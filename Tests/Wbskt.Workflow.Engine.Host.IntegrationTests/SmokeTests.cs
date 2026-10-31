@@ -31,7 +31,7 @@ public sealed class SmokeTests(SqlEdgeFixture fixture)
         {
             "WorkflowDefinitions", "Runs", "RunCounters", "Branches",
             "Bookmarks", "HistoryEvents", "SharedVariables",
-            "TriggerRegistrations", "PendingTriggerEvents",
+            "TriggerRegistrations", "PendingTriggerEvents", "TriggerDispatchOutcomes",
             "ScheduledFires", "IdempotencyKeys"
         };
 

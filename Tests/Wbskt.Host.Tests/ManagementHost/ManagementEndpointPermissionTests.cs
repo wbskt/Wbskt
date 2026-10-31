@@ -83,6 +83,7 @@ public sealed class ManagementEndpointPermissionTests
         ["WorkflowsController.Reinstate"] = PermissionNames.WorkflowsDelete,
         ["WorkflowsController.Rollback"] = PermissionNames.WorkflowsCreate,
         ["WorkflowsController.StartManualRun"] = PermissionNames.WorkflowsExecute,
+        ["WorkflowTriggersController.GetRecent"] = PermissionNames.WorkflowsRead,
     };
 
     private static Assembly ManagementHostAssembly => typeof(global::Wbskt.Management.Host.Program).Assembly;

@@ -2320,6 +2320,105 @@
         ],
         "type": "object"
       },
+      "TriggerActivityResponse": {
+        "properties": {
+          "hold": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TriggerHoldStateDto"
+              }
+            ]
+          },
+          "recent": {
+            "items": {
+              "$ref": "#/components/schemas/TriggerOutcomeDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "recent",
+          "hold"
+        ],
+        "type": "object"
+      },
+      "TriggerHoldStateDto": {
+        "properties": {
+          "dueAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lastEventAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "sinceAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "sinceAt",
+          "dueAt",
+          "lastEventAt"
+        ],
+        "type": "object"
+      },
+      "TriggerOutcomeDto": {
+        "properties": {
+          "channel": {
+            "type": "string"
+          },
+          "correlationKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "messageType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "occurredAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "runRef": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "occurredAt",
+          "channel",
+          "messageType",
+          "outcome",
+          "correlationKey",
+          "runRef"
+        ],
+        "type": "object"
+      },
       "UpdateClientRequest": {
         "properties": {
           "name": {
@@ -6600,6 +6699,64 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/triggers/{nodeId}/recent": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflowRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "nodeId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspaceRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TriggerActivityResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TriggerActivityResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TriggerActivityResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "WorkflowTriggers"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/variables/{variableName}": {
       "get": {
         "parameters": [
@@ -6894,6 +7051,9 @@
     },
     {
       "name": "Workflows"
+    },
+    {
+      "name": "WorkflowTriggers"
     }
   ]
 }

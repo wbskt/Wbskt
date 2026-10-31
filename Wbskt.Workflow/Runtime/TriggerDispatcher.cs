@@ -27,6 +27,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
     private readonly IIdempotencyKeyProvider _idempotencyKeyProvider;
     private readonly IExpressionEvaluator _expressionEvaluator;
     private readonly ILogger<TriggerDispatcher>? _logger;
+    private readonly TriggerOutcomeLog? _outcomeLog;
 
     public TriggerDispatcher(
         ICorrelationKeyResolver correlationKeyResolver,
@@ -39,7 +40,8 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         IRunDispatcher runDispatcher,
         IIdempotencyKeyProvider idempotencyKeyProvider,
         IExpressionEvaluator expressionEvaluator,
-        ILogger<TriggerDispatcher>? logger = null)
+        ILogger<TriggerDispatcher>? logger = null,
+        TriggerOutcomeLog? outcomeLog = null)
     {
         _correlationKeyResolver = correlationKeyResolver;
         _bookmarkResumer = bookmarkResumer;
@@ -52,6 +54,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         _idempotencyKeyProvider = idempotencyKeyProvider;
         _expressionEvaluator = expressionEvaluator;
         _logger = logger;
+        _outcomeLog = outcomeLog;
     }
 
     public async Task<TriggerDispatchResult> DispatchAsync(InboundEvent evt, CancellationToken ct)
@@ -195,6 +198,8 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             await _idempotencyKeyProvider.MarkSucceededAsync(bookmarkMatch.ClaimKey, "{}", ct);
         }
 
+        await RecordOutcomesAsync(resolvedEvent, registrations, perRegistration, ct);
+
         // The summary is deliberately lossy - one event fanning out to several registrations can
         // legitimately start one run and drop another. Callers that care read Registrations; the
         // summary exists so the common single-registration case stays a single value.
@@ -213,6 +218,22 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             summary?.CorrelationKey ?? defaultCorrelation,
             perRegistration,
             summary?.RunRefId);
+    }
+
+    private async Task RecordOutcomesAsync(InboundEvent evt, IReadOnlyCollection<TriggerRegistrationRow> registrations, List<TriggerRegistrationDispatch> perRegistration, CancellationToken ct)
+    {
+        if (_outcomeLog is null)
+        {
+            return;
+        }
+
+        foreach (TriggerRegistrationDispatch dispatch in perRegistration)
+        {
+            if (registrations.FirstOrDefault(r => r.Id == dispatch.RegistrationId) is { } registration)
+            {
+                await _outcomeLog.RecordAsync(evt, registration, dispatch.Outcome.ToString(), dispatch.CorrelationKey, dispatch.RunRefId, ct);
+            }
+        }
     }
 
     /// <summary>

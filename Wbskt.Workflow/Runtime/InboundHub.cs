@@ -44,14 +44,10 @@ internal sealed class InboundHub : IInboundHub
             // the match keys and the received-at, and a bookmark wake carries its dispatch reason on
             // BranchResumed. There is nothing left to add here for those.
             //
-            // TODO(arch): arrivals that produce NO run - filtered, secret mismatch, dropped, queued, or
-            // matching nothing - still have no durable record; this log line is it. They cannot go in
-            // HistoryEvents, whose clustered key leads with a NOT NULL RunId, so they need their own
-            // table. That is a schema decision with an access question attached (an arrival that matched
-            // nothing has no workspace to scope it to, so a per-workspace endpoint over it would leak
-            // across workspaces) and a volume one (an insert per inbound event, on the hottest path).
-            // The API-level version of the same question is already answered: TriggerDispatchResult
-            // reports every registration's outcome, so a caller is told why nothing ran.
+            // Arrivals that reach a trigger but start nothing (filtered, secret mismatch, dropped,
+            // queued) are kept per trigger node by TriggerOutcomeLog, newest 20 only, which bounds
+            // both the volume and the access question: each row belongs to one workflow. An arrival
+            // that matched nothing has no workspace to scope it to, so it is still only this log line.
             var result = await _triggerDispatcher.DispatchAsync(normalizedEvent, ct);
             // Debug, not Information: this runs for every device message, and at 100 msg/s a line each
             // costs ~11 GB of Loki. The counter keeps the outcome totals visible instead.
