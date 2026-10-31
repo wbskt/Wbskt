@@ -1,7 +1,9 @@
 using System.Data;
+using System.Text.Json;
 using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Events.Outbox;
 using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Auth.Host.Providers;
@@ -146,6 +148,32 @@ internal sealed class AccountProvider : BaseSqlProvider, IAccountProvider
         {
             throw new SecurityException("Email verification token is not valid.");
         }
+    }
+
+    public async Task<IReadOnlyCollection<int>> GetSoleTenantWorkspaceIdsAsync(int userId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.User_GetSoleTenantWorkspaces",
+            p => p.AddWithValue("@UserId", userId),
+            reader => reader.GetInt32(0),
+            cancellationToken);
+    }
+
+    public async Task DeleteUserAsync(int userId, IReadOnlyDictionary<int, OutboxMessage> deletedWorkspaces, CancellationToken cancellationToken = default)
+    {
+        // The property names are what the procedure's OPENJSON reads.
+        var planned = JsonSerializer.Serialize(deletedWorkspaces.Select(w => new Dictionary<string, object>
+        {
+            ["workspaceId"] = w.Key,
+            ["messageType"] = w.Value.MessageType,
+            ["payload"] = w.Value.Payload
+        }));
+
+        await ExecuteNonQueryAsync("dbo.User_Delete", p =>
+        {
+            p.AddWithValue("@UserId", userId);
+            p.Add("@DeletedWorkspaces", SqlDbType.NVarChar, -1).Value = planned;
+        }, cancellationToken);
     }
 
     private static User MapUser(SqlDataReader reader)

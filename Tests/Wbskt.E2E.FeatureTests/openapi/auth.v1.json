@@ -194,6 +194,17 @@
         ],
         "type": "object"
       },
+      "DeleteAccountRequest": {
+        "properties": {
+          "password": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "type": "object"
+      },
       "ForgotPasswordRequest": {
         "properties": {
           "email": {
@@ -935,6 +946,38 @@
   },
   "openapi": "3.1.1",
   "paths": {
+    "/api/auth/account/delete": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteAccountRequest"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteAccountRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "Account"
+        ]
+      }
+    },
     "/api/auth/change-password": {
       "post": {
         "requestBody": {
@@ -3796,6 +3839,9 @@
   "tags": [
     {
       "name": "Wbskt.Auth.Host"
+    },
+    {
+      "name": "Account"
     },
     {
       "name": "Auth"
