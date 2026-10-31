@@ -1350,7 +1350,7 @@
         ]
       }
     },
-    "/api/invitations/accept": {
+    "/api/v1/invitations/accept": {
       "post": {
         "requestBody": {
           "content": {
@@ -1399,7 +1399,7 @@
         ]
       }
     },
-    "/api/tenants": {
+    "/api/v1/tenants": {
       "get": {
         "responses": {
           "200": {
@@ -1484,7 +1484,7 @@
         ]
       }
     },
-    "/api/tenants/{tenantRef}": {
+    "/api/v1/tenants/{tenantRef}": {
       "put": {
         "parameters": [
           {
@@ -1527,7 +1527,7 @@
         ]
       }
     },
-    "/api/tenants/{tenantRef}/groups": {
+    "/api/v1/tenants/{tenantRef}/groups": {
       "get": {
         "parameters": [
           {
@@ -1692,7 +1692,7 @@
         ]
       }
     },
-    "/api/tenants/{tenantRef}/groups/{groupRef}": {
+    "/api/v1/tenants/{tenantRef}/groups/{groupRef}": {
       "delete": {
         "parameters": [
           {
@@ -1774,7 +1774,7 @@
         ]
       }
     },
-    "/api/tenants/{tenantRef}/groups/{groupRef}/roles": {
+    "/api/v1/tenants/{tenantRef}/groups/{groupRef}/roles": {
       "get": {
         "parameters": [
           {
@@ -1832,7 +1832,7 @@
         ]
       }
     },
-    "/api/tenants/{tenantRef}/groups/{groupRef}/roles/{roleRef}": {
+    "/api/v1/tenants/{tenantRef}/groups/{groupRef}/roles/{roleRef}": {
       "delete": {
         "parameters": [
           {
@@ -1940,7 +1940,7 @@
         ]
       }
     },
-    "/api/tenants/{tenantRef}/invitations": {
+    "/api/v1/tenants/{tenantRef}/invitations": {
       "get": {
         "parameters": [
           {
@@ -2105,7 +2105,7 @@
         ]
       }
     },
-    "/api/tenants/{tenantRef}/invitations/{invitationRef}": {
+    "/api/v1/tenants/{tenantRef}/invitations/{invitationRef}": {
       "delete": {
         "parameters": [
           {
@@ -2137,7 +2137,7 @@
         ]
       }
     },
-    "/api/tenants/{tenantRef}/members": {
+    "/api/v1/tenants/{tenantRef}/members": {
       "get": {
         "parameters": [
           {
@@ -2251,7 +2251,7 @@
         ]
       }
     },
-    "/api/tenants/{tenantRef}/members/{userRef}": {
+    "/api/v1/tenants/{tenantRef}/members/{userRef}": {
       "delete": {
         "parameters": [
           {
@@ -2283,7 +2283,7 @@
         ]
       }
     },
-    "/api/tenants/{tenantRef}/members/{userRef}/groups": {
+    "/api/v1/tenants/{tenantRef}/members/{userRef}/groups": {
       "get": {
         "parameters": [
           {
@@ -2341,7 +2341,7 @@
         ]
       }
     },
-    "/api/tenants/{tenantRef}/members/{userRef}/groups/{groupRef}": {
+    "/api/v1/tenants/{tenantRef}/members/{userRef}/groups/{groupRef}": {
       "delete": {
         "parameters": [
           {
@@ -2421,7 +2421,7 @@
         ]
       }
     },
-    "/api/tenants/{tenantRef}/members/{userRef}/permissions": {
+    "/api/v1/tenants/{tenantRef}/members/{userRef}/permissions": {
       "get": {
         "parameters": [
           {
@@ -2529,7 +2529,7 @@
         ]
       }
     },
-    "/api/tenants/{tenantRef}/members/{userRef}/permissions/{slug}": {
+    "/api/v1/tenants/{tenantRef}/members/{userRef}/permissions/{slug}": {
       "delete": {
         "parameters": [
           {
@@ -2577,7 +2577,7 @@
         ]
       }
     },
-    "/api/tenants/{tenantRef}/members/{userRef}/roles": {
+    "/api/v1/tenants/{tenantRef}/members/{userRef}/roles": {
       "get": {
         "parameters": [
           {
@@ -2635,7 +2635,7 @@
         ]
       }
     },
-    "/api/tenants/{tenantRef}/members/{userRef}/roles/{roleRef}": {
+    "/api/v1/tenants/{tenantRef}/members/{userRef}/roles/{roleRef}": {
       "delete": {
         "parameters": [
           {
@@ -2743,7 +2743,7 @@
         ]
       }
     },
-    "/api/tenants/{tenantRef}/members/{userRef}/suspended": {
+    "/api/v1/tenants/{tenantRef}/members/{userRef}/suspended": {
       "put": {
         "parameters": [
           {
@@ -2795,7 +2795,7 @@
         ]
       }
     },
-    "/api/tenants/{tenantRef}/permissions": {
+    "/api/v1/tenants/{tenantRef}/permissions": {
       "get": {
         "parameters": [
           {
@@ -2902,7 +2902,7 @@
         ]
       }
     },
-    "/api/tenants/{tenantRef}/roles": {
+    "/api/v1/tenants/{tenantRef}/roles": {
       "get": {
         "parameters": [
           {
@@ -3067,7 +3067,7 @@
         ]
       }
     },
-    "/api/tenants/{tenantRef}/roles/{roleRef}": {
+    "/api/v1/tenants/{tenantRef}/roles/{roleRef}": {
       "delete": {
         "parameters": [
           {
@@ -3149,7 +3149,7 @@
         ]
       }
     },
-    "/api/tenants/{tenantRef}/roles/{roleRef}/permissions": {
+    "/api/v1/tenants/{tenantRef}/roles/{roleRef}/permissions": {
       "get": {
         "parameters": [
           {
@@ -3257,7 +3257,7 @@
         ]
       }
     },
-    "/api/tenants/{tenantRef}/roles/{roleRef}/permissions/{slug}": {
+    "/api/v1/tenants/{tenantRef}/roles/{roleRef}/permissions/{slug}": {
       "delete": {
         "parameters": [
           {
@@ -3297,7 +3297,7 @@
         ]
       }
     },
-    "/api/workspaces": {
+    "/api/v1/workspaces": {
       "get": {
         "responses": {
           "200": {
@@ -3382,7 +3382,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}": {
+    "/api/v1/workspaces/{workspaceRef}": {
       "delete": {
         "parameters": [
           {
@@ -3446,7 +3446,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/members": {
+    "/api/v1/workspaces/{workspaceRef}/members": {
       "get": {
         "parameters": [
           {
@@ -3594,7 +3594,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/members/{userRef}": {
+    "/api/v1/workspaces/{workspaceRef}/members/{userRef}": {
       "delete": {
         "parameters": [
           {
@@ -3626,7 +3626,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/owner": {
+    "/api/v1/workspaces/{workspaceRef}/owner": {
       "put": {
         "parameters": [
           {
@@ -3669,7 +3669,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/permissions": {
+    "/api/v1/workspaces/{workspaceRef}/permissions": {
       "get": {
         "parameters": [
           {

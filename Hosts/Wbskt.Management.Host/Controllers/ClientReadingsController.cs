@@ -16,7 +16,7 @@ namespace Wbskt.Management.Host.Controllers;
 /// The history of a client's numeric state variables: every number it reported in a state report,
 /// for charting (summarised per bucket of time) or for export as CSV.
 /// </summary>
-[Route("api/workspaces/{workspaceRef:guid}/clients/{clientRef:guid}/readings")]
+[Route("api/v1/workspaces/{workspaceRef:guid}/clients/{clientRef:guid}/readings")]
 [ApiController]
 [Authorize]
 [RequiresPermission(PermissionNames.ClientsRead)]

@@ -10,7 +10,7 @@ namespace Wbskt.Management.Host.Controllers;
 
 // Pre-auth device flow (registration happens before a client has credentials), so this is
 // deliberately anonymous.
-[Route("api/client-registrations")]
+[Route("api/v1/client-registrations")]
 [ApiController]
 [AllowAnonymous]
 [ApiExplorerSettings(IgnoreApi = true)]

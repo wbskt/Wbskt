@@ -205,8 +205,9 @@ services:
       # keeps serving them for a release so the console can move over; sign-in and the refresh
       # cookie stay there. The workspace regex matches only auth's own routes (the list, one
       # workspace, its members, owner and the caller's permissions); every other /api/workspaces/{ref}/... path is
-      # management's. $$ is compose's escape for a literal $.
-      - traefik.http.routers.auth-api.rule=Host(`api.${DOMAIN}`) && (PathPrefix(`/api/tenants`) || PathPrefix(`/api/invitations`) || PathRegexp(`^/api/workspaces(/[0-9a-fA-F-]{36}(/(members|owner|permissions)(/.*)?)?)?/?$$`))
+      # management's. Each path is matched with and without /v1: the hosts serve the unversioned
+      # paths as aliases of /api/v1 for one release (#312). $$ is compose's escape for a literal $.
+      - traefik.http.routers.auth-api.rule=Host(`api.${DOMAIN}`) && (PathPrefix(`/api/v1/tenants`) || PathPrefix(`/api/v1/invitations`) || PathPrefix(`/api/tenants`) || PathPrefix(`/api/invitations`) || PathRegexp(`^/api(/v1)?/workspaces(/[0-9a-fA-F-]{36}(/(members|owner|permissions)(/.*)?)?)?/?$$`))
       - traefik.http.routers.auth-api.priority=900
       - traefik.http.routers.auth-api.entrypoints=websecure
       - traefik.http.routers.auth-api.tls.certresolver=letsencrypt
@@ -315,7 +316,7 @@ services:
       - traefik.enable=true
       # Longer than the management router's rule, so Traefik's default priority (rule length)
       # already prefers it; set explicitly so a longer management rule later cannot take over.
-      - traefik.http.routers.devices.rule=Host(`api.${DOMAIN}`) && (PathPrefix(`/api/client-auth`) || PathPrefix(`/api/client-registrations`))
+      - traefik.http.routers.devices.rule=Host(`api.${DOMAIN}`) && (PathPrefix(`/api/v1/client-auth`) || PathPrefix(`/api/v1/client-registrations`) || PathPrefix(`/api/client-auth`) || PathPrefix(`/api/client-registrations`))
       - traefik.http.routers.devices.priority=1000
       - traefik.http.routers.devices.entrypoints=websecure
       - traefik.http.routers.devices.tls.certresolver=letsencrypt

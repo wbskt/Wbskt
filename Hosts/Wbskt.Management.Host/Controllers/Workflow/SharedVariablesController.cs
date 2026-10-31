@@ -9,7 +9,7 @@ using Wbskt.Primitives.Constants;
 
 namespace Wbskt.Management.Host.Controllers.Workflow;
 
-[Route("api/workspaces/{workspaceRef:guid}/workflows/{workflowRef:guid}/variables")]
+[Route("api/v1/workspaces/{workspaceRef:guid}/workflows/{workflowRef:guid}/variables")]
 [ApiController]
 [Authorize]
 public sealed class SharedVariablesController : ApiControllerBase

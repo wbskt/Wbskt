@@ -10,7 +10,7 @@ using Wbskt.Primitives.Constants;
 
 namespace Wbskt.Management.Host.Controllers.Workflow;
 
-[Route("api/workspaces/{workspaceRef:guid}/workflows")]
+[Route("api/v1/workspaces/{workspaceRef:guid}/workflows")]
 [ApiController]
 [Authorize]
 public sealed class WorkflowsController : ApiControllerBase

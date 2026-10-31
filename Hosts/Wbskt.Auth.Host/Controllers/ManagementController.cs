@@ -17,7 +17,7 @@ namespace Wbskt.Auth.Host.Controllers;
 /// <see cref="TenantPermissionFilter"/> resolves the tenant and checks the caller before the action
 /// runs, and hands it the tenant's id as <c>[FromTenant] int tenantId</c>.
 /// </summary>
-[Route("api/tenants")]
+[Route("api/v1/tenants")]
 [AnnouncesWorkspaceAccessChange]
 [ApiController]
 [Authorize]

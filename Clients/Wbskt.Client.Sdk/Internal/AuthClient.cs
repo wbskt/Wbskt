@@ -18,7 +18,7 @@ internal sealed class AuthClient : IDisposable
 
     public async Task<(Guid ClientRefId, string Secret)> RegisterAsync()
     {
-        var response = await _httpClient.PostAsJsonAsync("api/client-registrations/initiate", new ClientRegistrationRequest(_config.PolicyPin, _config.DeviceName));
+        var response = await _httpClient.PostAsJsonAsync("api/v1/client-registrations/initiate", new ClientRegistrationRequest(_config.PolicyPin, _config.DeviceName));
 
         if (!response.IsSuccessStatusCode)
         {
@@ -31,7 +31,7 @@ internal sealed class AuthClient : IDisposable
 
     public async Task<string> LoginAsync(Guid clientRefId, string secret)
     {
-        var response = await _httpClient.PostAsJsonAsync("api/client-auth/login", new ClientLoginRequest(clientRefId, secret));
+        var response = await _httpClient.PostAsJsonAsync("api/v1/client-auth/login", new ClientLoginRequest(clientRefId, secret));
 
         if (!response.IsSuccessStatusCode)
         {

@@ -268,7 +268,7 @@ every integration's secret has been saved again.
 ### Device login and registration (`devices`)
 
 `devices` runs the management image with `Host__Role=Devices`. It serves only
-`/api/client-registrations` and `/api/client-auth` (plus `/healthz` and the JWKS), and Traefik sends
+`/api/v1/client-registrations` and `/api/v1/client-auth` (plus their unversioned aliases, `/healthz` and the JWKS), and Traefik sends
 it those paths on `api.<DOMAIN>`, so a console deploy or a heavy console query does not stop devices
 signing in. Device URLs and SDK settings do not change.
 

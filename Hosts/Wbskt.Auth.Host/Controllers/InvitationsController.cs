@@ -12,7 +12,7 @@ namespace Wbskt.Auth.Host.Controllers;
 /// route — which the invitee cannot supply. Discovering which tenant the token belongs to is the
 /// call's purpose, so it cannot also be its precondition.
 /// </summary>
-[Route("api/invitations")]
+[Route("api/v1/invitations")]
 [ApiController]
 [Authorize]
 public class InvitationsController : ApiControllerBase

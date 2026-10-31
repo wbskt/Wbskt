@@ -17,7 +17,7 @@ Global definitions:        Permissions (code-defined catalog, Wbskt.Primitives/C
 ```
 
 - Users are global identities; they belong to tenants via `TenantMembers`, which is many-to-many —
-  a user can be in any number of tenants and sees them all through `GET /api/tenants`.
+  a user can be in any number of tenants and sees them all through `GET /api/v1/tenants`.
 - `RolePermissions` (role → permission, allow/deny) is part of the **role definition** and is unscoped.
 - Scoping happens at **assignment**: `UserRoles`, `GroupRoles`, `UserPermissions` each carry
   `TenantId` (required) + `WorkspaceId` (nullable).
@@ -84,7 +84,7 @@ a `User` role an administrator has shaped, or empties later, is never touched ag
 
 **Joining an existing tenant happens exactly one way — a redeemed invitation.** An administrator
 issues one against an email address (`POST /{tenantRef}/invitations`), and the invitee redeems it,
-either with an account (`POST /api/invitations/accept`) or while creating one (`invitationToken` on
+either with an account (`POST /api/v1/invitations/accept`) or while creating one (`invitationToken` on
 `POST /api/auth/register`). The accepting account's email must match the address invited, so a
 leaked link is not by itself enough to join.
 
@@ -108,19 +108,19 @@ workspace deleted before the invitation is accepted is simply skipped.
 
 ### Redeeming, and why it needs an authenticated caller
 
-`POST /api/invitations/accept` requires a token **and** a signed-in account. That reads like a
+`POST /api/v1/invitations/accept` requires a token **and** a signed-in account. That reads like a
 contradiction — registration always creates a tenant, so how does someone who already has one accept
 an invitation? — but only if tenants are read as exclusive. They are not: `TenantMembers` is
 many-to-many, so redemption **adds a second membership** rather than replacing anything. An invited
 user ends up in two tenants, their own and the one that invited them, and sees both through
-`GET /api/tenants`.
+`GET /api/v1/tenants`.
 
 The authentication is what makes the address check possible. `TenantInvitation_Accept` joins the
 invitation to `dbo.Users` on the accepting user's ID and requires `I.Email = U.Email`; with no
 authenticated caller there is no `U.Email` to compare against, and possession of a leaked link would
 be enough to join. An anonymous variant would have to take credentials in the body, which is login
 with extra steps. It also explains the separate controller: everything under
-`api/tenants/{tenantRef}` resolves the tenant from the route, and discovering which tenant the token
+`api/v1/tenants/{tenantRef}` resolves the tenant from the route, and discovering which tenant the token
 belongs to is this call's purpose, so it cannot also be its precondition.
 
 Redemption marks the invitation accepted, inserts the membership, and — if the invitation named a
@@ -174,8 +174,8 @@ It refuses self-suspension (`AUTH_CANNOT_SUSPEND_SELF`) and suspending the last 
 
 ## Tenant administration API
 
-Everything lives under `api/tenants/{tenantRef}` and is addressed by opaque `Guid` reference, never
-by internal integer ID. `GET /api/tenants` lists the caller's tenants and is the entry point.
+Everything lives under `api/v1/tenants/{tenantRef}` and is addressed by opaque `Guid` reference, never
+by internal integer ID. `GET /api/v1/tenants` lists the caller's tenants and is the entry point.
 
 Reference resolution is **tenant-scoped**, which is why it sits in `TenantService` and `AccessControlService` rather than
 the controller: a role, group or user reference belonging to another tenant simply does not resolve,
@@ -185,8 +185,8 @@ their tenant's permission graph.
 
 | Area | Endpoints |
 |---|---|
-| Tenants | `GET /api/tenants`, `POST /api/tenants`, `PUT /{tenantRef}` |
-| Invitations | `GET/POST /{tenantRef}/invitations`, `DELETE /{tenantRef}/invitations/{invitationRef}`, `POST /api/invitations/accept` |
+| Tenants | `GET /api/v1/tenants`, `POST /api/v1/tenants`, `PUT /{tenantRef}` |
+| Invitations | `GET/POST /{tenantRef}/invitations`, `DELETE /{tenantRef}/invitations/{invitationRef}`, `POST /api/v1/invitations/accept` |
 | Roles | `GET/POST /roles`, `PUT/DELETE /roles/{roleRef}`, `GET/POST /roles/{roleRef}/permissions`, `DELETE /roles/{roleRef}/permissions/{slug}` |
 | Groups | `GET/POST /groups`, `PUT/DELETE /groups/{groupRef}`, `GET /groups/{groupRef}/roles`, `POST/DELETE /groups/{groupRef}/roles/{roleRef}` |
 | Members | `GET /members`, `GET /members/{userRef}/roles\|permissions\|groups`, `POST/DELETE /members/{userRef}/roles/{roleRef}`, `POST /members/{userRef}/permissions`, `DELETE /members/{userRef}/permissions/{slug}`, `POST/DELETE /members/{userRef}/groups/{groupRef}`, `PUT /members/{userRef}/suspended` |
@@ -206,7 +206,7 @@ These endpoints require a **tenant-wide** permission in the target tenant:
 `roles.read`/`roles.manage` for roles, permissions and assignments; `users.read`/`users.manage` for
 groups, membership and account state. The read/manage split exists so that a console which only
 displays the permission graph does not need the right to rewrite it.
-`POST /api/workspaces/{ref}/members` requires `users.manage` **in that workspace**, and also adds the
+`POST /api/v1/workspaces/{ref}/members` requires `users.manage` **in that workspace**, and also adds the
 user to the workspace's tenant (`WorkspaceMember_Add`) — without that row they would pass the
 membership gate but resolve no roles, since every assignment is filtered by `TenantId`.
 Workspace owners automatically receive the tenant's `Admin` role scoped to the new workspace
@@ -225,7 +225,7 @@ runs across every `Admin` role, not just the default tenant's, and must stay set
 
 ## Workspace-scoped permissions (management host)
 
-Every route below is `api/workspaces/{workspaceRef:guid}/…` and resolves through
+Every route below is `api/v1/workspaces/{workspaceRef:guid}/…` and resolves through
 `POST /api/internal/workspaces/resolve` before doing anything else. The resolve call is the membership gate;
 the slug is the second gate.
 
@@ -289,7 +289,7 @@ Two structural notes on scoping, since neither is enforced by the resolve call:
   rather than left sharing a live token with an attacker.
 - `POST /api/auth/logout` revokes one token; `POST /api/auth/logout-all` revokes the caller's whole
   set. Both succeed regardless of whether the token existed, so neither can be used to probe.
-- Suspending a member (`PUT /api/tenants/{tenantRef}/members/{userRef}/suspended`) does not touch
+- Suspending a member (`PUT /api/v1/tenants/{tenantRef}/members/{userRef}/suspended`) does not touch
   their tokens; it closes that one tenant to them on their next request.
 - The credential endpoints are rate limited per client IP, in three buckets (`RateLimiting:Authentication`,
   `RateLimiting:TokenRefresh`, `RateLimiting:EmailVerification`), and mail they send is throttled per

@@ -7,6 +7,7 @@ using Wbskt.Auth.Host.Controllers;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services;
 using Wbskt.Auth.Host.Services.Email;
+using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Infrastructure.Events;
 using Wbskt.Infrastructure.Events.Outbox;
 using Wbskt.Auth.Host.Telemetry;
@@ -189,6 +190,7 @@ public static class Program
 
         await app.RunStartupTasksAsync();
 
+        app.UseUnversionedApiAliases();
         app.UseWbsktPipeline();
 
         if (app.Configuration.IsApiDocsEnabled(app.Environment))

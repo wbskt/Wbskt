@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Events;
+using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Devices;
 using Wbskt.Infrastructure.Hosting;
@@ -279,6 +280,7 @@ public static class Program
 
         // The rate limiter runs before authentication, so anonymous callback floods are refused
         // before they reach auth or the engine relay.
+        app.UseUnversionedApiAliases();
         app.UseWbsktPipeline();
 
         if (app.Configuration.IsApiDocsEnabled(app.Environment))
