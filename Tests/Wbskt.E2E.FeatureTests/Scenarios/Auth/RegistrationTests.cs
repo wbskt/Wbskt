@@ -1,5 +1,6 @@
 using System.Net;
 using FluentAssertions;
+using Wbskt.Auth.Models;
 using Wbskt.E2E.FeatureTests.Fixtures;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
@@ -368,5 +369,68 @@ public sealed class RegistrationTests(ServicesFixture fixture)
         var response = await fixture.RegisterAsync(username, email, password, new string('t', 256));
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    // ── Sign-up proof of work (#152) ──────────────────────────────────────────────────────
+
+    [SkippableFact]
+    public async Task AUTH_REG_25_WithoutAChallenge_IsRefused()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (username, email, password) = ServicesFixture.NewCredentials();
+
+        var response = await fixture.SendAsync(
+            HttpMethod.Post, RegisterUrl, body: new { Username = username, Email = email, Password = password });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("SIGNUP_CHALLENGE_REQUIRED");
+    }
+
+    [SkippableFact]
+    public async Task AUTH_REG_26_ASolvedChallenge_RegistersOnlyOnce()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var challenge = await fixture.Auth.GetSignUpChallengeAsync();
+        var solution = SignUpProofOfWork.Solve(challenge.Challenge, challenge.Difficulty);
+
+        var (username, email, password) = ServicesFixture.NewCredentials();
+        var first = await fixture.Auth.RegisterRawAsync(new RegisterRequest(username, email, password, null, challenge.Challenge, solution));
+        first.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var (otherUsername, otherEmail, otherPassword) = ServicesFixture.NewCredentials();
+        var replay = await fixture.Auth.RegisterRawAsync(new RegisterRequest(otherUsername, otherEmail, otherPassword, null, challenge.Challenge, solution));
+        replay.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ServicesFixture.ReadErrorCodeAsync(replay)).Should().Be("SIGNUP_CHALLENGE_INVALID");
+    }
+
+    [SkippableFact]
+    public async Task AUTH_REG_27_AnUnsolvedChallenge_IsRefused()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var challenge = await fixture.Auth.GetSignUpChallengeAsync();
+        var wrong = Enumerable.Range(0, 1000)
+            .Select(i => $"wrong-{i}")
+            .First(s => !SignUpProofOfWork.Satisfies(challenge.Challenge, s, challenge.Difficulty));
+
+        var (username, email, password) = ServicesFixture.NewCredentials();
+        var response = await fixture.Auth.RegisterRawAsync(new RegisterRequest(username, email, password, null, challenge.Challenge, wrong));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("SIGNUP_CHALLENGE_INVALID");
+    }
+
+    [SkippableFact]
+    public async Task AUTH_REG_28_ChallengeIsAnonymousAndShortLived()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var challenge = await fixture.Auth.GetSignUpChallengeAsync();
+
+        challenge.Challenge.Should().StartWith("v1.");
+        challenge.Difficulty.Should().BeGreaterThan(0);
+        challenge.ExpiresAt.Should().BeAfter(DateTimeOffset.UtcNow).And.BeBefore(DateTimeOffset.UtcNow.AddMinutes(11));
     }
 }

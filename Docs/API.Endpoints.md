@@ -121,7 +121,7 @@ says what it is, `user` or `client`.
 Anonymous except where noted, and rate limited per client IP so the password hasher cannot be used as
 a work amplifier. There are three buckets, so routine traffic cannot spend the sign-in budget:
 `RateLimiting:Authentication` (10/min: register, login, change-password, forgot-password,
-reset-password), `RateLimiting:TokenRefresh` (120/min: refresh-token, logout) and
+reset-password), `RateLimiting:TokenRefresh` (120/min: refresh-token, logout, register/challenge) and
 `RateLimiting:EmailVerification` (10/min: verify-email, resend-verification).
 
 The endpoints that hash a password (register, login, change-password, reset-password) also share one
@@ -141,6 +141,20 @@ and an allowed `Origin`, so another site cannot spend it. `Auth:RefreshCookie:Sa
 a body-only refresh-token or logout with no token is still a 400. CORS on this host allows
 credentials.
 
+**Sign-up proof of work.** register needs a solved puzzle, so a script that signs up in a loop
+pays for each account in CPU time. A proof of work was chosen over a CAPTCHA because it involves no
+third party and tracks nobody. `GET register/challenge` returns `challenge`, `difficulty` and
+`expiresAt`; the caller finds a `solution` (the console counts up from 0) for which SHA-256 of the
+UTF-8 string `challenge + ":" + solution` starts with `difficulty` zero bits, and sends both with the
+registration. The challenge is HMAC-signed and stores nothing until it is redeemed; each one registers
+at most one account (recorded in Redis when it is connected) and expires after ten minutes. Without
+one register answers 400 `SIGNUP_CHALLENGE_REQUIRED`; a forged, expired, unsolved or spent one is 400
+`SIGNUP_CHALLENGE_INVALID`, and the client fetches a new one. `Auth:SignUpChallenge` sets `Enabled`
+(default true), `Difficulty` (default 18 bits, a second or two in a browser), `LifetimeSeconds` (600)
+and `Key` (a base64 HMAC key; unset, each process makes its own, which is fine for one replica).
+`SignUpProofOfWork` in `Wbskt.Auth.Models` is the reference solver, and `WbsktAuthClient.RegisterAsync`
+solves it for callers that send no challenge.
+
 register, forgot-password and resend-verification also respect a per-address mail cooldown
 (`Auth:MailCooldown`: one mail of each kind per address per 2 minutes, at most 5 per address an hour),
 kept in Redis when it is configured. A suppressed mail is answered with the same 204, and no new token
@@ -148,7 +162,8 @@ is issued, so the link already in the inbox keeps working.
 
 | Endpoint | Auth | What it does |
 |---|---|---|
-| `POST register` | anonymous | Creates an account **and its own tenant** — the tenant row, its `Admin`/`User` roles, the creator's membership, a tenant-wide Admin assignment and a default workspace. Accepts an optional `invitationToken` to join an existing tenant at the same time. Mails a confirmation link; the account cannot sign in until it is followed. Answers **204 whether or not the address is already registered** — a taken address creates nothing and mails its real owner instead. A taken *username* is still a 409 `AUTH_USERNAME_CONFLICT`: it discloses nothing about any address. |
+| `POST register` | anonymous | Creates an account **and its own tenant** — the tenant row, its `Admin`/`User` roles, the creator's membership, a tenant-wide Admin assignment and a default workspace. Accepts an optional `invitationToken` to join an existing tenant at the same time. Mails a confirmation link; the account cannot sign in until it is followed. Answers **204 whether or not the address is already registered** — a taken address creates nothing and mails its real owner instead. A taken *username* is still a 409 `AUTH_USERNAME_CONFLICT`: it discloses nothing about any address. Needs a solved `challenge` and `solution` (above). |
+| `GET register/challenge` | anonymous | Issues a sign-up proof-of-work puzzle (above). Stateless and cheap; rate limited like refresh-token. |
 | `POST login` | anonymous | Exchanges credentials for an access/refresh token pair (see the refresh cookie below). Every failure mode answers identically, so the endpoint cannot be used to probe which addresses are registered — except `AUTH_EMAIL_UNVERIFIED`, which is returned only *after* the password verifies and therefore tells a caller nothing they did not already prove. |
 | `POST refresh-token` | anonymous | Rotating refresh: issues a new pair and revokes the token presented. Presenting an already-revoked token is treated as a leak — every refresh token for that user is revoked and a `SecurityAlertEvent` is published. |
 | `POST logout` | anonymous | Revokes the one refresh token presented, and the access token issued with it. Succeeds whether or not it existed. |

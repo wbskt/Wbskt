@@ -29,4 +29,15 @@ public record RegisterRequest(
     /// </para>
     /// </summary>
     [StringLength(255)]
-    string? InvitationToken = null);
+    string? InvitationToken = null,
+
+    /// <summary>
+    /// The challenge from <c>GET /api/auth/register/challenge</c>, unchanged. Required while
+    /// <c>Auth:SignUpChallenge:Enabled</c> is on, which it is unless configured off.
+    /// </summary>
+    [StringLength(256)]
+    string? Challenge = null,
+
+    /// <summary>A solution to <see cref="Challenge"/>; see <see cref="SignUpProofOfWork"/>.</summary>
+    [StringLength(64)]
+    string? Solution = null);

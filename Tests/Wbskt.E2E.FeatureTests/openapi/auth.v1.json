@@ -542,6 +542,12 @@
       },
       "RegisterRequest": {
         "properties": {
+          "challenge": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "email": {
             "type": "string"
           },
@@ -553,6 +559,12 @@
           },
           "password": {
             "type": "string"
+          },
+          "solution": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "username": {
             "type": "string"
@@ -696,6 +708,30 @@
         },
         "required": [
           "isSuspended"
+        ],
+        "type": "object"
+      },
+      "SignUpChallengeResponse": {
+        "properties": {
+          "challenge": {
+            "type": "string"
+          },
+          "difficulty": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "expiresAt": {
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "challenge",
+          "difficulty",
+          "expiresAt"
         ],
         "type": "object"
       },
@@ -1185,6 +1221,35 @@
         },
         "responses": {
           "200": {
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/auth/register/challenge": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignUpChallengeResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignUpChallengeResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignUpChallengeResponse"
+                }
+              }
+            },
             "description": "OK"
           }
         },

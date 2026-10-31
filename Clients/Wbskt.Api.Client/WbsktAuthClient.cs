@@ -28,9 +28,26 @@ public sealed class WbsktAuthClient : WbsktApiClient
     public Task RegisterAsync(RegisterRequest request, CancellationToken cancellationToken = default) =>
         ReceiveAsync(RegisterRawAsync(request, cancellationToken), cancellationToken);
 
-    /// <summary><see cref="RegisterAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
-    public Task<HttpResponseMessage> RegisterRawAsync(RegisterRequest request, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Post, "/api/auth/register", request, cancellationToken);
+    /// <summary>
+    /// <see cref="RegisterAsync"/>, returning the response untouched for a caller that asserts on its
+    /// status or error. A request without a <see cref="RegisterRequest.Challenge"/> gets one fetched
+    /// and solved first; one that carries a challenge is sent as it is.
+    /// </summary>
+    public async Task<HttpResponseMessage> RegisterRawAsync(RegisterRequest request, CancellationToken cancellationToken = default)
+    {
+        if (request.Challenge is null)
+        {
+            var challenge = await GetSignUpChallengeAsync(cancellationToken).ConfigureAwait(false);
+            var solution = SignUpProofOfWork.Solve(challenge.Challenge, challenge.Difficulty, cancellationToken);
+            request = request with { Challenge = challenge.Challenge, Solution = solution };
+        }
+
+        return await SendRawAsync(HttpMethod.Post, "/api/auth/register", request, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>A proof-of-work puzzle for <see cref="RegisterAsync"/>. <c>GET /api/auth/register/challenge</c>.</summary>
+    public Task<SignUpChallengeResponse> GetSignUpChallengeAsync(CancellationToken cancellationToken = default) =>
+        ReceiveAsync<SignUpChallengeResponse>(SendRawAsync(HttpMethod.Get, "/api/auth/register/challenge", null, cancellationToken), cancellationToken);
 
     /// <summary>Signs in with an email and password and returns the token pair. <c>POST /api/auth/login</c>.</summary>
     public Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default) =>
