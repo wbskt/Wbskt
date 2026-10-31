@@ -34,6 +34,10 @@ public static class HistoryEventKind
     public const string NodeRetrying = "NodeRetrying";
     // An action step's {{ }} placeholder had no value and was sent as empty text.
     public const string TemplateValueMissing = "TemplateValueMissing";
+    // A counter step with a fraction, applied as a whole number.
+    public const string CounterStepTruncated = "CounterStepTruncated";
+    // A local counter whose value was not a number, counted from 0.
+    public const string CounterReset = "CounterReset";
 
     // Fan-out / fan-in
     public const string JoinContinuationSpawned = "JoinContinuationSpawned";
@@ -54,6 +58,8 @@ public static class HistoryEventKind
 
             NodeFailed
                 or TemplateValueMissing
+                or CounterStepTruncated
+                or CounterReset
                 or BranchFailed
                 or NodeRetrying
                 or BranchCancelled
