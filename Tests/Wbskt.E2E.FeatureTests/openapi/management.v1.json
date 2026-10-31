@@ -5109,6 +5109,36 @@
       }
     },
     "/api/v1/workspaces/{workspaceRef}/registration-policies/{policyRef}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "policyRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspaceRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "RegistrationPolicies"
+        ]
+      },
       "get": {
         "parameters": [
           {

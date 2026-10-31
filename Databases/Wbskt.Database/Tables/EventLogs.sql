@@ -31,11 +31,11 @@ CREATE TABLE dbo.EventLogs (
 
     -- Constraints
     CONSTRAINT PK_EventLogs        PRIMARY KEY (Id),
-    CONSTRAINT FK_EventLogs_Events FOREIGN KEY (EventId) REFERENCES dbo.Events(Id),
-    CONSTRAINT FK_EventLogs_Policy FOREIGN KEY (PolicyId) REFERENCES dbo.RegistrationPolicies(Id)
-    -- No foreign key on ClientId: clients can be deleted (dbo.Client_Delete) and their history
-    -- outlives them, identified by ClientRefId. A key would also fail a whole buffered insert batch
-    -- over one message logged just after its client was deleted.
+    CONSTRAINT FK_EventLogs_Events FOREIGN KEY (EventId) REFERENCES dbo.Events(Id)
+    -- No foreign key on ClientId or PolicyId: clients and policies can be deleted (dbo.Client_Delete,
+    -- dbo.RegistrationPolicy_Delete) and their history outlives them, identified by ClientRefId and
+    -- PolicyRefId. A key would also fail a whole buffered insert batch over one message logged just
+    -- after its client or policy was deleted, the deletion's own event among them.
 );
 GO
 

@@ -378,6 +378,7 @@ approval is automatic or manual.
 | `PATCH {policyRef}` | `policies.manage` | Updates name, auto-approval or enabled state. |
 | `POST {policyRef}/disable` | `policies.manage` | Stops the policy accepting new registrations. Already-registered clients are unaffected. |
 | `POST {policyRef}/rotate-pin` | `policies.manage` | Replaces the PIN and returns the policy with the new one. The old PIN stops registering devices; already-registered clients are unaffected. |
+| `DELETE {policyRef}` | `policies.manage` | Deletes a policy no client is enrolled through, in any status; otherwise `409 POLICY_HAS_CLIENTS` with the count. Templates pinned to it are unpinned and stay in the workspace; its event-log history is kept. Raises `PolicyDeletedEvent`. |
 
 ### 2.3 Message templates — `…/message-templates`
 

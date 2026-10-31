@@ -173,6 +173,44 @@ public sealed class DeviceLifecycleTests(ServicesFixture fixture)
             .StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    // ── Delete policy ─────────────────────────────────────────────────────────────────────
+
+    [SkippableFact]
+    public async Task POL_DEL_01_APolicyWithADevice_IsRefused_UntilTheDeviceIsGone()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (token, workspace) = await fixture.RegisterAndLoginUserAsync();
+        var (policyRef, pin) = await fixture.CreatePolicyAsync(token, workspace);
+        var (clientRef, _) = await fixture.RegisterClientAsync(pin, "keeps-policy");
+
+        var refused = await Send(HttpMethod.Delete, workspace, $"registration-policies/{policyRef}", token);
+        refused.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await ServicesFixture.ReadErrorCodeAsync(refused)).Should().Be("POLICY_HAS_CLIENTS");
+
+        (await Send(HttpMethod.Delete, workspace, $"clients/{clientRef}", token)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await Send(HttpMethod.Delete, workspace, $"registration-policies/{policyRef}", token)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        (await Send(HttpMethod.Get, workspace, $"registration-policies/{policyRef}", token)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await RegisterRawAsync(pin)).IsSuccessStatusCode.Should().BeFalse();
+    }
+
+    [SkippableFact]
+    public async Task POL_DEL_02_AnotherWorkspacesPolicy_Is404_AndSurvives()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (ownerToken, ownerWorkspace) = await fixture.RegisterAndLoginUserAsync();
+        var (policyRef, _) = await fixture.CreatePolicyAsync(ownerToken, ownerWorkspace);
+        var (strangerToken, strangerWorkspace) = await fixture.RegisterAndLoginUserAsync();
+
+        var response = await Send(HttpMethod.Delete, strangerWorkspace, $"registration-policies/{policyRef}", strangerToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("POLICY_NOT_FOUND");
+        (await Send(HttpMethod.Get, ownerWorkspace, $"registration-policies/{policyRef}", ownerToken)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────────────────
 
     private Task<HttpResponseMessage> Send(HttpMethod method, Guid workspace, string path, string token, object? body = null) =>
