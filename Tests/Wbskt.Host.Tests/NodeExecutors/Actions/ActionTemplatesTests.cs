@@ -1,0 +1,289 @@
+using System.Net;
+using System.Text.Json;
+using Microsoft.Extensions.Options;
+using Moq;
+using Wbskt.Host.Tests.Runtime.BranchResults;
+using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Exceptions;
+using Wbskt.Workflow.Abstraction.Integrations;
+using Wbskt.Workflow.Abstraction.Models.Nodes;
+using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
+using Wbskt.Workflow.Abstraction.Providers;
+using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Integrations;
+using Wbskt.Workflow.NodeExecutors.Actions;
+using static Wbskt.Host.Tests.NodeExecutors.Actions.NotificationExecutorTests;
+
+namespace Wbskt.Host.Tests.NodeExecutors.Actions;
+
+public sealed class ActionTemplatesTests
+{
+    private static readonly Guid NodeId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+    private static readonly Guid BranchRefId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+
+    private readonly RecordingRunJournal _journal = new([]);
+
+    // ------------------------------------------------------------- text
+
+    [Fact]
+    public async Task Text_fills_in_branch_state_trigger_payload_and_shared_variables()
+    {
+        var templates = TestTemplates.Create(_journal, Shared(("site", "\"greenhouse\"")));
+
+        string text = await templates.TextAsync(Context(), "message", "Frost: {{reading.temp}}°C in the {{ $shared.site }} ({{device}})", CancellationToken.None);
+
+        Assert.Equal("Frost: 1.4°C in the greenhouse (probe-7)", text);
+        Assert.Empty(_journal.Entries);
+    }
+
+    [Fact]
+    public async Task Text_without_placeholders_is_returned_as_written()
+    {
+        string text = await TestTemplates.Create(_journal).TextAsync(Context(), "message", "Tank low", CancellationToken.None);
+
+        Assert.Equal("Tank low", text);
+        Assert.Empty(_journal.Entries);
+    }
+
+    [Fact]
+    public async Task A_missing_value_is_empty_text_and_a_warning_naming_the_field_and_placeholder()
+    {
+        var templates = TestTemplates.Create(_journal, Shared());
+
+        string text = await templates.TextAsync(Context(), "body", "[{{nope.temp}}][{{$shared.token}}][{{device}}]", CancellationToken.None);
+
+        Assert.Equal("[][][probe-7]", text);
+        RunJournalEntry warning = Assert.Single(_journal.Entries);
+        Assert.Equal(HistoryEventKind.TemplateValueMissing, warning.EventKind);
+        Assert.Equal(HistoryEventKind.SeverityWarn, HistoryEventKind.SeverityFor(warning.EventKind));
+        Assert.Equal(42, warning.RunId);
+        Assert.Equal(BranchRefId, warning.BranchRefId);
+        Assert.Equal(NodeId, warning.NodeId);
+        Assert.Equal(
+            """{"field":"body","placeholders":["nope.temp","$shared.token"]}""",
+            JsonSerializer.Serialize(warning.Payload));
+    }
+
+    [Fact]
+    public async Task A_line_turns_line_breaks_a_value_brings_in_into_spaces()
+    {
+        var templates = TestTemplates.Create(_journal);
+
+        string line = await templates.LineAsync(Context(), "subject", "Alert: {{note}}", CancellationToken.None);
+
+        Assert.Equal("Alert: one two  three", line);
+    }
+
+    [Fact]
+    public async Task A_malformed_placeholder_fails_the_step()
+    {
+        var templates = TestTemplates.Create(_journal);
+
+        var ex = await Assert.ThrowsAsync<ExpressionEvaluationException>(() =>
+            templates.TextAsync(Context(), "message", "temp {{reading.temp", CancellationToken.None));
+
+        Assert.Contains("unclosed", ex.Message);
+    }
+
+    // ------------------------------------------------------------- json
+
+    [Fact]
+    public async Task Json_keeps_the_type_of_a_leaf_that_is_one_placeholder_and_fills_in_the_rest()
+    {
+        var templates = TestTemplates.Create(_journal);
+        JsonElement payload = JsonSerializer.SerializeToElement(new Dictionary<string, object>
+        {
+            ["on"] = "{{heaterOn}}",
+            ["temp"] = "{{reading.temp}}",
+            ["reading"] = "{{reading}}",
+            ["label"] = "{{device}} at {{reading.temp}}",
+            ["{{device}}"] = new object[] { "{{reading.temp}}", 3, true },
+            ["fixed"] = "as written"
+        });
+
+        JsonElement? filled = await templates.JsonAsync(Context(), "payload", payload, CancellationToken.None);
+
+        Assert.Equal(
+            """{"on":true,"temp":1.4,"reading":{"temp":1.4},"label":"probe-7 at 1.4","{{device}}":[1.4,3,true],"fixed":"as written"}""",
+            filled!.Value.GetRawText());
+        Assert.Empty(_journal.Entries);
+    }
+
+    [Fact]
+    public async Task Json_turns_a_missing_leaf_into_empty_text_and_warns_at_its_path()
+    {
+        var templates = TestTemplates.Create(_journal);
+        JsonElement payload = JsonSerializer.SerializeToElement(new { items = new object[] { new { on = "{{nope}}" } } });
+
+        JsonElement? filled = await templates.JsonAsync(Context(), "payload", payload, CancellationToken.None);
+
+        Assert.Equal("""{"items":[{"on":""}]}""", filled!.Value.GetRawText());
+        RunJournalEntry warning = Assert.Single(_journal.Entries);
+        Assert.Equal("""{"field":"payload.items[0].on","placeholders":["nope"]}""", JsonSerializer.Serialize(warning.Payload));
+    }
+
+    // -------------------------------------------------------- executors
+
+    [Fact]
+    public async Task Telegram_sends_the_filled_in_message()
+    {
+        var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"ok\":true}") });
+        var channel = new TelegramChannel(new SingleClientFactory(handler), Options.Create(new IntegrationOptions()));
+        var executor = new TelegramNodeExecutor(new StubResolver(Telegram()), channel, TestTemplates.Create(_journal));
+        var node = new TelegramNotificationNode
+        {
+            NodeId = NodeId,
+            Name = "tg",
+            Ports = [],
+            Config = new TelegramConfig { ChatId = "-100123", Message = "Frost: {{reading.temp}} C", IntegrationRef = Guid.NewGuid() }
+        };
+
+        Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(Context(node), CancellationToken.None));
+
+        Assert.Contains("\"text\":\"Frost: 1.4 C\"", handler.LastBody);
+    }
+
+    [Fact]
+    public async Task Webhook_fills_in_the_url_headers_and_body_before_checking_the_target()
+    {
+        var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), new AllowAllGuard(), StubResolver.Failing("UNUSED"), TestTemplates.Create(_journal));
+        var node = new WebhookNotificationNode
+        {
+            NodeId = NodeId,
+            Name = "call",
+            Ports = [],
+            Config = new WebhookNotificationConfig
+            {
+                Url = "https://hooks.example.test/{{device}}",
+                Method = "POST",
+                Headers = new Dictionary<string, string> { ["X-Note"] = "{{note}}" },
+                Body = JsonSerializer.SerializeToElement(new { on = "{{heaterOn}}" })
+            }
+        };
+
+        Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(Context(node), CancellationToken.None));
+
+        Assert.Equal("https://hooks.example.test/probe-7", handler.LastUri);
+        Assert.Equal(["one two  three"], handler.LastRequest!.Headers.GetValues("X-Note"));
+        Assert.Equal("""{"on":true}""", handler.LastBody);
+    }
+
+    [Fact]
+    public async Task Webhook_quotes_the_url_as_written_when_the_filled_in_one_is_refused()
+    {
+        var executor = new WebhookNodeExecutor(new SingleClientFactory(new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.OK))), new AllowAllGuard(), StubResolver.Failing("UNUSED"), TestTemplates.Create(_journal));
+        var node = new WebhookNotificationNode
+        {
+            NodeId = NodeId,
+            Name = "call",
+            Ports = [],
+            Config = new WebhookNotificationConfig { Url = "{{device}}", Method = "POST" }
+        };
+
+        var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(Context(node), CancellationToken.None));
+
+        Assert.Equal("WEBHOOK_INVALID_URL", fail.ErrorCode);
+        Assert.Contains("'{{device}}'", fail.Message);
+        Assert.DoesNotContain("probe-7", fail.Message);
+    }
+
+    [Fact]
+    public async Task Send_to_device_sends_the_filled_in_payload()
+    {
+        var publisher = new Mock<IDeviceCommandPublisher>();
+        var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>(), TestTemplates.Create(_journal));
+        var node = new SendClientMessageNode
+        {
+            NodeId = NodeId,
+            Name = "command",
+            Ports = [],
+            Config = new SendClientMessageConfig
+            {
+                ClientRef = Guid.NewGuid().ToString(),
+                Type = "SetHeater",
+                Payload = JsonSerializer.SerializeToElement(new { on = "{{heaterOn}}", reason = "{{device}} read {{reading.temp}}" })
+            }
+        };
+
+        Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(Context(node), CancellationToken.None));
+
+        publisher.Verify(p => p.PublishCommandAsync(
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), "SetHeater",
+            """{"on":true,"reason":"probe-7 read 1.4"}""",
+            It.IsAny<TimeSpan>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Toast_shows_the_filled_in_title_and_message()
+    {
+        var publisher = new Mock<IToastPublisher>();
+        var executor = new ToastNodeExecutor(publisher.Object, TestTemplates.Create(_journal));
+        var node = new ToastNotificationNode
+        {
+            NodeId = NodeId,
+            Name = "toast",
+            Ports = [],
+            Config = new ToastConfig { Title = "{{device}}", Message = "{{reading.temp}}°C" }
+        };
+
+        Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(Context(node), CancellationToken.None));
+
+        publisher.Verify(p => p.PublishToastAsync(
+            It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<int>(), "probe-7", "1.4°C", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // ------------------------------------------------------------- glue
+
+    private static NodeContext Context(BaseNode? node = null)
+    {
+        node ??= new ToastNotificationNode { NodeId = NodeId, Name = "toast", Ports = [], Config = new ToastConfig { Title = "t", Message = "m" } };
+        var local = new Dictionary<string, JsonElement>
+        {
+            ["reading"] = JsonSerializer.SerializeToElement(new { temp = 1.4 }),
+            ["heaterOn"] = JsonSerializer.SerializeToElement(true),
+            ["note"] = JsonSerializer.SerializeToElement("one\r\ntwo\n\nthree")
+        };
+        var trigger = new Dictionary<string, JsonElement> { ["device"] = JsonSerializer.SerializeToElement("probe-7") };
+
+        return new NodeContext
+        {
+            Branch = new BranchContext(42, 7, 3, Guid.NewGuid(), 1, node.NodeId.ToString(), 1, local, trigger, "corr", DateTime.UtcNow, 9)
+            {
+                BranchRefId = BranchRefId
+            },
+            Node = node,
+            CancellationToken = CancellationToken.None,
+            IdempotencyKey = "key"
+        };
+    }
+
+    private static ISharedVariableProvider Shared(params (string Name, string ValueJson)[] values)
+    {
+        var provider = new Mock<ISharedVariableProvider>();
+        provider
+            .Setup(p => p.GetByWorkflowRefIdNameAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns((Guid workflowRefId, string name, CancellationToken _) =>
+            {
+                foreach (var (n, valueJson) in values)
+                {
+                    if (n == name)
+                    {
+                        return Task.FromResult(new SharedVariableRow
+                        {
+                            Id = 1,
+                            WorkflowRefId = workflowRefId,
+                            VarName = name,
+                            VarType = "Json",
+                            ValueJson = valueJson,
+                            UpdatedAt = DateTime.UtcNow,
+                            CreatedAt = DateTime.UtcNow
+                        });
+                    }
+                }
+
+                throw new KeyNotFoundException(name);
+            });
+        return provider.Object;
+    }
+}

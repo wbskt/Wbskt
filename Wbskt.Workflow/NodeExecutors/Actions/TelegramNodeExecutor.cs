@@ -4,6 +4,7 @@ using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Integrations;
+using Wbskt.Workflow.Runtime;
 
 namespace Wbskt.Workflow.NodeExecutors.Actions;
 
@@ -16,7 +17,7 @@ namespace Wbskt.Workflow.NodeExecutors.Actions;
 /// versioned and readable by the whole workspace, so a token written into one leaks to every member
 /// and is frozen into every published version.
 /// </remarks>
-internal sealed class TelegramNodeExecutor(IIntegrationResolver resolver, TelegramChannel channel) : INodeExecutor
+internal sealed class TelegramNodeExecutor(IIntegrationResolver resolver, TelegramChannel channel, ActionTemplates templates) : INodeExecutor
 {
     public string Kind => NodeKind.ActionTelegram;
 
@@ -33,6 +34,11 @@ internal sealed class TelegramNodeExecutor(IIntegrationResolver resolver, Telegr
         }
 
         var integration = resolution.Integration!;
+        config = config with
+        {
+            ChatId = await templates.LineAsync(ctx, "chatId", config.ChatId, ct),
+            Message = await templates.TextAsync(ctx, "message", config.Message, ct)
+        };
         var result = await channel.SendAsync(integration, config, ct);
         if (!result.Ok)
         {

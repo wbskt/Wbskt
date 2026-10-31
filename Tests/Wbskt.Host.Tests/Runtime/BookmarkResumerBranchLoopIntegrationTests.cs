@@ -256,7 +256,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
             providers,
             new RunJournal(providers, new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
-            new StubNodeExecutorRegistry(new CommandNodeExecutor(publisher, resumer)),
+            new StubNodeExecutorRegistry(new CommandNodeExecutor(publisher, resumer, NodeExecutors.Actions.TestTemplates.Create())),
             _dispatcher,
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),

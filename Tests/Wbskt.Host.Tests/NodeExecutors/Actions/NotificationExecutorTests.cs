@@ -21,7 +21,7 @@ public sealed class NotificationExecutorTests
     public async Task Email_fails_without_resolving_when_there_is_no_recipient()
     {
         var resolver = new StubResolver(Smtp());
-        var executor = new EmailNodeExecutor(resolver, SmtpChannel());
+        var executor = new EmailNodeExecutor(resolver, SmtpChannel(), TestTemplates.Create());
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(EmailContext(to: " "), CancellationToken.None));
 
@@ -35,7 +35,7 @@ public sealed class NotificationExecutorTests
     {
         // A step whose integration was deleted fails the same way on every attempt.
         var resolver = StubResolver.Failing("INTEGRATION_NOT_FOUND");
-        var executor = new EmailNodeExecutor(resolver, SmtpChannel());
+        var executor = new EmailNodeExecutor(resolver, SmtpChannel(), TestTemplates.Create());
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(EmailContext(), CancellationToken.None));
 
@@ -47,7 +47,7 @@ public sealed class NotificationExecutorTests
     [Fact]
     public async Task Email_treats_a_malformed_address_as_permanent()
     {
-        var executor = new EmailNodeExecutor(new StubResolver(Smtp()), SmtpChannel());
+        var executor = new EmailNodeExecutor(new StubResolver(Smtp()), SmtpChannel(), TestTemplates.Create());
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(EmailContext(to: "not an address"), CancellationToken.None));
 
@@ -62,7 +62,7 @@ public sealed class NotificationExecutorTests
     {
         var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"ok\":true}") });
         var resolver = new StubResolver(Telegram());
-        var executor = new TelegramNodeExecutor(resolver, TelegramChannel(handler, "https://tg.test"));
+        var executor = new TelegramNodeExecutor(resolver, TelegramChannel(handler, "https://tg.test"), TestTemplates.Create());
 
         var result = await executor.ExecuteAsync(TelegramContext(), CancellationToken.None);
 
@@ -81,7 +81,7 @@ public sealed class NotificationExecutorTests
         {
             Content = new StringContent("{\"ok\":true,\"result\":{\"message_id\":77,\"chat\":{\"id\":-1001234567890,\"type\":\"channel\"}}}")
         });
-        var executor = new TelegramNodeExecutor(new StubResolver(Telegram()), TelegramChannel(handler));
+        var executor = new TelegramNodeExecutor(new StubResolver(Telegram()), TelegramChannel(handler), TestTemplates.Create());
 
         var result = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(TelegramContext(), CancellationToken.None));
 
@@ -94,7 +94,7 @@ public sealed class NotificationExecutorTests
     public async Task Telegram_leaves_out_the_ids_when_the_answer_has_none()
     {
         var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("not json") });
-        var executor = new TelegramNodeExecutor(new StubResolver(Telegram()), TelegramChannel(handler));
+        var executor = new TelegramNodeExecutor(new StubResolver(Telegram()), TelegramChannel(handler), TestTemplates.Create());
 
         var result = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(TelegramContext(), CancellationToken.None));
 
@@ -105,7 +105,7 @@ public sealed class NotificationExecutorTests
     public async Task Telegram_fails_without_calling_out_when_the_integration_cannot_be_had()
     {
         var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
-        var executor = new TelegramNodeExecutor(StubResolver.Failing("INTEGRATION_WRONG_TYPE"), TelegramChannel(handler));
+        var executor = new TelegramNodeExecutor(StubResolver.Failing("INTEGRATION_WRONG_TYPE"), TelegramChannel(handler), TestTemplates.Create());
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(TelegramContext(), CancellationToken.None));
 
@@ -126,7 +126,7 @@ public sealed class NotificationExecutorTests
     {
         var handler = new FakeHandler(_ => new HttpResponseMessage(status) { Content = new StringContent("{}") });
         var resolver = new StubResolver(Telegram());
-        var executor = new TelegramNodeExecutor(resolver, TelegramChannel(handler));
+        var executor = new TelegramNodeExecutor(resolver, TelegramChannel(handler), TestTemplates.Create());
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(TelegramContext(), CancellationToken.None));
 
@@ -143,7 +143,7 @@ public sealed class NotificationExecutorTests
         {
             Content = new StringContent($"{{\"description\":\"failed at https://api.telegram.org/bot{Token}/sendMessage\"}}")
         });
-        var executor = new TelegramNodeExecutor(new StubResolver(Telegram()), TelegramChannel(handler));
+        var executor = new TelegramNodeExecutor(new StubResolver(Telegram()), TelegramChannel(handler), TestTemplates.Create());
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(TelegramContext(), CancellationToken.None));
 
@@ -155,7 +155,7 @@ public sealed class NotificationExecutorTests
     public async Task Telegram_reports_a_network_failure_as_retryable_without_the_exception_text()
     {
         var handler = new FakeHandler(_ => throw new HttpRequestException($"connect to https://tg.test/bot{Token}/sendMessage failed"));
-        var executor = new TelegramNodeExecutor(new StubResolver(Telegram()), TelegramChannel(handler));
+        var executor = new TelegramNodeExecutor(new StubResolver(Telegram()), TelegramChannel(handler), TestTemplates.Create());
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(TelegramContext(), CancellationToken.None));
 

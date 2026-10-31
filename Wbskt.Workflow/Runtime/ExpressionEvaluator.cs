@@ -297,7 +297,7 @@ internal sealed class ExpressionEvaluator : IExpressionEvaluator
         };
     }
 
-    private static string ToStringValue(JsonElement value)
+    internal static string ToStringValue(JsonElement value)
     {
         return value.ValueKind switch
         {
@@ -414,48 +414,14 @@ internal sealed class ExpressionEvaluator : IExpressionEvaluator
     {
         string source = template.Template ?? string.Empty;
         var builder = new System.Text.StringBuilder(source.Length);
-
-        int index = 0;
-        while (index < source.Length)
+        foreach (TemplatePlaceholders.Part part in TemplatePlaceholders.Parse(source))
         {
-            int open = source.IndexOf("{{", index, StringComparison.Ordinal);
-            if (open < 0)
-            {
-                builder.Append(source, index, source.Length - index);
-                break;
-            }
-
-            builder.Append(source, index, open - index);
-
-            int close = source.IndexOf("}}", open + 2, StringComparison.Ordinal);
-            if (close < 0)
-            {
-                throw new ExpressionEvaluationException(
-                    $"Template has an unclosed '{{{{' placeholder: \"{source}\".");
-            }
-
-            string reference = source[(open + 2)..close].Trim();
-            if (reference.Length == 0)
-            {
-                throw new ExpressionEvaluationException($"Template contains an empty placeholder: \"{source}\".");
-            }
-
-            builder.Append(ToStringValue(await ResolveTemplateReferenceAsync(reference, context, ct)));
-            index = close + 2;
+            builder.Append(part.IsPlaceholder
+                ? ToStringValue(await EvaluateAsync(TemplatePlaceholders.ToExpression(part.Text), context, ct))
+                : part.Text);
         }
 
         return ToJsonElement(builder.ToString());
-    }
-
-    private async Task<JsonElement> ResolveTemplateReferenceAsync(string reference, BranchContext context, CancellationToken ct)
-    {
-        const string sharedPrefix = "$shared.";
-        if (reference.StartsWith(sharedPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            return await ResolveSharedVariableAsync(reference[sharedPrefix.Length..], context, ct);
-        }
-
-        return ResolveBranchState(reference, context);
     }
 
     // ------------------------------------------------------------ resolution

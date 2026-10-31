@@ -4,11 +4,12 @@ using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Integrations;
+using Wbskt.Workflow.Runtime;
 
 namespace Wbskt.Workflow.NodeExecutors.Actions;
 
 /// <summary>Sends a plain-text email through the SMTP integration the step names.</summary>
-internal sealed class EmailNodeExecutor(IIntegrationResolver resolver, SmtpChannel channel) : INodeExecutor
+internal sealed class EmailNodeExecutor(IIntegrationResolver resolver, SmtpChannel channel, ActionTemplates templates) : INodeExecutor
 {
     public string Kind => NodeKind.ActionEmail;
 
@@ -18,7 +19,8 @@ internal sealed class EmailNodeExecutor(IIntegrationResolver resolver, SmtpChann
         EmailConfig config = node.Config
             ?? throw new InvalidOperationException($"Email node {node.NodeId} is missing config.");
 
-        if (string.IsNullOrWhiteSpace(config.To))
+        string to = await templates.LineAsync(ctx, "to", config.To, ct);
+        if (string.IsNullOrWhiteSpace(to))
         {
             return new NodeExecutionResult.Fail("EMAIL_RECIPIENT_MISSING", "The email node has no recipient.", false, null);
         }
@@ -33,7 +35,9 @@ internal sealed class EmailNodeExecutor(IIntegrationResolver resolver, SmtpChann
 
         // A malformed address, a refused sign-in or a refused recipient fails the same way every time;
         // a relay that is down, greylisting or busy is worth retrying, and the retry policy decides how hard.
-        var result = await channel.SendAsync(integration, config.To, config.Subject, config.Body, ct);
+        string subject = await templates.LineAsync(ctx, "subject", config.Subject, ct);
+        string body = await templates.TextAsync(ctx, "body", config.Body, ct);
+        var result = await channel.SendAsync(integration, to, subject, body, ct);
         if (!result.Ok)
         {
             return new NodeExecutionResult.Fail(result.Code!, result.Message!, result.Retryable, null);
@@ -42,7 +46,7 @@ internal sealed class EmailNodeExecutor(IIntegrationResolver resolver, SmtpChann
         await resolver.MarkUsedAsync(integration, ct);
         return new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>
         {
-            ["to"] = JsonSerializer.SerializeToElement(config.To)
+            ["to"] = JsonSerializer.SerializeToElement(to)
         });
     }
 }

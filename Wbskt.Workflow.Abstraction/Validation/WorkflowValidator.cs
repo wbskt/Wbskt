@@ -706,12 +706,12 @@ public sealed class WorkflowValidator
             Add("DISCORD_MESSAGE_INVALID", $"the message must be at most {DiscordMaxMessageLength} characters.");
         }
 
-        if (config.AvatarUrl is not null && !IsHttpUrl(config.AvatarUrl))
+        if (config.AvatarUrl is not null && !IsHttpUrl(config.AvatarUrl) && !HasPlaceholder(config.AvatarUrl))
         {
             Add("DISCORD_AVATAR_URL_INVALID", "avatarUrl must be an absolute http or https URL.");
         }
 
-        if (config.ThreadId is not null && !IsSnowflake(config.ThreadId))
+        if (config.ThreadId is not null && !IsSnowflake(config.ThreadId) && !HasPlaceholder(config.ThreadId))
         {
             Add("DISCORD_THREAD_INVALID", "threadId must be a Discord id (digits only).");
         }
@@ -756,7 +756,7 @@ public sealed class WorkflowValidator
 
             foreach (var (name, url) in new[] { ("url", embed.Url), ("imageUrl", embed.ImageUrl), ("thumbnailUrl", embed.ThumbnailUrl) })
             {
-                if (url is not null && !IsHttpUrl(url))
+                if (url is not null && !IsHttpUrl(url) && !HasPlaceholder(url))
                 {
                     Add("DISCORD_EMBED_INVALID", $"{at}: {name} must be an absolute http or https URL.");
                 }
@@ -792,6 +792,9 @@ public sealed class WorkflowValidator
         }
     }
 
+    // A field filled in from {{ }} placeholders when the step runs can only be checked then.
+    private static bool HasPlaceholder(string value) => value.Contains("{{", StringComparison.Ordinal);
+
     private static bool IsHttpUrl(string value) =>
         Uri.TryCreate(value, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
 
@@ -811,7 +814,7 @@ public sealed class WorkflowValidator
 
         // Relative to what? Only an integration's base URL can answer that. A leading '/' is relative
         // too, though on Unix Uri reads it as an absolute file path.
-        if (node.IntegrationRef is null && (!Uri.TryCreate(config.Url, UriKind.Absolute, out _) || config.Url.StartsWith('/')))
+        if (node.IntegrationRef is null && !HasPlaceholder(config.Url) && (!Uri.TryCreate(config.Url, UriKind.Absolute, out _) || config.Url.StartsWith('/')))
         {
             issues.Add(new ValidationIssue(
                 ValidationSeverity.Error,

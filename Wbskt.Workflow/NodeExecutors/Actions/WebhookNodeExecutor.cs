@@ -16,14 +16,14 @@ namespace Wbskt.Workflow.NodeExecutors.Actions;
 /// reply, the body parsed (<c>json</c>); the call is bounded by the step's timeout and the body by
 /// <see cref="WebhookNotificationConfig.MaxResponseBytes"/>.
 /// </summary>
-internal sealed class WebhookNodeExecutor(IHttpClientFactory httpClientFactory, IOutboundAddressGuard addressGuard, IIntegrationResolver resolver) : INodeExecutor
+internal sealed class WebhookNodeExecutor(IHttpClientFactory httpClientFactory, IOutboundAddressGuard addressGuard, IIntegrationResolver resolver, ActionTemplates templates) : INodeExecutor
 {
     public string Kind => NodeKind.ActionWebhook;
 
     public async Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
     {
         WebhookNotificationNode node = (WebhookNotificationNode)ctx.Node;
-        WebhookNotificationConfig config = node.Config;
+        WebhookNotificationConfig config = await RenderAsync(ctx, node.Config, ct);
 
         ResolvedIntegration? integration = null;
         Uri? targetUri;
@@ -45,7 +45,7 @@ internal sealed class WebhookNodeExecutor(IHttpClientFactory httpClientFactory, 
             {
                 return new NodeExecutionResult.Fail(
                     "WEBHOOK_ORIGIN_MISMATCH",
-                    $"'{config.Url}' is not on {settings.BaseUrl}, the address the integration's credential is for.",
+                    $"'{node.Config.Url}' is not on {settings.BaseUrl}, the address the integration's credential is for.",
                     false,
                     null);
             }
@@ -63,7 +63,7 @@ internal sealed class WebhookNodeExecutor(IHttpClientFactory httpClientFactory, 
         {
             // The URL is author-defined; refuse anything that isn't a well-formed absolute http(s) URL
             // pointing at a non-reserved address, so the engine can't be turned into an SSRF proxy.
-            return new NodeExecutionResult.Fail("WEBHOOK_INVALID_URL", $"'{config.Url}' is not a valid absolute URL.", false, null);
+            return new NodeExecutionResult.Fail("WEBHOOK_INVALID_URL", $"'{node.Config.Url}' is not a valid absolute URL.", false, null);
         }
 
         OutboundAddressDecision decision = await addressGuard.EvaluateAsync(targetUri, ct);
@@ -160,6 +160,25 @@ internal sealed class WebhookNodeExecutor(IHttpClientFactory httpClientFactory, 
             string message = integration is null ? ex.Message : IntegrationErrors.Scrub(ex.Message, integration.Secrets);
             return new NodeExecutionResult.Fail("WEBHOOK_NETWORK_ERROR", message, true, ex);
         }
+    }
+
+    // The URL is filled in before the origin and address checks, so they judge where the call really goes.
+    // Failure messages quote the URL as written: filled in, it may carry a $shared secret into history.
+    private async Task<WebhookNotificationConfig> RenderAsync(NodeContext ctx, WebhookNotificationConfig config, CancellationToken ct)
+    {
+        Dictionary<string, string>? headers = null;
+        foreach (var (name, value) in config.Headers ?? new Dictionary<string, string>())
+        {
+            (headers ??= [])[name] =
+                await templates.LineAsync(ctx, $"headers.{name}", value, ct);
+        }
+
+        return config with
+        {
+            Url = await templates.LineAsync(ctx, "url", config.Url, ct),
+            Headers = headers,
+            Body = await templates.JsonAsync(ctx, "body", config.Body, ct)
+        };
     }
 
     /// <summary>
