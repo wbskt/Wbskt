@@ -5,6 +5,7 @@ using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Abstractions;
 using Wbskt.Events.Auth;
 using Wbskt.Infrastructure.Events.Outbox;
 using Wbskt.Infrastructure.Security;
@@ -37,7 +38,7 @@ public sealed class AccountDeletionServiceTests
         IReadOnlyDictionary<int, OutboxMessage>? planned = null;
         _accounts.Setup(p => p.DeleteUserAsync(42, It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), It.IsAny<CancellationToken>()))
             .Callback<int, IReadOnlyDictionary<int, OutboxMessage>, CancellationToken>((_, w, _) => planned = w)
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(new List<int> { 3 });
 
         var result = await Service().DeleteAccountAsync(42, Password, Ip);
 
@@ -46,6 +47,24 @@ public sealed class AccountDeletionServiceTests
         Assert.Equal(new[] { 7, 9 }, planned.Keys.Order());
         Assert.All(planned.Values, m => Assert.Contains(nameof(WorkspaceDeletedEvent), m.MessageType));
         _accessTokens.Verify(a => a.RevokeUserAsync(UserRef, It.IsAny<CancellationToken>()), Times.Once);
+        // Leaving tenant 3 is announced as the members endpoint would, and the deletion itself.
+        _bus.Verify(b => b.PublishAsync(It.Is<UserPermissionsChangedEvent>(e => e.UserId == 42), It.IsAny<CancellationToken>()), Times.Once);
+        _bus.Verify(b => b.PublishAsync(It.Is<TenantActorEvent>(e => e is MemberRemovedEvent && ((MemberRemovedEvent)e).MemberRefId == UserRef), It.IsAny<CancellationToken>()), Times.Once);
+        _bus.Verify(b => b.PublishAsync(It.Is<AccountDeletedEvent>(e => e.UserRefId == UserRef && e.ClientAddress == Ip), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_deactivated_or_already_deleted_account_cannot_delete()
+    {
+        var inactive = AUser();
+        inactive.IsActive = false;
+        _accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(inactive);
+
+        var result = await Service().DeleteAccountAsync(42, Password, Ip);
+
+        Assert.Equal("AUTH_USER_NOT_FOUND", result.Error.Code);
+        _accounts.Verify(p => p.RecordLoginFailureAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Never);
+        _accounts.Verify(p => p.DeleteUserAsync(It.IsAny<int>(), It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -73,11 +92,11 @@ public sealed class AccountDeletionServiceTests
     }
 
     [Fact]
-    public async Task The_only_administrator_of_a_shared_tenant_is_refused_and_keeps_their_tokens()
+    public async Task Leaving_a_shared_tenant_nobody_else_administers_is_refused_and_keeps_their_tokens()
     {
         _accounts.Setup(p => p.GetSoleTenantWorkspaceIdsAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(Array.Empty<int>());
         _accounts.Setup(p => p.DeleteUserAsync(42, It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(SqlExceptions.WithNumber(50018, "You are the only administrator of Acme."));
+            .ThrowsAsync(SqlExceptions.WithNumber(50018, "Nobody else administers Acme."));
 
         var result = await Service().DeleteAccountAsync(42, Password, Ip);
 

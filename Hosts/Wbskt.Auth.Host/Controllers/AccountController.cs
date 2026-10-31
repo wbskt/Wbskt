@@ -27,7 +27,7 @@ public class AccountController : ApiControllerBase
     /// <remarks>
     /// Tenants only this person belongs to are deleted with their workspaces, and everything in them;
     /// they leave every other tenant, and the workspaces they own there pass to another administrator.
-    /// While they are the only administrator of a tenant others belong to, the whole deletion is
+    /// While nobody else administers a tenant others belong to, the whole deletion is
     /// refused with 409 <c>ACCOUNT_SOLE_ADMINISTRATOR</c>, naming those tenants. Every session ends,
     /// on every host, and the account's username and address are anonymised, so the address can
     /// register again. A wrong password is 400 <c>AUTH_CURRENT_PASSWORD_INVALID</c> and counts towards
