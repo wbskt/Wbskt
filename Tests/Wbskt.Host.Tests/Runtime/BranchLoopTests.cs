@@ -2052,7 +2052,7 @@ public sealed class BranchLoopTests
         public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => throw new NotSupportedException();
         public Task<long> SumActiveBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<bool> TryChargeAsync(int runId, decimal cost, CancellationToken ct)
+        public Task<CreditCharge?> TryChargeAsync(int runId, decimal cost, CancellationToken ct)
         {
             hostCts.Cancel();
             throw new OperationCanceledException("host shutdown");
@@ -2292,10 +2292,10 @@ public sealed class BranchLoopTests
 
         public int ChargeCount { get; private set; }
 
-        public Task<bool> TryChargeAsync(int runId, decimal cost, CancellationToken ct)
+        public Task<CreditCharge?> TryChargeAsync(int runId, decimal cost, CancellationToken ct)
         {
             ChargeCount++;
-            return Task.FromResult(true);
+            return Task.FromResult<CreditCharge?>(new CreditCharge(0m, decimal.MaxValue));
         }
     }
 

@@ -233,7 +233,7 @@ public sealed class NodeExecutorsE2ETests
         }
 
         public Task<long> SumActiveBranchesAsync(CancellationToken ct) => Task.FromResult((long)_activeBranches);
-        public Task<bool> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult(true);
+        public Task<CreditCharge?> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult<CreditCharge?>(new CreditCharge(0m, decimal.MaxValue));
         public Task<BookmarkRow> CreateAsync(BookmarkRow row, CancellationToken ct) => throw new NotSupportedException();
         Task<BookmarkRow> IBookmarkProvider.GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         Task<BookmarkRow> IBookmarkProvider.GetByIdAsync(long bookmarkId, CancellationToken ct) => throw new NotSupportedException();

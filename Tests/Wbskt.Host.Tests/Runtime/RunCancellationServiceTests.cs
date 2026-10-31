@@ -625,7 +625,7 @@ public sealed class RunCancellationServiceTests
         }
 
         public Task<long> SumActiveBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
-        public Task<bool> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => throw new NotSupportedException();
+        public Task<CreditCharge?> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class RecordingBookmarkProvider : IBookmarkProvider
@@ -747,7 +747,7 @@ public sealed class RunCancellationServiceTests
         public Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => throw new NotSupportedException();
         public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => Task.FromResult(remainingAfterDecrement);
         public Task<long> SumActiveBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
-        public Task<bool> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => throw new NotSupportedException();
+        public Task<CreditCharge?> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => throw new NotSupportedException();
     }
 }
 

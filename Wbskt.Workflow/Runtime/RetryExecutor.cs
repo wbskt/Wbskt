@@ -35,6 +35,8 @@ internal static class RetryExecutor
     /// </summary>
     internal const string RetryAttemptKey = BranchStateKeys.RetryAttempt;
 
+    private const decimal CreditBudgetWarnRatio = 0.8m;
+
     /// <summary>
     /// The attempt a retry park left on the branch, or null when the branch is not parked for a retry
     /// (the key is absent, or holds something other than an attempt number).
@@ -77,6 +79,9 @@ internal static class RetryExecutor
         // reports and the attempts it has left are the real ones. Clamped so a stored number the policy
         // no longer allows still gets the node one last attempt rather than none.
         int startAttempt = Math.Clamp(firstAttempt, 1, Math.Max(1, policy.MaxAttempts));
+
+        // Held across attempts: the charge that crosses the line may be on an attempt that is retried.
+        List<NodeWarning> chargeWarnings = [];
 
         for (int attempt = startAttempt; attempt <= policy.MaxAttempts; attempt++)
         {
@@ -161,10 +166,10 @@ internal static class RetryExecutor
                 // Atomic budget-checked charge (2.2): the SP re-validates the budget under the
                 // same row lock as the increment, so this is a single round-trip with no
                 // check-then-act race between concurrent branches on the same run.
-                bool charged = await runCountersProvider.TryChargeAsync((int)context.RunId, cost, ct);
-                if (!charged)
+                CreditCharge? charge = await runCountersProvider.TryChargeAsync((int)context.RunId, cost, ct);
+                if (charge is null)
                 {
-                    var outOfCreditsResult = new NodeExecutionResult.Fail("OUT_OF_CREDITS", "Credit budget exhausted.", false, null);
+                    var outOfCreditsResult = new NodeExecutionResult.Fail("OUT_OF_CREDITS", "Credit budget exhausted.", false, null) { Warnings = chargeWarnings.ToArray() };
                     string errorJson = JsonSerializer.Serialize(outOfCreditsResult, EngineJson.Options);
 
                     await RecordOutcomeAsync(false, errorJson);
@@ -173,6 +178,13 @@ internal static class RetryExecutor
                 }
 
                 onCharge?.Invoke(cost);
+
+                // Charges on a run are serialised by the row lock, so exactly one of them crosses the line.
+                decimal threshold = charge.Budget * CreditBudgetWarnRatio;
+                if (charge.Spent - cost <= threshold && charge.Spent > threshold)
+                {
+                    chargeWarnings.Add(new NodeWarning(HistoryEventKind.CreditBudgetLow, new { spent = charge.Spent, budget = charge.Budget }));
+                }
 
                 if (workflowMetrics != null)
                 {
@@ -188,6 +200,7 @@ internal static class RetryExecutor
                 CancellationToken = ct,
                 IdempotencyKey = keyValue
             };
+            nodeContext.Warnings.AddRange(chargeWarnings);
 
             // Both ways a node can ask for a retry - returning a retryable Fail and throwing a
             // TransientNodeException - go through here. They used to be separate: the Fail path

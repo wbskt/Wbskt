@@ -403,7 +403,7 @@ public sealed class StrandedBranchSweepTests
             return Task.FromResult(state.ActiveBranches);
         }
 
-        public Task<bool> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult(true);
+        public Task<CreditCharge?> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult<CreditCharge?>(new CreditCharge(0m, decimal.MaxValue));
         public Task<long> SumActiveBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
     }
 
