@@ -47,7 +47,8 @@ class FakeApi:
                 self.logins.append((time.monotonic(), body))
                 if self.login_answers:
                     return self.login_answers.pop(0)
-                if self.known.get(str(body.get("clientRefId"))) != body.get("secret"):
+                secret = body.get("secret")
+                if not secret or self.known.get(str(body.get("clientRefId"))) != secret:
                     return 401, {"code": "CLIENT_UNAUTHORIZED"}, {}
                 return 200, {"accessToken": f"token-{len(self.logins)}", "expiresIn": 3600}, {}
             return 404, {}, {}
@@ -61,9 +62,8 @@ class FakeApi:
 
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self) -> None:
-                length = int(self.headers.get("Content-Length") or 0)
                 try:
-                    body = json.loads(self.rfile.read(length) or b"{}")
+                    body = json.loads(self._read_body() or b"{}")
                 except ValueError:
                     body = {}
                 status, payload, headers = api.handle(self.path, body)
@@ -75,6 +75,20 @@ class FakeApi:
                 self.send_header("Content-Length", str(len(raw)))
                 self.end_headers()
                 self.wfile.write(raw)
+
+            def _read_body(self) -> bytes:
+                # HttpClient sends JSON chunked, with no Content-Length.
+                if "chunked" not in self.headers.get("Transfer-Encoding", "").lower():
+                    return self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                body = b""
+                while True:
+                    size = int(self.rfile.readline().split(b";")[0].strip(), 16)
+                    if size == 0:
+                        while self.rfile.readline() not in (b"\r\n", b"\n", b""):
+                            pass
+                        return body
+                    body += self.rfile.read(size)
+                    self.rfile.readline()
 
             def log_message(self, *args: Any) -> None:
                 pass
