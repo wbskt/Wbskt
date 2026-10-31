@@ -54,6 +54,11 @@ BEGIN
     WHERE PTE.WorkflowRefId IN (
         SELECT WD.RefId FROM dbo.WorkflowDefinitions WD INNER JOIN @Definitions D ON D.Id = WD.Id);
 
+    DELETE TDO
+    FROM dbo.TriggerDispatchOutcomes TDO
+    WHERE TDO.WorkflowRefId IN (
+        SELECT WD.RefId FROM dbo.WorkflowDefinitions WD INNER JOIN @Definitions D ON D.Id = WD.Id);
+
     UPDATE dbo.WorkflowDefinitions
     SET IsEnabled = 0
     WHERE WorkspaceId = @WorkspaceId

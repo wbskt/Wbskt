@@ -7,6 +7,7 @@ using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.InboundAdapters;
+using Wbskt.Host.Tests.Runtime;
 
 namespace Wbskt.Host.Tests.InboundAdapters;
 
@@ -56,6 +57,24 @@ public sealed class ClientHoldRecorderTests
         await consumer.Consume(Context(evt).Object);
 
         Assert.Equal(sentAt, Assert.Single(provider.Records).EventAt);
+    }
+
+    [Theory]
+    [InlineData(true, TriggerDispatchOutcomeRow.HeldOutcome)]
+    [InlineData(false, nameof(TriggerDispatchOutcome.Filtered))]
+    public async Task A_held_message_is_kept_in_the_triggers_recent_outcomes(bool filterPasses, string outcome)
+    {
+        TriggerRegistrationRow hold = Registration(ClientHoldTriggerKey.Build(ClientRef, "temperature", 600, Guid.NewGuid(), Guid.NewGuid()));
+        var outcomes = new RecordingOutcomeProvider();
+        var recorder = new ClientHoldRecorder(new RecordingHoldStateProvider(hold), new FixedFilterEvaluator(filterPasses), UncachedTriggerRegistrationCache.Instance, RecordingOutcomeProvider.Log(outcomes));
+        var consumer = new ClientPayloadReceivedConsumer(Hub().Object, recorder);
+
+        await consumer.Consume(Context(new ClientMessageReceivedEvent(ClientRef, 12, 34, "temperature", "{}")).Object);
+
+        TriggerDispatchOutcomeRow row = Assert.Single(outcomes.Records);
+        Assert.Equal((hold.WorkflowRefId, hold.TriggerNodeId, outcome, "temperature"), (row.WorkflowRefId, row.TriggerNodeId, row.Outcome, row.MessageType));
+        // The adapter's event is not stamped yet; the record still carries a real time.
+        Assert.NotEqual(default, row.OccurredAt);
     }
 
     [Fact]

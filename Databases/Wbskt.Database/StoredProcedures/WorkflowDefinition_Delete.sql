@@ -1,6 +1,7 @@
 -- Deletes a workflow: tombstones its RefId (dbo.WorkflowDeletions), disables every version, and
--- removes its trigger and schedule registrations and any queued trigger events, exactly as
--- Workspace_Retire does for a whole workspace. Version rows and runs stay, so history is readable.
+-- removes its trigger and schedule registrations, any queued trigger events and the triggers'
+-- recent outcomes, exactly as Workspace_Retire does for a whole workspace. Version rows and runs
+-- stay, so history is readable.
 --
 -- Scoped by workspace. Returns nothing when the workflow is not in @WorkspaceId or is already
 -- deleted; otherwise one row per thing the caller must still act on outside the database:
@@ -45,6 +46,9 @@ BEGIN
     INNER JOIN @Definitions D ON D.Id = SF.WorkflowDefinitionId;
 
     DELETE FROM dbo.PendingTriggerEvents
+    WHERE WorkflowRefId = @RefId;
+
+    DELETE FROM dbo.TriggerDispatchOutcomes
     WHERE WorkflowRefId = @RefId;
 
     UPDATE WD
