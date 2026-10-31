@@ -29,7 +29,7 @@ CREATE TABLE dbo.Integrations (
     CONSTRAINT PK_Integrations                  PRIMARY KEY (Id),
     CONSTRAINT UQ_Integrations_RefId            UNIQUE (RefId),
     CONSTRAINT UQ_Integrations_WorkspaceId_Name UNIQUE (WorkspaceId, Name),
-    CONSTRAINT CK_Integrations_Type             CHECK (Type BETWEEN 1 AND 5),
+    CONSTRAINT CK_Integrations_Type             CHECK (Type >= 1 AND Type <= 5),
     CONSTRAINT CK_Integrations_Preset           CHECK (Preset IS NULL OR (Preset = 1 AND Type = 5))
 );
 GO
