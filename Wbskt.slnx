@@ -65,6 +65,7 @@
     <Project Path="Tests/Wbskt.Host.Tests/Wbskt.Host.Tests.csproj" />
     <Project Path="Tests/Wbskt.Workflow.Engine.Host.IntegrationTests/Wbskt.Workflow.Engine.Host.IntegrationTests.csproj" />
     <Project Path="Tests/Wbskt.LoadTester/Wbskt.LoadTester.csproj" />
+    <Project Path="Tests/Conformance/harnesses/dotnet/Wbskt.Conformance.Harness.csproj" />
   </Folder>
   <Folder Name="/Tools/">
     <Project Path="Tools/Wbskt.Workflow.Exporter/Wbskt.Workflow.Exporter.csproj" />

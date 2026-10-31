@@ -1,0 +1,57 @@
+# SDK conformance suite
+
+Checks a device SDK against [the device protocol](../../Docs/Device.Protocol.md), one scenario per
+item of its checklist (§6). The suite fakes the two HTTP endpoints and the socket host
+(`fake_wbskt.py`), so nothing else has to run, and each scenario takes a few seconds. The fake can
+misbehave on cue: refuse a token, throttle a login, forget a device, close or refuse the socket.
+
+The SDK runs as a separate process, a **harness**, so any language can take part. CI
+(`.github/workflows/sdk-conformance.yml`) runs it for the Python and .NET SDKs.
+
+```sh
+pip install -r requirements.txt
+pip install -e ../../Clients/python
+WBSKT_HARNESS="python harnesses/python/harness.py" python -m pytest -v
+
+dotnet build harnesses/dotnet -c Release -o /tmp/harness
+WBSKT_HARNESS="dotnet /tmp/harness/Wbskt.Conformance.Harness.dll" python -m pytest -v
+```
+
+The suite takes about four minutes, because it waits for the SDK's real reconnect delays (up to
+10 s after a drop) rather than shortening them.
+
+## Writing a harness
+
+A harness is a program that starts one client and then does what the suite tells it. It reads its
+settings from the environment:
+
+| Variable | |
+|---|---|
+| `WBSKT_API_URL` | Base URL of the fake API (`http://127.0.0.1:<port>`). |
+| `WBSKT_SOCKET_URL` | Base URL of the fake socket host (`ws://127.0.0.1:<port>`); the SDK adds `/ws`. |
+| `WBSKT_DEVICE_NAME` | The device name to register with. |
+| `WBSKT_POLICY_PIN` | The policy PIN, or empty. |
+| `WBSKT_STORAGE` | A file for the credentials. The same file is used across restarts of one scenario. |
+| `WBSKT_COMMANDS` | The commands to declare, as the JSON array of the `capabilities` message's `capabilities`. |
+
+The harness starts the client at once. It then reads one JSON object per line on stdin:
+
+| Line | Do |
+|---|---|
+| `{"op":"send","type":"…","payload":…}` | Send an application message. |
+| `{"op":"state","values":{…}}` | Report state. |
+| `{"op":"stop"}` | Stop the client and exit. |
+
+It writes one JSON object per line on stdout, flushing each one. Other lines are ignored, so the SDK
+may log there.
+
+| Line | When |
+|---|---|
+| `{"event":"started"}` | The client was started. |
+| `{"event":"connected"}` / `{"event":"disconnected"}` | The socket opened or closed. |
+| `{"event":"message","type":"…","payload":…,"commandId":"…"\|null}` | The SDK handed a message to the app. |
+| `{"event":"sent","type":"…"}` | `send` or `state` returned. |
+| `{"event":"rejected","type":"…","reason":"…"}` | The SDK refused to send the message, for example for a reserved type. |
+
+The ESP32 library can't run on a host, so its protocol logic has host tests of its own in the
+[Wbskt.Arduino](https://github.com/wbskt/Wbskt.Arduino) repository.

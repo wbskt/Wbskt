@@ -1,3 +1,5 @@
+using System.Security;
+
 namespace Wbskt.Client.Sdk.Internal;
 
 /// <summary>A device access token and when it stops being accepted.</summary>
@@ -45,3 +47,7 @@ internal sealed class DeviceLoginThrottledException(TimeSpan? retryAfter)
 {
     public TimeSpan? RetryAfter { get; } = retryAfter;
 }
+
+/// <summary>The device login answered <c>CLIENT_UNAUTHORIZED</c>: the device was deleted or its secret rotated.</summary>
+internal sealed class CredentialsRejectedException()
+    : SecurityException("The stored device credentials were rejected.");
