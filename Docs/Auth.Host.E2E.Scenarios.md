@@ -239,6 +239,21 @@ The most security-sensitive area, and entirely uncovered today.
 | `AUTH_LOCK_01` | − | Ten wrong passwords, then the right one | **401** `AUTH_INVALID_CREDENTIALS`, identical to a wrong password; sessions issued earlier still work |
 | `AUTH_LOCK_02` | + | Nine wrong passwords, a success, one more wrong one | The next correct sign-in still succeeds: a success resets the count |
 
+## 6b. Deleting your own account — `POST /api/auth/account/delete`
+
+The password is asked again. Tenants the user is the only member of go with the account, workspaces
+included (each publishes `WorkspaceDeletedEvent`); from shared tenants the user is removed and their
+workspaces pass to another administrator. The `Users` row stays, anonymised, so audit references
+still resolve.
+
+| ID | ± | Scenario | Expected |
+|---|---|---|---|
+| `AUTH_DEL_01` | + | Delete with the right password | **204**; every access token issued earlier is **401**, the refresh token fails, the old password no longer signs in, and the same username and address can register again |
+| `AUTH_DEL_02` | − | Wrong password | **400** `AUTH_CURRENT_PASSWORD_INVALID`; the account still signs in |
+| `AUTH_DEL_03` | − | No token | **401** |
+| `AUTH_DEL_04` | − | Only administrator of a tenant someone else belongs to | **409** `ACCOUNT_SOLE_ADMINISTRATOR`, naming the tenant; nothing is deleted |
+| `AUTH_DEL_05` | + | An invited member deletes their account | **204**; the administrator's member list no longer has them |
+
 ---
 
 ## 7. Rate limiting & transport

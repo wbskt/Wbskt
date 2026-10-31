@@ -120,12 +120,12 @@ says what it is, `user` or `client`.
 
 Anonymous except where noted, and rate limited per client IP so the password hasher cannot be used as
 a work amplifier. There are four buckets, so routine traffic cannot spend the sign-in budget:
-`RateLimiting:Authentication` (10/min: register, login, change-password, forgot-password,
-reset-password), `RateLimiting:TokenRefresh` (120/min: refresh-token, logout),
+`RateLimiting:Authentication` (10/min: register, login, change-password, account/delete,
+forgot-password, reset-password), `RateLimiting:TokenRefresh` (120/min: refresh-token, logout),
 `RateLimiting:SignUpChallenge` (30/min: register/challenge) and `RateLimiting:EmailVerification`
 (10/min: verify-email, resend-verification).
 
-The endpoints that hash a password (register, login, change-password, reset-password) also share one
+The endpoints that hash a password (register, login, change-password, account/delete, reset-password) also share one
 host-wide concurrency limit, `RateLimiting:PasswordHashing` (`PermitLimit`, default twice the CPU
 count, with up to `QueueLimit` 20 waiting), so a burst from many addresses queues instead of starving
 every other request of CPU. A request that finds the queue full gets 429. A password stored with
@@ -135,8 +135,8 @@ older hashing settings is re-hashed with the current ones on the next successful
 refresh-token, logout, logout-all and change-password. The refresh token then travels only in an
 `HttpOnly; Secure` cookie named `wbskt_refresh`, scoped to `/api/auth`, and is left out of the JSON
 body, so script on the page can never read it. refresh-token and logout take an empty body and read
-the cookie; refresh-token sets the replacement cookie, and a refused refresh, logout and logout-all
-clear it. The cookie is only read from a request with that header (which forces a CORS preflight)
+the cookie; refresh-token sets the replacement cookie, and a refused refresh, logout, logout-all and
+account/delete clear it. The cookie is only read from a request with that header (which forces a CORS preflight)
 and an allowed `Origin`, so another site cannot spend it. `Auth:RefreshCookie:SameSite` defaults to
 `Strict`. Without the header everything stays in the body as before, for the SDK, devices and tests;
 a body-only refresh-token or logout with no token is still a 400. CORS on this host allows
@@ -170,6 +170,7 @@ is issued, so the link already in the inbox keeps working.
 | `POST logout` | anonymous | Revokes the one refresh token presented, and the access token issued with it. Succeeds whether or not it existed. |
 | `POST logout-all` | authenticated | Revokes the caller's entire refresh-token set. |
 | `POST change-password` | authenticated | Takes `currentPassword` and `newPassword`. Writes the new password and revokes **every** session the account has in one transaction, then returns a fresh token pair for the caller. A wrong current password is 400 `AUTH_CURRENT_PASSWORD_INVALID` (not 401, so a client does not sign out) and counts towards the lockout below; a locked account is 403 `AUTH_ACCOUNT_LOCKED`. Rate limited like the anonymous endpoints. |
+| `POST account/delete` | authenticated | Deletes the caller's account. Takes `password`, checked like `change-password`'s current password (400 `AUTH_CURRENT_PASSWORD_INVALID`, counts towards the lockout, 403 `AUTH_ACCOUNT_LOCKED`). Tenants the caller is the only member of are deleted with their workspaces (each publishes `WorkspaceDeletedEvent`); from every other tenant the caller is removed, their workspaces passing to another administrator. 409 `ACCOUNT_SOLE_ADMINISTRATOR` when the caller is the only administrator of a tenant others belong to (the message names it), so promote someone first. The `Users` row is kept but anonymised (username, address and password cleared), so the address can register again and audit references still resolve. Every session and access token ends. **204** on success. |
 | `GET sessions` | authenticated | The caller's live sessions, newest sign-in first: `id` (a GUID that stays the same across refreshes), `createdAt` (the sign-in), `lastUsedAt`, `expiresAt`, `ipAddress` (of the last refresh) and `isCurrent` (the session the request came from). One per signed-in device or browser. |
 | `DELETE sessions/{sessionId}` | authenticated | Ends one of the caller's sessions: its refresh token stops working, and so does the access token that device holds (its `sid` claim names the session). 404 `AUTH_SESSION_NOT_FOUND` for an id that is not a live session of theirs. |
 | `POST forgot-password` | anonymous | Mails a reset link if the address has a usable account. **Always 204** — same status, same empty body, for a registered address, an unknown one, a deactivated one, and a malformed one. |
@@ -180,7 +181,7 @@ is issued, so the link already in the inbox keeps working.
 Access tokens last 15 minutes (`Jwt:AccessTokenLifetime`). A session lasts 7 days without use
 (`Jwt:RefreshTokenLifetime`), and 30 days from sign-in however often it is used (`Jwt:SessionLifetime`),
 after which refresh answers 401 `AUTH_TOKEN_INACTIVE` and the user signs in again. Logout-all,
-deactivation, a password reset or change, and a replayed refresh token each revoke the user's refresh tokens
+deactivation, deleting the account, a password reset or change, and a replayed refresh token each revoke the user's refresh tokens
 and, through a per-user watermark shared in Redis, the access tokens already issued, on the auth and
 management hosts alike. Logout and ending one session do the same for that session's access token,
 through its `sid` claim. Revoking access tokens is best effort: with Redis unreachable they live out

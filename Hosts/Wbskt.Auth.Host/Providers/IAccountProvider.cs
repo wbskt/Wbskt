@@ -1,4 +1,5 @@
 using Wbskt.Auth.Host.Models;
+using Wbskt.Infrastructure.Events.Outbox;
 using Wbskt.Primitives;
 
 namespace Wbskt.Auth.Host.Providers;
@@ -51,4 +52,19 @@ internal interface IAccountProvider : IReferenceProvider
     /// <see cref="Wbskt.Primitives.Exceptions.SecurityException"/> when the token is not valid.
     /// </summary>
     Task<int> ConsumeEmailVerificationTokenAsync(byte[] tokenHash, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The workspaces deleting this account deletes with it: those of every tenant the user is the
+    /// only member of (<c>dbo.User_GetSoleTenantWorkspaces</c>).
+    /// </summary>
+    Task<IReadOnlyCollection<int>> GetSoleTenantWorkspaceIdsAsync(int userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes the account (<c>dbo.User_Delete</c>): its sole tenants with their workspaces, each
+    /// workspace's event from <paramref name="deletedWorkspaces"/> queued in the outbox in the same
+    /// transaction; its membership of every other tenant; its sessions and tokens. The user row is
+    /// anonymised rather than removed. Throws SQL guard 50018 while the user is the only administrator
+    /// of a tenant others belong to, and 50019 when the workspaces no longer match.
+    /// </summary>
+    Task DeleteUserAsync(int userId, IReadOnlyDictionary<int, OutboxMessage> deletedWorkspaces, CancellationToken cancellationToken = default);
 }

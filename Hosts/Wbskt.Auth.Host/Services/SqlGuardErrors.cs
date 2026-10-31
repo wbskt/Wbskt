@@ -37,12 +37,17 @@ internal static class SqlGuardErrors
 
             SqlException { Number: 50012 } => Error.Conflict("AUTH_ALREADY_MEMBER", "That user is already a member of this tenant."),
 
-            // THROW 50001-50019 from the stored procedures are deliberate guards (wrong tenant, group
+            // Deleting an account: its owner is a tenant's only administrator (the message names the
+            // tenants), or its tenants changed between reading and deleting.
+            SqlException { Number: 50018 } guard => Error.Conflict("ACCOUNT_SOLE_ADMINISTRATOR", guard.Message),
+            SqlException { Number: 50019 } guard => Error.Conflict("ACCOUNT_DELETE_RETRY", guard.Message),
+
+            // THROW 50001-50029 from the stored procedures are deliberate guards (wrong tenant, group
             // has children, cannot remove the owner or the last administrator, unknown permission
             // slug, expired invitation) rather than faults, so they read back as validation. The
             // upper bound is deliberately ahead of the codes in use: a new guard that lands outside
             // this range reaches the caller as a 500, which is the opposite of what a guard is for.
-            SqlException { Number: >= 50001 and <= 50019 } guard => Error.Validation("AUTH_OPERATION_REJECTED", guard.Message),
+            SqlException { Number: >= 50001 and <= 50029 } guard => Error.Validation("AUTH_OPERATION_REJECTED", guard.Message),
 
             _ => null!
         };

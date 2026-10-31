@@ -89,6 +89,14 @@ public sealed class WbsktAuthClient : WbsktApiClient
     public Task<HttpResponseMessage> ChangePasswordRawAsync(ChangePasswordRequest request, CancellationToken cancellationToken = default) =>
         SendRawAsync(HttpMethod.Post, "/api/auth/change-password", request, cancellationToken);
 
+    /// <summary>Deletes the bearer's account after checking its password. <c>POST /api/auth/account/delete</c>.</summary>
+    public Task DeleteAccountAsync(DeleteAccountRequest request, CancellationToken cancellationToken = default) =>
+        ReceiveAsync(DeleteAccountRawAsync(request, cancellationToken), cancellationToken);
+
+    /// <summary><see cref="DeleteAccountAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
+    public Task<HttpResponseMessage> DeleteAccountRawAsync(DeleteAccountRequest request, CancellationToken cancellationToken = default) =>
+        SendRawAsync(HttpMethod.Post, "/api/auth/account/delete", request, cancellationToken);
+
     /// <summary>The bearer's live sign-in sessions. <c>GET /api/auth/sessions</c>.</summary>
     public Task<IReadOnlyList<SessionResponse>> GetSessionsAsync(CancellationToken cancellationToken = default) =>
         ReceiveAsync<IReadOnlyList<SessionResponse>>(GetSessionsRawAsync(cancellationToken), cancellationToken);

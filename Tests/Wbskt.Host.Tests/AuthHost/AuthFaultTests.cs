@@ -72,7 +72,9 @@ public sealed class AuthFaultTests
     [InlineData(50011, "INVITATION_INVALID")]
     [InlineData(50012, "AUTH_ALREADY_MEMBER")]
     [InlineData(50017, "WORKSPACE_NOT_FOUND")]
-    [InlineData(50019, "AUTH_OPERATION_REJECTED")]
+    [InlineData(50018, "ACCOUNT_SOLE_ADMINISTRATOR")]
+    [InlineData(50019, "ACCOUNT_DELETE_RETRY")]
+    [InlineData(50029, "AUTH_OPERATION_REJECTED")]
     public void Each_guard_has_its_error(int number, string code)
     {
         Assert.True(SqlGuardErrors.TryTranslate(SqlExceptions.WithNumber(number, "guard"), null, out var error));
@@ -80,7 +82,7 @@ public sealed class AuthFaultTests
     }
 
     [Theory]
-    [InlineData(50020)]
+    [InlineData(50030)]
     [InlineData(1205)]
     public void Anything_else_from_the_database_is_a_fault(int number)
     {
