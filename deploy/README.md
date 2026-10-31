@@ -330,6 +330,13 @@ deploy/scripts/deploy.sh --tag sha-abc1234 --services auth,management
 deploy/scripts/deploy.sh --console-tag sha-def5678
 ```
 
+Every variable the stack cannot run without is written `${VAR:?…}` in `docker-compose.yml`, so
+an unset or empty one stops every `docker compose` command - not only deploys, but `exec` in
+`backup.sh` and `restore.sh` too. `deploy.sh` checks with `docker compose config` before it pulls
+or stops anything and names the variable. A new required variable therefore has to be in the
+VM's `.env` before the commit that requires it is deployed: the deploy resets the checkout first,
+so from then on the nightly backup reads the new compose file as well.
+
 ## Network changes
 
 `deploy.sh` will refuse to run — before stopping anything — if the `networks:` block in

@@ -533,7 +533,7 @@ const ENV = [
  ['MANAGEMENT_JWT_PREVIOUS_PUBLIC_KEY','Tokens and keys','plain',false,'',[['management, devices','Jwt__AdditionalPublicKeys__0']],'Only while rotating.'],
  ['AUTH_EMAIL_FINGERPRINT_KEY','Tokens and keys','secret',false,'derived from AUTH_JWT_SIGNING_KEY',[['auth','Auth__Telemetry__EmailFingerprintKey']],'Keeps log fingerprints stable across signing-key rotations.','openssl rand -base64 32'],
  ['ENGINE_INBOUND_API_KEY','Tokens and keys','secret',true,'',[['engine','Engine__InboundApiKey'],['management, devices','Services__WorkflowEngineApiKey']],'Required on every engine call except health probes.','openssl rand -hex 32'],
- ['AUTH_INTERNAL_API_KEY','Tokens and keys','secret',true,'',[['auth','Internal__ApiKey'],['management, devices','Services__AuthInternalApiKey']],'Unset, the daily deleted-workspace sweep fails with 503.','openssl rand -hex 32'],
+ ['AUTH_INTERNAL_API_KEY','Tokens and keys','secret',true,'',[['auth','Internal__ApiKey'],['management, devices','Services__AuthInternalApiKey']],'Required: unset or empty, every docker compose command on the VM fails, including deploys and the nightly backup.','openssl rand -hex 32'],
  ['INTEGRATIONS_KEY_1','Tokens and keys','secret',true,'',[['engine','WorkflowEngine__Integrations__Keys__1']],'Seals integration secrets. Lose it and every saved integration secret is unreadable.','openssl rand -base64 32'],
  ['CONSOLE_ORIGIN','Browser access','plain',true,'',[['auth, management','Cors__AllowedOrigins__0'],['auth','Auth__Email__ConsoleBaseUrl']],'Public console URL; every mail link points here.'],
  ['CORS_EXTRA_ORIGINS','Browser access','plain',false,'',[['auth, management','Cors__ExtraOrigins']],'For ng serve against this backend. Clear before public launch.'],
@@ -983,6 +983,7 @@ function buildPipeline() {
     <div class="card"><h3>What deploy.sh does, in order</h3><ol class="ol">
       <li>Validates the tag and services (auth, management, devices, socket, engine).</li>
       <li>Refuses if tracked files on the VM have local edits, then <code>git reset --hard</code> to the tag's commit and re-runs itself.</li>
+      <li>Stops if <code>.env</code> is missing a required variable, naming it (<code>docker compose config</code>).</li>
       <li>Writes <code>IMAGE_TAG</code> into <code>.env</code>.</li>
       <li>Dry-runs Compose and stops if networks would be recreated.</li>
       <li>Prunes unused images; stops if under 3 GB is free. Nothing is stopped yet.</li>

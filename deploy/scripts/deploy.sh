@@ -267,11 +267,24 @@ wait_for_health() {
     die "timed out after ${HEALTH_TIMEOUT_SECONDS}s waiting for:$pending"
 }
 
+# Every compose command interpolates the whole file, so one required variable missing from .env
+# (a `${VAR:?…}` in docker-compose.yml) stops pull, up and exec alike. Check before anything is
+# pulled or stopped, and say which variable, rather than failing part way through the deploy.
+require_complete_env() {
+    local err
+    if ! err=$(docker compose config --quiet 2>&1); then
+        die ".env is incomplete; no image was pulled and no container touched:
+$err
+Fill it in from .env.example and deploy again."
+    fi
+}
+
 # The console image is built from the Dashboard repo, so there is no checkout to sync and no
 # migration to consider - just swap the tag and recreate the one container.
 deploy_console() {
-    set_env_var CONSOLE_IMAGE_TAG "$CONSOLE_TAG"
     cd "$COMPOSE_DIR"
+    require_complete_env
+    set_env_var CONSOLE_IMAGE_TAG "$CONSOLE_TAG"
 
     free_disk_space
 
@@ -286,9 +299,9 @@ deploy_console() {
 }
 
 deploy_backend() {
-    set_env_var IMAGE_TAG "$TAG"
-
     cd "$COMPOSE_DIR"
+    require_complete_env
+    set_env_var IMAGE_TAG "$TAG"
 
     # Before anything is stopped or pulled: refuse deploys Compose cannot complete.
     assert_no_network_recreation
