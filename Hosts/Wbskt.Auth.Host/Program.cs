@@ -163,6 +163,10 @@ public static class Program
             // Verify-email and resend-verification. Resend sends mail, so it stays tight; the
             // per-address cooldown (MailCooldown) is what protects the recipient.
             options.AddPerIpPolicy(builder.Configuration, RateLimitPolicies.EmailVerification, "EmailVerification", defaultPermitLimit: 10);
+
+            // Fetching a sign-up challenge. Costs one HMAC, but a person needs one per attempt, so a
+            // caller asking for more than this is not signing up by hand.
+            options.AddPerIpPolicy(builder.Configuration, RateLimitPolicies.SignUpChallenge, "SignUpChallenge", defaultPermitLimit: 30);
         });
 
         // Signed-in callers (tenant and workspace administration, changing a password): a budget per
@@ -194,6 +198,9 @@ public static class Program
                 "Auth:Email:RequireVerifiedEmailForSignIn is false: accounts can sign in without confirming their address. " +
                 "This is intended for local development and the end-to-end suite only.");
         }
+
+        // Built now so a malformed Auth:SignUpChallenge:Key stops startup rather than every sign-up.
+        app.Services.GetRequiredService<SignUpChallenges>();
 
         await app.RunStartupTasksAsync();
 

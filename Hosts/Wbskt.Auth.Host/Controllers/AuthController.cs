@@ -40,7 +40,7 @@ public class AuthController : ApiControllerBase
     /// registration. Each challenge registers at most one account and expires after ten minutes.
     /// </summary>
     [AllowAnonymous]
-    [EnableRateLimiting(RateLimitPolicies.TokenRefresh)]
+    [EnableRateLimiting(RateLimitPolicies.SignUpChallenge)]
     [HttpGet("register/challenge")]
     public ActionResult<SignUpChallengeResponse> GetSignUpChallenge() => Ok(_signUpChallenges.Issue());
 

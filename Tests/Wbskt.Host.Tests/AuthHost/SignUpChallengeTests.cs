@@ -81,7 +81,7 @@ public sealed class SignUpChallengeTests
     [Fact]
     public async Task A_shared_key_lets_another_replica_redeem()
     {
-        var key = Convert.ToBase64String(new byte[32]);
+        var key = Convert.ToBase64String(Enumerable.Range(0, 32).Select(i => (byte)i).ToArray());
         var issuing = Challenges(new SignUpChallengeOptions { Difficulty = 8, Key = key });
         var redeeming = Challenges(new SignUpChallengeOptions { Difficulty = 8, Key = key });
         var issued = issuing.Issue();
@@ -89,6 +89,12 @@ public sealed class SignUpChallengeTests
         var result = await redeeming.RedeemAsync(issued.Challenge, SignUpProofOfWork.Solve(issued.Challenge, issued.Difficulty));
 
         Assert.True(result.IsSuccess);
+    }
+
+    [Fact]
+    public void A_short_key_is_refused_at_construction()
+    {
+        Assert.Throws<InvalidOperationException>(() => Challenges(new SignUpChallengeOptions { Key = Convert.ToBase64String(new byte[8]) }));
     }
 
     [Fact]

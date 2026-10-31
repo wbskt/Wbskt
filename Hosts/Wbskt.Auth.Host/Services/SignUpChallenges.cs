@@ -1,3 +1,4 @@
+using System.Buffers.Text;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -92,6 +93,11 @@ public sealed class SignUpChallenges
         _key = string.IsNullOrEmpty(_options.Key)
             ? RandomNumberGenerator.GetBytes(32)
             : Convert.FromBase64String(_options.Key);
+        if (_key.Length < 32)
+        {
+            throw new InvalidOperationException("Auth:SignUpChallenge:Key must be at least 32 bytes, base64-encoded.");
+        }
+
         _difficulty = Math.Clamp(_options.Difficulty, 0, MaxDifficulty);
         _lifetime = TimeSpan.FromSeconds(Math.Max(1, _options.LifetimeSeconds));
         _redis = redis;
@@ -103,7 +109,7 @@ public sealed class SignUpChallenges
     public SignUpChallengeResponse Issue()
     {
         var expiresAt = DateTimeOffset.FromUnixTimeSeconds((_time.GetUtcNow() + _lifetime).ToUnixTimeSeconds());
-        var nonce = SecurityTokens.Generate();
+        var nonce = Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(16));
         var payload = string.Join('.', Version, _difficulty.ToString(CultureInfo.InvariantCulture), expiresAt.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture), nonce);
         return new SignUpChallengeResponse($"{payload}.{Sign(payload)}", _difficulty, expiresAt);
     }
@@ -168,8 +174,7 @@ public sealed class SignUpChallenges
 
     private string Sign(string payload)
     {
-        var mac = HMACSHA256.HashData(_key, Encoding.ASCII.GetBytes(payload));
-        return Convert.ToBase64String(mac).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        return Base64Url.EncodeToString(HMACSHA256.HashData(_key, Encoding.ASCII.GetBytes(payload)));
     }
 
     private async Task<bool> TrySpendAsync(string challenge, DateTimeOffset expiresAt)

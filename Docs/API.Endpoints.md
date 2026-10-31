@@ -119,10 +119,11 @@ says what it is, `user` or `client`.
 ### 1.1 Credentials — `api/auth`
 
 Anonymous except where noted, and rate limited per client IP so the password hasher cannot be used as
-a work amplifier. There are three buckets, so routine traffic cannot spend the sign-in budget:
+a work amplifier. There are four buckets, so routine traffic cannot spend the sign-in budget:
 `RateLimiting:Authentication` (10/min: register, login, change-password, forgot-password,
-reset-password), `RateLimiting:TokenRefresh` (120/min: refresh-token, logout, register/challenge) and
-`RateLimiting:EmailVerification` (10/min: verify-email, resend-verification).
+reset-password), `RateLimiting:TokenRefresh` (120/min: refresh-token, logout),
+`RateLimiting:SignUpChallenge` (30/min: register/challenge) and `RateLimiting:EmailVerification`
+(10/min: verify-email, resend-verification).
 
 The endpoints that hash a password (register, login, change-password, reset-password) also share one
 host-wide concurrency limit, `RateLimiting:PasswordHashing` (`PermitLimit`, default twice the CPU
@@ -151,7 +152,7 @@ at most one account (recorded in Redis when it is connected) and expires after t
 one register answers 400 `SIGNUP_CHALLENGE_REQUIRED`; a forged, expired, unsolved or spent one is 400
 `SIGNUP_CHALLENGE_INVALID`, and the client fetches a new one. `Auth:SignUpChallenge` sets `Enabled`
 (default true), `Difficulty` (default 18 bits, a second or two in a browser), `LifetimeSeconds` (600)
-and `Key` (a base64 HMAC key; unset, each process makes its own, which is fine for one replica).
+and `Key` (a base64 HMAC key of at least 32 bytes, checked at startup; unset, each process makes its own, which is fine for one replica but a second auth replica needs a shared one).
 `SignUpProofOfWork` in `Wbskt.Auth.Models` is the reference solver, and `WbsktAuthClient.RegisterAsync`
 solves it for callers that send no challenge.
 
@@ -163,7 +164,7 @@ is issued, so the link already in the inbox keeps working.
 | Endpoint | Auth | What it does |
 |---|---|---|
 | `POST register` | anonymous | Creates an account **and its own tenant** — the tenant row, its `Admin`/`User` roles, the creator's membership, a tenant-wide Admin assignment and a default workspace. Accepts an optional `invitationToken` to join an existing tenant at the same time. Mails a confirmation link; the account cannot sign in until it is followed. Answers **204 whether or not the address is already registered** — a taken address creates nothing and mails its real owner instead. A taken *username* is still a 409 `AUTH_USERNAME_CONFLICT`: it discloses nothing about any address. Needs a solved `challenge` and `solution` (above). |
-| `GET register/challenge` | anonymous | Issues a sign-up proof-of-work puzzle (above). Stateless and cheap; rate limited like refresh-token. |
+| `GET register/challenge` | anonymous | Issues a sign-up proof-of-work puzzle (above). Stateless and cheap; its own rate-limit bucket. |
 | `POST login` | anonymous | Exchanges credentials for an access/refresh token pair (see the refresh cookie below). Every failure mode answers identically, so the endpoint cannot be used to probe which addresses are registered — except `AUTH_EMAIL_UNVERIFIED`, which is returned only *after* the password verifies and therefore tells a caller nothing they did not already prove. |
 | `POST refresh-token` | anonymous | Rotating refresh: issues a new pair and revokes the token presented. Presenting an already-revoked token is treated as a leak — every refresh token for that user is revoked and a `SecurityAlertEvent` is published. |
 | `POST logout` | anonymous | Revokes the one refresh token presented, and the access token issued with it. Succeeds whether or not it existed. |

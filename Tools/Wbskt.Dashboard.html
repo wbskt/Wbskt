@@ -1286,6 +1286,22 @@ const auth_ = {
         return http.refreshing;
     },
 
+    // The sign-up proof of work: a counter whose SHA-256 of "challenge:counter" starts with
+    // `difficulty` zero bits. Same definition as SignUpProofOfWork in Wbskt.Auth.Models.
+    async solveChallenge(challenge, difficulty) {
+        const encoder = new TextEncoder();
+        for (let counter = 0; ; counter++) {
+            const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(`${challenge}:${counter}`)));
+            let bits = 0;
+            for (const b of hash) {
+                if (b === 0) { bits += 8; continue; }
+                bits += Math.clz32(b) - 24;
+                break;
+            }
+            if (bits >= difficulty) return String(counter);
+        }
+    },
+
     async register() {
         const body = {
             username: $('reg-username').value.trim(),
@@ -1293,7 +1309,12 @@ const auth_ = {
             password: $('reg-pass').value,
             invitationToken: $('reg-invite').value.trim() || null
         };
-        const ok = await act(() => http.post('auth', '/api/auth/register', body, { auth: false }), 'Account created. Check the inbox to verify the address, then sign in.');
+        const ok = await act(async () => {
+            const { challenge, difficulty } = await http.get('auth', '/api/auth/register/challenge', { auth: false });
+            body.challenge = challenge;
+            body.solution = await auth_.solveChallenge(challenge, difficulty);
+            return http.post('auth', '/api/auth/register', body, { auth: false });
+        }, 'Account created. Check the inbox to verify the address, then sign in.');
         if (ok !== undefined) {
             $('login-email').value = body.email;
             $('login-pass').value = body.password;
