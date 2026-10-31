@@ -16,14 +16,16 @@ public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
     private readonly IConnectionManager _connectionManager;
     private readonly ILogger<ClientCommandHandler> _logger;
     private readonly IEventBus _eventBus;
+    private readonly ICommandSender _commandSender;
     private readonly BusInstanceId _hostId;
     private readonly TimeProvider _timeProvider;
 
-    public ClientCommandHandler(IConnectionManager connectionManager, ILogger<ClientCommandHandler> logger, IEventBus eventBus, BusInstanceId hostId, TimeProvider? timeProvider = null)
+    public ClientCommandHandler(IConnectionManager connectionManager, ILogger<ClientCommandHandler> logger, IEventBus eventBus, ICommandSender commandSender, BusInstanceId hostId, TimeProvider? timeProvider = null)
     {
         _connectionManager = connectionManager;
         _logger = logger;
         _eventBus = eventBus;
+        _commandSender = commandSender;
         _hostId = hostId;
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
@@ -45,8 +47,7 @@ public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
         {
             if (command.TargetHostId != null)
             {
-                _logger.LogInformation("Command {CommandId} for {ClientRefId} not delivered: the connection has gone.", command.CommandId, command.ClientRefId);
-                await PublishFailedAsync(command, ClientCommandFailedEvent.NotConnectedReason, context.CancellationToken);
+                await RequeueAsync(command, context.CancellationToken);
             }
             else
             {
@@ -87,6 +88,26 @@ public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
         {
             _logger.LogWarning(ex, "Command {CommandId} for {ClientRefId} was sent, but its delivery could not be announced.", command.CommandId, command.ClientRefId);
         }
+    }
+
+    // The device dropped between the sender seeing it here and the command arriving. It waits in the
+    // device's queue for the next connect, as it would have had the sender seen the device offline.
+    // A command with no id predates the queue and cannot be told apart once queued, so it fails as before.
+    private async Task RequeueAsync(ClientCommandEvent command, CancellationToken ct)
+    {
+        if (command.CommandId is not { } commandId)
+        {
+            _logger.LogInformation("Command for {ClientRefId} not delivered: the connection has gone.", command.ClientRefId);
+            await PublishFailedAsync(command, ClientCommandFailedEvent.NotConnectedReason, ct);
+            return;
+        }
+
+        _logger.LogInformation("Command {CommandId} for {ClientRefId} not delivered: the connection has gone, so it goes back in the queue.", commandId, command.ClientRefId);
+        await _commandSender.SendAsync(
+            new RequeueClientCommand(
+                command.ClientRefId, command.ClientId, command.WorkspaceId, command.Type, command.Payload, commandId, command.ExpiresAtUtc,
+                command.ActorUserId, command.ActorUserRefId, command.ActorSource, command.ActorWorkflowRefId, command.ActorRunRefId),
+            ct);
     }
 
     private Task PublishFailedAsync(ClientCommandEvent command, string reason, CancellationToken ct)

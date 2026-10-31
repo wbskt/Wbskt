@@ -34,6 +34,7 @@ public sealed class ClientsControllerScopingTests
     // The workspace and the caller's permission are settled by WorkspacePermissionFilter before the
     // action runs (see WorkspacePermissionFilterTests), so the actions are handed the resolved ID.
     private readonly Mock<IClientCommandTargetProvider> _targets = new();
+    private readonly InMemoryQueuedCommandStore _queue = new();
 
     private (ClientsController Controller, Mock<IClientQueryService> ClientService, Mock<IEventBus> Bus, Mock<IEventLogService> EventLogService) CreateController()
     {
@@ -41,7 +42,7 @@ public sealed class ClientsControllerScopingTests
         var bus = new Mock<IEventBus>();
         var eventLogService = new Mock<IEventLogService>();
 
-        var controller = new ClientsController(clientService.Object, Mock.Of<IClientLifecycleService>(), new ClientCommandService(clientService.Object, new DeviceCommandSender(_targets.Object, bus.Object, NullLogger<DeviceCommandSender>.Instance), bus.Object, NullLogger<ClientCommandService>.Instance, new Wbskt.Management.Host.Telemetry.ManagementMetrics()), Mock.Of<IRegistrationPolicyService>(), eventLogService.Object);
+        var controller = new ClientsController(clientService.Object, Mock.Of<IClientLifecycleService>(), new ClientCommandService(clientService.Object, TestDeviceCommands.Sender(_targets.Object, bus.Object, _queue), _queue, bus.Object, Microsoft.Extensions.Options.Options.Create(new CommandQueueOptions()), NullLogger<ClientCommandService>.Instance, new Wbskt.Management.Host.Telemetry.ManagementMetrics()), Mock.Of<IRegistrationPolicyService>(), eventLogService.Object);
 
         controller.ControllerContext = new ControllerContext
         {
@@ -91,14 +92,16 @@ public sealed class ClientsControllerScopingTests
     }
 
     [Fact]
-    public async Task SendCommand_to_an_offline_device_is_a_409_and_publishes_nothing()
+    public async Task SendCommand_to_an_offline_device_is_a_202_queued_and_sends_nothing_yet()
     {
         var (controller, clientService, bus, _) = CreateController();
         SetupTarget(new ClientCommandTarget(ClientId, WorkspaceId, false, null));
 
         var result = (await controller.SendCommand(WorkspaceId, ClientRefId, new ClientCommandRequest("reboot", "{}"), CancellationToken.None)).Result;
 
-        ProblemAssert.Is(result, StatusCodes.Status409Conflict).Should().Be("DEVICE_OFFLINE");
+        var accepted = Assert.IsType<AcceptedResult>(result);
+        Assert.Equal(ClientCommandStatus.Queued, Assert.IsType<ClientCommandResponse>(accepted.Value).Status);
+        Assert.Single(_queue.Rows);
         bus.Verify(x => x.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 

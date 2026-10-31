@@ -304,7 +304,9 @@ public class ClientsController : ApiControllerBase
     }
 
     /// <summary>
-    /// Sends an asynchronous command payload to a specific registered client.
+    /// Sends an asynchronous command payload to a specific registered client. A connected client gets
+    /// it now; an offline one gets it when it next connects (status <c>queued</c>), unless the command
+    /// expires first.
     /// </summary>
     /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="clientRef">The unique reference ID of the target client.</param>
@@ -317,6 +319,37 @@ public class ClientsController : ApiControllerBase
     {
         var result = await _commandService.SendAsync(workspaceId, clientRef, request, cancellationToken);
         return result.IsSuccess ? Accepted(result.Value) : MapError(result.Error);
+    }
+
+    /// <summary>The commands waiting for an offline client, oldest first.</summary>
+    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
+    /// <param name="clientRef">The unique reference ID of the client.</param>
+    /// <param name="status">Which commands: only <c>queued</c> is kept, so it is the only value.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    [HttpGet("{clientRef:guid}/commands")]
+    [RequiresPermission(PermissionNames.ClientsRead)]
+    public async Task<ActionResult<IReadOnlyList<QueuedClientCommandResponse>>> GetCommands([FromWorkspace] int workspaceId, Guid clientRef, [FromQuery] string status, CancellationToken cancellationToken)
+    {
+        // Sent commands live in the event log (the comms feed); only waiting ones are listed here.
+        if (!string.Equals(status, ClientCommandStatus.Queued, StringComparison.OrdinalIgnoreCase))
+        {
+            return MapError(Error.Validation("COMMAND_STATUS_INVALID", "status must be 'queued'."));
+        }
+
+        return MapResult(await _commandService.GetQueuedAsync(workspaceId, clientRef, cancellationToken));
+    }
+
+    /// <summary>Cancels a command still waiting for an offline client.</summary>
+    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
+    /// <param name="clientRef">The unique reference ID of the client.</param>
+    /// <param name="commandId">The command's id, as the send returned it.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    [HttpDelete("{clientRef:guid}/commands/{commandId:guid}")]
+    [RequiresPermission(PermissionNames.ClientsCommand)]
+    public async Task<ActionResult> CancelCommand([FromWorkspace] int workspaceId, Guid clientRef, Guid commandId, CancellationToken cancellationToken)
+    {
+        var result = await _commandService.CancelAsync(workspaceId, clientRef, commandId, cancellationToken);
+        return result.IsSuccess ? NoContent() : MapError(result.Error);
     }
 
     /// <summary>Deprecated: <c>POST /clients/{clientRef}/commands</c>. Kept for one release.</summary>

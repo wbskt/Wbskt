@@ -11,4 +11,10 @@ public sealed record ClientCommandFailedEvent(Guid ClientRefId, int ClientId, in
 {
     /// <summary>The reason given when no socket host holds the device's connection.</summary>
     public const string NotConnectedReason = "The device is not connected.";
+
+    /// <summary>The reason given when a command waiting for an offline device outlives its expiry.</summary>
+    public const string ExpiredWhileQueuedReason = "The command expired before the device came back.";
+
+    /// <summary>The reason given for a waiting command whose device was revoked.</summary>
+    public const string RevokedWhileQueuedReason = "The device was revoked before it came back.";
 }

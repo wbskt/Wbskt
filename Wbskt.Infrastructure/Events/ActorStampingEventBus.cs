@@ -16,19 +16,33 @@ public sealed class ActorStampingEventBus(IEventBus inner, IIdentityService iden
 {
     public Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct = default) where TEvent : IEvent
     {
-        if (@event is ActorEvent { ActorUserId: null, ActorSource: null } actorEvent && identityService.TryGetUserIdentity(out var identity))
+        if (@event is ActorEvent actorEvent)
         {
-            actorEvent.ActorUserId = identity.UserId;
-            actorEvent.ActorUserRefId = identity.UserRefId;
-
-            if (requestOrigin?.Current is { } origin)
-            {
-                actorEvent.ActorSource = origin.Source;
-                actorEvent.ClientAddress = origin.ClientAddress;
-                actorEvent.UserAgent = origin.UserAgent;
-            }
+            Stamp(actorEvent, identityService, requestOrigin);
         }
 
         return inner.PublishAsync(@event, ct);
+    }
+
+    /// <summary>
+    /// Names the signed-in user of the current request as the event's actor, unless it has one. For a
+    /// caller that has to know the actor before it publishes, such as one storing it for later.
+    /// </summary>
+    public static void Stamp(ActorEvent actorEvent, IIdentityService identityService, IRequestOriginAccessor? requestOrigin)
+    {
+        if (actorEvent is not { ActorUserId: null, ActorSource: null } || !identityService.TryGetUserIdentity(out var identity))
+        {
+            return;
+        }
+
+        actorEvent.ActorUserId = identity.UserId;
+        actorEvent.ActorUserRefId = identity.UserRefId;
+
+        if (requestOrigin?.Current is { } origin)
+        {
+            actorEvent.ActorSource = origin.Source;
+            actorEvent.ClientAddress = origin.ClientAddress;
+            actorEvent.UserAgent = origin.UserAgent;
+        }
     }
 }

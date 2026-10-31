@@ -22,7 +22,7 @@ public sealed class ClientHoldRecorderTests
         TriggerRegistrationRow typed = Registration(ClientHoldTriggerKey.Build(ClientRef, "temperature", 600, Guid.NewGuid(), Guid.NewGuid()));
         TriggerRegistrationRow anyType = Registration(ClientHoldTriggerKey.Build(ClientRef, "*", 30, Guid.NewGuid(), Guid.NewGuid()));
         var provider = new RecordingHoldStateProvider(typed, anyType);
-        var consumer = new ClientPayloadReceivedConsumer(Hub().Object, new ClientHoldRecorder(provider, new FixedFilterEvaluator(filterPasses), UncachedTriggerRegistrationCache.Instance), new RecentDeviceActivity(TimeProvider.System));
+        var consumer = new ClientPayloadReceivedConsumer(Hub().Object, new ClientHoldRecorder(provider, new FixedFilterEvaluator(filterPasses), UncachedTriggerRegistrationCache.Instance));
         ClientMessageReceivedEvent evt = new(ClientRef, 12, 34, "temperature", "{\"celsius\":9.5}") { CreatedAtUtc = new DateTime(2026, 10, 3, 12, 0, 0, DateTimeKind.Utc) };
 
         await consumer.Consume(Context(evt).Object);
@@ -45,7 +45,7 @@ public sealed class ClientHoldRecorderTests
         // or the hold would start from the time the device reconnected.
         TriggerRegistrationRow typed = Registration(ClientHoldTriggerKey.Build(ClientRef, "temperature", 600, Guid.NewGuid(), Guid.NewGuid()));
         var provider = new RecordingHoldStateProvider(typed);
-        var consumer = new ClientPayloadReceivedConsumer(Hub().Object, new ClientHoldRecorder(provider, new FixedFilterEvaluator(true), UncachedTriggerRegistrationCache.Instance), new RecentDeviceActivity(TimeProvider.System));
+        var consumer = new ClientPayloadReceivedConsumer(Hub().Object, new ClientHoldRecorder(provider, new FixedFilterEvaluator(true), UncachedTriggerRegistrationCache.Instance));
         DateTime sentAt = new(2026, 10, 3, 11, 0, 0, DateTimeKind.Utc);
         ClientMessageReceivedEvent evt = new(ClientRef, 12, 34, "temperature", "{}")
         {
@@ -62,7 +62,7 @@ public sealed class ClientHoldRecorderTests
     public async Task A_message_with_no_hold_triggers_records_nothing()
     {
         var provider = new RecordingHoldStateProvider();
-        var consumer = new ClientPayloadReceivedConsumer(Hub().Object, new ClientHoldRecorder(provider, new FixedFilterEvaluator(true), UncachedTriggerRegistrationCache.Instance), new RecentDeviceActivity(TimeProvider.System));
+        var consumer = new ClientPayloadReceivedConsumer(Hub().Object, new ClientHoldRecorder(provider, new FixedFilterEvaluator(true), UncachedTriggerRegistrationCache.Instance));
 
         await consumer.Consume(Context(new ClientMessageReceivedEvent(ClientRef, 12, 34, "temperature", "{}")).Object);
 

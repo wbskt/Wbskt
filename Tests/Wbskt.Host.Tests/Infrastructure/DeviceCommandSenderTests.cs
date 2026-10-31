@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
@@ -9,7 +8,8 @@ namespace Wbskt.Host.Tests.Infrastructure;
 
 /// <summary>
 /// The console and workflows send commands through this one sender, so a device that cannot take a
-/// command is refused the same way for both: unknown, invalid, offline or a broker that is down.
+/// command is refused the same way for both: unknown, invalid, inactive, a full queue or a broker that
+/// is down. An offline, registered device has the command queued for it instead.
 /// </summary>
 public sealed class DeviceCommandSenderTests
 {
@@ -20,8 +20,10 @@ public sealed class DeviceCommandSenderTests
 
     private readonly Mock<IClientCommandTargetProvider> _targets = new();
     private readonly Mock<IEventBus> _bus = new();
+    private readonly InMemoryQueuedCommandStore _queue = new();
+    private readonly CommandQueueOptions _options = new();
 
-    private DeviceCommandSender Sender => new(_targets.Object, _bus.Object, NullLogger<DeviceCommandSender>.Instance);
+    private DeviceCommandSender Sender => TestDeviceCommands.Sender(_targets.Object, _bus.Object, _queue, options: _options);
 
     private static DeviceCommand Command(string type = "led.set", string payload = "{}", DateTime? expiresAtUtc = null) =>
         new(CommandId, ClientRefId, WorkspaceId, type, payload, expiresAtUtc);
@@ -53,15 +55,90 @@ public sealed class DeviceCommandSenderTests
     [InlineData(false, null)]
     [InlineData(false, "socket-a")]
     [InlineData(true, null)]
-    public async Task A_device_no_host_holds_is_offline(bool connected, string? hostId)
+    public async Task A_device_no_host_holds_has_the_command_queued_with_its_sender(bool connected, string? hostId)
     {
         Target(new ClientCommandTarget(ClientId, WorkspaceId, connected, hostId));
+        var expiresAt = new DateTime(2026, 10, 12, 9, 0, 30, DateTimeKind.Utc);
+        ClientCommandQueuedEvent? announced = null;
+        _bus.Setup(b => b.PublishAsync(It.IsAny<ClientCommandQueuedEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<ClientCommandQueuedEvent, CancellationToken>((e, _) => announced = e)
+            .Returns(Task.CompletedTask);
+
+        var result = await Sender.SendAsync(Command(expiresAtUtc: expiresAt), e => e.ActorUserId = 99, CancellationToken.None);
+
+        Assert.Equal(new DeviceCommandResult(DeviceCommandOutcome.Queued, ClientId, ExpiresAtUtc: expiresAt), result);
+        var row = Assert.Single(_queue.Rows);
+        Assert.Equal(CommandId, row.CommandId);
+        Assert.Equal(expiresAt, row.ExpiresAtUtc);
+        Assert.Equal(99, row.ActorUserId);
+        Assert.NotNull(announced);
+        Assert.Equal(CommandId, announced!.CommandId);
+        Assert.Equal(99, announced.ActorUserId);
+        _bus.Verify(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_command_sent_without_an_expiry_waits_the_default()
+    {
+        Target(new ClientCommandTarget(ClientId, WorkspaceId, false, null));
+        _options.DefaultExpiryMinutes = 30;
+        var before = DateTime.UtcNow;
 
         var result = await Sender.SendAsync(Command(), null, CancellationToken.None);
 
-        Assert.Equal(DeviceCommandOutcome.Offline, result.Outcome);
-        Assert.Equal(ClientId, result.ClientId);
+        Assert.Equal(DeviceCommandOutcome.Queued, result.Outcome);
+        Assert.InRange(result.ExpiresAtUtc!.Value, before.AddMinutes(30), DateTime.UtcNow.AddMinutes(30));
+    }
+
+    [Theory]
+    [InlineData(ClientStatus.Pending)]
+    [InlineData(ClientStatus.Revoked)]
+    [InlineData(ClientStatus.Rejected)]
+    public async Task An_offline_device_that_is_not_registered_is_inactive(ClientStatus status)
+    {
+        Target(new ClientCommandTarget(ClientId, WorkspaceId, false, null, status));
+
+        var result = await Sender.SendAsync(Command(), null, CancellationToken.None);
+
+        Assert.Equal(new DeviceCommandResult(DeviceCommandOutcome.Inactive, ClientId), result);
+        Assert.Empty(_queue.Rows);
         _bus.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task An_offline_device_with_a_full_queue_is_refused()
+    {
+        Target(new ClientCommandTarget(ClientId, WorkspaceId, false, null));
+        _options.MaxPerClient = 1;
+        await _queue.EnqueueAsync(new QueuedCommand(Guid.NewGuid(), ClientId, ClientRefId, WorkspaceId, "led.set", "{}", DateTime.UtcNow.AddHours(1)), 1, CancellationToken.None);
+
+        var result = await Sender.SendAsync(Command(), null, CancellationToken.None);
+
+        Assert.Equal(new DeviceCommandResult(DeviceCommandOutcome.QueueFull, ClientId), result);
+        Assert.Single(_queue.Rows);
+        _bus.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task A_device_that_connects_while_the_command_is_queued_gets_it_at_once()
+    {
+        // Offline when the sender looks, connected by the time the row is in.
+        _targets.SetupSequence(t => t.FindAsync(ClientRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ClientCommandTarget(ClientId, WorkspaceId, false, null))
+            .ReturnsAsync(new ClientCommandTarget(ClientId, WorkspaceId, true, "socket-b"));
+        ClientCommandEvent? sent = null;
+        _bus.Setup(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<ClientCommandEvent, CancellationToken>((e, _) => sent = e)
+            .Returns(Task.CompletedTask);
+
+        var result = await Sender.SendAsync(Command(), e => e.ActorUserId = 99, CancellationToken.None);
+
+        Assert.Equal(DeviceCommandOutcome.Queued, result.Outcome);
+        Assert.Empty(_queue.Rows);
+        Assert.NotNull(sent);
+        Assert.Equal("socket-b", sent!.TargetHostId);
+        Assert.Equal(CommandId, sent.CommandId);
+        Assert.Equal(99, sent.ActorUserId);
     }
 
     [Theory]
