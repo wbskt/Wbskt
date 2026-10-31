@@ -13,7 +13,7 @@ CREATE TABLE dbo.Roles
     CONSTRAINT FK_Roles_Tenants FOREIGN KEY (TenantId) REFERENCES dbo.Tenants(Id),
     CONSTRAINT UQ_Roles_RefId UNIQUE (RefId),
     CONSTRAINT UQ_Roles_Tenant_Name UNIQUE (TenantId, Name),
-    CONSTRAINT CK_Roles_Kind CHECK (Kind IN (N'Admin', N'User'))
+    CONSTRAINT CK_Roles_Kind CHECK (Kind = N'Admin' OR Kind = N'User')
 )
 GO
 
