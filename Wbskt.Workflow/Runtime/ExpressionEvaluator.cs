@@ -303,7 +303,8 @@ internal sealed class ExpressionEvaluator : IExpressionEvaluator
         {
             JsonValueKind.String => value.GetString() ?? string.Empty,
             JsonValueKind.Null or JsonValueKind.Undefined => string.Empty,
-            JsonValueKind.Number => value.GetDouble().ToString(CultureInfo.InvariantCulture),
+            // As written: through a double, a 19-digit id such as a Discord snowflake would print as 1.2E+18.
+            JsonValueKind.Number => value.GetRawText(),
             JsonValueKind.True => "true",
             JsonValueKind.False => "false",
             _ => value.GetRawText()
