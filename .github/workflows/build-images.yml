@@ -72,6 +72,8 @@ jobs:
         env:
           ACCEPT_EULA: "Y"
           MSSQL_SA_PASSWORD: Welcome1234
+          # The edition production runs, so a feature Express lacks fails here, not on the VM.
+          MSSQL_PID: Express
         ports:
           - 1433:1433
         options: >-
@@ -179,6 +181,8 @@ jobs:
         env:
           ACCEPT_EULA: "Y"
           MSSQL_SA_PASSWORD: Welcome1234
+          # The edition production runs, so a feature Express lacks fails here, not on the VM.
+          MSSQL_PID: Express
         ports:
           - 1433:1433
         options: >-

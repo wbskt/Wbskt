@@ -6,8 +6,9 @@
 # Three stages, because a backup that never leaves the machine is not a backup:
 #
 #   1. BACKUP DATABASE inside the sql container, into a staging directory on the sql-data volume.
-#   2. RESTORE VERIFYONLY, then copy the file out to BACKUP_DIR on the host and delete the staged
-#      copy - so the volume never accumulates backups it would lose along with the data.
+#   2. RESTORE VERIFYONLY, then copy the file out to BACKUP_DIR on the host, gzip it there and
+#      delete the staged copy - so the volume never accumulates backups it would lose along with
+#      the data.
 #   3. BACKUP_UPLOAD_CMD pushes BACKUP_DIR off the box.
 #
 # Stage 3 is mandatory. Without BACKUP_UPLOAD_CMD set, this script refuses to run rather than
@@ -85,14 +86,16 @@ back_up_one() {
     local db="$1"
     local staged="$STAGING_DIR/${db}_${STAMP}.bak"
     local local_copy="$BACKUP_DIR/${db}_${STAMP}.bak"
+    local compressed="${local_copy}.gz"
 
     log "backing up $db"
 
     # CHECKSUM makes the verify below meaningful - without it VERIFYONLY only checks the file is
     # structurally readable, not that its pages match what was written. INIT because each run
-    # writes its own uniquely named file and should never append to a previous one.
+    # writes its own uniquely named file and should never append to a previous one. No COMPRESSION:
+    # Express refuses it, so the file is gzipped on the host below instead.
     sqlcmd "BACKUP DATABASE [${db}] TO DISK = N'${staged}'
-            WITH INIT, CHECKSUM, COMPRESSION, STATS = 25;" \
+            WITH INIT, CHECKSUM, STATS = 25;" \
         || die "BACKUP DATABASE failed for $db"
 
     sqlcmd "RESTORE VERIFYONLY FROM DISK = N'${staged}' WITH CHECKSUM;" \
@@ -108,7 +111,10 @@ back_up_one() {
 
     [[ -s "$local_copy" ]] || die "$local_copy is empty"
 
-    log "wrote $local_copy ($(du -h "$local_copy" | cut -f1))"
+    nice gzip "$local_copy" || die "could not compress $local_copy"
+    gzip --test "$compressed" || die "$compressed does not decompress"
+
+    log "wrote $compressed ($(du -h "$compressed" | cut -f1))"
 }
 
 upload() {
@@ -125,7 +131,7 @@ upload() {
 # copies from here would mean this script could destroy the only surviving backups.
 prune() {
     log "pruning local backups older than $BACKUP_RETENTION_DAYS days"
-    find "$BACKUP_DIR" -maxdepth 1 -name '*.bak' -type f -mtime "+$BACKUP_RETENTION_DAYS" -print -delete
+    find "$BACKUP_DIR" -maxdepth 1 \( -name '*.bak' -o -name '*.bak.gz' \) -type f -mtime "+$BACKUP_RETENTION_DAYS" -print -delete
 }
 
 # Records the moment of the last good backup in the Pushgateway, where Prometheus picks it up. The
@@ -138,6 +144,25 @@ report_success() {
         || echo "backup: could not report success to $url" >&2
 }
 
+# Each database's allocated data-file size, for DatabaseNearExpressLimit: Express caps a database's
+# data at 10 GB. Allocated, not used, because that is what the cap counts, and deleting rows never
+# shrinks the file. Pushed before backing up so a failing backup does not hide a growing database.
+# Best effort, like report_success.
+report_sizes() {
+    local url="${BACKUP_METRICS_URL:-http://127.0.0.1:9091}" names rows
+    names="$(printf "N'%s', " "${DATABASES[@]}")"
+    rows="$(docker compose exec -T sql /opt/mssql-tools18/bin/sqlcmd \
+        -S localhost -U sa -P "$SQL_SA_PASSWORD" -C -b -h -1 -W -s '|' -Q "SET NOCOUNT ON;
+            SELECT DB_NAME(database_id), SUM(CAST(size AS BIGINT)) * 8192
+            FROM sys.master_files
+            WHERE type = 0 AND DB_NAME(database_id) IN (${names%, })
+            GROUP BY database_id;")" || { echo "backup: could not read database sizes" >&2; return; }
+
+    awk -F'|' 'NF == 2 { printf "wbskt_sql_data_file_bytes{database=\"%s\"} %s\n", $1, $2 }' <<< "$rows" \
+        | curl -fsS --max-time 10 --data-binary @- "$url/metrics/job/wbskt_backup" \
+        || echo "backup: could not report database sizes to $url" >&2
+}
+
 main() {
     load_env
     cd "$COMPOSE_DIR"
@@ -146,6 +171,8 @@ main() {
         || die "the sql service is not running"
 
     docker compose exec -T sql mkdir -p "$STAGING_DIR" || die "could not create $STAGING_DIR"
+
+    report_sizes
 
     for db in "${DATABASES[@]}"; do
         back_up_one "$db"

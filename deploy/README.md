@@ -418,6 +418,7 @@ alerts fire and reach nobody, and Alertmanager says so in its log.
 | `SocketDisconnectRateHigh` | abnormal device disconnects exceed half the connected devices in 10 minutes |
 | `BackupMissing` / `BackupNeverReported` | no successful backup for 26 hours |
 | `BackupFailed` | `backup.sh` failed (raised immediately by `scripts/alert.sh`) |
+| `DatabaseNearExpressLimit` | a database's data files pass 8 GiB of the Express edition's 10 GB (pushed nightly by `backup.sh`) |
 | `DiskAlmostFull` | any real filesystem on the VM has under 15% free for 10 minutes |
 | `DiskFillingFast` | at the last 6 hours' rate a filesystem under 40% free fills within 24 hours |
 | `NodeExporterDown` | Prometheus cannot scrape node-exporter, so nothing is watching disk space |
@@ -589,6 +590,43 @@ story, not performance, since both DBs stay on one SQL instance regardless (no p
 `sql:1433` on the `backend` network so `ConnectionStrings__DefaultConnection` /
 `ConnectionStrings__AuthDBConnection` don't need to change.
 
+## SQL Server edition
+
+The `sql` service runs **Express** (`MSSQL_PID`, default `Express`), the free edition licensed for
+production. Developer, the image's own default, is licensed for development and test only. Express
+caps each database at 10 GB of data (auth and core are separate databases, so each has its own),
+uses at most about 1.4 GB for its buffer pool, and the lesser of one socket or four cores. Nothing
+in the schema needs more, and CI runs its SQL Server as Express too, so a feature it lacks fails
+there first. `SQL_MEMORY_LIMIT_MB` (default 2048) stops SQL Server from planning for 80% of the
+VM's RAM. 2048 is as low as it goes: SQL Server treats any lower value as about 2000 MB, so a
+smaller number only looks tighter. On Express the buffer pool cap is what binds in practice. `DatabaseNearExpressLimit` warns at 8 GiB.
+
+The edition is read when the container starts, and the data files carry over: an existing
+Developer volume comes up as Express with its databases online, and switching back is the same
+steps with `MSSQL_PID=Developer`. `deploy.sh` never recreates `sql` (the migrator runs with
+`--no-deps`), so the switch happens only when you do it:
+
+1. Check each database's allocated data size is well under 10 GB. The cap counts the files, not the
+   rows in them, so a file that grew before old rows were deleted still counts at its full size:
+   ```bash
+   docker compose exec sql bash -c '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "EXEC sp_helpdb"'
+   ```
+   If one is close, shrink it once first (`DBCC SHRINKFILE`), while it is still on Developer.
+2. Make sure the checkout has the gzip version of `backup.sh` (Express rejects the old one's
+   `WITH COMPRESSION`), and run it once so there is a fresh backup from before the switch.
+3. Set `MSSQL_PID=Express` and `SQL_MEMORY_LIMIT_MB` in `.env` (an `.env` without them already
+   gets those defaults), then recreate the container:
+   ```bash
+   docker compose up -d sql      # recreates it with the new settings; the hosts reconnect on their own
+   ```
+4. Confirm the edition, then run `backup.sh` once by hand to see a backup succeed on Express:
+   ```bash
+   docker compose exec sql bash -c '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT @@VERSION"'   # names the edition
+   ```
+
+While `sql` restarts (about 30 seconds) the hosts' database calls fail and are retried, and the
+event log's writes wait in RabbitMQ.
+
 ## Backups
 
 Nightly full backups of both databases, run by `scripts/backup.sh` from cron on the VM. Configured
@@ -600,11 +638,12 @@ entirely from `compose/.env` (see `.env.example`); nothing is hardcoded to a clo
 
 Three stages, because a backup that never leaves the machine is not a backup:
 
-1. `BACKUP DATABASE ... WITH CHECKSUM, COMPRESSION` into a staging directory on the `sql-data`
+1. `BACKUP DATABASE ... WITH CHECKSUM` into a staging directory on the `sql-data`
    volume — a subdirectory of `/var/opt/mssql` specifically, because that path is already owned by
-   the non-root `mssql` user the image runs as.
-2. `RESTORE VERIFYONLY WITH CHECKSUM`, then the file is copied out to `BACKUP_DIR` on the host and
-   the staged copy deleted. A backup that does not verify is treated as no backup at all.
+   the non-root `mssql` user the image runs as. Not `WITH COMPRESSION`: Express refuses it.
+2. `RESTORE VERIFYONLY WITH CHECKSUM`, then the file is copied out to `BACKUP_DIR` on the host,
+   gzipped there (`<database>_<stamp>.bak.gz`) and the staged copy deleted. A backup that does not
+   verify is treated as no backup at all.
 3. `BACKUP_UPLOAD_CMD` pushes `BACKUP_DIR` off the box.
 
 **Stage 3 is mandatory.** Without `BACKUP_UPLOAD_CMD` set, `backup.sh` refuses to run rather than
@@ -648,13 +687,14 @@ upload target itself.
 
 ```bash
 # Rehearsal - restores into a scratch database, touches nothing live, prints row counts to compare.
-deploy/scripts/restore.sh --file /var/backups/wbskt/Wbskt.Database_20260825T020000Z.bak
+deploy/scripts/restore.sh --file /var/backups/wbskt/Wbskt.Database_20260825T020000Z.bak.gz
 
 # Real recovery - overwrites an existing database, which is why it needs --force.
 deploy/scripts/restore.sh --file <path> --target Wbskt.Database --force
 ```
 
-`restore.sh` verifies the backup before touching any database, and redirects the restored files so
+`restore.sh` takes a `.bak.gz` (decompressed on its way into the container) or a plain `.bak` from
+before backups were gzipped; both restore on Express. It verifies the backup before touching any database, and redirects the restored files so
 a copy restored under a scratch name cannot collide with the live database's files.
 
 With `--force`, the target is taken `SINGLE_USER WITH ROLLBACK IMMEDIATE` immediately before the
@@ -667,12 +707,12 @@ performed, what exists is a backup script, not a backup. A rehearsal, start to f
 
 1. `deploy/scripts/backup-check.sh` passes.
 2. Restore last night's backup of each database into a scratch copy:
-   `deploy/scripts/restore.sh --file "$(ls -t /var/backups/wbskt/Wbskt.Database_2*.bak | head -1)"`,
+   `deploy/scripts/restore.sh --file "$(ls -t /var/backups/wbskt/Wbskt.Database_2*.bak* | head -1)"`,
    then the same for `Wbskt.Database.Auth_2*`.
 3. Compare the printed row counts with the live database (the same query against
    `[Wbskt.Database]`). Small differences are the day's new rows; a table that is empty in the copy
    but not live is a failed rehearsal.
-4. Better still, fetch one `.bak` back from the off-box target and restore that, which proves the
+4. Better still, fetch one backup back from the off-box target and restore that, which proves the
    upload as well.
 5. Drop the scratch databases (`restore.sh` prints the command) and note the date in the ops
    tracking issue.

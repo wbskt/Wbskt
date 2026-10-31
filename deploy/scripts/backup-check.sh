@@ -95,7 +95,7 @@ check_log() {
 check_local_files() {
     local dir="${BACKUP_DIR:-/var/backups/wbskt}" db newest age
     for db in "${DATABASES[@]}"; do
-        newest="$(find "$dir" -maxdepth 1 -name "${db}_*.bak" -type f -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1)"
+        newest="$(find "$dir" -maxdepth 1 \( -name "${db}_*.bak" -o -name "${db}_*.bak.gz" \) -type f -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1)"
         if [[ -z "$newest" ]]; then
             fail "no $db backup in $dir"
             continue
@@ -135,7 +135,7 @@ main() {
     check_pushgateway
     echo
     echo "Off-box copies and the restore rehearsal are not checked here. Look at the upload"
-    echo "target directly, and rehearse with: $REPO_ROOT/deploy/scripts/restore.sh --file <newest .bak>"
+    echo "target directly, and rehearse with: $REPO_ROOT/deploy/scripts/restore.sh --file <newest .bak.gz>"
     if (( failures > 0 )); then
         echo "$failures check(s) failed."
         exit 1

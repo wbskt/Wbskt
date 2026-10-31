@@ -469,6 +469,10 @@ services:
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD}
+      # Express is the free edition licensed for production; Developer is for dev and test only.
+      # An existing volume switches edition on the next start - see "SQL Server edition" in deploy/README.md.
+      MSSQL_PID: ${MSSQL_PID:-Express}
+      MSSQL_MEMORY_LIMIT_MB: ${SQL_MEMORY_LIMIT_MB:-2048}
     volumes:
       - sql-data:/var/opt/mssql
     # Loopback only, for a desktop SQL client over an SSH tunnel (ssh -L 1433:127.0.0.1:1433 <vm>).
