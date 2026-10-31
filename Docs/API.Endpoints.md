@@ -20,7 +20,7 @@ and a snapshot disagree, the snapshot is right and this page is behind.
 | **Workflow Engine** (`Wbskt.Workflow.Engine.Host`) | **no** — backend network only | management host | shared API key header on `/api/inbound/*` |
 
 **Where a public URL lands.** `api.${DOMAIN}` is the one public API host: tenant administration
-(`/api/tenants`, `/api/invitations`) and the auth host's workspace routes (`/api/workspaces`, one
+(`/api/v1/tenants`, `/api/v1/invitations`) and the auth host's workspace routes (`/api/v1/workspaces`, one
 workspace, its `members` and `owner`) go to the auth host, device sign-in and registration to the
 devices role, and everything else to the management host. `auth.${DOMAIN}` serves sign-in, refresh
 and sessions (`/api/auth`, where the refresh cookie is scoped), and for one release still answers the
@@ -61,6 +61,24 @@ Two conventions run through every table below:
   (Endpoints still being moved to this rule are tracked in #233.)
 
 ---
+
+## Versioning
+
+Every route on `api.${DOMAIN}` is under **`/api/v1`** (`PublicApi.Prefix`). A breaking change to a
+public contract ships as `/api/v2` next to it, never as a change to `/v1`. These stay unversioned
+(`PublicApi.Unversioned`):
+
+- `/api/internal/*`: host-to-host only, never routed publicly.
+- `/api/auth/*`: the console's sign-in on `auth.${DOMAIN}`; the refresh cookie is scoped to that path.
+- `/api/callbacks/*` (management) and `/api/inbound/*` (engine): URLs users paste into third
+  parties (webhooks, wake links), which have to keep working as they are.
+- `/hubs/notifications`, the socket host's `/ws`, health probes and JWKS.
+
+**Aliases for one release (#312).** The auth and management hosts still answer the unversioned
+paths (`/api/workspaces/…` and so on) by handling them as `/api/v1/…`
+(`UnversionedApiAliasMiddleware`), and they answer those requests with `Deprecation: true`, so a
+console or device that hasn't moved yet keeps working. The OpenAPI documents list only `/api/v1`.
+Remove the aliases once the console and SDKs no longer call them.
 
 ## Errors
 
@@ -167,7 +185,7 @@ Sign-in requires a confirmed address. `Auth:Email:RequireVerifiedEmailForSignIn`
 off and is false in `appsettings.Development.json` so the end-to-end suite can run without an inbox;
 it must stay true anywhere real, and the host logs an error at startup while it is not.
 
-### 1.2 Invitations — `api/invitations`
+### 1.2 Invitations — `api/v1/invitations`
 
 | Endpoint | Auth | What it does |
 |---|---|---|
@@ -176,7 +194,7 @@ it must stay true anywhere real, and the host logs an error at startup while it 
 Issuing invitations lives under the tenant it belongs to (§1.3). Only the SHA-256 hash of a token is
 stored; the raw value is returned once, by the call that created it.
 
-### 1.3 Tenant administration — `api/tenants`
+### 1.3 Tenant administration — `api/v1/tenants`
 
 All authenticated. Permissions here must be held **tenant-wide** (`WorkspaceId IS NULL`) — a
 workspace-scoped grant deliberately does not satisfy them. References resolve tenant-scoped, so a
@@ -249,13 +267,13 @@ The member, invitation, role, group and permission lists page like the managemen
 release. The lists that return a bare array (tenants, a role's permissions, a group's roles, a
 member's roles, groups and permissions) are unchanged until the console reads pages.
 
-### 1.4 Workspaces — `api/workspaces`
+### 1.4 Workspaces — `api/v1/workspaces`
 
 | Endpoint | Permission | What it does |
 |---|---|---|
 | `POST /api/internal/workspaces/resolve` | membership only | **Backend network only.** **The gate every other host depends on.** Resolves a workspace reference to its internal ID plus the caller's effective permission slugs there. The management host calls this before every workspace-scoped request. Answers 403 for both "not a member" and "no such workspace" and 401 only when the caller cannot be identified at all — the management host relies on that distinction, and treats any other status as a server fault. |
 | `GET /api/internal/workspaces/deleted?since=&until=` | shared internal key | **Backend network only.** The ids of the workspaces deleted in the window, for the management host's deleted workspace sweep. No user is behind that call, so the action is `[AllowAnonymous]` and `[InternalApiKey]` instead: `X-Wbskt-Internal-Key` must match the auth host's `Internal:ApiKey` (`AUTH_INTERNAL_API_KEY`; management sends it from `Services:AuthInternalApiKey`). Without a configured key Production answers 503, as the engine does. |
-| `GET /` | none | Lists workspaces the caller belongs to. Each carries `tenantRefId`, the account that owns it, for the `api/tenants/{tenantRef}` routes (the member search a workspace's add box uses, for one). |
+| `GET /` | none | Lists workspaces the caller belongs to. Each carries `tenantRefId`, the account that owns it, for the `api/v1/tenants/{tenantRef}` routes (the member search a workspace's add box uses, for one). |
 | `POST /` | none | Creates a workspace in the caller's tenant and makes them its owner. The owner automatically receives the tenant's `Admin` role scoped to it. |
 | `PUT {workspaceRef}` | `users.manage` **in that workspace** | Renames a workspace or changes its description. |
 | `PUT {workspaceRef}/owner` | `users.manage` in that workspace | Body `{ "userRef": guid }`. Makes another member of the workspace's tenant its owner, adding them to the workspace if needed. The previous owner stays a member and can then be removed. Someone outside the tenant is 404 `USER_NOT_FOUND`. |
@@ -277,7 +295,7 @@ member's roles, groups and permissions) are unchanged until the console reads pa
 
 ## 2. Management host
 
-Every workspace-scoped route is `api/workspaces/{workspaceRef:guid}/…` and resolves through
+Every workspace-scoped route is `api/v1/workspaces/{workspaceRef:guid}/…` and resolves through
 `POST /api/internal/workspaces/resolve` on the auth host before doing anything else. That call is the
 membership gate; the permission slug is the second gate.
 
@@ -441,8 +459,8 @@ them too, and take over while no devices instance is healthy (see deploy/README.
 
 | Endpoint | What it does |
 |---|---|
-| `POST api/client-registrations/initiate` | A device presents a policy PIN and a name; gets back its `RefId` and secret. Auto-approval policies return it registered, otherwise it waits for an operator. |
-| `POST api/client-auth/login` | A device exchanges its `RefId` + secret for a short-lived access token, which it then presents to the socket host. |
+| `POST api/v1/client-registrations/initiate` | A device presents a policy PIN and a name; gets back its `RefId` and secret. Auto-approval policies return it registered, otherwise it waits for an operator. |
+| `POST api/v1/client-auth/login` | A device exchanges its `RefId` + secret for a short-lived access token, which it then presents to the socket host. |
 
 ### 2.10 Public workflow callbacks (anonymous)
 

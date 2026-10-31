@@ -62,6 +62,38 @@ public sealed partial class PublicRoutingTests
         Assert.True(Routers["auth-api"].Priority < Routers["devices"].Priority);
     }
 
+    [Fact]
+    public void Every_public_route_is_versioned()
+    {
+        var unversioned = HostArchitectureTests.ActionsIn(AuthHost).Concat(HostArchitectureTests.ActionsIn(ManagementHost))
+            .Select(a => a with { Route = a.Route.TrimStart('/') })
+            .Where(a => a.Route.StartsWith("api/", StringComparison.Ordinal) && !a.Route.StartsWith(PublicApi.Prefix + "/", StringComparison.Ordinal))
+            .Where(a => !PublicApi.Unversioned.Contains(a.Route.Split('/')[1]))
+            .Select(a => $"{a.Name} {a.Route}");
+
+        Assert.Empty(unversioned);
+    }
+
+    [Theory]
+    [InlineData("/api/v1/client-auth/login")]
+    [InlineData("/api/v1/client-registrations/initiate")]
+    [InlineData("/api/client-auth/login")]
+    [InlineData("/api/client-registrations/initiate")]
+    public void Device_sign_in_reaches_the_devices_role_with_or_without_the_version(string path)
+    {
+        Assert.True(Routers["devices"].Admits(path));
+    }
+
+    [Theory]
+    [InlineData("/api/tenants")]
+    [InlineData("/api/invitations/accept")]
+    [InlineData("/api/workspaces")]
+    [InlineData("/api/workspaces/" + AnyGuid + "/members")]
+    public void The_unversioned_auth_aliases_still_reach_auth(string path)
+    {
+        Assert.True(Routers["auth-api"].Admits(path));
+    }
+
     /// <summary>A route template as a request path: route parameters become a GUID.</summary>
     private static string Concrete(string route) => "/" + RouteParameter().Replace(route, AnyGuid);
 

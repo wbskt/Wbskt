@@ -14,7 +14,7 @@ using Wbskt.Primitives.Constants;
 
 namespace Wbskt.Management.Host.Controllers;
 
-[Route("api/workspaces/{workspaceRef:guid}/clients")]
+[Route("api/v1/workspaces/{workspaceRef:guid}/clients")]
 [ApiController]
 [Authorize]
 public class ClientsController : ApiControllerBase

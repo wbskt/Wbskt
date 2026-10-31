@@ -9,7 +9,7 @@ using Wbskt.Management.Host.Services;
 namespace Wbskt.Management.Host.Controllers;
 
 // Pre-auth device flow (a client logging in has no JWT yet), so this is deliberately anonymous.
-[Route("api/client-auth")]
+[Route("api/v1/client-auth")]
 [ApiController]
 [AllowAnonymous]
 [ApiExplorerSettings(IgnoreApi = true)]

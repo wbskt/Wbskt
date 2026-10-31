@@ -2868,7 +2868,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/clients": {
+    "/api/v1/workspaces/{workspaceRef}/clients": {
       "get": {
         "parameters": [
           {
@@ -3007,7 +3007,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/clients/counts": {
+    "/api/v1/workspaces/{workspaceRef}/clients/counts": {
       "get": {
         "parameters": [
           {
@@ -3055,7 +3055,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/clients/status": {
+    "/api/v1/workspaces/{workspaceRef}/clients/status": {
       "patch": {
         "parameters": [
           {
@@ -3115,7 +3115,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/clients/tags": {
+    "/api/v1/workspaces/{workspaceRef}/clients/tags": {
       "get": {
         "parameters": [
           {
@@ -3155,7 +3155,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/clients/{clientRef}": {
+    "/api/v1/workspaces/{workspaceRef}/clients/{clientRef}": {
       "delete": {
         "parameters": [
           {
@@ -3284,7 +3284,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/clients/{clientRef}/commands": {
+    "/api/v1/workspaces/{workspaceRef}/clients/{clientRef}/commands": {
       "post": {
         "parameters": [
           {
@@ -3353,7 +3353,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/clients/{clientRef}/comms": {
+    "/api/v1/workspaces/{workspaceRef}/clients/{clientRef}/comms": {
       "get": {
         "parameters": [
           {
@@ -3476,7 +3476,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/clients/{clientRef}/ping": {
+    "/api/v1/workspaces/{workspaceRef}/clients/{clientRef}/ping": {
       "post": {
         "parameters": [
           {
@@ -3508,7 +3508,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/clients/{clientRef}/readings": {
+    "/api/v1/workspaces/{workspaceRef}/clients/{clientRef}/readings": {
       "get": {
         "parameters": [
           {
@@ -3587,7 +3587,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/clients/{clientRef}/readings/csv": {
+    "/api/v1/workspaces/{workspaceRef}/clients/{clientRef}/readings/csv": {
       "get": {
         "parameters": [
           {
@@ -3645,7 +3645,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/clients/{clientRef}/rotate-secret": {
+    "/api/v1/workspaces/{workspaceRef}/clients/{clientRef}/rotate-secret": {
       "post": {
         "parameters": [
           {
@@ -3694,7 +3694,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/clients/{clientRef}/state": {
+    "/api/v1/workspaces/{workspaceRef}/clients/{clientRef}/state": {
       "get": {
         "parameters": [
           {
@@ -3743,7 +3743,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/clients/{clientRef}/tags": {
+    "/api/v1/workspaces/{workspaceRef}/clients/{clientRef}/tags": {
       "put": {
         "parameters": [
           {
@@ -3812,7 +3812,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/event-logs": {
+    "/api/v1/workspaces/{workspaceRef}/event-logs": {
       "get": {
         "parameters": [
           {
@@ -4044,7 +4044,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/event-logs/csv": {
+    "/api/v1/workspaces/{workspaceRef}/event-logs/csv": {
       "get": {
         "parameters": [
           {
@@ -4195,7 +4195,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/event-logs/summary": {
+    "/api/v1/workspaces/{workspaceRef}/event-logs/summary": {
       "get": {
         "parameters": [
           {
@@ -4259,7 +4259,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/integrations": {
+    "/api/v1/workspaces/{workspaceRef}/integrations": {
       "get": {
         "parameters": [
           {
@@ -4364,7 +4364,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/integrations/test": {
+    "/api/v1/workspaces/{workspaceRef}/integrations/test": {
       "post": {
         "parameters": [
           {
@@ -4424,7 +4424,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/integrations/{integrationRef}": {
+    "/api/v1/workspaces/{workspaceRef}/integrations/{integrationRef}": {
       "delete": {
         "parameters": [
           {
@@ -4570,7 +4570,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/integrations/{integrationRef}/chats": {
+    "/api/v1/workspaces/{workspaceRef}/integrations/{integrationRef}/chats": {
       "get": {
         "parameters": [
           {
@@ -4619,7 +4619,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/integrations/{integrationRef}/usage": {
+    "/api/v1/workspaces/{workspaceRef}/integrations/{integrationRef}/usage": {
       "get": {
         "parameters": [
           {
@@ -4668,7 +4668,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/message-templates": {
+    "/api/v1/workspaces/{workspaceRef}/message-templates": {
       "get": {
         "parameters": [
           {
@@ -4841,7 +4841,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/message-templates/{templateRef}": {
+    "/api/v1/workspaces/{workspaceRef}/message-templates/{templateRef}": {
       "delete": {
         "parameters": [
           {
@@ -4923,7 +4923,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/registration-policies": {
+    "/api/v1/workspaces/{workspaceRef}/registration-policies": {
       "get": {
         "parameters": [
           {
@@ -5102,7 +5102,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/registration-policies/{policyRef}": {
+    "/api/v1/workspaces/{workspaceRef}/registration-policies/{policyRef}": {
       "get": {
         "parameters": [
           {
@@ -5201,7 +5201,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/registration-policies/{policyRef}/disable": {
+    "/api/v1/workspaces/{workspaceRef}/registration-policies/{policyRef}/disable": {
       "post": {
         "parameters": [
           {
@@ -5233,7 +5233,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/registration-policies/{policyRef}/rotate-pin": {
+    "/api/v1/workspaces/{workspaceRef}/registration-policies/{policyRef}/rotate-pin": {
       "post": {
         "parameters": [
           {
@@ -5282,7 +5282,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/runs": {
+    "/api/v1/workspaces/{workspaceRef}/runs": {
       "get": {
         "parameters": [
           {
@@ -5396,7 +5396,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/runs/{runRef}": {
+    "/api/v1/workspaces/{workspaceRef}/runs/{runRef}": {
       "get": {
         "parameters": [
           {
@@ -5445,7 +5445,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/runs/{runRef}/cancel": {
+    "/api/v1/workspaces/{workspaceRef}/runs/{runRef}/cancel": {
       "post": {
         "parameters": [
           {
@@ -5497,7 +5497,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/runs/{runRef}/history": {
+    "/api/v1/workspaces/{workspaceRef}/runs/{runRef}/history": {
       "get": {
         "parameters": [
           {
@@ -5613,7 +5613,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/runs/{runRef}/signals/{signalName}": {
+    "/api/v1/workspaces/{workspaceRef}/runs/{runRef}/signals/{signalName}": {
       "post": {
         "parameters": [
           {
@@ -5690,7 +5690,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/stats": {
+    "/api/v1/workspaces/{workspaceRef}/stats": {
       "get": {
         "parameters": [
           {
@@ -5746,7 +5746,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/workflows": {
+    "/api/v1/workspaces/{workspaceRef}/workflows": {
       "get": {
         "parameters": [
           {
@@ -5911,7 +5911,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/workflows/validate": {
+    "/api/v1/workspaces/{workspaceRef}/workflows/validate": {
       "post": {
         "parameters": [
           {
@@ -5971,7 +5971,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/workflows/{workflowRef}": {
+    "/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}": {
       "delete": {
         "parameters": [
           {
@@ -6050,7 +6050,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/workflows/{workflowRef}/deprecate": {
+    "/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/deprecate": {
       "post": {
         "parameters": [
           {
@@ -6082,7 +6082,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/workflows/{workflowRef}/reinstate": {
+    "/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/reinstate": {
       "post": {
         "parameters": [
           {
@@ -6114,7 +6114,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/workflows/{workflowRef}/rollback/{version}": {
+    "/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/rollback/{version}": {
       "post": {
         "parameters": [
           {
@@ -6173,7 +6173,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/workflows/{workflowRef}/runs": {
+    "/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/runs": {
       "get": {
         "parameters": [
           {
@@ -6363,7 +6363,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/workflows/{workflowRef}/stats": {
+    "/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/stats": {
       "get": {
         "parameters": [
           {
@@ -6428,7 +6428,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/workflows/{workflowRef}/variables/{variableName}": {
+    "/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/variables/{variableName}": {
       "get": {
         "parameters": [
           {
@@ -6560,7 +6560,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/workflows/{workflowRef}/versions": {
+    "/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/versions": {
       "get": {
         "parameters": [
           {
@@ -6609,7 +6609,7 @@
         ]
       }
     },
-    "/api/workspaces/{workspaceRef}/workflows/{workflowRef}/versions/{version}": {
+    "/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/versions/{version}": {
       "get": {
         "parameters": [
           {

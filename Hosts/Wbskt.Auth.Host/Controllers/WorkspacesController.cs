@@ -13,7 +13,7 @@ using Wbskt.Primitives.Constants;
 
 namespace Wbskt.Auth.Host.Controllers;
 
-[Route("api/workspaces")]
+[Route("api/v1/workspaces")]
 [ApiController]
 [Authorize]
 public class WorkspacesController : ApiControllerBase

@@ -11,7 +11,7 @@ using Wbskt.Primitives.Constants;
 
 namespace Wbskt.Management.Host.Controllers;
 
-[Route("api/workspaces/{workspaceRef:guid}/message-templates")]
+[Route("api/v1/workspaces/{workspaceRef:guid}/message-templates")]
 [ApiController]
 [Authorize]
 public sealed class MessageTemplatesController : ApiControllerBase

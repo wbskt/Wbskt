@@ -12,7 +12,7 @@ using Wbskt.Primitives.Constants;
 
 namespace Wbskt.Management.Host.Controllers;
 
-[Route("api/workspaces/{workspaceRef:guid}/event-logs")]
+[Route("api/v1/workspaces/{workspaceRef:guid}/event-logs")]
 [ApiController]
 [Authorize]
 public sealed class EventLogsController : ApiControllerBase

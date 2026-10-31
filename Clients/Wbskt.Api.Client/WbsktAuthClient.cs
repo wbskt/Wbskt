@@ -126,7 +126,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="AcceptInvitationAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> AcceptInvitationRawAsync(AcceptInvitationRequest request, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Post, "/api/invitations/accept", request, cancellationToken);
+        SendRawAsync(HttpMethod.Post, "/api/v1/invitations/accept", request, cancellationToken);
 
     // ── Workspaces ────────────────────────────────────────────────────────────────────────────────
 
@@ -136,7 +136,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="GetWorkspacesAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> GetWorkspacesRawAsync(CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Get, "/api/workspaces", null, cancellationToken);
+        SendRawAsync(HttpMethod.Get, "/api/v1/workspaces", null, cancellationToken);
 
     /// <summary>Creates a workspace owned by the bearer. <c>POST /api/workspaces</c>.</summary>
     public Task<WorkspaceResponse> CreateWorkspaceAsync(CreateWorkspaceRequest request, CancellationToken cancellationToken = default) =>
@@ -144,7 +144,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="CreateWorkspaceAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> CreateWorkspaceRawAsync(CreateWorkspaceRequest request, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Post, "/api/workspaces", request, cancellationToken);
+        SendRawAsync(HttpMethod.Post, "/api/v1/workspaces", request, cancellationToken);
 
     /// <summary>The bearer's effective permissions in a workspace. <c>GET /api/workspaces/{workspaceRef}/permissions</c>.</summary>
     public Task<WorkspacePermissionsResponse> GetWorkspacePermissionsAsync(Guid workspaceRef, CancellationToken cancellationToken = default) =>
@@ -152,7 +152,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="GetWorkspacePermissionsAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> GetWorkspacePermissionsRawAsync(Guid workspaceRef, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Get, $"/api/workspaces/{workspaceRef}/permissions", null, cancellationToken);
+        SendRawAsync(HttpMethod.Get, $"/api/v1/workspaces/{workspaceRef}/permissions", null, cancellationToken);
 
     /// <summary>Renames a workspace or changes its description. <c>PUT /api/workspaces/{workspaceRef}</c>.</summary>
     public Task UpdateWorkspaceAsync(Guid workspaceRef, CreateWorkspaceRequest request, CancellationToken cancellationToken = default) =>
@@ -160,7 +160,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="UpdateWorkspaceAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> UpdateWorkspaceRawAsync(Guid workspaceRef, CreateWorkspaceRequest request, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Put, $"/api/workspaces/{workspaceRef}", request, cancellationToken);
+        SendRawAsync(HttpMethod.Put, $"/api/v1/workspaces/{workspaceRef}", request, cancellationToken);
 
     /// <summary>Deletes a workspace. <c>DELETE /api/workspaces/{workspaceRef}</c>.</summary>
     public Task DeleteWorkspaceAsync(Guid workspaceRef, CancellationToken cancellationToken = default) =>
@@ -168,7 +168,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="DeleteWorkspaceAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> DeleteWorkspaceRawAsync(Guid workspaceRef, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Delete, $"/api/workspaces/{workspaceRef}", null, cancellationToken);
+        SendRawAsync(HttpMethod.Delete, $"/api/v1/workspaces/{workspaceRef}", null, cancellationToken);
 
     /// <summary>Hands a workspace to another member of its tenant. <c>PUT /api/workspaces/{workspaceRef}/owner</c>.</summary>
     public Task TransferWorkspaceOwnershipAsync(Guid workspaceRef, TransferOwnershipRequest request, CancellationToken cancellationToken = default) =>
@@ -176,7 +176,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="TransferWorkspaceOwnershipAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> TransferWorkspaceOwnershipRawAsync(Guid workspaceRef, TransferOwnershipRequest request, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Put, $"/api/workspaces/{workspaceRef}/owner", request, cancellationToken);
+        SendRawAsync(HttpMethod.Put, $"/api/v1/workspaces/{workspaceRef}/owner", request, cancellationToken);
 
     /// <summary>Adds a tenant member to a workspace by email. <c>POST /api/workspaces/{workspaceRef}/members</c>.</summary>
     public Task AddWorkspaceMemberAsync(Guid workspaceRef, AddMemberRequest request, CancellationToken cancellationToken = default) =>
@@ -184,7 +184,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="AddWorkspaceMemberAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> AddWorkspaceMemberRawAsync(Guid workspaceRef, AddMemberRequest request, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Post, $"/api/workspaces/{workspaceRef}/members", request, cancellationToken);
+        SendRawAsync(HttpMethod.Post, $"/api/v1/workspaces/{workspaceRef}/members", request, cancellationToken);
 
     /// <summary>A page of a workspace's members. <c>GET /api/workspaces/{workspaceRef}/members</c>.</summary>
     public Task<Page<TenantMemberResponse>> GetWorkspaceMembersAsync(Guid workspaceRef, string? cursor = null, int? limit = null, CancellationToken cancellationToken = default) =>
@@ -192,7 +192,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="GetWorkspaceMembersAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> GetWorkspaceMembersRawAsync(Guid workspaceRef, string? cursor = null, int? limit = null, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Get, $"/api/workspaces/{workspaceRef}/members{Query(("cursor", cursor), ("limit", limit))}", null, cancellationToken);
+        SendRawAsync(HttpMethod.Get, $"/api/v1/workspaces/{workspaceRef}/members{Query(("cursor", cursor), ("limit", limit))}", null, cancellationToken);
 
     /// <summary>Removes a member from a workspace. <c>DELETE /api/workspaces/{workspaceRef}/members/{userRef}</c>.</summary>
     public Task RemoveWorkspaceMemberAsync(Guid workspaceRef, Guid userRef, CancellationToken cancellationToken = default) =>
@@ -200,7 +200,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="RemoveWorkspaceMemberAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> RemoveWorkspaceMemberRawAsync(Guid workspaceRef, Guid userRef, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Delete, $"/api/workspaces/{workspaceRef}/members/{userRef}", null, cancellationToken);
+        SendRawAsync(HttpMethod.Delete, $"/api/v1/workspaces/{workspaceRef}/members/{userRef}", null, cancellationToken);
 
     /// <summary>The internal workspace id and the bearer's effective permissions in it. A host-to-host route (<c>/api/internal</c>): never routed publicly, so only a caller on the backend network reaches it. <c>POST /api/internal/workspaces/resolve</c>.</summary>
     public Task<ResolvedWorkspaceResponse> ResolveWorkspaceAsync(ResolveWorkspaceRequest request, CancellationToken cancellationToken = default) =>
@@ -218,7 +218,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="GetTenantsAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> GetTenantsRawAsync(CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Get, "/api/tenants", null, cancellationToken);
+        SendRawAsync(HttpMethod.Get, "/api/v1/tenants", null, cancellationToken);
 
     /// <summary>Creates a tenant administered by the bearer. <c>POST /api/tenants</c>.</summary>
     public Task<TenantResponse> CreateTenantAsync(CreateTenantRequest request, CancellationToken cancellationToken = default) =>
@@ -226,7 +226,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="CreateTenantAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> CreateTenantRawAsync(CreateTenantRequest request, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Post, "/api/tenants", request, cancellationToken);
+        SendRawAsync(HttpMethod.Post, "/api/v1/tenants", request, cancellationToken);
 
     /// <summary>Renames a tenant or changes its description. <c>PUT /api/tenants/{tenantRef}</c>.</summary>
     public Task UpdateTenantAsync(Guid tenantRef, UpdateTenantRequest request, CancellationToken cancellationToken = default) =>
@@ -234,7 +234,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="UpdateTenantAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> UpdateTenantRawAsync(Guid tenantRef, UpdateTenantRequest request, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Put, $"/api/tenants/{tenantRef}", request, cancellationToken);
+        SendRawAsync(HttpMethod.Put, $"/api/v1/tenants/{tenantRef}", request, cancellationToken);
 
     /// <summary>A page of a tenant's outstanding invitations. <c>GET /api/tenants/{tenantRef}/invitations</c>.</summary>
     public Task<Page<InvitationResponse>> GetInvitationsAsync(Guid tenantRef, string? cursor = null, int? limit = null, CancellationToken cancellationToken = default) =>
@@ -242,7 +242,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="GetInvitationsAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> GetInvitationsRawAsync(Guid tenantRef, string? cursor = null, int? limit = null, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Get, $"/api/tenants/{tenantRef}/invitations{Query(("cursor", cursor), ("limit", limit))}", null, cancellationToken);
+        SendRawAsync(HttpMethod.Get, $"/api/v1/tenants/{tenantRef}/invitations{Query(("cursor", cursor), ("limit", limit))}", null, cancellationToken);
 
     /// <summary>Invites an address to a tenant. The response carries the raw token, the only time it is available. <c>POST /api/tenants/{tenantRef}/invitations</c>.</summary>
     public Task<CreatedInvitationResponse> CreateInvitationAsync(Guid tenantRef, CreateInvitationRequest request, CancellationToken cancellationToken = default) =>
@@ -250,7 +250,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="CreateInvitationAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> CreateInvitationRawAsync(Guid tenantRef, CreateInvitationRequest request, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Post, $"/api/tenants/{tenantRef}/invitations", request, cancellationToken);
+        SendRawAsync(HttpMethod.Post, $"/api/v1/tenants/{tenantRef}/invitations", request, cancellationToken);
 
     /// <summary>Withdraws an invitation. <c>DELETE /api/tenants/{tenantRef}/invitations/{invitationRef}</c>.</summary>
     public Task RevokeInvitationAsync(Guid tenantRef, Guid invitationRef, CancellationToken cancellationToken = default) =>
@@ -258,7 +258,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="RevokeInvitationAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> RevokeInvitationRawAsync(Guid tenantRef, Guid invitationRef, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Delete, $"/api/tenants/{tenantRef}/invitations/{invitationRef}", null, cancellationToken);
+        SendRawAsync(HttpMethod.Delete, $"/api/v1/tenants/{tenantRef}/invitations/{invitationRef}", null, cancellationToken);
 
     /// <summary>A page of a tenant's roles. <c>GET /api/tenants/{tenantRef}/roles</c>.</summary>
     public Task<Page<RoleResponse>> GetRolesAsync(Guid tenantRef, string? cursor = null, int? limit = null, CancellationToken cancellationToken = default) =>
@@ -266,7 +266,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="GetRolesAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> GetRolesRawAsync(Guid tenantRef, string? cursor = null, int? limit = null, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Get, $"/api/tenants/{tenantRef}/roles{Query(("cursor", cursor), ("limit", limit))}", null, cancellationToken);
+        SendRawAsync(HttpMethod.Get, $"/api/v1/tenants/{tenantRef}/roles{Query(("cursor", cursor), ("limit", limit))}", null, cancellationToken);
 
     /// <summary>Creates a role. <c>POST /api/tenants/{tenantRef}/roles</c>.</summary>
     public Task<RoleResponse> CreateRoleAsync(Guid tenantRef, CreateRoleRequest request, CancellationToken cancellationToken = default) =>
@@ -274,7 +274,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="CreateRoleAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> CreateRoleRawAsync(Guid tenantRef, CreateRoleRequest request, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Post, $"/api/tenants/{tenantRef}/roles", request, cancellationToken);
+        SendRawAsync(HttpMethod.Post, $"/api/v1/tenants/{tenantRef}/roles", request, cancellationToken);
 
     /// <summary>Renames a role or changes its description. <c>PUT /api/tenants/{tenantRef}/roles/{roleRef}</c>.</summary>
     public Task UpdateRoleAsync(Guid tenantRef, Guid roleRef, UpdateRoleRequest request, CancellationToken cancellationToken = default) =>
@@ -282,7 +282,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="UpdateRoleAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> UpdateRoleRawAsync(Guid tenantRef, Guid roleRef, UpdateRoleRequest request, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Put, $"/api/tenants/{tenantRef}/roles/{roleRef}", request, cancellationToken);
+        SendRawAsync(HttpMethod.Put, $"/api/v1/tenants/{tenantRef}/roles/{roleRef}", request, cancellationToken);
 
     /// <summary>Deletes a role. <c>DELETE /api/tenants/{tenantRef}/roles/{roleRef}</c>.</summary>
     public Task DeleteRoleAsync(Guid tenantRef, Guid roleRef, CancellationToken cancellationToken = default) =>
@@ -290,7 +290,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="DeleteRoleAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> DeleteRoleRawAsync(Guid tenantRef, Guid roleRef, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Delete, $"/api/tenants/{tenantRef}/roles/{roleRef}", null, cancellationToken);
+        SendRawAsync(HttpMethod.Delete, $"/api/v1/tenants/{tenantRef}/roles/{roleRef}", null, cancellationToken);
 
     /// <summary>The permissions attached to a role, with their deny flags. <c>GET /api/tenants/{tenantRef}/roles/{roleRef}/permissions</c>.</summary>
     public Task<IReadOnlyList<RolePermissionAssignmentResponse>> GetRolePermissionsAsync(Guid tenantRef, Guid roleRef, CancellationToken cancellationToken = default) =>
@@ -298,7 +298,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="GetRolePermissionsAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> GetRolePermissionsRawAsync(Guid tenantRef, Guid roleRef, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Get, $"/api/tenants/{tenantRef}/roles/{roleRef}/permissions", null, cancellationToken);
+        SendRawAsync(HttpMethod.Get, $"/api/v1/tenants/{tenantRef}/roles/{roleRef}/permissions", null, cancellationToken);
 
     /// <summary>Grants or denies a permission on a role. <c>POST /api/tenants/{tenantRef}/roles/{roleRef}/permissions</c>.</summary>
     public Task GrantRolePermissionAsync(Guid tenantRef, Guid roleRef, GrantRolePermissionRequest request, CancellationToken cancellationToken = default) =>
@@ -306,7 +306,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="GrantRolePermissionAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> GrantRolePermissionRawAsync(Guid tenantRef, Guid roleRef, GrantRolePermissionRequest request, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Post, $"/api/tenants/{tenantRef}/roles/{roleRef}/permissions", request, cancellationToken);
+        SendRawAsync(HttpMethod.Post, $"/api/v1/tenants/{tenantRef}/roles/{roleRef}/permissions", request, cancellationToken);
 
     /// <summary>Detaches a permission from a role. <c>DELETE /api/tenants/{tenantRef}/roles/{roleRef}/permissions/{slug}</c>.</summary>
     public Task RemoveRolePermissionAsync(Guid tenantRef, Guid roleRef, string slug, CancellationToken cancellationToken = default) =>
@@ -314,7 +314,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="RemoveRolePermissionAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> RemoveRolePermissionRawAsync(Guid tenantRef, Guid roleRef, string slug, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Delete, $"/api/tenants/{tenantRef}/roles/{roleRef}/permissions/{E(slug)}", null, cancellationToken);
+        SendRawAsync(HttpMethod.Delete, $"/api/v1/tenants/{tenantRef}/roles/{roleRef}/permissions/{E(slug)}", null, cancellationToken);
 
     /// <summary>A page of a tenant's groups. <c>GET /api/tenants/{tenantRef}/groups</c>.</summary>
     public Task<Page<GroupResponse>> GetGroupsAsync(Guid tenantRef, string? cursor = null, int? limit = null, CancellationToken cancellationToken = default) =>
@@ -322,7 +322,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="GetGroupsAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> GetGroupsRawAsync(Guid tenantRef, string? cursor = null, int? limit = null, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Get, $"/api/tenants/{tenantRef}/groups{Query(("cursor", cursor), ("limit", limit))}", null, cancellationToken);
+        SendRawAsync(HttpMethod.Get, $"/api/v1/tenants/{tenantRef}/groups{Query(("cursor", cursor), ("limit", limit))}", null, cancellationToken);
 
     /// <summary>Creates a group. <c>POST /api/tenants/{tenantRef}/groups</c>.</summary>
     public Task<GroupResponse> CreateGroupAsync(Guid tenantRef, CreateGroupRequest request, CancellationToken cancellationToken = default) =>
@@ -330,7 +330,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="CreateGroupAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> CreateGroupRawAsync(Guid tenantRef, CreateGroupRequest request, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Post, $"/api/tenants/{tenantRef}/groups", request, cancellationToken);
+        SendRawAsync(HttpMethod.Post, $"/api/v1/tenants/{tenantRef}/groups", request, cancellationToken);
 
     /// <summary>Renames a group. <c>PUT /api/tenants/{tenantRef}/groups/{groupRef}</c>.</summary>
     public Task UpdateGroupAsync(Guid tenantRef, Guid groupRef, UpdateGroupRequest request, CancellationToken cancellationToken = default) =>
@@ -338,7 +338,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="UpdateGroupAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> UpdateGroupRawAsync(Guid tenantRef, Guid groupRef, UpdateGroupRequest request, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Put, $"/api/tenants/{tenantRef}/groups/{groupRef}", request, cancellationToken);
+        SendRawAsync(HttpMethod.Put, $"/api/v1/tenants/{tenantRef}/groups/{groupRef}", request, cancellationToken);
 
     /// <summary>Deletes a group. <c>DELETE /api/tenants/{tenantRef}/groups/{groupRef}</c>.</summary>
     public Task DeleteGroupAsync(Guid tenantRef, Guid groupRef, CancellationToken cancellationToken = default) =>
@@ -346,7 +346,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="DeleteGroupAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> DeleteGroupRawAsync(Guid tenantRef, Guid groupRef, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Delete, $"/api/tenants/{tenantRef}/groups/{groupRef}", null, cancellationToken);
+        SendRawAsync(HttpMethod.Delete, $"/api/v1/tenants/{tenantRef}/groups/{groupRef}", null, cancellationToken);
 
     /// <summary>The roles a group holds, with their scopes. <c>GET /api/tenants/{tenantRef}/groups/{groupRef}/roles</c>.</summary>
     public Task<IReadOnlyList<RoleAssignmentResponse>> GetGroupRolesAsync(Guid tenantRef, Guid groupRef, CancellationToken cancellationToken = default) =>
@@ -354,7 +354,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="GetGroupRolesAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> GetGroupRolesRawAsync(Guid tenantRef, Guid groupRef, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Get, $"/api/tenants/{tenantRef}/groups/{groupRef}/roles", null, cancellationToken);
+        SendRawAsync(HttpMethod.Get, $"/api/v1/tenants/{tenantRef}/groups/{groupRef}/roles", null, cancellationToken);
 
     /// <summary>Assigns a role to a group, tenant-wide or in one workspace. <c>POST /api/tenants/{tenantRef}/groups/{groupRef}/roles/{roleRef}</c>.</summary>
     public Task AssignGroupRoleAsync(Guid tenantRef, Guid groupRef, Guid roleRef, AssignmentScopeRequest request, CancellationToken cancellationToken = default) =>
@@ -362,7 +362,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="AssignGroupRoleAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> AssignGroupRoleRawAsync(Guid tenantRef, Guid groupRef, Guid roleRef, AssignmentScopeRequest request, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Post, $"/api/tenants/{tenantRef}/groups/{groupRef}/roles/{roleRef}", request, cancellationToken);
+        SendRawAsync(HttpMethod.Post, $"/api/v1/tenants/{tenantRef}/groups/{groupRef}/roles/{roleRef}", request, cancellationToken);
 
     /// <summary>Removes a group's role assignment at one scope (tenant-wide when <paramref name="workspaceRef"/> is null). <c>DELETE /api/tenants/{tenantRef}/groups/{groupRef}/roles/{roleRef}</c>.</summary>
     public Task RemoveGroupRoleAsync(Guid tenantRef, Guid groupRef, Guid roleRef, Guid? workspaceRef = null, CancellationToken cancellationToken = default) =>
@@ -370,7 +370,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="RemoveGroupRoleAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> RemoveGroupRoleRawAsync(Guid tenantRef, Guid groupRef, Guid roleRef, Guid? workspaceRef = null, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Delete, $"/api/tenants/{tenantRef}/groups/{groupRef}/roles/{roleRef}{Query(("workspaceRef", workspaceRef))}", null, cancellationToken);
+        SendRawAsync(HttpMethod.Delete, $"/api/v1/tenants/{tenantRef}/groups/{groupRef}/roles/{roleRef}{Query(("workspaceRef", workspaceRef))}", null, cancellationToken);
 
     /// <summary>A page of the permissions a tenant can grant. <c>GET /api/tenants/{tenantRef}/permissions</c>.</summary>
     public Task<Page<PermissionResponse>> GetPermissionsAsync(Guid tenantRef, string? cursor = null, int? limit = null, CancellationToken cancellationToken = default) =>
@@ -378,7 +378,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="GetPermissionsAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> GetPermissionsRawAsync(Guid tenantRef, string? cursor = null, int? limit = null, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Get, $"/api/tenants/{tenantRef}/permissions{Query(("cursor", cursor), ("limit", limit))}", null, cancellationToken);
+        SendRawAsync(HttpMethod.Get, $"/api/v1/tenants/{tenantRef}/permissions{Query(("cursor", cursor), ("limit", limit))}", null, cancellationToken);
 
     /// <summary>A page of a tenant's members, optionally filtered by name or email. <c>GET /api/tenants/{tenantRef}/members</c>.</summary>
     public Task<Page<TenantMemberResponse>> GetTenantMembersAsync(Guid tenantRef, string? search = null, string? cursor = null, int? limit = null, CancellationToken cancellationToken = default) =>
@@ -386,7 +386,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="GetTenantMembersAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> GetTenantMembersRawAsync(Guid tenantRef, string? search = null, string? cursor = null, int? limit = null, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Get, $"/api/tenants/{tenantRef}/members{Query(("search", search), ("cursor", cursor), ("limit", limit))}", null, cancellationToken);
+        SendRawAsync(HttpMethod.Get, $"/api/v1/tenants/{tenantRef}/members{Query(("search", search), ("cursor", cursor), ("limit", limit))}", null, cancellationToken);
 
     /// <summary>The roles a member holds directly, with their scopes. <c>GET /api/tenants/{tenantRef}/members/{userRef}/roles</c>.</summary>
     public Task<IReadOnlyList<RoleAssignmentResponse>> GetMemberRolesAsync(Guid tenantRef, Guid userRef, CancellationToken cancellationToken = default) =>
@@ -394,7 +394,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="GetMemberRolesAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> GetMemberRolesRawAsync(Guid tenantRef, Guid userRef, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Get, $"/api/tenants/{tenantRef}/members/{userRef}/roles", null, cancellationToken);
+        SendRawAsync(HttpMethod.Get, $"/api/v1/tenants/{tenantRef}/members/{userRef}/roles", null, cancellationToken);
 
     /// <summary>The permissions granted or denied to a member directly. <c>GET /api/tenants/{tenantRef}/members/{userRef}/permissions</c>.</summary>
     public Task<IReadOnlyList<UserPermissionAssignmentResponse>> GetMemberPermissionsAsync(Guid tenantRef, Guid userRef, CancellationToken cancellationToken = default) =>
@@ -402,7 +402,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="GetMemberPermissionsAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> GetMemberPermissionsRawAsync(Guid tenantRef, Guid userRef, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Get, $"/api/tenants/{tenantRef}/members/{userRef}/permissions", null, cancellationToken);
+        SendRawAsync(HttpMethod.Get, $"/api/v1/tenants/{tenantRef}/members/{userRef}/permissions", null, cancellationToken);
 
     /// <summary>The groups a member belongs to. <c>GET /api/tenants/{tenantRef}/members/{userRef}/groups</c>.</summary>
     public Task<IReadOnlyList<GroupMembershipResponse>> GetMemberGroupsAsync(Guid tenantRef, Guid userRef, CancellationToken cancellationToken = default) =>
@@ -410,7 +410,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="GetMemberGroupsAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> GetMemberGroupsRawAsync(Guid tenantRef, Guid userRef, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Get, $"/api/tenants/{tenantRef}/members/{userRef}/groups", null, cancellationToken);
+        SendRawAsync(HttpMethod.Get, $"/api/v1/tenants/{tenantRef}/members/{userRef}/groups", null, cancellationToken);
 
     /// <summary>Adds a member to a group. <c>POST /api/tenants/{tenantRef}/members/{userRef}/groups/{groupRef}</c>.</summary>
     public Task AddMemberToGroupAsync(Guid tenantRef, Guid userRef, Guid groupRef, CancellationToken cancellationToken = default) =>
@@ -418,7 +418,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="AddMemberToGroupAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> AddMemberToGroupRawAsync(Guid tenantRef, Guid userRef, Guid groupRef, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Post, $"/api/tenants/{tenantRef}/members/{userRef}/groups/{groupRef}", null, cancellationToken);
+        SendRawAsync(HttpMethod.Post, $"/api/v1/tenants/{tenantRef}/members/{userRef}/groups/{groupRef}", null, cancellationToken);
 
     /// <summary>Removes a member from a group. <c>DELETE /api/tenants/{tenantRef}/members/{userRef}/groups/{groupRef}</c>.</summary>
     public Task RemoveMemberFromGroupAsync(Guid tenantRef, Guid userRef, Guid groupRef, CancellationToken cancellationToken = default) =>
@@ -426,7 +426,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="RemoveMemberFromGroupAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> RemoveMemberFromGroupRawAsync(Guid tenantRef, Guid userRef, Guid groupRef, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Delete, $"/api/tenants/{tenantRef}/members/{userRef}/groups/{groupRef}", null, cancellationToken);
+        SendRawAsync(HttpMethod.Delete, $"/api/v1/tenants/{tenantRef}/members/{userRef}/groups/{groupRef}", null, cancellationToken);
 
     /// <summary>Assigns a role to a member, tenant-wide or in one workspace. <c>POST /api/tenants/{tenantRef}/members/{userRef}/roles/{roleRef}</c>.</summary>
     public Task AssignMemberRoleAsync(Guid tenantRef, Guid userRef, Guid roleRef, AssignmentScopeRequest request, CancellationToken cancellationToken = default) =>
@@ -434,7 +434,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="AssignMemberRoleAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> AssignMemberRoleRawAsync(Guid tenantRef, Guid userRef, Guid roleRef, AssignmentScopeRequest request, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Post, $"/api/tenants/{tenantRef}/members/{userRef}/roles/{roleRef}", request, cancellationToken);
+        SendRawAsync(HttpMethod.Post, $"/api/v1/tenants/{tenantRef}/members/{userRef}/roles/{roleRef}", request, cancellationToken);
 
     /// <summary>Removes a member's role assignment at one scope (tenant-wide when <paramref name="workspaceRef"/> is null). <c>DELETE /api/tenants/{tenantRef}/members/{userRef}/roles/{roleRef}</c>.</summary>
     public Task RemoveMemberRoleAsync(Guid tenantRef, Guid userRef, Guid roleRef, Guid? workspaceRef = null, CancellationToken cancellationToken = default) =>
@@ -442,7 +442,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="RemoveMemberRoleAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> RemoveMemberRoleRawAsync(Guid tenantRef, Guid userRef, Guid roleRef, Guid? workspaceRef = null, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Delete, $"/api/tenants/{tenantRef}/members/{userRef}/roles/{roleRef}{Query(("workspaceRef", workspaceRef))}", null, cancellationToken);
+        SendRawAsync(HttpMethod.Delete, $"/api/v1/tenants/{tenantRef}/members/{userRef}/roles/{roleRef}{Query(("workspaceRef", workspaceRef))}", null, cancellationToken);
 
     /// <summary>Grants or denies a permission to a member directly. <c>POST /api/tenants/{tenantRef}/members/{userRef}/permissions</c>.</summary>
     public Task GrantMemberPermissionAsync(Guid tenantRef, Guid userRef, GrantPermissionRequest request, CancellationToken cancellationToken = default) =>
@@ -450,7 +450,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="GrantMemberPermissionAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> GrantMemberPermissionRawAsync(Guid tenantRef, Guid userRef, GrantPermissionRequest request, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Post, $"/api/tenants/{tenantRef}/members/{userRef}/permissions", request, cancellationToken);
+        SendRawAsync(HttpMethod.Post, $"/api/v1/tenants/{tenantRef}/members/{userRef}/permissions", request, cancellationToken);
 
     /// <summary>Removes a member's direct permission at one scope (tenant-wide when <paramref name="workspaceRef"/> is null). <c>DELETE /api/tenants/{tenantRef}/members/{userRef}/permissions/{slug}</c>.</summary>
     public Task RemoveMemberPermissionAsync(Guid tenantRef, Guid userRef, string slug, Guid? workspaceRef = null, CancellationToken cancellationToken = default) =>
@@ -458,7 +458,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="RemoveMemberPermissionAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> RemoveMemberPermissionRawAsync(Guid tenantRef, Guid userRef, string slug, Guid? workspaceRef = null, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Delete, $"/api/tenants/{tenantRef}/members/{userRef}/permissions/{E(slug)}{Query(("workspaceRef", workspaceRef))}", null, cancellationToken);
+        SendRawAsync(HttpMethod.Delete, $"/api/v1/tenants/{tenantRef}/members/{userRef}/permissions/{E(slug)}{Query(("workspaceRef", workspaceRef))}", null, cancellationToken);
 
     /// <summary>Removes a member from a tenant. <c>DELETE /api/tenants/{tenantRef}/members/{userRef}</c>.</summary>
     public Task RemoveTenantMemberAsync(Guid tenantRef, Guid userRef, CancellationToken cancellationToken = default) =>
@@ -466,7 +466,7 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="RemoveTenantMemberAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> RemoveTenantMemberRawAsync(Guid tenantRef, Guid userRef, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Delete, $"/api/tenants/{tenantRef}/members/{userRef}", null, cancellationToken);
+        SendRawAsync(HttpMethod.Delete, $"/api/v1/tenants/{tenantRef}/members/{userRef}", null, cancellationToken);
 
     /// <summary>Suspends a member in one tenant, or lifts the suspension. <c>PUT /api/tenants/{tenantRef}/members/{userRef}/suspended</c>.</summary>
     public Task SetMemberSuspendedAsync(Guid tenantRef, Guid userRef, SetMemberSuspendedRequest request, CancellationToken cancellationToken = default) =>
@@ -474,5 +474,5 @@ public sealed class WbsktAuthClient : WbsktApiClient
 
     /// <summary><see cref="SetMemberSuspendedAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> SetMemberSuspendedRawAsync(Guid tenantRef, Guid userRef, SetMemberSuspendedRequest request, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Put, $"/api/tenants/{tenantRef}/members/{userRef}/suspended", request, cancellationToken);
+        SendRawAsync(HttpMethod.Put, $"/api/v1/tenants/{tenantRef}/members/{userRef}/suspended", request, cancellationToken);
 }

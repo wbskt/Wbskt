@@ -12,7 +12,7 @@ using Wbskt.Primitives.Constants;
 
 namespace Wbskt.Management.Host.Controllers;
 
-[Route("api/workspaces/{workspaceRef:guid}/registration-policies")]
+[Route("api/v1/workspaces/{workspaceRef:guid}/registration-policies")]
 [ApiController]
 [Authorize]
 public class RegistrationPoliciesController : ApiControllerBase

@@ -16,7 +16,7 @@ namespace Wbskt.Management.Host.Controllers;
 /// a mail relay, an ntfy topic, an HTTP credential) that its workflow steps send through. Secrets go
 /// in and never come out: a response carries a hint, never the value.
 /// </summary>
-[Route("api/workspaces/{workspaceRef:guid}/integrations")]
+[Route("api/v1/workspaces/{workspaceRef:guid}/integrations")]
 [ApiController]
 [Authorize]
 public sealed class IntegrationsController(IIntegrationService integrations) : ApiControllerBase
