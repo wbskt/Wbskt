@@ -348,6 +348,71 @@ deploy_backend() {
     fi
 
     echo "==> deployed $TAG (${SERVICES[*]}) at $(git -C "$REPO_ROOT" rev-parse --short HEAD)"
+
+    report_drift || echo "warning: the drift check itself failed; the deploy above is unaffected"
+}
+
+# This script only ever recreates the five hosts, but the checkout it just reset carries every
+# other service's definition and config too. Anything that changed for them - a new exporter, a
+# scrape job, an alert rule - does nothing until that container is recreated, so say so loudly.
+# Reports only; never fails the deploy. The ::warning:: lines surface as annotations on the
+# Deploy workflow run, since its SSH step relays this output.
+report_drift() {
+    local -a stale=() missing=() lagging=() files=()
+    local svc want cid have src dest started
+
+    while read -r svc want; do
+        local ids
+        ids="$(docker compose ps -q "$svc" 2>/dev/null)"
+        if [[ -z "$ids" ]]; then
+            if is_allowed_service "$svc"; then lagging+=("$svc"); else missing+=("$svc"); fi
+            continue
+        fi
+        for cid in $ids; do
+            have="$(docker inspect -f '{{index .Config.Labels "com.docker.compose.config-hash"}}' "$cid")"
+            if [[ "$have" != "$want" ]]; then
+                if is_allowed_service "$svc"; then lagging+=("$svc"); else stale+=("$svc"); fi
+                break
+            fi
+        done
+
+        # A file bind-mounted on its own keeps the inode it was started with. git reset replaces
+        # a changed file rather than rewriting it, so the container goes on reading the old content
+        # until it is recreated. The file's mtime is then newer than the container's start. (Reading
+        # the file back is no use: docker cp resolves a bind mount to the host path.)
+        cid="${ids%%$'\n'*}"
+        started="$(date -d "$(docker inspect -f '{{.State.StartedAt}}' "$cid")" +%s)"
+        while read -r src dest; do
+            [[ -f "$src" ]] || continue
+            if (( $(stat -c %Y "$src") > started )); then files+=("$svc:$dest"); fi
+        done < <(docker inspect -f '{{range .Mounts}}{{if eq .Type "bind"}}{{.Source}} {{.Destination}}{{"\n"}}{{end}}{{end}}' "$cid")
+    done < <(docker compose config --hash '*')
+
+    if (( ${#stale[@]} + ${#missing[@]} + ${#lagging[@]} + ${#files[@]} == 0 )); then
+        echo "==> every running service matches the compose file"
+        return 0
+    fi
+
+    local -a apply=()
+    mapfile -t apply < <(printf '%s\n' "${stale[@]}" "${missing[@]}" "${files[@]%%:*}" | grep -v '^$' | sort -u)
+    for svc in "${stale[@]}"; do
+        echo "::warning::$svc is running an older definition than docker-compose.yml"
+    done
+    for svc in "${missing[@]}"; do
+        echo "::warning::$svc is in docker-compose.yml but has no container"
+    done
+    for svc in "${files[@]}"; do
+        echo "::warning::${svc%%:*} still has the old ${svc#*:}; the file changed on disk after it started"
+    done
+    for svc in "${lagging[@]}"; do
+        echo "::warning::$svc was not part of this deploy and does not match the compose file at $TAG"
+    done
+    if (( ${#apply[@]} > 0 )); then
+        echo "    apply on the VM, in deploy/compose: docker compose up -d --no-build --no-deps ${apply[*]}"
+    fi
+    if (( ${#lagging[@]} > 0 )); then
+        echo "    hosts: deploy.sh --tag $TAG --services $(IFS=,; echo "${lagging[*]}")"
+    fi
 }
 
 start_services() {
