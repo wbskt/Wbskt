@@ -341,6 +341,7 @@ step's `NodeCompleted` / `NodeFailed`. Payloads never carry a value that may be 
 | `CounterStepTruncated` | Variable (Increment/Decrement) | `var`, `step`, `applied`: a step with a fraction moves by the whole part |
 | `CounterReset` | Variable (local counter) | `var`, `kind`: the variable held something other than a number and was counted from 0 |
 | `WebhookJsonUnparsable` | Call a URL | `status`, `contentType`, `error` (a position, never the body): the response said JSON and didn't parse, so `json` was cleared |
+| `BranchStateLarge` | branch loop | `bytes`, `limit`, `largestKeys`: the step took the branch's local state past 80% of `MaxBranchLocalStateBytes`; written once, on the crossing step |
 
 ## 11. Metrics
 
