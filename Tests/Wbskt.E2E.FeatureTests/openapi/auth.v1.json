@@ -725,7 +725,8 @@
             ]
           },
           "expiresAt": {
-            "format": "date-time"
+            "format": "date-time",
+            "type": "string"
           }
         },
         "required": [
