@@ -66,7 +66,7 @@ public sealed class WorkflowMetrics : IWorkerTickMetrics, IDisposable
     /// <summary>Ticks of the periodic background workers, tagged <c>worker</c> and <c>outcome</c> (ok or failed).</summary>
     public Counter<long> WorkerTicks { get; }
 
-    /// <summary>Every inbound event the engine handled, tagged <c>channel</c> and <c>outcome</c> (the dispatch outcome, or Failed).</summary>
+    /// <summary>Every inbound event the engine handled, tagged <c>channel</c> and <c>outcome</c> (the dispatch outcome, or Failed). A retried message counts once per attempt.</summary>
     public Counter<long> InboundEvents { get; }
     public ObservableGauge<long> PendingTriggers { get; }
 
