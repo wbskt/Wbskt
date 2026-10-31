@@ -330,6 +330,17 @@ cancellations and abandoned joins.
 | Node | `NodeStarted`, `NodeCompleted`, `NodeFailed`, `NodeRetrying` |
 | Join | `JoinContinuationSpawned`, `JoinAbandoned` |
 
+**Step warnings** (Warn) note something a step did that the author probably didn't mean, without
+failing it. An executor adds a `NodeWarning` to `NodeContext.Warnings`. The retry executor passes on
+the warnings of the attempt that decided the step, and the branch loop writes them just before the
+step's `NodeCompleted` / `NodeFailed`. Payloads never carry a value that may be secret.
+
+| Warning | Written by | Payload |
+|---|---|---|
+| `TemplateValueMissing` | action steps | `field`, `placeholders` that had no value |
+| `CounterStepTruncated` | Variable (Increment/Decrement) | `var`, `step`, `applied`: a step with a fraction moves by the whole part |
+| `CounterReset` | Variable (local counter) | `var`, `kind`: the variable held something other than a number and was counted from 0 |
+
 ## 11. Metrics
 
 `WorkflowMetrics` (meter in `Wbskt.Workflow/Telemetry`):

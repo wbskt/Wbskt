@@ -146,6 +146,48 @@ public sealed class VariableNodeExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_local_counter_from_nothing_warns_nothing()
+    {
+        var executor = new VariableNodeExecutor(new RecordingSharedVariableProvider(), new MockExpressionEvaluator());
+        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "counter", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Local, Op = VariableOperation.Increment, Var = "fresh", Value = null } });
+
+        await executor.ExecuteAsync(context, CancellationToken.None);
+
+        Assert.Empty(context.Warnings);
+    }
+
+    [Theory]
+    [InlineData(VariableOperation.Increment, 1.7, 1d)]
+    [InlineData(VariableOperation.Decrement, 0.5, 0d)]
+    public async Task ExecuteAsync_counter_warns_when_it_drops_the_fraction_of_its_step(VariableOperation op, double step, double applied)
+    {
+        var executor = new VariableNodeExecutor(new RecordingSharedVariableProvider(), new MockExpressionEvaluator());
+        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "counter", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Local, Op = op, Var = "hits", Value = JsonSerializer.SerializeToElement(step) } });
+
+        await executor.ExecuteAsync(context, CancellationToken.None);
+
+        NodeWarning warning = Assert.Single(context.Warnings);
+        Assert.Equal(HistoryEventKind.CounterStepTruncated, warning.EventKind);
+        Assert.Equal($$"""{"var":"hits","step":{{step}},"applied":{{applied}}}""", JsonSerializer.Serialize(warning.Payload));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_local_counter_warns_when_it_counts_over_a_value_that_is_not_a_number()
+    {
+        var executor = new VariableNodeExecutor(new RecordingSharedVariableProvider(), new MockExpressionEvaluator());
+        NodeContext context = CreateContext(
+            new VariableNode { NodeId = Guid.NewGuid(), Name = "counter", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Local, Op = VariableOperation.Increment, Var = "hits", Value = null } },
+            new Dictionary<string, JsonElement> { ["hits"] = JsonSerializer.SerializeToElement("12") });
+
+        NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
+
+        Assert.Equal(1d, Assert.IsType<NodeExecutionResult.Continue>(result).LocalStatePatch["hits"].GetDouble());
+        NodeWarning warning = Assert.Single(context.Warnings);
+        Assert.Equal(HistoryEventKind.CounterReset, warning.EventKind);
+        Assert.Equal("""{"var":"hits","kind":"String"}""", JsonSerializer.Serialize(warning.Payload));
+    }
+
+    [Fact]
     public async Task ExecuteAsync_counter_with_a_non_numeric_step_fails()
     {
         var provider = new RecordingSharedVariableProvider();

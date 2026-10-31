@@ -199,12 +199,29 @@ internal sealed class VariableNodeExecutor : INodeExecutor
         }
 
         long delta = (long)(negate ? -step : step);
+        if (delta != (negate ? -step : step))
+        {
+            // Counters move in whole steps; the fraction is dropped, which reads as a counter that
+            // "doesn't count" when the step is below 1.
+            ctx.Warnings.Add(new NodeWarning(HistoryEventKind.CounterStepTruncated, new { var = config.Var, step, applied = Math.Abs(delta) }));
+        }
 
         if (config.Scope == VariableScope.Local)
         {
-            double current = ctx.Branch.LocalState.TryGetValue(config.Var, out JsonElement existing) && existing.ValueKind == JsonValueKind.Number
-                ? existing.GetDouble()
-                : 0;
+            double current = 0;
+            if (ctx.Branch.LocalState.TryGetValue(config.Var, out JsonElement existing))
+            {
+                if (existing.ValueKind == JsonValueKind.Number)
+                {
+                    current = existing.GetDouble();
+                }
+                else if (existing.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined))
+                {
+                    // A variable that does not exist yet starting at 0 is expected; one that holds text or
+                    // an object being counted from 0 loses what it held.
+                    ctx.Warnings.Add(new NodeWarning(HistoryEventKind.CounterReset, new { var = config.Var, kind = existing.ValueKind.ToString() }));
+                }
+            }
 
             return Continue(new Dictionary<string, JsonElement>
             {
