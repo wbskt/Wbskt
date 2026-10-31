@@ -8,7 +8,8 @@ using Wbskt.Workflow.Integrations;
 namespace Wbskt.Workflow.NodeExecutors.Actions;
 
 /// <summary>
-/// Posts a message through the Telegram Bot API, as the bot of the Telegram integration the step names.
+/// Posts a message through the Telegram Bot API, as the bot of the Telegram integration the step names,
+/// and writes the sent message's ids to <c>telegram</c>.
 /// </summary>
 /// <remarks>
 /// The bot token lives in the integration, sealed, never in the node: a definition is stored,
@@ -32,19 +33,25 @@ internal sealed class TelegramNodeExecutor(IIntegrationResolver resolver, Telegr
         }
 
         var integration = resolution.Integration!;
-        var result = await channel.SendMessageAsync(integration, config.ChatId, config.Message, ct);
+        var result = await channel.SendAsync(integration, config, ct);
         if (!result.Ok)
         {
-            // 4xx means the request itself is wrong - unknown chat, revoked token - and will be wrong
-            // again next time. 429 is the exception: Telegram rate-limits, and that is exactly what a
+            // 4xx means the request itself is wrong - unknown chat, revoked token, a chat that blocked
+            // the bot - and will be wrong again next time. 429 is the exception: Telegram rate-limits, and that is exactly what a
             // retry is for.
             return new NodeExecutionResult.Fail(result.Code!, result.Message!, result.Retryable, null);
         }
 
         await resolver.MarkUsedAsync(integration, ct);
-        return new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>
+        var patch = new Dictionary<string, JsonElement>
         {
             ["status"] = JsonSerializer.SerializeToElement(result.Status ?? 200)
-        });
+        };
+        if (result.Metadata is { } sent)
+        {
+            patch["telegram"] = sent;
+        }
+
+        return new NodeExecutionResult.Continue("default", patch);
     }
 }

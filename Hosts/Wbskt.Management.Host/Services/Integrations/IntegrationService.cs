@@ -355,6 +355,40 @@ internal sealed class IntegrationService(
         return Result<IntegrationTestResponse>.Success(new IntegrationTestResponse(outcome.Ok, outcome.Code, outcome.Message, outcome.Metadata));
     }
 
+    public async Task<Result<TelegramChatsResponse>> GetTelegramChatsAsync(int workspaceId, Guid refId, CancellationToken ct)
+    {
+        var owned = await FindOwnedAsync(workspaceId, refId, ct);
+        if (owned.IsFailure)
+        {
+            return Result<TelegramChatsResponse>.Failure(owned.Error);
+        }
+
+        var saved = owned.Value;
+        if (saved.Type != IntegrationType.Telegram)
+        {
+            return Result<TelegramChatsResponse>.Failure(Error.Validation(
+                "INTEGRATION_TYPE_UNSUPPORTED",
+                $"Only a telegram integration can list chats; this is a {IntegrationTypes.NameOf(saved.Type)} integration."));
+        }
+
+        var lookup = await engine.GetTelegramChatsAsync(new IntegrationChatsRequest(
+            workspaceId,
+            saved.RefId,
+            JsonSerializer.Deserialize<JsonElement>(saved.ConfigJson),
+            new SealedSecret(saved.SecretCiphertext, saved.KeyId)), ct);
+        if (lookup.IsFailure)
+        {
+            return Result<TelegramChatsResponse>.Failure(lookup.Error);
+        }
+
+        var outcome = lookup.Value;
+        return Result<TelegramChatsResponse>.Success(new TelegramChatsResponse(
+            outcome.Ok,
+            outcome.Code,
+            outcome.Message,
+            outcome.Chats.Select(c => new TelegramChatResponse(c.Id, c.Type, c.Title, c.Username)).ToList()));
+    }
+
     private async Task<Result<Integration>> FindOwnedAsync(int workspaceId, Guid refId, CancellationToken ct) =>
         await WorkspaceOwnership.LoadAsync(workspaceId, () => provider.FindByRefIdAsync(refId, ct), NotFound);
 

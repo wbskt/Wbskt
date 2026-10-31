@@ -14,6 +14,8 @@ public static class EngineIntegrationsApi
     public const string SealRoute = "internal/integrations/seal";
 
     public const string TestRoute = "internal/integrations/test";
+
+    public const string TelegramChatsRoute = "internal/integrations/telegram/chats";
 }
 
 /// <summary>A secret as stored: the sealed bytes and the master key that sealed them.</summary>
@@ -72,3 +74,22 @@ public sealed record IntegrationProbeRequest(
 /// <c>Metadata</c> is what the service told us about the account, such as a bot's username.
 /// </summary>
 public sealed record IntegrationProbeResponse(bool Ok, string? Code, string? Message, JsonElement? Metadata);
+
+/// <summary>Asks a saved Telegram integration's bot which chats it has heard from lately.</summary>
+public sealed record IntegrationChatsRequest(
+    int WorkspaceId,
+    Guid RefId,
+    JsonElement? Config,
+    SealedSecret Existing);
+
+/// <summary>
+/// A chat a Telegram bot can reach. <c>Id</c> is what a step's <c>chatId</c> takes; <c>Title</c> is
+/// a group's or channel's title, or the person's name for a private chat.
+/// </summary>
+public sealed record TelegramChat(string Id, string Type, string? Title, string? Username);
+
+/// <summary>
+/// The bot's recent chats, most recent first. Like a test, a refusal from Telegram is a successful
+/// answer: <c>Ok</c> false with a code and a message safe to show.
+/// </summary>
+public sealed record IntegrationChatsResponse(bool Ok, string? Code, string? Message, IReadOnlyList<TelegramChat> Chats);

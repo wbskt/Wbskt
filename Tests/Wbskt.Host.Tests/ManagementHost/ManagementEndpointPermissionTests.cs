@@ -45,6 +45,7 @@ public sealed class ManagementEndpointPermissionTests
         ["IntegrationsController.GetAll"] = PermissionNames.IntegrationsRead,
         ["IntegrationsController.Get"] = PermissionNames.IntegrationsRead,
         ["IntegrationsController.GetUsage"] = PermissionNames.IntegrationsRead,
+        ["IntegrationsController.GetChats"] = PermissionNames.IntegrationsRead,
         ["IntegrationsController.Create"] = PermissionNames.IntegrationsManage,
         ["IntegrationsController.Update"] = PermissionNames.IntegrationsManage,
         ["IntegrationsController.Delete"] = PermissionNames.IntegrationsManage,

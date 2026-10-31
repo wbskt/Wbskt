@@ -328,6 +328,14 @@ public sealed class WbsktManagementClient : WbsktApiClient
     public Task<HttpResponseMessage> TestIntegrationRawAsync(Guid workspaceRef, IntegrationTestRequest request, CancellationToken cancellationToken = default) =>
         SendRawAsync(HttpMethod.Post, $"/api/workspaces/{workspaceRef}/integrations/test", request, cancellationToken);
 
+    /// <summary>The chats a Telegram integration's bot has heard from lately. A refusal from Telegram is a 200 with <c>Ok</c> false. <c>GET /api/workspaces/{workspaceRef}/integrations/{integrationRef}/chats</c>.</summary>
+    public Task<TelegramChatsResponse> GetTelegramChatsAsync(Guid workspaceRef, Guid integrationRef, CancellationToken cancellationToken = default) =>
+        ReceiveAsync<TelegramChatsResponse>(GetTelegramChatsRawAsync(workspaceRef, integrationRef, cancellationToken), cancellationToken);
+
+    /// <summary><see cref="GetTelegramChatsAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
+    public Task<HttpResponseMessage> GetTelegramChatsRawAsync(Guid workspaceRef, Guid integrationRef, CancellationToken cancellationToken = default) =>
+        SendRawAsync(HttpMethod.Get, $"/api/workspaces/{workspaceRef}/integrations/{integrationRef}/chats", null, cancellationToken);
+
     // ── Workflows ─────────────────────────────────────────────────────────────────────────────────
 
     /// <summary>Publishes a workflow definition as a new version. <c>POST /api/workspaces/{workspaceRef}/workflows</c>.</summary>

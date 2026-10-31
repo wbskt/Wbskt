@@ -75,6 +75,33 @@ public sealed class NotificationExecutorTests
     }
 
     [Fact]
+    public async Task Telegram_writes_the_sent_messages_ids()
+    {
+        var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"ok\":true,\"result\":{\"message_id\":77,\"chat\":{\"id\":-1001234567890,\"type\":\"channel\"}}}")
+        });
+        var executor = new TelegramNodeExecutor(new StubResolver(Telegram()), TelegramChannel(handler));
+
+        var result = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(TelegramContext(), CancellationToken.None));
+
+        var sent = result.LocalStatePatch["telegram"];
+        Assert.Equal(77, sent.GetProperty("messageId").GetInt64());
+        Assert.Equal(-1001234567890, sent.GetProperty("chatId").GetInt64());
+    }
+
+    [Fact]
+    public async Task Telegram_leaves_out_the_ids_when_the_answer_has_none()
+    {
+        var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("not json") });
+        var executor = new TelegramNodeExecutor(new StubResolver(Telegram()), TelegramChannel(handler));
+
+        var result = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(TelegramContext(), CancellationToken.None));
+
+        Assert.False(result.LocalStatePatch.ContainsKey("telegram"));
+    }
+
+    [Fact]
     public async Task Telegram_fails_without_calling_out_when_the_integration_cannot_be_had()
     {
         var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
@@ -90,6 +117,8 @@ public sealed class NotificationExecutorTests
     [Theory]
     [InlineData(HttpStatusCode.BadRequest, "TELEGRAM_HTTP_ERROR", false)]
     [InlineData(HttpStatusCode.Unauthorized, "TELEGRAM_AUTH_FAILED", false)]
+    // A 403 is the chat refusing the bot (blocked, kicked), not a bad token.
+    [InlineData(HttpStatusCode.Forbidden, "TELEGRAM_CHAT_FORBIDDEN", false)]
     // Telegram rate-limits, and that is exactly what a retry is for.
     [InlineData((HttpStatusCode)429, "TELEGRAM_HTTP_ERROR", true)]
     [InlineData(HttpStatusCode.BadGateway, "TELEGRAM_HTTP_ERROR", true)]

@@ -611,8 +611,8 @@ public sealed class WorkflowValidator
                 case WebhookNotificationNode webhook:
                     ValidateWebhookStep(webhook, issues);
                     break;
-                case TelegramNotificationNode telegram when string.IsNullOrWhiteSpace(telegram.Config?.ChatId):
-                    issues.Add(new ValidationIssue(ValidationSeverity.Error, "TELEGRAM_CHAT_MISSING", $"Step '{node.Name}' has no chat to send to (chatId).", node.NodeId));
+                case TelegramNotificationNode telegram:
+                    ValidateTelegramStep(telegram, issues);
                     break;
                 case DiscordNotificationNode discord:
                     ValidateDiscordStep(discord, issues);
@@ -632,6 +632,47 @@ public sealed class WorkflowValidator
             }
         }
     }
+
+    // Telegram's limit on a message's text. It counts the text after markup is parsed, so for a
+    // formatted message this is a little stricter than Telegram itself.
+    private const int TelegramMaxMessageLength = 4096;
+
+    private static readonly string[] TelegramParseModes = ["MarkdownV2", "HTML"];
+
+    private static void ValidateTelegramStep(TelegramNotificationNode node, List<ValidationIssue> issues)
+    {
+        var config = node.Config;
+        void Add(string code, string message) =>
+            issues.Add(new ValidationIssue(ValidationSeverity.Error, code, $"Step '{node.Name}': {message}", node.NodeId));
+
+        if (string.IsNullOrWhiteSpace(config?.ChatId))
+        {
+            issues.Add(new ValidationIssue(ValidationSeverity.Error, "TELEGRAM_CHAT_MISSING", $"Step '{node.Name}' has no chat to send to (chatId).", node.NodeId));
+        }
+
+        if (config is null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(config.Message) || config.Message.Length > TelegramMaxMessageLength)
+        {
+            Add("TELEGRAM_MESSAGE_INVALID", $"the message must be 1-{TelegramMaxMessageLength} characters.");
+        }
+
+        if (config.ParseMode is not null && !TelegramParseModes.Contains(config.ParseMode, StringComparer.Ordinal))
+        {
+            Add("TELEGRAM_PARSE_MODE_INVALID", $"parseMode must be {string.Join(" or ", TelegramParseModes)}, or left out for plain text.");
+        }
+
+        if (config.MessageThreadId is not null && !IsTelegramId(config.MessageThreadId))
+        {
+            Add("TELEGRAM_THREAD_INVALID", "messageThreadId must be a topic id (digits only).");
+        }
+    }
+
+    // Telegram's message and topic ids are positive 32-bit integers.
+    private static bool IsTelegramId(string value) => int.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int id) && id > 0;
 
     // Discord's own limits; a message over any of them is refused whole.
     private const int DiscordMaxMessageLength = 2000;

@@ -106,4 +106,16 @@ public sealed class IntegrationsController(IIntegrationService integrations) : A
     [EnableRateLimiting(RateLimitPolicies.IntegrationTest)]
     public async Task<ActionResult<IntegrationTestResponse>> Test([FromWorkspace] int workspaceId, IntegrationTestRequest request, CancellationToken ct) =>
         MapResult(await integrations.TestAsync(workspaceId, request, ct));
+
+    /// <summary>
+    /// The chats a Telegram integration's bot has heard from in the last 24 hours, so a step's chat can
+    /// be picked rather than typed. A refusal from Telegram is a 200 with <c>ok</c> false
+    /// (<c>INTEGRATION_WEBHOOK_ACTIVE</c> while the bot has a webhook set); 400
+    /// <c>INTEGRATION_TYPE_UNSUPPORTED</c> for any other type. Limited as a test is, since it calls Telegram.
+    /// </summary>
+    [HttpGet("{integrationRef:guid}/chats")]
+    [RequiresPermission(PermissionNames.IntegrationsRead)]
+    [EnableRateLimiting(RateLimitPolicies.IntegrationTest)]
+    public async Task<ActionResult<TelegramChatsResponse>> GetChats([FromWorkspace] int workspaceId, Guid integrationRef, CancellationToken ct) =>
+        MapResult(await integrations.GetTelegramChatsAsync(workspaceId, integrationRef, ct));
 }

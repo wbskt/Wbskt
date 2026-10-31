@@ -62,6 +62,9 @@ internal sealed class WorkflowEngineClient : IWorkflowEngineClient
     public Task<Result<IntegrationProbeResponse>> ProbeIntegrationAsync(IntegrationProbeRequest request, CancellationToken ct) =>
         PostIntegrationAsync<IntegrationProbeRequest, IntegrationProbeResponse>(EngineIntegrationsApi.TestRoute, request, ct);
 
+    public Task<Result<IntegrationChatsResponse>> GetTelegramChatsAsync(IntegrationChatsRequest request, CancellationToken ct) =>
+        PostIntegrationAsync<IntegrationChatsRequest, IntegrationChatsResponse>(EngineIntegrationsApi.TelegramChatsRoute, request, ct);
+
     private async Task<Result<TResponse>> PostIntegrationAsync<TRequest, TResponse>(string route, TRequest request, CancellationToken ct)
         where TResponse : class
     {

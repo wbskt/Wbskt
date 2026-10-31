@@ -64,7 +64,7 @@ Action nodes accept `retry` and `onFailure` ([§6](#6-retries), [§7](#7-failure
 | `action:toast` | 0.5 | `default` | `title`, `message`. A notification to everyone watching the workspace in the console. |
 | `action:webhook` | 5.0 | `default`, `error` | `url`, `method`, `headers` (max 20), `body`, `timeoutSeconds` (default 30, max 60), optional `integrationRef` (an HTTP-auth integration). Writes `status`, `body` and, for a JSON reply, `json`. Responses over 256 KB fail. Redirects are not followed, private and reserved addresses are refused, and an integration's credential is only sent to its own origin. 5xx, timeouts and network errors are retryable; 4xx is not. |
 | `action:email` | 5.0 | `default` | `integrationRef` (SMTP), `to`, `subject`, `body`. |
-| `action:telegram` | 5.0 | `default` | `integrationRef`, `chatId`, `message`. 429 is retryable. |
+| `action:telegram` | 5.0 | `default` | `integrationRef`, `chatId` (a numeric id or `@channelusername`), `message` (1-4096 characters), `parseMode` (`MarkdownV2` or `HTML`; left out, plain text), `silent`, `messageThreadId` (a forum topic), `disableLinkPreview`. Writes `telegram` = `{ messageId, chatId }`, as Telegram's numbers. A 403 is `TELEGRAM_CHAT_FORBIDDEN` (the bot was blocked or removed), not retryable; 429 is retryable. The integration's `GET .../integrations/{ref}/chats` lists the chats the bot heard from in the last 24 hours. |
 | `action:discord` | 5.0 | `default` | `integrationRef`, `message`, `username`, `avatarUrl`, `threadId`, `embeds` (up to 10: `title`, `url`, `description`, `color` as `#RRGGBB`, `fields` of `name`/`value`/`inline`, `footer`, `imageUrl`, `thumbnailUrl`, `timestamp` to show the send time). `message` may be left out when there is an embed. Mentions are never parsed. Waits for Discord to save the message and writes `discord` = `{ messageId, channelId }`. 429 is retryable. |
 | `action:ntfy` | 5.0 | `default` | `integrationRef`, `message`, `title`, `priority`, `tags`. |
 
@@ -76,7 +76,7 @@ variables, sub-workflow input, `end` output, filters and correlation keys.
 
 Each branch carries a JSON object. It starts as `{ "trigger": <payload> }`; each node's result
 patches it. Keys nodes write: `trigger`, `triggeredAt`, `item`, `index`, `status`, `body`, `json`,
-`command`, `discord`, `signalPayload`, `wakePayload`, `childResult`, `casSucceeded`, `lastError`,
+`command`, `discord`, `telegram`, `signalPayload`, `wakePayload`, `childResult`, `casSucceeded`, `lastError`,
 `joinContributed`, `joinSucceeded`, `joinFailed`, and any local variable.
 
 * Keys starting with `__` are the engine's own (park markers, join tokens, retry attempt, loop
@@ -266,7 +266,7 @@ publish. An expression error fails the node with `EXPRESSION_EVALUATION_ERROR`.
 | Sub-workflows and end | `SUBWORKFLOW_INPUT_KEY_RESERVED`, `SUBWORKFLOW_SELF_REFERENCE`, `END_OUTPUT_WITHOUT_MANUAL_TRIGGER` |
 | Variables and waits | `VARIABLE_NAME_RESERVED`, `WAITFORHTTP_WEAK_TOKEN` |
 | Webhook step | `WEBHOOK_URL_RELATIVE`, `WEBHOOK_TIMEOUT_INVALID`, `WEBHOOK_HEADER_INVALID`, `WEBHOOK_HEADER_FORBIDDEN`, `WEBHOOK_HEADERS_TOO_MANY` |
-| Other steps | `INTEGRATION_REF_MISSING`, `TELEGRAM_CHAT_MISSING`, `DISCORD_MESSAGE_INVALID`, `DISCORD_EMBED_INVALID`, `DISCORD_THREAD_INVALID`, `DISCORD_AVATAR_URL_INVALID`, `NTFY_MESSAGE_MISSING`, `NTFY_PRIORITY_INVALID`, `CLIENT_MESSAGE_INVALID`, `CLIENT_MESSAGE_ACK_TIMEOUT` |
+| Other steps | `INTEGRATION_REF_MISSING`, `TELEGRAM_CHAT_MISSING`, `TELEGRAM_MESSAGE_INVALID`, `TELEGRAM_PARSE_MODE_INVALID`, `TELEGRAM_THREAD_INVALID`, `DISCORD_MESSAGE_INVALID`, `DISCORD_EMBED_INVALID`, `DISCORD_THREAD_INVALID`, `DISCORD_AVATAR_URL_INVALID`, `NTFY_MESSAGE_MISSING`, `NTFY_PRIORITY_INVALID`, `CLIENT_MESSAGE_INVALID`, `CLIENT_MESSAGE_ACK_TIMEOUT` |
 | Triggers | `INVALID_CLIENT_REF`, `INVALID_CRON`, `INVALID_PRESENCE_DURATION`, `INVALID_HOLD_DURATION`, `HOLD_REQUIRES_FILTER` |
 | Warnings | `NO_TRIGGERS`, `ORPHAN_NODE`, `SUSPICIOUS_CORRELATION_KEY` |
 

@@ -22,4 +22,9 @@ public sealed class IntegrationsController(IIntegrationVault vault) : ApiControl
     [HttpPost(EngineIntegrationsApi.TestRoute)]
     public async Task<ActionResult<IntegrationProbeResponse>> Test([FromBody] IntegrationProbeRequest request, CancellationToken ct) =>
         MapResult(await vault.TestAsync(request, ct));
+
+    /// <summary>The chats a saved Telegram integration's bot has heard from lately. A refusal from Telegram is a 200 with ok false.</summary>
+    [HttpPost(EngineIntegrationsApi.TelegramChatsRoute)]
+    public async Task<ActionResult<IntegrationChatsResponse>> TelegramChats([FromBody] IntegrationChatsRequest request, CancellationToken ct) =>
+        MapResult(await vault.GetTelegramChatsAsync(request, ct));
 }
