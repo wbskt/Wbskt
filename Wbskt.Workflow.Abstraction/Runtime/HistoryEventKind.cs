@@ -32,6 +32,8 @@ public static class HistoryEventKind
     public const string NodeCompleted = "NodeCompleted";
     public const string NodeFailed = "NodeFailed";
     public const string NodeRetrying = "NodeRetrying";
+    // An action step's {{ }} placeholder had no value and was sent as empty text.
+    public const string TemplateValueMissing = "TemplateValueMissing";
 
     // Fan-out / fan-in
     public const string JoinContinuationSpawned = "JoinContinuationSpawned";
@@ -51,6 +53,7 @@ public static class HistoryEventKind
             RunFaulted => SeverityError,
 
             NodeFailed
+                or TemplateValueMissing
                 or BranchFailed
                 or NodeRetrying
                 or BranchCancelled

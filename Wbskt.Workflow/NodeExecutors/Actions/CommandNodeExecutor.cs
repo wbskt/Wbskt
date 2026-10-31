@@ -19,7 +19,7 @@ namespace Wbskt.Workflow.NodeExecutors.Actions;
 /// "failed" when the platform reports it undelivered or it could not be sent at all, or "timeout" when
 /// neither comes in time (the bookmark's TTL takes that port without running the step again).</para>
 /// </summary>
-internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher, IBookmarkResumer bookmarkResumer, TimeProvider? clock = null)
+internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher, IBookmarkResumer bookmarkResumer, ActionTemplates templates, TimeProvider? clock = null)
     : ParkingNodeExecutor(clock ?? TimeProvider.System)
 {
     public const string AckedPort = CommandChannel.Acked;
@@ -44,14 +44,19 @@ internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher, IBo
                 null);
         }
 
-        if (node.Config.AwaitAck)
+        SendClientMessageConfig config = node.Config with
         {
-            return Park(ctx, node.Config, clientRefId);
+            Payload = await templates.JsonAsync(ctx, "payload", node.Config.Payload, ct)
+        };
+
+        if (config.AwaitAck)
+        {
+            return Park(ctx, config, clientRefId);
         }
 
         try
         {
-            await SendAsync(ctx, node.Config, Guid.NewGuid(), clientRefId, ct);
+            await SendAsync(ctx, config, Guid.NewGuid(), clientRefId, ct);
             return new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>());
         }
         catch (Exception ex)

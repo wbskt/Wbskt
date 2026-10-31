@@ -117,6 +117,7 @@ public static class WorkflowServiceCollectionExtensions
         // ISharedVariableProvider. Every consumer (the Logic/Variable/ForEach/ParallelForEach
         // executors) is itself Scoped, so this does not widen anything's lifetime.
         services.AddScoped<IExpressionEvaluator, ExpressionEvaluator>();
+        services.AddScoped<ActionTemplates>();
         services.AddSingleton<IOutboundAddressGuard, OutboundAddressGuard>();
         services.TryAddSingleton(Options.Create(new IntegrationOptions()));
         services.AddSingleton<IntegrationCipher>();

@@ -26,7 +26,7 @@ public sealed class IntegrationExecutorTests
             Content = new StringContent("{\"id\":\"1300000000000000001\",\"channel_id\":\"555\"}", System.Text.Encoding.UTF8, "application/json")
         });
         var resolver = new StubResolver(Discord());
-        var executor = new DiscordNodeExecutor(resolver, new DiscordChannel(new SingleClientFactory(handler)));
+        var executor = new DiscordNodeExecutor(resolver, new DiscordChannel(new SingleClientFactory(handler)), TestTemplates.Create());
 
         var result = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(DiscordContext("Tank low", "Pump"), CancellationToken.None));
 
@@ -44,7 +44,7 @@ public sealed class IntegrationExecutorTests
     public async Task Discord_passes_on_the_resolvers_failure_without_posting()
     {
         var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.NoContent));
-        var executor = new DiscordNodeExecutor(StubResolver.Failing("INTEGRATION_NOT_FOUND"), new DiscordChannel(new SingleClientFactory(handler)));
+        var executor = new DiscordNodeExecutor(StubResolver.Failing("INTEGRATION_NOT_FOUND"), new DiscordChannel(new SingleClientFactory(handler)), TestTemplates.Create());
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(DiscordContext("hi"), CancellationToken.None));
 
@@ -57,7 +57,7 @@ public sealed class IntegrationExecutorTests
     {
         var handler = new FakeHandler(_ => throw new HttpRequestException($"could not connect to {WebhookUrl}"));
         var resolver = new StubResolver(Discord());
-        var executor = new DiscordNodeExecutor(resolver, new DiscordChannel(new SingleClientFactory(handler)));
+        var executor = new DiscordNodeExecutor(resolver, new DiscordChannel(new SingleClientFactory(handler)), TestTemplates.Create());
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(DiscordContext("hi"), CancellationToken.None));
 
@@ -74,7 +74,7 @@ public sealed class IntegrationExecutorTests
     {
         var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
         var resolver = new StubResolver(Ntfy());
-        var executor = new NtfyNodeExecutor(resolver, new NtfyChannel(new SingleClientFactory(handler), new AllowAllGuard()));
+        var executor = new NtfyNodeExecutor(resolver, new NtfyChannel(new SingleClientFactory(handler), new AllowAllGuard()), TestTemplates.Create());
 
         var result = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(NtfyContext(), CancellationToken.None));
 
@@ -96,7 +96,7 @@ public sealed class IntegrationExecutorTests
     {
         var handler = new FakeHandler(_ => new HttpResponseMessage(status));
         var resolver = new StubResolver(Ntfy());
-        var executor = new NtfyNodeExecutor(resolver, new NtfyChannel(new SingleClientFactory(handler), new AllowAllGuard()));
+        var executor = new NtfyNodeExecutor(resolver, new NtfyChannel(new SingleClientFactory(handler), new AllowAllGuard()), TestTemplates.Create());
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(NtfyContext(), CancellationToken.None));
 
@@ -113,7 +113,7 @@ public sealed class IntegrationExecutorTests
         var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"state\":\"on\"}") });
         var resolver = new StubResolver(HttpAuth(HttpAuthSettings.Bearer));
         var guard = new RecordingGuard();
-        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), guard, resolver);
+        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), guard, resolver, TestTemplates.Create());
 
         var result = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(
             WebhookContext("api/services/light/turn_on", headers: new Dictionary<string, string> { ["X-Trace"] = "abc" }), CancellationToken.None));
@@ -131,7 +131,7 @@ public sealed class IntegrationExecutorTests
     public async Task Webhook_takes_an_absolute_url_on_the_integrations_origin()
     {
         var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
-        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), new AllowAllGuard(), new StubResolver(HttpAuth(HttpAuthSettings.Bearer)));
+        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), new AllowAllGuard(), new StubResolver(HttpAuth(HttpAuthSettings.Bearer)), TestTemplates.Create());
 
         Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(WebhookContext("https://ha.example.test:8123/api/states"), CancellationToken.None));
 
@@ -146,7 +146,7 @@ public sealed class IntegrationExecutorTests
     {
         var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
         var resolver = new StubResolver(HttpAuth(HttpAuthSettings.Bearer));
-        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), new AllowAllGuard(), resolver);
+        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), new AllowAllGuard(), resolver, TestTemplates.Create());
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(WebhookContext(url), CancellationToken.None));
 
@@ -162,7 +162,7 @@ public sealed class IntegrationExecutorTests
     public async Task Webhook_refuses_a_header_the_credential_goes_in(string mode, string header)
     {
         var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
-        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), new AllowAllGuard(), new StubResolver(HttpAuth(mode)));
+        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), new AllowAllGuard(), new StubResolver(HttpAuth(mode)), TestTemplates.Create());
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(
             WebhookContext("api/states", headers: new Dictionary<string, string> { [header] = "mine" }), CancellationToken.None));
@@ -175,7 +175,7 @@ public sealed class IntegrationExecutorTests
     public async Task Webhook_with_a_header_credential_may_still_set_authorization()
     {
         var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
-        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), new AllowAllGuard(), new StubResolver(HttpAuth(HttpAuthSettings.Header)));
+        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), new AllowAllGuard(), new StubResolver(HttpAuth(HttpAuthSettings.Header)), TestTemplates.Create());
 
         Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(
             WebhookContext("api/states", headers: new Dictionary<string, string> { ["Authorization"] = "Token other" }), CancellationToken.None));
@@ -188,7 +188,7 @@ public sealed class IntegrationExecutorTests
     public async Task Webhook_puts_a_content_type_header_on_the_body()
     {
         var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
-        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), new AllowAllGuard(), new StubResolver(HttpAuth(HttpAuthSettings.Bearer)));
+        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), new AllowAllGuard(), new StubResolver(HttpAuth(HttpAuthSettings.Bearer)), TestTemplates.Create());
 
         await executor.ExecuteAsync(WebhookContext("api/states", JsonSerializer.SerializeToElement(new { a = 1 }), new Dictionary<string, string> { ["Content-Type"] = "application/merge-patch+json" }), CancellationToken.None);
 
@@ -200,7 +200,7 @@ public sealed class IntegrationExecutorTests
     public async Task Webhook_never_calls_a_blocked_integration_target()
     {
         var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
-        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), new RecordingGuard(OutboundAddressDecision.Block("private")), new StubResolver(HttpAuth(HttpAuthSettings.Bearer)));
+        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), new RecordingGuard(OutboundAddressDecision.Block("private")), new StubResolver(HttpAuth(HttpAuthSettings.Bearer)), TestTemplates.Create());
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(WebhookContext("api/states"), CancellationToken.None));
 
@@ -213,7 +213,7 @@ public sealed class IntegrationExecutorTests
     {
         var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.BadGateway) { Content = new StringContent($"upstream rejected Bearer {ApiToken}") });
         var resolver = new StubResolver(HttpAuth(HttpAuthSettings.Bearer));
-        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), new AllowAllGuard(), resolver);
+        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), new AllowAllGuard(), resolver, TestTemplates.Create());
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(WebhookContext("api/states"), CancellationToken.None));
 
@@ -231,7 +231,7 @@ public sealed class IntegrationExecutorTests
         {
             Content = new StreamContent(new OutboundWebhookExecutorTests.FailingStream(_ => throw new IOException($"reset while reading Bearer {ApiToken}")))
         });
-        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), new AllowAllGuard(), new StubResolver(HttpAuth(HttpAuthSettings.Bearer)));
+        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), new AllowAllGuard(), new StubResolver(HttpAuth(HttpAuthSettings.Bearer)), TestTemplates.Create());
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(WebhookContext("api/states"), CancellationToken.None));
 
@@ -244,7 +244,7 @@ public sealed class IntegrationExecutorTests
     public async Task Webhook_passes_on_the_resolvers_failure_without_calling_out()
     {
         var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
-        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), new AllowAllGuard(), StubResolver.Failing("INTEGRATION_WRONG_TYPE"));
+        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), new AllowAllGuard(), StubResolver.Failing("INTEGRATION_WRONG_TYPE"), TestTemplates.Create());
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(WebhookContext("api/states"), CancellationToken.None));
 
@@ -257,7 +257,7 @@ public sealed class IntegrationExecutorTests
     {
         var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
         var resolver = new StubResolver(HttpAuth(HttpAuthSettings.Bearer));
-        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), new AllowAllGuard(), resolver);
+        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), new AllowAllGuard(), resolver, TestTemplates.Create());
 
         Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(WebhookContext("https://example.test/hook", withIntegration: false), CancellationToken.None));
 

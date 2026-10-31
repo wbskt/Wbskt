@@ -20,7 +20,7 @@ public sealed class CommandNodeExecutorTests
         publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>());
+        var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>(), TestTemplates.Create());
         JsonElement payload = JsonSerializer.SerializeToElement(new { temperature = 22 });
         NodeContext ctx = BuildContext(ClientRefId.ToString(), "OpenVent", payload);
 
@@ -47,7 +47,7 @@ public sealed class CommandNodeExecutorTests
         publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>());
+        var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>(), TestTemplates.Create());
         NodeContext ctx = BuildContext(ClientRefId.ToString(), "CloseVent", null);
 
         NodeExecutionResult result = await executor.ExecuteAsync(ctx, CancellationToken.None);
@@ -63,7 +63,7 @@ public sealed class CommandNodeExecutorTests
     public async Task ExecuteAsync_returns_Fail_with_CLIENT_MESSAGE_NO_TARGET_when_ClientRef_is_not_a_guid()
     {
         var publisher = new Mock<IDeviceCommandPublisher>();
-        var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>());
+        var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>(), TestTemplates.Create());
         NodeContext ctx = BuildContext("client-1", "OpenVent", null);
 
         NodeExecutionResult result = await executor.ExecuteAsync(ctx, CancellationToken.None);
@@ -82,7 +82,7 @@ public sealed class CommandNodeExecutorTests
         publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(exception);
 
-        var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>());
+        var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>(), TestTemplates.Create());
         NodeContext ctx = BuildContext(ClientRefId.ToString(), "OpenVent", null);
 
         NodeExecutionResult result = await executor.ExecuteAsync(ctx, CancellationToken.None);
@@ -98,7 +98,7 @@ public sealed class CommandNodeExecutorTests
     public async Task Awaiting_the_ack_parks_on_the_command_and_sends_it_only_once_parked()
     {
         var publisher = new Mock<IDeviceCommandPublisher>();
-        var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>());
+        var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>(), TestTemplates.Create());
         NodeContext ctx = BuildContext(ClientRefId.ToString(), "OpenVent", null, AwaitAck());
 
         NodeExecutionResult result = await executor.ExecuteAsync(ctx, CancellationToken.None);
@@ -124,7 +124,7 @@ public sealed class CommandNodeExecutorTests
         publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(sendFailure);
         var resumer = new Mock<IBookmarkResumer>();
-        var executor = new CommandNodeExecutor(publisher.Object, resumer.Object);
+        var executor = new CommandNodeExecutor(publisher.Object, resumer.Object, TestTemplates.Create());
 
         var wait = Assert.IsType<NodeExecutionResult.WaitForBookmark>(
             await executor.ExecuteAsync(BuildContext(ClientRefId.ToString(), "OpenVent", null, AwaitAck()), CancellationToken.None));
@@ -146,7 +146,7 @@ public sealed class CommandNodeExecutorTests
     [InlineData("failed", "failed")]
     public async Task A_wake_for_the_awaited_command_leaves_by_its_outcome_and_clears_the_wait(string outcome, string expectedPort)
     {
-        var executor = new CommandNodeExecutor(Mock.Of<IDeviceCommandPublisher>(), Mock.Of<IBookmarkResumer>());
+        var executor = new CommandNodeExecutor(Mock.Of<IDeviceCommandPublisher>(), Mock.Of<IBookmarkResumer>(), TestTemplates.Create());
         Guid commandId = Guid.NewGuid();
         NodeContext ctx = BuildContext(ClientRefId.ToString(), "OpenVent", null, AwaitAck(), new Dictionary<string, JsonElement>
         {
@@ -166,7 +166,7 @@ public sealed class CommandNodeExecutorTests
     public async Task A_wake_left_by_another_wait_is_not_taken_for_this_commands_answer()
     {
         // A step revisited in a loop, or one after an Await Signal, still finds the old "__wake".
-        var executor = new CommandNodeExecutor(Mock.Of<IDeviceCommandPublisher>(), Mock.Of<IBookmarkResumer>());
+        var executor = new CommandNodeExecutor(Mock.Of<IDeviceCommandPublisher>(), Mock.Of<IBookmarkResumer>(), TestTemplates.Create());
         NodeContext ctx = BuildContext(ClientRefId.ToString(), "OpenVent", null, AwaitAck(), new Dictionary<string, JsonElement>
         {
             ["__command_awaiting"] = JsonSerializer.SerializeToElement(Guid.NewGuid()),
@@ -183,7 +183,7 @@ public sealed class CommandNodeExecutorTests
     {
         // It used to be taken for a fresh visit: the step parked on a new command and sent it again.
         var publisher = new Mock<IDeviceCommandPublisher>();
-        var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>());
+        var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>(), TestTemplates.Create());
         Guid commandId = Guid.NewGuid();
         NodeContext ctx = BuildContext(ClientRefId.ToString(), "OpenVent", null, AwaitAck(), new Dictionary<string, JsonElement>
         {

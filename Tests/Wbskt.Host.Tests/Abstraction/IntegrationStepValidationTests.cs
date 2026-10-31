@@ -172,6 +172,7 @@ public sealed class IntegrationStepValidationTests
     [InlineData("1200000000000000002", true)]
     [InlineData("general", false)]
     [InlineData("", false)]
+    [InlineData("{{thread}}", true)]
     public void Discord_thread_is_a_discord_id(string threadId, bool valid)
     {
         var node = DiscordWith(new DiscordConfig { IntegrationRef = Guid.NewGuid(), Message = "m", ThreadId = threadId });
@@ -183,6 +184,7 @@ public sealed class IntegrationStepValidationTests
     [InlineData("https://example.test/pump.png", true)]
     [InlineData("pump.png", false)]
     [InlineData("ftp://example.test/pump.png", false)]
+    [InlineData("{{$shared.avatar}}", true)]
     public void Discord_avatar_is_an_absolute_web_url(string avatarUrl, bool valid)
     {
         var node = DiscordWith(new DiscordConfig { IntegrationRef = Guid.NewGuid(), Message = "m", AvatarUrl = avatarUrl });
@@ -218,6 +220,12 @@ public sealed class IntegrationStepValidationTests
     {
         Assert.Contains(IssuesFor(Webhook(url, null)), i => i.Code == "WEBHOOK_URL_RELATIVE");
         Assert.DoesNotContain(IssuesFor(Webhook(url, Guid.NewGuid())), i => i.Code == "WEBHOOK_URL_RELATIVE");
+    }
+
+    [Fact]
+    public void A_url_filled_in_from_a_placeholder_is_checked_when_the_step_runs()
+    {
+        Assert.DoesNotContain(IssuesFor(Webhook("{{$shared.hookUrl}}", null)), i => i.Code == "WEBHOOK_URL_RELATIVE");
     }
 
     [Fact]

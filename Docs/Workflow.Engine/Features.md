@@ -68,9 +68,27 @@ Action nodes accept `retry` and `onFailure` ([§6](#6-retries), [§7](#7-failure
 | `action:discord` | 5.0 | `default` | `integrationRef`, `message`, `username`, `avatarUrl`, `threadId`, `embeds` (up to 10: `title`, `url`, `description`, `color` as `#RRGGBB`, `fields` of `name`/`value`/`inline`, `footer`, `imageUrl`, `thumbnailUrl`, `timestamp` to show the send time). `message` may be left out when there is an embed. Mentions are never parsed. Waits for Discord to save the message and writes `discord` = `{ messageId, channelId }`. 429 is retryable. |
 | `action:ntfy` | 5.0 | `default` | `integrationRef`, `message`, `title`, `priority`, `tags`. |
 
-Action text fields (message bodies, URLs, payloads, `clientRef`) are used as written: they are not
-expressions and are not templated. Data flows between nodes through expressions in conditions,
-variables, sub-workflow input, `end` output, filters and correlation keys.
+Action text fields take `{{ path }}` and `{{ $shared.NAME }}` placeholders, filled in from the
+branch when the step runs, with the same resolution as a `template` expression (§12):
+
+| Step | Templated fields |
+|---|---|
+| `action:email` | `to`, `subject`, `body` |
+| `action:telegram` | `chatId`, `message` |
+| `action:ntfy` | `message`, `title`, `tags` |
+| `action:discord` | `message`, `username`, `avatarUrl`, `threadId`; each embed's `title`, `url`, `description`, `footer`, `imageUrl`, `thumbnailUrl` and field `name`/`value` |
+| `action:toast` | `title`, `message` |
+| `action:webhook` | `url`, header values, `body` |
+| `action:clientMessage` | `payload` |
+
+In a JSON field (`payload`, webhook `body`) every string is filled in; property names are not. A
+string that is exactly one placeholder takes the value's own JSON type, so `{ "on": "{{heaterOn}}" }`
+sends `true`, not `"true"`. A placeholder with no value is sent as empty text and the step still
+runs; the run's history gets a `TemplateValueMissing` warning naming the field and the placeholder
+(never a value). Line breaks a value brings into `to`, `subject`, a URL, a header or an id become
+spaces, so a value cannot add a header. The webhook's address checks run on the filled-in URL, and
+its failure messages quote the URL as written. An unclosed or empty placeholder fails the step with
+`EXPRESSION_EVALUATION_ERROR`. `clientRef`, `type` and other settings are used as written.
 
 ## 3. Branch state
 

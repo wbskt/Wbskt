@@ -22,7 +22,7 @@ public sealed class ToastNodeExecutorTests
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var executor = new ToastNodeExecutor(publisher.Object);
+        var executor = new ToastNodeExecutor(publisher.Object, TestTemplates.Create());
         NodeContext ctx = BuildContext("Deploy finished", "Build 42 is live.");
 
         NodeExecutionResult result = await executor.ExecuteAsync(ctx, CancellationToken.None);
@@ -52,7 +52,7 @@ public sealed class ToastNodeExecutorTests
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(exception);
 
-        var executor = new ToastNodeExecutor(publisher.Object);
+        var executor = new ToastNodeExecutor(publisher.Object, TestTemplates.Create());
         NodeContext ctx = BuildContext("Alert", "Something happened.");
 
         NodeExecutionResult result = await executor.ExecuteAsync(ctx, CancellationToken.None);
