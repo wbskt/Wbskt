@@ -25,6 +25,22 @@ public sealed class WbsktClient : IWbsktClient
 
     public int PendingMessageCount => _outbound.Count;
 
+    /// <summary>
+    /// A device named <paramref name="deviceName"/> on the hosted service, enrolling with
+    /// <paramref name="policyPin"/> the first time and keeping its credentials in a file
+    /// (<see cref="FileClientStorage.ForDevice"/>) for every start after that.
+    /// </summary>
+    public WbsktClient(string deviceName, string policyPin)
+        : this(new ClientConfig(WbsktDefaults.ApiUrl, WbsktDefaults.SocketUrl, deviceName, policyPin), FileClientStorage.ForDevice(deviceName))
+    {
+    }
+
+    /// <summary>Custom URLs (self-hosted, staging) and buffering, with credentials kept in a file.</summary>
+    public WbsktClient(ClientConfig config)
+        : this(config, FileClientStorage.ForDevice(config.DeviceName))
+    {
+    }
+
     public WbsktClient(ClientConfig config, IClientStorage storage)
     {
         _config = config;

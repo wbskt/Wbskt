@@ -1,6 +1,5 @@
 using Wbskt.Client.Sdk;
 using Wbskt.Client.Sdk.Models;
-using Wbskt.Simulator;
 
 Console.WriteLine("======================================");
 Console.WriteLine("   WBSKT CLIENT SIMULATOR STARTING    ");
@@ -15,7 +14,7 @@ var config = new ClientConfig(
         ?? throw new InvalidOperationException("Set WBSKT_POLICY_PIN to a registration policy's PIN.")
 );
 
-var storage = new FileClientStorage();
+var storage = new FileClientStorage("wbskt_creds.json");
 await using var client = new WbsktClient(config, storage);
 
 client.OnConnected += () => 
