@@ -46,13 +46,15 @@ public sealed class DeviceCommandQueue(
     /// <summary>
     /// Queues the command and announces it with <paramref name="announcement"/>, which names who sent
     /// it. False, with nothing queued or announced, when the device already has
-    /// <paramref name="maxPerClient"/> commands waiting.
+    /// <paramref name="maxPerClient"/> commands waiting. A command already waiting (a retried
+    /// hand-back) is true, and is not announced again.
     /// </summary>
     public async Task<bool> QueueAsync(QueuedCommand command, ClientCommandQueuedEvent announcement, int maxPerClient, CancellationToken ct)
     {
-        if (!await store.EnqueueAsync(command, maxPerClient, ct))
+        var outcome = await store.EnqueueAsync(command, maxPerClient, ct);
+        if (outcome != EnqueueOutcome.Queued)
         {
-            return false;
+            return outcome == EnqueueOutcome.AlreadyQueued;
         }
 
         // The command waits whether or not this is heard; a broker that is down only costs the row in

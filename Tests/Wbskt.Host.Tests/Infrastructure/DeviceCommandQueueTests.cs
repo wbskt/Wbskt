@@ -107,7 +107,7 @@ public sealed class DeviceCommandQueueTests
     }
 
     [Fact]
-    public async Task A_command_queued_twice_by_id_waits_once()
+    public async Task A_command_queued_twice_by_id_waits_and_is_announced_once()
     {
         var command = new QueuedCommand(Guid.NewGuid(), ClientId, ClientRefId, WorkspaceId, "led.set", "{}", Now.AddHours(1));
         var announcement = new ClientCommandQueuedEvent(ClientRefId, ClientId, WorkspaceId, "led.set", "{}", command.CommandId, command.ExpiresAtUtc);
@@ -116,6 +116,7 @@ public sealed class DeviceCommandQueueTests
         Assert.True(await Queue.QueueAsync(command, announcement, 5, CancellationToken.None));
 
         Assert.Single(_store.Rows);
+        _bus.Verify(b => b.PublishAsync(It.IsAny<ClientCommandQueuedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     private sealed class FixedClock(DateTime utcNow) : TimeProvider

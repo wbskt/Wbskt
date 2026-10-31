@@ -1,8 +1,8 @@
 -- Queues a command for an offline device, unless the device already has @MaxPerClient waiting.
 -- The count and the insert are one locked step, so two senders cannot both take the last place.
--- Queueing a command id that is already waiting is a no-op that reports it queued, so a retried
--- hand-back from a socket host does not fail on the unique key.
--- Returns Queued = 1 when the command is waiting, 0 when the queue is full or the client is gone.
+-- Queueing a command id that is already waiting is a no-op, so a retried hand-back from a socket
+-- host does not fail on the unique key.
+-- Returns Outcome: 1 queued, 2 already waiting, 0 refused (the queue is full or the client is gone).
 CREATE PROCEDURE dbo.QueuedCommand_Enqueue
     @CommandId          UNIQUEIDENTIFIER,
     @ClientId           INT,
@@ -27,7 +27,7 @@ BEGIN
     IF EXISTS (SELECT 1 FROM dbo.QueuedCommands WHERE CommandId = @CommandId)
     BEGIN
         COMMIT TRANSACTION;
-        SELECT CAST(1 AS BIT) AS Queued;
+        SELECT CAST(2 AS TINYINT) AS Outcome;
         RETURN;
     END
 
@@ -35,7 +35,7 @@ BEGIN
        OR (SELECT COUNT(*) FROM dbo.QueuedCommands WITH (UPDLOCK, HOLDLOCK) WHERE ClientId = @ClientId) >= @MaxPerClient
     BEGIN
         COMMIT TRANSACTION;
-        SELECT CAST(0 AS BIT) AS Queued;
+        SELECT CAST(0 AS TINYINT) AS Outcome;
         RETURN;
     END
 
@@ -47,6 +47,6 @@ BEGIN
          @ActorUserId, @ActorUserRefId, @ActorSource, @ActorWorkflowRefId, @ActorRunRefId);
 
     COMMIT TRANSACTION;
-    SELECT CAST(1 AS BIT) AS Queued;
+    SELECT CAST(1 AS TINYINT) AS Outcome;
 END
 GO
