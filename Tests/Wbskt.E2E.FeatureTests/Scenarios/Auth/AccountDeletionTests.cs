@@ -31,6 +31,10 @@ public sealed class AccountDeletionTests(ServicesFixture fixture)
         var user = await fixture.CreateUserAsync();
         var session = await fixture.LoginAsync(user.Email, user.Password);
 
+        // Access-token revocation is by issue time in whole seconds; step past the second these
+        // were issued in so the old access tokens are unambiguously older than the revocation.
+        await Task.Delay(TimeSpan.FromMilliseconds(1100));
+
         (await DeleteAsync(user.Token, user.Password)).StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         (await fixture.Auth.As(user.Token).GetSessionsRawAsync()).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
