@@ -169,7 +169,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
             providers,
             new RunJournal(providers, new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
-            new StubNodeExecutorRegistry(new AwaitSignalNodeExecutor(awaitClock)),
+            new StubNodeExecutorRegistry(new AwaitSignalNodeExecutor(awaitClock, NodeExecutors.Actions.TestTemplates.Create())),
             _dispatcher,
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),

@@ -88,11 +88,11 @@ internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher, IBo
 
     // Kept waiting after a stale wake, the step waits on the same command and sends nothing. Having no
     // deadline on the branch, it waits a whole ack timeout again.
-    protected override WakeCondition? KeepWaitingOn(NodeContext ctx, string? waitingOn, DateTime? deadline)
+    protected override ValueTask<WakeCondition?> KeepWaitingOnAsync(NodeContext ctx, string? waitingOn, DateTime? deadline, CancellationToken ct)
     {
-        return Guid.TryParse(waitingOn, out Guid commandId)
+        return ValueTask.FromResult<WakeCondition?>(Guid.TryParse(waitingOn, out Guid commandId)
             ? Condition(commandId, ((SendClientMessageNode)ctx.Node).Config)
-            : null;
+            : null);
     }
 
     private static CommandOutcomeWakeCondition Condition(Guid commandId, SendClientMessageConfig config)

@@ -949,7 +949,7 @@ public sealed class RetryExecutorTests
     [Fact]
     public async Task Await_signal_park_claims_no_key()
     {
-        var executor = new AwaitSignalNodeExecutor(new FixedClock());
+        var executor = new AwaitSignalNodeExecutor(new FixedClock(), NodeExecutors.Actions.TestTemplates.Create());
         var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = [], Config = new AwaitSignalConfig { SignalName = "go" } };
         var keys = new InMemoryIdempotencyKeyProvider();
 

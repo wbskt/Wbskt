@@ -80,6 +80,22 @@ public static class TemplatePlaceholders
         return Parse(source) is [{ IsPlaceholder: true } only] ? only.Text : null;
     }
 
+    /// <summary>
+    /// True when the reference has a form that can find a value: <c>$shared.NAME</c>, or a dotted path
+    /// of names such as <c>trigger.payload.room</c>. Anything else (an operator, a space, another
+    /// <c>$</c> root) is looked up as one key that no branch has, and fills in blank every time.
+    /// </summary>
+    public static bool IsReference(string reference)
+    {
+        string path = reference.StartsWith(SharedPrefix, StringComparison.OrdinalIgnoreCase)
+            ? reference[SharedPrefix.Length..]
+            : reference;
+        return path.Length > 0 && path.Split('.').All(IsName);
+    }
+
+    private static bool IsName(string segment) =>
+        segment.Length > 0 && segment.All(c => char.IsLetterOrDigit(c) || c is '_' or '-');
+
     public static WorkflowExpression ToExpression(string reference)
     {
         return reference.StartsWith(SharedPrefix, StringComparison.OrdinalIgnoreCase)

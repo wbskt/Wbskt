@@ -54,9 +54,9 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
     }
 
     // A stale wake is not this child's result: keep waiting on the same child run rather than starting another.
-    protected override WakeCondition? KeepWaitingOn(NodeContext ctx, string? waitingOn, DateTime? deadline)
+    protected override ValueTask<WakeCondition?> KeepWaitingOnAsync(NodeContext ctx, string? waitingOn, DateTime? deadline, CancellationToken ct)
     {
-        return Guid.TryParse(waitingOn, out Guid parkedOn) ? new ChildRunCompletedWakeCondition(parkedOn) : null;
+        return ValueTask.FromResult<WakeCondition?>(Guid.TryParse(waitingOn, out Guid parkedOn) ? new ChildRunCompletedWakeCondition(parkedOn) : null);
     }
 
     protected override async Task<NodeExecutionResult> FirstVisitAsync(NodeContext ctx, CancellationToken ct)

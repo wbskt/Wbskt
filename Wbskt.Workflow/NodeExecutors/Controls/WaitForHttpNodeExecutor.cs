@@ -22,7 +22,7 @@ internal sealed class WaitForHttpNodeExecutor(TimeProvider clock) : AwaitInbound
     protected override string DeadlineKey => BranchStateKeys.HttpDeadline;
     protected override string WakePayloadKey => "wakePayload";
 
-    protected override ParkPlan CreateParkPlan(NodeContext ctx)
+    protected override ValueTask<ParkPlan> CreateParkPlanAsync(NodeContext ctx, CancellationToken ct)
     {
         var node = (WaitForHttpNode)ctx.Node;
         WaitForHttpConfig config = node.Config
@@ -44,6 +44,6 @@ internal sealed class WaitForHttpNodeExecutor(TimeProvider clock) : AwaitInbound
             TtlPort = DefaultTimeoutPort
         };
 
-        return new ParkPlan(condition, token, Clock.GetUtcNow().UtcDateTime + config.Ttl);
+        return ValueTask.FromResult(new ParkPlan(condition, token, Clock.GetUtcNow().UtcDateTime + config.Ttl));
     }
 }

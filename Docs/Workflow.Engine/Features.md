@@ -48,7 +48,7 @@ copy the inbound payload into the branch as `trigger` and stamp `triggeredAt`.
 | `control:join` | 0.1 | `default` | `mode` (`All`, `Any`, `Quorum`), `quorumCount`. See [§8](#8-forks-and-joins). |
 | `control:variable` | 0.1 | `default` | `scope` (`Local`/`Shared`), `op`, `var`, `value`, `expected`. See [§10](#10-variables). |
 | `control:delay` | 0.1 | `default` | `duration`. Parks the branch on a timer. |
-| `control:awaitSignal` | 0.1 | `default` (+ `timeout` when `ttl` is set) | `signalName`, `correlation` (defaults to the run's RefId), `ttl`. Waits for `POST .../runs/{runRef}/signals/{signalName}`; the signal body lands in `signalPayload`. |
+| `control:awaitSignal` | 0.1 | `default` (+ `timeout` when `ttl` is set) | `signalName`, `correlation` (defaults to the run's RefId; placeholders filled in, see below), `ttl`. Waits for `POST .../runs/{runRef}/signals/{signalName}`; the signal body lands in `signalPayload`. |
 | `control:waitForHttp` | 0.1 | `default`, `timeout` | `ttl` (required), `token` (required, at least 24 characters: it is the only thing guarding the public URL). Waits for `POST /api/callbacks/wake/{token}` on the management host; the body lands in `wakePayload`. |
 | `control:subWorkflow` | 1.0 | `default` | `workflowRefId`, `correlationKey`, `input` (name → expression). See [§9](#9-sub-workflows). |
 | `control:end` | 0.1 | none | Ends the branch successfully. Optional `output` expression becomes the run's output. |
@@ -90,6 +90,15 @@ spaces, so a value cannot add a header. The webhook's address checks run on the 
 its failure messages quote the URL as written. An unclosed or empty placeholder is refused when the
 workflow is saved (`TEMPLATE_INVALID`, naming the field); one in a definition saved earlier fails the
 step with `EXPRESSION_EVALUATION_ERROR`. `clientRef`, `type` and other settings are used as written.
+
+Wait for signal's `correlation` takes the same placeholders, filled in as one line when the step
+parks, so `{{trigger.payload.parentRun}}` waits on that run's signal rather than on the placeholder
+text every run would share. It is a key, not a message, so a missing value is not sent as blank: the
+step fails with `SIGNAL_CORRELATION_MISSING` (not retryable), as it does when the value fills in to
+blank text. On save, `AWAIT_SIGNAL_CORRELATION_INVALID` refuses a correlation that could never fill in
+to a value of its own: a brace outside a placeholder, a `$trigger.` path written without `{{ }}`, or a
+placeholder that is not a dotted path or `$shared.NAME`. The signal endpoint is addressed by run, so
+the filled-in value has to be a run's RefId for a signal to reach it.
 
 Which fields take placeholders is declared once, with `[Templated]` on the config property
 (`[Templated(TemplateText.Line)]` for a header, URL or id). The engine's `ActionTemplates` and the
