@@ -115,7 +115,7 @@ check_pushgateway() {
     local url="${BACKUP_METRICS_URL:-http://127.0.0.1:9091}" line ts
     line="$(curl -fsS --max-time 5 "$url/metrics" 2>/dev/null | grep '^wbskt_backup_last_success_timestamp_seconds' | head -1)"
     if [[ -z "$line" ]]; then
-        warn "the Pushgateway at $url has no backup success timestamp (it resets when its container restarts)"
+        warn "the Pushgateway at $url has no backup success timestamp yet (none since its data volume was created)"
         return
     fi
     ts="$(awk '{printf "%d", $NF}' <<<"$line")"

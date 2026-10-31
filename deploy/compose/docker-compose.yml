@@ -30,6 +30,7 @@ volumes:
   loki-data:
   tempo-data:
   grafana-data:
+  pushgateway-data:
 
 # Every container's stdout is capped. Docker's default json-file driver never rotates, so on one VM
 # a chatty host eventually fills the disk SQL Server writes to. Logs worth keeping longer go to Loki.
@@ -549,6 +550,14 @@ services:
   pushgateway:
     image: prom/pushgateway:v1.11.1
     container_name: wbskt-pushgateway
+    # Persisted, or a restart forgets the backup success timestamp and BackupMissing goes blind
+    # until the next nightly run. /pushgateway is the image's own directory, owned by its nobody
+    # user, so a fresh named volume mounted there takes that owner and is writable.
+    command:
+      - --persistence.file=/pushgateway/metrics
+      - --persistence.interval=1m
+    volumes:
+      - pushgateway-data:/pushgateway
     # Loopback only: backup.sh runs from cron on the VM and pushes its success timestamp here.
     ports:
       - "127.0.0.1:9091:9091"

@@ -449,7 +449,9 @@ docker compose up -d --force-recreate prometheus   # picks up the new prometheus
 For backups, set `BACKUP_ALERT_CMD` to `deploy/scripts/alert.sh` in `.env`. A failed run then
 raises `BackupFailed` straight away, and every successful run pushes its timestamp to the
 Pushgateway. That timestamp is what lets `BackupMissing` catch the failure no command can report,
-which is cron not running the script at all.
+which is cron not running the script at all. The Pushgateway keeps what it was sent on the
+`pushgateway-data` volume, so restarting it does not blank the timestamp. On a VM that predates the
+volume, `docker compose up -d pushgateway` once creates it; the next nightly run fills it.
 
 ## Scaling
 
