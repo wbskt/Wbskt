@@ -161,6 +161,43 @@ public sealed class OutboundWebhookExecutorTests
     }
 
     [Fact]
+    public async Task A_reply_labelled_json_that_does_not_parse_warns_without_quoting_the_body()
+    {
+        var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"token":"s3cret" oops""", System.Text.Encoding.UTF8, "application/problem+json")
+        });
+        NodeContext ctx = BuildContext("https://example.test/webhook", "GET");
+
+        await CreateExecutor(handler).ExecuteAsync(ctx, CancellationToken.None);
+
+        NodeWarning warning = Assert.Single(ctx.Warnings);
+        Assert.Equal(HistoryEventKind.WebhookJsonUnparsable, warning.EventKind);
+        string payload = JsonSerializer.Serialize(warning.Payload);
+        Assert.Equal(200, JsonSerializer.SerializeToElement(warning.Payload).GetProperty("status").GetInt32());
+        Assert.Equal("application/problem+json", JsonSerializer.SerializeToElement(warning.Payload).GetProperty("contentType").GetString());
+        Assert.StartsWith("Not valid JSON at line 1", JsonSerializer.SerializeToElement(warning.Payload).GetProperty("error").GetString());
+        Assert.DoesNotContain("s3cret", payload);
+    }
+
+    [Theory]
+    [InlineData("application/json", "")]
+    [InlineData("text/plain", "not json")]
+    [InlineData("application/json", """{"ok":true}""")]
+    public async Task A_reply_that_never_promised_json_or_kept_its_promise_warns_nothing(string mediaType, string text)
+    {
+        var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(text, System.Text.Encoding.UTF8, mediaType)
+        });
+        NodeContext ctx = BuildContext("https://example.test/webhook", "GET");
+
+        await CreateExecutor(handler).ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Empty(ctx.Warnings);
+    }
+
+    [Fact]
     public async Task A_json_reply_does_not_remove_its_own_parsed_output()
     {
         var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)

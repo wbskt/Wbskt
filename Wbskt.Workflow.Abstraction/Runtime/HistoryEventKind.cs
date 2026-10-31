@@ -38,6 +38,8 @@ public static class HistoryEventKind
     public const string CounterStepTruncated = "CounterStepTruncated";
     // A local counter whose value was not a number, counted from 0.
     public const string CounterReset = "CounterReset";
+    // Call a URL got a response labelled JSON whose body did not parse.
+    public const string WebhookJsonUnparsable = "WebhookJsonUnparsable";
 
     // Fan-out / fan-in
     public const string JoinContinuationSpawned = "JoinContinuationSpawned";
@@ -60,6 +62,7 @@ public static class HistoryEventKind
                 or TemplateValueMissing
                 or CounterStepTruncated
                 or CounterReset
+                or WebhookJsonUnparsable
                 or BranchFailed
                 or NodeRetrying
                 or BranchCancelled
