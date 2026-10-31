@@ -340,6 +340,7 @@ step's `NodeCompleted` / `NodeFailed`. Payloads never carry a value that may be 
 | `TemplateValueMissing` | action steps | `field`, `placeholders` that had no value |
 | `CounterStepTruncated` | Variable (Increment/Decrement) | `var`, `step`, `applied`: a step with a fraction moves by the whole part |
 | `CounterReset` | Variable (local counter) | `var`, `kind`: the variable held something other than a number and was counted from 0 |
+| `WebhookJsonUnparsable` | Call a URL | `status`, `contentType`, `error` (a position, never the body): the response said JSON and didn't parse, so `json` was cleared |
 
 ## 11. Metrics
 

@@ -137,10 +137,26 @@ internal sealed class WebhookNodeExecutor(IHttpClientFactory httpClientFactory, 
                 // A JSON reply is also handed on parsed, so later steps can read its fields. Without
                 // one, an earlier call's json is dropped from the branch rather than left to be
                 // read as this call's.
-                if (IsJson(response.Content) && TryParse(body) is { } json)
+                if (IsJson(response.Content))
                 {
-                    output["json"] = json;
-                    return new NodeExecutionResult.Continue("default", output);
+                    if (TryParse(body, out string? error) is { } json)
+                    {
+                        output["json"] = json;
+                        return new NodeExecutionResult.Continue("default", output);
+                    }
+
+                    // Said JSON and wasn't: later steps reading json.* would otherwise just get nothing.
+                    // An empty body (a 200 with no content) is not a broken promise. The error names a
+                    // position, never the body, which may hold what the endpoint returned for a credential.
+                    if (!string.IsNullOrWhiteSpace(body))
+                    {
+                        ctx.Warnings.Add(new NodeWarning(HistoryEventKind.WebhookJsonUnparsable, new
+                        {
+                            status,
+                            contentType = response.Content.Headers.ContentType?.MediaType,
+                            error
+                        }));
+                    }
                 }
 
                 return new NodeExecutionResult.Continue("default", output, RemoveKeys: ["json"]);
@@ -232,15 +248,19 @@ internal sealed class WebhookNodeExecutor(IHttpClientFactory httpClientFactory, 
         content.Headers.ContentType?.MediaType is { } mediaType
         && (mediaType.Equals("application/json", StringComparison.OrdinalIgnoreCase) || mediaType.EndsWith("+json", StringComparison.OrdinalIgnoreCase));
 
-    private static JsonElement? TryParse(string body)
+    private static JsonElement? TryParse(string body, out string? error)
     {
         try
         {
             using JsonDocument document = JsonDocument.Parse(body);
+            error = null;
             return document.RootElement.Clone();
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            error = ex.LineNumber is { } line
+                ? $"Not valid JSON at line {line + 1}, byte {ex.BytePositionInLine + 1}."
+                : "Not valid JSON.";
             return null;
         }
     }
