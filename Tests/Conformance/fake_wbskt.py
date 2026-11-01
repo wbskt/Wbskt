@@ -167,5 +167,14 @@ class FakeSocket:
         await asyncio.wait_for(until(), timeout)
         return self.connections[count - 1]
 
+    async def wait_upgrades(self, count: int, timeout: float = 20.0) -> None:
+        """Until this many upgrades were asked for, whether or not they were accepted."""
+
+        async def until() -> None:
+            while len(self.upgrade_tokens) < count:
+                await asyncio.sleep(0.02)
+
+        await asyncio.wait_for(until(), timeout)
+
     async def send(self, connection: int, message: Dict[str, Any]) -> None:
         await self.connections[connection].send(json.dumps(message))
