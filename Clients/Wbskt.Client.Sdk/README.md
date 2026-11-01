@@ -41,4 +41,5 @@ in the console's send panel. Delivery acks and expired-command refusals are sent
 `ClientConfig.OfflineBufferSize`) and sends it in order, with its original time, on reconnect.
 
 The wire protocol every Wbskt SDK implements is documented in
-[Docs/Device.Protocol.md](https://github.com/wbskt/Wbskt/blob/master/Docs/Device.Protocol.md).
+[Docs/Device.Protocol.md](https://github.com/wbskt/Wbskt/blob/master/Docs/Device.Protocol.md), with the
+WebSocket specifics in [Docs/Device.Protocol.WebSocket.md](https://github.com/wbskt/Wbskt/blob/master/Docs/Device.Protocol.WebSocket.md).

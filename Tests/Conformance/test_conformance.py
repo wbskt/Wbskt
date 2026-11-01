@@ -1,4 +1,5 @@
-"""The device protocol checklist (Docs/Device.Protocol.md §6), run against one SDK's harness.
+"""The device protocol checklists, run against one SDK's harness: the message model
+(Docs/Device.Protocol.md §6) and the WebSocket binding (Docs/Device.Protocol.WebSocket.md §5).
 
 Delays here follow the protocol's own schedule: a reconnect after a drop can take up to 10 s and a
 retry after a failure up to 2 s, 4 s, 8 s..., so waits are generous on purpose.

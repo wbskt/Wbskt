@@ -1,20 +1,28 @@
-# Device protocol (v1)
+# Device protocol (v1): message model
 
-How a device talks to Wbskt. Every SDK (.NET, Python, ESP32/Arduino) implements this document, and a
-device written from scratch against it is as supported as one using an SDK. The types named here
-live in `Clients/Wbskt.Protocol`; where this page and that code disagree, the code is right and this
-page is behind.
+How a device talks to Wbskt, whatever carries the messages. Every SDK (.NET, Python, ESP32/Arduino)
+implements this document, and a device written from scratch against it is as supported as one using
+an SDK. The types named here live in `Clients/Wbskt.Protocol`; where this page and that code
+disagree, the code is right and this page is behind.
 
-A device makes two HTTPS calls, then holds one WebSocket open:
+This page is the part every transport shares: registration and login, the messages and their
+names, commands and acks, limits, and when to reconnect. How the messages travel is a **binding**,
+one page per transport:
+
+| Binding | Page | Endpoint |
+|---|---|---|
+| WebSocket | [Device.Protocol.WebSocket.md](Device.Protocol.WebSocket.md) | `wss://ws.<domain>/ws` |
+
+A device makes two HTTPS calls, then holds one connection open through a binding:
 
 ```
 POST https://api.<domain>/api/v1/client-registrations/initiate   once, with the policy PIN
 POST https://api.<domain>/api/v1/client-auth/login               whenever it needs a token
-GET  wss://ws.<domain>/ws  (Upgrade)                             the connection
+<the binding's connection>                                       e.g. GET wss://ws.<domain>/ws
 ```
 
-The hosted service is `api.dev.wbskt.com` and `ws.dev.wbskt.com` (`WbsktDefaults` in the .NET SDK).
-A self-hosted install uses its own `DOMAIN`.
+The hosted service is `api.dev.wbskt.com` (`WbsktDefaults` in the .NET SDK). A self-hosted install
+uses its own `DOMAIN`.
 
 ## 1. Register (once)
 
@@ -59,8 +67,9 @@ Content-Type: application/json
 ```
 
 `expiresIn` is in seconds (one hour today; read it, don't assume it). **Reuse the token** for every
-reconnect until a minute before it expires, and log in again only then or when the socket refuses
-it with 401. A device that logs in on every reconnect turns a server restart into a login storm.
+reconnect until a minute before it expires, and log in again only then or when the binding refuses
+it (a 401 on the WebSocket upgrade). A device that logs in on every reconnect turns a server restart
+into a login storm.
 
 | Answer | Do |
 |---|---|
@@ -73,23 +82,16 @@ Errors are RFC 7807 Problem Details; `code` carries the values above.
 
 ## 3. Connect
 
-```http
-GET /ws HTTP/1.1
-Host: ws.<domain>
-Upgrade: websocket
-Authorization: Bearer <accessToken>
-Sec-WebSocket-Protocol: wbskt.v1
-```
+The binding opens the connection and presents the access token; its page says how. Whatever the
+binding:
 
-Clients that cannot set headers on the upgrade (browsers) put the token in `?access_token=` instead.
-Offer the `wbskt.v1` subprotocol (`SocketProtocol.V1`); a connection that offers none is treated as
-v1. A 401 on the upgrade means the token is no longer accepted: drop it and log in again.
-
-One device has one connection. Connecting again closes the older one (`PolicyViolation`, "superseded").
+- A refused token means it is no longer accepted: drop it and log in again (§2).
+- One device has one connection. Connecting again ends the older one (superseded, §5).
+- Every connection starts with the device sending `capabilities` (§4.2), before anything else.
 
 ## 4. Messages
 
-Every message, both ways, is one **text** frame (or several, up to one message) holding a JSON object:
+Every message, both ways, is a JSON object:
 
 ```json
 { "type": "temperature", "payload": { "celsius": 21.5 }, "sentAt": "2026-10-31T12:00:00Z" }
@@ -104,12 +106,13 @@ Every message, both ways, is one **text** frame (or several, up to one message) 
 | `expiresAt` | server → device | On a command: don't act on it after this instant (§4.3). |
 
 **Limits.** A message is at most 64 KB (`SocketProtocol.MaxMessageBytes`); a bigger one ends the
-connection. Binary frames are ignored. A device may send 10 messages a second sustained with a burst
-of 100 (enough to flush an offline buffer); past that the excess is dropped, and after 500 drops in a
-row the connection is closed with `PolicyViolation` ("throttled").
+connection (too big, §5). A device may send 10 messages a second sustained with a burst of 100
+(enough to flush an offline buffer); past that the excess is dropped, and after 500 drops in a row
+the connection is ended (throttled, §5).
 
 **Reserved types.** Anything starting with `sys.` (any case) belongs to the platform, as do
-`capabilities` and `state.report`. A device must not send its own `sys.*` type.
+`capabilities` and `state.report`. A device must not send its own `sys.*` type. A binding may define
+`sys.*` messages of its own: the WebSocket binding's `sys.ping` and `sys.pong` are one.
 
 ### 4.1 Application messages (device → server)
 
@@ -125,8 +128,6 @@ the connection is back and `capabilities` has gone out. Never let a new message 
 
 | Type | Direction | Payload | Do |
 |---|---|---|---|
-| `sys.ping` | server → device | `{ "timestamp": "…", "id": "…" }` | Answer at once with `sys.pong`. |
-| `sys.pong` | device → server | `{ "originalTimestamp": <ping's timestamp>, "id": <ping's id> }` | The server times the round trip on its own clock. |
 | `sys.ack` | device → server | `{ "commandId": "…" }`, or with `"type"` and `"refused": "expired"` | See §4.3. |
 | `capabilities` | device → server | below | Send first on every connection. |
 | `state.report` | device → server | `{ "<name>": <value>, … }` | The state variables that changed. Numbers are kept as readings for charts. |
@@ -159,41 +160,45 @@ Commands sent while the device is offline are not queued today; the sender is to
 
 ## 5. Reconnecting
 
-Every device behind a socket host loses its connection at the same moment when that host restarts,
+Every device behind a gateway loses its connection at the same moment when that gateway restarts,
 so reconnects must be spread out. Delays are always drawn at random between zero and a ceiling
 ("full jitter"):
 
 | Situation | Wait before the next attempt |
 |---|---|
 | Connection just dropped | random 0–10 s |
-| Server closed with `EndpointUnavailable` (1001, restarting) | random 0–30 s |
+| Server ended it because it is restarting | random 0–30 s |
 | *n*-th failed attempt in a row (n = 0, 1, …) | random 0–min(60 s, 2 s × 2ⁿ) |
 | Login or registration answered 429 | `Retry-After` + random 0–2 s |
 
 The first connection at startup needs no delay. Reset the failure count once connected. Reuse the
-token (§2), so most reconnects are a socket handshake and not a login.
+token (§2), so most reconnects are a handshake and not a login.
 
-Close codes the server uses:
+Why the server ends a connection. Each binding says how it signals these (the WebSocket binding
+uses close codes):
 
-| Code | Reason | Do |
+| Reason | When | Do |
 |---|---|---|
-| 1000 NormalClosure | | Reconnect on the schedule. |
-| 1001 EndpointUnavailable | Server restarting | Reconnect, 0–30 s spread. |
-| 1008 PolicyViolation | Superseded, revoked, throttled | Reconnect on the schedule; a revoked device's login will then fail with 401. |
-| 1009 MessageTooBig | Over 64 KB | Fix the sender; reconnect on the schedule. |
+| Normal | The server closed it with nothing wrong. | Reconnect on the schedule. |
+| Restarting | The gateway is shutting down. | Reconnect, 0–30 s spread. |
+| Superseded | The same device connected again. | Reconnect on the schedule. |
+| Revoked | The device lost access: revoked, deleted or its secret rotated. | Reconnect on the schedule; login will then fail with 401. |
+| Throttled | Over the message rate (§4). | Reconnect on the schedule, and send less. |
+| Too big | A message over 64 KB (§4). | Fix the sender; reconnect on the schedule. |
 
 ## 6. Conformance checklist
 
-An SDK conforms when it:
+An SDK conforms to the message model when it:
 
 - [ ] stores credentials durably and registers only when it has none, or after `CLIENT_UNAUTHORIZED`;
-- [ ] reuses the access token until a minute before expiry, and renews it after a 401 on the upgrade;
-- [ ] offers `wbskt.v1` and sends the token as a bearer header (or `access_token`);
+- [ ] reuses the access token until a minute before expiry, and logs in again only then or when the binding refuses it;
 - [ ] sends `capabilities` first on every connection;
-- [ ] answers `sys.ping` with `sys.pong` echoing `id` and the timestamp;
 - [ ] acks commands with `commandId` on arrival and refuses expired ones with `refused: "expired"`;
 - [ ] stamps `sentAt` on application messages and buffers them in order while offline;
 - [ ] never sends a reserved type of its own, or a message over 64 KB;
-- [ ] reconnects on the jittered schedule in §5, honouring `Retry-After`.
+- [ ] reconnects on the jittered schedule above, honouring `Retry-After`.
+
+It also conforms to each binding it speaks; see that binding's checklist
+([WebSocket](Device.Protocol.WebSocket.md#5-conformance-checklist)).
 
 The .NET SDK (`Clients/Wbskt.Client.Sdk`) is the reference implementation.

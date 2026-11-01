@@ -6,7 +6,7 @@ name: Python SDK
 
 on:
   pull_request:
-    paths: ['Clients/python/**', 'Docs/Device.Protocol.md', '.github/workflows/python-sdk.yml']
+    paths: ['Clients/python/**', 'Docs/Device.Protocol.md', 'Docs/Device.Protocol.WebSocket.md', '.github/workflows/python-sdk.yml']
   push:
     branches: [master]
     paths: ['Clients/python/**', '.github/workflows/python-sdk.yml']
