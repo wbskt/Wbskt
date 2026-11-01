@@ -78,7 +78,7 @@ public sealed class DeviceSessions
     /// <summary>
     /// Runs one admitted device's session over <paramref name="connection"/> until it ends.
     /// </summary>
-    /// <param name="identity">The device, as <see cref="AdmitAsync"/> admitted it.</param>
+    /// <param name="admission">What <see cref="AdmitAsync"/> decided; it must have admitted the device.</param>
     /// <param name="connection">The transport's connection, accepted after admission.</param>
     /// <param name="receive">
     /// The transport's receive loop: reads until the connection ends, hands each text message to the
@@ -90,11 +90,17 @@ public sealed class DeviceSessions
     /// device is released and before its end is announced. It should not throw.
     /// </param>
     public async Task RunAsync(
-        ClientIdentity identity,
+        DeviceAdmission admission,
         IDeviceConnection connection,
         Func<DeviceInbox, Task<DisconnectReason>> receive,
         Func<DisconnectReason, Task> closeTransport)
     {
+        if (!admission.IsAdmitted)
+        {
+            throw new ArgumentException($"A refused device ({admission.Refusal}) has no session to run.", nameof(admission));
+        }
+
+        var identity = admission.Identity;
         var clientRefId = identity.ClientRefId;
 
         // The newest connection wins: one this instance still holds for the device is closed as superseded.
@@ -105,6 +111,14 @@ public sealed class DeviceSessions
 
         try
         {
+            // A revoke that landed after admission found nothing registered to close. Revokes update
+            // this host's list before they close, so asking it once registered leaves no gap.
+            if (_accessGate.IsRefusedHere(clientRefId, identity.IssuedAtUtc))
+            {
+                _logger.LogWarning("Client {ClientRefId} was revoked while it connected; closing.", clientRefId);
+                await connection.RequestCloseAsync(DisconnectReason.Revoked, DisconnectReason.Revoked.Describe());
+            }
+
             // Not tied to the connection: a device that drops straight away must still be recorded as
             // having connected, or its disconnect has nothing to pair with.
             await _eventBus.PublishAsync(new ClientConnectedEvent(clientRefId, connection.ClientId, connection.WorkspaceId, _hostId), CancellationToken.None);
@@ -154,7 +168,15 @@ public sealed class DeviceSessions
         if (reason != DisconnectReason.Superseded)
         {
             var description = connection.CloseRequest?.Description ?? reason.Describe();
-            await _eventBus.PublishAsync(new ClientDisconnectedEvent(clientRefId, connection.ClientId, connection.WorkspaceId, description, _hostId), CancellationToken.None);
+            try
+            {
+                await _eventBus.PublishAsync(new ClientDisconnectedEvent(clientRefId, connection.ClientId, connection.WorkspaceId, description, _hostId), CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                // The session is over either way; a broker outage must not surface as an unhandled request error.
+                _logger.LogWarning(ex, "Could not announce that client {ClientRefId} disconnected.", clientRefId);
+            }
         }
     }
 }

@@ -19,6 +19,12 @@ public interface IClientAccessGate
 
     /// <summary>Whether a token for the device issued at <paramref name="issuedAt"/> (UTC) is refused.</summary>
     Task<bool> IsRefusedAsync(Guid clientRefId, DateTime issuedAt, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Whether this host's own list, which every revoke updates before it closes the device's
+    /// connection, refuses the token. No round trip, so it is safe to ask on every connect.
+    /// </summary>
+    bool IsRefusedHere(Guid clientRefId, DateTime issuedAt);
 }
 
 /// <summary>
@@ -61,4 +67,6 @@ internal sealed class ClientAccessGate : IClientAccessGate
         return _cache.IsRevoked(clientRefId, issuedAt)
                || await _cutoffs.IsRevokedAsync(clientRefId, issuedAt, cancellationToken) == true;
     }
+
+    public bool IsRefusedHere(Guid clientRefId, DateTime issuedAt) => _cache.IsRevoked(clientRefId, issuedAt);
 }
