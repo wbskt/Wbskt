@@ -106,6 +106,18 @@ async def test_renews_the_token_after_the_upgrade_refuses_it(api, socket_server,
     assert socket_server.upgrade_tokens[-1] == "token-2"
 
 
+async def test_keeps_the_token_while_the_socket_host_is_down(api, socket_server, device):
+    socket_server.down = True
+    harness = await device()
+    await socket_server.wait_upgrades(4, timeout=60.0)
+    socket_server.down = False
+
+    await harness.expect("connected", timeout=60.0)
+
+    assert len(api.logins) == 1
+    assert set(socket_server.upgrade_tokens) == {"token-1"}
+
+
 async def test_waits_for_retry_after_when_throttled(api, socket_server, device):
     api.login_answers = [(429, {"code": "TOO_MANY_REQUESTS"}, {"Retry-After": "2"})]
     harness = await device()
@@ -234,3 +246,4 @@ async def test_refuses_to_send_a_reserved_type(api, socket_server, device, messa
     frame = await socket_server.next_of("marker")
 
     assert frame["type"] == "marker"
+

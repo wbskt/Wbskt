@@ -6,7 +6,8 @@ item of its checklist (§6). The suite fakes the two HTTP endpoints and the sock
 misbehave on cue: refuse a token, throttle a login, forget a device, close or refuse the socket.
 
 The SDK runs as a separate process, a **harness**, so any language can take part. CI
-(`.github/workflows/sdk-conformance.yml`) runs it for the Python and .NET SDKs.
+(`.github/workflows/sdk-conformance.yml`) runs it for the Python and .NET SDKs; the ESP32 SDK runs it
+in its own repository (below).
 
 ```sh
 pip install -r requirements.txt
@@ -53,5 +54,11 @@ may log there.
 | `{"event":"sent","type":"…"}` | `send` or `state` returned. |
 | `{"event":"rejected","type":"…","reason":"…"}` | The SDK refused to send the message, for example for a reserved type. |
 
-The ESP32 library can't run on a host, so its protocol logic has host tests of its own in the
-[Wbskt.Arduino](https://github.com/wbskt/Wbskt.Arduino) repository.
+The ESP32 library can't run on a host as it is. [Wbskt.Arduino](https://github.com/wbskt/Wbskt.Arduino)
+builds its client for Linux over shims of the ESP32 libraries (`test/conformance`), and its own CI
+runs this suite against that build:
+
+```sh
+make -C <Wbskt.Arduino>/test/conformance   # after cloning ArduinoJson into test/host/ArduinoJson
+WBSKT_HARNESS=<Wbskt.Arduino>/test/conformance/wbskt-harness python -m pytest -v
+```
