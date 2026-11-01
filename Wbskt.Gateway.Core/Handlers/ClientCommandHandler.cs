@@ -1,12 +1,11 @@
-using System.Net.WebSockets;
 using MassTransit;
 using Wbskt.Protocol;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Events.Client;
-using Wbskt.Socket.Host.Infrastructure;
+using Wbskt.Gateway.Core.Infrastructure;
 
-namespace Wbskt.Socket.Host.Handlers;
+namespace Wbskt.Gateway.Core.Handlers;
 
 public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
 {
@@ -34,7 +33,7 @@ public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
     {
         var command = context.Message;
 
-        // Every socket host receives every command, but only the one the sender saw holding the
+        // Every gateway instance receives every command, but only the one the sender saw holding the
         // device acts on it. A device that moved in between gets one answer, "not connected", rather
         // than a delivery from its new host and a failure from its old one.
         if (command.TargetHostId != null && command.TargetHostId != _hostId.Value)
@@ -43,7 +42,7 @@ public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
         }
 
         var connection = _connectionManager.GetConnection(command.ClientRefId);
-        if (connection?.Socket.State != WebSocketState.Open)
+        if (connection is not { IsOpen: true })
         {
             if (command.TargetHostId != null)
             {
@@ -115,7 +114,7 @@ public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
         return _eventBus.PublishAsync(new ClientCommandFailedEvent(command.ClientRefId, command.ClientId, command.WorkspaceId, command.Type, reason, command.CommandId), ct);
     }
 
-    private async Task HandleCommandAsync(ClientConnection connection, ClientCommandEvent command, CancellationToken ct)
+    private async Task HandleCommandAsync(IDeviceConnection connection, ClientCommandEvent command, CancellationToken ct)
     {
         _logger.LogInformation("Sending command {Type} to client {ClientRefId}.", command.Type, command.ClientRefId);
 

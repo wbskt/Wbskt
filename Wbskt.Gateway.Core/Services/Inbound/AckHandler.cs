@@ -3,7 +3,7 @@ using Wbskt.Protocol;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 
-namespace Wbskt.Socket.Host.Services.Inbound;
+namespace Wbskt.Gateway.Core.Services.Inbound;
 
 /// <summary>
 /// <c>sys.ack</c>: the SDK's transport-level answer to a command carrying a commandId. An ack with a

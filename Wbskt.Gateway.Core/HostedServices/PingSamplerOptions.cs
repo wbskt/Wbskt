@@ -1,4 +1,4 @@
-namespace Wbskt.Socket.Host.HostedServices;
+namespace Wbskt.Gateway.Core.HostedServices;
 
 /// <summary>The background latency sampler (<c>PingSampler</c>).</summary>
 public sealed class PingSamplerOptions

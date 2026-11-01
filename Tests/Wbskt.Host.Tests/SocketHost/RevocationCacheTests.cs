@@ -1,5 +1,5 @@
 using FluentAssertions;
-using Wbskt.Socket.Host.Infrastructure;
+using Wbskt.Gateway.Core.Infrastructure;
 
 namespace Wbskt.Host.Tests.SocketHost;
 

@@ -1,8 +1,8 @@
 using System.Text.Json;
 using Wbskt.Protocol;
-using Wbskt.Socket.Host.Telemetry;
+using Wbskt.Gateway.Core.Telemetry;
 
-namespace Wbskt.Socket.Host.Services.Inbound;
+namespace Wbskt.Gateway.Core.Services.Inbound;
 
 /// <summary>
 /// Parses a device's text message and routes it: a reserved <c>sys.*</c> type to its handler (an
@@ -13,10 +13,10 @@ public sealed class InboundMessageDispatcher
 {
     private readonly IReadOnlyDictionary<string, IInboundMessageHandler> _systemHandlers;
     private readonly DeviceMessageHandler _deviceMessages;
-    private readonly SocketMetrics _metrics;
+    private readonly GatewayMetrics _metrics;
     private readonly ILogger<InboundMessageDispatcher> _logger;
 
-    public InboundMessageDispatcher(IEnumerable<IInboundMessageHandler> handlers, DeviceMessageHandler deviceMessages, SocketMetrics metrics, ILogger<InboundMessageDispatcher> logger)
+    public InboundMessageDispatcher(IEnumerable<IInboundMessageHandler> handlers, DeviceMessageHandler deviceMessages, GatewayMetrics metrics, ILogger<InboundMessageDispatcher> logger)
     {
         _systemHandlers = handlers.ToDictionary(h => h.Type, StringComparer.Ordinal);
         _deviceMessages = deviceMessages;

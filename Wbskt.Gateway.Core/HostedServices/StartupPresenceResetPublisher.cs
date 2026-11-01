@@ -2,7 +2,7 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Events.Hosting;
 
-namespace Wbskt.Socket.Host.HostedServices;
+namespace Wbskt.Gateway.Core.HostedServices;
 
 // Announces this host's start so the management host clears the presence this host id held before
 // a crash and restart (connections that never got a ClientDisconnectedEvent, and that the heartbeat

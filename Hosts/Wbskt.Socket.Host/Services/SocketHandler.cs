@@ -1,14 +1,10 @@
 using System.Net.WebSockets;
-using Microsoft.Extensions.Options;
-using Wbskt.EventBus.Abstractions;
-using Wbskt.EventBus.RabbitMQ;
+using Wbskt.Gateway.Core.Infrastructure;
+using Wbskt.Gateway.Core.Services;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Protocol;
-using Wbskt.Events.Client;
 using Wbskt.Socket.Host.Infrastructure;
-using Wbskt.Socket.Host.Services.Inbound;
-using Wbskt.Socket.Host.Telemetry;
 
 namespace Wbskt.Socket.Host.Services;
 
@@ -17,41 +13,30 @@ public interface ISocketHandler
     Task HandleAsync(HttpContext context);
 }
 
+/// <summary>
+/// The WebSocket transport: the upgrade, the subprotocol and the frame loop. What a session means
+/// (registering the device, announcing it, budgeting and routing its messages) is Gateway.Core's.
+/// </summary>
 internal sealed class SocketHandler : ISocketHandler
 {
     // Messages are assembled across frames up to this cap; larger senders are disconnected.
     private const int MaxMessageBytes = SocketProtocol.MaxMessageBytes;
 
-    private readonly IConnectionManager _connectionManager;
+    private readonly DeviceSessions _sessions;
     private readonly IClientAccessGate _accessGate;
     private readonly ILogger<SocketHandler> _logger;
     private readonly IHostApplicationLifetime _appLifetime;
-    private readonly IEventBus _eventBus;
-    private readonly InboundMessageDispatcher _dispatcher;
-    private readonly SocketMetrics _metrics;
-    private readonly MessageBudgetOptions _budgetOptions;
-    private readonly string _hostId;
 
     public SocketHandler(
-        IConnectionManager connectionManager,
+        DeviceSessions sessions,
         IClientAccessGate accessGate,
         ILogger<SocketHandler> logger,
-        IHostApplicationLifetime appLifetime,
-        IEventBus eventBus,
-        BusInstanceId busInstanceId,
-        SocketMetrics metrics,
-        IOptions<MessageBudgetOptions> budgetOptions,
-        InboundMessageDispatcher dispatcher)
+        IHostApplicationLifetime appLifetime)
     {
-        _dispatcher = dispatcher;
-        _budgetOptions = budgetOptions.Value;
-        _metrics = metrics;
-        _connectionManager = connectionManager;
+        _sessions = sessions;
         _accessGate = accessGate;
         _logger = logger;
         _appLifetime = appLifetime;
-        _eventBus = eventBus;
-        _hostId = busInstanceId.Value;
     }
 
     public async Task HandleAsync(HttpContext context)
@@ -107,16 +92,12 @@ internal sealed class SocketHandler : ISocketHandler
             connection.Closing);
 
         // The newest connection wins: one this host still holds for the client is closed as superseded.
-        _connectionManager.Register(clientRefId, connection);
-        _logger.LogInformation("Client {ClientRefId} connected.", clientRefId);
-        _metrics.Connected();
+        _sessions.Open(clientRefId, connection);
         var reason = DisconnectReason.ClientClosed;
 
         try
         {
-            // Not tied to the connection: a client that drops straight away must still be recorded as
-            // having connected, or its disconnect has nothing to pair with.
-            await _eventBus.PublishAsync(new ClientConnectedEvent(clientRefId, clientId, workspaceId, _hostId), CancellationToken.None);
+            await _sessions.AnnounceConnectedAsync(clientRefId, connection);
 
             reason = await ReceiveLoopAsync(clientRefId, connection, cts.Token);
         }
@@ -138,18 +119,9 @@ internal sealed class SocketHandler : ISocketHandler
         {
             // A close someone asked for is the real reason, whatever the loop saw as it ended.
             reason = connection.CloseRequest?.Reason ?? reason;
-            _connectionManager.Unregister(clientRefId, connection);
+            _sessions.Release(clientRefId, connection);
             await CloseQuietlyAsync(webSocket, reason);
-            _metrics.Disconnected(reason);
-            _logger.LogInformation("Client {ClientRefId} disconnected ({Reason}).", clientRefId, reason.Tag());
-
-            // A superseded connection is not the device going offline: its newer connection, here or on
-            // another host, already announced it as connected.
-            if (reason != DisconnectReason.Superseded)
-            {
-                var description = connection.CloseRequest?.Description ?? reason.Describe();
-                await _eventBus.PublishAsync(new ClientDisconnectedEvent(clientRefId, clientId, workspaceId, description, _hostId), CancellationToken.None);
-            }
+            await _sessions.AnnounceEndedAsync(clientRefId, connection, reason);
         }
     }
 
@@ -176,8 +148,7 @@ internal sealed class SocketHandler : ISocketHandler
     {
         var webSocket = connection.Socket;
         using var reader = new WebSocketMessageReader(webSocket, MaxMessageBytes);
-        var budget = new MessageBudget(_budgetOptions);
-        var inbound = new InboundContext(clientRefId, connection);
+        var inbox = _sessions.CreateInbox(clientRefId, connection);
 
         while (webSocket.State is WebSocketState.Open or WebSocketState.CloseSent && !cancellationToken.IsCancellationRequested)
         {
@@ -194,40 +165,17 @@ internal sealed class SocketHandler : ISocketHandler
                     return DisconnectReason.ClientClosed;
                 case FrameKind.TooBig:
                     _logger.LogWarning("Client {ClientRefId} exceeded the {MaxMessageBytes}-byte message limit; closing.", clientRefId, MaxMessageBytes);
-                    await connection.RequestCloseAsync(DisconnectReason.MessageTooBig, WebSocketCloseStatus.MessageTooBig, $"Messages are limited to {MaxMessageBytes} bytes.");
+                    await connection.RequestCloseAsync(DisconnectReason.MessageTooBig, $"Messages are limited to {MaxMessageBytes} bytes.");
                     return DisconnectReason.MessageTooBig;
                 case FrameKind.Binary:
                     continue;
             }
 
-            // After we sent a Close, anything but the device's own Close is ignored.
-            if (connection.CloseRequest != null)
+            // The budget, the rate limit and routing are the session's; it says when the device must go.
+            if (await inbox.ReceiveAsync(read.Text!, cancellationToken) is { } ended)
             {
-                continue;
+                return ended;
             }
-
-            // Every message becomes broker traffic (event log, live feed, workflow triggers), so a
-            // device over its budget loses the excess, and one that keeps on is disconnected.
-            if (!budget.TryTake())
-            {
-                _metrics.Dropped("throttled");
-                if (budget.ConsecutiveDropped == 1)
-                {
-                    _logger.LogWarning("Client {ClientRefId} is sending faster than its message budget; dropping the excess.", clientRefId);
-                }
-
-                if (budget.Exhausted)
-                {
-                    _logger.LogWarning("Client {ClientRefId} stayed over its message budget for {Dropped} messages; closing.", clientRefId, budget.ConsecutiveDropped);
-                    await connection.RequestCloseAsync(DisconnectReason.Throttled, WebSocketCloseStatus.PolicyViolation, "Too many messages.");
-                    return DisconnectReason.Throttled;
-                }
-
-                continue;
-            }
-
-            _logger.LogDebug("Received from {ClientRefId}: {Message}", clientRefId, read.Text);
-            await _dispatcher.DispatchAsync(inbound, read.Text!, cancellationToken);
         }
 
         return DisconnectReason.Aborted;

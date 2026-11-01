@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace Wbskt.Socket.Host.Infrastructure;
+namespace Wbskt.Gateway.Core.Infrastructure;
 
 // In-memory deny-list for revoked client tokens, the fast path in front of the Redis cutoffs (see
 // ClientAccessGate). A client's JWT stays valid for up to an hour, so entries must outlive the token

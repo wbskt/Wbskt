@@ -7,10 +7,11 @@ using Moq;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Protocol;
+using Wbskt.Gateway.Core.Infrastructure;
 using Wbskt.Socket.Host.Infrastructure;
-using Wbskt.Socket.Host.Services;
-using Wbskt.Socket.Host.Services.Inbound;
-using Wbskt.Socket.Host.Telemetry;
+using Wbskt.Gateway.Core.Services;
+using Wbskt.Gateway.Core.Services.Inbound;
+using Wbskt.Gateway.Core.Telemetry;
 
 namespace Wbskt.Host.Tests.SocketHost;
 
@@ -37,7 +38,7 @@ public sealed class InboundMessageDispatcherTests
             new PongHandler(_bus, NullLogger<PongHandler>.Instance),
             new AckHandler(_bus, NullLogger<AckHandler>.Instance)
         ];
-        _dispatcher = new InboundMessageDispatcher(handlers, new DeviceMessageHandler(_bus), new SocketMetrics(), NullLogger<InboundMessageDispatcher>.Instance);
+        _dispatcher = new InboundMessageDispatcher(handlers, new DeviceMessageHandler(_bus), new GatewayMetrics(GatewayTransport.WebSocket), NullLogger<InboundMessageDispatcher>.Instance);
     }
 
     private Task Dispatch(string json) => _dispatcher.DispatchAsync(new InboundContext(ClientRefId, _connection), json, CancellationToken.None);

@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Wbskt.Gateway.Core.Infrastructure;
 using Wbskt.Socket.Host.Infrastructure;
 
 namespace Wbskt.Host.Tests.SocketHost;
@@ -47,11 +48,12 @@ public sealed class ConnectionManagerTests
         var (connection, socket) = Connection();
         manager.Register(ClientRefId, connection);
 
-        Assert.True(await manager.RequestCloseAsync(ClientRefId, DisconnectReason.Revoked, WebSocketCloseStatus.PolicyViolation, "Client deleted."));
-        await manager.RequestCloseAsync(ClientRefId, DisconnectReason.Superseded, WebSocketCloseStatus.PolicyViolation, "again");
+        Assert.True(await manager.RequestCloseAsync(ClientRefId, DisconnectReason.Revoked, "Client deleted."));
+        await manager.RequestCloseAsync(ClientRefId, DisconnectReason.Superseded, "again");
 
-        Assert.Equal(new CloseRequest(DisconnectReason.Revoked, WebSocketCloseStatus.PolicyViolation, "Client deleted."), connection.CloseRequest);
+        Assert.Equal(new CloseRequest(DisconnectReason.Revoked, "Client deleted."), connection.CloseRequest);
         socket.Verify(x => x.CloseOutputAsync(It.IsAny<WebSocketCloseStatus>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        socket.Verify(x => x.CloseOutputAsync(WebSocketCloseStatus.PolicyViolation, "Client deleted.", It.IsAny<CancellationToken>()), Times.Once);
         // The connection stays registered: only its receive loop unregisters it.
         Assert.Same(connection, manager.GetConnection(ClientRefId));
     }
@@ -63,7 +65,7 @@ public sealed class ConnectionManagerTests
         socket.Setup(x => x.CloseOutputAsync(It.IsAny<WebSocketCloseStatus>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new WebSocketException("gone"));
 
-        await connection.RequestCloseAsync(DisconnectReason.Revoked, WebSocketCloseStatus.PolicyViolation, "x");
+        await connection.RequestCloseAsync(DisconnectReason.Revoked, "x");
 
         Assert.True(connection.Closing.IsCancellationRequested);
     }
@@ -73,7 +75,7 @@ public sealed class ConnectionManagerTests
     {
         var manager = new ConnectionManager(NullLogger<ConnectionManager>.Instance);
 
-        Assert.False(await manager.RequestCloseAsync(ClientRefId, DisconnectReason.Revoked, WebSocketCloseStatus.PolicyViolation, "x"));
+        Assert.False(await manager.RequestCloseAsync(ClientRefId, DisconnectReason.Revoked, "x"));
     }
 
     private static (ClientConnection Connection, Mock<WebSocket> Socket) Connection()

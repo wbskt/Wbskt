@@ -22,9 +22,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\..\Clients\Wbskt.Protocol\Wbskt.Protocol.csproj" />
-      <ProjectReference Include="..\..\Events\Wbskt.EventBus\Wbskt.EventBus.csproj" />
-      <ProjectReference Include="..\..\Events\Wbskt.EventBus.RabbitMQ\Wbskt.EventBus.RabbitMQ.csproj" />
-      <ProjectReference Include="..\..\Events\Wbskt.Events\Wbskt.Events.csproj" />
+      <ProjectReference Include="..\..\Wbskt.Gateway.Core\Wbskt.Gateway.Core.csproj" />
       <ProjectReference Include="..\..\Wbskt.Infrastructure\Wbskt.Infrastructure.csproj" />
       <ProjectReference Include="..\..\Wbskt.Primitives\Wbskt.Primitives.csproj" />
     </ItemGroup>

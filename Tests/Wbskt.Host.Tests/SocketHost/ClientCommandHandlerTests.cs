@@ -8,7 +8,8 @@ using Moq;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Events.Client;
-using Wbskt.Socket.Host.Handlers;
+using Wbskt.Gateway.Core.Handlers;
+using Wbskt.Gateway.Core.Infrastructure;
 using Wbskt.Socket.Host.Infrastructure;
 
 namespace Wbskt.Host.Tests.SocketHost;

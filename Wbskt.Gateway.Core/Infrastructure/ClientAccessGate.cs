@@ -1,10 +1,9 @@
-using System.Net.WebSockets;
 using Wbskt.Infrastructure.Security;
 
-namespace Wbskt.Socket.Host.Infrastructure;
+namespace Wbskt.Gateway.Core.Infrastructure;
 
 /// <summary>
-/// The one place this host decides whether a device may be connected: the socket-side twin of the
+/// The one place a gateway decides whether a device may be connected: the gateway-side twin of the
 /// management host's ClientAccessRevoker, with the same three verbs.
 /// </summary>
 public interface IClientAccessGate
@@ -43,13 +42,13 @@ internal sealed class ClientAccessGate : IClientAccessGate
     public async Task RevokeAsync(Guid clientRefId, string description, CancellationToken cancellationToken = default)
     {
         _cache.Revoke(clientRefId);
-        await _connections.RequestCloseAsync(clientRefId, DisconnectReason.Revoked, WebSocketCloseStatus.PolicyViolation, description);
+        await _connections.RequestCloseAsync(clientRefId, DisconnectReason.Revoked, description);
     }
 
     public async Task RevokeIssuedBeforeAsync(Guid clientRefId, DateTime cutoff, string description, CancellationToken cancellationToken = default)
     {
         _cache.RevokeIssuedBefore(clientRefId, cutoff);
-        await _connections.RequestCloseAsync(clientRefId, DisconnectReason.Revoked, WebSocketCloseStatus.PolicyViolation, description);
+        await _connections.RequestCloseAsync(clientRefId, DisconnectReason.Revoked, description);
     }
 
     public void Reinstate(Guid clientRefId, DateTime reinstatedAt)

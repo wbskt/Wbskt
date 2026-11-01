@@ -1,7 +1,7 @@
 using Wbskt.Protocol;
 using System.Text.Json;
 
-namespace Wbskt.Socket.Host.Services;
+namespace Wbskt.Gateway.Core.Services;
 
 /// <summary>
 /// Reads the refusal an SDK puts on a <c>sys.ack</c> (<c>{ commandId, type, refused }</c>) when it

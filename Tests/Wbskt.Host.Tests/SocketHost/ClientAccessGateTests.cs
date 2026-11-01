@@ -1,7 +1,7 @@
 using System.Net.WebSockets;
 using Moq;
 using Wbskt.Infrastructure.Security;
-using Wbskt.Socket.Host.Infrastructure;
+using Wbskt.Gateway.Core.Infrastructure;
 
 namespace Wbskt.Host.Tests.SocketHost;
 
@@ -47,6 +47,6 @@ public sealed class ClientAccessGateTests
     {
         await _gate.RevokeAsync(ClientRefId, "Client deleted.");
 
-        _connections.Verify(x => x.RequestCloseAsync(ClientRefId, DisconnectReason.Revoked, WebSocketCloseStatus.PolicyViolation, "Client deleted."), Times.Once);
+        _connections.Verify(x => x.RequestCloseAsync(ClientRefId, DisconnectReason.Revoked, "Client deleted."), Times.Once);
     }
 }

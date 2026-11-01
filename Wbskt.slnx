@@ -70,6 +70,7 @@
   <Folder Name="/Tools/">
     <Project Path="Tools/Wbskt.Workflow.Exporter/Wbskt.Workflow.Exporter.csproj" />
   </Folder>
+  <Project Path="Wbskt.Gateway.Core/Wbskt.Gateway.Core.csproj" />
   <Project Path="Wbskt.Infrastructure/Wbskt.Infrastructure.csproj" />
   <Project Path="Wbskt.Primitives/Wbskt.Primitives.csproj" />
   <Project Path="Wbskt.Workflow.Abstraction/Wbskt.Workflow.Abstraction.csproj" />

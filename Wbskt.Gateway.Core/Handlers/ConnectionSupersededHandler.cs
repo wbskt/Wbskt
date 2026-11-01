@@ -1,12 +1,11 @@
-using System.Net.WebSockets;
 using MassTransit;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Events.Client;
-using Wbskt.Socket.Host.Infrastructure;
+using Wbskt.Gateway.Core.Infrastructure;
 
-namespace Wbskt.Socket.Host.Handlers;
+namespace Wbskt.Gateway.Core.Handlers;
 
-// With per-instance fan-out (WP2.1), every socket-host instance observes every
+// With per-instance fan-out (WP2.1), every gateway instance observes every
 // ClientConnectedEvent, including ones published by other instances. If another instance just
 // accepted a connection for a client we're still holding locally with an older connection, ours
 // is the stale duplicate (e.g. the client's previous host never noticed the network drop) -
@@ -50,7 +49,7 @@ public sealed class ConnectionSupersededHandler : IConsumer<ClientConnectedEvent
         }
 
         var existing = _connectionManager.GetConnection(message.ClientRefId);
-        if (existing == null || existing.Socket.State != WebSocketState.Open)
+        if (existing is not { IsOpen: true })
         {
             return;
         }
@@ -66,7 +65,6 @@ public sealed class ConnectionSupersededHandler : IConsumer<ClientConnectedEvent
 
         await existing.RequestCloseAsync(
             DisconnectReason.Superseded,
-            WebSocketCloseStatus.PolicyViolation,
             "Superseded by a newer connection on another host.");
     }
 }

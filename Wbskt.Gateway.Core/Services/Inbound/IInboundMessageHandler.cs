@@ -1,10 +1,10 @@
 using Wbskt.Protocol;
-using Wbskt.Socket.Host.Infrastructure;
+using Wbskt.Gateway.Core.Infrastructure;
 
-namespace Wbskt.Socket.Host.Services.Inbound;
+namespace Wbskt.Gateway.Core.Services.Inbound;
 
 /// <summary>The device a message came from.</summary>
-public sealed record InboundContext(Guid ClientRefId, ClientConnection Connection);
+public sealed record InboundContext(Guid ClientRefId, IDeviceConnection Connection);
 
 /// <summary>
 /// Handles one protocol message type from devices. Adding a message to the protocol is a new

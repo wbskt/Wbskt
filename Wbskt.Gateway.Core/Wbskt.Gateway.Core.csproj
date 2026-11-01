@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!-- The device-session logic every gateway shares, whatever transport a device connects over: the
+         token check and revocation, one connection per device, the message budget, command delivery
+         and acks, pings, presence, and the bus consumers. A gateway host adds the transport only. -->
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>$(NoWarn);1591</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+            <_Parameter1>Wbskt.Host.Tests</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Clients\Wbskt.Protocol\Wbskt.Protocol.csproj" />
+        <ProjectReference Include="..\Events\Wbskt.EventBus\Wbskt.EventBus.csproj" />
+        <ProjectReference Include="..\Events\Wbskt.EventBus.RabbitMQ\Wbskt.EventBus.RabbitMQ.csproj" />
+        <ProjectReference Include="..\Events\Wbskt.Events\Wbskt.Events.csproj" />
+        <ProjectReference Include="..\Wbskt.Infrastructure\Wbskt.Infrastructure.csproj" />
+        <ProjectReference Include="..\Wbskt.Primitives\Wbskt.Primitives.csproj" />
+    </ItemGroup>
+
+    <!-- What the web SDK imported implicitly when this code lived in the socket host. -->
+    <ItemGroup>
+        <Using Include="Microsoft.Extensions.Configuration" />
+        <Using Include="Microsoft.Extensions.DependencyInjection" />
+        <Using Include="Microsoft.Extensions.Hosting" />
+        <Using Include="Microsoft.Extensions.Logging" />
+    </ItemGroup>
+
+</Project>
