@@ -1,8 +1,7 @@
-using System.Net.WebSockets;
 using Microsoft.Extensions.Options;
-using Wbskt.Socket.Host.Infrastructure;
+using Wbskt.Gateway.Core.Infrastructure;
 
-namespace Wbskt.Socket.Host.HostedServices;
+namespace Wbskt.Gateway.Core.HostedServices;
 
 // Pings every connected client once per PingSamplerOptions.Interval (PingSampler:Interval, five
 // minutes by default) so the console's latency readings never go entirely stale. It runs whether or
@@ -32,7 +31,7 @@ internal sealed class PingSampler : BackgroundService
             {
                 foreach (var (clientRefId, connection) in _connectionManager.GetConnections())
                 {
-                    if (connection.Socket.State != WebSocketState.Open)
+                    if (!connection.IsOpen)
                     {
                         continue;
                     }

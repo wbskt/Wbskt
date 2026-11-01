@@ -1,8 +1,8 @@
 using MassTransit;
 using Wbskt.Events.Client;
-using Wbskt.Socket.Host.Infrastructure;
+using Wbskt.Gateway.Core.Infrastructure;
 
-namespace Wbskt.Socket.Host.Handlers;
+namespace Wbskt.Gateway.Core.Handlers;
 
 /// <summary>A deleted client: refuse every token it holds and close its connection.</summary>
 public sealed class ClientDeletedHandler : IConsumer<ClientDeletedEvent>

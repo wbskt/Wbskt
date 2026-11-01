@@ -1,17 +1,14 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Wbskt.EventBus.RabbitMQ;
+using Wbskt.Gateway.Core;
+using Wbskt.Gateway.Core.Telemetry;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.HealthChecks;
 using Wbskt.Infrastructure.Json;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Primitives;
 using Wbskt.Infrastructure.Hosting;
-using Wbskt.Socket.Host.HostedServices;
-using Wbskt.Socket.Host.Infrastructure;
 using Wbskt.Socket.Host.Services;
-using Wbskt.Socket.Host.Services.Inbound;
 using Wbskt.Infrastructure.Telemetry;
-using Wbskt.Socket.Host.Telemetry;
 
 namespace Wbskt.Socket.Host;
 
@@ -20,34 +17,12 @@ public static class Program
     public static async Task Main(string[] args)
     {
         var builder = WbsktHost.CreateBuilder(typeof(Program), args, "serilog.json", "rabbitmq.json");
-        builder.Services.AddSingleton<SocketMetrics>();
-        builder.AddWbsktTelemetry(SocketMetrics.MeterName);
-        
-        // Add services to the container.
-        builder.Services.AddSingleton<IConnectionManager, ConnectionManager>();
-        builder.Services.AddSingleton<IRevocationCache, RevocationCache>();
-        // The durable copy of the same revocations, written by the management host; see ClientTokenCutoffs.
-        builder.Services.AddClientTokenCutoffs(builder.Configuration);
-        builder.Services.AddSingleton<IClientAccessGate, ClientAccessGate>();
-        // Signs nothing; accepts client tokens signed by the management host (Jwt:TrustedJwksUrl).
-        builder.Services.AddWbsktJwtTrust(JwtIssuers.Management, JwtAudiences.Socket);
+        builder.AddWbsktTelemetry(GatewayMetrics.MeterName);
+
+        // The device sessions, the bus and its consumers, and the presence and latency services.
+        // This host adds only the WebSocket transport.
+        builder.Services.AddGatewayCore(builder.Configuration, GatewayTransport.WebSocket);
         builder.Services.AddScoped<ISocketHandler, SocketHandler>();
-        // What a device sends: one handler per protocol message type, and the device's own messages.
-        builder.Services.AddSingleton<IInboundMessageHandler, PongHandler>();
-        builder.Services.AddSingleton<IInboundMessageHandler, AckHandler>();
-        builder.Services.AddSingleton<DeviceMessageHandler>();
-        builder.Services.AddSingleton<InboundMessageDispatcher>();
-        builder.Services.Configure<MessageBudgetOptions>(builder.Configuration.GetSection(MessageBudgetOptions.SectionName));
-
-        // Event Bus — per-instance fan-out so every socket instance sees every client event
-        // (ClientCommandEvent, ClientPingEvent, ClientStatusChangedEvent); see EventBusExtensions.
-        builder.Services.AddRabbitMqEventBus(builder.Configuration, perInstanceEndpoints: true, consumerAssemblies: [typeof(Program).Assembly]);
-
-        // Background services (registered after the bus so it starts first)
-        builder.Services.AddHostedService<StartupPresenceResetPublisher>();
-        builder.Services.AddHostedService<HeartbeatPublisher>();
-        builder.Services.Configure<PingSamplerOptions>(builder.Configuration.GetSection(PingSamplerOptions.SectionName));
-        builder.Services.AddHostedService<PingSampler>();
 
         // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();

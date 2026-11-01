@@ -1,7 +1,7 @@
 using Wbskt.Protocol;
 using System.Text.Json;
-using Wbskt.Socket.Host.Services;
-using Wbskt.Socket.Host.Services.Inbound;
+using Wbskt.Gateway.Core.Services;
+using Wbskt.Gateway.Core.Services.Inbound;
 
 namespace Wbskt.Host.Tests.ClientSdk;
 

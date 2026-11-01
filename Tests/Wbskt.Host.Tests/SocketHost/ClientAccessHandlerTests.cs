@@ -2,8 +2,8 @@ using MassTransit;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Wbskt.Events.Client;
-using Wbskt.Socket.Host.Handlers;
-using Wbskt.Socket.Host.Infrastructure;
+using Wbskt.Gateway.Core.Handlers;
+using Wbskt.Gateway.Core.Infrastructure;
 
 namespace Wbskt.Host.Tests.SocketHost;
 

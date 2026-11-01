@@ -1,6 +1,4 @@
-using System.Net.WebSockets;
-
-namespace Wbskt.Socket.Host.Infrastructure;
+namespace Wbskt.Gateway.Core.Infrastructure;
 
 /// <summary>Why a connection ended. One value per connection, recorded by its receive loop alone.</summary>
 public enum DisconnectReason
@@ -30,8 +28,11 @@ public enum DisconnectReason
     Throttled
 }
 
-/// <summary>A close asked of a connection by someone other than its receive loop.</summary>
-public sealed record CloseRequest(DisconnectReason Reason, WebSocketCloseStatus Status, string Description);
+/// <summary>
+/// A close asked of a connection by someone other than its receive loop. The transport decides how
+/// the reason reaches the device (a WebSocket close code, for one).
+/// </summary>
+public sealed record CloseRequest(DisconnectReason Reason, string Description);
 
 public static class DisconnectReasons
 {

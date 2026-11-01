@@ -1,9 +1,8 @@
-using System.Net.WebSockets;
 using MassTransit;
 using Wbskt.Events.Client;
-using Wbskt.Socket.Host.Infrastructure;
+using Wbskt.Gateway.Core.Infrastructure;
 
-namespace Wbskt.Socket.Host.Handlers;
+namespace Wbskt.Gateway.Core.Handlers;
 
 public sealed class ClientPingHandler : IConsumer<ClientPingEvent>
 {
@@ -19,7 +18,7 @@ public sealed class ClientPingHandler : IConsumer<ClientPingEvent>
     public async Task Consume(ConsumeContext<ClientPingEvent> context)
     {
         var connection = _connectionManager.GetConnection(context.Message.ClientRefId);
-        if (connection?.Socket.State != WebSocketState.Open)
+        if (connection is not { IsOpen: true })
         {
             _logger.LogDebug("Received ping for {ClientRefId} but it is not connected or open.", context.Message.ClientRefId);
             return;

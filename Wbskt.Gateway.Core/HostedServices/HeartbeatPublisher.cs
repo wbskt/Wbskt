@@ -2,7 +2,7 @@ using MassTransit;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Events.Hosting;
 
-namespace Wbskt.Socket.Host.HostedServices;
+namespace Wbskt.Gateway.Core.HostedServices;
 
 // Tells the management host this instance is alive, on a fixed interval. Presence is a lease on it:
 // the clients this host holds stay "online" only while the beats keep arriving (see

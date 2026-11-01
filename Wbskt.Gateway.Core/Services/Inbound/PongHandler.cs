@@ -3,7 +3,7 @@ using Wbskt.Protocol;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 
-namespace Wbskt.Socket.Host.Services.Inbound;
+namespace Wbskt.Gateway.Core.Services.Inbound;
 
 /// <summary><c>sys.pong</c>: the answer to our <c>sys.ping</c> (matched by its id), turned into a latency reading.</summary>
 public sealed class PongHandler : IInboundMessageHandler
@@ -23,7 +23,7 @@ public sealed class PongHandler : IInboundMessageHandler
     {
         var connection = context.Connection;
 
-        // RTT is measured here, on the socket and on this host's clock, so neither bus hops nor a
+        // RTT is measured here, on the connection and on this host's clock, so neither bus hops nor a
         // device's echoed timestamp can change the number.
         if (!connection.TryCompletePing(TryGetPingId(message.Payload), out var sentAt))
         {

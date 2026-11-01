@@ -1,4 +1,4 @@
-namespace Wbskt.Socket.Host.Infrastructure;
+namespace Wbskt.Gateway.Core.Infrastructure;
 
 public interface IRevocationCache
 {

@@ -1,4 +1,4 @@
-namespace Wbskt.Socket.Host.Infrastructure;
+namespace Wbskt.Gateway.Core.Infrastructure;
 
 /// <summary>How fast one connected device may send (<c>Socket:MessageBudget</c>).</summary>
 public sealed class MessageBudgetOptions

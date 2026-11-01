@@ -3,7 +3,7 @@ using Wbskt.Protocol;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 
-namespace Wbskt.Socket.Host.Services.Inbound;
+namespace Wbskt.Gateway.Core.Services.Inbound;
 
 /// <summary>A device's own message (anything not <c>sys.*</c>): published for workflow triggers, the event log and the live feed.</summary>
 public sealed class DeviceMessageHandler
