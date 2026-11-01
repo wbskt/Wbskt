@@ -7,10 +7,10 @@ using Wbskt.Infrastructure.Json;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Primitives;
 using Wbskt.Infrastructure.Hosting;
-using Wbskt.Socket.Host.Services;
+using Wbskt.Gateway.WebSocket.Host.Services;
 using Wbskt.Infrastructure.Telemetry;
 
-namespace Wbskt.Socket.Host;
+namespace Wbskt.Gateway.WebSocket.Host;
 
 public static class Program
 {

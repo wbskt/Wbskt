@@ -10,9 +10,9 @@ using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Events.Client;
 using Wbskt.Gateway.Core.Handlers;
 using Wbskt.Gateway.Core.Infrastructure;
-using Wbskt.Socket.Host.Infrastructure;
+using Wbskt.Gateway.WebSocket.Host.Infrastructure;
 
-namespace Wbskt.Host.Tests.SocketHost;
+namespace Wbskt.Host.Tests.Gateway;
 
 /// <summary>
 /// Every socket host receives every command. A missing connection is handled exactly once (by the host

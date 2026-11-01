@@ -1,6 +1,6 @@
 using Wbskt.Gateway.Core.Infrastructure;
 
-namespace Wbskt.Host.Tests.SocketHost;
+namespace Wbskt.Host.Tests.Gateway;
 
 public sealed class MessageBudgetTests
 {

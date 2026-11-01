@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http;
 using Wbskt.Infrastructure.Security;
 
-namespace Wbskt.Host.Tests.SocketHost;
+namespace Wbskt.Host.Tests.Gateway;
 
 public sealed class ClientIdentityTests
 {

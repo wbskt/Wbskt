@@ -3,7 +3,7 @@ using Moq;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Gateway.Core.Infrastructure;
 
-namespace Wbskt.Host.Tests.SocketHost;
+namespace Wbskt.Host.Tests.Gateway;
 
 public sealed class ClientAccessGateTests
 {

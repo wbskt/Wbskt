@@ -172,8 +172,8 @@ services:
     environment: &management-env
       <<: *host-env
       ConnectionStrings__DefaultConnection: Server=localhost;Database=Wbskt.Database;User ID=wbskt_management;Password=Wb1-e2e-Host-Login;Encrypt=False;
-      # Management and devices sign device tokens with one key, and the socket host trusts only
-      # management's JWKS. Left unset, each would generate its own and the socket host would refuse
+      # Management and devices sign device tokens with one key, and the WebSocket gateway trusts only
+      # management's JWKS. Left unset, each would generate its own and the gateway would refuse
       # every token devices issues. The wrapper generates it once and keeps it under e2e-hosts/.
       Jwt__SigningKey: ${E2E_DEVICE_TOKEN_KEY:?run Tests/Wbskt.E2E.FeatureTests/e2e-up.sh, which sets it}
       # Plain HTTP to the engine: the container does not trust the development certificate that
@@ -216,14 +216,14 @@ services:
       auth:
         condition: service_healthy
 
-  socket:
+  gateway-ws:
     profiles: ["hosts"]
-    image: wbskt-e2e-socket:local
+    image: wbskt-e2e-gateway-ws:local
     build:
       <<: *host-build
       args:
-        HOST_PROJECT: Hosts/Wbskt.Socket.Host/Wbskt.Socket.Host.csproj
-        HOST_DLL: Wbskt.Socket.Host.dll
+        HOST_PROJECT: Hosts/Wbskt.Gateway.WebSocket.Host/Wbskt.Gateway.WebSocket.Host.csproj
+        HOST_DLL: Wbskt.Gateway.WebSocket.Host.dll
     network_mode: host
     environment:
       <<: *host-env

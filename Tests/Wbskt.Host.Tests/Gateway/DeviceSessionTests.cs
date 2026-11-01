@@ -9,9 +9,9 @@ using Wbskt.Gateway.Core.Infrastructure;
 using Wbskt.Gateway.Core.Services;
 using Wbskt.Gateway.Core.Services.Inbound;
 using Wbskt.Gateway.Core.Telemetry;
-using Wbskt.Socket.Host.Infrastructure;
+using Wbskt.Gateway.WebSocket.Host.Infrastructure;
 
-namespace Wbskt.Host.Tests.SocketHost;
+namespace Wbskt.Host.Tests.Gateway;
 
 /// <summary>
 /// The session steps the socket host's receive loop used to do inline, now in Gateway.Core: what a

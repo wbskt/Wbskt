@@ -419,7 +419,7 @@ single runaway loop; nothing caps a thousand of them.
 - These ceilings become plan tiers in Phase 3 (`P3-2`). Put the numbers in configuration, not
   constants, so they can vary per tenant later without a redeploy.
 - Do not throttle the device data plane the same way as the console API. A fleet of 5,000 devices
-  reconnecting after a socket-host restart is legitimate traffic.
+  reconnecting after a gateway restart is legitimate traffic.
 - `UseRateLimiter` must sit after `UseForwardedHeaders` so the partition key is the real client, not
   Traefik. The Auth host already gets this right — copy the ordering.
 
@@ -522,7 +522,7 @@ subject is a Guid while the identity middleware parses an int — an accident of
 a control. Read it before starting.
 
 **Where.** `Hosts/*/Program.cs` (`AddJwtBearer`), `Wbskt.Infrastructure/Security/JwtService.cs`,
-`Hosts/Wbskt.Socket.Host/Program.cs` (framework JWT bearer with `AcceptQueryToken("/ws")` and the
+`Hosts/Wbskt.Gateway.WebSocket.Host/Program.cs` (framework JWT bearer with `AcceptQueryToken("/ws")` and the
 `ClientOnly` policy on `/ws`).
 
 **Steps.** Asymmetric signing — Auth holds the private key, the others verify against a published
@@ -542,7 +542,7 @@ from `?access_token=` by `AcceptQueryToken`). It must be updated in lockstep or 
 "a deactivated account keeps working until its current access token expires." Disabling a compromised
 administrator leaves them fully operational for up to an hour.
 
-The shape is already solved for devices: `Hosts/Wbskt.Socket.Host/Infrastructure/ClientAccessGate.cs`
+The shape is already solved for devices: `Wbskt.Gateway.Core/Infrastructure/ClientAccessGate.cs`
 (this host's `RevocationCache` in front of the token cutoffs the management host keeps in Redis)
 exists precisely because a revoked client's JWT stays valid for an hour. Humans need the same.
 
@@ -625,7 +625,7 @@ every SDK then implements the same document.
 **Traps.**
 - The browser path must use `?access_token=` because browsers cannot set headers on a WebSocket
   upgrade. Phase 0's F7 work depends on that path staying anonymous to the authorization pipeline —
-  see the comment on `/ws` in `Hosts/Wbskt.Socket.Host/Program.cs`.
+  see the comment on `/ws` in `Hosts/Wbskt.Gateway.WebSocket.Host/Program.cs`.
 - Devices store the secret locally and replay it. Phase 0 hashed it server-side; the client side is
   unchanged and must stay that way.
 - A revoked client is rejected at connect by the revocation cache. SDKs need a sane backoff rather

@@ -27,11 +27,11 @@ public sealed partial class HostArchitectureTests
 {
     private static readonly Assembly AuthHost = typeof(global::Wbskt.Auth.Host.Program).Assembly;
     private static readonly Assembly ManagementHost = typeof(global::Wbskt.Management.Host.Program).Assembly;
-    private static readonly Assembly SocketHost = typeof(global::Wbskt.Socket.Host.Program).Assembly;
+    private static readonly Assembly WebSocketGatewayHost = typeof(global::Wbskt.Gateway.WebSocket.Host.Program).Assembly;
     private static readonly Assembly EngineHost = typeof(global::Wbskt.Workflow.Engine.Host.Program).Assembly;
 
-    private static readonly Assembly[] PublicHosts = [AuthHost, ManagementHost, SocketHost];
-    private static readonly Assembly[] AllHosts = [AuthHost, ManagementHost, SocketHost, EngineHost];
+    private static readonly Assembly[] PublicHosts = [AuthHost, ManagementHost, WebSocketGatewayHost];
+    private static readonly Assembly[] AllHosts = [AuthHost, ManagementHost, WebSocketGatewayHost, EngineHost];
 
     /// <summary>
     /// Engine controllers any replica may answer, leader or not, because nothing they do touches runs.
@@ -82,7 +82,7 @@ public sealed partial class HostArchitectureTests
 
         // The socket host's only routed surface is /ws, mapped with the ClientOnly policy. A
         // controller appearing there needs its own posture stated first.
-        Assert.Empty(ControllersIn(SocketHost));
+        Assert.Empty(ControllersIn(WebSocketGatewayHost));
     }
 
     [Fact]

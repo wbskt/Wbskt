@@ -8,12 +8,12 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Protocol;
 using Wbskt.Gateway.Core.Infrastructure;
-using Wbskt.Socket.Host.Infrastructure;
+using Wbskt.Gateway.WebSocket.Host.Infrastructure;
 using Wbskt.Gateway.Core.Services;
 using Wbskt.Gateway.Core.Services.Inbound;
 using Wbskt.Gateway.Core.Telemetry;
 
-namespace Wbskt.Host.Tests.SocketHost;
+namespace Wbskt.Host.Tests.Gateway;
 
 public sealed class InboundMessageDispatcherTests
 {

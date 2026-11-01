@@ -25,18 +25,18 @@ declare -A projects=(
   [auth]=Hosts/Wbskt.Auth.Host
   [management]=Hosts/Wbskt.Management.Host
   [devices]=Hosts/Wbskt.Management.Host
-  [socket]=Hosts/Wbskt.Socket.Host
+  [gateway-ws]=Hosts/Wbskt.Gateway.WebSocket.Host
   [engine]=Hosts/Wbskt.Workflow.Engine.Host
 )
 # The plain-HTTP dev port of each host, for the liveness probe.
-declare -A ports=([auth]=5000 [management]=5010 [devices]=5015 [socket]=5020 [engine]=5030)
+declare -A ports=([auth]=5000 [management]=5010 [devices]=5015 [gateway-ws]=5020 [engine]=5030)
 # Per-service settings on top of appsettings.Development.json, as space-separated KEY=VALUE pairs.
 declare -A settings=(
   [devices]="Host__Role=Devices Kestrel__Endpoints__Http__Url=http://localhost:5015 Kestrel__Endpoints__Https__Url=https://localhost:7015"
 )
 
 # Management and devices sign device tokens with one key, as both read MANAGEMENT_JWT_SIGNING_KEY in
-# deploy/compose. Left unset, each would generate its own, and the socket host, which trusts only
+# deploy/compose. Left unset, each would generate its own, and the WebSocket gateway, which trusts only
 # management's JWKS, would refuse every token devices issues. Kept in a file so restarting one of
 # them alone keeps the key the other is using.
 if [[ -z "${Jwt__SigningKey:-}" ]]; then
@@ -52,7 +52,7 @@ fi
 if [[ $# -gt 0 ]]; then
   services=("$@")
 else
-  services=(auth management devices socket engine)
+  services=(auth management devices gateway-ws engine)
   for project in $(printf '%s\n' "${projects[@]}" | sort -u); do
     dotnet build "$root/$project" --nologo -v q
   done

@@ -27,7 +27,7 @@
   <Folder Name="/Hosts/">
     <Project Path="Hosts/Wbskt.Auth.Host/Wbskt.Auth.Host.csproj" />
     <Project Path="Hosts/Wbskt.Management.Host/Wbskt.Management.Host.csproj" />
-    <Project Path="Hosts/Wbskt.Socket.Host/Wbskt.Socket.Host.csproj" />
+    <Project Path="Hosts/Wbskt.Gateway.WebSocket.Host/Wbskt.Gateway.WebSocket.Host.csproj" />
     <Project Path="Hosts/Wbskt.Workflow.Engine.Host/Wbskt.Workflow.Engine.Host.csproj" />
   </Folder>
   <Folder Name="/Models/">

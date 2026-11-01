@@ -5,7 +5,7 @@
 #
 #   Tests/Wbskt.E2E.FeatureTests/e2e-up.sh                  # build and start it all, then wait
 #   Tests/Wbskt.E2E.FeatureTests/e2e-up.sh infra            # infrastructure and databases only
-#   Tests/Wbskt.E2E.FeatureTests/e2e-up.sh restart socket   # restart one host and wait for it
+#   Tests/Wbskt.E2E.FeatureTests/e2e-up.sh restart gateway-ws  # restart one host and wait for it
 #   Tests/Wbskt.E2E.FeatureTests/e2e-up.sh logs auth        # any other docker compose command
 #   Tests/Wbskt.E2E.FeatureTests/e2e-up.sh down             # stop it all and drop the database
 #
@@ -26,7 +26,7 @@ state="${E2E_HOST_LOGS:-$root/e2e-hosts}/compose"
 compose_file="$root/deploy/compose/docker-compose.e2e.yml"
 mkdir -p "$state"
 
-hosts=(auth management devices socket engine)
+hosts=(auth management devices gateway-ws engine)
 
 # The plain-HTTP dev port of each host, for the liveness probe. A function rather than an
 # associative array, which the bash macOS ships does not have.
@@ -35,7 +35,7 @@ port_of() {
     auth) echo 5000 ;;
     management) echo 5010 ;;
     devices) echo 5015 ;;
-    socket) echo 5020 ;;
+    gateway-ws) echo 5020 ;;
     engine) echo 5030 ;;
     *) echo "unknown host: $1 (one of: ${hosts[*]})" >&2; exit 2 ;;
   esac
