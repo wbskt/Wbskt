@@ -27,7 +27,7 @@ public sealed class DeviceSessionTests
     private const string ThisHost = "gateway-a";
     private const string Message = """{"type":"t","payload":{}}""";
     private static readonly Guid ClientRefId = Guid.Parse("99999999-9999-9999-9999-999999999999");
-    private static readonly ClientIdentity Identity = new(ClientRefId, 42, 7, DateTime.UtcNow);
+    private static readonly DeviceAdmission Admitted = DeviceAdmission.Admit(new ClientIdentity(ClientRefId, 42, 7, DateTime.UtcNow));
 
     private readonly Mock<IEventBus> _bus = new();
     private readonly Mock<IClientAccessGate> _gate = new();
@@ -97,7 +97,7 @@ public sealed class DeviceSessionTests
         var registeredAtClose = true;
         DisconnectReason? closedWith = null;
 
-        await Sessions().RunAsync(Identity, connection,
+        await Sessions().RunAsync(Admitted, connection,
             _ =>
             {
                 registeredDuringLoop = ReferenceEquals(connection, _connections.GetConnection(ClientRefId));
@@ -123,7 +123,7 @@ public sealed class DeviceSessionTests
         var (connection, _) = Connection();
         DisconnectReason? closedWith = null;
 
-        await Sessions().RunAsync(Identity, connection,
+        await Sessions().RunAsync(Admitted, connection,
             async _ =>
             {
                 await connection.RequestCloseAsync(DisconnectReason.Revoked, "Client deleted.");
@@ -145,7 +145,7 @@ public sealed class DeviceSessionTests
         var (old, oldSocket) = Connection();
         var (fresh, _) = Connection();
 
-        await Sessions().RunAsync(Identity, old,
+        await Sessions().RunAsync(Admitted, old,
             _ =>
             {
                 _connections.Register(ClientRefId, fresh);
@@ -165,7 +165,7 @@ public sealed class DeviceSessionTests
         DisconnectReason? closedWith = null;
         await _stopping.CancelAsync();
 
-        await Sessions().RunAsync(Identity, connection,
+        await Sessions().RunAsync(Admitted, connection,
             _ => throw new OperationCanceledException(),
             reason =>
             {
@@ -182,7 +182,7 @@ public sealed class DeviceSessionTests
     {
         var (connection, _) = Connection();
 
-        await Sessions().RunAsync(Identity, connection, _ => throw new OperationCanceledException(), _ => Task.CompletedTask);
+        await Sessions().RunAsync(Admitted, connection, _ => throw new OperationCanceledException(), _ => Task.CompletedTask);
 
         VerifyDisconnected(DisconnectReason.Aborted.Describe());
     }
@@ -192,7 +192,7 @@ public sealed class DeviceSessionTests
     {
         var (connection, _) = Connection();
 
-        await Sessions().RunAsync(Identity, connection, _ => throw new InvalidOperationException("boom"), _ => Task.CompletedTask);
+        await Sessions().RunAsync(Admitted, connection, _ => throw new InvalidOperationException("boom"), _ => Task.CompletedTask);
 
         Assert.Null(_connections.GetConnection(ClientRefId));
         VerifyDisconnected(DisconnectReason.Error.Describe());
@@ -203,11 +203,52 @@ public sealed class DeviceSessionTests
     {
         var (connection, _) = Connection();
 
-        await Sessions().RunAsync(Identity, connection,
+        await Sessions().RunAsync(Admitted, connection,
             _ => Task.FromResult(DisconnectReason.ClientClosed),
             _ => throw new InvalidOperationException("boom"));
 
         VerifyDisconnected(DisconnectReason.ClientClosed.Describe());
+    }
+
+    [Fact]
+    public async Task A_device_revoked_after_admission_is_closed_once_registered()
+    {
+        var (connection, _) = Connection();
+        _gate.Setup(x => x.IsRefusedHere(ClientRefId, It.IsAny<DateTime>())).Returns(true);
+        CloseRequest? seenByLoop = null;
+
+        await Sessions().RunAsync(Admitted, connection,
+            _ =>
+            {
+                seenByLoop = connection.CloseRequest;
+                return Task.FromResult(DisconnectReason.ClientClosed);
+            },
+            _ => Task.CompletedTask);
+
+        Assert.Equal(DisconnectReason.Revoked, seenByLoop?.Reason);
+        VerifyDisconnected(DisconnectReason.Revoked.Describe());
+    }
+
+    [Fact]
+    public async Task A_disconnect_the_bus_cannot_take_does_not_escape_the_session()
+    {
+        var (connection, _) = Connection();
+        _bus.Setup(x => x.PublishAsync(It.IsAny<ClientDisconnectedEvent>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("broker down"));
+
+        await Sessions().RunAsync(Admitted, connection, _ => Task.FromResult(DisconnectReason.ClientClosed), _ => Task.CompletedTask);
+
+        Assert.Null(_connections.GetConnection(ClientRefId));
+    }
+
+    [Fact]
+    public async Task A_refused_admission_cannot_run_a_session()
+    {
+        var (connection, _) = Connection();
+        var refused = DeviceAdmission.Refuse(AdmissionRefusal.Revoked);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => Sessions().RunAsync(refused, connection, _ => Task.FromResult(DisconnectReason.ClientClosed), _ => Task.CompletedTask));
+
+        Assert.Null(_connections.GetConnection(ClientRefId));
     }
 
     [Fact]
@@ -216,7 +257,7 @@ public sealed class DeviceSessionTests
         var (connection, socket) = Connection();
         var results = new List<DisconnectReason?>();
 
-        await Sessions(new MessageBudgetOptions { PerSecond = 0.1, Burst = 1, CloseAfterDropped = 2 }).RunAsync(Identity, connection,
+        await Sessions(new MessageBudgetOptions { PerSecond = 0.1, Burst = 1, CloseAfterDropped = 2 }).RunAsync(Admitted, connection,
             async inbox =>
             {
                 for (var i = 0; i < 3; i++)
@@ -241,7 +282,7 @@ public sealed class DeviceSessionTests
         var tooBig = $$"""{"type":"t","payload":"{{new string('é', SocketProtocol.MaxMessageBytes / 2)}}"}""";
         DisconnectReason? result = null;
 
-        await Sessions().RunAsync(Identity, connection,
+        await Sessions().RunAsync(Admitted, connection,
             async inbox =>
             {
                 result = await inbox.ReceiveAsync(tooBig, CancellationToken.None);
@@ -260,7 +301,7 @@ public sealed class DeviceSessionTests
         var (connection, _) = Connection();
         DisconnectReason? result = DisconnectReason.Error;
 
-        await Sessions().RunAsync(Identity, connection,
+        await Sessions().RunAsync(Admitted, connection,
             async inbox =>
             {
                 await connection.RequestCloseAsync(DisconnectReason.Revoked, "x");

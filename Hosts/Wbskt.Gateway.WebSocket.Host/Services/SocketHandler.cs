@@ -83,7 +83,7 @@ internal sealed class SocketHandler : ISocketHandler
             connection.Closing);
 
         await _sessions.RunAsync(
-            identity,
+            admission,
             connection,
             inbox => ReceiveLoopAsync(identity.ClientRefId, connection, inbox, cts.Token),
             reason => CloseQuietlyAsync(webSocket, reason));

@@ -31,6 +31,7 @@ reason:
 |---|---|---|
 | 401, no `code` | The token did not validate: expired, signed by another key, or missing. | Drop the token and log in again (model §2). |
 | 401 `CLIENT_TOKEN_INVALID` | The token validated but is not a device token with every claim this gateway needs. | Drop the token and log in again. |
+| 403, no `code` | The token validated but does not mark itself as a device's (its `typ` claim). | A client bug: only the token from device login (model §2) is accepted here. |
 | 403 `CLIENT_REVOKED` | The device lost access after this token was issued: revoked, deleted, or its secret rotated. | Keep the token and retry on the reconnect schedule (model §5); once it expires, login reports what happened. |
 | 400 `SOCKET_PROTOCOL_UNSUPPORTED` | The upgrade offered only subprotocol versions this gateway does not speak. | Offer `wbskt.v1`. A client bug, not something to retry. |
 | 400 `SOCKET_UPGRADE_REQUIRED` | The request to `/ws` was not a WebSocket upgrade. | A client bug, not something to retry. |
