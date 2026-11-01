@@ -435,22 +435,30 @@ report_drift() {
 # their presence heartbeat. They are stopped the way compose stops a host (SIGTERM, 10 s grace), so
 # each closes its device connections as a server restart and the devices reconnect to the
 # replacement through the same public address.
+#
+# Best-effort: by now the deploy has succeeded, so a failure here warns with the command to finish
+# by hand rather than failing the deploy (and skipping the drift report after it).
 retire_replaced_services() {
-    local old new project
+    local old new project filters
     local -a ids
     # The project name (docker-compose.yml's name:), which compose stamps on every container it starts.
-    project="$(docker compose config | sed -n 's/^name: *//p' | head -n 1)"
-    [[ -n "$project" ]] || { echo "warning: could not read the compose project name; old containers left running" >&2; return 0; }
+    project="$(docker compose config 2>/dev/null | sed -n 's/^name: *//p' | head -n 1)" || project=""
+    if [[ -z "$project" ]]; then
+        echo "warning: could not read the compose project name; any containers of a renamed service are left running" >&2
+        return 0
+    fi
     for old in "${!RETIRED_SERVICES[@]}"; do
         new="${RETIRED_SERVICES[$old]}"
         [[ " ${SERVICES[*]} " == *" $new "* ]] || continue
-        mapfile -t ids < <(docker ps -aq \
-            --filter "label=com.docker.compose.project=$project" \
-            --filter "label=com.docker.compose.service=$old")
+        filters="--filter label=com.docker.compose.project=$project --filter label=com.docker.compose.service=$old"
+        # A failed listing reads as none left: process substitution hides the status, and set -e with it.
+        # shellcheck disable=SC2086 # the filters are two words each, on purpose
+        mapfile -t ids < <(docker ps -aq $filters 2>/dev/null)
         (( ${#ids[@]} > 0 )) || continue
         echo "==> retiring $old (${#ids[@]} container(s)): $new is healthy and replaces it"
-        docker stop --time 10 "${ids[@]}" >/dev/null
-        docker rm "${ids[@]}" >/dev/null
+        if ! { docker stop --time 10 "${ids[@]}" >/dev/null && docker rm "${ids[@]}" >/dev/null; }; then
+            echo "warning: could not retire every old $old container; finish with: docker rm -f \$(docker ps -aq $filters)" >&2
+        fi
     done
 }
 

@@ -1,6 +1,8 @@
+using System.Text;
 using Wbskt.Gateway.Core.Infrastructure;
 using Wbskt.Gateway.Core.Services.Inbound;
 using Wbskt.Gateway.Core.Telemetry;
+using Wbskt.Protocol;
 
 namespace Wbskt.Gateway.Core.Services;
 
@@ -10,6 +12,9 @@ namespace Wbskt.Gateway.Core.Services;
 /// </summary>
 public sealed class DeviceInbox
 {
+    /// <summary>The close description for a message over <see cref="SocketProtocol.MaxMessageBytes"/>.</summary>
+    public static readonly string TooBigDescription = $"Messages are limited to {SocketProtocol.MaxMessageBytes} bytes.";
+
     private readonly InboundContext _context;
     private readonly MessageBudget _budget;
     private readonly InboundMessageDispatcher _dispatcher;
@@ -27,7 +32,8 @@ public sealed class DeviceInbox
 
     /// <summary>
     /// Takes one message from the device. Returns the reason the session must end, when this message
-    /// ended it (the device stayed over its budget, and its close has been asked for); null otherwise.
+    /// ended it (it was over the size limit, or the device stayed over its budget, and its close has
+    /// been asked for); null otherwise.
     /// </summary>
     public async Task<DisconnectReason?> ReceiveAsync(string text, CancellationToken cancellationToken)
     {
@@ -38,6 +44,16 @@ public sealed class DeviceInbox
         if (connection.CloseRequest != null)
         {
             return null;
+        }
+
+        // Every transport caps its reads at this size, as it must to bound its memory; this is the same
+        // rule checked once more where all of them meet. Under a third of the limit in characters
+        // cannot be over it in UTF-8 bytes, so most messages skip the count.
+        if (text.Length > SocketProtocol.MaxMessageBytes / 3 && Encoding.UTF8.GetByteCount(text) > SocketProtocol.MaxMessageBytes)
+        {
+            _logger.LogWarning("Client {ClientRefId} exceeded the {MaxMessageBytes}-byte message limit; closing.", clientRefId, SocketProtocol.MaxMessageBytes);
+            await connection.RequestCloseAsync(DisconnectReason.MessageTooBig, TooBigDescription);
+            return DisconnectReason.MessageTooBig;
         }
 
         // Every message becomes broker traffic (event log, live feed, workflow triggers), so a

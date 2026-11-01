@@ -7,8 +7,8 @@ an item on one of those two checklists:
 
 | Checklist | Scenarios |
 |---|---|
-| Message model | registering once, pending approval, registering again, reusing the token, `Retry-After`, `capabilities` first, command acks, expired commands, plain messages, `sentAt` and the offline backlog, reserved types |
-| WebSocket binding | the subprotocol and bearer token, renewing after a 401 on the upgrade, keeping the token while the gateway is down, ping and pong |
+| Message model | registering once, pending approval, registering again, reusing the token, `Retry-After`, `capabilities` first, ping and pong, command acks, expired commands, plain messages, `sentAt` and the offline backlog, reserved types |
+| WebSocket binding | the subprotocol and bearer token, renewing after a 401 on the upgrade, keeping the token while the gateway is down |
 
 A future binding (MQTT, HTTPS) adds its own checklist and its own scenarios.
 

@@ -363,7 +363,9 @@ The first deploy of a commit with the rename does this on its own, and needs not
 4. Once `gateway-ws` is healthy, it stops the `socket` containers (10 s grace, as compose does) and
    removes them. Each closes its devices' connections as a server restart, and they reconnect
    through the same address to `gateway-ws`. That is the same blip any socket deploy caused, and
-   shorter: the new tier is already up when the old one goes.
+   shorter: the new tier is already up when the old one goes. If stopping or removing them fails,
+   the deploy still succeeds (it already has) and prints a `warning:` with the command to finish
+   by hand.
 
 Afterwards, rename the variable in the VM's `.env` when convenient (`SOCKET_REPLICAS=3` to
 `GATEWAY_WS_REPLICAS=3`); until then the old name keeps working. Saved Grafana or Loki queries that

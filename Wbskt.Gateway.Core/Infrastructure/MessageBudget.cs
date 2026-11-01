@@ -1,9 +1,9 @@
 namespace Wbskt.Gateway.Core.Infrastructure;
 
-/// <summary>How fast one connected device may send (<c>Socket:MessageBudget</c>).</summary>
+/// <summary>How fast one connected device may send (<c>Gateway:MessageBudget</c>).</summary>
 public sealed class MessageBudgetOptions
 {
-    public const string SectionName = "Socket:MessageBudget";
+    public const string SectionName = "Gateway:MessageBudget";
 
     /// <summary>Messages per second a device may sustain.</summary>
     public double PerSecond { get; set; } = 10;

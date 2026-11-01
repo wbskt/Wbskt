@@ -528,15 +528,35 @@ engine is never exposed publicly and the manual/signal channels never get a publ
 ## 3. WebSocket gateway
 
 The device data plane. One long-lived WebSocket per client; everything else is a bus event.
-`Wbskt.Gateway.WebSocket.Host` is the transport only (the upgrade, the subprotocol and the frame
-loop); the session logic it runs (the token check and revocation, one connection per device, the
-message budget, command delivery and acks, pings and presence) is `Wbskt.Gateway.Core`, which later
-gateways for other transports will share. Devices reach it as `wss://ws.${DOMAIN}/ws`; the compose
-service is `gateway-ws`, once called `socket`.
+`Wbskt.Gateway.WebSocket.Host` is the transport only (the upgrade, the subprotocol, the frame
+loop and the close codes); the session logic it runs (the token check and revocation, one connection
+per device, the message budget and size limit, command delivery and acks, pings and presence) is
+`Wbskt.Gateway.Core`, which later gateways for other transports will share. Devices reach it as
+`wss://ws.${DOMAIN}/ws`; the compose service is `gateway-ws`, once called `socket`.
+
+A gateway for another transport takes two calls from Core's `DeviceSessions`. `AdmitAsync` reads
+the device's identity from its authenticated token and checks it was not revoked since it was issued;
+the transport turns a refusal into its own answer. `RunAsync` then runs the session around the
+transport's receive loop and close, both passed in, so registering the device, announcing it, routing
+its messages and recording its end happen in one order for every transport. The transport implements
+`IDeviceConnection` (sending a text message and closing) and caps each read at 64 KB. An architecture
+test keeps WebSocket and HTTP types out of Core.
+
+Some names keep "socket" on purpose:
+
+| Name | Why it stays |
+|---|---|
+| `wbskt-socket` token audience (`JwtAudiences.Socket`) | It is in every device token already issued. |
+| `SocketHostHeartbeat`, `SocketHostStartedEvent` | MassTransit names exchanges after message types; renaming one needs management and every gateway deployed together. |
+| `wbskt_socket_*` metrics | The `SocketDisconnectRateHigh` alert and the dashboards are built on them. |
+| `SocketMessage`, `SocketProtocol` | Public types of `Wbskt.Protocol`, which the .NET SDK ships. |
+| `SOCKET_URL`, `E2E_SOCKET_RESTART_COMMAND` | Device and SDK configuration, and an E2E variable CI and developers set. |
+
+`Gateway:MessageBudget` (once `Socket:MessageBudget`) holds the per-device message budget.
 
 | Endpoint | Auth | What it does |
 |---|---|---|
-| `GET /ws` (upgrade) | client JWT, `Authorization: Bearer` **or** `?access_token=` | Establishes the client's connection. The query fallback exists for browser WebSocket clients, which cannot set headers. Rejects the upgrade with 401 before any socket is opened. |
+| `GET /ws` (upgrade) | client JWT, `Authorization: Bearer` **or** `?access_token=` | Establishes the client's connection. The query fallback exists for browser WebSocket clients, which cannot set headers. Refuses before any socket is opened: 401 for a token that does not validate, 401 `CLIENT_TOKEN_INVALID` for one missing a device claim, 403 `CLIENT_REVOKED` for a revoked device, 400 `SOCKET_PROTOCOL_UNSUPPORTED` and 400 `SOCKET_UPGRADE_REQUIRED`. |
 | `GET /healthz` | anonymous | Liveness — the process is up. Probes nothing, so a dependency failure cannot trigger a restart loop. |
 | `GET /healthz/ready` | anonymous | Readiness — dependencies reachable. 503 when not. This is what the compose healthcheck consumes, so it also drives Traefik's routing table and `deploy.sh`'s health wait. |
 
