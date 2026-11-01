@@ -2,7 +2,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Wbskt.Gateway.Core.Services;
 
-namespace Wbskt.Host.Tests.SocketHost;
+namespace Wbskt.Host.Tests.Gateway;
 
 public sealed class CommandRefusalTests
 {

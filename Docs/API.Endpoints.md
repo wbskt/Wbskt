@@ -16,7 +16,7 @@ and a snapshot disagree, the snapshot is right and this page is behind.
 |---|---|---|---|
 | **Auth** (`Wbskt.Auth.Host`) | yes | console, other hosts | JWT bearer; the credential endpoints are anonymous and rate limited |
 | **Management** (`Wbskt.Management.Host`) | yes | console, device SDK | JWT bearer, plus three deliberately anonymous edges (below) |
-| **Socket** (`Wbskt.Socket.Host`) | yes | device SDK | JWT bearer on the WebSocket upgrade, header or `access_token` query |
+| **WebSocket gateway** (`Wbskt.Gateway.WebSocket.Host`, over `Wbskt.Gateway.Core`) | yes | device SDK | JWT bearer on the WebSocket upgrade, header or `access_token` query |
 | **Workflow Engine** (`Wbskt.Workflow.Engine.Host`) | **no** — backend network only | management host | shared API key header on `/api/inbound/*` |
 
 **Where a public URL lands.** `api.${DOMAIN}` is the one public API host: tenant administration
@@ -29,7 +29,7 @@ publicly: those are host-to-host calls over the backend network (`InternalRoutes
 labels in `deploy/compose/docker-compose.yml` decide all of this, and `PublicRoutingTests` checks
 them against each host's routes.
 
-**The three publicly routed hosts default-deny.** Management, Auth and Socket each set an
+**The three publicly routed hosts default-deny.** Management, Auth and the WebSocket gateway each set an
 authorization `FallbackPolicy`, so a controller that forgets `[Authorize]` cannot be reached
 anonymously and the anonymous surface is an explicit, auditable choice:
 
@@ -39,7 +39,7 @@ anonymously and the anonymous surface is an explicit, auditable choice:
   roles and permissions. `AuthController`'s credential endpoints carry `[AllowAnonymous]`
   individually, and so does the one internal route a background job calls with no user token
   (`GET /api/internal/workspaces/deleted`), which `[InternalApiKey]` guards with a shared key instead.
-- **Socket host** — has no controllers at all. `/ws` requires the `ClientOnly` policy (a device
+- **WebSocket gateway** — has no controllers at all. `/ws` requires the `ClientOnly` policy (a device
   token: `type=client`), validated by the same bearer handler as the other hosts. Browsers cannot set
   headers on a WebSocket, so on `/ws` the handler also reads `?access_token=` (`AcceptQueryToken`,
   shared with the management host's SignalR hub). `HostArchitectureTests` fails if a controller
@@ -72,7 +72,7 @@ public contract ships as `/api/v2` next to it, never as a change to `/v1`. These
 - `/api/auth/*`: the console's sign-in on `auth.${DOMAIN}`; the refresh cookie is scoped to that path.
 - `/api/callbacks/*` (management) and `/api/inbound/*` (engine): URLs users paste into third
   parties (webhooks, wake links), which have to keep working as they are.
-- `/hubs/notifications`, the socket host's `/ws`, health probes and JWKS.
+- `/hubs/notifications`, the WebSocket gateway's `/ws`, health probes and JWKS.
 
 **Aliases for one release (#312).** The auth and management hosts still answer the unversioned
 paths (`/api/workspaces/…` and so on) by handling them as `/api/v1/…`
@@ -109,7 +109,7 @@ says what it is, `user` or `client`.
   from `sub` (the auth host from its database, the management host from
   `GET /api/internal/users/me`), cached.
 - **Device token** (management host, audience `wbskt-socket`): `sub`, `typ: "client"`, `name`,
-  `policy_ref`, and for now the device's internal `id` and `workspace_id`, which the socket host
+  `policy_ref`, and for now the device's internal `id` and `workspace_id`, which the WebSocket gateway
   stamps on every event it publishes and has no database to read from.
 - Tokens issued before this contract (`sub` the internal id, `uref`, `type`) are still accepted until
   they expire. Revocation ("sign out everywhere", a password change) is keyed by the user's RefId.
@@ -352,7 +352,7 @@ that is empty or backwards is 400 `TIME_RANGE_INVALID`, and one longer than 400 
 | `DELETE {clientRef}` | `clients.manage` | Deletes a client with its capabilities and state, closes its connection and refuses its still-valid token. Its event-log history stays. The device must register again to come back. |
 | `POST {clientRef}/rotate-secret` | `clients.manage` | Replaces the client's secret and returns the new one once (`{ clientRefId, secret }`). The old secret stops working, tokens issued before the rotation are refused, and the live connection is closed. |
 | `PUT {clientRef}/tags` | `clients.update` | Replaces the client's tags (`{ tags }`; an empty list clears them) and returns them as stored. Tags are trimmed and lower-cased, and repeats collapse. Each is 1–32 letters, digits, spaces, `-`, `_` or `.`, starting and ending with a letter or digit (else 400 `CLIENT_TAG_INVALID`); at most 10 per client (else 400 `CLIENT_TAGS_TOO_MANY`). |
-| `POST {clientRef}/commands` | `clients.command` | Sends a command to a client and returns a `commandId` for correlating the delivery/ack events that follow, with `status` `sent` or `queued`. Rejects reserved protocol message types and payloads over 32 KiB. A connected client gets it at once. An offline, registered client has it queued (`status: "queued"`, `expiresAt` = when it stops waiting) and delivered, oldest first, when it next connects; a client that drops before delivery has the command put back in its queue. Queuing is refused with 409 `COMMAND_QUEUE_FULL` past `CommandQueue:MaxPerClient` waiting commands (default 100), and with 409 `DEVICE_INACTIVE` for an offline client that is pending, revoked or rejected. Optional `expiresAt` (at most 24 h ahead, else 400 `COMMAND_EXPIRY_INVALID`); without one a queued command waits `CommandQueue:DefaultExpiryMinutes` (24 h). A command that expires while queued, or whose client is revoked, ends with `ClientCommandFailedEvent`; past `expiresAt` the socket host does not send the command and the SDK refuses it. A workflow's send-message step goes through the same sender (`IDeviceCommandSender`) and its command always expires when the step would stop waiting for the answer: its ack timeout, 30 s by default. |
+| `POST {clientRef}/commands` | `clients.command` | Sends a command to a client and returns a `commandId` for correlating the delivery/ack events that follow, with `status` `sent` or `queued`. Rejects reserved protocol message types and payloads over 32 KiB. A connected client gets it at once. An offline, registered client has it queued (`status: "queued"`, `expiresAt` = when it stops waiting) and delivered, oldest first, when it next connects; a client that drops before delivery has the command put back in its queue. Queuing is refused with 409 `COMMAND_QUEUE_FULL` past `CommandQueue:MaxPerClient` waiting commands (default 100), and with 409 `DEVICE_INACTIVE` for an offline client that is pending, revoked or rejected. Optional `expiresAt` (at most 24 h ahead, else 400 `COMMAND_EXPIRY_INVALID`); without one a queued command waits `CommandQueue:DefaultExpiryMinutes` (24 h). A command that expires while queued, or whose client is revoked, ends with `ClientCommandFailedEvent`; past `expiresAt` the gateway does not send the command and the SDK refuses it. A workflow's send-message step goes through the same sender (`IDeviceCommandSender`) and its command always expires when the step would stop waiting for the answer: its ack timeout, 30 s by default. |
 | `GET {clientRef}/commands?status=queued` | `clients.read` | The commands waiting for an offline client, oldest first, as one page (`items`, `totalCount`): `commandId`, `type`, `payload`, `queuedAt`, `expiresAt`. `status` must be `queued` (400 `COMMAND_STATUS_INVALID` otherwise); sent commands are in the comms feed. |
 | `DELETE {clientRef}/commands/{commandId}` | `clients.command` | Cancels a waiting command (204, raising `ClientCommandCancelledEvent`); 404 `COMMAND_NOT_QUEUED` once it was delivered, expired or cancelled. |
 | `POST {clientRef}/ping` | `clients.ping` | Triggers a round-trip latency measurement. |
@@ -363,7 +363,7 @@ document: `GET policy/{policyRef}` (now `GET ?policyRefId=`), `PATCH {clientRef}
 `PATCH {clientRef}/name` (now `PATCH {clientRef}`), and `POST {clientRef}/command` (now
 `/commands`).
 
-Command and ping publish onto the event bus, and the socket host dispatches on `ClientRefId` alone —
+Command and ping publish onto the event bus, and the gateway dispatches on `ClientRefId` alone —
 it has no workspace of its own to check against. The controller's ownership check is therefore the
 only one in the path.
 
@@ -481,7 +481,7 @@ them too, and take over while no devices instance is healthy (see deploy/README.
 | Endpoint | What it does |
 |---|---|
 | `POST api/v1/client-registrations/initiate` | A device presents a policy PIN and a name; gets back its `RefId` and secret. Auto-approval policies return it registered, otherwise it waits for an operator. |
-| `POST api/v1/client-auth/login` | A device exchanges its `RefId` + secret for a short-lived access token, which it then presents to the socket host. |
+| `POST api/v1/client-auth/login` | A device exchanges its `RefId` + secret for a short-lived access token, which it then presents to the WebSocket gateway. |
 
 ### 2.10 Public workflow callbacks (anonymous)
 
@@ -525,9 +525,14 @@ engine is never exposed publicly and the manual/signal channels never get a publ
 
 ---
 
-## 3. Socket host
+## 3. WebSocket gateway
 
 The device data plane. One long-lived WebSocket per client; everything else is a bus event.
+`Wbskt.Gateway.WebSocket.Host` is the transport only (the upgrade, the subprotocol and the frame
+loop); the session logic it runs (the token check and revocation, one connection per device, the
+message budget, command delivery and acks, pings and presence) is `Wbskt.Gateway.Core`, which later
+gateways for other transports will share. Devices reach it as `wss://ws.${DOMAIN}/ws`; the compose
+service is `gateway-ws`, once called `socket`.
 
 | Endpoint | Auth | What it does |
 |---|---|---|
@@ -547,10 +552,10 @@ Once open, the connection carries the platform protocol — `sys.ping { timestam
 { originalTimestamp, id }` (the host times the round trip on its own clock and matches the pong by
 `id`; a pong without one answers the pending ping), command frames and their `sys.ack`, state and
 capability reports. Commands arrive from the management host over the bus
-and are routed by `ClientRefId` to whichever socket host holds the connection. Every socket host
+and are routed by `ClientRefId` to whichever gateway instance holds the connection. Every gateway instance
 receives every command; only the one the management host saw holding the connection reports it
 missing. A command frame may carry `expiresAt`; an SDK that receives it late answers
-`sys.ack { commandId, type, refused: "expired" }` instead of raising it, and the socket host reports
+`sys.ack { commandId, type, refused: "expired" }` instead of raising it, and the gateway reports
 that as a failed command.
 
 ---

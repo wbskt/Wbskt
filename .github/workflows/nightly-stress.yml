@@ -2,7 +2,7 @@ name: Nightly stress
 
 # The load the pull-request gate (build-images.yml) leaves out because it takes minutes: the
 # thousand-run ConcurrencyStressE2ETests scenario and Tests/Wbskt.LoadTester holding a few hundred
-# devices on the socket host. Same hosts, started from source as Development, against the same
+# devices on the WebSocket gateway. Same hosts, started from source as Development, against the same
 # services as the e2e job in build-images.yml; the setup is copied from there, so keep the two in
 # step. Nothing here gates a merge or an image.
 

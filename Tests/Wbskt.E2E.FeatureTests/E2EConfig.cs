@@ -46,7 +46,7 @@ internal static class E2EConfig
 
     /// <summary>
     /// Opt-in: a shell command that restarts the socket host and returns once it is serving again,
-    /// e.g. <c>Tests/Wbskt.E2E.FeatureTests/start-hosts.sh socket</c>. The device-revocation
+    /// e.g. <c>Tests/Wbskt.E2E.FeatureTests/start-hosts.sh gateway-ws</c>. The device-revocation
     /// scenarios that need a restart skip without it; they drop every live device connection, so
     /// they are meant to run on their own.
     /// </summary>

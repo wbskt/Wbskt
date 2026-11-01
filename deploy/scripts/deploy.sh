@@ -25,8 +25,12 @@ set -euo pipefail
 # Backing services (sql/rabbitmq/redis/traefik) are deliberately absent - they are not rebuilt per
 # release and restarting them is a separate, more disruptive decision. Console is absent too; it
 # has its own mode above.
-readonly ALLOWED_SERVICES=(auth management devices socket engine)
-readonly DEFAULT_SERVICES=(auth management devices socket engine)
+readonly ALLOWED_SERVICES=(auth management devices gateway-ws engine)
+readonly DEFAULT_SERVICES=(auth management devices gateway-ws engine)
+# Services this stack no longer has, each with the one that replaced it. A deploy that starts the
+# replacement stops and removes the old one's containers once the replacement is healthy, and an old
+# name on --services means its replacement. socket became gateway-ws (see deploy/README.md).
+readonly -A RETIRED_SERVICES=([socket]=gateway-ws)
 readonly HEALTH_TIMEOUT_SECONDS=240
 # Free space required on the image store after pruning, before anything is pulled. A full disk
 # fails layer extraction halfway through a pull; failing here instead says why, and still happens
@@ -53,10 +57,11 @@ usage: deploy.sh --tag <image-tag> [--services <a,b,c>] [--ref <git-ref>] [--ski
 
   --tag              Backend image tag, e.g. sha-abc1234. Also selects the commit this
                      checkout is reset to.
-  --services         Comma- or space-separated subset of: auth management devices socket
-                     engine. Defaults to all of them. Use commas over SSH: the remote side
-                     word-splits the command line, so a quoted space-separated list arrives
-                     as separate arguments.
+  --services         Comma- or space-separated subset of: auth management devices gateway-ws
+                     engine. Defaults to all of them. "socket", the old name of gateway-ws,
+                     still means gateway-ws. Use commas over SSH: the remote side word-splits
+                     the command line, so a quoted space-separated list arrives as separate
+                     arguments.
   --ref              Git ref to reset the checkout to. Defaults to the commit embedded in a
                      sha-<commit> tag; required for any other tag shape.
   --skip-migrations  Don't run the migrator. Migrations run by DEFAULT - the incremental
@@ -115,8 +120,15 @@ validate_backend() {
     validate_tag "$TAG"
 
     [[ ${#SERVICES[@]} -gt 0 ]] || SERVICES=("${DEFAULT_SERVICES[@]}")
-    for svc in "${SERVICES[@]}"; do
+    local -a named=("${SERVICES[@]}")
+    SERVICES=()
+    for svc in "${named[@]}"; do
+        if [[ -n "${RETIRED_SERVICES[$svc]:-}" ]]; then
+            echo "==> '$svc' is now '${RETIRED_SERVICES[$svc]}'; deploying that"
+            svc="${RETIRED_SERVICES[$svc]}"
+        fi
         is_allowed_service "$svc" || die "unknown service '$svc' (allowed: ${ALLOWED_SERVICES[*]})"
+        [[ " ${SERVICES[*]} " == *" $svc "* ]] || SERVICES+=("$svc")
     done
 
     if [[ -z "$REF" && "$TAG" =~ ^sha-([0-9a-f]{7,40})$ ]]; then
@@ -347,6 +359,8 @@ deploy_backend() {
         start_services "${SERVICES[@]}"
     fi
 
+    retire_replaced_services
+
     echo "==> deployed $TAG (${SERVICES[*]}) at $(git -C "$REPO_ROOT" rev-parse --short HEAD)"
 
     report_drift || echo "warning: the drift check itself failed; the deploy above is unaffected"
@@ -413,6 +427,31 @@ report_drift() {
     if (( ${#lagging[@]} > 0 )); then
         echo "    hosts: deploy.sh --tag $TAG --services $(IFS=,; echo "${lagging[*]}")"
     fi
+}
+
+# Stops and removes the containers of a service this stack renamed, once its replacement has just
+# been started and reported healthy. Compose no longer knows the old name, so it would leave them
+# running as orphans: serving devices from the old image, holding their Traefik router, and renewing
+# their presence heartbeat. They are stopped the way compose stops a host (SIGTERM, 10 s grace), so
+# each closes its device connections as a server restart and the devices reconnect to the
+# replacement through the same public address.
+retire_replaced_services() {
+    local old new project
+    local -a ids
+    # The project name (docker-compose.yml's name:), which compose stamps on every container it starts.
+    project="$(docker compose config | sed -n 's/^name: *//p' | head -n 1)"
+    [[ -n "$project" ]] || { echo "warning: could not read the compose project name; old containers left running" >&2; return 0; }
+    for old in "${!RETIRED_SERVICES[@]}"; do
+        new="${RETIRED_SERVICES[$old]}"
+        [[ " ${SERVICES[*]} " == *" $new "* ]] || continue
+        mapfile -t ids < <(docker ps -aq \
+            --filter "label=com.docker.compose.project=$project" \
+            --filter "label=com.docker.compose.service=$old")
+        (( ${#ids[@]} > 0 )) || continue
+        echo "==> retiring $old (${#ids[@]} container(s)): $new is healthy and replaces it"
+        docker stop --time 10 "${ids[@]}" >/dev/null
+        docker rm "${ids[@]}" >/dev/null
+    done
 }
 
 start_services() {

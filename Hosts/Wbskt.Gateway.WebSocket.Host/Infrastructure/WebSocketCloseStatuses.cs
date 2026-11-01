@@ -1,7 +1,7 @@
 using System.Net.WebSockets;
 using Wbskt.Gateway.Core.Infrastructure;
 
-namespace Wbskt.Socket.Host.Infrastructure;
+namespace Wbskt.Gateway.WebSocket.Host.Infrastructure;
 
 /// <summary>The WebSocket close code a device receives when this host closes its connection.</summary>
 public static class WebSocketCloseStatuses

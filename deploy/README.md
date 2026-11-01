@@ -71,14 +71,14 @@ Dashboard  push to master ─> build-and-deploy.yml ─> ghcr.io/wbskt/wbskt-con
                docker compose pull console && up -d --no-build --no-deps console
 ```
 
-Five images per backend commit — `wbskt-auth`, `wbskt-management`, `wbskt-socket`, `wbskt-engine`,
+Five images per backend commit — `wbskt-auth`, `wbskt-management`, `wbskt-gateway-ws`, `wbskt-engine`,
 `wbskt-migrator` — each tagged `sha-<short-commit>` and `latest`. The console is a sixth,
 published on the Dashboard repo's own cadence and tracked by its own `CONSOLE_IMAGE_TAG`.
 
 Every push to master deploys itself: once the tests, E2E, the upgrade rehearsal (below, under
 Database migrations) and all five images succeed, **Build
 images** calls the **Deploy** workflow with that run's tag, deploying every host (auth,
-management, devices, socket, engine) with migrations. If the `production` GitHub Environment has required reviewers, that deploy waits for
+management, devices, gateway-ws, engine) with migrations. If the `production` GitHub Environment has required reviewers, that deploy waits for
 an approval. To redeploy or pick services, dispatch **Deploy** by hand:
 
 | Input | Meaning |
@@ -159,10 +159,10 @@ docker compose up -d sql                                    # wait for it to rep
 docker compose --profile migrate pull migrator
 MIGRATE_FRESH=true docker compose --profile migrate run --rm migrator   # first run only - creates the DBs
 
-docker compose pull auth management devices socket engine
+docker compose pull auth management devices gateway-ws engine
 docker compose up -d rabbitmq redis
 docker compose up -d otel-collector prometheus alertmanager pushgateway loki tempo grafana node-exporter cadvisor
-docker compose up -d --no-build auth management devices socket engine traefik
+docker compose up -d --no-build auth management devices gateway-ws engine traefik
 docker compose ps                                           # everything should report healthy
 ```
 
@@ -212,10 +212,11 @@ Two hosts sign tokens, each with its own EC P-256 key, and neither key leaves it
 | Key | Signs | Validated by |
 |---|---|---|
 | `AUTH_JWT_SIGNING_KEY` | user tokens (issuer `wbskt-auth`, audience `wbskt-api`) | auth itself; management, via `http://auth:8080/.well-known/jwks.json` |
-| `MANAGEMENT_JWT_SIGNING_KEY` | device tokens (issuer `wbskt-management`, audience `wbskt-socket`) | socket, via `http://management:8080/.well-known/jwks.json` |
+| `MANAGEMENT_JWT_SIGNING_KEY` | device tokens (issuer `wbskt-management`, audience `wbskt-socket`) | gateway-ws, via `http://management:8080/.well-known/jwks.json` |
 
-So a user token is useless at `/ws` and a device token is useless at the API, and the socket host
-holds no secret at all. Generate each key with
+So a user token is useless at `/ws` and a device token is useless at the API, and the WebSocket
+gateway holds no secret at all. (The audience keeps its old name, `wbskt-socket`: every device token
+in the field carries it.) Generate each key with
 
 ```bash
 openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt | base64 -w0
@@ -309,7 +310,7 @@ them from the deployed hosts, set `API_DOCS_ENABLED=true` in `compose/.env` and 
 # compose/.env
 API_DOCS_ENABLED=true
 
-docker compose up -d --no-build auth management socket
+docker compose up -d --no-build auth management
 ```
 
 Each host then serves `/scalar` and `/openapi/v1.json`: `https://auth.<DOMAIN>/scalar`,
@@ -337,6 +338,47 @@ an unset or empty one stops every `docker compose` command - not only deploys, b
 or stops anything and names the variable. A new required variable therefore has to be in the
 VM's `.env` before the commit that requires it is deployed: the deploy resets the checkout first,
 so from then on the nightly backup reads the new compose file as well.
+
+### The socket service became gateway-ws
+
+The WebSocket device host was renamed with the gateway work (wbskt/Wbskt#511): the project is
+`Hosts/Wbskt.Gateway.WebSocket.Host`, and in this stack the image `wbskt-socket` became
+`wbskt-gateway-ws`, the compose service `socket` became `gateway-ws`, the Traefik router and service
+`socket` became `gateway-ws`, `SOCKET_REPLICAS` became `GATEWAY_WS_REPLICAS`, and logs and traces
+say `wbskt-gateway-ws` where they said `wbskt-socket`.
+
+**Devices see no change.** `wss://ws.<DOMAIN>/ws`, the `wbskt.v1` subprotocol, port 8080 behind
+Traefik, the `SOCKET_URL` management hands out, the device token and its `wbskt-socket` audience,
+every message and every close code are as they were. The metric names (`wbskt_socket_*`) and the
+`SocketDisconnectRateHigh` alert are unchanged too.
+
+The first deploy of a commit with the rename does this on its own, and needs nothing up front:
+
+1. The checkout resets, and the new `deploy.sh` takes over, as on every deploy.
+2. It pulls `wbskt-gateway-ws`. If GHCR refuses (the package is new, so check it can be read with
+   the VM's token, as `wbskt-socket` could), the deploy stops here with nothing touched.
+3. It starts `gateway-ws` beside the running `socket` containers, with the same replica count:
+   `SOCKET_REPLICAS` is still read while `GATEWAY_WS_REPLICAS` is absent. Both answer
+   `ws.<DOMAIN>` for the moment, which is safe: every instance can serve every device.
+4. Once `gateway-ws` is healthy, it stops the `socket` containers (10 s grace, as compose does) and
+   removes them. Each closes its devices' connections as a server restart, and they reconnect
+   through the same address to `gateway-ws`. That is the same blip any socket deploy caused, and
+   shorter: the new tier is already up when the old one goes.
+
+Afterwards, rename the variable in the VM's `.env` when convenient (`SOCKET_REPLICAS=3` to
+`GATEWAY_WS_REPLICAS=3`); until then the old name keeps working. Saved Grafana or Loki queries that
+filter on `service_name="wbskt-socket"` need the new name; nothing checked in does.
+
+`--services socket` still works and means `gateway-ws`. Pass the default (every host) or `socket`
+on the first deploy rather than `gateway-ws`: the script that checks the arguments is still the old
+one until the checkout has been reset, and it does not know the new name.
+
+**Rolling back past the rename** starts `socket` again from the older commit, whose `deploy.sh` knows
+nothing of `gateway-ws`, so its containers stay up beside it. Remove them once `socket` is healthy:
+
+```bash
+docker rm -f $(docker ps -aq --filter label=com.docker.compose.project=wbskt --filter label=com.docker.compose.service=gateway-ws)
+```
 
 A backend deploy only recreates the five hosts, but it lands every other service's definition and
 config file too. It ends by comparing each running container with the compose file and prints a
@@ -393,7 +435,7 @@ static config (entrypoints, ACME settings, etc.), not for routine host redeploys
 Every host sends traces, metrics and logs over OTLP to `otel-collector`, which fans them out to
 Tempo (traces, 72h), Prometheus (metrics, `METRICS_RETENTION`, default 15d) and Loki (logs, 7d).
 MassTransit carries the trace context in message headers, so one trace follows a device message
-from the socket host, across the bus, into the engine and the management host. Logs carry the
+from the WebSocket gateway, across the bus, into the engine and the management host. Logs carry the
 trace and span ids, and Grafana links the two both ways. `docker compose logs` keeps working too:
 the hosts still write to stdout, now rotated (20 MB x 5 per container).
 
@@ -463,16 +505,16 @@ volume, `docker compose up -d pushgateway` once creates it; the next nightly run
 
 ## Scaling
 
-Replica counts are declared in `.env` (`SOCKET_REPLICAS`, `MANAGEMENT_REPLICAS`,
+Replica counts are declared in `.env` (`GATEWAY_WS_REPLICAS`, `MANAGEMENT_REPLICAS`,
 `ENGINE_REPLICAS`), not passed as `--scale` on the command line:
 
 ```bash
-SOCKET_REPLICAS=3    # Phase 1
+GATEWAY_WS_REPLICAS=3 # Phase 1 (read as SOCKET_REPLICAS, its old name, when unset)
 MANAGEMENT_REPLICAS=2 # Phase 3
 ENGINE_REPLICAS=1    # Phase 4 - a second replica is a warm standby, not a second worker
 ```
 
-This is load-bearing, not a style preference. `docker compose up -d socket` converges to the
+This is load-bearing, not a style preference. `docker compose up -d gateway-ws` converges to the
 count declared in the compose file, so a tier scaled with a one-off `--scale` flag silently drops
 back to a single replica the next time anything redeploys it. Declaring it in `.env` means the
 deploy script preserves the scale without needing to know about it.
@@ -746,7 +788,7 @@ a copy restored under a scratch name cannot collide with the live database's fil
 With `--force`, the target is taken `SINGLE_USER WITH ROLLBACK IMMEDIATE` immediately before the
 restore, which disconnects the hosts. The restored database comes back `MULTI_USER`, and so does
 the original if the restore fails. To be sure no host reconnects in between, stop them first
-(`docker compose stop auth management devices socket engine`) and start them again afterwards.
+(`docker compose stop auth management devices gateway-ws engine`) and start them again afterwards.
 
 **Rehearse it at least once, and confirm the row counts.** Until a restore has actually been
 performed, what exists is a backup script, not a backup. A rehearsal, start to finish:

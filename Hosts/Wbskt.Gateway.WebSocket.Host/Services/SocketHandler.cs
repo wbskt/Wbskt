@@ -4,9 +4,9 @@ using Wbskt.Gateway.Core.Services;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Protocol;
-using Wbskt.Socket.Host.Infrastructure;
+using Wbskt.Gateway.WebSocket.Host.Infrastructure;
 
-namespace Wbskt.Socket.Host.Services;
+namespace Wbskt.Gateway.WebSocket.Host.Services;
 
 public interface ISocketHandler
 {
@@ -125,7 +125,7 @@ internal sealed class SocketHandler : ISocketHandler
         }
     }
 
-    private static async Task CloseQuietlyAsync(WebSocket webSocket, DisconnectReason reason)
+    private static async Task CloseQuietlyAsync(System.Net.WebSockets.WebSocket webSocket, DisconnectReason reason)
     {
         if (webSocket.State is not (WebSocketState.Open or WebSocketState.CloseReceived))
         {

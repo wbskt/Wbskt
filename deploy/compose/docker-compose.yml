@@ -229,7 +229,7 @@ services:
       # Its own login, limited to running the core database's procedures; the migrator creates it.
       ConnectionStrings__DefaultConnection: Server=sql;Database=Wbskt.Database;User Id=wbskt_management;Password=${SQL_MANAGEMENT_PASSWORD:?SQL_MANAGEMENT_PASSWORD is required - see .env.example};TrustServerCertificate=True;Encrypt=True;
       ConnectionStrings__Redis: redis:6379
-      # Signs client tokens for the socket host, and validates user tokens against auth's public keys.
+      # Signs client tokens for the device gateways, and validates user tokens against auth's public keys.
       Jwt__SigningKey: ${MANAGEMENT_JWT_SIGNING_KEY:?MANAGEMENT_JWT_SIGNING_KEY is required - see .env.example}
       Jwt__AdditionalPublicKeys__0: ${MANAGEMENT_JWT_PREVIOUS_PUBLIC_KEY:-}
       Jwt__TrustedJwksUrl: http://auth:8080/.well-known/jwks.json
@@ -322,17 +322,20 @@ services:
       - traefik.http.routers.devices.tls.certresolver=letsencrypt
       - traefik.http.services.devices.loadbalancer.server.port=8080
 
-  socket:
-    image: ${REGISTRY:-ghcr.io/wbskt}/wbskt-socket:${IMAGE_TAG:-latest}
+  # The WebSocket device gateway (Hosts/Wbskt.Gateway.WebSocket.Host), the service once called
+  # "socket". Devices still reach it as wss://ws.${DOMAIN}/ws; only names on this side changed. See
+  # "The socket service became gateway-ws" in deploy/README.md for the deploy that renamed it.
+  gateway-ws:
+    image: ${REGISTRY:-ghcr.io/wbskt}/wbskt-gateway-ws:${IMAGE_TAG:-latest}
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
       args:
-        HOST_PROJECT: Hosts/Wbskt.Socket.Host/Wbskt.Socket.Host.csproj
-        HOST_DLL: Wbskt.Socket.Host.dll
+        HOST_PROJECT: Hosts/Wbskt.Gateway.WebSocket.Host/Wbskt.Gateway.WebSocket.Host.csproj
+        HOST_DLL: Wbskt.Gateway.WebSocket.Host.dll
     environment:
       <<: *host-env
-      OTEL_SERVICE_NAME: wbskt-socket
+      OTEL_SERVICE_NAME: wbskt-gateway-ws
       # Signs nothing; validates client tokens against management's public keys, fetched on first use.
       Jwt__TrustedJwksUrl: http://management:8080/.well-known/jwks.json
       # Device revocations the management host records, checked when a device connects.
@@ -353,17 +356,21 @@ services:
     networks: [edge, backend]
     restart: unless-stopped
     logging: *default-logging
-    # Declared rather than left to `--scale`, because `docker compose up -d socket` converges to
+    # Declared rather than left to `--scale`, because `docker compose up -d gateway-ws` converges to
     # whatever is declared here - a deploy that omitted --scale would silently drop a 3-replica
-    # tier back to 1.
+    # tier back to 1. SOCKET_REPLICAS is the variable's old name, still honoured so a .env that
+    # predates the rename keeps its replica count.
     deploy:
-      replicas: ${SOCKET_REPLICAS:-1}
+      replicas: ${GATEWAY_WS_REPLICAS:-${SOCKET_REPLICAS:-1}}
     labels:
       - traefik.enable=true
-      - traefik.http.routers.socket.rule=Host(`ws.${DOMAIN}`)
-      - traefik.http.routers.socket.entrypoints=websecure
-      - traefik.http.routers.socket.tls.certresolver=letsencrypt
-      - traefik.http.services.socket.loadbalancer.server.port=8080
+      # Named for the gateway. During the deploy that renamed it, the old socket containers kept their
+      # own router (socket) on the same rule until deploy.sh stopped them; either could take a new
+      # connection meanwhile, which is safe because every instance can serve every device.
+      - traefik.http.routers.gateway-ws.rule=Host(`ws.${DOMAIN}`)
+      - traefik.http.routers.gateway-ws.entrypoints=websecure
+      - traefik.http.routers.gateway-ws.tls.certresolver=letsencrypt
+      - traefik.http.services.gateway-ws.loadbalancer.server.port=8080
       # No stickiness needed: per-instance fan-out (WP2) means every instance can route commands
       # to any client it doesn't hold, and WebSocket upgrade pins the TCP connection natively.
 

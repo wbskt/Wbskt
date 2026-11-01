@@ -5,7 +5,7 @@ Tests exercise the **public HTTP APIs** and the real `WbsktClient` SDK end-to-en
 
 ## Prerequisites
 
-The five dev hosts (auth, management, devices, socket, engine), SQL Server with both databases
+The five dev hosts (auth, management, devices, gateway-ws, engine), SQL Server with both databases
 deployed, RabbitMQ and Redis must be running **before** executing these tests.
 
 ### One command
@@ -54,7 +54,7 @@ docker run -d --hostname wbskt-rabbit --name wbskt-rabbit -p 5672:5672 -p 15672:
 docker run -d --name wbskt-redis -p 6379:6379 redis:7-alpine
 ```
 
-The auth, management and socket hosts find Redis at `localhost:6379` through `ConnectionStrings:Redis` in their `appsettings.Development.json` (override it with `ConnectionStrings__Redis`). It carries access-token revocations between the auth and management hosts and device revocations from the management host to the socket host, so without it the revocation scenarios (`AUTH_TK_10`, `AUTH_OUT_11`, `DEV_REV_01`) fail.
+The auth host, the management host and the WebSocket gateway find Redis at `localhost:6379` through `ConnectionStrings:Redis` in their `appsettings.Development.json` (override it with `ConnectionStrings__Redis`). It carries access-token revocations between the auth and management hosts and device revocations from the management host to the WebSocket gateway, so without it the revocation scenarios (`AUTH_TK_10`, `AUTH_OUT_11`, `DEV_REV_01`) fail.
 
 ### 2. Deploy databases
 
@@ -73,7 +73,7 @@ Use the Rider compound run configuration **RunAll** (`.run/RunAll.run.xml`), or 
 ```
 dotnet run --project Hosts/Wbskt.Auth.Host           # https://localhost:7000
 dotnet run --project Hosts/Wbskt.Management.Host     # https://localhost:7010
-dotnet run --project Hosts/Wbskt.Socket.Host         # https://localhost:7020 / ws://localhost:5020
+dotnet run --project Hosts/Wbskt.Gateway.WebSocket.Host  # https://localhost:7020 / ws://localhost:5020
 dotnet run --project Hosts/Wbskt.Workflow.Engine.Host # https://localhost:7030
 ```
 
@@ -119,7 +119,7 @@ dotnet test Tests/Wbskt.E2E.FeatureTests --filter "FullyQualifiedName~Scenarios.
 ```
 
 The three opt-in passes below must still run **alone**, with `--filter`: the rate-limit scenarios spend
-the per-IP budget the other collections are signing in with, the socket restart drops every live
+the per-IP budget the other collections are signing in with, the gateway restart drops every live
 device connection, the engine collection's included, and the outage pass stops the broker, Redis and
 the engine under everything else.
 
@@ -151,17 +151,17 @@ E2E_RATE_LIMIT_TESTS=1 E2E_AUTH_PERMIT_LIMIT=10 \
 
 `E2E_AUTH_PERMIT_LIMIT` must match the limit the host is running with. `AUTH_RL_04` exhausts the separate refresh bucket instead, so restart the auth host with `RateLimiting__TokenRefresh__PermitLimit=120` for it (`E2E_REFRESH_PERMIT_LIMIT` defaults to 120 and must match); `AUTH_RL_05` and `AUTH_RL_11` spend it too. `AUTH_RL_12` exhausts the verification bucket, so restart with `RateLimiting__EmailVerification__PermitLimit=10` for it (`E2E_VERIFICATION_PERMIT_LIMIT` defaults to 10 and must match).
 
-### 6. Socket host restart scenario (opt-in)
+### 6. WebSocket gateway restart scenario (opt-in)
 
-`DeviceRevocationTests.DEV_REV_02` revokes, deletes and rotates the secret of devices, restarts the socket host, and checks their old tokens are still refused: the socket host forgets every revocation event it heard, so this proves the cutoffs the management host keeps in Redis. It skips unless `E2E_SOCKET_RESTART_COMMAND` holds a command that restarts the socket host, and since the restart drops every live device connection, run it on its own:
+`DeviceRevocationTests.DEV_REV_02` revokes, deletes and rotates the secret of devices, restarts the WebSocket gateway, and checks their old tokens are still refused: the WebSocket gateway forgets every revocation event it heard, so this proves the cutoffs the management host keeps in Redis. It skips unless `E2E_SOCKET_RESTART_COMMAND` holds a command that restarts the WebSocket gateway, and since the restart drops every live device connection, run it on its own:
 
 ```bash
-E2E_SOCKET_RESTART_COMMAND="$PWD/Tests/Wbskt.E2E.FeatureTests/start-hosts.sh socket" \
+E2E_SOCKET_RESTART_COMMAND="$PWD/Tests/Wbskt.E2E.FeatureTests/start-hosts.sh gateway-ws" \
   dotnet test Tests/Wbskt.E2E.FeatureTests --filter FullyQualifiedName~DeviceRevocationTests.DEV_REV_02
 ```
 
 Against the hosts `e2e-up.sh` started, the restart command is
-`E2E_SOCKET_RESTART_COMMAND="$PWD/Tests/Wbskt.E2E.FeatureTests/e2e-up.sh restart socket"`.
+`E2E_SOCKET_RESTART_COMMAND="$PWD/Tests/Wbskt.E2E.FeatureTests/e2e-up.sh restart gateway-ws"`.
 
 ### 7. Outage pass (opt-in)
 
@@ -194,7 +194,7 @@ E2E_RABBITMQ_CONTAINER=wbskt-rabbit E2E_REDIS_CONTAINER=wbskt-redis \
 | Class | What it asserts |
 |---|---|
 | `BrokerOutageE2ETests` | With RabbitMQ stopped, a command and a ping answer 503 `EVENT_BUS_UNAVAILABLE` with `Retry-After`, sign-in still works, and a webhook to the public callback answers 503 with `Retry-After`. Once it is back, pings and commands go through again and the retried webhook starts its run. The callback does not hold a delivery it could not queue: it is the sender's retry that drains it. |
-| `RedisOutageE2ETests` | With Redis stopped, a device revoked before the outage and one revoked during it are refused at the socket (the socket host falls back to the revocations it heard by event), and an untouched device still connects. A member removed from a workspace during the outage is refused by the auth host at once and by the management host within its access-cache lifetime (`WorkspaceAccessCache:Seconds`, 30 s). |
+| `RedisOutageE2ETests` | With Redis stopped, a device revoked before the outage and one revoked during it are refused at the socket (the WebSocket gateway falls back to the revocations it heard by event), and an untouched device still connects. A member removed from a workspace during the outage is refused by the auth host at once and by the management host within its access-cache lifetime (`WorkspaceAccessCache:Seconds`, 30 s). |
 | `EngineFailoverE2ETests` | With a second engine running, the standby answers inbound calls 503 `ENGINE_NOT_LEADER` with `Retry-After` and is not ready. A run parks on a signal; the leader is killed; the standby keeps refusing until it holds the lease, then serves. The signal, sent to it, resumes the parked branch and the run succeeds, with one run, one `BranchStarted`, one `BranchParked` and one `BranchResumed`. |
 
 The management host calls the one engine URL it is configured with, so after the kill its engine
@@ -205,7 +205,7 @@ use its pid files in `e2e-hosts/`), not those `e2e-up.sh` runs in containers.
 
 ### CI
 
-The `e2e` job in `.github/workflows/build-images.yml` runs all four passes on every pull request and push to master, against SQL Server, RabbitMQ and Redis service containers and the five hosts started with `start-hosts.sh`. The main pass runs the three collections in parallel. The socket restart pass runs once after the main one. The rate-limit pass restarts the auth host before each scenario, since the budget one exhausts outlives it, and once more for the 429 row of the error-shape contract theory. The outage pass runs last, against an auth host restarted with the Development limits again; it passes the RabbitMQ and Redis service containers to `outage.sh` by id, and runs `outage.sh restore-all` at the end whatever happened. Before the main pass, the job compares each host's OpenAPI document with its snapshot (see [OpenAPI snapshots](#openapi-snapshots)). Image publishing does not wait on it yet.
+The `e2e` job in `.github/workflows/build-images.yml` runs all four passes on every pull request and push to master, against SQL Server, RabbitMQ and Redis service containers and the five hosts started with `start-hosts.sh`. The main pass runs the three collections in parallel. The gateway restart pass runs once after the main one. The rate-limit pass restarts the auth host before each scenario, since the budget one exhausts outlives it, and once more for the 429 row of the error-shape contract theory. The outage pass runs last, against an auth host restarted with the Development limits again; it passes the RabbitMQ and Redis service containers to `outage.sh` by id, and runs `outage.sh restore-all` at the end whatever happened. Before the main pass, the job compares each host's OpenAPI document with its snapshot (see [OpenAPI snapshots](#openapi-snapshots)). Image publishing does not wait on it yet.
 
 The job does not use `e2e-up.sh` yet. Moving it over would build the five host images in the job, which costs build time and wants a cache of its own, so it is a separate decision; until then CI and the compose file are two ways of standing up the same thing, and a host setting one needs has to go in both.
 
@@ -255,7 +255,7 @@ The per-user `Api` limiter cannot stand in for the 429: Development raises it to
 so a change to a route or a request or response shape is a diff someone reviews rather than
 something `Docs/API.Endpoints.md` catches up with later. The hosts serve them at `/openapi/v1.json`
 when API docs are on, which they are in Development. The engine host references the OpenAPI package
-but maps no document, and the socket host serves none, so neither has a snapshot.
+but maps no document, and the WebSocket gateway serves none, so neither has a snapshot.
 
 CI's `e2e` job runs `openapi/refresh.sh --check` once the hosts are up: it fetches each document,
 normalizes it (keys sorted with `jq -S`, `servers` dropped, since that is the address it was fetched

@@ -14,7 +14,7 @@ This repository is the backend. The web console lives in
 |---|---|
 | **Auth** (`Hosts/Wbskt.Auth.Host`) | Accounts, sign-in, email verification, password reset, tokens, tenants, roles and permissions. |
 | **Management** (`Hosts/Wbskt.Management.Host`) | Workspaces, policies, clients and workflows: the API the console and the client SDK call. |
-| **Socket** (`Hosts/Wbskt.Socket.Host`) | Holds the clients' WebSocket connections and routes their messages. |
+| **WebSocket gateway** (`Hosts/Wbskt.Gateway.WebSocket.Host`) | Holds the clients' WebSocket connections and routes their messages. The session logic is `Wbskt.Gateway.Core`, a library later gateways for other transports will share. |
 | **Workflow Engine** (`Hosts/Wbskt.Workflow.Engine.Host`) | Runs workflows. Not publicly routed; only the management host calls it. |
 
 The hosts share SQL Server (two databases, deployed from DACPACs), RabbitMQ for events between
@@ -70,7 +70,7 @@ the database script.
    ```bash
    dotnet run --project Hosts/Wbskt.Auth.Host             # https://localhost:7000
    dotnet run --project Hosts/Wbskt.Management.Host       # https://localhost:7010
-   dotnet run --project Hosts/Wbskt.Socket.Host           # https://localhost:7020
+   dotnet run --project Hosts/Wbskt.Gateway.WebSocket.Host  # https://localhost:7020
    dotnet run --project Hosts/Wbskt.Workflow.Engine.Host  # https://localhost:7030
    ```
 

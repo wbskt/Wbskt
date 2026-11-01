@@ -2,7 +2,7 @@
   <configuration default="false" name="RunAll" type="CompoundRunConfigurationType">
     <toRun name="Wbskt.Auth.Host: dev" type="LaunchSettings" />
     <toRun name="Wbskt.Management.Host: dev" type="LaunchSettings" />
-    <toRun name="Wbskt.Socket.Host: dev" type="LaunchSettings" />
+    <toRun name="Wbskt.Gateway.WebSocket.Host: dev" type="LaunchSettings" />
     <toRun name="Wbskt.Workflow.Engine.Host: dev" type="LaunchSettings" />
     <method v="2" />
   </configuration>

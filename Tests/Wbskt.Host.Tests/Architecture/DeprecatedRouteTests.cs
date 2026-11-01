@@ -23,7 +23,7 @@ public sealed partial class DeprecatedRouteTests
     [
         typeof(global::Wbskt.Auth.Host.Program).Assembly,
         typeof(global::Wbskt.Management.Host.Program).Assembly,
-        typeof(global::Wbskt.Socket.Host.Program).Assembly,
+        typeof(global::Wbskt.Gateway.WebSocket.Host.Program).Assembly,
         typeof(global::Wbskt.Workflow.Engine.Host.Program).Assembly,
     ];
 

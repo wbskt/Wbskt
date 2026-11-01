@@ -283,13 +283,13 @@ jobs:
             --nologo -v q --logger "console;verbosity=normal" \
             --logger "trx;LogFileName=e2e.trx" --results-directory TestResults 2>&1 | tee e2e-output.txt
 
-      # Then the device-revocation scenario that restarts the socket host, which the run above
+      # Then the device-revocation scenario that restarts the WebSocket gateway, which the run above
       # skips: a revoked device's token must still be refused once the host has forgotten every
       # event it heard. It runs on its own because the restart drops every live device connection.
-      - name: Socket restart tests
+      - name: Gateway restart tests
         if: ${{ !cancelled() && steps.hosts.outcome == 'success' }}
         env:
-          E2E_SOCKET_RESTART_COMMAND: ${{ github.workspace }}/Tests/Wbskt.E2E.FeatureTests/start-hosts.sh socket
+          E2E_SOCKET_RESTART_COMMAND: ${{ github.workspace }}/Tests/Wbskt.E2E.FeatureTests/start-hosts.sh gateway-ws
         run: |
           set -o pipefail
           dotnet test Tests/Wbskt.E2E.FeatureTests/Wbskt.E2E.FeatureTests.csproj --no-build \
@@ -531,9 +531,9 @@ jobs:
           - service: management
             project: Hosts/Wbskt.Management.Host/Wbskt.Management.Host.csproj
             dll: Wbskt.Management.Host.dll
-          - service: socket
-            project: Hosts/Wbskt.Socket.Host/Wbskt.Socket.Host.csproj
-            dll: Wbskt.Socket.Host.dll
+          - service: gateway-ws
+            project: Hosts/Wbskt.Gateway.WebSocket.Host/Wbskt.Gateway.WebSocket.Host.csproj
+            dll: Wbskt.Gateway.WebSocket.Host.dll
           - service: engine
             project: Hosts/Wbskt.Workflow.Engine.Host/Wbskt.Workflow.Engine.Host.csproj
             dll: Wbskt.Workflow.Engine.Host.dll

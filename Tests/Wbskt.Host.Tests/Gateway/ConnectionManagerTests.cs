@@ -2,9 +2,9 @@ using System.Net.WebSockets;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Wbskt.Gateway.Core.Infrastructure;
-using Wbskt.Socket.Host.Infrastructure;
+using Wbskt.Gateway.WebSocket.Host.Infrastructure;
 
-namespace Wbskt.Host.Tests.SocketHost;
+namespace Wbskt.Host.Tests.Gateway;
 
 public sealed class ConnectionManagerTests
 {

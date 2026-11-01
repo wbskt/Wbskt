@@ -310,8 +310,8 @@ pre { margin: 0; background: var(--canvas); border: 1px solid var(--line-soft); 
     <p class="lede">Traefik is the only container with host ports. It routes by host name and path to containers on the <code>edge</code> network, and to the engine through an internal entrypoint that is never published. Everything else listens only inside Docker networks or on the VM loopback.</p>
     <div class="twocol" style="margin-bottom:14px">
       <div class="sheet"><table><thead><tr><th>Network</th><th>Subnet</th><th>Static</th><th>Members</th></tr></thead><tbody>
-        <tr><td><b>edge</b> <span class="mono">wbskt_edge</span></td><td><code>172.28.0.0/24</code></td><td>Traefik <code>.2</code>; dynamic pool <code>.128/25</code></td><td>traefik, console, auth, management, devices, socket</td></tr>
-        <tr><td><b>backend</b> <span class="mono">wbskt_backend</span></td><td><code>172.28.1.0/24</code></td><td>Traefik <code>.2</code>; dynamic pool <code>.128/25</code></td><td>traefik, auth, management, devices, socket, engine, sql, rabbitmq, redis, telemetry, migrator</td></tr>
+        <tr><td><b>edge</b> <span class="mono">wbskt_edge</span></td><td><code>172.28.0.0/24</code></td><td>Traefik <code>.2</code>; dynamic pool <code>.128/25</code></td><td>traefik, console, auth, management, devices, gateway-ws</td></tr>
+        <tr><td><b>backend</b> <span class="mono">wbskt_backend</span></td><td><code>172.28.1.0/24</code></td><td>Traefik <code>.2</code>; dynamic pool <code>.128/25</code></td><td>traefik, auth, management, devices, gateway-ws, engine, sql, rabbitmq, redis, telemetry, migrator</td></tr>
       </tbody></table></div>
       <div class="sheet"><table><thead><tr><th>Entrypoint</th><th>Listens</th><th>Behaviour</th></tr></thead><tbody>
         <tr><td><code>web</code></td><td>host <code>:80</code></td><td>Redirects to HTTPS; serves the Let's Encrypt HTTP-01 challenge</td></tr>
@@ -389,16 +389,16 @@ pre { margin: 0; background: var(--canvas); border: 1px solid var(--line-soft); 
 
 <script>
 // ---------------------------------------------------------------- data
-const SVC = ['auth','management','devices','socket','engine'];
+const SVC = ['auth','management','devices','gateway-ws','engine'];
 const N = {};
 function node(id, label, sub, kind, x, y, w, h, d) { N[id] = Object.assign({ id, label, sub, kind, x, y, w, h }, d || {}); }
 // top band: outside the VM
 const TX = i => 28 + i * 117;
 node('browser','Browsers','console users','ext',TX(0),40,108,44,{ title:'Browsers', what:'People using the console at console.DOMAIN. Every request arrives over HTTPS on 443 at Traefik.', facts:[['Talks to','console., auth., api. DOMAIN'],['Live updates','SignalR at api.DOMAIN/hubs/notifications'],['Session','HttpOnly refresh cookie from auth (SameSite Strict by default)']] });
-node('device','Devices','Client SDK','ext',TX(1),40,108,44,{ title:'Devices', what:'Customer devices running the Client SDK. They register and log in over HTTPS at api.DOMAIN, then hold a WebSocket to ws.DOMAIN.', facts:[['Login','api.DOMAIN/api/v1/client-auth, /api/v1/client-registrations (unversioned aliases for one release)'],['Socket','wss://ws.DOMAIN'],['Token','Device JWT signed by management, audience wbskt-socket']] });
+node('device','Devices','Client SDK','ext',TX(1),40,108,44,{ title:'Devices', what:'Customer devices running the Client SDK. They register and log in over HTTPS at api.DOMAIN, then hold a WebSocket to ws.DOMAIN.', facts:[['Login','api.DOMAIN/api/v1/client-auth, /api/v1/client-registrations (unversioned aliases for one release)'],['Gateway','wss://ws.DOMAIN/ws (gateway-ws)'],['Token','Device JWT signed by management, audience wbskt-socket']] });
 node('laptop','Ops laptop','you, over SSH','ext',TX(2),40,108,44,{ title:'Ops laptop', what:'You. Nothing operational is publicly routed, so everything goes through SSH to the VM: a shell, docker compose, and tunnels to Grafana and Alertmanager.', facts:[['Reach','SSH 22 to the VM'],['Tunnels','127.0.0.1:3000 Grafana, :9093 Alertmanager, :9091 Pushgateway, :1433 SQL, :15672 RabbitMQ UI']], cmds:[['Tunnel Grafana + Alertmanager','ssh -L 3000:127.0.0.1:3000 -L 9093:127.0.0.1:9093 {vm}']] });
 node('gha','GitHub Actions','build + deploy','ext',TX(3),40,108,44,{ title:'GitHub Actions', what:'Builds and tests on every master push, publishes images to GHCR, then SSHes to the VM and runs deploy.sh.', facts:[['Backend','build-images.yml → deploy.yml, GitHub-hosted ubuntu-latest'],['Console','build-and-deploy.yml on the self-hosted runner'],['Environments','production, production-console'],['Secrets','DEPLOY_HOST, DEPLOY_USER, DEPLOY_PATH, DEPLOY_SSH_KEY, DEPLOY_KNOWN_HOSTS']], go:'pipeline' });
-node('ghcr','GHCR','ghcr.io/wbskt','ext',TX(4),40,108,44,{ title:'GitHub Container Registry', what:'Holds every image the VM runs. The VM logs in once with a classic PAT scoped to read:packages.', facts:[['Images','wbskt-auth, -management, -socket, -engine, -migrator, -console'],['Tags','sha-<short commit> and latest'],['Registry var','REGISTRY (default ghcr.io/wbskt)'],['Login stored in','~/.docker/config.json on the VM']] });
+node('ghcr','GHCR','ghcr.io/wbskt','ext',TX(4),40,108,44,{ title:'GitHub Container Registry', what:'Holds every image the VM runs. The VM logs in once with a classic PAT scoped to read:packages.', facts:[['Images','wbskt-auth, -management, -gateway-ws, -engine, -migrator, -console'],['Tags','sha-<short commit> and latest'],['Registry var','REGISTRY (default ghcr.io/wbskt)'],['Login stored in','~/.docker/config.json on the VM']] });
 node('le','Let’s Encrypt','TLS certs','ext',TX(5),40,108,44,{ title:'Let’s Encrypt', what:'Issues the certificates Traefik serves, through the HTTP-01 challenge on port 80.', facts:[['Account email','ACME_EMAIL'],['Directory','ACME_CASERVER (production unless set to staging)'],['Stored in','volume wbskt_traefik-acme → /letsencrypt/acme.json']] });
 node('smtp','SMTP relay','outbound mail','ext',TX(6),40,108,44,{ title:'SMTP relay', what:'External mail relay. Auth sends confirmation, invitation and reset mail through it; Alertmanager sends alert email through the same settings.', facts:[['Settings','SMTP_HOST, SMTP_PORT (587), SMTP_USE_STARTTLS, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM_ADDRESS, SMTP_FROM_NAME'],['Without it','Sign-ups succeed but nobody can confirm an address or sign in']] });
 node('integ','Integrations','Telegram, ntfy…','ext',TX(7),40,108,44,{ title:'Integration APIs', what:'Telegram bots, mail relays, Discord webhooks, ntfy topics and API tokens that workflow steps send through. The engine makes these calls.', facts:[['Secrets','Sealed by the engine with INTEGRATIONS_KEY_1; the DB holds only ciphertext']] });
@@ -411,19 +411,19 @@ node('console','console','nginx · edge only','app',AX(0),292,150,48,{ title:'co
 node('auth','auth','sign-in · edge+backend','app',AX(1),292,150,48,{ title:'auth', what:'Sign-in, accounts, tenants, workspaces and invitations. Signs user tokens and serves their public keys at /.well-known/jwks.json.', facts:[['Image','wbskt-auth:${IMAGE_TAG}'],['Port','8080'],['Networks','edge, backend'],['Routes','auth.DOMAIN (not /api/internal); api.DOMAIN tenants, invitations, workspace admin'],['Database','Wbskt.Database.Auth as wbskt_auth'],['Health','/healthz/ready'],['Depends on','rabbitmq, sql, redis healthy'],['Mounts','deploy/config → /Config (Serilog)']], env:['RABBITMQ_USER','RABBITMQ_PASSWORD','SQL_AUTH_PASSWORD','AUTH_JWT_SIGNING_KEY','AUTH_JWT_PREVIOUS_PUBLIC_KEY','AUTH_EMAIL_FINGERPRINT_KEY','CONSOLE_ORIGIN','CORS_EXTRA_ORIGINS','REFRESH_COOKIE_SAMESITE','API_DOCS_ENABLED','SMTP_HOST','SMTP_PORT','SMTP_USE_STARTTLS','SMTP_USERNAME','SMTP_PASSWORD','SMTP_FROM_ADDRESS','SMTP_FROM_NAME','AUTH_INTERNAL_API_KEY'], cmds:[['Tail logs','docker compose logs -f --tail 200 auth'],['Check mail is configured (expect no output)','docker compose logs auth 2>&1 | grep "No SMTP relay is configured"'],['Restart alone','docker compose up -d --no-build --no-deps auth']] });
 node('management','management','console API · edge+backend','app',AX(2),292,150,48,{ title:'management', what:'The console API and the SignalR notifications hub. Signs device tokens, validates user tokens with auth’s keys, and calls the engine through Traefik.', facts:[['Image','wbskt-management:${IMAGE_TAG}'],['Port','8080'],['Networks','edge, backend'],['Route','api.DOMAIN, every path except /api/internal; sticky cookie for SignalR'],['Replicas','MANAGEMENT_REPLICAS (default 1)'],['Database','Wbskt.Database as wbskt_management'],['Calls','http://auth:8080, http://traefik:8081'],['Depends on','rabbitmq, sql, redis, auth healthy']], env:['RABBITMQ_USER','RABBITMQ_PASSWORD','SQL_MANAGEMENT_PASSWORD','MANAGEMENT_JWT_SIGNING_KEY','MANAGEMENT_JWT_PREVIOUS_PUBLIC_KEY','ENGINE_INBOUND_API_KEY','AUTH_INTERNAL_API_KEY','CONSOLE_ORIGIN','CORS_EXTRA_ORIGINS','API_DOCS_ENABLED','MANAGEMENT_REPLICAS'], cmds:[['Tail logs (all replicas)','docker compose logs -f --tail 200 management'],['Restart (devices keeps device login up meanwhile)','docker compose up -d --no-build --no-deps management']] });
 node('devices','devices','device login · edge+backend','app',AX(3),292,150,48,{ title:'devices', what:'The management image run with Host__Role=Devices. Serves only device registration and login, so a console deploy or heavy query cannot stop devices signing in.', facts:[['Image','wbskt-management:${IMAGE_TAG}'],['Port','8080'],['Networks','edge, backend'],['Route','api.DOMAIN /api/v1/client-auth, /api/v1/client-registrations and their unversioned aliases (priority 1000)'],['Fallback','management serves the same paths while devices is unhealthy'],['Replicas','DEVICES_REPLICAS (default 1)'],['Database','Wbskt.Database as wbskt_management']], env:['RABBITMQ_USER','RABBITMQ_PASSWORD','SQL_MANAGEMENT_PASSWORD','MANAGEMENT_JWT_SIGNING_KEY','MANAGEMENT_JWT_PREVIOUS_PUBLIC_KEY','ENGINE_INBOUND_API_KEY','AUTH_INTERNAL_API_KEY','CONSOLE_ORIGIN','CORS_EXTRA_ORIGINS','DEVICES_REPLICAS'], cmds:[['Tail logs','docker compose logs -f --tail 200 devices'],['Restart alone','docker compose up -d --no-build --no-deps devices']], notes:'deploy.sh always restarts devices first and waits for it to be healthy before touching management.' });
-node('socket','socket','WebSockets · edge+backend','app',AX(4),292,150,48,{ title:'socket', what:'Holds device WebSocket connections. Holds no secret: it validates device tokens with management’s public keys and checks revocations in Redis.', facts:[['Image','wbskt-socket:${IMAGE_TAG}'],['Port','8080'],['Networks','edge, backend'],['Route','ws.DOMAIN (no stickiness needed)'],['Replicas','SOCKET_REPLICAS (default 1)'],['Keys from','http://management:8080/.well-known/jwks.json'],['Depends on','rabbitmq, redis healthy']], env:['RABBITMQ_USER','RABBITMQ_PASSWORD','SOCKET_REPLICAS'], cmds:[['Tail logs','docker compose logs -f --tail 200 socket'],['Scale to 3 (edit .env first)','sed -i "s/^SOCKET_REPLICAS=.*/SOCKET_REPLICAS=3/" .env && docker compose up -d --no-build --no-deps socket']] });
+node('gateway-ws','gateway-ws','WebSockets · edge+backend','app',AX(4),292,150,48,{ title:'gateway-ws', what:'The WebSocket device gateway, once the socket service: Hosts/Wbskt.Gateway.WebSocket.Host, the transport over Wbskt.Gateway.Core, which holds the session logic later gateways will share. Holds device WebSocket connections. Holds no secret: it validates device tokens with management’s public keys and checks revocations in Redis.', facts:[['Image','wbskt-gateway-ws:${IMAGE_TAG} (was wbskt-socket)'],['Port','8080'],['Networks','edge, backend'],['Route','ws.DOMAIN (no stickiness needed); Traefik router gateway-ws'],['Devices see','wss://ws.DOMAIN/ws, subprotocol wbskt.v1, token audience wbskt-socket: all unchanged by the rename'],['Replicas','GATEWAY_WS_REPLICAS, else SOCKET_REPLICAS (default 1)'],['Keys from','http://management:8080/.well-known/jwks.json'],['Depends on','rabbitmq, redis healthy']], env:['RABBITMQ_USER','RABBITMQ_PASSWORD','GATEWAY_WS_REPLICAS'], cmds:[['Tail logs','docker compose logs -f --tail 200 gateway-ws'],['Scale to 3 (edit .env first)','sed -i "s/^GATEWAY_WS_REPLICAS=.*/GATEWAY_WS_REPLICAS=3/" .env && docker compose up -d --no-build --no-deps gateway-ws']] });
 node('engine','engine','workflows · backend only','app',AX(5),292,150,48,{ title:'engine', what:'The workflow engine. Active/standby: one replica holds the leader lease and does all work, others are warm spares. Not on the edge network; reached only through Traefik’s internal :8081.', facts:[['Image','wbskt-engine:${IMAGE_TAG}'],['Port','8080'],['Network','backend only'],['Route','traefik:8081 /api/inbound, /internal/integrations'],['Leader routing','Traefik health check on /healthz/ready (only the leader is ready)'],['Container health','/healthz (liveness)'],['Replicas','ENGINE_REPLICAS (default 1)'],['Database','Wbskt.Database as wbskt_engine']], env:['RABBITMQ_USER','RABBITMQ_PASSWORD','SQL_ENGINE_PASSWORD','ENGINE_INBOUND_API_KEY','INTEGRATIONS_KEY_1','ENGINE_REPLICAS'], cmds:[['Tail logs','docker compose logs -f --tail 200 engine'],['Restart alone','docker compose up -d --no-build --no-deps engine']], notes:'Losing INTEGRATIONS_KEY_1 makes every saved integration secret unreadable. Keep a copy with the backup credentials.' });
 
 const DX = i => 60 + i * 250;
 node('sql','SQL Server 2022',':1433 · sql-data','data',DX(0),404,230,48,{ title:'SQL Server', what:'Both databases on one instance. Hosts use their own least-privilege logins that can only run stored procedures; sa is for the migrator, healthcheck and backups.', facts:[['Image','mcr.microsoft.com/mssql/server:2022-latest'],['Container','wbskt-sql'],['Port','1433 on the backend network, and 127.0.0.1:1433 on the VM for tunnels'],['Volume','sql-data → /var/opt/mssql'],['Databases','Wbskt.Database, Wbskt.Database.Auth'],['Logins','wbskt_auth, wbskt_management, wbskt_engine, sa'],['Health','sqlcmd SELECT 1 every 10s'],['Edition','Express (MSSQL_PID): 10 GB of data per database, ~1.4 GB buffer pool'],['Memory cap','SQL_MEMORY_LIMIT_MB, default 2048 (its floor)'],['Edition switch','Only when sql is recreated; deploy.sh never does']], env:['SQL_SA_PASSWORD','MSSQL_PID','SQL_MEMORY_LIMIT_MB'], cmds:[['Desktop SQL client from your laptop (localhost,1433 as sa)','ssh -L 1433:127.0.0.1:1433 {vm}'],['Open a SQL shell as sa','docker compose exec sql bash -c \'/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C\''],['Database sizes','docker compose exec sql bash -c \'/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "EXEC sp_helpdb"\''],['Run a backup now','{path}/deploy/scripts/backup.sh']], go:'runbook' });
 node('rabbitmq','RabbitMQ 4',':5672 · UI :15672','data',DX(1),404,230,48,{ title:'RabbitMQ', what:'The message bus (MassTransit). Carries device messages to the engine, commands back to devices, and events to management. Holds in-flight messages only.', facts:[['Image','rabbitmq:4-management'],['Container','wbskt-rabbitmq'],['Ports','5672 AMQP and 15692 Prometheus, backend only; 15672 management UI also on 127.0.0.1 on the VM'],['Volume','rabbitmq-data → /var/lib/rabbitmq'],['Health','ping + the callback-queue cap policy'],['Backed up','No, by design']], env:['RABBITMQ_USER','RABBITMQ_PASSWORD'], cmds:[['Management UI from your laptop (http://localhost:15672)','ssh -L 15672:127.0.0.1:15672 {vm}'],['Queues with depth and consumers','docker compose exec rabbitmq rabbitmqctl list_queues name messages consumers'],['Dead-lettered messages','docker compose exec rabbitmq rabbitmqctl list_queues name messages | grep -E "_error|_skipped"']] });
-node('redis','Redis 7',':6379 · AOF on','data',DX(2),404,230,48,{ title:'Redis', what:'SignalR backplane and cache, plus token revocations that live about an hour (signed-out users, revoked devices).', facts:[['Image','redis:7 (appendonly yes)'],['Container','wbskt-redis'],['Port','6379, backend only'],['Volume','redis-data → /data'],['Used by','auth, management, devices, socket'],['Backed up','No, by design']], cmds:[['Ping','docker compose exec redis redis-cli ping'],['Memory and key count','docker compose exec redis redis-cli info memory | grep used_memory_human && docker compose exec redis redis-cli dbsize']] });
+node('redis','Redis 7',':6379 · AOF on','data',DX(2),404,230,48,{ title:'Redis', what:'SignalR backplane and cache, plus token revocations that live about an hour (signed-out users, revoked devices).', facts:[['Image','redis:7 (appendonly yes)'],['Container','wbskt-redis'],['Port','6379, backend only'],['Volume','redis-data → /data'],['Used by','auth, management, devices, gateway-ws'],['Backed up','No, by design']], cmds:[['Ping','docker compose exec redis redis-cli ping'],['Memory and key count','docker compose exec redis redis-cli info memory | grep used_memory_human && docker compose exec redis redis-cli dbsize']] });
 node('migrator','migrator','one-shot · profile migrate','oneshot',DX(3),404,230,48,{ title:'migrator', what:'Publishes both DACPACs with sqlpackage. Incremental by default and safe to rerun; deploy.sh runs it on every backend deploy. Creates and resets the per-host SQL logins.', facts:[['Image','wbskt-migrator:${IMAGE_TAG}'],['Container','wbskt-migrator (exits when done)'],['Profile','migrate'],['Connects as','sa'],['Statement timeout','MIGRATE_COMMAND_TIMEOUT, default 1800s (sqlpackage’s own is 60s, too short for a table rebuild)'],['Shell-only flags','MIGRATE_FRESH, MIGRATE_ALLOW_DATA_LOSS']], env:['SQL_SA_PASSWORD','SQL_AUTH_PASSWORD','SQL_MANAGEMENT_PASSWORD','SQL_ENGINE_PASSWORD','ROOT_ADMIN_PASSWORD_HASH'], cmds:[['Incremental migration (safe)','docker compose --profile migrate run --rm migrator']], notes:'MIGRATE_FRESH=true drops and recreates both databases with no prompt. Only for a brand-new environment.' });
 
 node('otel','OTel collector','OTLP :4317','tele',DX(0),516,230,48,{ title:'OpenTelemetry collector', what:'Receives traces, metrics and logs from every host and fans them out to Tempo, Prometheus and Loki.', facts:[['Image','otel/opentelemetry-collector-contrib:0.130.0'],['Port','4317 OTLP gRPC, backend only'],['Config','deploy/observability/otel-collector.yaml'],['Hosts point at it via','OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317'],['Health','No Docker healthcheck (no shell in the image); Prometheus scrapes its :8888 metrics and OtelCollectorDown fires when that stops']] });
 node('prometheus','Prometheus','metrics · alert rules','tele',DX(1),516,230,48,{ title:'Prometheus', what:'Stores metrics (pushed over OTLP and scraped), evaluates the alert rules and fires them at Alertmanager.', facts:[['Image','prom/prometheus:v3.5.0'],['Retention','METRICS_RETENTION (default 15d)'],['Scrapes','rabbitmq:15692, pushgateway:9091, node-exporter:9100, cadvisor:8080, otel-collector:8888'],['Health','wget /-/ready every 30s'],['Rules','deploy/observability/alerts.yml'],['Volume','prometheus-data']], env:['METRICS_RETENTION'], go:'alerts' });
 node('loki','Loki','logs · 7 days','tele',DX(2),516,230,48,{ title:'Loki', what:'Log store. Logs carry trace and span ids, and Grafana links logs and traces both ways.', facts:[['Image','grafana/loki:3.5.3'],['Retention','168h'],['Health','wget /ready on :3100 every 30s, 60s start grace'],['Volume','loki-data']] });
-node('tempo','Tempo','traces · 72 hours','tele',DX(3),516,230,48,{ title:'Tempo', what:'Trace store. MassTransit carries trace context in message headers, so one trace follows a device message from socket, over the bus, into the engine and management.', facts:[['Image','grafana/tempo:2.8.2'],['Retention','72h'],['Health','wget /ready on :3200 every 30s, 60s start grace'],['Volume','tempo-data']] });
+node('tempo','Tempo','traces · 72 hours','tele',DX(3),516,230,48,{ title:'Tempo', what:'Trace store. MassTransit carries trace context in message headers, so one trace follows a device message from gateway-ws, over the bus, into the engine and management.', facts:[['Image','grafana/tempo:2.8.2'],['Retention','72h'],['Health','wget /ready on :3200 every 30s, 60s start grace'],['Volume','tempo-data']] });
 node('nodeexp','node-exporter',':9100 · host filesystems','tele',DX(0),516,230,48,{ title:'node-exporter', what:'Host metrics for the VM itself, read through a read-only mount of / and the host’s /proc. Its filesystem free space drives DiskAlmostFull and DiskFillingFast.', facts:[['Image','prom/node-exporter:v1.12.1'],['Container','wbskt-node-exporter'],['Port','9100, backend only'],['Mounts','/ → /host (read-only), pid: host'],['Ignores','Docker’s own overlay mounts, /dev, /proc, /run, /sys']], cmds:[['Free space as Prometheus sees it','docker compose exec prometheus wget -qO- "http://localhost:9090/api/v1/query?query=node_filesystem_avail_bytes" | head -c 1500'],['Start it on a VM that predates it','docker compose up -d node-exporter && docker compose up -d --force-recreate prometheus']], go:'alerts' });
 node('cadvisor','cAdvisor',':8080 · per-container','tele',DX(0),516,230,48,{ title:'cAdvisor', what:'Per-container CPU, memory and start times. A container restarted in place keeps its series, so its start time changing is how ContainerRestarting spots a crash loop.', facts:[['Image','ghcr.io/google/cadvisor:v0.60.6'],['Container','wbskt-cadvisor'],['Port','8080, backend only'],['Runs','privileged, reads /sys, /var/run and /var/lib/docker read-only'],['Metrics','cpu and memory only (the full set is thousands of series per container)']], cmds:[['Restart counts Docker keeps','docker ps -a --format "{{.Names}}" | xargs docker inspect -f "{{.Name}} restarts={{.RestartCount}} oom={{.State.OOMKilled}}"'],['Start it on a VM that predates it','docker compose up -d cadvisor && docker compose up -d --force-recreate prometheus']], go:'alerts' });
 
@@ -443,7 +443,7 @@ const E = {};
  ['t_auth','traefik','auth','auth.DOMAIN, api.DOMAIN admin paths → auth:8080'],
  ['t_mgmt','traefik','management','api.DOMAIN → management:8080, sticky cookie'],
  ['t_dev','traefik','devices','api.DOMAIN /api/client-* → devices:8080'],
- ['t_sock','traefik','socket','ws.DOMAIN → socket:8080'],
+ ['t_sock','traefik','gateway-ws','ws.DOMAIN → gateway-ws:8080'],
  ['t_eng','traefik','engine',':8081 → engine leader :8080'],
  ['mgmt_t','management','traefik','http://traefik:8081 with ENGINE_INBOUND_API_KEY'],
  ['t_le','traefik','le','ACME HTTP-01 on :80'],
@@ -452,18 +452,18 @@ const E = {};
  ['dev_sql','devices','sql','Wbskt.Database as wbskt_management'],
  ['eng_sql','engine','sql','Wbskt.Database as wbskt_engine'],
  ['mgmt_auth','management','auth','JWKS; /api/internal with AUTH_INTERNAL_API_KEY'],
- ['sock_mgmt','socket','management','JWKS for device tokens'],
+ ['sock_mgmt','gateway-ws','management','JWKS for device tokens'],
  ['auth_redis','auth','redis','publishes token revocations'],
  ['mgmt_redis','management','redis','SignalR backplane, revocations'],
- ['sock_redis','socket','redis','device revocation check'],
- ['sock_rmq','socket','rabbitmq','AMQP 5672: device messages'],
+ ['sock_redis','gateway-ws','redis','device revocation check'],
+ ['sock_rmq','gateway-ws','rabbitmq','AMQP 5672: device messages'],
  ['rmq_eng','rabbitmq','engine','engine leader consumes'],
  ['eng_rmq','engine','rabbitmq','commands and events'],
- ['rmq_sock','rabbitmq','socket','commands to connected devices'],
+ ['rmq_sock','rabbitmq','gateway-ws','commands to connected devices'],
  ['rmq_mgmt','rabbitmq','management','events become console notifications'],
  ['auth_smtp','auth','smtp','SMTP 587: confirm, invite, reset'],
  ['eng_integ','engine','integ','HTTPS out through an integration'],
- ['o_auth','auth','otel','OTLP 4317'],['o_mgmt','management','otel','OTLP 4317'],['o_dev','devices','otel','OTLP 4317'],['o_sock','socket','otel','OTLP 4317'],['o_eng','engine','otel','OTLP 4317'],
+ ['o_auth','auth','otel','OTLP 4317'],['o_mgmt','management','otel','OTLP 4317'],['o_dev','devices','otel','OTLP 4317'],['o_sock','gateway-ws','otel','OTLP 4317'],['o_eng','engine','otel','OTLP 4317'],
  ['otel_prom','otel','prometheus','metrics'],['otel_loki','otel','loki','logs'],['otel_tempo','otel','tempo','traces'],
  ['prom_rmq','prometheus','rabbitmq','scrape :15692'],
  ['prom_push','prometheus','pushgateway','scrape :9091'],
@@ -479,7 +479,7 @@ const E = {};
  ['sshd_ghcr','sshd','ghcr','docker compose pull'],
  ['sshd_mig','sshd','migrator','compose run migrator'],
  ['mig_sql','migrator','sql','sqlpackage publish as sa'],
- ['dep_dev','sshd','devices','up -d --no-deps (first)'],['dep_mgmt','sshd','management','up -d --no-deps'],['dep_auth','sshd','auth','up -d --no-deps'],['dep_sock','sshd','socket','up -d --no-deps'],['dep_eng','sshd','engine','up -d --no-deps'],
+ ['dep_dev','sshd','devices','up -d --no-deps (first)'],['dep_mgmt','sshd','management','up -d --no-deps'],['dep_auth','sshd','auth','up -d --no-deps'],['dep_sock','sshd','gateway-ws','up -d --no-deps'],['dep_eng','sshd','engine','up -d --no-deps'],
  ['dep_console','sshd','console','up -d --no-deps console'],
  ['cron_sql','cron','sql','BACKUP DATABASE via compose exec'],
  ['cron_off','cron','offsite','BACKUP_UPLOAD_CMD'],
@@ -495,23 +495,23 @@ const FLOWS = [
  { id:'devlogin', name:'Device registration and login', desc:'Devices register and log in on api.DOMAIN. Traefik sends those two paths to the devices host and falls back to management while devices restarts.', steps:[
    ['d_t','Device calls api.DOMAIN/api/v1/client-auth'], ['t_dev','Router priority 1000 sends it to devices'], ['dev_sql','devices verifies the device secret hash in SQL'], ['t_dev','Returns a device JWT signed with MANAGEMENT_JWT_SIGNING_KEY'] ] },
  { id:'devmsg', name:'Device message to workflow run', desc:'A connected device sends a message, the engine runs the matching workflow, and commands flow back to devices.', steps:[
-   ['d_t','Device opens wss://ws.DOMAIN'], ['t_sock','Traefik hands the WebSocket to a socket replica'], ['sock_mgmt','socket validates the device token with management’s public keys'], ['sock_redis','and checks Redis for a revocation'], ['sock_rmq','socket publishes the message to RabbitMQ'], ['rmq_eng','The engine leader consumes it and starts or advances a run'], ['eng_sql','Run state is saved in Wbskt.Database'], ['eng_rmq','Commands for devices go back on the bus'], ['rmq_sock','socket delivers them to the connected device'] ] },
+   ['d_t','Device opens wss://ws.DOMAIN'], ['t_sock','Traefik hands the WebSocket to a gateway-ws replica'], ['sock_mgmt','gateway-ws validates the device token with management’s public keys'], ['sock_redis','and checks Redis for a revocation'], ['sock_rmq','gateway-ws publishes the message to RabbitMQ'], ['rmq_eng','The engine leader consumes it and starts or advances a run'], ['eng_sql','Run state is saved in Wbskt.Database'], ['eng_rmq','Commands for devices go back on the bus'], ['rmq_sock','gateway-ws delivers them to the connected device'] ] },
  { id:'integ', name:'Integration send', desc:'Integration credentials are sealed by the engine, never by management, and workflow steps send through them.', steps:[
    ['b_t','Someone saves a Telegram bot in the console'], ['t_mgmt','The request reaches management'], ['mgmt_t','management calls /internal/integrations on traefik:8081'], ['t_eng','The engine seals the secret with INTEGRATIONS_KEY_1'], ['eng_sql','Only the ciphertext is stored'], ['eng_integ','Later, a workflow step opens it and sends the message'] ] },
  { id:'release', name:'Release deploy', desc:'A push to master builds, tests and publishes images, then deploy.sh rolls them out on the VM.', steps:[
-   ['gha_ghcr','Tests, E2E and the upgrade rehearsal pass; five images pushed as sha-<short>'], ['gha_sshd','deploy.yml SSHes in; the forced command runs deploy.sh'], ['sshd_ghcr','Checkout reset to the commit, unused images pruned, 3 GB free checked, images pulled'], ['sshd_mig','The migrator runs (incremental, default on)'], ['mig_sql','sqlpackage applies the schema delta'], ['dep_dev','devices restarts first and must turn healthy'], ['dep_mgmt','then management'], ['dep_auth','auth'], ['dep_sock','socket'], ['dep_eng','engine; deploy.sh waits up to 240s for health'] ] },
+   ['gha_ghcr','Tests, E2E and the upgrade rehearsal pass; five images pushed as sha-<short>'], ['gha_sshd','deploy.yml SSHes in; the forced command runs deploy.sh'], ['sshd_ghcr','Checkout reset to the commit, unused images pruned, 3 GB free checked, images pulled'], ['sshd_mig','The migrator runs (incremental, default on)'], ['mig_sql','sqlpackage applies the schema delta'], ['dep_dev','devices restarts first and must turn healthy'], ['dep_mgmt','then management'], ['dep_auth','auth'], ['dep_sock','gateway-ws; old socket containers, if any, are stopped once it is healthy'], ['dep_eng','engine; deploy.sh waits up to 240s for health'] ] },
  { id:'backup', name:'Nightly backup', desc:'At 02:00 cron runs backup.sh. A backup that does not verify, or never leaves the VM, counts as no backup.', steps:[
    ['cron_sql','BACKUP DATABASE with checksum (Express has no backup compression), then RESTORE VERIFYONLY'], ['cron_sql','The .bak is copied out to BACKUP_DIR on the host and gzipped there'], ['cron_off','BACKUP_UPLOAD_CMD pushes BACKUP_DIR off the box'], ['cron_push','Success timestamp pushed to the Pushgateway'], ['prom_push','Prometheus scrapes it; BackupMissing fires after 26h without one'], ['cron_am','On failure, alert.sh raises BackupFailed directly'], ['am_smtp','Alertmanager emails ALERT_EMAIL_TO'] ] },
  { id:'telemetry', name:'Telemetry and alerts', desc:'Every host exports OTLP to the collector. You read it all in Grafana over an SSH tunnel.', steps:[
-   ['o_auth','auth exports OTLP'], ['o_mgmt','management exports OTLP'], ['o_dev','devices exports OTLP'], ['o_sock','socket exports OTLP'], ['o_eng','engine exports OTLP'], ['otel_prom','Metrics to Prometheus'], ['otel_loki','Logs to Loki'], ['otel_tempo','Traces to Tempo'], ['prom_rmq','Prometheus also scrapes RabbitMQ for dead letters'], ['prom_am','Rules fire to Alertmanager'], ['am_smtp','Alertmanager emails or calls the webhook'], ['laptop_sshd','You SSH in with a tunnel'], ['sshd_graf','and open Grafana on localhost:3000'], ['graf_prom','Grafana queries Prometheus'], ['graf_loki','Loki'], ['graf_tempo','and Tempo'] ] },
+   ['o_auth','auth exports OTLP'], ['o_mgmt','management exports OTLP'], ['o_dev','devices exports OTLP'], ['o_sock','gateway-ws exports OTLP'], ['o_eng','engine exports OTLP'], ['otel_prom','Metrics to Prometheus'], ['otel_loki','Logs to Loki'], ['otel_tempo','Traces to Tempo'], ['prom_rmq','Prometheus also scrapes RabbitMQ for dead letters'], ['prom_am','Rules fire to Alertmanager'], ['am_smtp','Alertmanager emails or calls the webhook'], ['laptop_sshd','You SSH in with a tunnel'], ['sshd_graf','and open Grafana on localhost:3000'], ['graf_prom','Grafana queries Prometheus'], ['graf_loki','Loki'], ['graf_tempo','and Tempo'] ] },
 ];
 
 const ENV = [
  // [name, group, kind(secret|plain), required, default, uses [[svc, key]], note, generate]
  ['REGISTRY','Images and scale','plain',false,'ghcr.io/wbskt',[['all images','image prefix']],'Where the VM pulls images from.'],
- ['IMAGE_TAG','Images and scale','plain',false,'latest',[['auth, management, devices, socket, engine, migrator','image tag']],'deploy.sh rewrites it on every backend deploy, so .env always names what is running.'],
+ ['IMAGE_TAG','Images and scale','plain',false,'latest',[['auth, management, devices, gateway-ws, engine, migrator','image tag']],'deploy.sh rewrites it on every backend deploy, so .env always names what is running.'],
  ['CONSOLE_IMAGE_TAG','Images and scale','plain',false,'latest',[['console','image tag']],'Moved only by deploy.sh --console-tag.'],
- ['SOCKET_REPLICAS','Images and scale','plain',false,'1',[['socket','deploy.replicas']],'Declare scale here, never with --scale, or the next deploy shrinks it back.'],
+ ['GATEWAY_WS_REPLICAS','Images and scale','plain',false,'1',[['gateway-ws','deploy.replicas']],'Was SOCKET_REPLICAS, which is still read while this is unset. Declare scale here, never with --scale, or the next deploy shrinks it back.'],
  ['MANAGEMENT_REPLICAS','Images and scale','plain',false,'1',[['management','deploy.replicas']],''],
  ['DEVICES_REPLICAS','Images and scale','plain',false,'1',[['devices','deploy.replicas']],''],
  ['ENGINE_REPLICAS','Images and scale','plain',false,'1',[['engine','deploy.replicas']],'Replicas above 1 are warm standbys behind one leader lease.'],
@@ -525,10 +525,10 @@ const ENV = [
  ['SQL_MANAGEMENT_PASSWORD','SQL','secret',true,'',[['management, devices','ConnectionStrings__DefaultConnection'],['migrator','creates login wbskt_management']],'','printf \'Wb1%s\\n\' "$(openssl rand -hex 16)"'],
  ['SQL_ENGINE_PASSWORD','SQL','secret',true,'',[['engine','ConnectionStrings__DefaultConnection'],['migrator','creates login wbskt_engine']],'','printf \'Wb1%s\\n\' "$(openssl rand -hex 16)"'],
  ['ROOT_ADMIN_PASSWORD_HASH','SQL','secret',false,'',[['migrator','root account, first run only']],'Clear it once the install is done.'],
- ['RABBITMQ_USER','RabbitMQ','plain',true,'wbskt',[['rabbitmq','RABBITMQ_DEFAULT_USER'],['auth, management, devices, socket, engine','RabbitMQ__UserName']],''],
- ['RABBITMQ_PASSWORD','RabbitMQ','secret',true,'',[['rabbitmq','RABBITMQ_DEFAULT_PASS'],['auth, management, devices, socket, engine','RabbitMQ__Password']],''],
+ ['RABBITMQ_USER','RabbitMQ','plain',true,'wbskt',[['rabbitmq','RABBITMQ_DEFAULT_USER'],['auth, management, devices, gateway-ws, engine','RabbitMQ__UserName']],''],
+ ['RABBITMQ_PASSWORD','RabbitMQ','secret',true,'',[['rabbitmq','RABBITMQ_DEFAULT_PASS'],['auth, management, devices, gateway-ws, engine','RabbitMQ__Password']],''],
  ['AUTH_JWT_SIGNING_KEY','Tokens and keys','secret',true,'',[['auth','Jwt__SigningKey']],'Signs user tokens. Rotation keeps the old public half in AUTH_JWT_PREVIOUS_PUBLIC_KEY.','openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt | base64 -w0'],
- ['MANAGEMENT_JWT_SIGNING_KEY','Tokens and keys','secret',true,'',[['management, devices','Jwt__SigningKey']],'Signs device tokens for the socket host.','openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt | base64 -w0'],
+ ['MANAGEMENT_JWT_SIGNING_KEY','Tokens and keys','secret',true,'',[['management, devices','Jwt__SigningKey']],'Signs device tokens for the WebSocket gateway (audience wbskt-socket, unchanged by the rename).','openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt | base64 -w0'],
  ['AUTH_JWT_PREVIOUS_PUBLIC_KEY','Tokens and keys','plain',false,'',[['auth','Jwt__AdditionalPublicKeys__0']],'Only while rotating. A public key, not a secret.'],
  ['MANAGEMENT_JWT_PREVIOUS_PUBLIC_KEY','Tokens and keys','plain',false,'',[['management, devices','Jwt__AdditionalPublicKeys__0']],'Only while rotating.'],
  ['AUTH_EMAIL_FINGERPRINT_KEY','Tokens and keys','secret',false,'derived from AUTH_JWT_SIGNING_KEY',[['auth','Auth__Telemetry__EmailFingerprintKey']],'Keeps log fingerprints stable across signing-key rotations.','openssl rand -base64 32'],
@@ -561,7 +561,7 @@ const ENV = [
 ];
 const DEV_ENV = ['REGISTRY','IMAGE_TAG','CONSOLE_IMAGE_TAG','SOCKET_REPLICAS','MANAGEMENT_REPLICAS','DEVICES_REPLICAS','ENGINE_REPLICAS','DOMAIN','ACME_EMAIL','SQL_SA_PASSWORD','SQL_AUTH_PASSWORD','SQL_MANAGEMENT_PASSWORD','SQL_ENGINE_PASSWORD','ROOT_ADMIN_PASSWORD_HASH','RABBITMQ_USER','RABBITMQ_PASSWORD','AUTH_JWT_SIGNING_KEY','MANAGEMENT_JWT_SIGNING_KEY','AUTH_JWT_PREVIOUS_PUBLIC_KEY','MANAGEMENT_JWT_PREVIOUS_PUBLIC_KEY','AUTH_EMAIL_FINGERPRINT_KEY','CONSOLE_ORIGIN','CORS_EXTRA_ORIGINS','REFRESH_COOKIE_SAMESITE','API_DOCS_ENABLED','SMTP_HOST','SMTP_PORT','SMTP_USE_STARTTLS','SMTP_USERNAME','SMTP_PASSWORD','SMTP_FROM_ADDRESS','SMTP_FROM_NAME','ENGINE_INBOUND_API_KEY','AUTH_INTERNAL_API_KEY','INTEGRATIONS_KEY_1','BACKUP_DIR','BACKUP_RETENTION_DAYS','GRAFANA_ADMIN_PASSWORD','METRICS_RETENTION','ALERT_EMAIL_TO','ALERT_WEBHOOK_URL'];
 // In dev.env but still a placeholder there: the real value lives only in the VM's .env.
-const DEV_TODO = new Set(['SQL_AUTH_PASSWORD','SQL_MANAGEMENT_PASSWORD','SQL_ENGINE_PASSWORD','AUTH_JWT_SIGNING_KEY','MANAGEMENT_JWT_SIGNING_KEY','AUTH_EMAIL_FINGERPRINT_KEY','AUTH_INTERNAL_API_KEY','INTEGRATIONS_KEY_1']);
+const DEV_TODO = new Set(['GATEWAY_WS_REPLICAS','SQL_AUTH_PASSWORD','SQL_MANAGEMENT_PASSWORD','SQL_ENGINE_PASSWORD','AUTH_JWT_SIGNING_KEY','MANAGEMENT_JWT_SIGNING_KEY','AUTH_EMAIL_FINGERPRINT_KEY','AUTH_INTERNAL_API_KEY','INTEGRATIONS_KEY_1']);
 const OPTIONAL_DRIFT = new Set(['ACME_CASERVER','BACKUP_ALLOW_LOCAL_ONLY','MIGRATE_FRESH','MIGRATE_ALLOW_DATA_LOSS','MIGRATE_COMMAND_TIMEOUT','MSSQL_PID','SQL_MEMORY_LIMIT_MB']);
 
 const ROUTES = [
@@ -570,14 +570,14 @@ const ROUTES = [
  ['auth-api','Host(api.DOMAIN) && (/api[/v1]/tenants | /api[/v1]/invitations | /api[/v1]/workspaces[/{id}[/members|owner|permissions]])','900','auth:8080','Workspace admin moved to the one API host (#304). Unversioned paths are aliases of /api/v1 for one release (#312).'],
  ['devices','Host(api.DOMAIN) && (/api[/v1]/client-auth | /api[/v1]/client-registrations)','1000','devices:8080','Falls through to management while devices is unhealthy.'],
  ['management','Host(api.DOMAIN) && !PathPrefix(/api/internal)','default (rule length)','management:8080','Sticky cookie for SignalR across replicas.'],
- ['socket','Host(ws.DOMAIN)','default','socket:8080','WebSocket upgrade pins the connection.'],
+ ['gateway-ws','Host(ws.DOMAIN)','default','gateway-ws:8080','WebSocket upgrade pins the connection.'],
  ['engine','entrypoint engine :8081 && (/api/inbound | /internal/integrations)','default','engine:8080','Traefik health check on /healthz/ready routes to the leader only.'],
 ];
 const PORTS = [
  ['traefik','80, 443','Internet (host ports)','HTTP redirect + ACME, HTTPS/WSS'],
  ['traefik','8081','Containers only','Engine entrypoint'],
  ['console','80','Traefik (edge)','nginx'],
- ['auth, management, devices, socket, engine','8080','Traefik and other containers','ASP.NET hosts'],
+ ['auth, management, devices, gateway-ws, engine','8080','Traefik and other containers','ASP.NET hosts'],
  ['sql','1433','backend network; 127.0.0.1 on the VM','TDS (ssh -L for a desktop client)'],
  ['rabbitmq','5672','backend network','AMQP'],
  ['rabbitmq','15672','127.0.0.1 on the VM','Management UI (ssh -L)'],
@@ -597,10 +597,10 @@ const PORTS = [
 const INTERNAL = [
  ['management','http://auth:8080','AUTH_INTERNAL_API_KEY on /api/internal','Workspace data, deleted-workspace sweep'],
  ['management','http://auth:8080/.well-known/jwks.json','none (public keys)','Validate user tokens'],
- ['socket','http://management:8080/.well-known/jwks.json','none (public keys)','Validate device tokens'],
+ ['gateway-ws','http://management:8080/.well-known/jwks.json','none (public keys)','Validate device tokens'],
  ['management','http://traefik:8081','ENGINE_INBOUND_API_KEY','Runs, signals, integration sealing'],
  ['all five hosts','rabbitmq:5672','RABBITMQ_USER / RABBITMQ_PASSWORD','Message bus'],
- ['auth, management, devices, socket','redis:6379','none (backend network only)','Backplane and revocations'],
+ ['auth, management, devices, gateway-ws','redis:6379','none (backend network only)','Backplane and revocations'],
  ['auth, management, devices, engine','sql:1433','per-host SQL login','Stored procedures'],
  ['all five hosts','http://otel-collector:4317','none','OTLP telemetry'],
 ];
@@ -630,7 +630,7 @@ const TREE = [
  ['head','{path}','The Wbskt checkout (<b>DEPLOY_PATH</b>). deploy.sh resets it to the deployed commit; it refuses to run with local edits to tracked files.'],
  ['row','├─ deploy/compose/docker-compose.yml','The whole stack. Compose project name <b>wbskt</b>.'],
  ['row','├─ deploy/compose/.env','<b>All secrets.</b> Untracked, never committed. deploy.sh rewrites <b>IMAGE_TAG</b> and <b>CONSOLE_IMAGE_TAG</b> here.'],
- ['row','├─ deploy/config/serilog.json','Mounted read-only at <b>/Config</b> in auth, management, devices, socket, engine.'],
+ ['row','├─ deploy/config/serilog.json','Mounted read-only at <b>/Config</b> in auth, management, devices, gateway-ws, engine.'],
  ['row','├─ deploy/observability/','Collector, Prometheus + alerts.yml (scrapes node-exporter and cAdvisor), Loki, Tempo, Grafana datasources, Alertmanager entrypoint, RabbitMQ plugins and healthcheck. All mounted read-only.'],
  ['row','└─ deploy/scripts/','deploy.sh, backup.sh, backup-check.sh, restore.sh, alert.sh, ssh-forced-command.sh.'],
  ['head','/var/backups/wbskt/','<b>BACKUP_DIR</b>. Wbskt.Database_&lt;UTC stamp&gt;.bak.gz and Wbskt.Database.Auth_&lt;stamp&gt;.bak.gz, pruned after BACKUP_RETENTION_DAYS.'],
@@ -659,8 +659,8 @@ const RUNBOOK = [
    ['Every container with health','docker compose ps'],
    ['Which image tags are deployed','grep -E "^(IMAGE_TAG|CONSOLE_IMAGE_TAG)=" .env && docker compose images'],
    ['Follow one service','docker compose logs -f --tail 200 engine'],
-   ['Follow all five hosts','docker compose logs -f --tail 50 auth management devices socket engine'],
-   ['Errors in the last hour','docker compose logs --since 1h auth management devices socket engine 2>&1 | grep -iE "error|fail|exception" | tail -50'],
+   ['Follow all five hosts','docker compose logs -f --tail 50 auth management devices gateway-ws engine'],
+   ['Errors in the last hour','docker compose logs --since 1h auth management devices gateway-ws engine 2>&1 | grep -iE "error|fail|exception" | tail -50'],
    ['Search older logs with trace links (laptop)','ssh -L 3000:127.0.0.1:3000 {vm}\n# then Grafana → Explore → Loki'] ] },
  { t:'Database', p:'SQL Server is on the backend network and the VM loopback, so a desktop client goes through an SSH tunnel.', c:[
    ['SQL shell as sa','docker compose exec sql bash -c \'/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C\''],
@@ -674,7 +674,7 @@ const RUNBOOK = [
    ['Last run','tail -n 50 /var/log/wbskt-backup.log'],
    ['Local backups','ls -lh /var/backups/wbskt'],
    ['Rehearse: restore into a scratch database, prints row counts','{path}/deploy/scripts/restore.sh --file /var/backups/wbskt/Wbskt.Database_<stamp>.bak.gz'],
-   ['Real recovery over the live database','docker compose stop auth management devices socket engine\n{path}/deploy/scripts/restore.sh --file /var/backups/wbskt/Wbskt.Database_<stamp>.bak.gz --target Wbskt.Database --force\ndocker compose up -d --no-build auth management devices socket engine','danger'] ] },
+   ['Real recovery over the live database','docker compose stop auth management devices gateway-ws engine\n{path}/deploy/scripts/restore.sh --file /var/backups/wbskt/Wbskt.Database_<stamp>.bak.gz --target Wbskt.Database --force\ndocker compose up -d --no-build auth management devices gateway-ws engine','danger'] ] },
  { t:'RabbitMQ and Redis', p:'Neither is backed up; both hold short-lived state.', c:[
    ['Queues, depth, consumers','docker compose exec rabbitmq rabbitmqctl list_queues name messages consumers'],
    ['Dead letters','docker compose exec rabbitmq rabbitmqctl list_queues name messages | grep -E "_error|_skipped"'],
@@ -685,7 +685,7 @@ const RUNBOOK = [
    ['Only some hosts','{path}/deploy/scripts/deploy.sh --tag sha-<short> --services "auth management"'],
    ['Console to a build','{path}/deploy/scripts/deploy.sh --console-tag sha-<short>'],
    ['Restart one host without touching dependencies','docker compose up -d --no-build --no-deps auth'],
-   ['Change scale (edit .env, then apply)','sed -i "s/^SOCKET_REPLICAS=.*/SOCKET_REPLICAS=3/" .env\ndocker compose up -d --no-build --no-deps socket'],
+   ['Change scale (edit .env, then apply)','sed -i "s/^GATEWAY_WS_REPLICAS=.*/GATEWAY_WS_REPLICAS=3/" .env\ndocker compose up -d --no-build --no-deps gateway-ws'],
    ['Network definition changed (maintenance window)','docker compose down && docker compose up -d --no-build','danger'] ] },
  { t:'Disk space', p:'The disk filled from old images once already. deploy.sh now prunes first and stops if under 3 GB is free, and DiskAlmostFull pages at 15% free.', c:[
    ['Which filesystem is full','df -h / /var/lib/containerd /var/lib/docker'],
@@ -752,12 +752,12 @@ const board = $('#board');
 const ROWS = [
  { ids:['browser','device','laptop','gha','ghcr','le','smtp','integ','offsite'], top:32, h:84, w:120, gap:18, x0:28, ny:44 },
  { ids:['traefik'], top:180, h:110, w:1136, gap:0, x0:72, label:['Public edge','edge network 172.28.0.0/24, host ports 80 and 443'] },
- { ids:['console','auth','management','devices','socket','engine'], top:318, h:116, w:166, gap:28, x0:72, label:['App hosts','ASP.NET on :8080'] },
+ { ids:['console','auth','management','devices','gateway-ws','engine'], top:318, h:116, w:166, gap:28, x0:72, label:['App hosts','ASP.NET on :8080'] },
  { ids:['sql','rabbitmq','redis','migrator'], top:462, h:116, w:254, gap:40, x0:72, label:['Data','backend network 172.28.1.0/24, never published'] },
  { ids:['otel','prometheus','loki','tempo','nodeexp','cadvisor'], top:606, h:116, w:166, gap:28, x0:72, label:['Telemetry','backend network'] },
  { ids:['sshd','cron','grafana','alertmanager','pushgateway'], top:750, h:116, w:200, gap:34, x0:72, label:['VM host','SSH, cron, and ports bound to 127.0.0.1'] },
 ];
-const SUBS = { traefik:'v3.7. The only container with host ports. TLS from Let’s Encrypt, plus an internal :8081 for the engine.', console:'nginx, edge only', auth:'sign-in, tenants', management:'console API, SignalR', devices:'device login', socket:'device WebSockets', engine:'workflows, backend only', sql:':1433, volume sql-data', rabbitmq:':5672, UI on :15672', redis:':6379, AOF on', migrator:'one-shot, profile migrate', otel:'OTLP on :4317', prometheus:'metrics and alert rules', loki:'logs, kept 7 days', tempo:'traces, kept 72 hours', nodeexp:'disk space, :9100', cadvisor:'container restarts', sshd:'deploy user, docker group', cron:'nightly at 02:00', grafana:'127.0.0.1:3000', alertmanager:'127.0.0.1:9093', pushgateway:'127.0.0.1:9091' };
+const SUBS = { traefik:'v3.7. The only container with host ports. TLS from Let’s Encrypt, plus an internal :8081 for the engine.', console:'nginx, edge only', auth:'sign-in, tenants', management:'console API, SignalR', devices:'device login', 'gateway-ws':'device WebSockets', engine:'workflows, backend only', sql:':1433, volume sql-data', rabbitmq:':5672, UI on :15672', redis:':6379, AOF on', migrator:'one-shot, profile migrate', otel:'OTLP on :4317', prometheus:'metrics and alert rules', loki:'logs, kept 7 days', tempo:'traces, kept 72 hours', nodeexp:'disk space, :9100', cadvisor:'container restarts', sshd:'deploy user, docker group', cron:'nightly at 02:00', grafana:'127.0.0.1:3000', alertmanager:'127.0.0.1:9093', pushgateway:'127.0.0.1:9091' };
 N.cron.label = 'cron: backup.sh';
 ROWS.forEach((r, ri) => r.ids.forEach((id, i) => {
   const n = N[id]; n.row = ri; n.x = r.x0 + i * (r.w + r.gap); n.w = r.w;
@@ -969,7 +969,7 @@ function buildPipeline() {
     <div class="stages">
       <div class="stage"><b>Push to master</b><span>PRs run the gate only; no images</span></div>
       <div class="stage"><b>Gate</b><span>unit, integration, package scan, E2E, upgrade rehearsal</span></div>
-      <div class="stage"><b>Publish 5 images</b><span>auth, management, socket, engine, migrator → GHCR as sha-&lt;short&gt; + latest</span></div>
+      <div class="stage"><b>Publish 5 images</b><span>auth, management, gateway-ws, engine, migrator → GHCR as sha-&lt;short&gt; + latest</span></div>
       <div class="stage"><b>Deploy workflow</b><span>queued on deploy-production; approval if production has reviewers</span></div>
       <div class="stage vm"><b>deploy.sh on the VM</b><span>--tag sha-&lt;short&gt;, every host, migrations on</span></div>
     </div></div>
@@ -982,7 +982,7 @@ function buildPipeline() {
     </div></div>
   <div class="twocol">
     <div class="card"><h3>What deploy.sh does, in order</h3><ol class="ol">
-      <li>Validates the tag and services (auth, management, devices, socket, engine).</li>
+      <li>Validates the tag and services (auth, management, devices, gateway-ws, engine; <code>socket</code>, the old name, means gateway-ws).</li>
       <li>Refuses if tracked files on the VM have local edits, then <code>git reset --hard</code> to the tag's commit and re-runs itself.</li>
       <li>Stops if <code>.env</code> is missing a required variable, naming it (<code>docker compose config</code>).</li>
       <li>Writes <code>IMAGE_TAG</code> into <code>.env</code>.</li>
@@ -990,6 +990,7 @@ function buildPipeline() {
       <li>Prunes unused images; stops if under 3 GB is free. Nothing is stopped yet.</li>
       <li>Pulls the images, then runs the migrator unless <code>--skip-migrations</code>.</li>
       <li>Starts devices and waits for health, then the other hosts with <code>--no-deps</code>.</li>
+      <li>Stops and removes any containers left from a renamed service once its replacement is healthy: <code>socket</code>, replaced by <code>gateway-ws</code>.</li>
       <li>Waits up to 240 s for health; on timeout prints the last 20 log lines per failing service.</li>
       <li>Compares every other running service with the compose file and warns about any that changed, have stale bind-mounted config, or have no container. It never recreates them.</li>
     </ol></div>

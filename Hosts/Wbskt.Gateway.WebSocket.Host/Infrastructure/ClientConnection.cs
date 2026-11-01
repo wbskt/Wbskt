@@ -2,7 +2,7 @@ using System.Net.WebSockets;
 using System.Text;
 using Wbskt.Gateway.Core.Infrastructure;
 
-namespace Wbskt.Socket.Host.Infrastructure;
+namespace Wbskt.Gateway.WebSocket.Host.Infrastructure;
 
 /// <summary>
 /// One device's socket. Its receive loop (SocketHandler) owns its end: it alone unregisters it,
@@ -18,7 +18,8 @@ public sealed class ClientConnection : DeviceConnection, IDisposable
     private readonly SemaphoreSlim _sendLock = new(1, 1);
     private readonly CancellationTokenSource _closing = new();
 
-    public required WebSocket Socket { get; init; }
+    // Qualified: inside Wbskt.Gateway, a bare WebSocket names this host's own namespace.
+    public required System.Net.WebSockets.WebSocket Socket { get; init; }
 
     public override bool IsOpen => Socket.State == WebSocketState.Open;
 
