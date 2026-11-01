@@ -2,7 +2,7 @@
 
 How the [message model](Device.Protocol.md) travels over a WebSocket. Registration, login, the
 messages themselves, commands and the reconnect schedule are all on that page; this one covers only
-what is particular to the WebSocket: the upgrade, the frames, keepalive and close codes. The
+what is particular to the WebSocket: the upgrade and how it is refused, the frames, and close codes. The
 `Wbskt.Gateway.WebSocket.Host` serves it.
 
 The hosted endpoint is `wss://ws.dev.wbskt.com/ws` (`WbsktDefaults` in the .NET SDK). A self-hosted
@@ -24,9 +24,17 @@ Sec-WebSocket-Protocol: wbskt.v1
 Offer the `wbskt.v1` subprotocol (`SocketProtocol.V1`); a connection that offers none is treated as
 v1, and one that offers only other versions is refused.
 
-A 401 on the upgrade means the token is no longer accepted: drop it and log in again (model §2). Any
-other refusal, such as a 503 while the gateway restarts, keeps the token and retries on the
-reconnect schedule (model §5).
+The gateway refuses before the upgrade, with an RFC 7807 Problem Details body whose `code` names the
+reason:
+
+| Answer | Means | Do |
+|---|---|---|
+| 401, no `code` | The token did not validate: expired, signed by another key, or missing. | Drop the token and log in again (model §2). |
+| 401 `CLIENT_TOKEN_INVALID` | The token validated but is not a device token with every claim this gateway needs. | Drop the token and log in again. |
+| 403 `CLIENT_REVOKED` | The device lost access after this token was issued: revoked, deleted, or its secret rotated. | Keep the token and retry on the reconnect schedule (model §5); once it expires, login reports what happened. |
+| 400 `SOCKET_PROTOCOL_UNSUPPORTED` | The upgrade offered only subprotocol versions this gateway does not speak. | Offer `wbskt.v1`. A client bug, not something to retry. |
+| 400 `SOCKET_UPGRADE_REQUIRED` | The request to `/ws` was not a WebSocket upgrade. | A client bug, not something to retry. |
+| 503, or no answer | The gateway is restarting or unreachable. | Keep the token and retry on the reconnect schedule. |
 
 ## 2. Frames
 
@@ -35,13 +43,12 @@ as several frames; the 64 KB limit applies to the whole message. Binary frames a
 
 ## 3. Keepalive
 
-The gateway pings each connection to time its round trip. These are binding messages, reserved like
-every `sys.*` type:
+The round-trip ping is the model's `sys.ping` and `sys.pong` (model §4.2), sent as text messages
+like any other.
 
-| Type | Direction | Payload | Do |
-|---|---|---|---|
-| `sys.ping` | server → device | `{ "timestamp": "…", "id": "…" }` | Answer at once with `sys.pong`. |
-| `sys.pong` | device → server | `{ "originalTimestamp": <ping's timestamp>, "id": <ping's id> }` | The server times the round trip on its own clock. |
+Separately, the gateway sends a WebSocket Ping control frame every 30 seconds and drops a connection
+that has not answered within another 30, so a device that lost power does not stay "online" for
+minutes. WebSocket libraries answer these Pings on their own; a device does nothing for them.
 
 ## 4. Close codes
 
@@ -61,8 +68,7 @@ The close description is text for logs. Branch on the code, not on the descripti
 An SDK conforms to the WebSocket binding when it:
 
 - [ ] offers `wbskt.v1` and sends the token as a bearer header (or `access_token`);
-- [ ] renews the token after a 401 on the upgrade, and keeps it after any other refusal;
-- [ ] answers `sys.ping` with `sys.pong` echoing `id` and the timestamp.
+- [ ] renews the token after a 401 on the upgrade, and keeps it after any other refusal.
 
 Together with the [message model's checklist](Device.Protocol.md#6-conformance-checklist), this is
 everything the conformance suite (`Tests/Conformance`) checks.

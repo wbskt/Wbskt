@@ -14,8 +14,9 @@ public interface ISocketHandler
 }
 
 /// <summary>
-/// The WebSocket transport: the upgrade, the subprotocol and the frame loop. What a session means
-/// (registering the device, announcing it, budgeting and routing its messages) is Gateway.Core's.
+/// The WebSocket transport: the upgrade, the subprotocol, the frame loop and the close. Who may
+/// connect and what a session means (registering the device, announcing it, budgeting and routing its
+/// messages, recording its end) is Gateway.Core's <see cref="DeviceSessions"/>.
 /// </summary>
 internal sealed class SocketHandler : ISocketHandler
 {
@@ -23,18 +24,15 @@ internal sealed class SocketHandler : ISocketHandler
     private const int MaxMessageBytes = SocketProtocol.MaxMessageBytes;
 
     private readonly DeviceSessions _sessions;
-    private readonly IClientAccessGate _accessGate;
     private readonly ILogger<SocketHandler> _logger;
     private readonly IHostApplicationLifetime _appLifetime;
 
     public SocketHandler(
         DeviceSessions sessions,
-        IClientAccessGate accessGate,
         ILogger<SocketHandler> logger,
         IHostApplicationLifetime appLifetime)
     {
         _sessions = sessions;
-        _accessGate = accessGate;
         _logger = logger;
         _appLifetime = appLifetime;
     }
@@ -47,23 +45,16 @@ internal sealed class SocketHandler : ISocketHandler
             return;
         }
 
-        // The ClientOnly policy on /ws has already authenticated a device token; one that is not well
-        // formed (a claim missing or unreadable) is refused here rather than failing later.
-        if (!ClientIdentity.TryRead(context.User, out var identity))
+        // The ClientOnly policy on /ws has already authenticated a device token. Whether this device may
+        // connect (a well-formed token, not revoked since it was issued) is the session's to decide.
+        var admission = await _sessions.AdmitAsync(context.User, context.RequestAborted);
+        if (!admission.IsAdmitted)
         {
-            await Problems.WriteAsync(context, StatusCodes.Status401Unauthorized, "CLIENT_TOKEN_INVALID", "The device token is missing a claim this host needs.");
+            await RefuseAsync(context, admission.Refusal.Value);
             return;
         }
 
-        var (clientRefId, clientId, workspaceId, issuedAt) = identity;
-
-        // A revoked client's JWT stays valid for up to an hour; the access gate closes that window.
-        if (await _accessGate.IsRefusedAsync(clientRefId, issuedAt, context.RequestAborted))
-        {
-            _logger.LogWarning("Rejecting websocket for revoked client {ClientRefId}", clientRefId);
-            await Problems.WriteAsync(context, StatusCodes.Status403Forbidden, "CLIENT_REVOKED", "This device's access has been revoked.");
-            return;
-        }
+        var identity = admission.Identity;
 
         // The protocol version: a client offers wbskt.v1, and one that offers nothing (SDKs before the
         // version, a browser that sets no subprotocol) is spoken to as v1. One that offers only
@@ -71,7 +62,7 @@ internal sealed class SocketHandler : ISocketHandler
         var offered = context.WebSockets.WebSocketRequestedProtocols;
         if (offered.Count > 0 && !offered.Contains(SocketProtocol.V1))
         {
-            _logger.LogWarning("Rejecting websocket for client {ClientRefId}: no supported protocol in {Offered}.", clientRefId, string.Join(", ", offered));
+            _logger.LogWarning("Rejecting websocket for client {ClientRefId}: no supported protocol in {Offered}.", identity.ClientRefId, string.Join(", ", offered));
             await Problems.WriteAsync(context, StatusCodes.Status400BadRequest, "SOCKET_PROTOCOL_UNSUPPORTED", $"Offer the {SocketProtocol.V1} subprotocol, or none.");
             return;
         }
@@ -80,50 +71,29 @@ internal sealed class SocketHandler : ISocketHandler
         using var connection = new ClientConnection
         {
             Socket = webSocket,
-            ClientId = clientId,
-            WorkspaceId = workspaceId
+            ClientId = identity.ClientId,
+            WorkspaceId = identity.WorkspaceId
         };
 
         // Ends the receive loop when the device goes away, the host stops, or a close someone asked
-        // for (see ClientConnection.RequestCloseAsync) is not answered in time.
+        // for (see ClientConnection.CloseAsync) is not answered in time.
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(
             context.RequestAborted,
             _appLifetime.ApplicationStopping,
             connection.Closing);
 
-        // The newest connection wins: one this host still holds for the client is closed as superseded.
-        _sessions.Open(clientRefId, connection);
-        var reason = DisconnectReason.ClientClosed;
-
-        try
-        {
-            await _sessions.AnnounceConnectedAsync(clientRefId, connection);
-
-            reason = await ReceiveLoopAsync(clientRefId, connection, cts.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            reason = _appLifetime.ApplicationStopping.IsCancellationRequested ? DisconnectReason.ServerStopping : DisconnectReason.Aborted;
-        }
-        catch (WebSocketException ex)
-        {
-            reason = DisconnectReason.Aborted;
-            _logger.LogDebug("WebSocket error for client {ClientRefId}: {Message}", clientRefId, ex.Message);
-        }
-        catch (Exception ex)
-        {
-            reason = DisconnectReason.Error;
-            _logger.LogError(ex, "Unexpected error in WebSocket loop for client {ClientRefId}.", clientRefId);
-        }
-        finally
-        {
-            // A close someone asked for is the real reason, whatever the loop saw as it ended.
-            reason = connection.CloseRequest?.Reason ?? reason;
-            _sessions.Release(clientRefId, connection);
-            await CloseQuietlyAsync(webSocket, reason);
-            await _sessions.AnnounceEndedAsync(clientRefId, connection, reason);
-        }
+        await _sessions.RunAsync(
+            identity,
+            connection,
+            inbox => ReceiveLoopAsync(identity.ClientRefId, connection, inbox, cts.Token),
+            reason => CloseQuietlyAsync(webSocket, reason));
     }
+
+    private static Task RefuseAsync(HttpContext context, AdmissionRefusal refusal) => refusal switch
+    {
+        AdmissionRefusal.Revoked => Problems.WriteAsync(context, StatusCodes.Status403Forbidden, "CLIENT_REVOKED", "This device's access has been revoked."),
+        _ => Problems.WriteAsync(context, StatusCodes.Status401Unauthorized, "CLIENT_TOKEN_INVALID", "The device token is missing a claim this host needs.")
+    };
 
     private static async Task CloseQuietlyAsync(System.Net.WebSockets.WebSocket webSocket, DisconnectReason reason)
     {
@@ -144,11 +114,23 @@ internal sealed class SocketHandler : ISocketHandler
         }
     }
 
-    private async Task<DisconnectReason> ReceiveLoopAsync(Guid clientRefId, ClientConnection connection, CancellationToken cancellationToken)
+    private async Task<DisconnectReason> ReceiveLoopAsync(Guid clientRefId, ClientConnection connection, DeviceInbox inbox, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await ReadFramesAsync(clientRefId, connection, inbox, cancellationToken);
+        }
+        catch (WebSocketException ex)
+        {
+            _logger.LogDebug("WebSocket error for client {ClientRefId}: {Message}", clientRefId, ex.Message);
+            return DisconnectReason.Aborted;
+        }
+    }
+
+    private async Task<DisconnectReason> ReadFramesAsync(Guid clientRefId, ClientConnection connection, DeviceInbox inbox, CancellationToken cancellationToken)
     {
         var webSocket = connection.Socket;
         using var reader = new WebSocketMessageReader(webSocket, MaxMessageBytes);
-        var inbox = _sessions.CreateInbox(clientRefId, connection);
 
         while (webSocket.State is WebSocketState.Open or WebSocketState.CloseSent && !cancellationToken.IsCancellationRequested)
         {
@@ -165,13 +147,14 @@ internal sealed class SocketHandler : ISocketHandler
                     return DisconnectReason.ClientClosed;
                 case FrameKind.TooBig:
                     _logger.LogWarning("Client {ClientRefId} exceeded the {MaxMessageBytes}-byte message limit; closing.", clientRefId, MaxMessageBytes);
-                    await connection.RequestCloseAsync(DisconnectReason.MessageTooBig, $"Messages are limited to {MaxMessageBytes} bytes.");
+                    await connection.RequestCloseAsync(DisconnectReason.MessageTooBig, DeviceInbox.TooBigDescription);
                     return DisconnectReason.MessageTooBig;
                 case FrameKind.Binary:
                     continue;
             }
 
-            // The budget, the rate limit and routing are the session's; it says when the device must go.
+            // The size backstop, the budget, the rate limit and routing are the session's; it says when
+            // the device must go.
             if (await inbox.ReceiveAsync(read.Text!, cancellationToken) is { } ended)
             {
                 return ended;

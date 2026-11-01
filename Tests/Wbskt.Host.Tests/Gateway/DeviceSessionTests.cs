@@ -1,4 +1,6 @@
 using System.Net.WebSockets;
+using System.Security.Claims;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -10,27 +12,36 @@ using Wbskt.Gateway.Core.Services;
 using Wbskt.Gateway.Core.Services.Inbound;
 using Wbskt.Gateway.Core.Telemetry;
 using Wbskt.Gateway.WebSocket.Host.Infrastructure;
+using Wbskt.Infrastructure.Security;
+using Wbskt.Protocol;
 
 namespace Wbskt.Host.Tests.Gateway;
 
 /// <summary>
-/// The session steps the socket host's receive loop used to do inline, now in Gateway.Core: what a
-/// device sees (its close code) and what the rest of the system hears (connected, disconnected).
+/// A device session as every transport gets it from Gateway.Core: who is admitted, and, around the
+/// transport's own receive loop and close, what the device sees (its close code) and what the rest of
+/// the system hears (connected, disconnected).
 /// </summary>
 public sealed class DeviceSessionTests
 {
     private const string ThisHost = "gateway-a";
+    private const string Message = """{"type":"t","payload":{}}""";
     private static readonly Guid ClientRefId = Guid.Parse("99999999-9999-9999-9999-999999999999");
+    private static readonly ClientIdentity Identity = new(ClientRefId, 42, 7, DateTime.UtcNow);
 
     private readonly Mock<IEventBus> _bus = new();
+    private readonly Mock<IClientAccessGate> _gate = new();
+    private readonly CancellationTokenSource _stopping = new();
     private readonly ConnectionManager _connections = new(NullLogger<ConnectionManager>.Instance);
 
     private DeviceSessions Sessions(MessageBudgetOptions? budget = null)
     {
         var metrics = new GatewayMetrics(GatewayTransport.WebSocket);
         var dispatcher = new InboundMessageDispatcher([], new DeviceMessageHandler(_bus.Object), metrics, NullLogger<InboundMessageDispatcher>.Instance);
-        return new DeviceSessions(_connections, _bus.Object, new BusInstanceId(ThisHost), metrics, dispatcher,
-            Options.Create(budget ?? new MessageBudgetOptions()), NullLogger<DeviceSessions>.Instance, NullLogger<DeviceInbox>.Instance);
+        var lifetime = new Mock<IHostApplicationLifetime>();
+        lifetime.SetupGet(x => x.ApplicationStopping).Returns(_stopping.Token);
+        return new DeviceSessions(_connections, _gate.Object, _bus.Object, new BusInstanceId(ThisHost), metrics, dispatcher,
+            Options.Create(budget ?? new MessageBudgetOptions()), lifetime.Object, NullLogger<DeviceSessions>.Instance, NullLogger<DeviceInbox>.Instance);
     }
 
     private static (ClientConnection Connection, Mock<WebSocket> Socket) Connection()
@@ -41,48 +52,106 @@ public sealed class DeviceSessionTests
         return (new ClientConnection { Socket = socket.Object, ClientId = 42, WorkspaceId = 7 }, socket);
     }
 
+    private static ClaimsPrincipal DeviceUser() => new(new ClaimsIdentity(ClientClaims.For(ClientRefId, "sensor", Guid.NewGuid(), 42, 7), "test"));
+
+    private void VerifyDisconnected(string reason) =>
+        _bus.Verify(x => x.PublishAsync(It.Is<ClientDisconnectedEvent>(e => e.ClientRefId == ClientRefId && e.Reason == reason && e.HostId == ThisHost), CancellationToken.None), Times.Once);
+
     [Fact]
-    public async Task A_session_announces_the_device_connected_and_disconnected_from_this_host()
+    public async Task A_well_formed_token_that_is_not_revoked_is_admitted()
     {
-        var sessions = Sessions();
-        var (connection, _) = Connection();
+        var admission = await Sessions().AdmitAsync(DeviceUser(), CancellationToken.None);
 
-        sessions.Open(ClientRefId, connection);
-        await sessions.AnnounceConnectedAsync(ClientRefId, connection);
-        Assert.Same(connection, _connections.GetConnection(ClientRefId));
-
-        sessions.Release(ClientRefId, connection);
-        await sessions.AnnounceEndedAsync(ClientRefId, connection, DisconnectReason.Aborted);
-
-        Assert.Null(_connections.GetConnection(ClientRefId));
-        _bus.Verify(x => x.PublishAsync(It.Is<ClientConnectedEvent>(e => e.ClientRefId == ClientRefId && e.ClientId == 42 && e.WorkspaceId == 7 && e.HostId == ThisHost), CancellationToken.None), Times.Once);
-        _bus.Verify(x => x.PublishAsync(It.Is<ClientDisconnectedEvent>(e => e.ClientRefId == ClientRefId && e.Reason == DisconnectReason.Aborted.Describe() && e.HostId == ThisHost), CancellationToken.None), Times.Once);
+        Assert.True(admission.IsAdmitted);
+        Assert.Equal(ClientRefId, admission.Identity.ClientRefId);
+        Assert.Equal(42, admission.Identity.ClientId);
+        Assert.Equal(7, admission.Identity.WorkspaceId);
     }
 
     [Fact]
-    public async Task A_requested_close_names_its_own_reason_in_the_disconnect()
+    public async Task A_token_missing_a_device_claim_is_refused_as_invalid()
     {
-        var sessions = Sessions();
+        var admission = await Sessions().AdmitAsync(new ClaimsPrincipal(new ClaimsIdentity("test")), CancellationToken.None);
+
+        Assert.False(admission.IsAdmitted);
+        Assert.Equal(AdmissionRefusal.TokenInvalid, admission.Refusal);
+        _gate.Verify(x => x.IsRefusedAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_revoked_device_is_refused()
+    {
+        _gate.Setup(x => x.IsRefusedAsync(ClientRefId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var admission = await Sessions().AdmitAsync(DeviceUser(), CancellationToken.None);
+
+        Assert.False(admission.IsAdmitted);
+        Assert.Equal(AdmissionRefusal.Revoked, admission.Refusal);
+    }
+
+    [Fact]
+    public async Task A_session_announces_the_device_and_releases_it_before_the_transport_closes()
+    {
         var (connection, _) = Connection();
-        sessions.Open(ClientRefId, connection);
-        await connection.RequestCloseAsync(DisconnectReason.Revoked, "Client deleted.");
+        var registeredDuringLoop = false;
+        var registeredAtClose = true;
+        DisconnectReason? closedWith = null;
 
-        await sessions.AnnounceEndedAsync(ClientRefId, connection, DisconnectReason.Revoked);
+        await Sessions().RunAsync(Identity, connection,
+            _ =>
+            {
+                registeredDuringLoop = ReferenceEquals(connection, _connections.GetConnection(ClientRefId));
+                return Task.FromResult(DisconnectReason.Aborted);
+            },
+            reason =>
+            {
+                registeredAtClose = _connections.GetConnection(ClientRefId) != null;
+                closedWith = reason;
+                return Task.CompletedTask;
+            });
 
-        _bus.Verify(x => x.PublishAsync(It.Is<ClientDisconnectedEvent>(e => e.Reason == "Client deleted."), CancellationToken.None), Times.Once);
+        Assert.True(registeredDuringLoop);
+        Assert.False(registeredAtClose);
+        Assert.Equal(DisconnectReason.Aborted, closedWith);
+        _bus.Verify(x => x.PublishAsync(It.Is<ClientConnectedEvent>(e => e.ClientRefId == ClientRefId && e.ClientId == 42 && e.WorkspaceId == 7 && e.HostId == ThisHost), CancellationToken.None), Times.Once);
+        VerifyDisconnected(DisconnectReason.Aborted.Describe());
+    }
+
+    [Fact]
+    public async Task A_requested_close_is_the_reason_whatever_the_loop_saw()
+    {
+        var (connection, _) = Connection();
+        DisconnectReason? closedWith = null;
+
+        await Sessions().RunAsync(Identity, connection,
+            async _ =>
+            {
+                await connection.RequestCloseAsync(DisconnectReason.Revoked, "Client deleted.");
+                return DisconnectReason.ClientClosed;
+            },
+            reason =>
+            {
+                closedWith = reason;
+                return Task.CompletedTask;
+            });
+
+        Assert.Equal(DisconnectReason.Revoked, closedWith);
+        VerifyDisconnected("Client deleted.");
     }
 
     [Fact]
     public async Task A_superseded_session_does_not_announce_the_device_offline()
     {
-        var sessions = Sessions();
         var (old, oldSocket) = Connection();
         var (fresh, _) = Connection();
-        sessions.Open(ClientRefId, old);
-        sessions.Open(ClientRefId, fresh);
 
-        sessions.Release(ClientRefId, old);
-        await sessions.AnnounceEndedAsync(ClientRefId, old, old.CloseRequest!.Reason);
+        await Sessions().RunAsync(Identity, old,
+            _ =>
+            {
+                _connections.Register(ClientRefId, fresh);
+                return Task.FromResult(DisconnectReason.ClientClosed);
+            },
+            _ => Task.CompletedTask);
 
         oldSocket.Verify(x => x.CloseOutputAsync(WebSocketCloseStatus.PolicyViolation, ConnectionManager.SupersededDescription, It.IsAny<CancellationToken>()), Times.Once);
         Assert.Same(fresh, _connections.GetConnection(ClientRefId));
@@ -90,28 +159,117 @@ public sealed class DeviceSessionTests
     }
 
     [Fact]
+    public async Task A_loop_cancelled_by_shutdown_ends_as_server_stopping()
+    {
+        var (connection, _) = Connection();
+        DisconnectReason? closedWith = null;
+        await _stopping.CancelAsync();
+
+        await Sessions().RunAsync(Identity, connection,
+            _ => throw new OperationCanceledException(),
+            reason =>
+            {
+                closedWith = reason;
+                return Task.CompletedTask;
+            });
+
+        Assert.Equal(DisconnectReason.ServerStopping, closedWith);
+        VerifyDisconnected(DisconnectReason.ServerStopping.Describe());
+    }
+
+    [Fact]
+    public async Task A_loop_cancelled_otherwise_ends_as_aborted()
+    {
+        var (connection, _) = Connection();
+
+        await Sessions().RunAsync(Identity, connection, _ => throw new OperationCanceledException(), _ => Task.CompletedTask);
+
+        VerifyDisconnected(DisconnectReason.Aborted.Describe());
+    }
+
+    [Fact]
+    public async Task A_loop_that_throws_still_releases_and_announces_the_device()
+    {
+        var (connection, _) = Connection();
+
+        await Sessions().RunAsync(Identity, connection, _ => throw new InvalidOperationException("boom"), _ => Task.CompletedTask);
+
+        Assert.Null(_connections.GetConnection(ClientRefId));
+        VerifyDisconnected(DisconnectReason.Error.Describe());
+    }
+
+    [Fact]
+    public async Task A_transport_close_that_throws_does_not_stop_the_end_being_announced()
+    {
+        var (connection, _) = Connection();
+
+        await Sessions().RunAsync(Identity, connection,
+            _ => Task.FromResult(DisconnectReason.ClientClosed),
+            _ => throw new InvalidOperationException("boom"));
+
+        VerifyDisconnected(DisconnectReason.ClientClosed.Describe());
+    }
+
+    [Fact]
     public async Task A_device_that_stays_over_its_budget_is_closed_with_1008()
     {
         var (connection, socket) = Connection();
-        var inbox = Sessions(new MessageBudgetOptions { PerSecond = 0.1, Burst = 1, CloseAfterDropped = 2 }).CreateInbox(ClientRefId, connection);
+        var results = new List<DisconnectReason?>();
 
-        Assert.Null(await inbox.ReceiveAsync("""{"type":"t","payload":{}}""", CancellationToken.None));
-        Assert.Null(await inbox.ReceiveAsync("""{"type":"t","payload":{}}""", CancellationToken.None));
-        Assert.Equal(DisconnectReason.Throttled, await inbox.ReceiveAsync("""{"type":"t","payload":{}}""", CancellationToken.None));
+        await Sessions(new MessageBudgetOptions { PerSecond = 0.1, Burst = 1, CloseAfterDropped = 2 }).RunAsync(Identity, connection,
+            async inbox =>
+            {
+                for (var i = 0; i < 3; i++)
+                {
+                    results.Add(await inbox.ReceiveAsync(Message, CancellationToken.None));
+                }
 
+                return DisconnectReason.ClientClosed;
+            },
+            _ => Task.CompletedTask);
+
+        Assert.Equal([null, null, DisconnectReason.Throttled], results);
         socket.Verify(x => x.CloseOutputAsync(WebSocketCloseStatus.PolicyViolation, "Too many messages.", It.IsAny<CancellationToken>()), Times.Once);
         _bus.Verify(x => x.PublishAsync(It.IsAny<ClientMessageReceivedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        VerifyDisconnected("Too many messages.");
+    }
+
+    [Fact]
+    public async Task A_message_over_the_size_limit_is_closed_with_1009_whatever_the_transport_let_through()
+    {
+        var (connection, socket) = Connection();
+        var tooBig = $$"""{"type":"t","payload":"{{new string('é', SocketProtocol.MaxMessageBytes / 2)}}"}""";
+        DisconnectReason? result = null;
+
+        await Sessions().RunAsync(Identity, connection,
+            async inbox =>
+            {
+                result = await inbox.ReceiveAsync(tooBig, CancellationToken.None);
+                return DisconnectReason.ClientClosed;
+            },
+            _ => Task.CompletedTask);
+
+        Assert.Equal(DisconnectReason.MessageTooBig, result);
+        socket.Verify(x => x.CloseOutputAsync(WebSocketCloseStatus.MessageTooBig, DeviceInbox.TooBigDescription, It.IsAny<CancellationToken>()), Times.Once);
+        _bus.Verify(x => x.PublishAsync(It.IsAny<ClientMessageReceivedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task Messages_after_a_requested_close_are_ignored()
     {
         var (connection, _) = Connection();
-        var inbox = Sessions().CreateInbox(ClientRefId, connection);
-        await connection.RequestCloseAsync(DisconnectReason.Revoked, "x");
+        DisconnectReason? result = DisconnectReason.Error;
 
-        Assert.Null(await inbox.ReceiveAsync("""{"type":"t","payload":{}}""", CancellationToken.None));
+        await Sessions().RunAsync(Identity, connection,
+            async inbox =>
+            {
+                await connection.RequestCloseAsync(DisconnectReason.Revoked, "x");
+                result = await inbox.ReceiveAsync(Message, CancellationToken.None);
+                return DisconnectReason.ClientClosed;
+            },
+            _ => Task.CompletedTask);
 
+        Assert.Null(result);
         _bus.Verify(x => x.PublishAsync(It.IsAny<ClientMessageReceivedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

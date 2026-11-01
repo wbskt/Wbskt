@@ -990,7 +990,7 @@ function buildPipeline() {
       <li>Prunes unused images; stops if under 3 GB is free. Nothing is stopped yet.</li>
       <li>Pulls the images, then runs the migrator unless <code>--skip-migrations</code>.</li>
       <li>Starts devices and waits for health, then the other hosts with <code>--no-deps</code>.</li>
-      <li>Stops and removes any containers left from a renamed service once its replacement is healthy: <code>socket</code>, replaced by <code>gateway-ws</code>.</li>
+      <li>Stops and removes any containers left from a renamed service once its replacement is healthy: <code>socket</code>, replaced by <code>gateway-ws</code>. Best-effort: a failure here only warns, with the command to finish by hand, because the deploy has already succeeded.</li>
       <li>Waits up to 240 s for health; on timeout prints the last 20 log lines per failing service.</li>
       <li>Compares every other running service with the compose file and warns about any that changed, have stale bind-mounted config, or have no container. It never recreates them.</li>
     </ol></div>

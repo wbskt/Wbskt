@@ -5,8 +5,14 @@ namespace Wbskt.Gateway.Core.Infrastructure;
 /// <summary>
 /// One device's live connection, whatever transport carries it. The gateway core holds devices
 /// through this and never touches the transport: sending a message, pinging and closing are all the
-/// connection's own business. Its transport's receive loop owns its end, and alone unregisters it.
+/// connection's own business. Its session (<see cref="Services.DeviceSessions.RunAsync"/>) owns its
+/// end, and alone unregisters it.
 /// </summary>
+/// <remarks>
+/// A transport must cap each message it reads at <see cref="Wbskt.Protocol.SocketProtocol.MaxMessageBytes"/>
+/// before buffering more, and end the session as <see cref="DisconnectReason.MessageTooBig"/> past it;
+/// the inbox checks the same limit again, but by then the transport has already held the bytes.
+/// </remarks>
 public interface IDeviceConnection
 {
     int ClientId { get; }
