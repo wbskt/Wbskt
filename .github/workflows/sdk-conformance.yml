@@ -9,6 +9,7 @@ on:
       - 'Clients/**'
       - 'Tests/Conformance/**'
       - 'Docs/Device.Protocol.md'
+      - 'Docs/Device.Protocol.WebSocket.md'
       - '.github/workflows/sdk-conformance.yml'
   push:
     branches: [master]

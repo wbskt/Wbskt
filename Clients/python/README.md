@@ -106,6 +106,7 @@ reserved; `send` raises `ValueError` for either.
 
 ## Protocol
 
-The SDK implements [the device protocol](https://github.com/wbskt/Wbskt/blob/master/Docs/Device.Protocol.md):
+The SDK implements [the device protocol](https://github.com/wbskt/Wbskt/blob/master/Docs/Device.Protocol.md)
+and its [WebSocket binding](https://github.com/wbskt/Wbskt/blob/master/Docs/Device.Protocol.WebSocket.md):
 token reuse, jittered reconnects that honour `Retry-After`, ping answers and command
 acknowledgements. Read it to write a client in another language.

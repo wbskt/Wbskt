@@ -471,7 +471,7 @@ Like workspace groups, client groups don't survive a reconnect: the console join
 
 ### 2.9 Device edges (anonymous)
 
-Pre-authentication device flows: a client enrolling or signing in has no token yet. The whole device flow, socket included, is in [Device.Protocol.md](Device.Protocol.md). Both are hidden
+Pre-authentication device flows: a client enrolling or signing in has no token yet. The whole device flow is in [Device.Protocol.md](Device.Protocol.md), and the socket in its [WebSocket binding](Device.Protocol.WebSocket.md). Both are hidden
 from the API docs.
 
 In production the `devices` container serves these two paths on the same `api.` host: a management

@@ -1,9 +1,20 @@
 # SDK conformance suite
 
-Checks a device SDK against [the device protocol](../../Docs/Device.Protocol.md), one scenario per
-item of its checklist (§6). The suite fakes the two HTTP endpoints and the socket host
-(`fake_wbskt.py`), so nothing else has to run, and each scenario takes a few seconds. The fake can
-misbehave on cue: refuse a token, throttle a login, forget a device, close or refuse the socket.
+Checks a device SDK against the device protocol: the
+[message model](../../Docs/Device.Protocol.md) (checklist in §6) and the
+[WebSocket binding](../../Docs/Device.Protocol.WebSocket.md) (checklist in §5). Every scenario checks
+an item on one of those two checklists:
+
+| Checklist | Scenarios |
+|---|---|
+| Message model | registering once, pending approval, registering again, reusing the token, `Retry-After`, `capabilities` first, command acks, expired commands, plain messages, `sentAt` and the offline backlog, reserved types |
+| WebSocket binding | the subprotocol and bearer token, renewing after a 401 on the upgrade, keeping the token while the gateway is down, ping and pong |
+
+A future binding (MQTT, HTTPS) adds its own checklist and its own scenarios.
+
+The suite fakes the two HTTP endpoints and the WebSocket gateway (`fake_wbskt.py`), so nothing else
+has to run, and each scenario takes a few seconds. The fake can misbehave on cue: refuse a token,
+throttle a login, forget a device, close or refuse the socket.
 
 The SDK runs as a separate process, a **harness**, so any language can take part. CI
 (`.github/workflows/sdk-conformance.yml`) runs it for the Python and .NET SDKs; the ESP32 SDK runs it
