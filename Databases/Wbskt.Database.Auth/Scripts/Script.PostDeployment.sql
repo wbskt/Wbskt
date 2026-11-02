@@ -152,6 +152,14 @@ BEGIN
 END
 GO
 
+-- Not a default User grant: a firmware image replaces the code a device runs. Admin roles get it
+-- with every other permission below.
+IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'clients.firmware')
+BEGIN
+    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('clients.firmware', 'Update client firmware over the air');
+END
+GO
+
 -- Message Template Permissions
 IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'templates.read')
 BEGIN

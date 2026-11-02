@@ -236,6 +236,7 @@ the slug is the second gate.
 | Clients | `DELETE clients/{ref}`, `POST clients/{ref}/rotate-secret` | `clients.manage` |
 | Clients | `POST clients/{ref}/command` | `clients.command` |
 | Clients | `POST clients/{ref}/ping` | `clients.ping` |
+| Clients | `POST clients/{ref}/ota` | `clients.firmware` |
 | Clients | `GET clients/{ref}/comms` | `logs.read` — it is a projection of the event log, not client state |
 | Policies | `GET registration-policies…` | `policies.read` |
 | Policies | `POST`, `PATCH {ref}`, `POST {ref}/disable`, `POST {ref}/rotate-pin` | `policies.manage` |

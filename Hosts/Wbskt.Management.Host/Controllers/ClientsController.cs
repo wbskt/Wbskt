@@ -333,7 +333,7 @@ public class ClientsController : ApiControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The command id, which the client's status reports carry.</returns>
     [HttpPost("{clientRef:guid}/ota")]
-    [RequiresPermission(PermissionNames.ClientsCommand)]
+    [RequiresPermission(PermissionNames.ClientsFirmware)]
     public async Task<ActionResult<ClientCommandResponse>> SendOta([FromWorkspace] int workspaceId, Guid clientRef, ClientOtaRequest request, CancellationToken cancellationToken)
     {
         var result = await _commandService.SendOtaAsync(workspaceId, clientRef, request, cancellationToken);
