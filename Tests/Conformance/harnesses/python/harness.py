@@ -48,7 +48,15 @@ async def main() -> None:
     )
     client.on_connected = lambda: emit("connected")
     client.on_disconnected = lambda: emit("disconnected")
-    client.on_message = lambda m: emit("message", type=m.type, payload=m.payload, commandId=m.command_id)
+    throw_next = [False]
+
+    def on_message(m: Any) -> None:
+        emit("message", type=m.type, payload=m.payload, commandId=m.command_id)
+        if throw_next[0]:
+            throw_next[0] = False
+            raise RuntimeError("thrown by the harness")
+
+    client.on_message = on_message
 
     await client.start()
     emit("started")
@@ -68,6 +76,9 @@ async def main() -> None:
                 if name == "send":
                     await client.send(op["type"], op.get("payload"))
                     emit("sent", type=op["type"])
+                elif name == "throw-next":
+                    throw_next[0] = True
+                    emit("armed")
                 elif name == "send-many":
                     for n in range(op["count"]):
                         await client.send(op["type"], n)

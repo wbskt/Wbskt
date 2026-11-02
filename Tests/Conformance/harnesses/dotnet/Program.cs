@@ -39,8 +39,16 @@ var commands = JsonSerializer.Deserialize<List<CommandCapability>>(Env("WBSKT_CO
 await using var client = new WbsktClient(config, new FileClientStorage(Env("WBSKT_STORAGE")));
 client.OnConnected += () => Emit("connected");
 client.OnDisconnected += () => Emit("disconnected");
+var throwNext = 0;
 client.OnMessageReceived += (type, payload, commandId) =>
+{
     Emit("message", new() { ["type"] = type, ["payload"] = payload, ["commandId"] = commandId });
+    if (Interlocked.Exchange(ref throwNext, 0) == 1)
+    {
+        throw new InvalidOperationException("thrown by the harness");
+    }
+};
+client.OnHandlerError += error => Emit("handler-error", new() { ["reason"] = error.Message });
 
 await client.UpdateCapabilitiesAsync(new ClientCapabilities("", "", "", commands));
 await client.StartAsync();
@@ -63,6 +71,10 @@ while (await Console.In.ReadLineAsync() is { } line)
             case "send":
                 await client.SendAsync(type, op["payload"]?.DeepClone()!);
                 Emit("sent", new() { ["type"] = type });
+                break;
+            case "throw-next":
+                Interlocked.Exchange(ref throwNext, 1);
+                Emit("armed");
                 break;
             case "send-many":
                 var count = op["count"]!.GetValue<int>();

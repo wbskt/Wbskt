@@ -28,6 +28,8 @@ public sealed class WbsktClient : IWbsktClient
     private ClientCapabilities? _lastCapabilities;
 
     public event Action<string, object?, string?>? OnMessageReceived;
+
+    public event Action<Exception>? OnHandlerError;
     public event Action? OnConnected;
     public event Action? OnDisconnected;
 
@@ -60,6 +62,7 @@ public sealed class WbsktClient : IWbsktClient
 
         // Forward internal events to public surface
         _socket.OnMessageReceived += (type, payload, commandId) => OnMessageReceived?.Invoke(type, payload, commandId);
+        _socket.OnHandlerError += error => OnHandlerError?.Invoke(error);
         _socket.OnConnected += HandleConnected;
         _socket.OnDisconnected += HandleDisconnect;
     }

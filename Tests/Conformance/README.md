@@ -7,7 +7,7 @@ an item on one of those two checklists:
 
 | Checklist | Scenarios |
 |---|---|
-| Message model | registering once, pending approval, registering again, reusing the token, `Retry-After`, `capabilities` first, ping and pong, command acks, expired commands, plain messages, `sentAt` and the offline backlog, pacing a large backlog under the message budget, reserved types |
+| Message model | registering once, pending approval, registering again, reusing the token, `Retry-After`, `capabilities` first, ping and pong, command acks, expired commands, plain messages, a throwing handler and malformed frames, `sentAt` and the offline backlog, pacing a large backlog under the message budget, reserved types |
 | Firmware updates (optional) | listing `ota`, rejecting while off, an expired update, plain `http`, accepted → downloading → installed |
 | WebSocket binding | the subprotocol and bearer token, renewing after a 401 on the upgrade, keeping the token while the gateway is down |
 
@@ -56,6 +56,7 @@ The harness starts the client at once. It then reads one JSON object per line on
 | `{"op":"send","type":"…","payload":…}` | Send an application message. |
 | `{"op":"send-many","type":"…","count":N}` | Send N application messages with payloads 0 … N-1, as fast as the app can call send. |
 | `{"op":"state","values":{…}}` | Report state. |
+| `{"op":"throw-next"}` | Make the app's message handler throw after it reports the next message. Answer `{"event":"armed"}`. |
 | `{"op":"stop"}` | Stop the client and exit. |
 
 It writes one JSON object per line on stdout, flushing each one. Other lines are ignored, so the SDK
