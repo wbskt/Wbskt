@@ -30,6 +30,9 @@ public sealed class DeviceSessions
     private readonly ILogger<DeviceInbox> _inboxLogger;
     private readonly string _hostId;
 
+    /// <summary>How long one publish of a device's message or announcement may take before it is given up.</summary>
+    internal static readonly TimeSpan PublishTimeout = TimeSpan.FromSeconds(10);
+
     public DeviceSessions(
         IConnectionManager connections,
         IClientAccessGate accessGate,
@@ -108,6 +111,8 @@ public sealed class DeviceSessions
         _logger.LogInformation("Client {ClientRefId} connected.", clientRefId);
         _metrics.Connected();
         var reason = DisconnectReason.ClientClosed;
+        using var stopAnnouncing = new CancellationTokenSource();
+        var announcing = Task.CompletedTask;
 
         try
         {
@@ -119,9 +124,11 @@ public sealed class DeviceSessions
                 await connection.RequestCloseAsync(DisconnectReason.Revoked, DisconnectReason.Revoked.Describe());
             }
 
-            // Not tied to the connection: a device that drops straight away must still be recorded as
-            // having connected, or its disconnect has nothing to pair with.
-            await _eventBus.PublishAsync(new ClientConnectedEvent(clientRefId, connection.ClientId, connection.WorkspaceId, _hostId), CancellationToken.None);
+            // A broker that is down must not end the session: the announcement is retried in the
+            // background until it goes out or the session ends. The event keeps the time it was made,
+            // so presence still orders it before this session's disconnect.
+            announcing = AnnounceConnectedAsync(
+                new ClientConnectedEvent(clientRefId, connection.ClientId, connection.WorkspaceId, _hostId), stopAnnouncing.Token);
 
             var inbox = new DeviceInbox(new InboundContext(clientRefId, connection), new MessageBudget(_budgetOptions), _dispatcher, _metrics, _inboxLogger);
             reason = await receive(inbox);
@@ -139,9 +146,57 @@ public sealed class DeviceSessions
         {
             // A close someone asked for is the real reason, whatever the loop saw as it ended.
             reason = connection.CloseRequest?.Reason ?? reason;
+            await stopAnnouncing.CancelAsync();
+            await announcing;
             _connections.Unregister(clientRefId, connection);
             await CloseTransportAsync(clientRefId, closeTransport, reason);
             await AnnounceEndedAsync(clientRefId, connection, reason);
+        }
+    }
+
+    // Not tied to the connection: a device that drops straight away must still be recorded as having
+    // connected, or its disconnect has nothing to pair with. Runs beside the session and never throws;
+    // each attempt is bounded, so a broker that hangs instead of failing doesn't hold the session's end.
+    private async Task AnnounceConnectedAsync(ClientConnectedEvent connected, CancellationToken stop)
+    {
+        var delay = TimeSpan.FromSeconds(1);
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                using var bounded = CancellationTokenSource.CreateLinkedTokenSource(stop);
+                bounded.CancelAfter(PublishTimeout);
+                await _eventBus.PublishAsync(connected, bounded.Token);
+                if (attempt > 1)
+                {
+                    _logger.LogInformation("Announced that client {ClientRefId} connected, at attempt {Attempt}.", connected.ClientRefId, attempt);
+                }
+
+                return;
+            }
+            catch (OperationCanceledException) when (stop.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                if (attempt == 1)
+                {
+                    _metrics.Dropped("bus");
+                    _logger.LogWarning("Could not announce that client {ClientRefId} connected; retrying until the session ends. {Message}", connected.ClientRefId, ex.Message);
+                }
+            }
+
+            try
+            {
+                await Task.Delay(delay, stop);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            delay = TimeSpan.FromSeconds(Math.Min(30, delay.TotalSeconds * 2));
         }
     }
 
