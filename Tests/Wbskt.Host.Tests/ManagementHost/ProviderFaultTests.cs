@@ -97,6 +97,6 @@ public sealed class ProviderFaultTests
 
     private static ClientQueryService Service(Mock<IClientProvider> provider)
     {
-        return new ClientQueryService(provider.Object, NullLogger<ClientQueryService>.Instance);
+        return new ClientQueryService(provider.Object, Mock.Of<IClientMessageTypeProvider>(), NullLogger<ClientQueryService>.Instance);
     }
 }

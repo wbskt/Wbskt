@@ -127,7 +127,7 @@ public sealed class ClientLifecycleRenameTests
     {
         var provider = new Mock<IClientProvider>();
         provider.Setup(x => x.FindDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>())).ReturnsAsync(detail);
-        return new ClientQueryService(provider.Object, NullLogger<ClientQueryService>.Instance);
+        return new ClientQueryService(provider.Object, Mock.Of<IClientMessageTypeProvider>(), NullLogger<ClientQueryService>.Instance);
     }
 
     private static ClientDetail CreateDetail(int workspaceId = WorkspaceId)

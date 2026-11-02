@@ -12,11 +12,13 @@ namespace Wbskt.Management.Host.Services;
 internal sealed class ClientQueryService : IClientQueryService
 {
     private readonly IClientProvider _clientProvider;
+    private readonly IClientMessageTypeProvider _messageTypeProvider;
     private readonly ILogger<ClientQueryService> _logger;
 
-    public ClientQueryService(IClientProvider clientProvider, ILogger<ClientQueryService> logger)
+    public ClientQueryService(IClientProvider clientProvider, IClientMessageTypeProvider messageTypeProvider, ILogger<ClientQueryService> logger)
     {
         _clientProvider = clientProvider;
+        _messageTypeProvider = messageTypeProvider;
         _logger = logger;
     }
 
@@ -120,6 +122,41 @@ internal sealed class ClientQueryService : IClientQueryService
             .AsReadOnly();
 
         return Result<IReadOnlyCollection<ClientStateVariableResponse>>.Success(response);
+    }
+
+    public async Task<Result<IReadOnlyCollection<ClientMessageTypeResponse>>> GetMessageTypesAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
+    {
+        var lookup = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+        if (lookup.IsFailure)
+        {
+            return Result<IReadOnlyCollection<ClientMessageTypeResponse>>.Failure(lookup.Error);
+        }
+
+        var types = await _messageTypeProvider.GetByClientAsync(lookup.Value.Id, cancellationToken);
+        IReadOnlyCollection<ClientMessageTypeResponse> response =
+        [
+            .. types.Select(t => new ClientMessageTypeResponse(t.Type, t.Count, new DateTimeOffset(t.FirstSeenAt), new DateTimeOffset(t.LastSeenAt), MessageTypes.IsReserved(t.Type), ParseSample(t.SamplePayload)))
+        ];
+        return Result<IReadOnlyCollection<ClientMessageTypeResponse>>.Success(response);
+    }
+
+    // A device's payload is any JSON, stored as it arrived; one that does not parse is left out.
+    private static JsonElement? ParseSample(string? payload)
+    {
+        if (string.IsNullOrEmpty(payload))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(payload);
+            return document.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     public async Task<Result<int>> EnsureClientInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)

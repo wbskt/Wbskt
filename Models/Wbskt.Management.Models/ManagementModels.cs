@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Wbskt.Protocol;
 using Wbskt.Models;
 
@@ -85,6 +86,19 @@ public record ClientTagCountResponse(string Tag, int ClientCount);
 
 /// <summary>How many clients a workspace or a policy has in each status, and how many are connected now.</summary>
 public record ClientCountsResponse(int Total, int Pending, int Registered, int Revoked, int Rejected, int Connected);
+
+/// <summary>A message type a client has sent, for a type picker.</summary>
+/// <param name="Count">How many messages of this type have arrived since the platform started counting them.</param>
+/// <param name="IsPlatform">A type the platform reads itself (<c>state.report</c>, <c>capabilities</c>), shown apart from the device's own.</param>
+/// <param name="SamplePayload">The latest payload of this type, when it was small enough to keep (4,000 characters).</param>
+public record ClientMessageTypeResponse(
+    string Type,
+    long Count,
+    DateTimeOffset FirstSeenAt,
+    DateTimeOffset LastSeenAt,
+    bool IsPlatform,
+    JsonElement? SamplePayload
+);
 
 public record ClientStateVariableResponse(
     string Name,

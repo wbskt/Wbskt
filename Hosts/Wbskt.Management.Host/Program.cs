@@ -80,6 +80,7 @@ public static class Program
         // Numeric state history: written by the state.report ingestion, read for charts and CSV.
         builder.Services.Configure<ReadingsOptions>(builder.Configuration.GetSection(ReadingsOptions.SectionName));
         builder.Services.AddScoped<IClientReadingProvider, ClientReadingProvider>();
+        builder.Services.AddScoped<IClientMessageTypeProvider, ClientMessageTypeProvider>();
         builder.Services.AddScoped<IClientReadingService, ClientReadingService>();
         if (role == HostRole.All)
         {
