@@ -9,14 +9,6 @@ public sealed record WebhookTriggerConfig
     [JsonPropertyName("path")]
     public required string Path { get; init; }
 
-    /// <summary>
-    /// Ignored: the webhook URL only answers POST, whatever this says. Optional, and read only so that
-    /// definitions saved with it still load; it is dropped from new ones.
-    /// </summary>
-    [JsonPropertyName("method")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? Method { get; init; }
-
     [JsonPropertyName("correlationKey")]
     public string? CorrelationKey { get; init; } = null;
 

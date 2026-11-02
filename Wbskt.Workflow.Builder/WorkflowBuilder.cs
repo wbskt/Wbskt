@@ -425,8 +425,7 @@ public sealed class WorkflowBuilder
         return AddLogicGate(LogicConditionJsonConverter.FromLegacyString(condition), out nodeId);
     }
 
-    /// <param name="method">Ignored by the platform (webhooks are always POST); kept for callers that still pass it.</param>
-    public WorkflowBuilder AddWebhookTrigger(string path, string? method, WorkflowConcurrencyPolicy concurrencyPolicy, out Guid nodeId, WorkflowExpression? filter = null, string? secret = null)
+    public WorkflowBuilder AddWebhookTrigger(string path, WorkflowConcurrencyPolicy concurrencyPolicy, out Guid nodeId, WorkflowExpression? filter = null, string? secret = null)
     {
         var id = Guid.NewGuid();
         nodeId = id;
@@ -434,7 +433,7 @@ public sealed class WorkflowBuilder
             NodeId = id,
             Name = "Webhook Trigger",
             Ports = [new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
-            Config = new WebhookTriggerConfig { Path = path, Method = method, CorrelationKey = null, ConcurrencyPolicy = concurrencyPolicy, Filter = filter, Secret = secret } });
+            Config = new WebhookTriggerConfig { Path = path, CorrelationKey = null, ConcurrencyPolicy = concurrencyPolicy, Filter = filter, Secret = secret } });
 
         _head = (id, PortNames.Default);
         return this;

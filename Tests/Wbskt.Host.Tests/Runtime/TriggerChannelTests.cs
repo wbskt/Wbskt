@@ -155,7 +155,7 @@ public sealed class TriggerChannelTests
             NodeId = Guid.NewGuid(),
             Name = "hook",
             Ports = [],
-            Config = new WebhookTriggerConfig { Path = "orders", Method = "POST", Secret = "s3cret" }
+            Config = new WebhookTriggerConfig { Path = "orders", Secret = "s3cret" }
         };
 
         TriggerRegistrationSpec spec = await RegisterAsync(new WebhookChannel(), trigger);
@@ -230,7 +230,7 @@ public sealed class TriggerChannelTests
         [
             ClientTrigger("temp"),
             ClientTrigger("temp", holdSeconds: 60),
-            new WebhookTriggerNode { NodeId = Guid.NewGuid(), Name = "hook", Ports = [], Config = new WebhookTriggerConfig { Path = "p", Method = "POST" } },
+            new WebhookTriggerNode { NodeId = Guid.NewGuid(), Name = "hook", Ports = [], Config = new WebhookTriggerConfig { Path = "p" } },
             new ManualTriggerNode { NodeId = Guid.NewGuid(), Name = "run", Ports = [], Config = new ManualTriggerConfig { Description = "run" } }
         ];
 

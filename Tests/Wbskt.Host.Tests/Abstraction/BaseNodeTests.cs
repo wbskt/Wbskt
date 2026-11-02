@@ -120,7 +120,7 @@ public class BaseNodeTests
         new ClientTriggerNode { NodeId = Id, Name = "t", Ports = [Out], Config = new ClientTriggerConfig { ClientRef = "dev-1", Type = "telemetry" } },
         new ClientPresenceTriggerNode { NodeId = Id, Name = "t", Ports = [Out], Config = new ClientPresenceTriggerConfig { ClientRef = "dev-1" } },
         new ScheduleTriggerNode { NodeId = Id, Name = "t", Ports = [Out], Config = new ScheduleTriggerConfig { Cron = "0 * * * *" } },
-        new WebhookTriggerNode { NodeId = Id, Name = "t", Ports = [Out], Config = new WebhookTriggerConfig { Path = "orders", Method = "POST" } },
+        new WebhookTriggerNode { NodeId = Id, Name = "t", Ports = [Out], Config = new WebhookTriggerConfig { Path = "orders" } },
         new ManualTriggerNode { NodeId = Id, Name = "t", Ports = [Out], Config = new ManualTriggerConfig { Description = "d" } },
         new LogicGateNode { NodeId = Id, Name = "c", Ports = [In], Config = new LogicGateConfig { Condition = LogicConditionJsonConverter.FromLegacyString("$trigger.temperature > 35") } },
         new ForEachNode { NodeId = Id, Name = "c", Ports = [In], Config = new ForEachConfig { Collection = "$trigger.items" } },

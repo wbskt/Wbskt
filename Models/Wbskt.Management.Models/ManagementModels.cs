@@ -63,7 +63,7 @@ public record ClientResponse(
 
 /// <param name="System">The platform features the device last said it takes, such as <c>ota</c>; empty when none.</param>
 /// <param name="UpdatingUntil">As on <see cref="ClientResponse"/>.</param>
-/// <param name="FirmwareVersion">The version of the code the device runs, from its capabilities report, or from the <c>firmware</c> state an older SDK reported; null when it said neither.</param>
+/// <param name="FirmwareVersion">The version of the code the device runs, from its capabilities report; null when it never said.</param>
 public record ClientDetailResponse(
     Guid ClientRefId,
     Guid PolicyRefId,

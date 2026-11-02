@@ -121,7 +121,7 @@ public sealed class WorkflowLifecycleTests(ServicesFixture fixture)
     private Task<HttpResponseMessage> PublishRawAsync(string token, Guid workspace, Guid refId, string path)
     {
         WorkflowDefinition definition = new WorkflowBuilder($"E2E-Lifecycle-{refId:N}", refId)
-            .AddWebhookTrigger(path, "POST", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddWebhookTrigger(path, WorkflowConcurrencyPolicy.AllowParallel, out _)
             .AddDelay(TimeSpan.FromMilliseconds(10))
             .BuildAndValidate();
         return fixture.Management.As(token).PublishWorkflowRawAsync(workspace, new WorkflowPublishRequest(refId, $"E2E-Lifecycle-{refId:N}", null, definition));

@@ -49,7 +49,7 @@ public sealed class EventLogRetentionServiceTests
     {
         var registry = new EventRegistry();
         registry.RegisterEvent("ClientMessageReceivedEvent", 11);
-        registry.RegisterEvent("ClientPongEvent", 12);
+        registry.RegisterEvent("ClientCommandAckedEvent", 12);
         registry.RegisterEvent("PolicyCreatedEvent", 20);
         var provider = new Mock<IEventProvider>();
         provider.Setup(p => p.DeleteBeforeAsync(It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>?>(), It.IsAny<CancellationToken>()))
