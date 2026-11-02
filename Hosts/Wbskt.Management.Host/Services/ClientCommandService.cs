@@ -113,7 +113,7 @@ public sealed class ClientCommandService : IClientCommandService
         }
 
         // An update that turns up days later is a surprise, so it always expires.
-        var expiresAt = request.ExpiresAt ?? DateTimeOffset.UtcNow.Add(_defaultExpiry);
+        var expiresAt = request.ExpiresAt ?? _clock.GetUtcNow().Add(_defaultExpiry);
         var payload = JsonSerializer.Serialize(new OtaUpdatePayload(request.Url, request.Sha256.ToLowerInvariant(), NullIfEmpty(request.Version), request.Size));
         var sent = await DispatchAsync(
             new DeviceCommand(Guid.NewGuid(), clientRefId, workspaceId, MessageTypes.OtaUpdate, payload, expiresAt.UtcDateTime, Platform: true),
@@ -234,7 +234,7 @@ public sealed class ClientCommandService : IClientCommandService
             return Result.Failure(clientResult.Error);
         }
 
-        if (!await TryPublishActionAsync(new ClientPingEvent(clientRefId, clientResult.Value, workspaceId, DateTime.UtcNow), cancellationToken))
+        if (!await TryPublishActionAsync(new ClientPingEvent(clientRefId, clientResult.Value, workspaceId, _clock.GetUtcNow().UtcDateTime), cancellationToken))
         {
             return Result.Failure(BrokerUnavailable);
         }
