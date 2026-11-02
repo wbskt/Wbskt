@@ -235,6 +235,24 @@ async def test_stamps_messages_and_sends_the_offline_backlog_in_order(api, socke
         assert arrived - sent_at.timestamp() >= 1.0
 
 
+async def test_paces_a_large_offline_backlog_under_the_gateway_budget(api, socket_server, device):
+    count = 300
+    socket_server.down = True
+    harness = await device()
+    await harness.command("send-many", type="reading", count=count)
+    await harness.expect("sent", type="reading", count=count)
+    socket_server.down = False
+
+    # 50 back to back, then 8 a second: about 31 s for the rest.
+    await socket_server.next_of("capabilities", RECONNECT)
+    readings = [(await socket_server.next_of("reading", 30.0))["payload"] for _ in range(count)]
+
+    assert readings == list(range(count))
+    assert socket_server.dropped == 0
+    assert not socket_server.close_codes
+    await harness.expect("connected", timeout=10.0)
+
+
 @pytest.mark.parametrize("message_type", ["sys.custom", "SYS.ping", "capabilities", "State.Report"])
 async def test_refuses_to_send_a_reserved_type(api, socket_server, device, message_type):
     harness = await device()

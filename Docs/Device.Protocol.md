@@ -106,9 +106,15 @@ Every message, both ways, is a JSON object:
 | `expiresAt` | server → device | On a command: don't act on it after this instant (§4.3). |
 
 **Limits.** A message is at most 64 KB (`DeviceProtocol.MaxMessageBytes`); a bigger one ends the
-connection (too big, §5). A device may send 10 messages a second sustained with a burst of 100
-(enough to flush an offline buffer); past that the excess is dropped, and after 500 drops in a row
-the connection is ended (throttled, §5).
+connection (too big, §5). The gateway lets a device send 10 messages a second sustained with a
+burst of 100; past that the excess is dropped, and after 500 drops in a row the connection is ended
+(throttled, §5).
+
+**Pacing.** A device sends at most 8 messages a second after a burst of 50
+(`DeviceProtocol.SendPerSecond`, `DeviceProtocol.SendBurst`), and that includes the offline backlog it
+flushes on reconnect. A message the gateway drops has still left the device, so an SDK that flushes a
+full buffer at once loses most of it. The SDKs pace with a token bucket and keep answering pings
+while a backlog drains.
 
 **Reserved types.** Anything starting with `sys.` (any case) belongs to the platform, as do
 `capabilities` and `state.report`. A device must not send its own `sys.*` type.
@@ -237,6 +243,7 @@ An SDK conforms to the message model when it:
 - [ ] answers `sys.ping` with `sys.pong` echoing `id` and the timestamp;
 - [ ] acks commands with `commandId` on arrival and refuses expired ones with `refused: "expired"`;
 - [ ] stamps `sentAt` on application messages and buffers them in order while offline;
+- [ ] sends no more than 8 messages a second after a burst of 50, a flushed backlog included;
 - [ ] never sends a reserved type of its own, or a message over 64 KB;
 - [ ] reconnects on the jittered schedule above, honouring `Retry-After`.
 

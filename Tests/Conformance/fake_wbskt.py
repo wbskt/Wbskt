@@ -21,6 +21,12 @@ LOGIN_PATH = "/api/v1/client-auth/login"
 SOCKET_PATH = "/ws"
 SUBPROTOCOL = "wbskt.v1"
 
+# The gateway's default message budget (MessageBudgetOptions); the fake enforces it the same way.
+BUDGET_PER_SECOND = 10.0
+BUDGET_BURST = 100
+BUDGET_CLOSE_AFTER_DROPPED = 500
+CLOSE_THROTTLED = 1008
+
 Answer = Tuple[int, Dict[str, Any], Dict[str, str]]
 
 
@@ -103,6 +109,26 @@ class FakeApi:
             self._server.server_close()
 
 
+class _Budget:
+    """A token bucket plus a count of drops in a row, like Wbskt.Gateway.Core's MessageBudget."""
+
+    def __init__(self) -> None:
+        self._tokens = float(BUDGET_BURST)
+        self._last = time.monotonic()
+        self.consecutive_dropped = 0
+
+    def try_take(self) -> bool:
+        now = time.monotonic()
+        self._tokens = min(BUDGET_BURST, self._tokens + (now - self._last) * BUDGET_PER_SECOND)
+        self._last = now
+        if self._tokens >= 1:
+            self._tokens -= 1
+            self.consecutive_dropped = 0
+            return True
+        self.consecutive_dropped += 1
+        return False
+
+
 class FakeSocket:
     def __init__(self) -> None:
         self.connections: List[ServerConnection] = []
@@ -110,6 +136,9 @@ class FakeSocket:
         self.upgrade_tokens: List[str] = []
         self.subprotocols: List[Optional[str]] = []
         self.rejected_tokens: set = set()
+        # Messages dropped over the budget, and the close code the fake sent on each connection.
+        self.dropped = 0
+        self.close_codes: Dict[int, int] = {}
         # While set, every upgrade is answered 503, as by a host that is down.
         self.down = False
         self.url = ""
@@ -131,9 +160,18 @@ class FakeSocket:
         index = len(self.connections)
         self.connections.append(ws)
         self.subprotocols.append(ws.subprotocol)
+        budget = _Budget()
         async for raw in ws:
-            if isinstance(raw, str):
-                await self.frames.put((index, json.loads(raw), time.time()))
+            if not isinstance(raw, str):
+                continue
+            if not budget.try_take():
+                self.dropped += 1
+                if budget.consecutive_dropped >= BUDGET_CLOSE_AFTER_DROPPED:
+                    self.close_codes[index] = CLOSE_THROTTLED
+                    await ws.close(CLOSE_THROTTLED, "Too many messages.")
+                    return
+                continue
+            await self.frames.put((index, json.loads(raw), time.time()))
 
     async def start(self) -> None:
         self._server = await serve(
