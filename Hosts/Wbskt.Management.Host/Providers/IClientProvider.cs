@@ -75,7 +75,11 @@ public interface IClientProvider : IReferenceProvider
     /// <summary>Stores a capabilities report received at <paramref name="reportedAt"/>; false when a newer one is already stored.</summary>
     Task<bool> UpsertCapabilitiesAsync(int clientId, string agentName, string agentVersion, string platform,
         string capabilitiesJson, string? systemJson, string? firmwareVersion, DateTime reportedAt, CancellationToken cancellationToken = default);
-    Task<StateVariableUpsert> UpsertStateVariableAsync(int clientId, string name, string dataType, string valueJson,
-        CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Stores one state report's <paramref name="variables"/> (distinct by name) in one call, and returns
+    /// one outcome per variable in the same order. New names past <paramref name="maxPerClient"/> are refused.
+    /// </summary>
+    Task<IReadOnlyList<StateVariableUpsert>> ReportStateVariablesAsync(int clientId, IReadOnlyList<StateVariableValue> variables,
+        int maxPerClient, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<ClientStateVariable>> GetStateVariablesAsync(int clientId, CancellationToken cancellationToken = default);
 }

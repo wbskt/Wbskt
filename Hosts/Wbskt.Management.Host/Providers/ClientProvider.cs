@@ -331,22 +331,40 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         }, cancellationToken);
     }
 
-    public async Task<StateVariableUpsert> UpsertStateVariableAsync(int clientId, string name, string dataType, string valueJson,
-        CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<StateVariableUpsert>> ReportStateVariablesAsync(int clientId, IReadOnlyList<StateVariableValue> variables,
+        int maxPerClient, CancellationToken cancellationToken = default)
     {
-        // Returns the previous ValueJson (NULL on first report) so callers can detect changes.
-        return await ExecuteSingleAsync("dbo.ClientStateVariable_Upsert", p =>
+        if (variables.Count == 0)
         {
-            p.AddWithValue("@ClientId", clientId);
-            p.AddWithValue("@Name", name);
-            p.AddWithValue("@DataType", dataType);
-            p.AddWithValue("@ValueJson", valueJson);
-        },
-        reader => new StateVariableUpsert(
-            reader.GetBoolean(reader.GetOrdinal("Stored")),
-            reader.IsDBNull(reader.GetOrdinal("OldValueJson")) ? null : reader.GetString(reader.GetOrdinal("OldValueJson"))),
-        new InvalidOperationException("ClientStateVariable_Upsert did not return a row."),
-        cancellationToken);
+            return [];
+        }
+
+        using var table = new DataTable();
+        table.Columns.Add("Ordinal", typeof(int));
+        table.Columns.Add("Name", typeof(string));
+        table.Columns.Add("DataType", typeof(string));
+        table.Columns.Add("ValueJson", typeof(string));
+        for (var i = 0; i < variables.Count; i++)
+        {
+            table.Rows.Add(i, variables[i].Name, variables[i].DataType, variables[i].ValueJson);
+        }
+
+        var outcomes = await ExecuteCollectionAsync(
+            "dbo.ClientStateVariables_Report",
+            p =>
+            {
+                p.AddWithValue("@ClientId", clientId);
+                p.AddWithValue("@MaxPerClient", maxPerClient);
+                var parameter = p.AddWithValue("@Variables", table);
+                parameter.SqlDbType = SqlDbType.Structured;
+                parameter.TypeName = "dbo.ClientStateVariableTableType";
+            },
+            reader => new StateVariableUpsert(
+                reader.GetString(reader.GetOrdinal("Name")),
+                reader.GetBoolean(reader.GetOrdinal("Stored")),
+                reader.IsDBNull(reader.GetOrdinal("OldValueJson")) ? null : reader.GetString(reader.GetOrdinal("OldValueJson"))),
+            cancellationToken);
+        return outcomes.ToList();
     }
 
     public async Task<IReadOnlyCollection<ClientStateVariable>> GetStateVariablesAsync(int clientId, CancellationToken cancellationToken = default)
