@@ -9,6 +9,7 @@ CREATE TABLE dbo.ClientCapabilities (
     SystemJson       NVARCHAR(1000) NULL,    -- platform features it takes, as a JSON array (["ota"])
     FirmwareVersion  NVARCHAR(50)  NULL,     -- ClientCapabilities.FirmwareVersion: the code the device runs
     UpdatedAt        DATETIME2(3)  NOT NULL  DEFAULT SYSUTCDATETIME(),
+    ReportedAt       DATETIME2(3)  NULL,     -- when the gateway received the stored report; an older one is not applied
 
     -- Constraints
     CONSTRAINT PK_ClientCapabilities         PRIMARY KEY (ClientId),

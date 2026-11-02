@@ -182,11 +182,20 @@ public sealed class ClientMetadataIngestionHandler : IConsumer<ClientMessageRece
         var systemJson = system.Count == 0 ? null : JsonSerializer.Serialize(system);
         var firmwareVersion = string.IsNullOrWhiteSpace(capabilities.FirmwareVersion) ? null : Truncate(capabilities.FirmwareVersion.Trim(), MaxFirmwareVersionLength);
 
-        await _clientProvider.UpsertCapabilitiesAsync(message.ClientId, agentName, agentVersion, platform, capabilitiesJson, systemJson, firmwareVersion, cancellationToken);
+        // Ordered by when the gateway received it, as presence is: a retried older report must not
+        // overwrite a newer one, since its system list decides whether an update may be sent.
+        if (!await _clientProvider.UpsertCapabilitiesAsync(message.ClientId, agentName, agentVersion, platform, capabilitiesJson, systemJson, firmwareVersion,
+                message.CreatedAtUtc, cancellationToken))
+        {
+            _logger.LogInformation("Ignored an older capabilities report from client {ClientRefId}.", message.ClientRefId);
+            return;
+        }
+
         _logger.LogDebug("Stored capabilities for client {ClientRefId} ({Agent} {Version} on {Platform}).", message.ClientRefId, agentName, agentVersion, platform);
 
         await _eventBus.PublishAsync(
-            new ClientCapabilitiesUpdatedEvent(message.ClientRefId, message.ClientId, message.WorkspaceId, agentName, agentVersion, platform),
+            new ClientCapabilitiesUpdatedEvent(message.ClientRefId, message.ClientId, message.WorkspaceId, agentName, agentVersion, platform,
+                firmwareVersion, system, capabilities.Capabilities ?? []),
             cancellationToken);
     }
 

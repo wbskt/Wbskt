@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Wbskt.EventBus\Wbskt.EventBus.csproj" />
+    <ProjectReference Include="..\..\Clients\Wbskt.Protocol\Wbskt.Protocol.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
