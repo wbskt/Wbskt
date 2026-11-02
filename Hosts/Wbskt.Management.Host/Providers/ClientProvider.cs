@@ -315,10 +315,10 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         }, cancellationToken);
     }
 
-    public async Task UpsertCapabilitiesAsync(int clientId, string agentName, string agentVersion, string platform,
-        string capabilitiesJson, string? systemJson, string? firmwareVersion, CancellationToken cancellationToken = default)
+    public async Task<bool> UpsertCapabilitiesAsync(int clientId, string agentName, string agentVersion, string platform,
+        string capabilitiesJson, string? systemJson, string? firmwareVersion, DateTime reportedAt, CancellationToken cancellationToken = default)
     {
-        await ExecuteNonQueryAsync("dbo.ClientCapabilities_Upsert", p =>
+        return await ExecuteScalarAsync<bool>("dbo.ClientCapabilities_Upsert", p =>
         {
             p.AddWithValue("@ClientId", clientId);
             p.AddWithValue("@AgentName", agentName);
@@ -327,6 +327,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             p.AddWithValue("@CapabilitiesJson", capabilitiesJson);
             p.AddWithValue("@SystemJson", (object?)systemJson ?? DBNull.Value);
             p.AddWithValue("@FirmwareVersion", (object?)firmwareVersion ?? DBNull.Value);
+            p.Add("@ReportedAt", SqlDbType.DateTime2).Value = reportedAt;
         }, cancellationToken);
     }
 

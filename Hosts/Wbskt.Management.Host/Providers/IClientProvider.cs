@@ -72,8 +72,9 @@ public interface IClientProvider : IReferenceProvider
     Task<ClientDetail?> FindDetailByRefIdAsync(Guid refId, CancellationToken cancellationToken = default);
     Task UpdateNameAsync(int id, string name, CancellationToken cancellationToken = default);
     Task UpdateRttAsync(int id, int lastRttMs, DateTime measuredAt, CancellationToken cancellationToken = default);
-    Task UpsertCapabilitiesAsync(int clientId, string agentName, string agentVersion, string platform,
-        string capabilitiesJson, string? systemJson, string? firmwareVersion, CancellationToken cancellationToken = default);
+    /// <summary>Stores a capabilities report received at <paramref name="reportedAt"/>; false when a newer one is already stored.</summary>
+    Task<bool> UpsertCapabilitiesAsync(int clientId, string agentName, string agentVersion, string platform,
+        string capabilitiesJson, string? systemJson, string? firmwareVersion, DateTime reportedAt, CancellationToken cancellationToken = default);
     Task<StateVariableUpsert> UpsertStateVariableAsync(int clientId, string name, string dataType, string valueJson,
         CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<ClientStateVariable>> GetStateVariablesAsync(int clientId, CancellationToken cancellationToken = default);
