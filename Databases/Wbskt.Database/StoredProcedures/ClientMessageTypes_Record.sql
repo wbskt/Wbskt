@@ -2,12 +2,17 @@
 -- A new type is stored only while the client has fewer than @MaxPerClient, so a device cannot grow
 -- the table without bound by varying types; the newest new types are kept first. A client deleted
 -- meanwhile is skipped rather than failing the batch.
+-- One transaction: when two consumers race to insert the same new type, the loser rolls back whole and
+-- its batch is retried, rather than keeping counts it already added and adding them again on the retry.
 CREATE PROCEDURE dbo.ClientMessageTypes_Record
     @Rows dbo.ClientMessageTypeTableType READONLY,
     @MaxPerClient INT = 100
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    BEGIN TRANSACTION;
 
     UPDATE t
     SET
@@ -26,5 +31,7 @@ BEGIN
           AND EXISTS (SELECT 1 FROM dbo.Clients c WHERE c.Id = r.ClientId)
     ) n
     WHERE n.Position + (SELECT COUNT(*) FROM dbo.ClientMessageTypes t WHERE t.ClientId = n.ClientId) <= @MaxPerClient;
+
+    COMMIT TRANSACTION;
 END
 GO
