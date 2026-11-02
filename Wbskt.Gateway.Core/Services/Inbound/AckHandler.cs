@@ -23,7 +23,7 @@ public sealed class AckHandler : IInboundMessageHandler
 
     public string Type => MessageTypes.Ack;
 
-    public async Task HandleAsync(InboundContext context, SocketMessage message, CancellationToken cancellationToken)
+    public async Task HandleAsync(InboundContext context, DeviceMessage message, CancellationToken cancellationToken)
     {
         var connection = context.Connection;
         if (!TryGetCommandId(message.Payload, out var commandId))

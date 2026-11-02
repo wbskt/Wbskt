@@ -21,7 +21,7 @@ public interface ISocketHandler
 internal sealed class SocketHandler : ISocketHandler
 {
     // Messages are assembled across frames up to this cap; larger senders are disconnected.
-    private const int MaxMessageBytes = SocketProtocol.MaxMessageBytes;
+    private const int MaxMessageBytes = DeviceProtocol.MaxMessageBytes;
 
     private readonly DeviceSessions _sessions;
     private readonly ILogger<SocketHandler> _logger;
@@ -60,14 +60,14 @@ internal sealed class SocketHandler : ISocketHandler
         // version, a browser that sets no subprotocol) is spoken to as v1. One that offers only
         // versions this host does not speak is refused before the upgrade.
         var offered = context.WebSockets.WebSocketRequestedProtocols;
-        if (offered.Count > 0 && !offered.Contains(SocketProtocol.V1))
+        if (offered.Count > 0 && !offered.Contains(WebSocketBinding.Subprotocol))
         {
             _logger.LogWarning("Rejecting websocket for client {ClientRefId}: no supported protocol in {Offered}.", identity.ClientRefId, string.Join(", ", offered));
-            await Problems.WriteAsync(context, StatusCodes.Status400BadRequest, "SOCKET_PROTOCOL_UNSUPPORTED", $"Offer the {SocketProtocol.V1} subprotocol, or none.");
+            await Problems.WriteAsync(context, StatusCodes.Status400BadRequest, "SOCKET_PROTOCOL_UNSUPPORTED", $"Offer the {WebSocketBinding.Subprotocol} subprotocol, or none.");
             return;
         }
 
-        using var webSocket = await context.WebSockets.AcceptWebSocketAsync(offered.Count > 0 ? SocketProtocol.V1 : null);
+        using var webSocket = await context.WebSockets.AcceptWebSocketAsync(offered.Count > 0 ? WebSocketBinding.Subprotocol : null);
         using var connection = new ClientConnection
         {
             Socket = webSocket,

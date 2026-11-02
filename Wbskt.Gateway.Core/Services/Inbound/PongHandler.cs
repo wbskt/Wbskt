@@ -19,7 +19,7 @@ public sealed class PongHandler : IInboundMessageHandler
 
     public string Type => MessageTypes.Pong;
 
-    public async Task HandleAsync(InboundContext context, SocketMessage message, CancellationToken cancellationToken)
+    public async Task HandleAsync(InboundContext context, DeviceMessage message, CancellationToken cancellationToken)
     {
         var connection = context.Connection;
 

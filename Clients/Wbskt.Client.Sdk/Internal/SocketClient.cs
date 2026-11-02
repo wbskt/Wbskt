@@ -52,7 +52,7 @@ internal sealed class SocketClient : IAsyncDisposable
 
         var uri = new Uri($"{_baseUrl.TrimEnd('/')}/ws");
         _webSocket.Options.SetRequestHeader("Authorization", $"Bearer {token}");
-        _webSocket.Options.AddSubProtocol(SocketProtocol.V1);
+        _webSocket.Options.AddSubProtocol(WebSocketBinding.Subprotocol);
         _webSocket.Options.CollectHttpResponseDetails = true;
         try
         {
@@ -68,7 +68,7 @@ internal sealed class SocketClient : IAsyncDisposable
         _ = Task.Run(ReceiveLoopAsync, _cts.Token);
     }
 
-    public async Task SendAsync(SocketMessage message)
+    public async Task SendAsync(DeviceMessage message)
     {
         if (_webSocket.State != WebSocketState.Open)
         {
@@ -97,7 +97,7 @@ internal sealed class SocketClient : IAsyncDisposable
 
     private async Task ReceiveLoopAsync()
     {
-        using var reader = new WebSocketMessageReader(_webSocket, SocketProtocol.MaxMessageBytes);
+        using var reader = new WebSocketMessageReader(_webSocket, DeviceProtocol.MaxMessageBytes);
         try
         {
             while (_webSocket.State == WebSocketState.Open && !_cts.Token.IsCancellationRequested)
@@ -123,7 +123,7 @@ internal sealed class SocketClient : IAsyncDisposable
                 {
                     case MessageTypes.Ping:
                         var ping = doc.RootElement.GetProperty("payload").Deserialize<PingPayload>()!;
-                        await SendAsync(new SocketMessage(MessageTypes.Pong, new PongPayload(ping.Timestamp, ping.Id)));
+                        await SendAsync(new DeviceMessage(MessageTypes.Pong, new PongPayload(ping.Timestamp, ping.Id)));
                         break;
                     default:
                         var payload = doc.RootElement.TryGetProperty("payload", out var p) ? (object)p.Clone() : null;
@@ -136,12 +136,12 @@ internal sealed class SocketClient : IAsyncDisposable
                             if (CommandExpiry.IsExpired(doc.RootElement, DateTimeOffset.UtcNow))
                             {
                                 // Answered, so the platform reports it as refused rather than lost.
-                                await SendAsync(new SocketMessage(MessageTypes.Ack, new AckPayload(commandId, type, AckPayload.Expired)));
+                                await SendAsync(new DeviceMessage(MessageTypes.Ack, new AckPayload(commandId, type, AckPayload.Expired)));
                                 break;
                             }
 
                             // Transport-level delivery ack; app-level acks are ordinary messages.
-                            await SendAsync(new SocketMessage(MessageTypes.Ack, new AckPayload(commandId)));
+                            await SendAsync(new DeviceMessage(MessageTypes.Ack, new AckPayload(commandId)));
                         }
 
                         OnMessageReceived?.Invoke(type ?? "unknown", payload, commandId);

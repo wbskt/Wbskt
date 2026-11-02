@@ -32,7 +32,7 @@ public abstract class DeviceConnection : IDeviceConnection
             _pendingPing = (id, sentAt);
         }
 
-        return SendAsync(new SocketMessage(MessageTypes.Ping, new PingPayload(sentAt, id)), cancellationToken);
+        return SendAsync(new DeviceMessage(MessageTypes.Ping, new PingPayload(sentAt, id)), cancellationToken);
     }
 
     public bool TryCompletePing(string? id, out DateTime sentAt)
@@ -51,7 +51,7 @@ public abstract class DeviceConnection : IDeviceConnection
         }
     }
 
-    public Task SendAsync(SocketMessage message, CancellationToken cancellationToken)
+    public Task SendAsync(DeviceMessage message, CancellationToken cancellationToken)
     {
         return SendTextAsync(JsonSerializer.Serialize(message), cancellationToken);
     }

@@ -11,7 +11,7 @@ public static class DeviceMessageRules
     public const int MaxTypeLength = MessageTypes.MaxTypeLength;
 
     /// <summary>Half the 64 KB socket message cap, leaving room for the envelope.</summary>
-    public const int MaxPayloadChars = SocketProtocol.MaxMessageBytes / 2;
+    public const int MaxPayloadChars = DeviceProtocol.MaxMessageBytes / 2;
 
     public static bool IsReserved(string messageType) => MessageTypes.IsReserved(messageType);
 

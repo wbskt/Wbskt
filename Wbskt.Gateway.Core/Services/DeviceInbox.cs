@@ -12,8 +12,8 @@ namespace Wbskt.Gateway.Core.Services;
 /// </summary>
 public sealed class DeviceInbox
 {
-    /// <summary>The close description for a message over <see cref="SocketProtocol.MaxMessageBytes"/>.</summary>
-    public static readonly string TooBigDescription = $"Messages are limited to {SocketProtocol.MaxMessageBytes} bytes.";
+    /// <summary>The close description for a message over <see cref="DeviceProtocol.MaxMessageBytes"/>.</summary>
+    public static readonly string TooBigDescription = $"Messages are limited to {DeviceProtocol.MaxMessageBytes} bytes.";
 
     private readonly InboundContext _context;
     private readonly MessageBudget _budget;
@@ -49,9 +49,9 @@ public sealed class DeviceInbox
         // Every transport caps its reads at this size, as it must to bound its memory; this is the same
         // rule checked once more where all of them meet. Under a third of the limit in characters
         // cannot be over it in UTF-8 bytes, so most messages skip the count.
-        if (text.Length > SocketProtocol.MaxMessageBytes / 3 && Encoding.UTF8.GetByteCount(text) > SocketProtocol.MaxMessageBytes)
+        if (text.Length > DeviceProtocol.MaxMessageBytes / 3 && Encoding.UTF8.GetByteCount(text) > DeviceProtocol.MaxMessageBytes)
         {
-            _logger.LogWarning("Client {ClientRefId} exceeded the {MaxMessageBytes}-byte message limit; closing.", clientRefId, SocketProtocol.MaxMessageBytes);
+            _logger.LogWarning("Client {ClientRefId} exceeded the {MaxMessageBytes}-byte message limit; closing.", clientRefId, DeviceProtocol.MaxMessageBytes);
             await connection.RequestCloseAsync(DisconnectReason.MessageTooBig, TooBigDescription);
             return DisconnectReason.MessageTooBig;
         }

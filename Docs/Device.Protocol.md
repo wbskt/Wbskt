@@ -105,7 +105,7 @@ Every message, both ways, is a JSON object:
 | `commandId` | server → device | Present on a command that wants delivery confirmed (§4.3). |
 | `expiresAt` | server → device | On a command: don't act on it after this instant (§4.3). |
 
-**Limits.** A message is at most 64 KB (`SocketProtocol.MaxMessageBytes`); a bigger one ends the
+**Limits.** A message is at most 64 KB (`DeviceProtocol.MaxMessageBytes`); a bigger one ends the
 connection (too big, §5). A device may send 10 messages a second sustained with a burst of 100
 (enough to flush an offline buffer); past that the excess is dropped, and after 500 drops in a row
 the connection is ended (throttled, §5).

@@ -146,7 +146,7 @@ public sealed class WbsktClient : IWbsktClient
         try
         {
             // Capabilities describe the connection, so they go out first and are never buffered.
-            await _socket.SendAsync(new SocketMessage(MessageTypes.Capabilities, BuildEffectiveCapabilities()));
+            await _socket.SendAsync(new DeviceMessage(MessageTypes.Capabilities, BuildEffectiveCapabilities()));
         }
         catch (Exception)
         {
@@ -220,7 +220,7 @@ public sealed class WbsktClient : IWbsktClient
 
         if (_socket.IsConnected)
         {
-            await _socket.SendAsync(new SocketMessage(MessageTypes.Capabilities, BuildEffectiveCapabilities()));
+            await _socket.SendAsync(new DeviceMessage(MessageTypes.Capabilities, BuildEffectiveCapabilities()));
         }
     }
 
@@ -239,7 +239,7 @@ public sealed class WbsktClient : IWbsktClient
 
     private async Task EnqueueAsync(string type, object payload)
     {
-        var message = new SocketMessage(type, payload) { SentAt = DateTimeOffset.UtcNow };
+        var message = new DeviceMessage(type, payload) { SentAt = DateTimeOffset.UtcNow };
 
         if (_outbound.Capacity <= 0)
         {

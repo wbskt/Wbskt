@@ -56,15 +56,9 @@ public static class MessageTypes
         IsSystem(type) || Comparer.Equals(type, Capabilities) || Comparer.Equals(type, StateReport);
 }
 
-/// <summary>Limits and the version every side of the socket agrees on.</summary>
-public static class SocketProtocol
+/// <summary>Limits of the message model that every binding and every SDK agrees on.</summary>
+public static class DeviceProtocol
 {
-    /// <summary>
-    /// The WebSocket subprotocol (<c>Sec-WebSocket-Protocol</c>) of this version of the protocol. A
-    /// client offers it, and the server accepts it; a connection that offers none is treated as v1.
-    /// </summary>
-    public const string V1 = "wbskt.v1";
-
-    /// <summary>Messages are assembled across frames up to this size; a larger one ends the connection.</summary>
+    /// <summary>A message, assembled from whatever pieces the binding carries it in, is at most this size; a larger one ends the connection.</summary>
     public const int MaxMessageBytes = 64 * 1024;
 }

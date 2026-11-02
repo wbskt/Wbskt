@@ -15,7 +15,7 @@ public sealed class ContractTimestampTests
         typeof(global::Wbskt.Auth.Models.LoginRequest).Assembly,
         typeof(global::Wbskt.Management.Models.EventLogResponse).Assembly,
         typeof(global::Wbskt.Models.Page<>).Assembly,
-        typeof(global::Wbskt.Protocol.SocketMessage).Assembly,
+        typeof(global::Wbskt.Protocol.DeviceMessage).Assembly,
     ];
 
     /// <summary>

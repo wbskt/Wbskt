@@ -15,5 +15,5 @@ public interface IInboundMessageHandler
     /// <summary>The message type handled, such as <c>sys.pong</c>.</summary>
     string Type { get; }
 
-    Task HandleAsync(InboundContext context, SocketMessage message, CancellationToken cancellationToken);
+    Task HandleAsync(InboundContext context, DeviceMessage message, CancellationToken cancellationToken);
 }
