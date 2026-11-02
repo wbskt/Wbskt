@@ -9,6 +9,11 @@ public interface ISharedVariableProvider
     /// <summary>The variable, or null when the workflow has none by that name. Defaulted so the engine's test doubles need no stub.</summary>
     Task<SharedVariableRow?> FindByWorkflowRefIdNameAsync(Guid workflowRefId, string varName, CancellationToken ct)
         => throw new NotSupportedException();
+
+    /// <summary>Every variable of the workflow, by name. Defaulted so the engine's test doubles need no stub.</summary>
+    Task<IReadOnlyCollection<SharedVariableRow>> ListByWorkflowRefIdAsync(Guid workflowRefId, CancellationToken ct)
+        => throw new NotSupportedException();
+
     Task<SharedVariableRow> InitializeAsync(Guid workflowRefId, string varName, string varType, string valueJson, CancellationToken ct);
     Task<SharedVariableRow> SetAsync(Guid workflowRefId, string varName, string valueJson, CancellationToken ct);
     Task<string> IncrementAsync(Guid workflowRefId, string varName, long delta, CancellationToken ct);

@@ -21,6 +21,18 @@ public sealed class SharedVariableService : ISharedVariableService
         _eventBus = eventBus;
     }
 
+    public async Task<Result<IReadOnlyCollection<SharedVariableDto>>> ListAsync(int workspaceId, Guid workflowRefId, CancellationToken ct)
+    {
+        var ensureWorkflowResult = await _workflows.EnsureWorkflowInWorkspaceAsync(workspaceId, workflowRefId, ct);
+        if (ensureWorkflowResult.IsFailure)
+        {
+            return Result<IReadOnlyCollection<SharedVariableDto>>.Failure(ensureWorkflowResult.Error);
+        }
+
+        var rows = await _variables.ListByWorkflowRefIdAsync(workflowRefId, ct);
+        return Result<IReadOnlyCollection<SharedVariableDto>>.Success([.. rows.Select(Map)]);
+    }
+
     public async Task<Result<SharedVariableDto>> GetAsync(int workspaceId, Guid workflowRefId, string name, CancellationToken ct)
     {
         var ensureWorkflowResult = await _workflows.EnsureWorkflowInWorkspaceAsync(workspaceId, workflowRefId, ct);

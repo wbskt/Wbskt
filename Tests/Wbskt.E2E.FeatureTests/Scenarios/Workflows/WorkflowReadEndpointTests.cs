@@ -104,6 +104,9 @@ public sealed class WorkflowReadEndpointTests(ServicesFixture fixture)
         set.ValueJson.Should().Be("42");
 
         (await management.GetWorkflowVariableAsync(workspace, workflowRef, VariableName)).ValueJson.Should().Be("42");
+
+        var listed = await management.ListWorkflowVariablesAsync(workspace, workflowRef);
+        listed.Items.Should().ContainSingle(v => v.VarName == VariableName).Which.ValueJson.Should().Be("42");
     }
 
     /// <summary>A manual trigger that writes <see cref="VariableName"/> = 1 as a shared variable.</summary>

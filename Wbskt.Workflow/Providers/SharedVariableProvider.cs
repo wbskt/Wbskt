@@ -45,6 +45,11 @@ internal sealed class SharedVariableProvider : BaseSqlProvider, ISharedVariableP
         );
     }
 
+    public async Task<IReadOnlyCollection<SharedVariableRow>> ListByWorkflowRefIdAsync(Guid workflowRefId, CancellationToken ct)
+    {
+        return await ExecuteCollectionAsync("dbo.SharedVariable_GetBy_WorkflowRefId", p => p.AddWithValue("@WorkflowRefId", workflowRefId), Map, ct);
+    }
+
     public async Task<SharedVariableRow> InitializeAsync(Guid workflowRefId, string varName, string varType, string valueJson, CancellationToken ct)
     {
         return await ExecuteSingleAsync(

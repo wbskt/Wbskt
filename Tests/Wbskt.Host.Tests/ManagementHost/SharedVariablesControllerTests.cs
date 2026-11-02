@@ -67,6 +67,43 @@ public sealed class SharedVariablesControllerTests
     }
 
     [Fact]
+    public async Task List_returns_every_variable_of_an_owned_workflow()
+    {
+        var provider = new Mock<ISharedVariableProvider>();
+        var workflowRefId = Guid.NewGuid();
+        provider.Setup(x => x.ListByWorkflowRefIdAsync(workflowRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new SharedVariableRow { Id = 1, WorkflowRefId = workflowRefId, VarName = "counter", VarType = "Counter", ValueJson = "3", UpdatedAt = DateTime.UtcNow, CreatedAt = DateTime.UtcNow },
+                new SharedVariableRow { Id = 2, WorkflowRefId = workflowRefId, VarName = "frostLimit", VarType = "Number", ValueJson = "2.5", UpdatedAt = DateTime.UtcNow, CreatedAt = DateTime.UtcNow }
+            ]);
+        var (controller, workflowService) = CreateController(provider.Object);
+        workflowService.Setup(x => x.EnsureWorkflowInWorkspaceAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success());
+
+        var response = await controller.List(WorkspaceId, workflowRefId, CancellationToken.None);
+
+        var page = Assert.IsType<Wbskt.Models.Page<SharedVariableDto>>(Assert.IsType<OkObjectResult>(response.Result).Value);
+        Assert.Equal(["counter", "frostLimit"], page.Items.Select(v => v.VarName));
+        Assert.Equal(2, page.TotalCount);
+    }
+
+    [Fact]
+    public async Task List_of_a_workflow_in_another_workspace_reads_nothing()
+    {
+        var provider = new Mock<ISharedVariableProvider>();
+        var workflowRefId = Guid.NewGuid();
+        var (controller, workflowService) = CreateController(provider.Object);
+        workflowService.Setup(x => x.EnsureWorkflowInWorkspaceAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure(Error.NotFound("WORKFLOW_NOT_FOUND", "Workflow not found.")));
+
+        var response = await controller.List(WorkspaceId, workflowRefId, CancellationToken.None);
+
+        ProblemAssert.Is(response.Result, StatusCodes.Status404NotFound);
+        provider.VerifyNoOtherCalls();
+    }
+
+    [Fact]
     public async Task Set_resolves_workspace_validates_ownership_and_returns_dto()
     {
         var provider = new Mock<ISharedVariableProvider>();

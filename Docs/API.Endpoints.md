@@ -441,6 +441,7 @@ Workflow-scoped state that outlives any single run, used to coordinate between t
 
 | Endpoint | Permission | What it does |
 |---|---|---|
+| `GET /` | `workflows.read` | Every variable of the workflow, by name, as one page (`items`, `totalCount`): `workflowRefId`, `varName`, `varType`, `valueJson`, `updatedAt`. For the console's `$shared.NAME` picker. 404 `WORKFLOW_NOT_FOUND` for a workflow this workspace does not own. |
 | `GET {variableName}` | `workflows.read` | Reads one variable. |
 | `PUT {variableName}` | `workflows.execute` | Writes one. Operating state, not definition — hence `execute` rather than an authoring permission. |
 
