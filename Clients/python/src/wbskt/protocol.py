@@ -4,6 +4,10 @@ SUBPROTOCOL = "wbskt.v1"
 MAX_MESSAGE_BYTES = 64 * 1024
 MAX_TYPE_LENGTH = 100
 
+# Below the gateway's default budget (10 a second, burst 100), a flushed offline backlog included.
+SEND_PER_SECOND = 8.0
+SEND_BURST = 50
+
 SYSTEM_PREFIX = "sys."
 PING = "sys.ping"
 PONG = "sys.pong"

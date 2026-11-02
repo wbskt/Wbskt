@@ -19,6 +19,7 @@ from websockets.asyncio.client import ClientConnection, connect
 from websockets.exceptions import ConnectionClosed, InvalidStatus
 
 from . import _http, protocol
+from ._pacing import Pacer
 from .models import Command, Message, RegistrationRequired, WbsktError
 from .reconnect import ReconnectPolicy
 from .storage import FileStorage, Storage
@@ -85,6 +86,8 @@ class AsyncWbsktClient:
         self._capabilities: List[Command] = list(capabilities)
         self._firmware_version = firmware_version
         self._buffer: Deque[str] = collections.deque(maxlen=offline_buffer_size)
+        self._pacer = Pacer(protocol.SEND_PER_SECOND, protocol.SEND_BURST)
+        self._send_lock: Optional[asyncio.Lock] = None
         self._policy = reconnect_policy or ReconnectPolicy()
         self._token: Optional[str] = None
         self._token_expires = 0.0
@@ -107,6 +110,7 @@ class AsyncWbsktClient:
             return
         self._stopping = asyncio.Event()
         self._inbox = asyncio.Queue()
+        self._send_lock = asyncio.Lock()
         self._error = None
         self._dispatch_task = asyncio.ensure_future(self._dispatch())
         self._run_task = asyncio.ensure_future(self._run())
@@ -160,12 +164,15 @@ class AsyncWbsktClient:
         if len(frame.encode("utf-8")) > protocol.MAX_MESSAGE_BYTES:
             raise ValueError(f"message is over {protocol.MAX_MESSAGE_BYTES} bytes")
         ws = self._ws
-        if self._connected and ws is not None:
-            try:
-                await ws.send(frame)
-                return
-            except ConnectionClosed:
-                pass
+        if self._connected and ws is not None and self._send_lock is not None:
+            # The lock is FIFO, so paced sends still leave in the order they were made.
+            async with self._send_lock:
+                try:
+                    await self._pacer.take()
+                    await ws.send(frame)
+                    return
+                except ConnectionClosed:
+                    pass
         self._buffer.append(frame)
 
     async def _run(self) -> None:
@@ -222,21 +229,19 @@ class AsyncWbsktClient:
             raise
 
         self._ws = ws
+        drain: Optional["asyncio.Task[None]"] = None
         try:
             await ws.send(self._capabilities_frame())
-            while self._buffer:
-                await ws.send(self._buffer[0])
-                self._buffer.popleft()
-            # Nothing awaits between the empty check and this, so a send can't overtake the backlog.
-            self._connected = True
-            log.info("wbskt: connected as %s", self.device_name)
-            await _call(self.on_connected)
+            # The backlog drains at the paced rate while pings are answered.
+            drain = asyncio.ensure_future(self._drain(ws))
             async for raw in ws:
                 if isinstance(raw, str):
                     await self._receive(ws, raw)
         except ConnectionClosed:
             pass
         finally:
+            if drain is not None:
+                drain.cancel()
             was_connected = self._connected
             self._connected = False
             self._ws = None
@@ -245,6 +250,28 @@ class AsyncWbsktClient:
                 await _call(self.on_disconnected)
 
         return ws.close_code == protocol.CLOSE_SERVER_RESTARTING
+
+    async def _drain(self, ws: ClientConnection) -> None:
+        """Send the offline backlog, paced, then mark the client connected."""
+        assert self._send_lock is not None
+        try:
+            async with self._send_lock:
+                while self._buffer:
+                    frame = self._buffer[0]
+                    await self._pacer.take()
+                    await ws.send(frame)
+                    # A full buffer may have dropped this frame while it was being sent.
+                    if self._buffer and self._buffer[0] is frame:
+                        self._buffer.popleft()
+                # Nothing awaits between the empty check and this, so a send can't overtake the backlog.
+                self._connected = True
+        except ConnectionClosed:
+            return
+        log.info("wbskt: connected as %s", self.device_name)
+        try:
+            await _call(self.on_connected)
+        except Exception:
+            log.exception("wbskt: on_connected raised")
 
     async def _receive(self, ws: ClientConnection, raw: str) -> None:
         try:

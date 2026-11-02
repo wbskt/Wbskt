@@ -68,6 +68,10 @@ async def main() -> None:
                 if name == "send":
                     await client.send(op["type"], op.get("payload"))
                     emit("sent", type=op["type"])
+                elif name == "send-many":
+                    for n in range(op["count"]):
+                        await client.send(op["type"], n)
+                    emit("sent", type=op["type"], count=op["count"])
                 elif name == "state":
                     await client.report_state(op["values"])
                     emit("sent", type="state.report")

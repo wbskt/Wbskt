@@ -61,4 +61,13 @@ public static class DeviceProtocol
 {
     /// <summary>A message, assembled from whatever pieces the binding carries it in, is at most this size; a larger one ends the connection.</summary>
     public const int MaxMessageBytes = 64 * 1024;
+
+    /// <summary>
+    /// Messages a second an SDK sends at most, a flushed offline backlog included. Below the gateway's
+    /// default budget (10 a second, burst 100) so a device never relies on the gateway's headroom.
+    /// </summary>
+    public const double SendPerSecond = 8;
+
+    /// <summary>Messages an SDK sends back to back before <see cref="SendPerSecond"/> applies.</summary>
+    public const int SendBurst = 50;
 }

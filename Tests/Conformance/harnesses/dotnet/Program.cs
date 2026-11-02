@@ -64,6 +64,15 @@ while (await Console.In.ReadLineAsync() is { } line)
                 await client.SendAsync(type, op["payload"]?.DeepClone()!);
                 Emit("sent", new() { ["type"] = type });
                 break;
+            case "send-many":
+                var count = op["count"]!.GetValue<int>();
+                for (var n = 0; n < count; n++)
+                {
+                    await client.SendAsync(type, n);
+                }
+
+                Emit("sent", new() { ["type"] = type, ["count"] = count });
+                break;
             case "state":
                 var values = op["values"].Deserialize<Dictionary<string, object?>>() ?? [];
                 await client.ReportStateAsync(values);

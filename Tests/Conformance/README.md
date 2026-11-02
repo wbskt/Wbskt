@@ -7,7 +7,7 @@ an item on one of those two checklists:
 
 | Checklist | Scenarios |
 |---|---|
-| Message model | registering once, pending approval, registering again, reusing the token, `Retry-After`, `capabilities` first, ping and pong, command acks, expired commands, plain messages, `sentAt` and the offline backlog, reserved types |
+| Message model | registering once, pending approval, registering again, reusing the token, `Retry-After`, `capabilities` first, ping and pong, command acks, expired commands, plain messages, `sentAt` and the offline backlog, pacing a large backlog under the message budget, reserved types |
 | Firmware updates (optional) | listing `ota`, rejecting while off, an expired update, plain `http`, accepted → downloading → installed |
 | WebSocket binding | the subprotocol and bearer token, renewing after a 401 on the upgrade, keeping the token while the gateway is down |
 
@@ -15,7 +15,9 @@ A future binding (MQTT, HTTPS) adds its own checklist and its own scenarios.
 
 The suite fakes the two HTTP endpoints and the WebSocket gateway (`fake_wbskt.py`), so nothing else
 has to run, and each scenario takes a few seconds. The fake can misbehave on cue: refuse a token,
-throttle a login, forget a device, close or refuse the socket.
+throttle a login, forget a device, close or refuse the socket. It enforces the gateway's default
+message budget (10 a second, burst 100, closed with 1008 after 500 drops in a row) and records what it
+dropped.
 
 The SDK runs as a separate process, a **harness**, so any language can take part. CI
 (`.github/workflows/sdk-conformance.yml`) runs it for the Python and .NET SDKs; the ESP32 SDK runs it
@@ -52,6 +54,7 @@ The harness starts the client at once. It then reads one JSON object per line on
 | Line | Do |
 |---|---|
 | `{"op":"send","type":"…","payload":…}` | Send an application message. |
+| `{"op":"send-many","type":"…","count":N}` | Send N application messages with payloads 0 … N-1, as fast as the app can call send. |
 | `{"op":"state","values":{…}}` | Report state. |
 | `{"op":"stop"}` | Stop the client and exit. |
 
@@ -63,7 +66,7 @@ may log there.
 | `{"event":"started"}` | The client was started. |
 | `{"event":"connected"}` / `{"event":"disconnected"}` | The socket opened or closed. |
 | `{"event":"message","type":"…","payload":…,"commandId":"…"\|null}` | The SDK handed a message to the app. |
-| `{"event":"sent","type":"…"}` | `send` or `state` returned. |
+| `{"event":"sent","type":"…"}` | `send` or `state` returned. After `send-many`, once, with `"count":N`. |
 | `{"event":"rejected","type":"…","reason":"…"}` | The SDK refused to send the message, for example for a reserved type. |
 
 An SDK that takes firmware updates (protocol §4.4) is also run through `test_ota.py`; for any other,

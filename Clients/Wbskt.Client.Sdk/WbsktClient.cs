@@ -12,6 +12,7 @@ public sealed class WbsktClient : IWbsktClient
     private readonly SocketClient _socket;
     private readonly OutboundBuffer _outbound;
     private readonly SemaphoreSlim _flushLock = new(1, 1);
+    private readonly TokenBucket _pacer = new(DeviceProtocol.SendPerSecond, DeviceProtocol.SendBurst);
     private readonly CancellationTokenSource _cts = new();
     private readonly ReconnectPolicy _reconnect = new();
     private readonly DeviceTokenCache _tokens;
@@ -248,7 +249,17 @@ public sealed class WbsktClient : IWbsktClient
                 throw new InvalidOperationException("Socket not connected.");
             }
 
-            await _socket.SendAsync(message);
+            await _flushLock.WaitAsync();
+            try
+            {
+                await _pacer.TakeAsync(_cts.Token);
+                await _socket.SendAsync(message);
+            }
+            finally
+            {
+                _flushLock.Release();
+            }
+
             return;
         }
 
@@ -259,27 +270,36 @@ public sealed class WbsktClient : IWbsktClient
 
     private async Task FlushOutboundAsync()
     {
-        await _flushLock.WaitAsync();
-        try
+        while (_announced && _socket.IsConnected && _outbound.Count > 0)
         {
-            while (_announced && _socket.IsConnected && _outbound.TryPeek(out var next))
+            // A flush already running sends this message too, so the caller doesn't wait behind a paced backlog.
+            if (!await _flushLock.WaitAsync(0))
             {
-                try
-                {
-                    await _socket.SendAsync(next);
-                }
-                catch (Exception)
-                {
-                    // Keep it queued; the next connection resends it.
-                    return;
-                }
-
-                _outbound.RemoveIfHead(next);
+                return;
             }
-        }
-        finally
-        {
-            _flushLock.Release();
+
+            try
+            {
+                while (_announced && _socket.IsConnected && _outbound.TryPeek(out var next))
+                {
+                    try
+                    {
+                        await _pacer.TakeAsync(_cts.Token);
+                        await _socket.SendAsync(next);
+                    }
+                    catch (Exception)
+                    {
+                        // Keep it queued; the next connection resends it.
+                        return;
+                    }
+
+                    _outbound.RemoveIfHead(next);
+                }
+            }
+            finally
+            {
+                _flushLock.Release();
+            }
         }
     }
 
