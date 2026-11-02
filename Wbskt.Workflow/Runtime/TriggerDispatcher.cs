@@ -239,6 +239,8 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         }
     }
 
+    private static readonly IReadOnlyCollection<TriggerRegistrationRow> NoRegistrations = [];
+
     /// <summary>
     /// The registrations for the event's keys. For a device message, "nothing listens" may come from the
     /// cache, which is the answer most device messages get; registrations, which claim the event and start
@@ -250,8 +252,6 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
     /// read each time, so a webhook fired or a run started by hand right after a publish never waits on
     /// the announcement that clears the cache.
     /// </remarks>
-    private static readonly IReadOnlyCollection<TriggerRegistrationRow> NoRegistrations = [];
-
     private Task<IReadOnlyCollection<TriggerRegistrationRow>> GetRegistrationsAsync(InboundEvent evt, CancellationToken ct)
     {
         // Nothing can register a trigger on a command's outcome: it only wakes the step waiting for it.
