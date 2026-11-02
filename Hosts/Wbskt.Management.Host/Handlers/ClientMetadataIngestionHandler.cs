@@ -20,6 +20,7 @@ public sealed class ClientMetadataIngestionHandler : IConsumer<ClientMessageRece
     private const int MaxStateVariableNameLength = 100;
     private const int MaxSystemEntries = 20;
     private const int MaxSystemEntryLength = 40;
+    private const int MaxFirmwareVersionLength = 50;
 
     // As the workflow engine judges a payload late: it arrived this long after the device sent it.
     internal static readonly TimeSpan LateThreshold = TimeSpan.FromSeconds(30);
@@ -179,8 +180,9 @@ public sealed class ClientMetadataIngestionHandler : IConsumer<ClientMessageRece
         var capabilitiesJson = JsonSerializer.Serialize(capabilities.Capabilities ?? []);
         var system = ReadSystem(capabilities.System);
         var systemJson = system.Count == 0 ? null : JsonSerializer.Serialize(system);
+        var firmwareVersion = string.IsNullOrWhiteSpace(capabilities.FirmwareVersion) ? null : Truncate(capabilities.FirmwareVersion.Trim(), MaxFirmwareVersionLength);
 
-        await _clientProvider.UpsertCapabilitiesAsync(message.ClientId, agentName, agentVersion, platform, capabilitiesJson, systemJson, cancellationToken);
+        await _clientProvider.UpsertCapabilitiesAsync(message.ClientId, agentName, agentVersion, platform, capabilitiesJson, systemJson, firmwareVersion, cancellationToken);
         _logger.LogDebug("Stored capabilities for client {ClientRefId} ({Agent} {Version} on {Platform}).", message.ClientRefId, agentName, agentVersion, platform);
 
         await _eventBus.PublishAsync(

@@ -119,6 +119,22 @@ async def test_sends_capabilities_first_then_the_backlog_in_order(api, socket_se
     assert first["sentAt"] <= second["sentAt"]
 
 
+async def test_capabilities_carry_the_firmware_version_only_when_given(api, socket_server, no_jitter):
+    client = make_client(api, socket_server, no_jitter, firmware_version="2.4.1")
+    await client.start()
+    capabilities = await socket_server.next()
+    await client.stop()
+
+    assert capabilities["payload"]["firmwareVersion"] == "2.4.1"
+
+    client = make_client(api, socket_server, no_jitter)
+    await client.start()
+    capabilities = await socket_server.next()
+    await client.stop()
+
+    assert "firmwareVersion" not in capabilities["payload"]
+
+
 async def test_buffer_drops_the_oldest_when_full(api, socket_server, no_jitter):
     client = make_client(api, socket_server, no_jitter, offline_buffer_size=2)
     for n in range(3):

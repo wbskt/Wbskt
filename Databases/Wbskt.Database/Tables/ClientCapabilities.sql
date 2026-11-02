@@ -7,6 +7,7 @@ CREATE TABLE dbo.ClientCapabilities (
     Platform         NVARCHAR(100) NOT NULL, -- ClientCapabilities.OS     ("linux-arm64")
     CapabilitiesJson NVARCHAR(MAX) NOT NULL, -- serialized list of command capabilities
     SystemJson       NVARCHAR(1000) NULL,    -- platform features it takes, as a JSON array (["ota"])
+    FirmwareVersion  NVARCHAR(50)  NULL,     -- ClientCapabilities.FirmwareVersion: the code the device runs
     UpdatedAt        DATETIME2(3)  NOT NULL  DEFAULT SYSUTCDATETIME(),
 
     -- Constraints

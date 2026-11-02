@@ -72,7 +72,7 @@ reads two more variables:
 
 | Variable | |
 |---|---|
-| `WBSKT_OTA` | The firmware version. When set, the client takes updates and reports it as the `firmware` state. |
+| `WBSKT_OTA` | The firmware version. When set, the client takes updates and sends it as `firmwareVersion` in `capabilities`. |
 | `WBSKT_OTA_INSTALL` | `ok`: install whatever is sent, without downloading, then restart. Anything else: fail the download with that as the error. |
 
 and writes two more events:

@@ -69,6 +69,7 @@ class AsyncWbsktClient:
         capabilities: Iterable[Command] = (),
         offline_buffer_size: int = OFFLINE_BUFFER_SIZE,
         reconnect_policy: Optional[ReconnectPolicy] = None,
+        firmware_version: Optional[str] = None,
     ) -> None:
         if not device_name:
             raise ValueError("device_name is required")
@@ -82,6 +83,7 @@ class AsyncWbsktClient:
         self.on_disconnected: Optional[Handler] = None
 
         self._capabilities: List[Command] = list(capabilities)
+        self._firmware_version = firmware_version
         self._buffer: Deque[str] = collections.deque(maxlen=offline_buffer_size)
         self._policy = reconnect_policy or ReconnectPolicy()
         self._token: Optional[str] = None
@@ -322,15 +324,15 @@ class AsyncWbsktClient:
         return client_ref_id, secret
 
     def _capabilities_frame(self) -> str:
-        return _encode(
-            protocol.CAPABILITIES,
-            {
-                "agent": "wbskt-python",
-                "version": __version__,
-                "os": f"{platform.system()} {platform.machine()}".strip(),
-                "capabilities": [c.to_json() for c in self._capabilities],
-            },
-        )
+        frame: Dict[str, Any] = {
+            "agent": "wbskt-python",
+            "version": __version__,
+            "os": f"{platform.system()} {platform.machine()}".strip(),
+            "capabilities": [c.to_json() for c in self._capabilities],
+        }
+        if self._firmware_version:
+            frame["firmwareVersion"] = self._firmware_version
+        return _encode(protocol.CAPABILITIES, frame)
 
 
 class WbsktClient:

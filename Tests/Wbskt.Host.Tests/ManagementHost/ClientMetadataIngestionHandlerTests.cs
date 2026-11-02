@@ -48,7 +48,7 @@ public sealed class ClientMetadataIngestionHandlerTests
         await handler.Consume(Context("capabilities", payload));
 
         provider.Verify(x => x.UpsertCapabilitiesAsync(ClientId, "csharp-sdk", "1.4.0", "linux-arm64",
-            It.Is<string>(json => json.Contains("cmd.actuate")), null, It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<string>(json => json.Contains("cmd.actuate")), null, null, It.IsAny<CancellationToken>()), Times.Once);
         bus.Verify(x => x.PublishAsync(
             It.Is<ClientCapabilitiesUpdatedEvent>(e => e.ClientRefId == ClientRefId && e.AgentName == "csharp-sdk" && e.AgentVersion == "1.4.0" && e.Platform == "linux-arm64"),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -62,7 +62,7 @@ public sealed class ClientMetadataIngestionHandlerTests
 
         await handler.Consume(Context("capabilities", payload));
 
-        provider.Verify(x => x.UpsertCapabilitiesAsync(ClientId, "js-sdk", "0.1.0", "browser", It.IsAny<string>(), null, It.IsAny<CancellationToken>()), Times.Once);
+        provider.Verify(x => x.UpsertCapabilitiesAsync(ClientId, "js-sdk", "0.1.0", "browser", It.IsAny<string>(), null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -73,7 +73,28 @@ public sealed class ClientMetadataIngestionHandlerTests
 
         await handler.Consume(Context("capabilities", payload));
 
-        provider.Verify(x => x.UpsertCapabilitiesAsync(ClientId, "wbskt-esp32", "0.3.0", "esp32", "[]", """["ota"]""", It.IsAny<CancellationToken>()), Times.Once);
+        provider.Verify(x => x.UpsertCapabilitiesAsync(ClientId, "wbskt-esp32", "0.3.0", "esp32", "[]", """["ota"]""", null, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Capabilities_firmware_version_is_trimmed_and_capped()
+    {
+        var (handler, provider, _) = CreateHandler();
+        var payload = "{\"agent\":\"wbskt-esp32\",\"version\":\"0.3.0\",\"os\":\"esp32\",\"capabilities\":[],\"firmwareVersion\":\"  " + new string('9', 60) + "  \"}";
+
+        await handler.Consume(Context("capabilities", payload));
+
+        provider.Verify(x => x.UpsertCapabilitiesAsync(ClientId, "wbskt-esp32", "0.3.0", "esp32", "[]", null, new string('9', 50), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Blank_firmware_version_is_stored_as_none()
+    {
+        var (handler, provider, _) = CreateHandler();
+
+        await handler.Consume(Context("capabilities", """{"agent":"wbskt-esp32","version":"0.3.0","os":"esp32","capabilities":[],"firmwareVersion":"  "}"""));
+
+        provider.Verify(x => x.UpsertCapabilitiesAsync(ClientId, "wbskt-esp32", "0.3.0", "esp32", "[]", null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -83,7 +104,7 @@ public sealed class ClientMetadataIngestionHandlerTests
 
         await handler.Consume(Context("capabilities", "{not json"));
 
-        provider.Verify(x => x.UpsertCapabilitiesAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        provider.Verify(x => x.UpsertCapabilitiesAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
         bus.Verify(x => x.PublishAsync(It.IsAny<ClientCapabilitiesUpdatedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -94,7 +115,7 @@ public sealed class ClientMetadataIngestionHandlerTests
 
         await handler.Consume(Context("capabilities", """{"Version":"1.0","OS":"linux-x64","Capabilities":[]}"""));
 
-        provider.Verify(x => x.UpsertCapabilitiesAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        provider.Verify(x => x.UpsertCapabilitiesAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -105,7 +126,7 @@ public sealed class ClientMetadataIngestionHandlerTests
 
         await handler.Consume(Context("capabilities", payload));
 
-        provider.Verify(x => x.UpsertCapabilitiesAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        provider.Verify(x => x.UpsertCapabilitiesAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

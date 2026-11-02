@@ -30,11 +30,21 @@ def system_of(capabilities: Dict[str, Any]) -> List[str]:
     return payload.get("system") or []
 
 
+def firmware_version_of(capabilities: Dict[str, Any]) -> Any:
+    payload = {k.lower(): v for k, v in capabilities["payload"].items()}
+    return payload.get("firmwareversion")
+
+
 async def next_ota_status(socket_server, timeout: float = RECONNECT) -> Dict[str, Any]:
     return (await socket_server.next_of("sys.ota.status", timeout=timeout))["payload"]
 
 
 async def start_with_ota(device, socket_server, monkeypatch, version: str = "1.0.0"):
+    harness, _ = await start_with_ota_capabilities(device, socket_server, monkeypatch, version)
+    return harness
+
+
+async def start_with_ota_capabilities(device, socket_server, monkeypatch, version: str = "1.0.0"):
     harness_command = os.environ.get("WBSKT_HARNESS", "")
     if _takes_ota.get(harness_command) is False:
         pytest.skip("this SDK does not take firmware updates")
@@ -45,15 +55,13 @@ async def start_with_ota(device, socket_server, monkeypatch, version: str = "1.0
     _takes_ota[harness_command] = "ota" in system_of(capabilities)
     if not _takes_ota[harness_command]:
         pytest.skip("this SDK does not take firmware updates")
-    return harness
+    return harness, capabilities
 
 
 async def test_lists_ota_and_reports_the_firmware_version(api, socket_server, device, monkeypatch):
-    await start_with_ota(device, socket_server, monkeypatch)
+    _, capabilities = await start_with_ota_capabilities(device, socket_server, monkeypatch)
 
-    state = await socket_server.next_of("state.report")
-
-    assert state["payload"].get("firmware") == "1.0.0"
+    assert firmware_version_of(capabilities) == "1.0.0"
 
 
 async def test_rejects_an_update_while_ota_is_off(api, socket_server, device, monkeypatch):
@@ -117,13 +125,14 @@ async def test_reports_accepted_downloading_and_installed_from_the_new_firmware(
     monkeypatch.setenv("WBSKT_OTA", "1.1.0")
     new = await device()
     await new.expect("connected", timeout=RECONNECT)
+    # The new firmware's capabilities come first on its connection, before its statuses.
+    capabilities = await socket_server.next_of("capabilities", timeout=RECONNECT)
     after = [await next_ota_status(socket_server)]
     while after[-1]["state"] != "installed":
         after.append(await next_ota_status(socket_server))
-    state = await socket_server.next_of("state.report")
 
     assert (accepted["commandId"], accepted["state"]) == ("o4", "accepted")
     assert all(s["commandId"] == "o4" and s["state"] in ("downloading", "installed") for s in after)
     assert after[-1]["version"] == "1.1.0"
-    assert state["payload"].get("firmware") == "1.1.0"
+    assert firmware_version_of(capabilities) == "1.1.0"
     assert len(api.logins) == 1

@@ -14,5 +14,6 @@ public class ClientDetail : Client
     public string? Platform { get; set; }
     public string? CapabilitiesJson { get; set; }
     public string? SystemJson { get; set; }
+    public string? FirmwareVersion { get; set; }
     public DateTime? CapabilitiesUpdatedAt { get; set; }
 }

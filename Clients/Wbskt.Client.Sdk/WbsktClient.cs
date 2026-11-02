@@ -165,7 +165,7 @@ public sealed class WbsktClient : IWbsktClient
         var agent = app is { Agent.Length: > 0 } ? app.Agent : SdkInfo.AgentName;
         var version = app is { Version.Length: > 0 } ? app.Version : SdkInfo.Version;
         var os = app is { OS.Length: > 0 } ? app.OS : SdkInfo.Platform;
-        return new ClientCapabilities(agent, version, os, app?.Capabilities ?? []);
+        return new ClientCapabilities(agent, version, os, app?.Capabilities ?? [], app?.System, app?.FirmwareVersion);
     }
 
     private void HandleDisconnect()

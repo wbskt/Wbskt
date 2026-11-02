@@ -60,6 +60,7 @@ public record ClientResponse(
 );
 
 /// <param name="System">The platform features the device last said it takes, such as <c>ota</c>; empty when none.</param>
+/// <param name="FirmwareVersion">The version of the code the device runs, from its capabilities report, or from the <c>firmware</c> state an older SDK reported; null when it said neither.</param>
 public record ClientDetailResponse(
     Guid ClientRefId,
     Guid PolicyRefId,
@@ -77,7 +78,8 @@ public record ClientDetailResponse(
     IReadOnlyList<CommandCapability>? Capabilities,
     DateTime CreatedAt,
     IReadOnlyList<string> Tags,
-    IReadOnlyList<string> System
+    IReadOnlyList<string> System,
+    string? FirmwareVersion = null
 );
 
 public record ClientTagsResponse(Guid ClientRefId, IReadOnlyList<string> Tags);

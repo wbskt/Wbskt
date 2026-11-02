@@ -248,6 +248,12 @@
           "createdAt": {
             "format": "date-time"
           },
+          "firmwareVersion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "isConnected": {
             "type": "boolean"
           },
