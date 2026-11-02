@@ -61,5 +61,5 @@ internal static class TestDeviceCommands
         new(store, targets, bus, Options.Create(options ?? new CommandQueueOptions()), clock ?? TimeProvider.System, NullLogger<DeviceCommandQueue>.Instance);
 
     public static DeviceCommandSender Sender(IClientCommandTargetProvider targets, IEventBus bus, IQueuedCommandStore? store = null, TimeProvider? clock = null, CommandQueueOptions? options = null) =>
-        new(targets, Queue(store ?? new InMemoryQueuedCommandStore(), targets, bus, clock, options), bus, NullLogger<DeviceCommandSender>.Instance);
+        new(targets, Queue(store ?? new InMemoryQueuedCommandStore(), targets, bus, clock, options), bus, clock ?? TimeProvider.System, NullLogger<DeviceCommandSender>.Instance);
 }

@@ -40,6 +40,7 @@ public sealed class ClientCommandService : IClientCommandService
     private readonly TimeSpan _defaultExpiry;
     private readonly ILogger<ClientCommandService> _logger;
     private readonly ManagementMetrics _metrics;
+    private readonly TimeProvider _clock;
 
     public ClientCommandService(
         IClientQueryService clientService,
@@ -50,8 +51,10 @@ public sealed class ClientCommandService : IClientCommandService
         ILogger<ClientCommandService> logger,
         ManagementMetrics metrics,
         IIdentityService? identity = null,
-        IRequestOriginAccessor? requestOrigin = null)
+        IRequestOriginAccessor? requestOrigin = null,
+        TimeProvider? clock = null)
     {
+        _clock = clock ?? TimeProvider.System;
         _clientService = clientService;
         _sender = sender;
         _queue = queue;
@@ -134,6 +137,7 @@ public sealed class ClientCommandService : IClientCommandService
             DeviceCommandOutcome.UnknownClient => Result<ClientCommandResponse>.Failure(WorkspaceOwnership.ClientNotFound),
             DeviceCommandOutcome.BrokerUnavailable => Result<ClientCommandResponse>.Failure(BrokerUnavailable),
             DeviceCommandOutcome.Invalid => Result<ClientCommandResponse>.Failure(ToError(result.Violation!)),
+            DeviceCommandOutcome.ExpiryInvalid => Result<ClientCommandResponse>.Failure(ExpiryInvalid),
             _ => throw new ArgumentOutOfRangeException(nameof(result), result.Outcome, null)
         };
     }
@@ -209,23 +213,22 @@ public sealed class ClientCommandService : IClientCommandService
         return Result.Success();
     }
 
-    private static Error? Validate(ClientCommandRequest request)
+    private Error? Validate(ClientCommandRequest request)
     {
         if (DeviceMessageRules.Check(request.Type, request.Payload) is { } violation)
         {
             return ToError(violation);
         }
 
-        if (request.ExpiresAt is { } expiresAt
-            && (expiresAt <= DateTimeOffset.UtcNow || expiresAt > DateTimeOffset.UtcNow.Add(CommandQueueOptions.MaxLifetime)))
+        if (request.ExpiresAt is { } expiresAt && !CommandLifetime.IsValidExpiry(expiresAt, _clock.GetUtcNow()))
         {
-            return Error.Validation("COMMAND_EXPIRY_INVALID", "expiresAt must be in the future and at most 24 hours away.");
+            return ExpiryInvalid;
         }
 
         return null;
     }
 
-    private static Error? ValidateOta(ClientOtaRequest request)
+    private Error? ValidateOta(ClientOtaRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Url)
             || request.Url.Length > MaxOtaUrlLength
@@ -251,14 +254,15 @@ public sealed class ClientCommandService : IClientCommandService
             return Error.Validation("OTA_SIZE_INVALID", "size must be the image's size in bytes, more than 0.");
         }
 
-        if (request.ExpiresAt is { } expiresAt
-            && (expiresAt <= DateTimeOffset.UtcNow || expiresAt > DateTimeOffset.UtcNow.Add(CommandQueueOptions.MaxLifetime)))
+        if (request.ExpiresAt is { } expiresAt && !CommandLifetime.IsValidExpiry(expiresAt, _clock.GetUtcNow()))
         {
-            return Error.Validation("COMMAND_EXPIRY_INVALID", "expiresAt must be in the future and at most 24 hours away.");
+            return ExpiryInvalid;
         }
 
         return null;
     }
+
+    private static readonly Error ExpiryInvalid = Error.Validation("COMMAND_EXPIRY_INVALID", "expiresAt must be in the future and at most 24 hours away.");
 
     private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 

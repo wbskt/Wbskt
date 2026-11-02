@@ -1,3 +1,4 @@
+using Wbskt.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -33,7 +34,10 @@ public enum DeviceCommandOutcome
     Invalid,
 
     /// <summary>The broker failed or did not take the command in time; nothing was sent.</summary>
-    BrokerUnavailable
+    BrokerUnavailable,
+
+    /// <summary>The expiry is further ahead than <see cref="CommandLifetime.Max"/>.</summary>
+    ExpiryInvalid
 }
 
 /// <param name="ClientId">The device's internal id; 0 when <see cref="DeviceCommandOutcome.UnknownClient"/>.</param>
@@ -60,6 +64,7 @@ public sealed class DeviceCommandSender(
     IClientCommandTargetProvider targets,
     DeviceCommandQueue queue,
     IEventBus eventBus,
+    TimeProvider clock,
     ILogger<DeviceCommandSender> logger) : IDeviceCommandSender
 {
     /// <summary>How long a command waits for the broker before the sender is told it is unavailable.</summary>
@@ -84,6 +89,14 @@ public sealed class DeviceCommandSender(
         {
             logger.LogInformation("Command '{Type}' to client '{ClientRefId}' refused: {Reason}", command.Type, command.ClientRefId, violation.Message);
             return new DeviceCommandResult(DeviceCommandOutcome.Invalid, target.ClientId, violation);
+        }
+
+        // The lifetime is promised to every sender, so it is held here rather than by each caller. A past
+        // expiry still goes out: the socket host and the SDK refuse it, and the sender hears why.
+        if (command.ExpiresAtUtc is { } expiresAt && expiresAt > clock.GetUtcNow().UtcDateTime + CommandLifetime.Max)
+        {
+            logger.LogInformation("Command '{Type}' to client '{ClientRefId}' refused: it expires at {ExpiresAt:O}.", command.Type, command.ClientRefId, expiresAt);
+            return new DeviceCommandResult(DeviceCommandOutcome.ExpiryInvalid, target.ClientId);
         }
 
         if (!target.IsConnected || string.IsNullOrEmpty(target.HostId))

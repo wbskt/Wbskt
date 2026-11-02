@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
+using Wbskt.Models;
 
 namespace Wbskt.Infrastructure.Devices;
 
@@ -14,7 +15,7 @@ public sealed class CommandQueueOptions
     /// The furthest ahead a command's expiry may be, waiting or not. A command is never acted on later
     /// than this after it was sent, whatever the configuration says.
     /// </summary>
-    public static readonly TimeSpan MaxLifetime = TimeSpan.FromHours(24);
+    public static readonly TimeSpan MaxLifetime = CommandLifetime.Max;
 
     /// <summary>How many commands may wait for one device; a send past it is refused.</summary>
     public int MaxPerClient { get; set; } = 100;
