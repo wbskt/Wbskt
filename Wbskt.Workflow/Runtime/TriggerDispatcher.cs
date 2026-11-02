@@ -250,8 +250,17 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
     /// read each time, so a webhook fired or a run started by hand right after a publish never waits on
     /// the announcement that clears the cache.
     /// </remarks>
+    private static readonly IReadOnlyCollection<TriggerRegistrationRow> NoRegistrations = [];
+
     private Task<IReadOnlyCollection<TriggerRegistrationRow>> GetRegistrationsAsync(InboundEvent evt, CancellationToken ct)
     {
+        // Nothing can register a trigger on a command's outcome: it only wakes the step waiting for it.
+        // Every device ack comes through here, so it skips the registration read.
+        if (string.Equals(evt.ChannelKind, CommandChannel.Name, StringComparison.Ordinal))
+        {
+            return Task.FromResult(NoRegistrations);
+        }
+
         if (!string.Equals(evt.ChannelKind, ClientChannel.Name, StringComparison.Ordinal) || evt.MatchKeys.Count == 0)
         {
             return _triggerRegistrationProvider.GetActiveByChannelKeysAsync(evt.ChannelKind, evt.MatchKeys, ct);

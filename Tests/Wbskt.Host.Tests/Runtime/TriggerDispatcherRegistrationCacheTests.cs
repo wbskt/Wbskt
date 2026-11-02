@@ -80,6 +80,19 @@ public sealed class TriggerDispatcherRegistrationCacheTests
         Assert.Equal(2, harness.Registrations.Reads);
     }
 
+    [Fact]
+    public async Task A_command_outcome_never_reads_registrations()
+    {
+        // Every device ack arrives on the command channel, and nothing can register a trigger there.
+        var harness = new Harness();
+
+        TriggerDispatchResult result = await harness.Dispatcher.DispatchAsync(CommandChannel.Event(Guid.NewGuid(), CommandChannel.Acked, null), CancellationToken.None);
+
+        Assert.Equal(TriggerDispatchOutcome.NoRegistration, result.Outcome);
+        Assert.Equal(0, harness.Registrations.Reads);
+        Assert.Equal([false], harness.Bookmarks.HasRegistrations);
+    }
+
     private static InboundEvent DeviceMessage(string messageId) => ClientChannel.Event(
         new ClientMessage(ClientRef, 12, 34, "telemetry", JsonSerializer.SerializeToElement(new { celsius = 21 }), DateTime.UtcNow, DateTime.UtcNow, false),
         $"client-message:{ClientRef}:{messageId}");
