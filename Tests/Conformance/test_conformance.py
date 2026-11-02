@@ -211,6 +211,26 @@ async def test_hands_over_a_plain_message_without_an_ack(api, socket_server, dev
     assert after["type"] == "after"
 
 
+async def test_survives_a_throwing_handler_and_malformed_frames(api, socket_server, device):
+    harness = await device()
+    await harness.expect("connected")
+    await socket_server.next_of("capabilities")
+
+    await harness.command("throw-next")
+    await harness.expect("armed")
+    await socket_server.send(0, {"type": "boom", "payload": 1})
+    await harness.expect("message", type="boom")
+    await socket_server.connections[0].send("not json")
+    await socket_server.send(0, {"payload": "no type"})
+    await socket_server.send(0, {"type": "sys.ping"})
+    await socket_server.next_of("sys.pong")
+    await socket_server.send(0, {"type": "after", "payload": 2})
+    await harness.expect("message", type="after")
+
+    assert len(socket_server.connections) == 1
+    assert not [e for e in harness.log if e["event"] == "disconnected"]
+
+
 # Sending
 
 

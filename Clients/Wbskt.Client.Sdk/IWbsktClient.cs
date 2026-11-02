@@ -6,7 +6,11 @@ namespace Wbskt.Client.Sdk;
 public interface IWbsktClient : IAsyncDisposable
 {
     // type, payload, commandId (non-null when the platform requests a delivery ack; the SDK acks automatically)
+    // Handed over one at a time, in arrival order, on the SDK's own task: a slow handler doesn't delay pongs.
     event Action<string, object?, string?>? OnMessageReceived;
+
+    /// <summary>An <see cref="OnMessageReceived"/> handler threw. The connection stays up.</summary>
+    event Action<Exception>? OnHandlerError;
     event Action? OnConnected;
     event Action? OnDisconnected;
 

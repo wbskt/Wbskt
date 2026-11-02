@@ -38,7 +38,12 @@ await using var wbskt = new WbsktClient(config, new FileClientStorage("/etc/wbsk
 in the console's send panel. Delivery acks and expired-command refusals are sent for you.
 
 **Offline.** `SendAsync` while disconnected queues the message (1,000 by default,
-`ClientConfig.OfflineBufferSize`) and sends it in order, with its original time, on reconnect.
+`ClientConfig.OfflineBufferSize`) and sends it in order, with its original time, on reconnect. Sends
+are paced at 8 a second after a burst of 50, under the gateway's limit, so a full buffer takes about
+two minutes to drain.
+
+**Handlers.** Messages reach `OnMessageReceived` one at a time, in order, on the SDK's own task. A
+handler that throws doesn't drop the connection; the exception is raised on `OnHandlerError`.
 
 The wire protocol every Wbskt SDK implements is documented in
 [Docs/Device.Protocol.md](https://github.com/wbskt/Wbskt/blob/master/Docs/Device.Protocol.md), with the
