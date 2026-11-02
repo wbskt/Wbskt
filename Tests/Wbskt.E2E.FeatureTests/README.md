@@ -205,7 +205,17 @@ use its pid files in `e2e-hosts/`), not those `e2e-up.sh` runs in containers.
 
 ### CI
 
-The `e2e` job in `.github/workflows/build-images.yml` runs all four passes on every pull request and push to master, against SQL Server, RabbitMQ and Redis service containers and the five hosts started with `start-hosts.sh`. The main pass runs the three collections in parallel. The gateway restart pass runs once after the main one. The rate-limit pass restarts the auth host before each scenario, since the budget one exhausts outlives it, and once more for the 429 row of the error-shape contract theory. The outage pass runs last, against an auth host restarted with the Development limits again; it passes the RabbitMQ and Redis service containers to `outage.sh` by id, and runs `outage.sh restore-all` at the end whatever happened. Before the main pass, the job compares each host's OpenAPI document with its snapshot (see [OpenAPI snapshots](#openapi-snapshots)). Image publishing does not wait on it yet.
+The `e2e` job in `.github/workflows/build-images.yml` runs on every pull request that can affect the hosts and on every push to master, as five matrix legs. Each leg is its own runner with its own SQL Server, RabbitMQ and Redis service containers and its own five hosts started with `start-hosts.sh`, so the passes that used to wait for each other run side by side:
+
+| Leg | Runs |
+|---|---|
+| `lifecycle` | the main pass, `Scenarios/Lifecycle` |
+| `triggers` | the main pass, `Scenarios/Triggers` and `Scenarios/Timeouts` |
+| `rest` | the main pass, every other folder (its filter is the complement of the two above), plus the OpenAPI snapshot check |
+| `rate-limit` | the rate-limit pass: the auth host restarted before each scenario, and once more for the 429 row of the error-shape contract theory |
+| `outage` | the gateway restart scenario, then the outage pass, which gets the RabbitMQ and Redis service containers by id and runs `outage.sh restore-all` at the end whatever happened |
+
+The engine collection runs its classes one after another, so it is what sets the main pass's length; the shards split it by folder. If one shard grows much longer than the others, move a folder between the first two filters. The `e2e-shards` job then checks that each shard ran tests and that no test ran in two shards. Image publishing waits for every leg and for that check.
 
 The job does not use `e2e-up.sh` yet. Moving it over would build the five host images in the job, which costs build time and wants a cache of its own, so it is a separate decision; until then CI and the compose file are two ways of standing up the same thing, and a host setting one needs has to go in both.
 

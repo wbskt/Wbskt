@@ -6,7 +6,8 @@ name: Build images
 # Dockerfile first shows up on the master push that would publish it. On master, no image is built
 # or pushed until the tests, the scan, E2E and the upgrade rehearsal have passed, so a red E2E never
 # moves :latest; once every image has
-# succeeded, the deploy job hands that run's sha-<short> tag to deploy.yml.
+# succeeded, the deploy job hands that run's sha-<short> tag to deploy.yml. A pull request that
+# changes only docs or the Python SDK skips every job after `changes`.
 #
 # Every job stays on GitHub-hosted runners. The repository is public, and a self-hosted runner would
 # run code from any fork's pull request on the machine that hosts it.
@@ -19,10 +20,52 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Whether this change can affect what the jobs below test. A pull request that touches only the
+  # docs, Markdown outside Clients/ (the .NET SDK packs its README) or the Python SDK (which has
+  # python-sdk.yml and sdk-conformance.yml) skips them. A skipped job counts as passed for a required
+  # check, where a workflow left out by `on: paths-ignore` would never report at all. Pushes and
+  # manual runs always run everything, so nothing is published from a partial check.
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      hosts: ${{ steps.filter.outputs.hosts }}
+    steps:
+      - id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [[ "$EVENT" != "pull_request" ]]; then
+            echo "hosts=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename' > files.txt
+          count=$(grep -c . files.txt || true)
+          # The API lists at most 3000 files; past that, assume anything changed.
+          if [[ "$count" -eq 0 || "$count" -ge 3000 ]]; then
+            echo "hosts=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          relevant=$(awk '!/^Docs\// && !/^Clients\/python\// && !(/\.md$/ && !/^Clients\//)' files.txt)
+          echo "changed: $count file(s); affecting the hosts:"
+          echo "${relevant:-  none}"
+          if [[ -n "$relevant" ]]; then
+            echo "hosts=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "hosts=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # Nothing below publishes an image until these pass. The gate lives in this workflow rather than a
   # separate one so that `needs:` can enforce it directly — a `workflow_run` chain would let a red
   # commit publish first and report second.
   test:
+    needs: changes
+    if: needs.changes.outputs.hosts == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,6 +73,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
+          cache: true
+          cache-dependency-path: Directory.Packages.props
 
       # The project is named explicitly rather than running the solution: Tests/Wbskt.LoadTester is
       # an Exe, not a test project, and `dotnet test` on the solution would try to run it.
@@ -73,6 +118,8 @@ jobs:
           if-no-files-found: ignore
 
   integration:
+    needs: changes
+    if: needs.changes.outputs.hosts == 'true'
     runs-on: ubuntu-latest
     services:
       sqlserver:
@@ -111,6 +158,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
+          cache: true
+          cache-dependency-path: Directory.Packages.props
 
       # `dotnet tool install` fails when the tool is already there, so install only when it is missing.
       - name: Install sqlpackage
@@ -178,11 +227,34 @@ jobs:
             coverage-report/
           if-no-files-found: ignore
 
-  # The black-box suite in Tests/Wbskt.E2E.FeatureTests, against all four hosts started from source
+  # The black-box suite in Tests/Wbskt.E2E.FeatureTests, against all five hosts started from source
   # as Development. That environment is what raises the auth host's per-IP rate limit (every test
   # shares the runner's address) and lets freshly registered users sign in without a mailbox.
+  #
+  # One leg per pass, each on its own runner with its own databases, broker, Redis and hosts, so the
+  # passes that used to run one after another to keep out of each other's way (the rate limits spent,
+  # the gateway restarted, the broker stopped) now run side by side. The main pass is split three
+  # ways by folder. The last shard is "everything the other two do not take", so a new folder always
+  # lands in one shard and no test can fall between them. The engine collection runs its classes one
+  # after another, so the split follows its folders: Lifecycle, then Triggers with Timeouts, then the
+  # rest (auth, devices and the smaller engine folders, which still run as parallel collections).
   e2e:
+    needs: changes
+    if: needs.changes.outputs.hosts == 'true'
+    name: e2e (${{ matrix.pass }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pass: lifecycle
+            filter: FullyQualifiedName~.Scenarios.Lifecycle.
+          - pass: triggers
+            filter: FullyQualifiedName~.Scenarios.Triggers.|FullyQualifiedName~.Scenarios.Timeouts.
+          - pass: rest
+            filter: FullyQualifiedName!~.Scenarios.Lifecycle.&FullyQualifiedName!~.Scenarios.Triggers.&FullyQualifiedName!~.Scenarios.Timeouts.
+          - pass: rate-limit
+          - pass: outage
     services:
       sqlserver:
         image: mcr.microsoft.com/mssql/server:2022-latest
@@ -234,6 +306,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
+          cache: true
+          cache-dependency-path: Directory.Packages.props
 
       # `dotnet tool install` fails when the tool is already there, so install only when it is missing.
       - name: Install sqlpackage
@@ -259,35 +333,47 @@ jobs:
         id: hosts
         run: Tests/Wbskt.E2E.FeatureTests/start-hosts.sh
 
+      # Every pass below runs with --no-build, so the suite is built once here.
+      - name: Build the E2E suite
+        id: build
+        run: dotnet build Tests/Wbskt.E2E.FeatureTests/Wbskt.E2E.FeatureTests.csproj --nologo -v q
+
       # Each host's OpenAPI document (/openapi/v1.json, served in Development) against the snapshot
       # checked in under Tests/Wbskt.E2E.FeatureTests/openapi, so a route or contract change is a
       # reviewed diff. A snapshot not committed yet is written instead of compared, with a warning;
       # the documents fetched are uploaded either way, to be committed from the artifact. The E2E
-      # tests still run when this fails, so a contract diff does not hide their result.
+      # tests still run when this fails, so a contract diff does not hide their result. One leg is
+      # enough: every leg runs the same hosts.
       - name: OpenAPI snapshots
+        if: matrix.pass == 'rest'
         run: Tests/Wbskt.E2E.FeatureTests/openapi/refresh.sh --check
 
       - name: Upload OpenAPI documents
-        if: ${{ !cancelled() && steps.hosts.outcome == 'success' }}
+        if: ${{ !cancelled() && matrix.pass == 'rest' && steps.hosts.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: openapi-snapshots
           path: openapi-current/
           if-no-files-found: warn
 
+      # The main pass, this leg's share of it. The opt-in scenarios in the share skip themselves: the
+      # rate-limit, gateway-restart and outage ones each need a variable only their own leg sets.
       - name: E2E tests
-        if: ${{ !cancelled() && steps.hosts.outcome == 'success' }}
+        if: ${{ !cancelled() && matrix.filter && steps.hosts.outcome == 'success' && steps.build.outcome == 'success' }}
+        env:
+          E2E_FILTER: ${{ matrix.filter }}
         run: |
           set -o pipefail
-          dotnet test Tests/Wbskt.E2E.FeatureTests/Wbskt.E2E.FeatureTests.csproj \
+          dotnet test Tests/Wbskt.E2E.FeatureTests/Wbskt.E2E.FeatureTests.csproj --no-build \
+            --filter "$E2E_FILTER" \
             --nologo -v q --logger "console;verbosity=normal" \
             --logger "trx;LogFileName=e2e.trx" --results-directory TestResults 2>&1 | tee e2e-output.txt
 
-      # Then the device-revocation scenario that restarts the WebSocket gateway, which the run above
-      # skips: a revoked device's token must still be refused once the host has forgotten every
-      # event it heard. It runs on its own because the restart drops every live device connection.
+      # The device-revocation scenario that restarts the WebSocket gateway: a revoked device's token
+      # must still be refused once the host has forgotten every event it heard. It shares the outage
+      # leg because both take things down under the hosts, and neither may run under the main pass.
       - name: Gateway restart tests
-        if: ${{ !cancelled() && steps.hosts.outcome == 'success' }}
+        if: ${{ !cancelled() && matrix.pass == 'outage' && steps.hosts.outcome == 'success' && steps.build.outcome == 'success' }}
         env:
           E2E_SOCKET_RESTART_COMMAND: ${{ github.workspace }}/Tests/Wbskt.E2E.FeatureTests/start-hosts.sh gateway-ws
         run: |
@@ -297,13 +383,12 @@ jobs:
             --nologo -v q --logger "console;verbosity=normal" \
             --logger "trx;LogFileName=sr.trx" --results-directory TestResults 2>&1 | tee sr-output.txt
 
-      # Then the rate-limit scenarios, which the run above skips. They exhaust the shared per-IP budget
-      # on purpose, and the budget outlives a test (AUTH_RL_01 leaves the next one unable to even
-      # register its user), so each gets an auth host restarted with the production limit. A restart
-      # is a fresh window: the limiter is in memory.
-      # Runs even when the main pass failed, so one red scenario there does not hide these.
+      # The rate-limit scenarios. They exhaust the shared per-IP budget on purpose, and the budget
+      # outlives a test (AUTH_RL_01 leaves the next one unable to even register its user), so each
+      # gets an auth host restarted with the production limit. A restart is a fresh window: the limiter
+      # is in memory.
       - name: Rate-limit tests
-        if: ${{ !cancelled() && steps.hosts.outcome == 'success' }}
+        if: ${{ !cancelled() && matrix.pass == 'rate-limit' && steps.hosts.outcome == 'success' && steps.build.outcome == 'success' }}
         env:
           RateLimiting__Authentication__PermitLimit: "10"
           E2E_AUTH_PERMIT_LIMIT: "10"
@@ -338,23 +423,19 @@ jobs:
           fi
           exit $status
 
-      # Then the outage scenarios (Scenarios/Outage), which every pass above skips. outage.sh stops
-      # the RabbitMQ and Redis service containers by id and kills whichever engine holds the lease,
-      # under hosts the other scenarios would be using, so these run on their own. Each scenario
-      # brings back what it took down as it ends, and restore-all runs once more here whatever
-      # happened, so the steps after this one find the services and the original engine as they were.
-      # The runner's user can drive the service containers: the docker socket is open to it.
+      # The outage scenarios (Scenarios/Outage), which every other pass skips. outage.sh stops the
+      # RabbitMQ and Redis service containers by id and kills whichever engine holds the lease. Each
+      # scenario brings back what it took down as it ends, and restore-all runs once more here
+      # whatever happened. The runner's user can drive the service containers: the docker socket is
+      # open to it.
       - name: Outage tests
-        if: ${{ !cancelled() && steps.hosts.outcome == 'success' }}
+        if: ${{ !cancelled() && matrix.pass == 'outage' && steps.hosts.outcome == 'success' && steps.build.outcome == 'success' }}
         env:
           E2E_OUTAGE_COMMAND: "${{ github.workspace }}/Tests/Wbskt.E2E.FeatureTests/outage.sh {action}"
           E2E_RABBITMQ_CONTAINER: ${{ job.services.rabbitmq.id }}
           E2E_REDIS_CONTAINER: ${{ job.services.redis.id }}
         run: |
           set -o pipefail
-          # The rate-limit pass left the auth host on the production limits, which these scenarios'
-          # sign-ups and sign-ins would exhaust; restarted here without them, it is back on Development's.
-          Tests/Wbskt.E2E.FeatureTests/start-hosts.sh auth
           status=0
           dotnet test Tests/Wbskt.E2E.FeatureTests/Wbskt.E2E.FeatureTests.csproj --no-build \
             --filter "FullyQualifiedName~Scenarios.Outage" \
@@ -365,11 +446,18 @@ jobs:
       # Every test is a [SkippableFact] that skips itself when the hosts are unreachable, and a
       # fully skipped run exits 0, so a host that never came up would otherwise report green.
       # A handful of scenarios skip by design (an engine-only route, an opt-in gate), so this
-      # checks that the suite ran rather than demanding zero skips.
+      # checks that each pass this leg ran actually ran tests rather than demanding zero skips.
       - name: Fail if the suite did not actually run
         if: always()
+        env:
+          PASS: ${{ matrix.pass }}
         run: |
-          for f in e2e-output.txt sr-output.txt rl-output.txt outage-output.txt; do
+          case "$PASS" in
+            rate-limit) files="rl-output.txt" ;;
+            outage) files="sr-output.txt outage-output.txt" ;;
+            *) files="e2e-output.txt" ;;
+          esac
+          for f in $files; do
             passed=$(grep -oP 'Passed:\s*\K\d+' "$f" 2>/dev/null | awk '{ n += $1 } END { print n + 0 }')
             echo "$f: passed=${passed:-0}"
             if [[ "${passed:-0}" -eq 0 ]]; then
@@ -397,14 +485,52 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-results
+          name: e2e-results-${{ matrix.pass }}
           path: |
             e2e-hosts/*.log
             *-output.txt
             TestResults/**/*.trx
           if-no-files-found: ignore
 
+  # The main pass is split across three legs by folder (see the e2e job). The rest leg's filter is
+  # the complement of the other two, so the split cannot drop a test; this checks that every leg ran
+  # tests and that no test ran in two of them.
+  e2e-shards:
+    needs: [changes, e2e]
+    if: ${{ !cancelled() && needs.changes.outputs.hosts == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: e2e-results-*
+          path: results
+
+      - name: Every test in exactly one shard
+        run: |
+          total=0
+          for pass in lifecycle triggers rest; do
+            f="results/e2e-results-$pass/e2e-output.txt"
+            n=$(grep -oP 'Total tests:\s*\K\d+' "$f" 2>/dev/null | head -1 || true)
+            echo "$pass: ${n:-missing}"
+            if [[ -z "$n" || "$n" -eq 0 ]]; then
+              echo "::error::the $pass shard reported no tests"
+              exit 1
+            fi
+            total=$((total + n))
+            # Unique within the shard first: a theory's rows can share a name.
+            grep -oP '^\s+(Passed|Failed|Skipped) \KWbskt\.E2E\.FeatureTests\.[^\s(]+' "$f" | sort -u >> names.txt || true
+          done
+          dupes=$(sort names.txt | uniq -d)
+          if [[ -n "$dupes" ]]; then
+            echo "::error::tests ran in more than one shard:"
+            echo "$dupes"
+            exit 1
+          fi
+          echo "the three shards ran $total tests between them, none of them twice"
+
   scan:
+    needs: changes
+    if: needs.changes.outputs.hosts == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -412,6 +538,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
+          cache: true
+          cache-dependency-path: Directory.Packages.props
 
       # Restore first: `list package --vulnerable` reports nothing useful against an unrestored tree.
       # Parsed as JSON rather than by grepping the human-readable output — only projects that
@@ -436,7 +564,10 @@ jobs:
   # DACPACs. See "Upgrade rehearsal" in deploy/README.md. Skipped for pull requests from forks, which
   # get no token to pull the image with.
   migration-rehearsal:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: changes
+    if: >-
+      needs.changes.outputs.hosts == 'true' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -515,7 +646,7 @@ jobs:
           echo "prefix=ghcr.io/$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')/wbskt" >> "$GITHUB_OUTPUT"
 
   hosts:
-    needs: [meta, test, integration, scan, e2e, migration-rehearsal]
+    needs: [meta, test, integration, scan, e2e, e2e-shards, migration-rehearsal]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
@@ -568,7 +699,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
   migrator:
-    needs: [meta, test, integration, scan, e2e, migration-rehearsal]
+    needs: [meta, test, integration, scan, e2e, e2e-shards, migration-rehearsal]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
