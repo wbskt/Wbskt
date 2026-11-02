@@ -163,16 +163,21 @@ class AsyncWbsktClient:
     async def _send_or_buffer(self, frame: str) -> None:
         if len(frame.encode("utf-8")) > protocol.MAX_MESSAGE_BYTES:
             raise ValueError(f"message is over {protocol.MAX_MESSAGE_BYTES} bytes")
-        ws = self._ws
-        if self._connected and ws is not None and self._send_lock is not None:
+        if self._connected and self._send_lock is not None:
             # The lock is FIFO, so paced sends still leave in the order they were made.
             async with self._send_lock:
-                try:
-                    await self._pacer.take()
-                    await ws.send(frame)
-                    return
-                except ConnectionClosed:
-                    pass
+                # Read under the lock: a reconnect may have drained the backlog while this send waited,
+                # and a frame buffered for the old connection would then sit until the next one.
+                ws = self._ws
+                if self._connected and ws is not None:
+                    try:
+                        await self._pacer.take()
+                        await ws.send(frame)
+                        return
+                    except ConnectionClosed:
+                        pass
+                self._buffer.append(frame)
+                return
         self._buffer.append(frame)
 
     async def _run(self) -> None:

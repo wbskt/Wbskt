@@ -87,7 +87,6 @@ public sealed class DeviceCommandQueue(
                 return true;
             }
 
-
             await DeliverAsync(command.ClientRefId, target.ClientId, command.WorkspaceId, hostId, ct);
         }
 

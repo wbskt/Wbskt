@@ -108,6 +108,18 @@ internal sealed class SocketHandler : ISocketHandler
         }
     }
 
+    private static async Task AcknowledgeCloseAsync(ClientConnection connection, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await connection.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Acknowledged", cancellationToken);
+        }
+        catch (Exception ex) when (ex is WebSocketException or OperationCanceledException)
+        {
+            // The device has already gone; its session ends the same way.
+        }
+    }
+
     private async Task<DisconnectReason> ReceiveLoopAsync(Guid clientRefId, ClientConnection connection, DeviceInbox inbox, CancellationToken cancellationToken)
     {
         try
@@ -132,15 +144,18 @@ internal sealed class SocketHandler : ISocketHandler
             switch (read.Kind)
             {
                 case FrameKind.Closed:
+                    // Read before answering: the device's reason holds even if the answer can't be sent.
+                    var closed = webSocket.CloseStatus == (WebSocketCloseStatus)WebSocketBinding.UpdatingCloseCode
+                        ? DisconnectReason.Updating
+                        : DisconnectReason.ClientClosed;
+
                     // Either the device closed, or it answered a close we sent (the handshake is then complete).
                     if (webSocket.State == WebSocketState.CloseReceived)
                     {
-                        await connection.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Acknowledged", cancellationToken);
+                        await AcknowledgeCloseAsync(connection, cancellationToken);
                     }
 
-                    return webSocket.CloseStatus == (WebSocketCloseStatus)WebSocketBinding.UpdatingCloseCode
-                        ? DisconnectReason.Updating
-                        : DisconnectReason.ClientClosed;
+                    return closed;
                 case FrameKind.TooBig:
                     _logger.LogWarning("Client {ClientRefId} exceeded the {MaxMessageBytes}-byte message limit; closing.", clientRefId, MaxMessageBytes);
                     await connection.RequestCloseAsync(DisconnectReason.MessageTooBig, DeviceInbox.TooBigDescription);
