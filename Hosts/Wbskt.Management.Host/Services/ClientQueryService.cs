@@ -180,7 +180,25 @@ internal sealed class ClientQueryService : IClientQueryService
             d.Platform,
             capabilities,
             d.CreatedAt,
-            d.Tags
+            d.Tags,
+            ReadSystem(d.SystemJson)
         );
+    }
+
+    private static IReadOnlyList<string> ReadSystem(string? json)
+    {
+        if (string.IsNullOrEmpty(json))
+        {
+            return [];
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(json) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
     }
 }

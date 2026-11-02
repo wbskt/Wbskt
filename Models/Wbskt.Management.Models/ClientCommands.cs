@@ -8,6 +8,14 @@ public record ClientCommandRequest(string Type, string Payload, DateTimeOffset? 
 /// <param name="ExpiresAt">When a queued command stops waiting for the device; the request's expiry for a sent one.</param>
 public record ClientCommandResponse(Guid CommandId, string Status, DateTimeOffset? ExpiresAt);
 
+/// <summary>A firmware update for one device: where the image is, and its digest.</summary>
+/// <param name="Url">An <c>https</c> URL the device can download the image from.</param>
+/// <param name="Sha256">The image's SHA-256 as 64 hex digits (<c>sha256sum firmware.bin</c>).</param>
+/// <param name="Version">The version the new firmware reports. Optional.</param>
+/// <param name="Size">The image's size in bytes, so the device can refuse one too big before downloading. Optional.</param>
+/// <param name="ExpiresAt">Don't install after this. Defaults to the command queue's expiry.</param>
+public record ClientOtaRequest(string Url, string Sha256, string? Version = null, long? Size = null, DateTimeOffset? ExpiresAt = null);
+
 /// <summary>A command waiting for an offline device.</summary>
 public record QueuedClientCommandResponse(Guid CommandId, string Type, string Payload, DateTimeOffset QueuedAt, DateTimeOffset ExpiresAt);
 

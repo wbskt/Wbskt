@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MassTransit;
 using Wbskt.Protocol;
 using Wbskt.EventBus.Abstractions;
@@ -120,10 +121,23 @@ public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
 
         // The SDK auto-acks frames carrying a commandId with sys.ack, and refuses (still acking, with
         // a reason) one that arrives past expiresAt.
-        var message = new SocketMessage(command.Type, command.Payload, command.CommandId?.ToString())
+        var message = new SocketMessage(command.Type, PayloadFor(command), command.CommandId?.ToString())
         {
             ExpiresAt = command.ExpiresAtUtc is { } expiresAt ? new DateTimeOffset(DateTime.SpecifyKind(expiresAt, DateTimeKind.Utc)) : null
         };
         await connection.SendAsync(message, ct);
+    }
+
+    // A platform command's payload is a JSON object the device reads fields from, so it goes out as
+    // that object. A device's own commands keep going out as the text they were sent with.
+    private static object PayloadFor(ClientCommandEvent command)
+    {
+        if (!MessageTypes.IsPlatformCommand(command.Type))
+        {
+            return command.Payload;
+        }
+
+        using var document = JsonDocument.Parse(command.Payload);
+        return document.RootElement.Clone();
     }
 }

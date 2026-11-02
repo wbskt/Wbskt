@@ -13,5 +13,6 @@ public class ClientDetail : Client
     public string? AgentVersion { get; set; }
     public string? Platform { get; set; }
     public string? CapabilitiesJson { get; set; }
+    public string? SystemJson { get; set; }
     public DateTime? CapabilitiesUpdatedAt { get; set; }
 }

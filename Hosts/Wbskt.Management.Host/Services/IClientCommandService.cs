@@ -20,6 +20,15 @@ public interface IClientCommandService
     /// </summary>
     Task<Result<ClientCommandResponse>> SendAsync(int workspaceId, Guid clientRefId, ClientCommandRequest request, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Sends <c>sys.ota.update</c> to a device that lists <c>ota</c> in its capabilities, through the
+    /// same path as <see cref="SendAsync"/>, so an offline device gets it queued. It always carries an
+    /// expiry. <c>OTA_URL_INVALID</c>, <c>OTA_SHA256_INVALID</c>, <c>OTA_VERSION_INVALID</c> and
+    /// <c>OTA_SIZE_INVALID</c> (400) for a bad request, <c>OTA_NOT_SUPPORTED</c> (409) for a device
+    /// that does not take updates, and the errors of <see cref="SendAsync"/>.
+    /// </summary>
+    Task<Result<ClientCommandResponse>> SendOtaAsync(int workspaceId, Guid clientRefId, ClientOtaRequest request, CancellationToken cancellationToken = default);
+
     /// <summary>The commands waiting for a device of this workspace, oldest first.</summary>
     Task<Result<IReadOnlyList<QueuedClientCommandResponse>>> GetQueuedAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default);
 

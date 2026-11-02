@@ -132,6 +132,8 @@ the connection is back and `capabilities` has gone out. Never let a new message 
 | `sys.ack` | device → server | `{ "commandId": "…" }`, or with `"type"` and `"refused": "expired"` | See §4.3. |
 | `capabilities` | device → server | below | Send first on every connection. |
 | `state.report` | device → server | `{ "<name>": <value>, … }` | The state variables that changed. Numbers are kept as readings for charts. |
+| `sys.ota.update` | server → device | `{ "url": "https://…", "sha256": "<64 hex>", "version"?: "…", "size"?: <bytes> }` | Optional (§4.4). A command: acked, and refused when expired, as in §4.3. |
+| `sys.ota.status` | device → server | `{ "commandId": "…", "state": "…", "progress"?: 0–100, "version"?: "…", "error"?: "…" }` | Optional (§4.4). How an update is going. |
 
 `capabilities` describes the device and the commands it takes. Property names are read ignoring case:
 
@@ -141,11 +143,14 @@ the connection is back and `capabilities` has gone out. Never let a new message 
   "capabilities": [
     { "command": "relay.set", "description": "Switch the relay",
       "parameters": [ { "name": "on", "label": "On", "dataType": "boolean", "description": "", "isRequired": true } ] }
-  ]
+  ],
+  "system": [ "ota" ]
 }
 ```
 
-`dataType` is `string`, `number`, `boolean` or `object`. Send it again whenever the set changes.
+`dataType` is `string`, `number`, `boolean` or `object`. `system` lists the optional platform
+features the device takes; today the only one is `ota` (§4.4). Leave it out when there are none.
+Send `capabilities` again whenever either set changes.
 
 ### 4.3 Commands (server → device)
 
@@ -157,7 +162,37 @@ A command is an ordinary message with a `type` that isn't reserved. If it carrie
    it. This is delivery confirmation, not success; report the outcome as an application message if
    it matters.
 
-Commands sent while the device is offline are not queued today; the sender is told it is offline.
+A command sent while the device is offline waits on the server (at most 24 hours, or until its
+`expiresAt`) and arrives, oldest first, once the device connects again. So a device can get a command
+long after it was sent: that is what `expiresAt` is for.
+
+`sys.ota.update` is the one reserved type that is a command: it carries `commandId` and `expiresAt`
+and is acked and refused exactly as above. No other reserved type is ever sent as a command.
+
+### 4.4 Firmware updates (optional)
+
+A device that can replace its own firmware lists `"ota"` under `system` in `capabilities`. The server
+sends `sys.ota.update` only to such a device, and only with an `https` URL and a SHA-256. The
+message carries a link, not the image: an image is 1–2 MB and a message at most 64 KB.
+
+1. Ack it as any command (§4.3). If it has expired, refuse it there and do nothing else.
+2. Answer `sys.ota.status` with the command's `commandId` and a `state`:
+   - `rejected`, with `error`, when it won't start: OTA is off, the URL isn't `https`, the digest
+     isn't 64 hex digits, `size` is bigger than the space for the image, or another update is
+     under way. Nothing changes on the device.
+   - `accepted` when it will. Then `downloading` with `progress` (percent) as it goes.
+   - `failed`, with `error`, if it goes wrong after that: the download breaks, the digest doesn't
+     match, or the new firmware never connects and the device goes back to the previous one. The
+     device keeps running its previous firmware.
+   - `installed`, with `version`, sent by the **new** firmware once it has connected. Keep the
+     `commandId` across the restart for this.
+3. Check the SHA-256 before the new image can boot, and keep the credentials across the update so
+   the device signs in as the same client.
+4. Report the running version as the `firmware` state variable (`state.report`) on every
+   connection, so the server sees which firmware a device runs whatever happened.
+
+Every firmware shipped must keep an update path. A device whose new firmware can't take
+`sys.ota.update` can only be updated by hand after that.
 
 ## 5. Reconnecting
 
@@ -199,6 +234,12 @@ An SDK conforms to the message model when it:
 - [ ] stamps `sentAt` on application messages and buffers them in order while offline;
 - [ ] never sends a reserved type of its own, or a message over 64 KB;
 - [ ] reconnects on the jittered schedule above, honouring `Retry-After`.
+
+And, if it takes firmware updates (§4.4), when it:
+
+- [ ] lists `ota` under `system` only while updates are on, and answers `sys.ota.update` with `rejected` otherwise;
+- [ ] refuses an expired `sys.ota.update` in its ack and starts nothing;
+- [ ] reports `accepted`, `downloading` and, from the new firmware, `installed` with the version, under the update's `commandId`.
 
 It also conforms to each binding it speaks; see that binding's checklist
 ([WebSocket](Device.Protocol.WebSocket.md#5-conformance-checklist)).

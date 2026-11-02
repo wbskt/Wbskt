@@ -36,7 +36,8 @@ public sealed class InboundMessageDispatcherTests
         IInboundMessageHandler[] handlers =
         [
             new PongHandler(_bus, NullLogger<PongHandler>.Instance),
-            new AckHandler(_bus, NullLogger<AckHandler>.Instance)
+            new AckHandler(_bus, NullLogger<AckHandler>.Instance),
+            new OtaStatusHandler(_bus, NullLogger<OtaStatusHandler>.Instance)
         ];
         _dispatcher = new InboundMessageDispatcher(handlers, new DeviceMessageHandler(_bus), new GatewayMetrics(GatewayTransport.WebSocket), NullLogger<InboundMessageDispatcher>.Instance);
     }
@@ -105,6 +106,42 @@ public sealed class InboundMessageDispatcherTests
     public async Task An_ack_without_a_command_id_publishes_nothing()
     {
         await Dispatch("""{"type":"sys.ack","payload":{}}""");
+
+        _bus.Published.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task An_ota_status_is_published_with_its_command_progress_and_version()
+    {
+        await Dispatch($$$"""{"type":"sys.ota.status","payload":{"commandId":"{{{CommandId}}}","state":"downloading","progress":140,"version":"1.1.0"}}""");
+
+        var status = _bus.Published.Should().ContainSingle().Which.Should().BeOfType<ClientOtaStatusEvent>().Subject;
+        status.State.Should().Be(OtaStates.Downloading);
+        status.CommandId.Should().Be(CommandId);
+        status.Progress.Should().Be(100);
+        status.Version.Should().Be("1.1.0");
+        status.Error.Should().BeNull();
+        status.ClientId.Should().Be(1);
+        status.WorkspaceId.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task An_ota_status_without_a_command_id_keeps_its_error_cut_to_length()
+    {
+        await Dispatch($$$"""{"type":"sys.ota.status","payload":{"state":"failed","error":"{{{new string('e', 600)}}}"}}""");
+
+        var status = _bus.Published.Should().ContainSingle().Which.Should().BeOfType<ClientOtaStatusEvent>().Subject;
+        status.CommandId.Should().BeNull();
+        status.Error.Should().HaveLength(OtaStatusHandler.MaxErrorLength);
+    }
+
+    [Theory]
+    [InlineData("""{"type":"sys.ota.status","payload":{"state":"done"}}""")]
+    [InlineData("""{"type":"sys.ota.status","payload":{}}""")]
+    [InlineData("""{"type":"sys.ota.status","payload":"installed"}""")]
+    public async Task An_ota_status_without_a_known_state_publishes_nothing(string json)
+    {
+        await Dispatch(json);
 
         _bus.Published.Should().BeEmpty();
     }
