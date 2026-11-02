@@ -258,6 +258,34 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             cancellationToken);
     }
 
+    public async Task<IReadOnlyCollection<ExpiredPresence>> ReconcilePresenceByHostAsync(string hostId, IReadOnlyCollection<Guid> connectedRefIds, DateTime takenAtUtc, TimeSpan margin, CancellationToken cancellationToken = default)
+    {
+        using var table = new DataTable();
+        table.Columns.Add("RefId", typeof(Guid));
+        foreach (var refId in connectedRefIds.Distinct())
+        {
+            table.Rows.Add(refId);
+        }
+
+        return await ExecuteCollectionAsync(
+            "dbo.Client_ReconcilePresenceBy_HostId",
+            p =>
+            {
+                p.AddWithValue("@HostId", hostId);
+                p.Add("@TakenAt", SqlDbType.DateTime2).Value = takenAtUtc;
+                p.AddWithValue("@MarginSeconds", (int)margin.TotalSeconds);
+                var parameter = p.AddWithValue("@ConnectedRefIds", table);
+                parameter.SqlDbType = SqlDbType.Structured;
+                parameter.TypeName = "dbo.RefIdTableType";
+            },
+            reader => new ExpiredPresence(
+                reader.GetInt32(reader.GetOrdinal("Id")),
+                reader.GetGuid(reader.GetOrdinal("RefId")),
+                reader.GetInt32(reader.GetOrdinal("WorkspaceId")),
+                reader.IsDBNull(reader.GetOrdinal("ConnectedHostId")) ? null : reader.GetString(reader.GetOrdinal("ConnectedHostId"))),
+            cancellationToken);
+    }
+
     public async Task<ClientDetail?> FindDetailByRefIdAsync(Guid refId, CancellationToken cancellationToken = default)
     {
         return await ExecuteFindAsync(

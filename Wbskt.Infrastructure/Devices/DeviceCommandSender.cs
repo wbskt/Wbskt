@@ -125,7 +125,7 @@ public sealed class DeviceCommandSender(
         var announcement = new ClientCommandQueuedEvent(command.ClientRefId, target.ClientId, command.WorkspaceId, command.Type, command.Payload, command.CommandId, expiresAt);
         attribute?.Invoke(announcement);
 
-        if (!await queue.QueueAsync(QueuedCommand.From(command, target.ClientId, expiresAt, announcement), announcement, queue.Options.MaxPerClient, cancellationToken))
+        if (!await queue.QueueAsync(QueuedCommand.From(command, target.ClientId, expiresAt, announcement), announcement, queue.Options.MaxPerClient, returnedByHostId: null, cancellationToken))
         {
             logger.LogInformation("Client '{ClientRefId}' is offline with a full queue; command '{Type}' not queued.", command.ClientRefId, command.Type);
             return new DeviceCommandResult(DeviceCommandOutcome.QueueFull, target.ClientId);

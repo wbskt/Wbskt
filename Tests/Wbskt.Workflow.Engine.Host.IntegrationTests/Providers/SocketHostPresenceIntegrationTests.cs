@@ -9,6 +9,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 /// Presence as a lease on socket-host heartbeats: Client_ExpirePresence clears the clients held by a
 /// host that has gone silent, and only those. Client_ResetPresenceBy_HostId covers the case the lease
 /// cannot: a host restarted under the same id, renewing the lease over connections that died with it.
+/// Client_ReconcilePresenceBy_HostId covers a live host that lost a disconnect.
 /// </summary>
 [Collection("SqlEdge")]
 public sealed class SocketHostPresenceIntegrationTests(SqlEdgeFixture fixture)
@@ -83,6 +84,40 @@ public sealed class SocketHostPresenceIntegrationTests(SqlEdgeFixture fixture)
         Assert.False(await IsConnectedAsync(heldClient));
         Assert.True(await IsConnectedAsync(otherClient));
         Assert.Empty(await clients.ResetPresenceByHostAsync(restartedHost));
+    }
+
+    [SkippableFact]
+    public async Task A_live_hosts_snapshot_clears_only_the_lost_connections_it_no_longer_holds()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var configuration = ProviderFactory.BuildConfiguration(fixture.ConnectionString);
+        var clients = new ClientProvider(configuration);
+        int workspaceId = Random.Shared.Next(1_000_000, int.MaxValue);
+        string host = $"live-{Guid.NewGuid():N}";
+        string otherHost = $"other-{Guid.NewGuid():N}";
+        var takenAt = DateTime.UtcNow;
+
+        (int lostClient, Guid lostRef) = await CreateClientAsync(workspaceId);
+        (int heldClient, Guid heldRef) = await CreateClientAsync(workspaceId);
+        (int justConnected, _) = await CreateClientAsync(workspaceId);
+        (int elsewhere, _) = await CreateClientAsync(workspaceId);
+        await PresenceAsync(lostClient, takenAt.AddMinutes(-10), host);
+        await PresenceAsync(heldClient, takenAt.AddMinutes(-10), host);
+        // Connected while the snapshot was taken, so it may not be in it yet.
+        await PresenceAsync(justConnected, takenAt.AddSeconds(-5), host);
+        await PresenceAsync(elsewhere, takenAt.AddMinutes(-10), otherHost);
+
+        var cleared = await clients.ReconcilePresenceByHostAsync(host, [heldRef], takenAt, TimeSpan.FromMinutes(1));
+
+        var only = Assert.Single(cleared);
+        Assert.Equal(lostClient, only.ClientId);
+        Assert.Equal(lostRef, only.ClientRefId);
+        Assert.Equal(host, only.HostId);
+        Assert.False(await IsConnectedAsync(lostClient));
+        Assert.True(await IsConnectedAsync(heldClient));
+        Assert.True(await IsConnectedAsync(justConnected));
+        Assert.True(await IsConnectedAsync(elsewhere));
+        Assert.Empty(await clients.ReconcilePresenceByHostAsync(host, [heldRef], takenAt, TimeSpan.FromMinutes(1)));
     }
 
     private async Task<(int ClientId, Guid ClientRef)> CreateClientAsync(int workspaceId)

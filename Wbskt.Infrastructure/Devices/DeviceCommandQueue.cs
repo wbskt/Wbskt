@@ -47,9 +47,11 @@ public sealed class DeviceCommandQueue(
     /// Queues the command and announces it with <paramref name="announcement"/>, which names who sent
     /// it. False, with nothing queued or announced, when the device already has
     /// <paramref name="maxPerClient"/> commands waiting. A command already waiting (a retried
-    /// hand-back) is true, and is not announced again.
+    /// hand-back) is true, and is not announced again. <paramref name="returnedByHostId"/>, for a
+    /// hand-back, is the socket host that no longer had the device: the command is not delivered
+    /// straight back there, even while presence still names it, and waits for the next connect.
     /// </summary>
-    public async Task<bool> QueueAsync(QueuedCommand command, ClientCommandQueuedEvent announcement, int maxPerClient, CancellationToken ct)
+    public async Task<bool> QueueAsync(QueuedCommand command, ClientCommandQueuedEvent announcement, int maxPerClient, string? returnedByHostId, CancellationToken ct)
     {
         var outcome = await store.EnqueueAsync(command, maxPerClient, ct);
         if (outcome != EnqueueOutcome.Queued)
@@ -75,6 +77,16 @@ public sealed class DeviceCommandQueue(
         var target = await targets.FindAsync(command.ClientRefId, ct);
         if (target is { IsConnected: true, HostId: { Length: > 0 } hostId })
         {
+            if (string.Equals(hostId, returnedByHostId, StringComparison.Ordinal))
+            {
+                // Presence is stale: the disconnect hasn't landed, or was lost (the host's presence
+                // snapshot repairs that). Delivering now would loop the command between the two hosts.
+                logger.LogInformation("Command '{CommandId}' waits for client '{ClientRefId}' to connect again: host '{HostId}' handed it back.",
+                    command.CommandId, command.ClientRefId, hostId);
+                return true;
+            }
+
+
             await DeliverAsync(command.ClientRefId, target.ClientId, command.WorkspaceId, hostId, ct);
         }
 

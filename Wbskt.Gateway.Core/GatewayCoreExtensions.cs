@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Gateway.Core.HostedServices;
 using Wbskt.Gateway.Core.Infrastructure;
@@ -20,6 +21,7 @@ public static class GatewayCoreExtensions
     public static IServiceCollection AddGatewayCore(this IServiceCollection services, IConfiguration configuration, GatewayTransport transport)
     {
         services.AddSingleton(transport);
+        services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<GatewayMetrics>();
 
         services.AddSingleton<IConnectionManager, ConnectionManager>();
