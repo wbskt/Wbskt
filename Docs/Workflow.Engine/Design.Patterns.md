@@ -120,6 +120,12 @@ says what to wait for (`ParkPlan`) and what to do when woken (`ResumeStep`).
 TTL expiry does not run the node: the scheduler sets the branch's `PendingTakePort` and the loop
 leaves by that port.
 
+**Known window.** The bookmark is written before `AfterParked` runs, and the two are not one
+transaction. If the engine stops between them, the side effect never happens: a client message with
+`awaitAck` is never sent, and the step leaves by `timeout` once its ack timeout passes (30 s by
+default). The step does not hang and nothing is sent twice. Closing the gap would take a "send owed"
+marker and a sweep after restart; it was judged not worth it for a window of milliseconds (#295).
+
 **Rule.** A new waiting node derives from `ParkingNodeExecutor`. Do not hand-roll bookmarks.
 
 ### Long backoff parks too
