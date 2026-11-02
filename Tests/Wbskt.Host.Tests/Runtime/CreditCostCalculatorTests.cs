@@ -53,7 +53,7 @@ public sealed class CreditCostCalculatorTests
         var calculator = new DefaultCreditCostCalculator(Options.Create(new CreditCostOptions { DefaultCost = 7m }));
 
         Assert.Equal(0m, calculator.Calculate(new ManualTriggerNode { NodeId = Guid.NewGuid(), Name = "t", Ports = [], Config = new Wbskt.Workflow.Abstraction.Models.Triggers.ManualTriggerConfig { Description = "d" } }));
-        Assert.Equal(0m, calculator.Calculate(new WebhookTriggerNode { NodeId = Guid.NewGuid(), Name = "t", Ports = [], Config = new Wbskt.Workflow.Abstraction.Models.Triggers.WebhookTriggerConfig { Path = "orders", Method = "POST" } }));
+        Assert.Equal(0m, calculator.Calculate(new WebhookTriggerNode { NodeId = Guid.NewGuid(), Name = "t", Ports = [], Config = new Wbskt.Workflow.Abstraction.Models.Triggers.WebhookTriggerConfig { Path = "orders" } }));
     }
 
     private sealed record UnpricedNode : BaseNode

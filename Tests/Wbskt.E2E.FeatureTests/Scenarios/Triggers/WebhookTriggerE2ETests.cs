@@ -54,7 +54,7 @@ public sealed class WebhookTriggerE2ETests(ServicesFixture fixture)
     private static WorkflowDefinition BuildWebhookDefinition(Guid workflowRefId, string path)
     {
         var builder = new WorkflowBuilder($"E2E-Webhook-{workflowRefId:N}", workflowRefId)
-            .AddWebhookTrigger(path, "POST", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddWebhookTrigger(path, WorkflowConcurrencyPolicy.AllowParallel, out _)
             .AddDelay(TimeSpan.FromMilliseconds(10));
 
         // We only assert the run terminal state. Sending a message would fail because webhooks don't have a targeted clientRef payload.

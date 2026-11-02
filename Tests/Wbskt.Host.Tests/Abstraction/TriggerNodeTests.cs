@@ -103,7 +103,7 @@ public class TriggerNodeTests
     }
 
     [Fact]
-    public void WebhookTriggerNode_deserialises()
+    public void WebhookTriggerNode_deserialises_and_ignores_an_old_method()
     {
         var json = """
             {
@@ -117,24 +117,6 @@ public class TriggerNodeTests
         var node = JsonSerializer.Deserialize<BaseNode>(json, Options);
         var webhook = Assert.IsType<WebhookTriggerNode>(node);
         Assert.Equal("/water-start", webhook.Config.Path);
-        Assert.Equal("POST", webhook.Config.Method);
-    }
-
-    [Fact]
-    public void WebhookTriggerNode_needs_no_method_and_writes_none()
-    {
-        var json = """
-            {
-                "nodeId": "00000000-0000-0000-0000-000000000002",
-                "kind": "trigger:webhook",
-                "name": "Webhook",
-                "ports": [{ "portId": "default", "direction": "Output", "label": "Out" }],
-                "config": { "path": "/water-start" }
-            }
-            """;
-        var webhook = Assert.IsType<WebhookTriggerNode>(JsonSerializer.Deserialize<BaseNode>(json, Options));
-
-        Assert.Null(webhook.Config.Method);
         Assert.DoesNotContain("\"method\"", JsonSerializer.Serialize<BaseNode>(webhook, Options));
     }
 

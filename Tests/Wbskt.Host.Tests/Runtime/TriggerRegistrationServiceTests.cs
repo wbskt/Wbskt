@@ -102,7 +102,7 @@ public sealed class TriggerRegistrationServiceTests
         {
             Nodes =
             [
-                new WebhookTriggerNode { NodeId = Guid.Parse("33333333-3333-3333-3333-333333333333"), Name = "webhook", Ports = [], Config = new WebhookTriggerConfig { Path = "/hooks/intake", Method = "POST", CorrelationKey = null, ConcurrencyPolicy = WorkflowConcurrencyPolicy.DropIfRunning, Filter = filter, Secret = "s3cret" } },
+                new WebhookTriggerNode { NodeId = Guid.Parse("33333333-3333-3333-3333-333333333333"), Name = "webhook", Ports = [], Config = new WebhookTriggerConfig { Path = "/hooks/intake", CorrelationKey = null, ConcurrencyPolicy = WorkflowConcurrencyPolicy.DropIfRunning, Filter = filter, Secret = "s3cret" } },
                 new ClientTriggerNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "client", Ports = [], Config = new ClientTriggerConfig { ClientRef = "client-serial-1", Type = "telemetry", CorrelationKey = null, ConcurrencyPolicy = WorkflowConcurrencyPolicy.Queue, Filter = filter } }
             ]
         };
@@ -151,7 +151,7 @@ public sealed class TriggerRegistrationServiceTests
             [
                 new ClientTriggerNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "client", Ports = [], Config = new ClientTriggerConfig { ClientRef = "client-serial-1", Type = "telemetry", CorrelationKey = null, ConcurrencyPolicy = WorkflowConcurrencyPolicy.Queue } },
                 new ScheduleTriggerNode { NodeId = Guid.Parse("22222222-2222-2222-2222-222222222222"), Name = "schedule", Ports = [], Config = new ScheduleTriggerConfig { Cron = "*/5 * * * *" } },
-                new WebhookTriggerNode { NodeId = Guid.Parse("33333333-3333-3333-3333-333333333333"), Name = "webhook", Ports = [], Config = new WebhookTriggerConfig { Path = "/hooks/intake", Method = "POST", CorrelationKey = null, ConcurrencyPolicy = WorkflowConcurrencyPolicy.DropIfRunning } },
+                new WebhookTriggerNode { NodeId = Guid.Parse("33333333-3333-3333-3333-333333333333"), Name = "webhook", Ports = [], Config = new WebhookTriggerConfig { Path = "/hooks/intake", CorrelationKey = null, ConcurrencyPolicy = WorkflowConcurrencyPolicy.DropIfRunning } },
                 new ManualTriggerNode { NodeId = Guid.Parse("44444444-4444-4444-4444-444444444444"), Name = "manual", Ports = [], Config = new ManualTriggerConfig { Description = "manual" } }
             ],
             [],

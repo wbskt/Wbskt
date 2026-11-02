@@ -204,9 +204,7 @@ message carries a link, not the image: an image is 1–2 MB and a message at mos
 4. Check the SHA-256 before the new image can boot, and keep the credentials across the update so
    the device signs in as the same client.
 5. Send the running version as `firmwareVersion` in `capabilities` on every connection, so the
-   server sees which firmware a device runs whatever happened. Firmware from before this field
-   reported it as the `firmware` state variable; the server still reads that when `firmwareVersion`
-   is missing.
+   server sees which firmware a device runs whatever happened.
 
 Every firmware shipped must keep an update path. A device whose new firmware can't take
 `sys.ota.update` can only be updated by hand after that.

@@ -465,15 +465,6 @@ public sealed partial class WorkflowValidator
                     break;
 
                 case WebhookTriggerNode webhook:
-                    // The URL only answers POST; an old definition's method still loads, so this warns rather than fails.
-                    if (webhook.Config?.Method is { } method && !string.Equals(method, "POST", StringComparison.OrdinalIgnoreCase))
-                    {
-                        issues.Add(new ValidationIssue(
-                            ValidationSeverity.Warning,
-                            "WEBHOOK_METHOD_IGNORED",
-                            $"Webhook trigger '{node.NodeId}' has method '{method}', but webhooks only accept POST; the method is ignored.",
-                            node.NodeId, "config.method"));
-                    }
                     WarnOnCorrelation(node.NodeId, webhook.Config?.CorrelationKey, issues);
                     break;
             }

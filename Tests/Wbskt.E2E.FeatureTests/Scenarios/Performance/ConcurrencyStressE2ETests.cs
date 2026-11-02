@@ -35,7 +35,7 @@ public class ConcurrencyStressE2ETests
         // Fork into 5 branches -> Delay 1s -> Join
         Guid workflowRefId = Guid.NewGuid();
         var builder = new WorkflowBuilder($"E2E-Stress-{workflowRefId:N}", workflowRefId)
-            .AddWebhookTrigger("stress", "POST", WorkflowConcurrencyPolicy.AllowParallel, out _);
+            .AddWebhookTrigger("stress", WorkflowConcurrencyPolicy.AllowParallel, out _);
 
         builder.AddFork(["b1", "b2", "b3", "b4", "b5"], fork =>
         {

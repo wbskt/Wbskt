@@ -75,7 +75,7 @@ public sealed class BrokerOutageE2ETests(ServicesFixture fixture)
         var path = $"mq-outage-{Guid.NewGuid():N}";
         var workflowRefId = Guid.NewGuid();
         var definition = new WorkflowBuilder($"E2E-MqOutage-{workflowRefId:N}", workflowRefId)
-            .AddWebhookTrigger(path, "POST", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddWebhookTrigger(path, WorkflowConcurrencyPolicy.AllowParallel, out _)
             .AddDelay(TimeSpan.FromMilliseconds(10))
             .BuildAndValidate();
         var publishedRef = await fixture.PublishWorkflowAsync(

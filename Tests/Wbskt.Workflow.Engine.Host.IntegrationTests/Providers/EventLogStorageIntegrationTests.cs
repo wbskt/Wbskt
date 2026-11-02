@@ -177,7 +177,7 @@ public sealed class EventLogStorageIntegrationTests(SqlEdgeFixture fixture)
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
         int workspaceId = Random.Shared.Next(1_000_000, int.MaxValue);
-        int traffic = await EventIdAsync("ClientPongEvent");
+        int traffic = await EventIdAsync("ClientMessageReceivedEvent");
         var messageId = Guid.NewGuid();
         EventLogEntry Entry() => new(traffic, "{}", DateTime.UtcNow, workspaceId, MessageId: messageId);
 

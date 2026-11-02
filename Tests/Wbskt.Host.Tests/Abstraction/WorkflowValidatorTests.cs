@@ -1081,29 +1081,6 @@ public sealed class WorkflowValidatorRuleTests
         return def with { Nodes = [client], Edges = [] };
     }
 
-    [Theory]
-    [InlineData("GET", true)]
-    [InlineData("put", true)]
-    [InlineData("POST", false)]
-    [InlineData("post", false)]
-    [InlineData(null, false)]
-    public void Validate_warns_on_a_webhook_method_other_than_post(string? method, bool warns)
-    {
-        var def = ValidWorkflowBuilder.Build();
-        var webhook = new WebhookTriggerNode
-        {
-            NodeId = Guid.NewGuid(),
-            Name = "callback",
-            Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Out" }],
-            Config = new Wbskt.Workflow.Abstraction.Models.Triggers.WebhookTriggerConfig { Path = "water-start", Method = method }
-        };
-
-        var result = Validator.Validate(def with { Nodes = [webhook], Edges = [] });
-
-        Assert.Equal(warns, result.Issues.Any(i => i.Severity == ValidationSeverity.Warning && i.Code == "WEBHOOK_METHOD_IGNORED"));
-        Assert.DoesNotContain(result.Issues, i => i.Code == "WEBHOOK_METHOD_IGNORED" && i.Severity == ValidationSeverity.Error);
-    }
-
     [Fact]
     public void Validate_accepts_a_presence_trigger_and_counts_it_as_a_trigger()
     {
