@@ -109,6 +109,7 @@ async def socket_server():
 @pytest.fixture
 async def device(api, socket_server, tmp_path: Path):
     """Starts harnesses for one device; each start shares the device's storage, like a reboot."""
+    socket_server.token_devices = api.token_devices
     started: List[Harness] = []
     command = harness_command()
 
