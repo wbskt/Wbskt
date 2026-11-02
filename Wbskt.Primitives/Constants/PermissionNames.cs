@@ -18,6 +18,7 @@ public static class PermissionNames
     public const string ClientsManage = "clients.manage";
     public const string ClientsCommand = "clients.command";
     public const string ClientsPing = "clients.ping";
+    public const string ClientsFirmware = "clients.firmware";
     public const string TemplatesRead = "templates.read";
     public const string TemplatesManage = "templates.manage";
     public const string WorkflowsRead = "workflows.read";
