@@ -25,11 +25,10 @@ public sealed class TriggerDispatchOutcomeIntegrationTests(SqlEdgeFixture fixtur
         Guid otherNode = Guid.NewGuid();
         DateTime t0 = new(2026, 10, 31, 10, 0, 0, DateTimeKind.Utc);
 
-        for (int i = 0; i < ITriggerDispatchOutcomeProvider.Keep + 5; i++)
-        {
-            await provider.RecordAsync(Row(workflowRef, node, t0.AddSeconds(i), $"type-{i}"), CancellationToken.None);
-        }
-        await provider.RecordAsync(Row(workflowRef, otherNode, t0, "other"), CancellationToken.None);
+        // Two batches, as two flushes would write them: the second trims what the first left.
+        var rows = Enumerable.Range(0, ITriggerDispatchOutcomeProvider.Keep + 5).Select(i => Row(workflowRef, node, t0.AddSeconds(i), $"type-{i}")).ToList();
+        await provider.RecordManyAsync([.. rows.Take(10), Row(workflowRef, otherNode, t0, "other")], CancellationToken.None);
+        await provider.RecordManyAsync(rows.Skip(10).ToList(), CancellationToken.None);
 
         Assert.Equal(ITriggerDispatchOutcomeProvider.Keep, await CountAsync(workflowRef, node));
         var recent = (await provider.GetRecentAsync(workflowRef, node, 100, CancellationToken.None)).ToList();
@@ -70,7 +69,7 @@ public sealed class TriggerDispatchOutcomeIntegrationTests(SqlEdgeFixture fixtur
         Guid workflowRef = Guid.NewGuid();
         Guid node = Guid.NewGuid();
         await PublishAsync(workflowRef, workspaceId);
-        await Provider().RecordAsync(Row(workflowRef, node, DateTime.UtcNow, "t"), CancellationToken.None);
+        await Provider().RecordManyAsync([Row(workflowRef, node, DateTime.UtcNow, "t")], CancellationToken.None);
 
         await ProcAsync("dbo.WorkflowDefinition_Delete", ("@RefId", workflowRef), ("@WorkspaceId", workspaceId), ("@DeletedBy", 1));
 

@@ -109,6 +109,7 @@ public static class Program
         services.AddHostedService<ClientHoldTicker>();
         services.AddHostedService<RunReaper>();
         services.AddHostedService<HistoryRetentionGc>();
+        services.AddHostedService<TriggerOutcomeFlusher>();
         services.AddHostedService<IdempotencyKeyGc>();
         services.AddHostedService<PendingTriggerEventBacklogReaper>();
         services.AddHostedService<MetricsExporter>();
