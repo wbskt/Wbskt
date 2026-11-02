@@ -426,6 +426,14 @@ public sealed class WbsktManagementClient : WbsktApiClient
     public Task<HttpResponseMessage> StartRunRawAsync(Guid workspaceRef, Guid workflowRef, StartRunRequest request, CancellationToken cancellationToken = default) =>
         SendRawAsync(HttpMethod.Post, $"/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/runs", request, cancellationToken);
 
+    /// <summary>Every shared variable of a workflow, by name. <c>GET /api/workspaces/{workspaceRef}/workflows/{workflowRef}/variables</c>.</summary>
+    public Task<Page<SharedVariableDto>> ListWorkflowVariablesAsync(Guid workspaceRef, Guid workflowRef, CancellationToken cancellationToken = default) =>
+        ReceiveAsync<Page<SharedVariableDto>>(ListWorkflowVariablesRawAsync(workspaceRef, workflowRef, cancellationToken), cancellationToken);
+
+    /// <summary><see cref="ListWorkflowVariablesAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
+    public Task<HttpResponseMessage> ListWorkflowVariablesRawAsync(Guid workspaceRef, Guid workflowRef, CancellationToken cancellationToken = default) =>
+        SendRawAsync(HttpMethod.Get, $"/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/variables", null, cancellationToken);
+
     /// <summary>One of a workflow's shared variables. <c>GET /api/workspaces/{workspaceRef}/workflows/{workflowRef}/variables/{variableName}</c>.</summary>
     public Task<SharedVariableDto> GetWorkflowVariableAsync(Guid workspaceRef, Guid workflowRef, string variableName, CancellationToken cancellationToken = default) =>
         ReceiveAsync<SharedVariableDto>(GetWorkflowVariableRawAsync(workspaceRef, workflowRef, variableName, cancellationToken), cancellationToken);

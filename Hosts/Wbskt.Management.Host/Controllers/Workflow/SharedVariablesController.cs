@@ -5,6 +5,7 @@ using Wbskt.Infrastructure.Authorization;
 using Wbskt.Management.Host.Authorization;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Management.Models.Workflow;
+using Wbskt.Models;
 using Wbskt.Primitives.Constants;
 
 namespace Wbskt.Management.Host.Controllers.Workflow;
@@ -19,6 +20,20 @@ public sealed class SharedVariablesController : ApiControllerBase
     public SharedVariablesController(ISharedVariableService variableService)
     {
         _variableService = variableService;
+    }
+
+    /// <summary>Every shared variable of the workflow, by name, with its type, value and when it last changed.</summary>
+    [HttpGet]
+    [RequiresPermission(PermissionNames.WorkflowsRead)]
+    public async Task<ActionResult<Page<SharedVariableDto>>> List([FromWorkspace] int workspaceId, Guid workflowRef, CancellationToken ct)
+    {
+        var result = await _variableService.ListAsync(workspaceId, workflowRef, ct);
+        if (result.IsFailure)
+        {
+            return MapResult(Result<Page<SharedVariableDto>>.Failure(result.Error));
+        }
+
+        return Ok(new Page<SharedVariableDto> { Items = result.Value, TotalCount = result.Value.Count });
     }
 
     [HttpGet("{variableName}")]

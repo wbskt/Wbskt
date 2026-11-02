@@ -63,6 +63,7 @@ public sealed class ManagementEndpointPermissionTests
         ["RegistrationPoliciesController.RotatePin"] = PermissionNames.PoliciesManage,
         ["RegistrationPoliciesController.Disable"] = PermissionNames.PoliciesManage,
         ["RegistrationPoliciesController.Delete"] = PermissionNames.PoliciesManage,
+        ["SharedVariablesController.List"] = PermissionNames.WorkflowsRead,
         ["SharedVariablesController.Get"] = PermissionNames.WorkflowsRead,
         ["SharedVariablesController.Set"] = PermissionNames.WorkflowsExecute,
         ["WorkflowHistoryController.List"] = PermissionNames.WorkflowsRead,

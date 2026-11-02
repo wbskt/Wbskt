@@ -1595,6 +1595,35 @@
         ],
         "type": "object"
       },
+      "PageOfSharedVariableDto": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SharedVariableDto"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "totalCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "PageOfWorkflowSummaryDto": {
         "properties": {
           "items": {
@@ -6784,6 +6813,55 @@
         },
         "tags": [
           "WorkflowTriggers"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/variables": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflowRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspaceRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOfSharedVariableDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOfSharedVariableDto"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOfSharedVariableDto"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "SharedVariables"
         ]
       }
     },
