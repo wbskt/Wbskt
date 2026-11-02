@@ -135,4 +135,6 @@ async def test_reports_accepted_downloading_and_installed_from_the_new_firmware(
     assert all(s["commandId"] == "o4" and s["state"] in ("downloading", "installed") for s in after)
     assert after[-1]["version"] == "1.1.0"
     assert firmware_version_of(capabilities) == "1.1.0"
-    assert len(api.logins) == 1
+    # Kept credentials: the new firmware signs in again, as the same client, without registering.
+    assert len(api.registrations) == 1
+    assert len({login["clientRefId"] for _, login in api.logins}) == 1
