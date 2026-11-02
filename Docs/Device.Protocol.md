@@ -238,6 +238,7 @@ uses close codes):
 | Revoked | The device lost access: revoked, deleted or its secret rotated. | Reconnect on the schedule; login will then fail with 401. |
 | Throttled | Over the message rate (§4). | Reconnect on the schedule, and send less. |
 | Too big | A message over 64 KB (§4). | Fix the sender; reconnect on the schedule. |
+| Server error | The server failed while serving the connection. | Reconnect on the schedule. |
 
 ## 6. Conformance checklist
 

@@ -43,6 +43,26 @@ public sealed class ClientConnection : DeviceConnection, IDisposable
     }
 
     /// <summary>
+    /// Sends a Close frame under the send lock, so it cannot interleave with a message being sent: the
+    /// answer to a device's Close, or the last word on a connection that is ending.
+    /// </summary>
+    public async Task CloseOutputAsync(WebSocketCloseStatus status, string description, CancellationToken cancellationToken)
+    {
+        await _sendLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (Socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
+            {
+                await Socket.CloseOutputAsync(status, description, cancellationToken);
+            }
+        }
+        finally
+        {
+            _sendLock.Release();
+        }
+    }
+
+    /// <summary>
     /// Sends the Close frame (the device answers with its own, which ends the receive loop) and cuts
     /// the connection if no answer comes within <see cref="CloseGrace"/>.
     /// </summary>

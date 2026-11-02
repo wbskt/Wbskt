@@ -8,7 +8,6 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Protocol;
 using Wbskt.Gateway.Core.Infrastructure;
-using Wbskt.Gateway.WebSocket.Host.Infrastructure;
 using Wbskt.Gateway.Core.Services;
 using Wbskt.Gateway.Core.Services.Inbound;
 using Wbskt.Gateway.Core.Telemetry;
@@ -21,18 +20,11 @@ public sealed class InboundMessageDispatcherTests
     private static readonly Guid CommandId = Guid.Parse("88888888-8888-8888-8888-888888888888");
 
     private readonly RecordingEventBus _bus = new();
-    private readonly List<string> _sent = [];
-    private readonly ClientConnection _connection;
+    private readonly FakeDeviceConnection _connection = new() { ClientId = 1, WorkspaceId = 2 };
     private readonly InboundMessageDispatcher _dispatcher;
 
     public InboundMessageDispatcherTests()
     {
-        var socket = new Mock<WebSocket>();
-        socket.Setup(x => x.SendAsync(It.IsAny<ArraySegment<byte>>(), WebSocketMessageType.Text, true, It.IsAny<CancellationToken>()))
-            .Callback((ArraySegment<byte> bytes, WebSocketMessageType _, bool _, CancellationToken _) => _sent.Add(Encoding.UTF8.GetString(bytes)))
-            .Returns(Task.CompletedTask);
-        _connection = new ClientConnection { Socket = socket.Object, ClientId = 1, WorkspaceId = 2 };
-
         IInboundMessageHandler[] handlers =
         [
             new PongHandler(_bus, NullLogger<PongHandler>.Instance),
@@ -191,7 +183,7 @@ public sealed class InboundMessageDispatcherTests
     private async Task<PingPayload> SendPing()
     {
         await _connection.SendPingAsync(CancellationToken.None);
-        var frame = JsonDocument.Parse(_sent.Last()).RootElement;
+        var frame = JsonDocument.Parse(_connection.Sent[^1]).RootElement;
         frame.GetProperty("type").GetString().Should().Be(MessageTypes.Ping);
         return frame.GetProperty("payload").Deserialize<PingPayload>()!;
     }
