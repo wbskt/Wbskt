@@ -53,6 +53,8 @@ public sealed class ClientOtaTests
             .ReturnsAsync(Result<ClientDetailResponse>.Success(new ClientDetailResponse(
                 ClientRefId, Guid.NewGuid(), "p", "board", ClientStatus.Registered, connected, null, null, null, null,
                 "wbskt-esp32", "0.3.0", "esp32", [], DateTime.UtcNow, [], system)));
+        _clients.Setup(x => x.EnsureClientInWorkspaceAsync(WorkspaceId, ClientRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<int>.Success(ClientId));
     }
 
     private Task<IActionResult?> Send(ClientOtaRequest request) =>
@@ -92,6 +94,22 @@ public sealed class ClientOtaTests
         var queued = _queue.Rows.Should().ContainSingle().Subject;
         queued.Type.Should().Be(MessageTypes.OtaUpdate);
         queued.ExpiresAtUtc.Should().BeCloseTo(expiresAt.UtcDateTime, TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task A_newer_update_cancels_the_older_ones_still_waiting_and_leaves_other_commands()
+    {
+        Device(connected: false, SystemCapabilities.Ota);
+        await Send(new ClientOtaRequest("https://firmware.example/1.1.bin", Digest));
+        var older = _queue.Rows.Single().CommandId;
+        var reboot = Guid.NewGuid();
+        await _queue.EnqueueAsync(new QueuedCommand(reboot, ClientId, ClientRefId, WorkspaceId, "reboot", "{}", DateTime.UtcNow.AddHours(1)), 10, CancellationToken.None);
+
+        var result = await Send(new ClientOtaRequest("https://firmware.example/1.2.bin", Digest));
+
+        var newer = Assert.IsType<ClientCommandResponse>(Assert.IsType<AcceptedResult>(result).Value).CommandId;
+        _queue.Rows.Select(r => r.CommandId).Should().BeEquivalentTo([reboot, newer]);
+        _bus.Verify(x => x.PublishAsync(It.Is<ClientCommandCancelledEvent>(e => e.CommandId == older && e.Type == MessageTypes.OtaUpdate), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

@@ -61,6 +61,7 @@ How the gateway signals each reason the model gives for ending a connection (mod
 | 1001 EndpointUnavailable | Restarting | Reconnect, 0–30 s spread. |
 | 1008 PolicyViolation | Superseded, revoked, throttled | Reconnect on the schedule; a revoked device's login will then fail with 401. |
 | 1009 MessageTooBig | Too big | Fix the sender; reconnect on the schedule. |
+| 1011 InternalServerError | Server error | Reconnect on the schedule. |
 
 The close description is text for logs. Branch on the code, not on the description.
 

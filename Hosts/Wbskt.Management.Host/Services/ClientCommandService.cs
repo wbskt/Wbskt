@@ -115,10 +115,33 @@ public sealed class ClientCommandService : IClientCommandService
         // An update that turns up days later is a surprise, so it always expires.
         var expiresAt = request.ExpiresAt ?? DateTimeOffset.UtcNow.Add(_defaultExpiry);
         var payload = JsonSerializer.Serialize(new OtaUpdatePayload(request.Url, request.Sha256.ToLowerInvariant(), NullIfEmpty(request.Version), request.Size));
-        return await DispatchAsync(
+        var sent = await DispatchAsync(
             new DeviceCommand(Guid.NewGuid(), clientRefId, workspaceId, MessageTypes.OtaUpdate, payload, expiresAt.UtcDateTime, Platform: true),
             expiresAt,
             cancellationToken);
+        if (sent.IsSuccess)
+        {
+            await CancelOlderUpdatesAsync(workspaceId, clientRefId, sent.Value.CommandId, cancellationToken);
+        }
+
+        return sent;
+    }
+
+    // Queued updates are delivered oldest first, and a device takes one at a time, so an older one
+    // still waiting would install instead of this one and get this one rejected as "already in progress".
+    private async Task CancelOlderUpdatesAsync(int workspaceId, Guid clientRefId, Guid newest, CancellationToken cancellationToken)
+    {
+        var clientResult = await _clientService.EnsureClientInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+        if (clientResult.IsFailure)
+        {
+            return;
+        }
+
+        var queued = await _queue.GetAsync(clientResult.Value, cancellationToken);
+        foreach (var older in queued.Where(c => c.CommandId != newest && MessageTypes.Comparer.Equals(c.Type, MessageTypes.OtaUpdate)))
+        {
+            await CancelQueuedAsync(workspaceId, clientRefId, clientResult.Value, older.CommandId, cancellationToken);
+        }
     }
 
     private async Task<Result<ClientCommandResponse>> DispatchAsync(DeviceCommand command, DateTimeOffset? expiresAt, CancellationToken cancellationToken)
@@ -163,10 +186,17 @@ public sealed class ClientCommandService : IClientCommandService
             return Result.Failure(clientResult.Error);
         }
 
-        var cancelled = await _queue.CancelAsync(clientResult.Value, commandId, cancellationToken);
+        return await CancelQueuedAsync(workspaceId, clientRefId, clientResult.Value, commandId, cancellationToken)
+            ? Result.Success()
+            : Result.Failure(NotQueued);
+    }
+
+    private async Task<bool> CancelQueuedAsync(int workspaceId, Guid clientRefId, int clientId, Guid commandId, CancellationToken cancellationToken)
+    {
+        var cancelled = await _queue.CancelAsync(clientId, commandId, cancellationToken);
         if (cancelled is null)
         {
-            return Result.Failure(NotQueued);
+            return false;
         }
 
         // The command is out of the queue whether or not this is heard.
@@ -179,7 +209,7 @@ public sealed class ClientCommandService : IClientCommandService
             _logger.LogWarning("Queued command '{CommandId}' was cancelled, but the cancellation could not be announced. {Message}", commandId, ex.Message);
         }
 
-        return Result.Success();
+        return true;
     }
 
     // A command that waits is delivered later by background work with no request in scope, so who sent

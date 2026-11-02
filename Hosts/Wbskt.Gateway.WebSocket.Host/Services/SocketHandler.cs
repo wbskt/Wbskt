@@ -86,7 +86,7 @@ internal sealed class SocketHandler : ISocketHandler
             admission,
             connection,
             inbox => ReceiveLoopAsync(identity.ClientRefId, connection, inbox, cts.Token),
-            reason => CloseQuietlyAsync(webSocket, reason));
+            reason => CloseQuietlyAsync(connection, reason));
     }
 
     private static Task RefuseAsync(HttpContext context, AdmissionRefusal refusal) => refusal switch
@@ -95,18 +95,12 @@ internal sealed class SocketHandler : ISocketHandler
         _ => Problems.WriteAsync(context, StatusCodes.Status401Unauthorized, "CLIENT_TOKEN_INVALID", "The device token is missing a claim this host needs.")
     };
 
-    private static async Task CloseQuietlyAsync(System.Net.WebSockets.WebSocket webSocket, DisconnectReason reason)
+    private static async Task CloseQuietlyAsync(ClientConnection connection, DisconnectReason reason)
     {
-        if (webSocket.State is not (WebSocketState.Open or WebSocketState.CloseReceived))
-        {
-            return;
-        }
-
         try
         {
-            var status = reason == DisconnectReason.ServerStopping ? WebSocketCloseStatus.EndpointUnavailable : WebSocketCloseStatus.NormalClosure;
             using var timeout = new CancellationTokenSource(ClientConnection.CloseGrace);
-            await webSocket.CloseOutputAsync(status, reason.Describe(), timeout.Token);
+            await connection.CloseOutputAsync(WebSocketCloseStatuses.For(reason), reason.Describe(), timeout.Token);
         }
         catch
         {
@@ -141,7 +135,7 @@ internal sealed class SocketHandler : ISocketHandler
                     // Either the device closed, or it answered a close we sent (the handshake is then complete).
                     if (webSocket.State == WebSocketState.CloseReceived)
                     {
-                        await webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Acknowledged", cancellationToken);
+                        await connection.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Acknowledged", cancellationToken);
                     }
 
                     return webSocket.CloseStatus == (WebSocketCloseStatus)WebSocketBinding.UpdatingCloseCode

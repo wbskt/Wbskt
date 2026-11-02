@@ -1,5 +1,3 @@
-using System.Net.WebSockets;
-using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using MassTransit;
@@ -10,7 +8,6 @@ using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Events.Client;
 using Wbskt.Gateway.Core.Handlers;
 using Wbskt.Gateway.Core.Infrastructure;
-using Wbskt.Gateway.WebSocket.Host.Infrastructure;
 
 namespace Wbskt.Host.Tests.Gateway;
 
@@ -29,23 +26,16 @@ public sealed class ClientCommandHandlerTests
     private readonly Mock<IConnectionManager> _connections = new();
     private readonly Mock<IEventBus> _bus = new();
     private readonly Mock<ICommandSender> _commands = new();
-    private readonly List<string> _sentFrames = [];
+    private readonly FakeDeviceConnection _connection = new() { ClientId = 42, WorkspaceId = 7 };
+
+    private IReadOnlyList<string> _sentFrames => _connection.Sent;
 
     private ClientCommandHandler CreateHandler()
     {
         return new ClientCommandHandler(_connections.Object, NullLogger<ClientCommandHandler>.Instance, _bus.Object, _commands.Object, new BusInstanceId(ThisHost), new FixedTime(Now));
     }
 
-    private void Connected()
-    {
-        var socket = new Mock<WebSocket>();
-        socket.SetupGet(x => x.State).Returns(WebSocketState.Open);
-        socket.Setup(x => x.SendAsync(It.IsAny<ArraySegment<byte>>(), WebSocketMessageType.Text, true, It.IsAny<CancellationToken>()))
-            .Callback<ArraySegment<byte>, WebSocketMessageType, bool, CancellationToken>((bytes, _, _, _) => _sentFrames.Add(Encoding.UTF8.GetString(bytes)))
-            .Returns(Task.CompletedTask);
-        _connections.Setup(x => x.GetConnection(ClientRefId))
-            .Returns(new ClientConnection { Socket = socket.Object, ClientId = 42, WorkspaceId = 7 });
-    }
+    private void Connected() => _connections.Setup(x => x.GetConnection(ClientRefId)).Returns(_connection);
 
     private static ConsumeContext<ClientCommandEvent> Context(string? targetHostId = ThisHost, DateTime? expiresAtUtc = null)
     {
@@ -170,12 +160,8 @@ public sealed class ClientCommandHandlerTests
     [Fact]
     public async Task A_send_that_throws_is_reported_with_a_fixed_reason_not_the_exception_text()
     {
-        var socket = new Mock<WebSocket>();
-        socket.SetupGet(x => x.State).Returns(WebSocketState.Open);
-        socket.Setup(x => x.SendAsync(It.IsAny<ArraySegment<byte>>(), It.IsAny<WebSocketMessageType>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new ObjectDisposedException("System.Net.WebSockets.ManagedWebSocket"));
-        _connections.Setup(x => x.GetConnection(ClientRefId))
-            .Returns(new ClientConnection { Socket = socket.Object, ClientId = 42, WorkspaceId = 7 });
+        _connection.SendFailure = new ObjectDisposedException("System.Net.WebSockets.ManagedWebSocket");
+        Connected();
 
         await CreateHandler().Consume(Context());
 

@@ -1,4 +1,3 @@
-using System.Net.WebSockets;
 using System.Security.Claims;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -11,7 +10,6 @@ using Wbskt.Gateway.Core.Infrastructure;
 using Wbskt.Gateway.Core.Services;
 using Wbskt.Gateway.Core.Services.Inbound;
 using Wbskt.Gateway.Core.Telemetry;
-using Wbskt.Gateway.WebSocket.Host.Infrastructure;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Protocol;
 
@@ -44,13 +42,7 @@ public sealed class DeviceSessionTests
             Options.Create(budget ?? new MessageBudgetOptions()), lifetime.Object, NullLogger<DeviceSessions>.Instance, NullLogger<DeviceInbox>.Instance);
     }
 
-    private static (ClientConnection Connection, Mock<WebSocket> Socket) Connection()
-    {
-        var socket = new Mock<WebSocket>();
-        socket.SetupGet(x => x.State).Returns(WebSocketState.Open);
-        socket.Setup(x => x.CloseOutputAsync(It.IsAny<WebSocketCloseStatus>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        return (new ClientConnection { Socket = socket.Object, ClientId = 42, WorkspaceId = 7 }, socket);
-    }
+    private static FakeDeviceConnection Connection() => new() { ClientId = 42, WorkspaceId = 7 };
 
     private static ClaimsPrincipal DeviceUser() => new(new ClaimsIdentity(ClientClaims.For(ClientRefId, "sensor", Guid.NewGuid(), 42, 7), "test"));
 
@@ -92,7 +84,7 @@ public sealed class DeviceSessionTests
     [Fact]
     public async Task A_session_announces_the_device_and_releases_it_before_the_transport_closes()
     {
-        var (connection, _) = Connection();
+        var connection = Connection();
         var registeredDuringLoop = false;
         var registeredAtClose = true;
         DisconnectReason? closedWith = null;
@@ -126,7 +118,7 @@ public sealed class DeviceSessionTests
             .Returns(() => connectAttempts == 1 ? Task.FromException(new InvalidOperationException("broker down")) : Task.CompletedTask);
         _bus.Setup(x => x.PublishAsync(It.IsAny<ClientMessageReceivedEvent>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("broker down"));
-        var (connection, _) = Connection();
+        var connection = Connection();
         DisconnectReason? result = DisconnectReason.Error;
 
         await Sessions().RunAsync(Admitted, connection,
@@ -147,7 +139,7 @@ public sealed class DeviceSessionTests
     [Fact]
     public async Task A_requested_close_is_the_reason_whatever_the_loop_saw()
     {
-        var (connection, _) = Connection();
+        var connection = Connection();
         DisconnectReason? closedWith = null;
 
         await Sessions().RunAsync(Admitted, connection,
@@ -169,8 +161,8 @@ public sealed class DeviceSessionTests
     [Fact]
     public async Task A_superseded_session_does_not_announce_the_device_offline()
     {
-        var (old, oldSocket) = Connection();
-        var (fresh, _) = Connection();
+        var old = Connection();
+        var fresh = Connection();
 
         await Sessions().RunAsync(Admitted, old,
             _ =>
@@ -180,7 +172,7 @@ public sealed class DeviceSessionTests
             },
             _ => Task.CompletedTask);
 
-        oldSocket.Verify(x => x.CloseOutputAsync(WebSocketCloseStatus.PolicyViolation, ConnectionManager.SupersededDescription, It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(new CloseRequest(DisconnectReason.Superseded, ConnectionManager.SupersededDescription), Assert.Single(old.Closes));
         Assert.Same(fresh, _connections.GetConnection(ClientRefId));
         _bus.Verify(x => x.PublishAsync(It.IsAny<ClientDisconnectedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -188,7 +180,7 @@ public sealed class DeviceSessionTests
     [Fact]
     public async Task A_loop_cancelled_by_shutdown_ends_as_server_stopping()
     {
-        var (connection, _) = Connection();
+        var connection = Connection();
         DisconnectReason? closedWith = null;
         await _stopping.CancelAsync();
 
@@ -207,7 +199,7 @@ public sealed class DeviceSessionTests
     [Fact]
     public async Task A_loop_cancelled_otherwise_ends_as_aborted()
     {
-        var (connection, _) = Connection();
+        var connection = Connection();
 
         await Sessions().RunAsync(Admitted, connection, _ => throw new OperationCanceledException(), _ => Task.CompletedTask);
 
@@ -217,7 +209,7 @@ public sealed class DeviceSessionTests
     [Fact]
     public async Task A_loop_that_throws_still_releases_and_announces_the_device()
     {
-        var (connection, _) = Connection();
+        var connection = Connection();
 
         await Sessions().RunAsync(Admitted, connection, _ => throw new InvalidOperationException("boom"), _ => Task.CompletedTask);
 
@@ -230,7 +222,7 @@ public sealed class DeviceSessionTests
     [InlineData(DisconnectReason.ClientClosed, false)]
     public async Task Only_a_device_closing_to_update_is_announced_as_updating(DisconnectReason reason, bool updating)
     {
-        var (connection, _) = Connection();
+        var connection = Connection();
 
         await Sessions().RunAsync(Admitted, connection, _ => Task.FromResult(reason), _ => Task.CompletedTask);
 
@@ -240,7 +232,7 @@ public sealed class DeviceSessionTests
     [Fact]
     public async Task A_transport_close_that_throws_does_not_stop_the_end_being_announced()
     {
-        var (connection, _) = Connection();
+        var connection = Connection();
 
         await Sessions().RunAsync(Admitted, connection,
             _ => Task.FromResult(DisconnectReason.ClientClosed),
@@ -252,7 +244,7 @@ public sealed class DeviceSessionTests
     [Fact]
     public async Task A_device_revoked_after_admission_is_closed_once_registered()
     {
-        var (connection, _) = Connection();
+        var connection = Connection();
         _gate.Setup(x => x.IsRefusedHere(ClientRefId, It.IsAny<DateTime>())).Returns(true);
         CloseRequest? seenByLoop = null;
 
@@ -271,7 +263,7 @@ public sealed class DeviceSessionTests
     [Fact]
     public async Task A_disconnect_the_bus_cannot_take_does_not_escape_the_session()
     {
-        var (connection, _) = Connection();
+        var connection = Connection();
         _bus.Setup(x => x.PublishAsync(It.IsAny<ClientDisconnectedEvent>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("broker down"));
 
         await Sessions().RunAsync(Admitted, connection, _ => Task.FromResult(DisconnectReason.ClientClosed), _ => Task.CompletedTask);
@@ -282,7 +274,7 @@ public sealed class DeviceSessionTests
     [Fact]
     public async Task A_refused_admission_cannot_run_a_session()
     {
-        var (connection, _) = Connection();
+        var connection = Connection();
         var refused = DeviceAdmission.Refuse(AdmissionRefusal.Revoked);
 
         await Assert.ThrowsAsync<ArgumentException>(() => Sessions().RunAsync(refused, connection, _ => Task.FromResult(DisconnectReason.ClientClosed), _ => Task.CompletedTask));
@@ -293,7 +285,7 @@ public sealed class DeviceSessionTests
     [Fact]
     public async Task A_device_that_stays_over_its_budget_is_closed_with_1008()
     {
-        var (connection, socket) = Connection();
+        var connection = Connection();
         var results = new List<DisconnectReason?>();
 
         await Sessions(new MessageBudgetOptions { PerSecond = 0.1, Burst = 1, CloseAfterDropped = 2 }).RunAsync(Admitted, connection,
@@ -309,7 +301,7 @@ public sealed class DeviceSessionTests
             _ => Task.CompletedTask);
 
         Assert.Equal([null, null, DisconnectReason.Throttled], results);
-        socket.Verify(x => x.CloseOutputAsync(WebSocketCloseStatus.PolicyViolation, "Too many messages.", It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(new CloseRequest(DisconnectReason.Throttled, "Too many messages."), Assert.Single(connection.Closes));
         _bus.Verify(x => x.PublishAsync(It.IsAny<ClientMessageReceivedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         VerifyDisconnected("Too many messages.");
     }
@@ -317,7 +309,7 @@ public sealed class DeviceSessionTests
     [Fact]
     public async Task A_message_over_the_size_limit_is_closed_with_1009_whatever_the_transport_let_through()
     {
-        var (connection, socket) = Connection();
+        var connection = Connection();
         var tooBig = $$"""{"type":"t","payload":"{{new string('é', DeviceProtocol.MaxMessageBytes / 2)}}"}""";
         DisconnectReason? result = null;
 
@@ -330,14 +322,14 @@ public sealed class DeviceSessionTests
             _ => Task.CompletedTask);
 
         Assert.Equal(DisconnectReason.MessageTooBig, result);
-        socket.Verify(x => x.CloseOutputAsync(WebSocketCloseStatus.MessageTooBig, DeviceInbox.TooBigDescription, It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(new CloseRequest(DisconnectReason.MessageTooBig, DeviceInbox.TooBigDescription), Assert.Single(connection.Closes));
         _bus.Verify(x => x.PublishAsync(It.IsAny<ClientMessageReceivedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task Messages_after_a_requested_close_are_ignored()
     {
-        var (connection, _) = Connection();
+        var connection = Connection();
         DisconnectReason? result = DisconnectReason.Error;
 
         await Sessions().RunAsync(Admitted, connection,
@@ -351,21 +343,5 @@ public sealed class DeviceSessionTests
 
         Assert.Null(result);
         _bus.Verify(x => x.PublishAsync(It.IsAny<ClientMessageReceivedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-}
-
-/// <summary>The close codes are part of the device protocol: moving the reasons into Gateway.Core must not change them.</summary>
-public sealed class WebSocketCloseStatusesTests
-{
-    [Theory]
-    [InlineData(DisconnectReason.Revoked, WebSocketCloseStatus.PolicyViolation)]
-    [InlineData(DisconnectReason.Superseded, WebSocketCloseStatus.PolicyViolation)]
-    [InlineData(DisconnectReason.Throttled, WebSocketCloseStatus.PolicyViolation)]
-    [InlineData(DisconnectReason.MessageTooBig, WebSocketCloseStatus.MessageTooBig)]
-    [InlineData(DisconnectReason.ServerStopping, WebSocketCloseStatus.EndpointUnavailable)]
-    [InlineData(DisconnectReason.ClientClosed, WebSocketCloseStatus.NormalClosure)]
-    public void Each_reason_keeps_its_close_code(DisconnectReason reason, WebSocketCloseStatus expected)
-    {
-        Assert.Equal(expected, WebSocketCloseStatuses.For(reason));
     }
 }
