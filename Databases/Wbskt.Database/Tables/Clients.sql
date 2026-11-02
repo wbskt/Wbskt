@@ -12,6 +12,7 @@ CREATE TABLE dbo.Clients (
     LastRttMs      INT              NULL, -- last measured socket round-trip
     RttMeasuredAt  DATETIME2(3)     NULL,
     ConnectedHostId NVARCHAR(100)   NULL, -- socket-host instance currently holding this connection
+    UpdatingUntil  DATETIME2(3)     NULL, -- closed to install a firmware update: updating, not offline, until then or its next connect
     CreatedAt      DATETIME2(3)     NOT NULL           DEFAULT SYSUTCDATETIME(),
 
     -- Constraints

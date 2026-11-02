@@ -52,7 +52,12 @@ public interface IClientProvider : IReferenceProvider
     Task<IReadOnlyList<ClientTagCount>> GetTagsAsync(int workspaceId, CancellationToken cancellationToken = default);
     /// <summary>Replaces a client's secret hash; false when the client is not in <paramref name="workspaceId"/>.</summary>
     Task<bool> UpdateSecretAsync(int id, int workspaceId, byte[] secretHash, CancellationToken cancellationToken = default);
-    Task UpdatePresenceAsync(int id, bool isConnected, DateTime lastActivityAt, string? hostId = null, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Records a connect or a disconnect. <paramref name="updatingUntil"/>, on a disconnect, says the device
+    /// closed to install an update and counts as updating until then; a connect always clears it.
+    /// </summary>
+    Task UpdatePresenceAsync(int id, bool isConnected, DateTime lastActivityAt, string? hostId = null, DateTime? updatingUntil = null,
+        CancellationToken cancellationToken = default);
     /// <summary>
     /// Clears the presence of clients held by a socket host not heard from for <paramref name="staleAfter"/>,
     /// and returns them. Each row is claimed once, however many instances sweep at the same time.

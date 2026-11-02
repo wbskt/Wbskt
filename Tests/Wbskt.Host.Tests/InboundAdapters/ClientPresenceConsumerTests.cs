@@ -1,6 +1,7 @@
 using MassTransit;
 using Moq;
 using Wbskt.Events.Client;
+using Wbskt.Protocol;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -28,6 +29,18 @@ public sealed class ClientPresenceConsumerTests
         Assert.Equal(2, provider.Inserts.Count);
         Assert.Contains((oneMinute, ClientRef, "offline", ChangedAt, ChangedAt.AddSeconds(60)), provider.Inserts);
         Assert.Contains((fiveMinutes, ClientRef, "offline", ChangedAt, ChangedAt.AddSeconds(300)), provider.Inserts);
+    }
+
+    [Fact]
+    public async Task A_device_closing_to_update_is_not_offline_until_the_update_has_had_its_time()
+    {
+        string oneMinute = ClientPresenceTriggerKey.Build(ClientRef, ClientPresenceState.Offline, 60, Guid.NewGuid(), Guid.NewGuid());
+        var provider = new RecordingPresenceCheckProvider(oneMinute);
+        var consumer = new ClientDisconnectedConsumer(new ClientPresenceParker(provider));
+
+        await consumer.Consume(Context(new ClientDisconnectedEvent(ClientRef, 12, 34, "Updating", "host-1", IsUpdating: true) { CreatedAtUtc = ChangedAt }));
+
+        Assert.Equal((oneMinute, ClientRef, "offline", ChangedAt, ChangedAt.AddSeconds(60) + OtaTiming.UpdateWindow), Assert.Single(provider.Inserts));
     }
 
     [Fact]

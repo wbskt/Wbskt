@@ -64,6 +64,14 @@ How the gateway signals each reason the model gives for ending a connection (mod
 
 The close description is text for logs. Branch on the code, not on the description.
 
+A device may close with one code of its own:
+
+| Code | Meaning | Server does |
+|---|---|---|
+| 4000 Updating | Closing to install a firmware update (model §4.4). | Shows the device as updating, not offline, and holds presence triggers back, until it connects again or 5 minutes pass. |
+
+Any other code from a device is an ordinary close.
+
 ## 5. Conformance checklist
 
 An SDK conforms to the WebSocket binding when it:

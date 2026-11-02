@@ -189,15 +189,21 @@ message carries a link, not the image: an image is 1–2 MB and a message at mos
    - `rejected`, with `error`, when it won't start: OTA is off, the URL isn't `https`, the digest
      isn't 64 hex digits, `size` is bigger than the space for the image, or another update is
      under way. Nothing changes on the device.
-   - `accepted` when it will. Then `downloading` with `progress` (percent) as it goes.
+   - `accepted` when it will. Then `downloading`, with `progress` (percent) as it goes if it can.
+     `progress` is optional and best effort: a device that closes its connection to free memory for
+     the download (as the ESP32 library does) cannot send it, and sends `downloading` once, before it closes.
    - `failed`, with `error`, if it goes wrong after that: the download breaks, the digest doesn't
      match, or the new firmware never connects and the device goes back to the previous one. The
      device keeps running its previous firmware.
    - `installed`, with `version`, sent by the **new** firmware once it has connected. Keep the
      `commandId` across the restart for this.
-3. Check the SHA-256 before the new image can boot, and keep the credentials across the update so
+3. A device that closes its connection to download closes with the binding's "updating" code (WebSocket:
+   4000). The server then shows it as updating rather than offline, and holds presence triggers back,
+   for up to 5 minutes or until it connects again. Give the new image the same 5 minutes to connect
+   before rolling it back.
+4. Check the SHA-256 before the new image can boot, and keep the credentials across the update so
    the device signs in as the same client.
-4. Send the running version as `firmwareVersion` in `capabilities` on every connection, so the
+5. Send the running version as `firmwareVersion` in `capabilities` on every connection, so the
    server sees which firmware a device runs whatever happened. Firmware from before this field
    reported it as the `firmware` state variable; the server still reads that when `firmwareVersion`
    is missing.
@@ -252,7 +258,8 @@ And, if it takes firmware updates (§4.4), when it:
 - [ ] lists `ota` under `system` only while updates are on, and answers `sys.ota.update` with `rejected` otherwise;
 - [ ] sends the running version as `firmwareVersion` in `capabilities`;
 - [ ] refuses an expired `sys.ota.update` in its ack and starts nothing;
-- [ ] reports `accepted`, `downloading` and, from the new firmware, `installed` with the version, under the update's `commandId`.
+- [ ] reports `accepted`, `downloading` and, from the new firmware, `installed` with the version, under the update's `commandId`;
+- [ ] closes with the binding's "updating" code when it drops its connection to download.
 
 It also conforms to each binding it speaks; see that binding's checklist
 ([WebSocket](Device.Protocol.WebSocket.md#5-conformance-checklist)).

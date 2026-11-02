@@ -18,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List, Optional, Tuple
 
 from websockets.asyncio.server import ServerConnection, serve
+from websockets.exceptions import ConnectionClosed
 
 REGISTER_PATH = "/api/v1/client-registrations/initiate"
 LOGIN_PATH = "/api/v1/client-auth/login"
@@ -30,6 +31,8 @@ BUDGET_BURST = 100
 BUDGET_CLOSE_AFTER_DROPPED = 500
 CLOSE_THROTTLED = 1008
 CLOSE_SUPERSEDED = 1008
+# The one close code a device sends of its own: closing to install a firmware update.
+CLOSE_UPDATING = 4000
 
 Answer = Tuple[int, Dict[str, Any], Dict[str, str]]
 
@@ -152,6 +155,8 @@ class FakeSocket:
         # Messages dropped over the budget, and the close code the fake sent on each connection.
         self.dropped = 0
         self.close_codes: Dict[int, int] = {}
+        # The close code each connection's device sent, when it closed first (1006: it sent none).
+        self.device_close_codes: Dict[int, int] = {}
         # While set, every upgrade is answered 503, as by a host that is down.
         self.down = False
         self.url = ""
@@ -193,17 +198,23 @@ class FakeSocket:
                 self.close_codes[self.connections.index(older)] = CLOSE_SUPERSEDED
                 await older.close(CLOSE_SUPERSEDED, "Superseded by a new connection.")
         budget = _Budget()
-        async for raw in ws:
-            if not isinstance(raw, str):
-                continue
-            if not budget.try_take():
-                self.dropped += 1
-                if budget.consecutive_dropped >= BUDGET_CLOSE_AFTER_DROPPED:
-                    self.close_codes[index] = CLOSE_THROTTLED
-                    await ws.close(CLOSE_THROTTLED, "Too many messages.")
-                    return
-                continue
-            await self.frames.put((index, json.loads(raw), time.time()))
+        try:
+            async for raw in ws:
+                if not isinstance(raw, str):
+                    continue
+                if not budget.try_take():
+                    self.dropped += 1
+                    if budget.consecutive_dropped >= BUDGET_CLOSE_AFTER_DROPPED:
+                        self.close_codes[index] = CLOSE_THROTTLED
+                        await ws.close(CLOSE_THROTTLED, "Too many messages.")
+                        return
+                    continue
+                await self.frames.put((index, json.loads(raw), time.time()))
+        except ConnectionClosed:
+            pass
+        finally:
+            if index not in self.close_codes and ws.close_code is not None:
+                self.device_close_codes[index] = ws.close_code
 
     async def start(self) -> None:
         self._server = await serve(

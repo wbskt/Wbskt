@@ -179,7 +179,8 @@ internal sealed class ClientQueryService : IClientQueryService
             c.LastActivityAt,
             c.LastRttMs,
             c.CreatedAt,
-            c.Tags
+            c.Tags,
+            AsUtc(c.UpdatingUntil)
         );
     }
 
@@ -219,9 +220,12 @@ internal sealed class ClientQueryService : IClientQueryService
             d.CreatedAt,
             d.Tags,
             ReadSystem(d.SystemJson),
-            d.FirmwareVersion
+            d.FirmwareVersion,
+            AsUtc(d.UpdatingUntil)
         );
     }
+
+    private static DateTimeOffset? AsUtc(DateTime? value) => value is { } at ? new DateTimeOffset(DateTime.SpecifyKind(at, DateTimeKind.Utc)) : null;
 
     private static IReadOnlyList<string> ReadSystem(string? json)
     {

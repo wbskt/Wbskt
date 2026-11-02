@@ -2,7 +2,8 @@ CREATE PROCEDURE dbo.Client_UpdatePresence
     @Id INT,
     @IsConnected BIT,
     @LastActivityAt DATETIME2(3),
-    @HostId NVARCHAR(100) = NULL
+    @HostId NVARCHAR(100) = NULL,
+    @UpdatingUntil DATETIME2(3) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -19,7 +20,8 @@ BEGIN
             LastActivityAt = @LastActivityAt,
             -- ConnectedAt anchors uptime: set on connect, cleared on disconnect
             ConnectedAt = @LastActivityAt,
-            ConnectedHostId = @HostId
+            ConnectedHostId = @HostId,
+            UpdatingUntil = NULL
         WHERE Id = @Id
             AND (LastActivityAt IS NULL OR LastActivityAt < @LastActivityAt);
     END
@@ -33,7 +35,8 @@ BEGIN
             IsConnected = 0,
             LastActivityAt = @LastActivityAt,
             ConnectedAt = NULL,
-            ConnectedHostId = NULL
+            ConnectedHostId = NULL,
+            UpdatingUntil = @UpdatingUntil
         WHERE Id = @Id
             AND (LastActivityAt IS NULL OR LastActivityAt <= @LastActivityAt)
             AND (@HostId IS NULL OR ConnectedHostId IS NULL OR ConnectedHostId = @HostId);

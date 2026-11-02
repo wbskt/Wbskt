@@ -46,6 +46,7 @@ public record BulkClientStatusResponse(IReadOnlyList<Guid> Updated, IReadOnlyLis
 
 public record BulkClientStatusFailure(Guid ClientRefId, string Code, string Message);
 
+/// <param name="UpdatingUntil">Set when the device's last disconnect was to install a firmware update: while it is later than now the device counts as updating, not offline. Cleared on its next connect.</param>
 public record ClientResponse(
     Guid ClientRefId,
     Guid PolicyRefId,
@@ -56,10 +57,12 @@ public record ClientResponse(
     DateTime? LastActivityAt,
     int? LastRttMs,
     DateTime CreatedAt,
-    IReadOnlyList<string> Tags
+    IReadOnlyList<string> Tags,
+    DateTimeOffset? UpdatingUntil = null
 );
 
 /// <param name="System">The platform features the device last said it takes, such as <c>ota</c>; empty when none.</param>
+/// <param name="UpdatingUntil">As on <see cref="ClientResponse"/>.</param>
 /// <param name="FirmwareVersion">The version of the code the device runs, from its capabilities report, or from the <c>firmware</c> state an older SDK reported; null when it said neither.</param>
 public record ClientDetailResponse(
     Guid ClientRefId,
@@ -79,7 +82,8 @@ public record ClientDetailResponse(
     DateTime CreatedAt,
     IReadOnlyList<string> Tags,
     IReadOnlyList<string> System,
-    string? FirmwareVersion = null
+    string? FirmwareVersion = null,
+    DateTimeOffset? UpdatingUntil = null
 );
 
 public record ClientTagsResponse(Guid ClientRefId, IReadOnlyList<string> Tags);

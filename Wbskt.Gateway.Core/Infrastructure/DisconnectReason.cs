@@ -25,7 +25,10 @@ public enum DisconnectReason
     MessageTooBig,
 
     /// <summary>The device kept sending faster than its message budget allows.</summary>
-    Throttled
+    Throttled,
+
+    /// <summary>The device closed to install a firmware update, and is expected back on the new image.</summary>
+    Updating
 }
 
 /// <summary>
@@ -47,6 +50,7 @@ public static class DisconnectReasons
         DisconnectReason.Superseded => "superseded",
         DisconnectReason.MessageTooBig => "message_too_big",
         DisconnectReason.Throttled => "throttled",
+        DisconnectReason.Updating => "updating",
         _ => "unknown"
     };
 
@@ -61,6 +65,7 @@ public static class DisconnectReasons
         DisconnectReason.Superseded => "The device connected again.",
         DisconnectReason.MessageTooBig => "The device sent a message over the size limit.",
         DisconnectReason.Throttled => "The device sent messages faster than allowed.",
+        DisconnectReason.Updating => "The device is installing a firmware update.",
         _ => "Disconnected."
     };
 }

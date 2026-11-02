@@ -17,6 +17,7 @@ BEGIN
         c.Status,
         c.IsConnected,
         c.ConnectedAt,
+        c.UpdatingUntil,
         c.LastActivityAt,
         c.LastRttMs,
         c.RttMeasuredAt,
