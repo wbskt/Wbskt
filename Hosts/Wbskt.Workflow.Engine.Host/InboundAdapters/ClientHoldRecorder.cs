@@ -54,7 +54,7 @@ public sealed class ClientHoldRecorder(
             if (outcomeLog is not null)
             {
                 string outcome = matches ? TriggerDispatchOutcomeRow.HeldOutcome : nameof(TriggerDispatchOutcome.Filtered);
-                await outcomeLog.RecordAsync(message, registration, outcome, null, null, ct);
+                outcomeLog.Record(message, registration, outcome, null, null);
             }
         }
     }

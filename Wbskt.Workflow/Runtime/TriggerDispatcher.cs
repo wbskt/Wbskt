@@ -201,7 +201,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             await _idempotencyKeyProvider.MarkSucceededAsync(bookmarkMatch.ClaimKey, "{}", ct);
         }
 
-        await RecordOutcomesAsync(resolvedEvent, registrations, perRegistration, ct);
+        RecordOutcomes(resolvedEvent, registrations, perRegistration);
 
         // The summary is deliberately lossy - one event fanning out to several registrations can
         // legitimately start one run and drop another. Callers that care read Registrations; the
@@ -223,7 +223,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             summary?.RunRefId);
     }
 
-    private async Task RecordOutcomesAsync(InboundEvent evt, IReadOnlyCollection<TriggerRegistrationRow> registrations, List<TriggerRegistrationDispatch> perRegistration, CancellationToken ct)
+    private void RecordOutcomes(InboundEvent evt, IReadOnlyCollection<TriggerRegistrationRow> registrations, List<TriggerRegistrationDispatch> perRegistration)
     {
         if (_outcomeLog is null)
         {
@@ -234,7 +234,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         {
             if (registrations.FirstOrDefault(r => r.Id == dispatch.RegistrationId) is { } registration)
             {
-                await _outcomeLog.RecordAsync(evt, registration, dispatch.Outcome.ToString(), dispatch.CorrelationKey, dispatch.RunRefId, ct);
+                _outcomeLog.Record(evt, registration, dispatch.Outcome.ToString(), dispatch.CorrelationKey, dispatch.RunRefId);
             }
         }
     }

@@ -5,16 +5,28 @@ namespace Wbskt.Host.Tests.Runtime;
 
 internal sealed class RecordingOutcomeProvider(bool fail = false) : ITriggerDispatchOutcomeProvider
 {
-    public List<TriggerDispatchOutcomeRow> Records { get; } = [];
+    private readonly List<TriggerDispatchOutcomeRow> _records = [];
 
-    public Task RecordAsync(TriggerDispatchOutcomeRow row, CancellationToken ct)
+    public Wbskt.Workflow.Runtime.TriggerOutcomeBuffer Buffer { get; } = new();
+
+    /// <summary>What was written, after writing whatever is still buffered, as the engine's flusher would.</summary>
+    public List<TriggerDispatchOutcomeRow> Records
+    {
+        get
+        {
+            _records.AddRange(Buffer.Drain());
+            return _records;
+        }
+    }
+
+    public Task RecordManyAsync(IReadOnlyList<TriggerDispatchOutcomeRow> rows, CancellationToken ct)
     {
         if (fail)
         {
             throw new InvalidOperationException("database unavailable");
         }
 
-        Records.Add(row);
+        _records.AddRange(rows);
         return Task.CompletedTask;
     }
 
@@ -25,5 +37,5 @@ internal sealed class RecordingOutcomeProvider(bool fail = false) : ITriggerDisp
         Task.FromResult<TriggerHoldStateRow?>(null);
 
     public static Wbskt.Workflow.Runtime.TriggerOutcomeLog Log(RecordingOutcomeProvider provider) =>
-        new(provider, TimeProvider.System, Microsoft.Extensions.Logging.Abstractions.NullLogger<Wbskt.Workflow.Runtime.TriggerOutcomeLog>.Instance);
+        new(provider.Buffer, TimeProvider.System);
 }

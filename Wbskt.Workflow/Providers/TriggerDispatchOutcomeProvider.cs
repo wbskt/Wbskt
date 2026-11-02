@@ -11,20 +11,38 @@ internal sealed class TriggerDispatchOutcomeProvider : BaseSqlProvider, ITrigger
 {
     public TriggerDispatchOutcomeProvider(IConfiguration configuration) : base(configuration) { }
 
-    public async Task RecordAsync(TriggerDispatchOutcomeRow row, CancellationToken ct)
+    public async Task RecordManyAsync(IReadOnlyList<TriggerDispatchOutcomeRow> rows, CancellationToken ct)
     {
+        if (rows.Count == 0)
+        {
+            return;
+        }
+
+        using var table = new DataTable();
+        table.Columns.Add("Ordinal", typeof(int));
+        table.Columns.Add("WorkflowRefId", typeof(Guid));
+        table.Columns.Add("TriggerNodeId", typeof(Guid));
+        table.Columns.Add("OccurredAt", typeof(DateTime));
+        table.Columns.Add("ChannelKind", typeof(string));
+        table.Columns.Add("MessageType", typeof(string));
+        table.Columns.Add("Outcome", typeof(string));
+        table.Columns.Add("CorrelationKey", typeof(string));
+        table.Columns.Add("RunRefId", typeof(Guid));
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var row = rows[i];
+            table.Rows.Add(i, row.WorkflowRefId, row.TriggerNodeId, row.OccurredAt, Truncate(row.ChannelKind, 64),
+                (object?)Truncate(row.MessageType, 200) ?? DBNull.Value, row.Outcome,
+                (object?)Truncate(row.CorrelationKey, 400) ?? DBNull.Value, (object?)row.RunRefId ?? DBNull.Value);
+        }
+
         await ExecuteNonQueryAsync(
-            "dbo.TriggerDispatchOutcome_Record",
+            "dbo.TriggerDispatchOutcome_RecordMany",
             p =>
             {
-                p.AddWithValue("@WorkflowRefId", row.WorkflowRefId);
-                p.AddWithValue("@TriggerNodeId", row.TriggerNodeId);
-                p.Add("@OccurredAt", SqlDbType.DateTime2).Value = row.OccurredAt;
-                p.AddWithValue("@ChannelKind", Truncate(row.ChannelKind, 64));
-                p.AddWithValue("@MessageType", (object?)Truncate(row.MessageType, 200) ?? DBNull.Value);
-                p.AddWithValue("@Outcome", row.Outcome);
-                p.AddWithValue("@CorrelationKey", (object?)Truncate(row.CorrelationKey, 400) ?? DBNull.Value);
-                p.AddWithValue("@RunRefId", (object?)row.RunRefId ?? DBNull.Value);
+                var parameter = p.AddWithValue("@Outcomes", table);
+                parameter.SqlDbType = SqlDbType.Structured;
+                parameter.TypeName = "dbo.TriggerDispatchOutcomeTableType";
                 p.AddWithValue("@Keep", ITriggerDispatchOutcomeProvider.Keep);
             },
             ct

@@ -11,7 +11,8 @@ public interface ITriggerDispatchOutcomeProvider
     /// <summary>How many outcomes are kept for each trigger node.</summary>
     const int Keep = 20;
 
-    Task RecordAsync(TriggerDispatchOutcomeRow row, CancellationToken ct);
+    /// <summary>Writes outcomes in the order given, keeping the newest <see cref="Keep"/> per trigger node.</summary>
+    Task RecordManyAsync(IReadOnlyList<TriggerDispatchOutcomeRow> rows, CancellationToken ct);
 
     /// <summary>The newest outcomes for one trigger node, newest first.</summary>
     Task<IReadOnlyCollection<TriggerDispatchOutcomeRow>> GetRecentAsync(Guid workflowRefId, Guid triggerNodeId, int take, CancellationToken ct);
