@@ -3,6 +3,7 @@ using Wbskt.Events.Abstractions;
 using Wbskt.Events.Workflow;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Models.Workflow;
+using Wbskt.Models;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 
@@ -21,16 +22,19 @@ public sealed class SharedVariableService : ISharedVariableService
         _eventBus = eventBus;
     }
 
-    public async Task<Result<IReadOnlyCollection<SharedVariableDto>>> ListAsync(int workspaceId, Guid workflowRefId, CancellationToken ct)
+    /// <summary>Variable names come from the definition, but every version's names stay, so the list is capped rather than trusted to be short.</summary>
+    internal const int MaxListed = 200;
+
+    public async Task<Result<IPagedList<SharedVariableDto>>> ListAsync(int workspaceId, Guid workflowRefId, CancellationToken ct)
     {
         var ensureWorkflowResult = await _workflows.EnsureWorkflowInWorkspaceAsync(workspaceId, workflowRefId, ct);
         if (ensureWorkflowResult.IsFailure)
         {
-            return Result<IReadOnlyCollection<SharedVariableDto>>.Failure(ensureWorkflowResult.Error);
+            return Result<IPagedList<SharedVariableDto>>.Failure(ensureWorkflowResult.Error);
         }
 
-        var rows = await _variables.ListByWorkflowRefIdAsync(workflowRefId, ct);
-        return Result<IReadOnlyCollection<SharedVariableDto>>.Success([.. rows.Select(Map)]);
+        var rows = await _variables.ListByWorkflowRefIdAsync(workflowRefId, MaxListed, ct);
+        return Result<IPagedList<SharedVariableDto>>.Success(new PagedList<SharedVariableDto>(rows.Select(Map), rows.TotalCount));
     }
 
     public async Task<Result<SharedVariableDto>> GetAsync(int workspaceId, Guid workflowRefId, string name, CancellationToken ct)

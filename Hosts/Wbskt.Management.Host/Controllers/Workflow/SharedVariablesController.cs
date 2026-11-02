@@ -22,7 +22,10 @@ public sealed class SharedVariablesController : ApiControllerBase
         _variableService = variableService;
     }
 
-    /// <summary>Every shared variable of the workflow, by name, with its type, value and when it last changed.</summary>
+    /// <summary>
+    /// The workflow's shared variables by name, with type, value and when each last changed. At most 200;
+    /// <c>totalCount</c> says how many there are, so a longer list shows as cut.
+    /// </summary>
     [HttpGet]
     [RequiresPermission(PermissionNames.WorkflowsRead)]
     public async Task<ActionResult<Page<SharedVariableDto>>> List([FromWorkspace] int workspaceId, Guid workflowRef, CancellationToken ct)
@@ -33,7 +36,7 @@ public sealed class SharedVariablesController : ApiControllerBase
             return MapResult(Result<Page<SharedVariableDto>>.Failure(result.Error));
         }
 
-        return Ok(new Page<SharedVariableDto> { Items = result.Value, TotalCount = result.Value.Count });
+        return Ok(new Page<SharedVariableDto> { Items = [.. result.Value], TotalCount = result.Value.TotalCount });
     }
 
     [HttpGet("{variableName}")]

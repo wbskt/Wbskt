@@ -13,6 +13,7 @@ using Wbskt.Management.Host.Controllers.Workflow;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Management.Models.Workflow;
+using Wbskt.Models;
 using Wbskt.Primitives.Constants;
 using Wbskt.Primitives.Exceptions;
 using Wbskt.Primitives.Models;
@@ -71,12 +72,12 @@ public sealed class SharedVariablesControllerTests
     {
         var provider = new Mock<ISharedVariableProvider>();
         var workflowRefId = Guid.NewGuid();
-        provider.Setup(x => x.ListByWorkflowRefIdAsync(workflowRefId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(
+        provider.Setup(x => x.ListByWorkflowRefIdAsync(workflowRefId, SharedVariableService.MaxListed, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PagedList<SharedVariableRow>(
             [
                 new SharedVariableRow { Id = 1, WorkflowRefId = workflowRefId, VarName = "counter", VarType = "Counter", ValueJson = "3", UpdatedAt = DateTime.UtcNow, CreatedAt = DateTime.UtcNow },
                 new SharedVariableRow { Id = 2, WorkflowRefId = workflowRefId, VarName = "frostLimit", VarType = "Number", ValueJson = "2.5", UpdatedAt = DateTime.UtcNow, CreatedAt = DateTime.UtcNow }
-            ]);
+            ], 2));
         var (controller, workflowService) = CreateController(provider.Object);
         workflowService.Setup(x => x.EnsureWorkflowInWorkspaceAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
@@ -86,6 +87,26 @@ public sealed class SharedVariablesControllerTests
         var page = Assert.IsType<Wbskt.Models.Page<SharedVariableDto>>(Assert.IsType<OkObjectResult>(response.Result).Value);
         Assert.Equal(["counter", "frostLimit"], page.Items.Select(v => v.VarName));
         Assert.Equal(2, page.TotalCount);
+    }
+
+    [Fact]
+    public async Task List_past_the_cap_says_how_many_there_are()
+    {
+        var provider = new Mock<ISharedVariableProvider>();
+        var workflowRefId = Guid.NewGuid();
+        var rows = Enumerable.Range(0, SharedVariableService.MaxListed)
+            .Select(i => new SharedVariableRow { Id = i, WorkflowRefId = workflowRefId, VarName = $"v{i:D3}", VarType = "Number", ValueJson = "0", UpdatedAt = DateTime.UtcNow, CreatedAt = DateTime.UtcNow });
+        provider.Setup(x => x.ListByWorkflowRefIdAsync(workflowRefId, SharedVariableService.MaxListed, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PagedList<SharedVariableRow>(rows, 250));
+        var (controller, workflowService) = CreateController(provider.Object);
+        workflowService.Setup(x => x.EnsureWorkflowInWorkspaceAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success());
+
+        var response = await controller.List(WorkspaceId, workflowRefId, CancellationToken.None);
+
+        var page = Assert.IsType<Wbskt.Models.Page<SharedVariableDto>>(Assert.IsType<OkObjectResult>(response.Result).Value);
+        Assert.Equal(SharedVariableService.MaxListed, page.Items.Count());
+        Assert.Equal(250, page.TotalCount);
     }
 
     [Fact]
