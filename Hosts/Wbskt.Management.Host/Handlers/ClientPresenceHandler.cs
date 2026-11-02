@@ -2,6 +2,7 @@ using MassTransit;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure.Devices;
 using Wbskt.Management.Host.Providers;
+using Wbskt.Protocol;
 
 namespace Wbskt.Management.Host.Handlers;
 
@@ -23,7 +24,7 @@ public sealed class ClientPresenceHandler : IConsumer<ClientConnectedEvent>, ICo
     public async Task Consume(ConsumeContext<ClientConnectedEvent> context)
     {
         var message = context.Message;
-        await _clientProvider.UpdatePresenceAsync(message.ClientId, true, message.CreatedAtUtc, message.HostId, context.CancellationToken);
+        await _clientProvider.UpdatePresenceAsync(message.ClientId, true, message.CreatedAtUtc, message.HostId, cancellationToken: context.CancellationToken);
 
         // After the presence write: a sender that queues from here on sees the device online and sends
         // live, and anything queued before it is taken here (see DeviceCommandQueue.QueueAsync).
@@ -33,6 +34,7 @@ public sealed class ClientPresenceHandler : IConsumer<ClientConnectedEvent>, ICo
     public async Task Consume(ConsumeContext<ClientDisconnectedEvent> context)
     {
         var message = context.Message;
-        await _clientProvider.UpdatePresenceAsync(message.ClientId, false, message.CreatedAtUtc, message.HostId, context.CancellationToken);
+        DateTime? updatingUntil = message.IsUpdating ? message.CreatedAtUtc + OtaTiming.UpdateWindow : null;
+        await _clientProvider.UpdatePresenceAsync(message.ClientId, false, message.CreatedAtUtc, message.HostId, updatingUntil, context.CancellationToken);
     }
 }

@@ -23,7 +23,7 @@ public sealed record OtaUpdatePayload(
 /// <summary>The payload of <see cref="MessageTypes.OtaStatus"/>.</summary>
 /// <param name="CommandId">The <see cref="MessageTypes.OtaUpdate"/> this is about.</param>
 /// <param name="State">One of <see cref="OtaStates"/>.</param>
-/// <param name="Progress">While downloading: percent, 0–100.</param>
+/// <param name="Progress">While downloading: percent, 0–100. Optional and best effort: a device that closes its connection to download cannot send it.</param>
 /// <param name="Version">The version being installed, or installed.</param>
 /// <param name="Error">Why the update was rejected or failed.</param>
 public sealed record OtaStatusPayload(
@@ -52,4 +52,14 @@ public static class OtaStates
     public const string Rejected = "rejected";
 
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal) { Accepted, Downloading, Installed, Failed, Rejected };
+}
+
+public static class OtaTiming
+{
+    /// <summary>
+    /// How long a device that closed to install an update counts as updating rather than offline. The
+    /// SDKs give a new image as long to connect before rolling it back, so a device not back by then
+    /// has failed in a way it could not report.
+    /// </summary>
+    public static readonly TimeSpan UpdateWindow = TimeSpan.FromMinutes(5);
 }

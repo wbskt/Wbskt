@@ -144,7 +144,9 @@ internal sealed class SocketHandler : ISocketHandler
                         await webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Acknowledged", cancellationToken);
                     }
 
-                    return DisconnectReason.ClientClosed;
+                    return webSocket.CloseStatus == (WebSocketCloseStatus)WebSocketBinding.UpdatingCloseCode
+                        ? DisconnectReason.Updating
+                        : DisconnectReason.ClientClosed;
                 case FrameKind.TooBig:
                     _logger.LogWarning("Client {ClientRefId} exceeded the {MaxMessageBytes}-byte message limit; closing.", clientRefId, MaxMessageBytes);
                     await connection.RequestCloseAsync(DisconnectReason.MessageTooBig, DeviceInbox.TooBigDescription);

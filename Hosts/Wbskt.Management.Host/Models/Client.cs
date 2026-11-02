@@ -13,6 +13,7 @@ public class Client : IWorkspaceOwned
     public ClientStatus Status { get; set; }
     public bool IsConnected { get; set; }
     public DateTime? ConnectedAt { get; set; }
+    public DateTime? UpdatingUntil { get; set; }
     public DateTime? LastActivityAt { get; set; }
     public int? LastRttMs { get; set; }
     public DateTime? RttMeasuredAt { get; set; }

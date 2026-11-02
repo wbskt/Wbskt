@@ -225,6 +225,18 @@ public sealed class DeviceSessionTests
         VerifyDisconnected(DisconnectReason.Error.Describe());
     }
 
+    [Theory]
+    [InlineData(DisconnectReason.Updating, true)]
+    [InlineData(DisconnectReason.ClientClosed, false)]
+    public async Task Only_a_device_closing_to_update_is_announced_as_updating(DisconnectReason reason, bool updating)
+    {
+        var (connection, _) = Connection();
+
+        await Sessions().RunAsync(Admitted, connection, _ => Task.FromResult(reason), _ => Task.CompletedTask);
+
+        _bus.Verify(x => x.PublishAsync(It.Is<ClientDisconnectedEvent>(e => e.IsUpdating == updating), CancellationToken.None), Times.Once);
+    }
+
     [Fact]
     public async Task A_transport_close_that_throws_does_not_stop_the_end_being_announced()
     {

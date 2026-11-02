@@ -220,7 +220,8 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         return updated > 0;
     }
 
-    public async Task UpdatePresenceAsync(int id, bool isConnected, DateTime lastActivityAt, string? hostId = null, CancellationToken cancellationToken = default)
+    public async Task UpdatePresenceAsync(int id, bool isConnected, DateTime lastActivityAt, string? hostId = null, DateTime? updatingUntil = null,
+        CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.Client_UpdatePresence", p =>
         {
@@ -229,6 +230,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             // DateTime2 keeps the full millisecond, so a connect and a disconnect a few ms apart stay in order.
             p.Add("@LastActivityAt", SqlDbType.DateTime2).Value = lastActivityAt;
             p.AddWithValue("@HostId", (object?)hostId ?? DBNull.Value);
+            p.Add("@UpdatingUntil", SqlDbType.DateTime2).Value = (object?)updatingUntil ?? DBNull.Value;
         }, cancellationToken);
     }
 
@@ -401,6 +403,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             Status = (ClientStatus)reader.GetByte(reader.GetOrdinal("Status")),
             IsConnected = reader.GetBoolean(reader.GetOrdinal("IsConnected")),
             ConnectedAt = reader.IsDBNull(reader.GetOrdinal("ConnectedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("ConnectedAt")),
+            UpdatingUntil = reader.IsDBNull(reader.GetOrdinal("UpdatingUntil")) ? null : reader.GetDateTime(reader.GetOrdinal("UpdatingUntil")),
             LastActivityAt = reader.IsDBNull(reader.GetOrdinal("LastActivityAt")) ? null : reader.GetDateTime(reader.GetOrdinal("LastActivityAt")),
             LastRttMs = reader.IsDBNull(reader.GetOrdinal("LastRttMs")) ? null : reader.GetInt32(reader.GetOrdinal("LastRttMs")),
             RttMeasuredAt = reader.IsDBNull(reader.GetOrdinal("RttMeasuredAt")) ? null : reader.GetDateTime(reader.GetOrdinal("RttMeasuredAt")),
@@ -456,6 +459,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             Status = (ClientStatus)reader.GetByte(reader.GetOrdinal("Status")),
             IsConnected = reader.GetBoolean(reader.GetOrdinal("IsConnected")),
             ConnectedAt = reader.IsDBNull(reader.GetOrdinal("ConnectedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("ConnectedAt")),
+            UpdatingUntil = reader.IsDBNull(reader.GetOrdinal("UpdatingUntil")) ? null : reader.GetDateTime(reader.GetOrdinal("UpdatingUntil")),
             LastActivityAt = reader.IsDBNull(reader.GetOrdinal("LastActivityAt")) ? null : reader.GetDateTime(reader.GetOrdinal("LastActivityAt")),
             LastRttMs = reader.IsDBNull(reader.GetOrdinal("LastRttMs")) ? null : reader.GetInt32(reader.GetOrdinal("LastRttMs")),
             RttMeasuredAt = reader.IsDBNull(reader.GetOrdinal("RttMeasuredAt")) ? null : reader.GetDateTime(reader.GetOrdinal("RttMeasuredAt")),

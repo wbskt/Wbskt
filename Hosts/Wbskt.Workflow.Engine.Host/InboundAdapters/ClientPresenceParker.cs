@@ -11,7 +11,12 @@ namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 /// </summary>
 public sealed class ClientPresenceParker(IClientPresenceCheckProvider provider)
 {
-    public async Task ParkAsync(Guid clientRefId, int workspaceId, ClientPresenceState state, DateTime changedAtUtc, CancellationToken ct)
+    /// <param name="extraGrace">
+    /// Added to every trigger's own grace period: a device that closed to install an update is not offline
+    /// until the update has had its time.
+    /// </param>
+    public async Task ParkAsync(Guid clientRefId, int workspaceId, ClientPresenceState state, DateTime changedAtUtc, CancellationToken ct,
+        TimeSpan extraGrace = default)
     {
         // The event's own timestamp, unmodified: the management host writes the same value into the
         // client's presence columns, so the ticker can tell this change apart from a later one.
@@ -26,7 +31,7 @@ public sealed class ClientPresenceParker(IClientPresenceCheckProvider provider)
                 continue;
             }
 
-            await provider.InsertAsync(triggerKey, clientRefId, stateName, changedAt, changedAt.AddSeconds(forSeconds), ct);
+            await provider.InsertAsync(triggerKey, clientRefId, stateName, changedAt, changedAt.AddSeconds(forSeconds) + extraGrace, ct);
         }
     }
 }

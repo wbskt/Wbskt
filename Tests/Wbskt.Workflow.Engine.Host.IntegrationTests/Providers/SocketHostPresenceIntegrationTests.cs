@@ -120,6 +120,27 @@ public sealed class SocketHostPresenceIntegrationTests(SqlEdgeFixture fixture)
         Assert.Empty(await clients.ReconcilePresenceByHostAsync(host, [heldRef], takenAt, TimeSpan.FromMinutes(1)));
     }
 
+    [SkippableFact]
+    public async Task A_device_closing_to_update_is_updating_until_its_next_connect()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var clients = new ClientProvider(ProviderFactory.BuildConfiguration(fixture.ConnectionString));
+        string host = $"host-{Guid.NewGuid():N}";
+        (int clientId, Guid clientRef) = await CreateClientAsync(Random.Shared.Next(1_000_000, int.MaxValue));
+        var t0 = DateTime.UtcNow.AddMinutes(-1);
+
+        await clients.UpdatePresenceAsync(clientId, true, t0, host);
+        await clients.UpdatePresenceAsync(clientId, false, t0.AddSeconds(10), host, t0.AddMinutes(5));
+
+        var updating = await clients.FindDetailByRefIdAsync(clientRef);
+        Assert.False(updating!.IsConnected);
+        Assert.Equal(t0.AddMinutes(5), updating.UpdatingUntil!.Value, TimeSpan.FromMilliseconds(1));
+
+        await clients.UpdatePresenceAsync(clientId, true, t0.AddSeconds(40), host);
+
+        Assert.Null((await clients.FindDetailByRefIdAsync(clientRef))!.UpdatingUntil);
+    }
+
     private async Task<(int ClientId, Guid ClientRef)> CreateClientAsync(int workspaceId)
     {
         await using var conn = await OpenAsync();

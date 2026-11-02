@@ -225,7 +225,8 @@ public sealed class DeviceSessions
             var description = connection.CloseRequest?.Description ?? reason.Describe();
             try
             {
-                await _eventBus.PublishAsync(new ClientDisconnectedEvent(clientRefId, connection.ClientId, connection.WorkspaceId, description, _hostId), CancellationToken.None);
+                await _eventBus.PublishAsync(new ClientDisconnectedEvent(clientRefId, connection.ClientId, connection.WorkspaceId, description, _hostId,
+                    IsUpdating: reason == DisconnectReason.Updating), CancellationToken.None);
             }
             catch (Exception ex)
             {

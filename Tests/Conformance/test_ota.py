@@ -3,10 +3,13 @@ turns them on when WBSKT_OTA is set; every scenario here is skipped for one whos
 list "ota" under "system" in its capabilities.
 """
 
+import asyncio
 import os
 from typing import Any, Dict, List
 
 import pytest
+
+from fake_wbskt import CLOSE_UPDATING
 
 RECONNECT = 25.0
 
@@ -120,6 +123,13 @@ async def test_reports_accepted_downloading_and_installed_from_the_new_firmware(
     await socket_server.send(0, ota_update("o4"))
     accepted = await next_ota_status(socket_server)
     await old.expect("restart")
+    # A device that closed its connection to download said why, so the server shows it as updating.
+    # One that kept it open until it restarted just drops it (1006).
+    for _ in range(100):
+        if 0 in socket_server.device_close_codes:
+            break
+        await asyncio.sleep(0.05)
+    assert socket_server.device_close_codes.get(0) in (CLOSE_UPDATING, 1006)
 
     # A device may close the socket to download, so progress can arrive late or not at all.
     monkeypatch.setenv("WBSKT_OTA", "1.1.0")
