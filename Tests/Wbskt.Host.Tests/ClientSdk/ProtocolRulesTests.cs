@@ -41,7 +41,7 @@ public sealed class ProtocolRulesTests
     [Fact]
     public void A_payload_is_capped_at_half_a_socket_message()
     {
-        Assert.Equal(SocketProtocol.MaxMessageBytes / 2, DeviceMessageRules.MaxPayloadChars);
+        Assert.Equal(DeviceProtocol.MaxMessageBytes / 2, DeviceMessageRules.MaxPayloadChars);
         Assert.NotNull(DeviceMessageRules.FindViolation("led.set", new string('x', DeviceMessageRules.MaxPayloadChars + 1)));
     }
 

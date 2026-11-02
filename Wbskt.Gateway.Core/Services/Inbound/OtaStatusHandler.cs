@@ -26,7 +26,7 @@ public sealed class OtaStatusHandler : IInboundMessageHandler
 
     public string Type => MessageTypes.OtaStatus;
 
-    public async Task HandleAsync(InboundContext context, SocketMessage message, CancellationToken cancellationToken)
+    public async Task HandleAsync(InboundContext context, DeviceMessage message, CancellationToken cancellationToken)
     {
         if (message.Payload is not JsonElement { ValueKind: JsonValueKind.Object } payload
             || ReadString(payload, "state") is not { } state

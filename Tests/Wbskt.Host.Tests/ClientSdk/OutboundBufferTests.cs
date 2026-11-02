@@ -52,7 +52,7 @@ public sealed class OutboundBufferTests
         Assert.False(buffer.TryPeek(out _));
     }
 
-    private static SocketMessage Message(string type) => new(type, new { });
+    private static DeviceMessage Message(string type) => new(type, new { });
 
     private static List<string> Drain(OutboundBuffer buffer)
     {

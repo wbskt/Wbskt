@@ -29,7 +29,7 @@ public sealed class DeviceOtaTests(ServicesFixture fixture)
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspace, autoApproval: true);
         var (clientRef, secret) = await fixture.RegisterClientAsync(pin, $"e2e-ota-{Guid.NewGuid():N}");
         await using var device = await RawDeviceSocket.ConnectAsync(await fixture.LoginClientAsync(clientRef, secret));
-        await device.SendAsync(new SocketMessage(MessageTypes.Capabilities, new { agent = "e2e-raw", version = "1.0.0", os = "test", capabilities = Array.Empty<object>(), system = new[] { "ota" } }));
+        await device.SendAsync(new DeviceMessage(MessageTypes.Capabilities, new { agent = "e2e-raw", version = "1.0.0", os = "test", capabilities = Array.Empty<object>(), system = new[] { "ota" } }));
         await WaitForSystemAsync(token, workspace, clientRef);
 
         var badUrl = await fixture.SendAsync(HttpMethod.Post, Ota(workspace, clientRef), token, new { url = "http://firmware.example/a.bin", sha256 = Digest });
@@ -53,8 +53,8 @@ public sealed class DeviceOtaTests(ServicesFixture fixture)
         payload.GetProperty("url").GetString().Should().Be(FirmwareUrl);
         payload.GetProperty("sha256").GetString().Should().Be(Digest);
 
-        await device.SendAsync(new SocketMessage(MessageTypes.Ack, new AckPayload(commandId!)));
-        await device.SendAsync(new SocketMessage(MessageTypes.OtaStatus, new OtaStatusPayload(commandId, OtaStates.Accepted, Version: "1.1.0")));
+        await device.SendAsync(new DeviceMessage(MessageTypes.Ack, new AckPayload(commandId!)));
+        await device.SendAsync(new DeviceMessage(MessageTypes.OtaStatus, new OtaStatusPayload(commandId, OtaStates.Accepted, Version: "1.1.0")));
 
         await ServicesFixture.PollUntilAsync(
             "ClientOtaStatusEvent in the client's activity",

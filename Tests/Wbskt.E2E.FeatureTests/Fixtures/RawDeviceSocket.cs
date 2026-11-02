@@ -9,7 +9,7 @@ namespace Wbskt.E2E.FeatureTests.Fixtures;
 /// <summary>
 /// A device on the socket host without the SDK: a bare <see cref="ClientWebSocket"/> that opens the
 /// connection the way <c>Wbskt.Client.Sdk</c> does (<c>{SocketWsBaseUrl}/ws</c>, the device token as a
-/// bearer <c>Authorization</c> header, the <see cref="SocketProtocol.V1"/> subprotocol) and then sends
+/// bearer <c>Authorization</c> header, the <see cref="WebSocketBinding.Subprotocol"/> subprotocol) and then sends
 /// whatever it is given. The SDK and the host share <c>Wbskt.Protocol</c>, so a scenario driven only
 /// through the SDK cannot see a protocol regression the two make together; this can send what the SDK
 /// never would: malformed frames, oversized messages, a flood, a stale token.
@@ -40,7 +40,7 @@ public sealed class RawDeviceSocket : IAsyncDisposable
     public string? SubProtocol => _socket.SubProtocol;
 
     /// <summary>Connects, or throws when the host refuses the upgrade.</summary>
-    public static async Task<RawDeviceSocket> ConnectAsync(string token, string? subProtocol = SocketProtocol.V1)
+    public static async Task<RawDeviceSocket> ConnectAsync(string token, string? subProtocol = WebSocketBinding.Subprotocol)
     {
         var (status, socket) = await TryConnectAsync(token, subProtocol);
         return socket ?? throw new InvalidOperationException($"The socket host refused the upgrade with HTTP {(int)status}.");
@@ -50,7 +50,7 @@ public sealed class RawDeviceSocket : IAsyncDisposable
     /// Connects and returns the upgrade's status: 101 with the socket, or the status the host
     /// refused it with (401, 403, 400...) and no socket.
     /// </summary>
-    public static async Task<(HttpStatusCode Status, RawDeviceSocket? Socket)> TryConnectAsync(string? token, string? subProtocol = SocketProtocol.V1)
+    public static async Task<(HttpStatusCode Status, RawDeviceSocket? Socket)> TryConnectAsync(string? token, string? subProtocol = WebSocketBinding.Subprotocol)
     {
         var socket = new ClientWebSocket();
         if (token is not null)
@@ -89,7 +89,7 @@ public sealed class RawDeviceSocket : IAsyncDisposable
         _socket.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes(text)), WebSocketMessageType.Text, endOfMessage: true, cancellationToken);
 
     /// <summary>Sends a protocol message serialized as the SDK serializes it.</summary>
-    public Task SendAsync(SocketMessage message, CancellationToken cancellationToken = default) =>
+    public Task SendAsync(DeviceMessage message, CancellationToken cancellationToken = default) =>
         SendRawAsync(JsonSerializer.Serialize(message), cancellationToken);
 
     /// <summary>
@@ -98,7 +98,7 @@ public sealed class RawDeviceSocket : IAsyncDisposable
     /// </summary>
     public async Task<MessageRead?> ReceiveAsync(TimeSpan timeout)
     {
-        using var reader = new WebSocketMessageReader(_socket, SocketProtocol.MaxMessageBytes);
+        using var reader = new WebSocketMessageReader(_socket, DeviceProtocol.MaxMessageBytes);
         using var cts = new CancellationTokenSource(timeout);
         try
         {
@@ -117,7 +117,7 @@ public sealed class RawDeviceSocket : IAsyncDisposable
     /// </summary>
     public async Task<WebSocketCloseStatus?> ReceiveUntilClosedAsync(TimeSpan timeout)
     {
-        using var reader = new WebSocketMessageReader(_socket, SocketProtocol.MaxMessageBytes);
+        using var reader = new WebSocketMessageReader(_socket, DeviceProtocol.MaxMessageBytes);
         using var cts = new CancellationTokenSource(timeout);
         try
         {

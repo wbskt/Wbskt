@@ -26,10 +26,10 @@ public sealed class InboundMessageDispatcher
 
     public async Task DispatchAsync(InboundContext context, string json, CancellationToken cancellationToken)
     {
-        SocketMessage? message;
+        DeviceMessage? message;
         try
         {
-            message = JsonSerializer.Deserialize<SocketMessage>(json);
+            message = JsonSerializer.Deserialize<DeviceMessage>(json);
         }
         catch (JsonException ex)
         {

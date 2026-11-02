@@ -5,7 +5,7 @@ using Wbskt.Gateway.Core.Services.Inbound;
 
 namespace Wbskt.Host.Tests.ClientSdk;
 
-public sealed class SocketMessageSentAtTests
+public sealed class DeviceMessageSentAtTests
 {
     private static readonly DateTime Now = new(2026, 10, 3, 12, 0, 0, DateTimeKind.Utc);
 
@@ -13,10 +13,10 @@ public sealed class SocketMessageSentAtTests
     public void Sent_time_round_trips_and_is_left_out_when_unset()
     {
         var sentAt = new DateTimeOffset(2026, 10, 3, 11, 59, 0, TimeSpan.Zero);
-        var json = JsonSerializer.Serialize(new SocketMessage("temperature", new { celsius = 4 }) { SentAt = sentAt });
+        var json = JsonSerializer.Serialize(new DeviceMessage("temperature", new { celsius = 4 }) { SentAt = sentAt });
 
-        Assert.Equal(sentAt, JsonSerializer.Deserialize<SocketMessage>(json)!.SentAt);
-        Assert.DoesNotContain("sentAt", JsonSerializer.Serialize(new SocketMessage("sys.pong", new { })));
+        Assert.Equal(sentAt, JsonSerializer.Deserialize<DeviceMessage>(json)!.SentAt);
+        Assert.DoesNotContain("sentAt", JsonSerializer.Serialize(new DeviceMessage("sys.pong", new { })));
     }
 
     [Theory]
@@ -27,7 +27,7 @@ public sealed class SocketMessageSentAtTests
     [InlineData("{\"type\":\"t\",\"payload\":{},\"sentAt\":{\"at\":1}}")]
     public void A_missing_or_unreadable_sent_time_does_not_reject_the_message(string json)
     {
-        var message = JsonSerializer.Deserialize<SocketMessage>(json)!;
+        var message = JsonSerializer.Deserialize<DeviceMessage>(json)!;
 
         Assert.Equal("t", message.Type);
         Assert.Null(message.SentAt);
@@ -36,7 +36,7 @@ public sealed class SocketMessageSentAtTests
     [Fact]
     public void A_sent_time_without_an_offset_is_read_as_utc()
     {
-        var message = JsonSerializer.Deserialize<SocketMessage>("{\"type\":\"t\",\"payload\":{},\"sentAt\":\"2026-10-03T11:00:00\"}")!;
+        var message = JsonSerializer.Deserialize<DeviceMessage>("{\"type\":\"t\",\"payload\":{},\"sentAt\":\"2026-10-03T11:00:00\"}")!;
 
         Assert.Equal(new DateTimeOffset(2026, 10, 3, 11, 0, 0, TimeSpan.Zero), message.SentAt);
     }

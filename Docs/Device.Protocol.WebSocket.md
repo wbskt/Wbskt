@@ -21,7 +21,7 @@ Sec-WebSocket-Protocol: wbskt.v1
 `accessToken` is the one login returned (model §2). Clients that cannot set headers on the upgrade
 (browsers) put it in `?access_token=` instead.
 
-Offer the `wbskt.v1` subprotocol (`SocketProtocol.V1`); a connection that offers none is treated as
+Offer the `wbskt.v1` subprotocol (`WebSocketBinding.Subprotocol`); a connection that offers none is treated as
 v1, and one that offers only other versions is refused.
 
 The gateway refuses before the upgrade, with an RFC 7807 Problem Details body whose `code` names the

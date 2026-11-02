@@ -18,7 +18,7 @@ public sealed class DeviceMessageHandler
         _eventBus = eventBus;
     }
 
-    public Task HandleAsync(InboundContext context, SocketMessage message, CancellationToken cancellationToken)
+    public Task HandleAsync(InboundContext context, DeviceMessage message, CancellationToken cancellationToken)
     {
         var connection = context.Connection;
         var payload = JsonSerializer.Serialize(message.Payload);

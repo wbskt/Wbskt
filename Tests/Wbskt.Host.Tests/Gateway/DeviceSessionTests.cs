@@ -279,7 +279,7 @@ public sealed class DeviceSessionTests
     public async Task A_message_over_the_size_limit_is_closed_with_1009_whatever_the_transport_let_through()
     {
         var (connection, socket) = Connection();
-        var tooBig = $$"""{"type":"t","payload":"{{new string('é', SocketProtocol.MaxMessageBytes / 2)}}"}""";
+        var tooBig = $$"""{"type":"t","payload":"{{new string('é', DeviceProtocol.MaxMessageBytes / 2)}}"}""";
         DisconnectReason? result = null;
 
         await Sessions().RunAsync(Admitted, connection,

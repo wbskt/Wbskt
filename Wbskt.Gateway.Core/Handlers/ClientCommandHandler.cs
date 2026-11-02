@@ -121,7 +121,7 @@ public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
 
         // The SDK auto-acks frames carrying a commandId with sys.ack, and refuses (still acking, with
         // a reason) one that arrives past expiresAt.
-        var message = new SocketMessage(command.Type, PayloadFor(command), command.CommandId?.ToString())
+        var message = new DeviceMessage(command.Type, PayloadFor(command), command.CommandId?.ToString())
         {
             ExpiresAt = command.ExpiresAtUtc is { } expiresAt ? new DateTimeOffset(DateTime.SpecifyKind(expiresAt, DateTimeKind.Utc)) : null
         };

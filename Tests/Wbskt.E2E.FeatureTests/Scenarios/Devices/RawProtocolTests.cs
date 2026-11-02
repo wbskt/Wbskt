@@ -47,8 +47,8 @@ public sealed class RawProtocolTests(ServicesFixture fixture)
         // Both connections still carry messages afterwards.
         string senderType = $"e2e.raw.{Guid.NewGuid():N}";
         string bystanderType = $"e2e.raw.{Guid.NewGuid():N}";
-        await a.SendAsync(new SocketMessage(senderType, new { n = 1 }));
-        await b.SendAsync(new SocketMessage(bystanderType, new { n = 2 }));
+        await a.SendAsync(new DeviceMessage(senderType, new { n = 1 }));
+        await b.SendAsync(new DeviceMessage(bystanderType, new { n = 2 }));
 
         await WaitForInboundAsync(token, workspace, sender, senderType);
         await WaitForInboundAsync(token, workspace, bystander, bystanderType);
@@ -70,10 +70,10 @@ public sealed class RawProtocolTests(ServicesFixture fixture)
 
         // One byte over: the host has read the whole message by the time it knows, so nothing is
         // left unread on the connection when it closes.
-        await socket.SendRawAsync(new string('x', SocketProtocol.MaxMessageBytes + 1));
+        await socket.SendRawAsync(new string('x', DeviceProtocol.MaxMessageBytes + 1));
 
         (await closed).Should().Be(WebSocketCloseStatus.MessageTooBig);
-        socket.CloseStatusDescription.Should().Contain(SocketProtocol.MaxMessageBytes.ToString());
+        socket.CloseStatusDescription.Should().Contain(DeviceProtocol.MaxMessageBytes.ToString());
     }
 
     [SkippableFact]
@@ -161,7 +161,7 @@ public sealed class RawProtocolTests(ServicesFixture fixture)
 
         await using (var v1 = await RawDeviceSocket.ConnectAsync(deviceToken))
         {
-            v1.SubProtocol.Should().Be(SocketProtocol.V1);
+            v1.SubProtocol.Should().Be(WebSocketBinding.Subprotocol);
         }
 
         await using (var none = await RawDeviceSocket.ConnectAsync(deviceToken, subProtocol: null))

@@ -552,7 +552,6 @@ Some names keep "socket" on purpose:
 | `wbskt-socket` token audience (`JwtAudiences.Socket`) | It is in every device token already issued. |
 | `SocketHostHeartbeat`, `SocketHostStartedEvent` | MassTransit names exchanges after message types; renaming one needs management and every gateway deployed together. |
 | `wbskt_socket_*` metrics | The `SocketDisconnectRateHigh` alert and the dashboards are built on them. |
-| `SocketMessage`, `SocketProtocol` | Public types of `Wbskt.Protocol`, which the .NET SDK ships. |
 | `SOCKET_URL`, `E2E_SOCKET_RESTART_COMMAND` | Device and SDK configuration, and an E2E variable CI and developers set. |
 
 `Gateway:MessageBudget` (once `Socket:MessageBudget`) holds the per-device message budget.

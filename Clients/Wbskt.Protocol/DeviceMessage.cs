@@ -5,7 +5,7 @@ namespace Wbskt.Protocol;
 /// <summary>
 /// Represents a message exchanged between the client and server.
 /// </summary>
-public record SocketMessage(
+public record DeviceMessage(
     [property: JsonPropertyName("type")]      string  Type,
     [property: JsonPropertyName("payload")]   object  Payload,
     [property: JsonPropertyName("commandId")] string? CommandId = null

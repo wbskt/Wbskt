@@ -9,7 +9,7 @@ namespace Wbskt.Gateway.Core.Infrastructure;
 /// end, and alone unregisters it.
 /// </summary>
 /// <remarks>
-/// A transport must cap each message it reads at <see cref="Wbskt.Protocol.SocketProtocol.MaxMessageBytes"/>
+/// A transport must cap each message it reads at <see cref="Wbskt.Protocol.DeviceProtocol.MaxMessageBytes"/>
 /// before buffering more, and end the session as <see cref="DisconnectReason.MessageTooBig"/> past it;
 /// the inbox checks the same limit again, but by then the transport has already held the bytes.
 /// </remarks>
@@ -31,7 +31,7 @@ public interface IDeviceConnection
     /// <summary>The close someone asked for, if any; the receive loop reports its reason.</summary>
     CloseRequest? CloseRequest { get; }
 
-    Task SendAsync(SocketMessage message, CancellationToken cancellationToken);
+    Task SendAsync(DeviceMessage message, CancellationToken cancellationToken);
 
     /// <summary>
     /// Sends a <c>sys.ping</c> and remembers it, so the pong is timed on this host's clock rather
