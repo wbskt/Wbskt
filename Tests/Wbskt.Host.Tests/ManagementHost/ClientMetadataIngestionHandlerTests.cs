@@ -157,12 +157,33 @@ public sealed class ClientMetadataIngestionHandlerTests
         provider.Verify(x => x.UpsertCapabilitiesAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    // Answers every reported variable alike, in the order given, as the procedure does.
+    private static void Report(Mock<IClientProvider> provider, bool stored, string? oldValueJson)
+    {
+        provider.Setup(x => x.ReportStateVariablesAsync(ClientId, It.IsAny<IReadOnlyList<StateVariableValue>>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((int _, IReadOnlyList<StateVariableValue> variables, int _, CancellationToken _) =>
+                variables.Select(v => new StateVariableUpsert(v.Name, stored, oldValueJson)).ToList());
+    }
+
+    [Fact]
+    public async Task A_state_report_is_stored_in_one_call_with_one_row_per_name_holding_the_last_value()
+    {
+        var (handler, provider, bus) = CreateHandler();
+        Report(provider, stored: true, oldValueJson: null);
+
+        await handler.Consume(Context("state.report", """{"temp":1,"door":"open","Temp":2}"""));
+
+        provider.Verify(x => x.ReportStateVariablesAsync(ClientId,
+            It.Is<IReadOnlyList<StateVariableValue>>(v => v.SequenceEqual(new[] { new StateVariableValue("temp", "number", "2"), new StateVariableValue("door", "string", "\"open\"") })),
+            ClientMetadataIngestionHandler.MaxStateVariablesPerClient, It.IsAny<CancellationToken>()), Times.Once);
+        bus.Verify(x => x.PublishAsync(It.IsAny<ClientPropertyUpdatedEvent>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
     [Fact]
     public async Task State_report_change_publishes_property_updated_with_old_value()
     {
         var (handler, provider, bus) = CreateHandler();
-        provider.Setup(x => x.UpsertStateVariableAsync(ClientId, "ventPosition", "number", "75", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new StateVariableUpsert(true, "0"));
+        Report(provider, stored: true, oldValueJson: "0");
 
         await handler.Consume(Context("state.report", """{"ventPosition":75}"""));
 
@@ -175,8 +196,7 @@ public sealed class ClientMetadataIngestionHandlerTests
     public async Task State_report_first_value_publishes_with_null_old_value()
     {
         var (handler, provider, bus) = CreateHandler();
-        provider.Setup(x => x.UpsertStateVariableAsync(ClientId, "firmware", "string", "\"2.4.1\"", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new StateVariableUpsert(true, null));
+        Report(provider, stored: true, oldValueJson: null);
 
         await handler.Consume(Context("state.report", """{"firmware":"2.4.1"}"""));
 
@@ -189,12 +209,13 @@ public sealed class ClientMetadataIngestionHandlerTests
     public async Task State_report_unchanged_value_still_bumps_freshness_but_publishes_nothing()
     {
         var (handler, provider, bus) = CreateHandler();
-        provider.Setup(x => x.UpsertStateVariableAsync(ClientId, "ventPosition", "number", "75", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new StateVariableUpsert(true, "75"));
+        Report(provider, stored: true, oldValueJson: "75");
 
         await handler.Consume(Context("state.report", """{"ventPosition":75}"""));
 
-        provider.Verify(x => x.UpsertStateVariableAsync(ClientId, "ventPosition", "number", "75", It.IsAny<CancellationToken>()), Times.Once);
+        provider.Verify(x => x.ReportStateVariablesAsync(ClientId,
+            It.Is<IReadOnlyList<StateVariableValue>>(v => v.SequenceEqual(new[] { new StateVariableValue("ventPosition", "number", "75") })),
+            ClientMetadataIngestionHandler.MaxStateVariablesPerClient, It.IsAny<CancellationToken>()), Times.Once);
         bus.Verify(x => x.PublishAsync(It.IsAny<ClientPropertyUpdatedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -202,8 +223,7 @@ public sealed class ClientMetadataIngestionHandlerTests
     public async Task State_report_variable_refused_at_the_cap_publishes_nothing()
     {
         var (handler, provider, bus) = CreateHandler();
-        provider.Setup(x => x.UpsertStateVariableAsync(ClientId, "extra", "number", "1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new StateVariableUpsert(false, null));
+        Report(provider, stored: false, oldValueJson: null);
 
         await handler.Consume(Context("state.report", """{"extra":1}"""));
 
@@ -217,7 +237,7 @@ public sealed class ClientMetadataIngestionHandlerTests
 
         await handler.Consume(Context("state.report", "[1,2,3]"));
 
-        provider.Verify(x => x.UpsertStateVariableAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        provider.Verify(x => x.ReportStateVariablesAsync(It.IsAny<int>(), It.IsAny<IReadOnlyList<StateVariableValue>>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -235,8 +255,7 @@ public sealed class ClientMetadataIngestionHandlerTests
     public async Task State_report_numbers_go_to_the_readings_history_at_the_devices_time()
     {
         var (handler, provider, _) = CreateHandler();
-        provider.Setup(x => x.UpsertStateVariableAsync(ClientId, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new StateVariableUpsert(true, null));
+        Report(provider, stored: true, oldValueJson: null);
         var sentAt = ReceivedAt.AddSeconds(-2);
 
         await handler.Consume(Context("state.report", """{"temp":4.5,"battery":87,"door":"open","on":true,"pos":[1,2]}""", sentAt));
@@ -250,8 +269,7 @@ public sealed class ClientMetadataIngestionHandlerTests
     public async Task A_report_sent_from_the_offline_buffer_is_marked_late()
     {
         var (handler, provider, _) = CreateHandler();
-        provider.Setup(x => x.UpsertStateVariableAsync(ClientId, "temp", "number", "3", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new StateVariableUpsert(true, null));
+        Report(provider, stored: true, oldValueJson: null);
         var sentAt = ReceivedAt.AddMinutes(-20);
 
         await handler.Consume(Context("state.report", """{"temp":3}""", sentAt));
@@ -263,8 +281,7 @@ public sealed class ClientMetadataIngestionHandlerTests
     public async Task A_report_without_a_sent_time_counts_when_it_arrived()
     {
         var (handler, provider, _) = CreateHandler();
-        provider.Setup(x => x.UpsertStateVariableAsync(ClientId, "temp", "number", "3", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new StateVariableUpsert(true, null));
+        Report(provider, stored: true, oldValueJson: null);
 
         await handler.Consume(Context("state.report", """{"temp":3}"""));
 
@@ -275,8 +292,7 @@ public sealed class ClientMetadataIngestionHandlerTests
     public async Task Numbers_refused_at_the_variable_cap_are_not_recorded()
     {
         var (handler, provider, _) = CreateHandler();
-        provider.Setup(x => x.UpsertStateVariableAsync(ClientId, "extra", "number", "1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new StateVariableUpsert(false, null));
+        Report(provider, stored: false, oldValueJson: null);
 
         await handler.Consume(Context("state.report", """{"extra":1}"""));
 
@@ -287,8 +303,7 @@ public sealed class ClientMetadataIngestionHandlerTests
     public async Task A_report_with_no_numbers_records_no_readings()
     {
         var (handler, provider, _) = CreateHandler();
-        provider.Setup(x => x.UpsertStateVariableAsync(ClientId, "door", "string", "\"open\"", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new StateVariableUpsert(true, null));
+        Report(provider, stored: true, oldValueJson: null);
 
         await handler.Consume(Context("state.report", """{"door":"open"}"""));
 

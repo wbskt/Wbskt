@@ -1,5 +1,7 @@
 using System.Data;
 using Microsoft.Data.SqlClient;
+using Wbskt.Management.Host.Models;
+using Wbskt.Management.Host.Providers;
 using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 
 namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
@@ -136,10 +138,16 @@ public sealed class EngineCorrectnessIntegrationTests(SqlEdgeFixture fixture)
             VALUES (@p0, @PolicyId, N'cap', 0x00);
             """, workspaceId);
 
-        Assert.Equal((true, (string?)null), await UpsertAsync(clientId, "a", "1", maxPerClient: 2));
-        Assert.Equal((true, (string?)null), await UpsertAsync(clientId, "b", "1", maxPerClient: 2));
-        Assert.Equal((false, (string?)null), await UpsertAsync(clientId, "c", "1", maxPerClient: 2));
-        Assert.Equal((true, "1"), await UpsertAsync(clientId, "a", "2", maxPerClient: 2));
+        var clients = new ClientProvider(ProviderFactory.BuildConfiguration(fixture.ConnectionString));
+
+        // One report past the cap: the earlier new names take the places, in the order reported.
+        Assert.Equal(
+            [new StateVariableUpsert("b", true, null), new StateVariableUpsert("a", true, null), new StateVariableUpsert("c", false, null)],
+            await clients.ReportStateVariablesAsync(clientId, [Variable("b", "1"), Variable("a", "1"), Variable("c", "1")], maxPerClient: 2));
+        // At the cap, a known name still updates, case-insensitively, and returns what it replaced.
+        Assert.Equal(
+            [new StateVariableUpsert("A", true, "1"), new StateVariableUpsert("d", false, null)],
+            await clients.ReportStateVariablesAsync(clientId, [Variable("A", "2"), Variable("d", "1")], maxPerClient: 2));
 
         Assert.Equal(2, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.ClientStateVariables WHERE ClientId = @p0", clientId));
     }
@@ -213,20 +221,7 @@ public sealed class EngineCorrectnessIntegrationTests(SqlEdgeFixture fixture)
         return (reader.GetBoolean(reader.GetOrdinal("ShouldContinue")), reader.GetBoolean(reader.GetOrdinal("Abandoned")));
     }
 
-    private async Task<(bool Stored, string? Old)> UpsertAsync(int clientId, string name, string valueJson, int maxPerClient)
-    {
-        await using var conn = await OpenAsync();
-        await using var cmd = new SqlCommand("dbo.ClientStateVariable_Upsert", conn) { CommandType = CommandType.StoredProcedure };
-        cmd.Parameters.AddWithValue("@ClientId", clientId);
-        cmd.Parameters.AddWithValue("@Name", name);
-        cmd.Parameters.AddWithValue("@DataType", "number");
-        cmd.Parameters.AddWithValue("@ValueJson", valueJson);
-        cmd.Parameters.AddWithValue("@MaxPerClient", maxPerClient);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        await reader.ReadAsync();
-        return (reader.GetBoolean(reader.GetOrdinal("Stored")),
-            reader.IsDBNull(reader.GetOrdinal("OldValueJson")) ? null : reader.GetString(reader.GetOrdinal("OldValueJson")));
-    }
+    private static StateVariableValue Variable(string name, string valueJson) => new(name, "number", valueJson);
 
     private async Task<int> InsertScheduleAsync(int definitionId, Guid workflowRefId, Guid triggerNodeId)
     {
