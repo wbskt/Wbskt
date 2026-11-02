@@ -67,7 +67,7 @@ public interface IClientProvider : IReferenceProvider
     Task UpdateNameAsync(int id, string name, CancellationToken cancellationToken = default);
     Task UpdateRttAsync(int id, int lastRttMs, DateTime measuredAt, CancellationToken cancellationToken = default);
     Task UpsertCapabilitiesAsync(int clientId, string agentName, string agentVersion, string platform,
-        string capabilitiesJson, CancellationToken cancellationToken = default);
+        string capabilitiesJson, string? systemJson, CancellationToken cancellationToken = default);
     Task<StateVariableUpsert> UpsertStateVariableAsync(int clientId, string name, string dataType, string valueJson,
         CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<ClientStateVariable>> GetStateVariablesAsync(int clientId, CancellationToken cancellationToken = default);

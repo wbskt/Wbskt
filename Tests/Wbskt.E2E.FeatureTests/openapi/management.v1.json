@@ -285,6 +285,12 @@
           "status": {
             "$ref": "#/components/schemas/ClientStatus"
           },
+          "system": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "tags": {
             "items": {
               "type": "string"
@@ -308,7 +314,45 @@
           "platform",
           "capabilities",
           "createdAt",
-          "tags"
+          "tags",
+          "system"
+        ],
+        "type": "object"
+      },
+      "ClientOtaRequest": {
+        "properties": {
+          "expiresAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "size": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "url": {
+            "type": "string"
+          },
+          "version": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "url",
+          "sha256"
         ],
         "type": "object"
       },
@@ -3736,6 +3780,75 @@
               "text/plain": {
                 "schema": {
                   "$ref": "#/components/schemas/PageOfEventLogResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspaceRef}/clients/{clientRef}/ota": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clientRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspaceRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientOtaRequest"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientOtaRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientOtaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientCommandResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientCommandResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientCommandResponse"
                 }
               }
             },

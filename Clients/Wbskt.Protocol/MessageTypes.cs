@@ -20,6 +20,17 @@ public static class MessageTypes
     /// <summary>Device to server: a command carrying a commandId arrived. Payload: <see cref="AckPayload"/>.</summary>
     public const string Ack = "sys.ack";
 
+    /// <summary>
+    /// Server to device: install the firmware at a URL. The one platform message that is a command: it
+    /// carries a commandId and an expiresAt, and is acked and refused when expired like any other.
+    /// Payload: <see cref="OtaUpdatePayload"/>. Sent only to a device that lists
+    /// <see cref="SystemCapabilities.Ota"/> in its capabilities.
+    /// </summary>
+    public const string OtaUpdate = "sys.ota.update";
+
+    /// <summary>Device to server: how a <see cref="OtaUpdate"/> is going. Payload: <see cref="OtaStatusPayload"/>.</summary>
+    public const string OtaStatus = "sys.ota.status";
+
     /// <summary>Device to server: what it is and which commands it takes. Payload: <see cref="ClientCapabilities"/>.</summary>
     public const string Capabilities = "capabilities";
 
@@ -36,6 +47,9 @@ public static class MessageTypes
     public static readonly StringComparer Comparer = StringComparer.OrdinalIgnoreCase;
 
     public static bool IsSystem(string type) => type.StartsWith(SystemPrefix, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>A reserved type the platform sends as a command, through the same path as a device's own commands.</summary>
+    public static bool IsPlatformCommand(string type) => Comparer.Equals(type, OtaUpdate);
 
     /// <summary>A type only the platform may send to a device: a system type, or one the server reads from devices.</summary>
     public static bool IsReserved(string type) =>

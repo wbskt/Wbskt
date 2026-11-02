@@ -58,6 +58,7 @@ public record ClientResponse(
     IReadOnlyList<string> Tags
 );
 
+/// <param name="System">The platform features the device last said it takes, such as <c>ota</c>; empty when none.</param>
 public record ClientDetailResponse(
     Guid ClientRefId,
     Guid PolicyRefId,
@@ -74,7 +75,8 @@ public record ClientDetailResponse(
     string? Platform,
     IReadOnlyList<CommandCapability>? Capabilities,
     DateTime CreatedAt,
-    IReadOnlyList<string> Tags
+    IReadOnlyList<string> Tags,
+    IReadOnlyList<string> System
 );
 
 public record ClientTagsResponse(Guid ClientRefId, IReadOnlyList<string> Tags);

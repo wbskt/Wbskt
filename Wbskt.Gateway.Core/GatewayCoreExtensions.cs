@@ -34,6 +34,7 @@ public static class GatewayCoreExtensions
         // What a device sends: one handler per protocol message type, and the device's own messages.
         services.AddSingleton<IInboundMessageHandler, PongHandler>();
         services.AddSingleton<IInboundMessageHandler, AckHandler>();
+        services.AddSingleton<IInboundMessageHandler, OtaStatusHandler>();
         services.AddSingleton<DeviceMessageHandler>();
         services.AddSingleton<InboundMessageDispatcher>();
         services.Configure<MessageBudgetOptions>(configuration.GetSection(MessageBudgetOptions.SectionName));

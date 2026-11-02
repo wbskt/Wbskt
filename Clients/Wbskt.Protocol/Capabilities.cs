@@ -18,9 +18,18 @@ public record CommandCapability(
     List<PropertySchema> Parameters
 );
 
+/// <param name="System">The platform features the device takes, such as <see cref="SystemCapabilities.Ota"/>. Absent means none.</param>
 public record ClientCapabilities(
     string Agent,
     string Version,
     string OS,
-    List<CommandCapability> Capabilities
+    List<CommandCapability> Capabilities,
+    List<string>? System = null
 );
+
+/// <summary>The names a device may list under <c>system</c> in its capabilities.</summary>
+public static class SystemCapabilities
+{
+    /// <summary>Takes <see cref="MessageTypes.OtaUpdate"/>.</summary>
+    public const string Ota = "ota";
+}

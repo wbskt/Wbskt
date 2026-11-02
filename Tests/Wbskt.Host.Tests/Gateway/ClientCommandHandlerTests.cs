@@ -150,6 +150,24 @@ public sealed class ClientCommandHandlerTests
     }
 
     [Fact]
+    public async Task A_platform_command_goes_out_with_its_payload_as_an_object_and_a_device_command_as_sent()
+    {
+        Connected();
+        var ota = new Mock<ConsumeContext<ClientCommandEvent>>();
+        ota.SetupGet(x => x.Message).Returns(new ClientCommandEvent(ClientRefId, 42, 7, "sys.ota.update", """{"url":"https://f.example/a.bin"}""", CommandId, ThisHost));
+        ota.SetupGet(x => x.CancellationToken).Returns(CancellationToken.None);
+
+        await CreateHandler().Consume(ota.Object);
+        await CreateHandler().Consume(Context());
+
+        _sentFrames.Should().HaveCount(2);
+        var update = JsonDocument.Parse(_sentFrames[0]).RootElement.GetProperty("payload");
+        update.ValueKind.Should().Be(JsonValueKind.Object);
+        update.GetProperty("url").GetString().Should().Be("https://f.example/a.bin");
+        JsonDocument.Parse(_sentFrames[1]).RootElement.GetProperty("payload").ValueKind.Should().Be(JsonValueKind.String);
+    }
+
+    [Fact]
     public async Task A_send_that_throws_is_reported_with_a_fixed_reason_not_the_exception_text()
     {
         var socket = new Mock<WebSocket>();

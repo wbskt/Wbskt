@@ -41,6 +41,26 @@ public static class DeviceMessageRules
 
         return null;
     }
+
+    /// <summary>
+    /// The rule a platform command (<see cref="MessageTypes.IsPlatformCommand"/>) breaks, or null when
+    /// it may be sent. Only the platform's own senders call this; whatever a user or a workflow sends
+    /// goes through <see cref="Check"/>, which refuses every reserved type.
+    /// </summary>
+    public static DeviceMessageViolation? CheckPlatformCommand(string? messageType, string? payload)
+    {
+        if (messageType is null || !MessageTypes.IsPlatformCommand(messageType))
+        {
+            return new DeviceMessageViolation(DeviceMessageRule.TypeReserved, $"Message type '{messageType}' is not a platform command.");
+        }
+
+        if (payload is { Length: > MaxPayloadChars })
+        {
+            return new DeviceMessageViolation(DeviceMessageRule.PayloadSize, $"Message payload is limited to {MaxPayloadChars} characters.");
+        }
+
+        return null;
+    }
 }
 
 public enum DeviceMessageRule

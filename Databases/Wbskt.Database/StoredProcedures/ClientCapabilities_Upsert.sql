@@ -3,7 +3,8 @@ CREATE PROCEDURE dbo.ClientCapabilities_Upsert
     @AgentName NVARCHAR(100),
     @AgentVersion NVARCHAR(50),
     @Platform NVARCHAR(100),
-    @CapabilitiesJson NVARCHAR(MAX)
+    @CapabilitiesJson NVARCHAR(MAX),
+    @SystemJson NVARCHAR(1000) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -14,13 +15,14 @@ BEGIN
         AgentVersion = @AgentVersion,
         Platform = @Platform,
         CapabilitiesJson = @CapabilitiesJson,
+        SystemJson = @SystemJson,
         UpdatedAt = SYSUTCDATETIME()
     WHERE ClientId = @ClientId;
 
     IF @@ROWCOUNT = 0
     BEGIN
-        INSERT INTO dbo.ClientCapabilities (ClientId, AgentName, AgentVersion, Platform, CapabilitiesJson)
-        VALUES (@ClientId, @AgentName, @AgentVersion, @Platform, @CapabilitiesJson);
+        INSERT INTO dbo.ClientCapabilities (ClientId, AgentName, AgentVersion, Platform, CapabilitiesJson, SystemJson)
+        VALUES (@ClientId, @AgentName, @AgentVersion, @Platform, @CapabilitiesJson, @SystemJson);
     END
 END
 GO

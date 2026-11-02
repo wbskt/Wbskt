@@ -26,6 +26,7 @@ BEGIN
         cap.AgentVersion,
         cap.Platform,
         cap.CapabilitiesJson,
+        cap.SystemJson,
         cap.UpdatedAt AS CapabilitiesUpdatedAt,
         (SELECT STRING_AGG(t.Tag, ',') WITHIN GROUP (ORDER BY t.Tag)
          FROM dbo.ClientTags t WHERE t.ClientId = c.Id) AS Tags

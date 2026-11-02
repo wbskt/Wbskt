@@ -8,6 +8,7 @@ an item on one of those two checklists:
 | Checklist | Scenarios |
 |---|---|
 | Message model | registering once, pending approval, registering again, reusing the token, `Retry-After`, `capabilities` first, ping and pong, command acks, expired commands, plain messages, `sentAt` and the offline backlog, reserved types |
+| Firmware updates (optional) | listing `ota`, rejecting while off, an expired update, plain `http`, accepted → downloading → installed |
 | WebSocket binding | the subprotocol and bearer token, renewing after a 401 on the upgrade, keeping the token while the gateway is down |
 
 A future binding (MQTT, HTTPS) adds its own checklist and its own scenarios.
@@ -64,6 +65,22 @@ may log there.
 | `{"event":"message","type":"…","payload":…,"commandId":"…"\|null}` | The SDK handed a message to the app. |
 | `{"event":"sent","type":"…"}` | `send` or `state` returned. |
 | `{"event":"rejected","type":"…","reason":"…"}` | The SDK refused to send the message, for example for a reserved type. |
+
+An SDK that takes firmware updates (protocol §4.4) is also run through `test_ota.py`; for any other,
+those scenarios are skipped, since its device doesn't list `ota` in its capabilities. Its harness
+reads two more variables:
+
+| Variable | |
+|---|---|
+| `WBSKT_OTA` | The firmware version. When set, the client takes updates and reports it as the `firmware` state. |
+| `WBSKT_OTA_INSTALL` | `ok`: install whatever is sent, without downloading, then restart. Anything else: fail the download with that as the error. |
+
+and writes two more events:
+
+| Line | When |
+|---|---|
+| `{"event":"ota","state":"…","percent":…}` | An update moved on: `accepted`, `downloading`, `installed`, `failed` or `rejected`. |
+| `{"event":"restart"}` | The client restarts into new firmware. The harness then exits, and the suite starts it again with the new `WBSKT_OTA`. |
 
 The ESP32 library can't run on a host as it is. [Wbskt.Arduino](https://github.com/wbskt/Wbskt.Arduino)
 builds its client for Linux over shims of the ESP32 libraries (`test/conformance`), and its own CI

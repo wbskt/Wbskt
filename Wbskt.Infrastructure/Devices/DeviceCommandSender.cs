@@ -41,7 +41,8 @@ public enum DeviceCommandOutcome
 public sealed record DeviceCommandResult(DeviceCommandOutcome Outcome, int ClientId = 0, DeviceMessageViolation? Violation = null, DateTime? ExpiresAtUtc = null);
 
 /// <param name="ExpiresAtUtc">Past this the socket host and the SDK refuse the command instead of acting on it late.</param>
-public sealed record DeviceCommand(Guid CommandId, Guid ClientRefId, int WorkspaceId, string Type, string Payload, DateTime? ExpiresAtUtc = null);
+/// <param name="Platform">A platform command such as <c>sys.ota.update</c>, which the protocol rules otherwise refuse as reserved.</param>
+public sealed record DeviceCommand(Guid CommandId, Guid ClientRefId, int WorkspaceId, string Type, string Payload, DateTime? ExpiresAtUtc = null, bool Platform = false);
 
 /// <summary>
 /// Sends a command to a device, the same way for the console and for a workflow step: resolve the
@@ -76,7 +77,10 @@ public sealed class DeviceCommandSender(
             return new DeviceCommandResult(DeviceCommandOutcome.UnknownClient);
         }
 
-        if (DeviceMessageRules.Check(command.Type, command.Payload) is { } violation)
+        var violation = command.Platform
+            ? DeviceMessageRules.CheckPlatformCommand(command.Type, command.Payload)
+            : DeviceMessageRules.Check(command.Type, command.Payload);
+        if (violation is not null)
         {
             logger.LogInformation("Command '{Type}' to client '{ClientRefId}' refused: {Reason}", command.Type, command.ClientRefId, violation.Message);
             return new DeviceCommandResult(DeviceCommandOutcome.Invalid, target.ClientId, violation);

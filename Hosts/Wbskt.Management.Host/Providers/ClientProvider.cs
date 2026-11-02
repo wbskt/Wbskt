@@ -288,7 +288,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
     }
 
     public async Task UpsertCapabilitiesAsync(int clientId, string agentName, string agentVersion, string platform,
-        string capabilitiesJson, CancellationToken cancellationToken = default)
+        string capabilitiesJson, string? systemJson, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.ClientCapabilities_Upsert", p =>
         {
@@ -297,6 +297,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             p.AddWithValue("@AgentVersion", agentVersion);
             p.AddWithValue("@Platform", platform);
             p.AddWithValue("@CapabilitiesJson", capabilitiesJson);
+            p.AddWithValue("@SystemJson", (object?)systemJson ?? DBNull.Value);
         }, cancellationToken);
     }
 
@@ -416,6 +417,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             AgentVersion = reader.IsDBNull(reader.GetOrdinal("AgentVersion")) ? null : reader.GetString(reader.GetOrdinal("AgentVersion")),
             Platform = reader.IsDBNull(reader.GetOrdinal("Platform")) ? null : reader.GetString(reader.GetOrdinal("Platform")),
             CapabilitiesJson = reader.IsDBNull(reader.GetOrdinal("CapabilitiesJson")) ? null : reader.GetString(reader.GetOrdinal("CapabilitiesJson")),
+            SystemJson = reader.IsDBNull(reader.GetOrdinal("SystemJson")) ? null : reader.GetString(reader.GetOrdinal("SystemJson")),
             CapabilitiesUpdatedAt = reader.IsDBNull(reader.GetOrdinal("CapabilitiesUpdatedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("CapabilitiesUpdatedAt")),
             Tags = ReadTags(reader)
         };

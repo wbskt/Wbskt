@@ -18,6 +18,8 @@ public sealed class ClientMetadataIngestionHandler : IConsumer<ClientMessageRece
     private const int MaxStatePayloadChars = 8 * 1024;
     private const int MaxStateVariablesPerReport = 50;
     private const int MaxStateVariableNameLength = 100;
+    private const int MaxSystemEntries = 20;
+    private const int MaxSystemEntryLength = 40;
 
     // As the workflow engine judges a payload late: it arrived this long after the device sent it.
     internal static readonly TimeSpan LateThreshold = TimeSpan.FromSeconds(30);
@@ -175,13 +177,32 @@ public sealed class ClientMetadataIngestionHandler : IConsumer<ClientMessageRece
         var agentVersion = Truncate(capabilities.Version ?? string.Empty, 50);
         var platform = Truncate(capabilities.OS ?? string.Empty, 100);
         var capabilitiesJson = JsonSerializer.Serialize(capabilities.Capabilities ?? []);
+        var system = ReadSystem(capabilities.System);
+        var systemJson = system.Count == 0 ? null : JsonSerializer.Serialize(system);
 
-        await _clientProvider.UpsertCapabilitiesAsync(message.ClientId, agentName, agentVersion, platform, capabilitiesJson, cancellationToken);
+        await _clientProvider.UpsertCapabilitiesAsync(message.ClientId, agentName, agentVersion, platform, capabilitiesJson, systemJson, cancellationToken);
         _logger.LogDebug("Stored capabilities for client {ClientRefId} ({Agent} {Version} on {Platform}).", message.ClientRefId, agentName, agentVersion, platform);
 
         await _eventBus.PublishAsync(
             new ClientCapabilitiesUpdatedEvent(message.ClientRefId, message.ClientId, message.WorkspaceId, agentName, agentVersion, platform),
             cancellationToken);
+    }
+
+    // Names are matched exactly by the platform, so they are kept lower-case, once each, and only
+    // as many and as long as a real list needs.
+    private static List<string> ReadSystem(List<string>? names)
+    {
+        if (names is null)
+        {
+            return [];
+        }
+
+        return names
+            .Where(n => !string.IsNullOrWhiteSpace(n) && n.Length <= MaxSystemEntryLength)
+            .Select(n => n.Trim().ToLowerInvariant())
+            .Distinct(StringComparer.Ordinal)
+            .Take(MaxSystemEntries)
+            .ToList();
     }
 
     private static string Truncate(string value, int maxLength)

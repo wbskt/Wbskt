@@ -321,6 +321,25 @@ public class ClientsController : ApiControllerBase
         return result.IsSuccess ? Accepted(result.Value) : MapError(result.Error);
     }
 
+    /// <summary>
+    /// Tells a client to update its firmware from a URL (<c>sys.ota.update</c>). Only for a client whose
+    /// capabilities list <c>ota</c>. Sent like any command: a connected client gets it now and an offline
+    /// one when it next connects, unless it expires first. The client then reports its progress as
+    /// <c>OnClientOtaStatusEvent</c> and in its activity.
+    /// </summary>
+    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
+    /// <param name="clientRef">The unique reference ID of the target client.</param>
+    /// <param name="request">The image's https URL and SHA-256, and optionally its version and size.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The command id, which the client's status reports carry.</returns>
+    [HttpPost("{clientRef:guid}/ota")]
+    [RequiresPermission(PermissionNames.ClientsCommand)]
+    public async Task<ActionResult<ClientCommandResponse>> SendOta([FromWorkspace] int workspaceId, Guid clientRef, ClientOtaRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _commandService.SendOtaAsync(workspaceId, clientRef, request, cancellationToken);
+        return result.IsSuccess ? Accepted(result.Value) : MapError(result.Error);
+    }
+
     /// <summary>The commands waiting for an offline client, oldest first.</summary>
     /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="clientRef">The unique reference ID of the client.</param>
