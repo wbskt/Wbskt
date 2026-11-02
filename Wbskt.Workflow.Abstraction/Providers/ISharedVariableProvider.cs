@@ -1,3 +1,4 @@
+using Wbskt.Models;
 using Wbskt.Workflow.Abstraction.Entities;
 
 namespace Wbskt.Workflow.Abstraction.Providers;
@@ -10,8 +11,8 @@ public interface ISharedVariableProvider
     Task<SharedVariableRow?> FindByWorkflowRefIdNameAsync(Guid workflowRefId, string varName, CancellationToken ct)
         => throw new NotSupportedException();
 
-    /// <summary>Every variable of the workflow, by name. Defaulted so the engine's test doubles need no stub.</summary>
-    Task<IReadOnlyCollection<SharedVariableRow>> ListByWorkflowRefIdAsync(Guid workflowRefId, CancellationToken ct)
+    /// <summary>The workflow's first <paramref name="take"/> variables by name, and how many it has. Defaulted so the engine's test doubles need no stub.</summary>
+    Task<IPagedList<SharedVariableRow>> ListByWorkflowRefIdAsync(Guid workflowRefId, int take, CancellationToken ct)
         => throw new NotSupportedException();
 
     Task<SharedVariableRow> InitializeAsync(Guid workflowRefId, string varName, string varType, string valueJson, CancellationToken ct);

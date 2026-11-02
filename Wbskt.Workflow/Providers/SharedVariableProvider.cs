@@ -3,6 +3,7 @@ using System.Data.Common;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Wbskt.Infrastructure;
+using Wbskt.Models;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Exceptions;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -45,9 +46,18 @@ internal sealed class SharedVariableProvider : BaseSqlProvider, ISharedVariableP
         );
     }
 
-    public async Task<IReadOnlyCollection<SharedVariableRow>> ListByWorkflowRefIdAsync(Guid workflowRefId, CancellationToken ct)
+    public async Task<IPagedList<SharedVariableRow>> ListByWorkflowRefIdAsync(Guid workflowRefId, int take, CancellationToken ct)
     {
-        return await ExecuteCollectionAsync("dbo.SharedVariable_GetBy_WorkflowRefId", p => p.AddWithValue("@WorkflowRefId", workflowRefId), Map, ct);
+        return await ExecutePagedCollectionAsync(
+            "dbo.SharedVariable_GetBy_WorkflowRefId",
+            p =>
+            {
+                p.AddWithValue("@WorkflowRefId", workflowRefId);
+                p.AddWithValue("@Take", take);
+                p.Add("@TotalCount", SqlDbType.Int).Direction = ParameterDirection.Output;
+            },
+            Map,
+            ct);
     }
 
     public async Task<SharedVariableRow> InitializeAsync(Guid workflowRefId, string varName, string varType, string valueJson, CancellationToken ct)
