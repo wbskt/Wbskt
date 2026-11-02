@@ -34,7 +34,7 @@ copy the inbound payload into the branch as `trigger` and stamp `triggeredAt`.
 | `trigger:client` | `clientRef`, `type` (`*` for any), `correlationKey`, `concurrencyPolicy` (default `Queue`), `filter`, `holdSeconds` | A device sends a message of that type. With `holdSeconds` > 0 it fires only once `filter` has kept matching for that long (needs a filter; at most 24 h), and stays quiet until a message stops matching. |
 | `trigger:clientPresence` | `clientRef`, `state` (`Online`/`Offline`), `forSeconds` (default 60, max 24 h), `correlationKey`, `concurrencyPolicy` | A device has stayed in that state for `forSeconds`. |
 | `trigger:schedule` | `cron`, `correlationKey` | The cron expression fires (UTC). |
-| `trigger:webhook` | `path`, `method`, `correlationKey`, `concurrencyPolicy`, `filter`, `secret` | `POST /api/callbacks/webhook/{workspaceRef}/{path}` on the management host. With a `secret`, the caller must send it in `X-Wbskt-Secret`. |
+| `trigger:webhook` | `path`, `correlationKey`, `concurrencyPolicy`, `filter`, `secret` | `POST /api/callbacks/webhook/{workspaceRef}/{path}` on the management host. Only POST: an old `method` field is accepted and ignored. With a `secret`, the caller must send it in `X-Wbskt-Secret`. |
 | `trigger:manual` | `description` | A user starts it from the console or API (`POST .../workflows/{workflowRef}/runs`, with an optional idempotency key). |
 
 ### 2.2 Controls
