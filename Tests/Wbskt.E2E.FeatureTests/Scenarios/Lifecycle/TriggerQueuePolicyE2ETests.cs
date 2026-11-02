@@ -61,9 +61,15 @@ public sealed class TriggerQueuePolicyE2ETests(ServicesFixture fixture)
             await Task.Delay(50);
         }
 
-        // ── Shortly after, exactly one run should have started; the other two
-        //    events must be queued (PendingTriggerEvents), not dropped or run in parallel ──
-        await Task.Delay(500);
+        // ── Once the first run has started, it must be the only one; the other two
+        //    events must be queued (PendingTriggerEvents), not dropped or run in parallel.
+        //    Polled rather than slept: on a cold engine the first run can take over a second to start,
+        //    and each run holds for AwaitTimeout, so a second run cannot start before this sees the first. ──
+        var started = await ServicesFixture.PollAsync(
+            async () => (await fixture.ListRunsAsync(token, workspaceRef, publishedRef)).Count > 0,
+            timeout: TimeSpan.FromSeconds(10),
+            interval: TimeSpan.FromMilliseconds(100));
+        started.Should().BeTrue("the first telemetry event must start a run");
         var runsShortlyAfter = await fixture.ListRunsAsync(token, workspaceRef, publishedRef);
         runsShortlyAfter.Should().HaveCount(1, "Queue policy must start only one run immediately and hold the rest in the pending-trigger queue");
         runsShortlyAfter[0].Status.Should().Be("Running");
