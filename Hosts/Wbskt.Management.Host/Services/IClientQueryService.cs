@@ -23,6 +23,9 @@ public interface IClientQueryService
     Task<Result<IReadOnlyList<ClientTagCountResponse>>> GetTagsAsync(int workspaceId, CancellationToken cancellationToken = default);
     Task<Result<IReadOnlyCollection<ClientStateVariableResponse>>> GetStateAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default);
 
+    /// <summary>The message types a client of this workspace has sent, most recently seen first.</summary>
+    Task<Result<IReadOnlyCollection<ClientMessageTypeResponse>>> GetMessageTypesAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Verifies a client reference belongs to <paramref name="workspaceId"/> and returns its internal
     /// ID. For endpoints that act on a client without going through a workspace-scoped service call —

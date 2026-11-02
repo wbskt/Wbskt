@@ -319,6 +319,51 @@
         ],
         "type": "object"
       },
+      "ClientMessageTypeResponse": {
+        "properties": {
+          "count": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "firstSeenAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "isPlatform": {
+            "type": "boolean"
+          },
+          "lastSeenAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "samplePayload": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            ]
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "count",
+          "firstSeenAt",
+          "lastSeenAt",
+          "isPlatform",
+          "samplePayload"
+        ],
+        "type": "object"
+      },
       "ClientOtaRequest": {
         "properties": {
           "expiresAt": {
@@ -1404,6 +1449,35 @@
           "failureCount",
           "avgDurationMs",
           "maxDurationMs"
+        ],
+        "type": "object"
+      },
+      "PageOfClientMessageTypeResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ClientMessageTypeResponse"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "totalCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items"
         ],
         "type": "object"
       },
@@ -3780,6 +3854,55 @@
               "text/plain": {
                 "schema": {
                   "$ref": "#/components/schemas/PageOfEventLogResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspaceRef}/clients/{clientRef}/message-types": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clientRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspaceRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOfClientMessageTypeResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOfClientMessageTypeResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOfClientMessageTypeResponse"
                 }
               }
             },

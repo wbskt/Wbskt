@@ -279,6 +279,27 @@ public class ClientsController : ApiControllerBase
         return Ok(new Page<ClientStateVariableResponse> { Items = result.Value });
     }
 
+    /// <summary>
+    /// The message types the client has sent, most recently seen first, with how many and when, and
+    /// the latest payload of each when it was small enough to keep. Types the platform reads itself
+    /// (<c>state.report</c>, <c>capabilities</c>) carry <c>isPlatform</c>. At most 100 types per client.
+    /// </summary>
+    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
+    /// <param name="clientRef">The unique reference ID of the client.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    [HttpGet("{clientRef:guid}/message-types")]
+    [RequiresPermission(PermissionNames.ClientsRead)]
+    public async Task<ActionResult<Page<ClientMessageTypeResponse>>> GetMessageTypes([FromWorkspace] int workspaceId, Guid clientRef, CancellationToken cancellationToken)
+    {
+        var result = await _queryService.GetMessageTypesAsync(workspaceId, clientRef, cancellationToken);
+        if (result.IsFailure)
+        {
+            return MapResult(Result<Page<ClientMessageTypeResponse>>.Failure(result.Error));
+        }
+
+        return Ok(new Page<ClientMessageTypeResponse> { Items = result.Value, TotalCount = result.Value.Count });
+    }
+
     /// <summary>Deprecated: <c>PATCH /clients/{clientRef}</c> with <c>name</c>. Kept for one release.</summary>
     [HttpPatch("{clientRef:guid}/name")]
     [ApiExplorerSettings(IgnoreApi = true)]

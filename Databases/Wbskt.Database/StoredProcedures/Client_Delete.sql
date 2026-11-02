@@ -22,6 +22,7 @@ BEGIN
     END
 
     DELETE FROM dbo.ClientStateVariables WHERE ClientId = @Id;
+    DELETE FROM dbo.ClientMessageTypes WHERE ClientId = @Id;
     DELETE FROM dbo.ClientCapabilities WHERE ClientId = @Id;
     DELETE FROM dbo.ClientTags WHERE ClientId = @Id;
     DELETE FROM dbo.QueuedCommands WHERE ClientId = @Id;

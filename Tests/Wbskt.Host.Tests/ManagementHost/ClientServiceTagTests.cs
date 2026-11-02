@@ -31,7 +31,7 @@ public sealed class ClientServiceTagTests
         _provider.Setup(x => x.SetTagsAsync(ClientId, WorkspaceId, It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
         _service = new ClientLifecycleService(_provider.Object, Mock.Of<IEventBus>(), Mock.Of<IClientTokenCutoffs>(), NullLogger<ClientLifecycleService>.Instance);
-        _queries = new ClientQueryService(_provider.Object, NullLogger<ClientQueryService>.Instance);
+        _queries = new ClientQueryService(_provider.Object, Mock.Of<IClientMessageTypeProvider>(), NullLogger<ClientQueryService>.Instance);
     }
 
     [Theory]
