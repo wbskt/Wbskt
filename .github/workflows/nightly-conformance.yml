@@ -1,0 +1,122 @@
+name: Nightly conformance
+
+# Runs Tests/Conformance/test_live.py with the .NET harness against the real hosts, started from
+# source as in nightly-stress.yml (the setup is copied from there; keep them in step). The pull-request
+# suite (sdk-conformance.yml) checks the SDKs against fake_wbskt.py; this checks that what the fake does
+# is still what the gateway does. Nothing here gates a merge or an image.
+
+on:
+  schedule:
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-conformance
+  cancel-in-progress: false
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+      ConnectionStrings__Redis: localhost:6379
+      HOST_SQL_PASSWORD: Wb1-e2e-Host-Login
+      ConnectionStrings__AuthDBConnection: Server=localhost;Database=Wbskt.Database.Auth;User ID=wbskt_auth;Password=Wb1-e2e-Host-Login;Encrypt=False;
+      ConnectionStrings__DefaultConnection: Server=localhost;Database=Wbskt.Database;User ID=wbskt_management;Password=Wb1-e2e-Host-Login;Encrypt=False;
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+
+      - name: Install sqlpackage
+        run: |
+          dotnet tool list -g | grep -qi '^microsoft\.sqlpackage ' || dotnet tool install -g microsoft.sqlpackage
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Deploy databases
+        run: pwsh ./Deploy-Databases.ps1 -HostLoginPassword "$HOST_SQL_PASSWORD"
+
+      - name: Trust the development certificate
+        run: |
+          dotnet dev-certs https
+          dotnet dev-certs https --export-path "$RUNNER_TEMP/aspnet-dev.crt" --format PEM
+          sudo cp "$RUNNER_TEMP/aspnet-dev.crt" /usr/local/share/ca-certificates/aspnet-dev.crt
+          sudo update-ca-certificates
+
+      - name: Start hosts
+        run: Tests/Wbskt.E2E.FeatureTests/start-hosts.sh
+
+      - name: Workspace and policy
+        run: |
+          set -euo pipefail
+          auth=https://localhost:7000
+          management=https://localhost:7010
+          token=$(curl -fsS -X POST "$auth/api/auth/login" -H 'Content-Type: application/json' \
+            -d '{"email":"admin@wbskt.com","password":"Password123!"}' | jq -r .accessToken)
+          workspace=$(curl -fsS -X POST "$auth/api/v1/workspaces" -H "Authorization: Bearer $token" \
+            -H 'Content-Type: application/json' -d "{\"name\":\"nightly-conformance-$GITHUB_RUN_ID\"}" | jq -r .refId)
+          pin=$(curl -fsS -X POST "$management/api/v1/workspaces/$workspace/registration-policies" \
+            -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
+            -d '{"name":"nightly-conformance","maxClients":null,"autoApproval":true}' | jq -r .pin)
+          if [[ -z "$pin" || "$pin" == "null" ]]; then
+            echo "::error::could not create a registration policy"
+            exit 1
+          fi
+          echo "::add-mask::$token"
+          {
+            echo "WBSKT_LIVE_API_URL=$management"
+            echo "WBSKT_LIVE_SOCKET_URL=ws://localhost:5020"
+            echo "WBSKT_LIVE_TOKEN=$token"
+            echo "WBSKT_LIVE_WORKSPACE=$workspace"
+            echo "WBSKT_LIVE_PIN=$pin"
+          } >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Live scenarios with the .NET harness
+        working-directory: Tests/Conformance
+        run: |
+          set -o pipefail
+          pip install -r requirements.txt
+          dotnet build harnesses/dotnet/Wbskt.Conformance.Harness.csproj -c Release -o "$RUNNER_TEMP/harness" --nologo -v q
+          WBSKT_HARNESS="dotnet $RUNNER_TEMP/harness/Wbskt.Conformance.Harness.dll" \
+            python -m pytest -v test_live.py 2>&1 | tee "$GITHUB_WORKSPACE/live-output.txt"
+
+      # Every scenario is skipped when WBSKT_LIVE_* is missing, and a skipped run exits 0.
+      - name: Fail if the live scenarios did not run
+        run: |
+          if ! grep -qE '[0-9]+ passed' live-output.txt || grep -qE ' skipped' live-output.txt; then
+            echo "::error::the live conformance scenarios were skipped or did not pass"
+            exit 1
+          fi
+
+      - name: Host logs
+        if: failure()
+        run: |
+          for f in e2e-hosts/*.log; do
+            echo "::group::$f"
+            tail -n 300 "$f"
+            echo "::endgroup::"
+          done
+
+      - name: Upload host logs and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-conformance
+          path: |
+            e2e-hosts/*.log
+            live-output.txt
+          if-no-files-found: ignore

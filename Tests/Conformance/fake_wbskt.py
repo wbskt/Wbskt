@@ -2,7 +2,10 @@
 
 It records what the SDK did (registrations, logins, the token on each upgrade, every frame) so the
 scenarios can check it against Docs/Device.Protocol.md, and it can misbehave on cue: refuse a token,
-throttle a login, reject credentials, close the socket.
+throttle a login, reject credentials, close the socket. Like the real gateway, it refuses a revoked
+device's token with 403 CLIENT_REVOKED, refuses an upgrade offering only unknown subprotocols with 400
+SOCKET_PROTOCOL_UNSUPPORTED, closes a device's older connection when it connects again (1008), and
+enforces the per-device message budget (1008).
 """
 
 import asyncio
@@ -26,6 +29,7 @@ BUDGET_PER_SECOND = 10.0
 BUDGET_BURST = 100
 BUDGET_CLOSE_AFTER_DROPPED = 500
 CLOSE_THROTTLED = 1008
+CLOSE_SUPERSEDED = 1008
 
 Answer = Tuple[int, Dict[str, Any], Dict[str, str]]
 
@@ -38,6 +42,8 @@ class FakeApi:
         # Answers for the next logins, before the normal 200.
         self.login_answers: List[Answer] = []
         self.known: Dict[str, str] = {}
+        # Which device each issued token belongs to; the socket reads it to supersede connections.
+        self.token_devices: Dict[str, str] = {}
         self._lock = threading.Lock()
         self._server: Optional[ThreadingHTTPServer] = None
         self.url = ""
@@ -56,7 +62,9 @@ class FakeApi:
                 secret = body.get("secret")
                 if not secret or self.known.get(str(body.get("clientRefId"))) != secret:
                     return 401, {"code": "CLIENT_UNAUTHORIZED"}, {}
-                return 200, {"accessToken": f"token-{len(self.logins)}", "expiresIn": 3600}, {}
+                token = f"token-{len(self.logins)}"
+                self.token_devices[token] = str(body.get("clientRefId"))
+                return 200, {"accessToken": token, "expiresIn": 3600}, {}
             return 404, {}, {}
 
     def forget_all_devices(self) -> None:
@@ -136,6 +144,11 @@ class FakeSocket:
         self.upgrade_tokens: List[str] = []
         self.subprotocols: List[Optional[str]] = []
         self.rejected_tokens: set = set()
+        self.revoked_tokens: set = set()
+        # Shared with FakeApi.token_devices by the fixture.
+        self.token_devices: Dict[str, str] = {}
+        self.refused: List[Tuple[int, str]] = []
+        self._live: Dict[str, ServerConnection] = {}
         # Messages dropped over the budget, and the close code the fake sent on each connection.
         self.dropped = 0
         self.close_codes: Dict[int, int] = {}
@@ -154,12 +167,31 @@ class FakeSocket:
             return connection.respond(HTTPStatus.SERVICE_UNAVAILABLE, "down\n")
         if token in self.rejected_tokens:
             return connection.respond(HTTPStatus.UNAUTHORIZED, "token rejected\n")
+        if token in self.revoked_tokens:
+            return self._problem(connection, HTTPStatus.FORBIDDEN, "CLIENT_REVOKED")
+        offered = [p.strip() for p in request.headers.get("Sec-WebSocket-Protocol", "").split(",") if p.strip()]
+        if offered and SUBPROTOCOL not in offered:
+            return self._problem(connection, HTTPStatus.BAD_REQUEST, "SOCKET_PROTOCOL_UNSUPPORTED")
         return None
+
+    def _problem(self, connection: ServerConnection, status: HTTPStatus, code: str) -> Any:
+        self.refused.append((int(status), code))
+        response = connection.respond(status, json.dumps({"status": int(status), "code": code}))
+        response.headers["Content-Type"] = "application/problem+json"
+        return response
 
     async def _handler(self, ws: ServerConnection) -> None:
         index = len(self.connections)
         self.connections.append(ws)
         self.subprotocols.append(ws.subprotocol)
+        authorization = ws.request.headers.get("Authorization", "") if ws.request is not None else ""
+        device = self.token_devices.get(authorization[7:] if authorization.startswith("Bearer ") else authorization)
+        if device is not None:
+            older = self._live.get(device)
+            self._live[device] = ws
+            if older is not None:
+                self.close_codes[self.connections.index(older)] = CLOSE_SUPERSEDED
+                await older.close(CLOSE_SUPERSEDED, "Superseded by a new connection.")
         budget = _Budget()
         async for raw in ws:
             if not isinstance(raw, str):
@@ -213,6 +245,10 @@ class FakeSocket:
                 await asyncio.sleep(0.02)
 
         await asyncio.wait_for(until(), timeout)
+
+    async def close(self, connection: int, code: int, reason: str = "") -> None:
+        self.close_codes[connection] = code
+        await self.connections[connection].close(code, reason)
 
     async def send(self, connection: int, message: Dict[str, Any]) -> None:
         await self.connections[connection].send(json.dumps(message))

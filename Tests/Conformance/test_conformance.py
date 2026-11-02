@@ -83,6 +83,7 @@ async def test_offers_the_subprotocol_and_a_bearer_token(api, socket_server, dev
 
     assert socket_server.subprotocols[0] == "wbskt.v1"
     assert socket_server.upgrade_tokens[0] == "token-1"
+    assert not socket_server.refused
 
 
 async def test_reuses_the_token_across_a_reconnect(api, socket_server, device):
@@ -119,6 +120,19 @@ async def test_keeps_the_token_while_the_socket_host_is_down(api, socket_server,
     assert set(socket_server.upgrade_tokens) == {"token-1"}
 
 
+async def test_keeps_the_token_while_the_device_is_revoked(api, socket_server, device):
+    socket_server.revoked_tokens.add("token-1")
+    harness = await device()
+    await socket_server.wait_upgrades(3, timeout=60.0)
+    socket_server.revoked_tokens.clear()
+
+    await harness.expect("connected", timeout=60.0)
+
+    assert (403, "CLIENT_REVOKED") in socket_server.refused
+    assert len(api.logins) == 1
+    assert set(socket_server.upgrade_tokens) == {"token-1"}
+
+
 async def test_waits_for_retry_after_when_throttled(api, socket_server, device):
     api.login_answers = [(429, {"code": "TOO_MANY_REQUESTS"}, {"Retry-After": "2"})]
     harness = await device()
@@ -129,6 +143,34 @@ async def test_waits_for_retry_after_when_throttled(api, socket_server, device):
 
 
 # On the socket
+
+
+@pytest.mark.parametrize("code", [1000, 1001, 1008, 1009])
+async def test_reconnects_after_each_close_code(api, socket_server, device, code):
+    harness = await device()
+    await harness.expect("connected")
+    await socket_server.wait_connections(1)
+
+    await socket_server.close(0, code, "closed by the conformance suite")
+    await harness.expect("disconnected")
+
+    # 1001 asks for a spread of up to 30 s; the others for the usual schedule.
+    await socket_server.wait_connections(2, timeout=40.0 if code == 1001 else RECONNECT)
+    await harness.expect("connected")
+    assert len(api.logins) == 1
+
+
+async def test_a_second_connection_supersedes_the_first(api, socket_server, device):
+    first = await device()
+    await first.expect("connected")
+
+    second = await device()
+    await second.expect("connected")
+    await first.expect("disconnected")
+    await second.stop()
+
+    await first.expect("connected", timeout=RECONNECT)
+    assert socket_server.close_codes[0] == 1008
 
 
 async def test_sends_capabilities_first_on_every_connection(api, socket_server, device):
@@ -256,14 +298,15 @@ async def test_stamps_messages_and_sends_the_offline_backlog_in_order(api, socke
 
 
 async def test_paces_a_large_offline_backlog_under_the_gateway_budget(api, socket_server, device):
-    count = 300
+    # Past the gateway's burst of 100, and within every SDK's default buffer (the ESP32's is 16 KB).
+    count = 150
     socket_server.down = True
     harness = await device()
     await harness.command("send-many", type="reading", count=count)
     await harness.expect("sent", type="reading", count=count)
     socket_server.down = False
 
-    # 50 back to back, then 8 a second: about 31 s for the rest.
+    # 50 back to back, then 8 a second: about 13 s for the rest.
     await socket_server.next_of("capabilities", RECONNECT)
     readings = [(await socket_server.next_of("reading", 30.0))["payload"] for _ in range(count)]
 

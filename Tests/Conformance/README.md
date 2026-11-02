@@ -9,15 +9,24 @@ an item on one of those two checklists:
 |---|---|
 | Message model | registering once, pending approval, registering again, reusing the token, `Retry-After`, `capabilities` first, ping and pong, command acks, expired commands, plain messages, a throwing handler and malformed frames, `sentAt` and the offline backlog, pacing a large backlog under the message budget, reserved types |
 | Firmware updates (optional) | listing `ota`, rejecting while off, an expired update, plain `http`, accepted → downloading → installed |
-| WebSocket binding | the subprotocol and bearer token, renewing after a 401 on the upgrade, keeping the token while the gateway is down |
+| WebSocket binding | the subprotocol and bearer token, renewing after a 401 on the upgrade, keeping the token while the gateway is down or the device is revoked (403 `CLIENT_REVOKED`), reconnecting after each close code (1000, 1001, 1008, 1009), a second connection superseding the first |
 
 A future binding (MQTT, HTTPS) adds its own checklist and its own scenarios.
 
 The suite fakes the two HTTP endpoints and the WebSocket gateway (`fake_wbskt.py`), so nothing else
 has to run, and each scenario takes a few seconds. The fake can misbehave on cue: refuse a token,
-throttle a login, forget a device, close or refuse the socket. It enforces the gateway's default
-message budget (10 a second, burst 100, closed with 1008 after 500 drops in a row) and records what it
-dropped.
+throttle a login, forget a device, close or refuse the socket. It also does what the real gateway
+does unprompted:
+
+- refuses a revoked device's token with 403 `CLIENT_REVOKED`, and an upgrade that offers only unknown
+  subprotocols with 400 `SOCKET_PROTOCOL_UNSUPPORTED`, as Problem Details;
+- closes a device's older connection with 1008 when it connects again;
+- enforces the default message budget (10 a second, burst 100, closed with 1008 after 500 drops in a
+  row) and counts what it dropped.
+
+`nightly-conformance.yml` runs `test_live.py` against the real hosts every night, so the fake and the
+gateway can't drift apart unnoticed: the scenarios there need no misbehaviour on cue and check what the
+platform recorded through the management API.
 
 The SDK runs as a separate process, a **harness**, so any language can take part. CI
 (`.github/workflows/sdk-conformance.yml`) runs it for the Python and .NET SDKs; the ESP32 SDK runs it
@@ -89,6 +98,11 @@ and writes two more events:
 The ESP32 library can't run on a host as it is. [Wbskt.Arduino](https://github.com/wbskt/Wbskt.Arduino)
 builds its client for Linux over shims of the ESP32 libraries (`test/conformance`), and its own CI
 runs this suite against that build:
+
+What the ESP32 build can't observe: its WebSockets library doesn't pass the close code up, so it
+treats every close alike and never applies the 0–30 s spread after 1001 (it reconnects on its usual
+schedule, which the scenario accepts). Its handlers can't throw (the ESP32 build has no exceptions), so
+`throw-next` only answers `armed`.
 
 ```sh
 make -C <Wbskt.Arduino>/test/conformance   # after cloning ArduinoJson into test/host/ArduinoJson
