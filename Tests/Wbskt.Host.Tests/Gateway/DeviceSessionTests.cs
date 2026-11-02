@@ -113,8 +113,35 @@ public sealed class DeviceSessionTests
         Assert.True(registeredDuringLoop);
         Assert.False(registeredAtClose);
         Assert.Equal(DisconnectReason.Aborted, closedWith);
-        _bus.Verify(x => x.PublishAsync(It.Is<ClientConnectedEvent>(e => e.ClientRefId == ClientRefId && e.ClientId == 42 && e.WorkspaceId == 7 && e.HostId == ThisHost), CancellationToken.None), Times.Once);
+        _bus.Verify(x => x.PublishAsync(It.Is<ClientConnectedEvent>(e => e.ClientRefId == ClientRefId && e.ClientId == 42 && e.WorkspaceId == 7 && e.HostId == ThisHost), It.IsAny<CancellationToken>()), Times.Once);
         VerifyDisconnected(DisconnectReason.Aborted.Describe());
+    }
+
+    [Fact]
+    public async Task A_broker_outage_drops_the_devices_messages_but_not_its_session()
+    {
+        var connectAttempts = 0;
+        _bus.Setup(x => x.PublishAsync(It.IsAny<ClientConnectedEvent>(), It.IsAny<CancellationToken>()))
+            .Callback(() => connectAttempts++)
+            .Returns(() => connectAttempts == 1 ? Task.FromException(new InvalidOperationException("broker down")) : Task.CompletedTask);
+        _bus.Setup(x => x.PublishAsync(It.IsAny<ClientMessageReceivedEvent>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("broker down"));
+        var (connection, _) = Connection();
+        DisconnectReason? result = DisconnectReason.Error;
+
+        await Sessions().RunAsync(Admitted, connection,
+            async inbox =>
+            {
+                result = await inbox.ReceiveAsync(Message, CancellationToken.None);
+                // The connect announcement is retried a second later, while the session lasts.
+                await Task.Delay(TimeSpan.FromSeconds(1.5));
+                return DisconnectReason.ClientClosed;
+            },
+            _ => Task.CompletedTask);
+
+        Assert.Null(result);
+        Assert.Equal(2, connectAttempts);
+        VerifyDisconnected(DisconnectReason.ClientClosed.Describe());
     }
 
     [Fact]

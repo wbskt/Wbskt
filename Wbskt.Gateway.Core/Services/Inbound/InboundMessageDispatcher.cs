@@ -15,6 +15,7 @@ public sealed class InboundMessageDispatcher
     private readonly DeviceMessageHandler _deviceMessages;
     private readonly GatewayMetrics _metrics;
     private readonly ILogger<InboundMessageDispatcher> _logger;
+    private long _lastDropWarning = long.MinValue / 2;
 
     public InboundMessageDispatcher(IEnumerable<IInboundMessageHandler> handlers, DeviceMessageHandler deviceMessages, GatewayMetrics metrics, ILogger<InboundMessageDispatcher> logger)
     {
@@ -46,18 +47,42 @@ public sealed class InboundMessageDispatcher
             return;
         }
 
-        if (!MessageTypes.IsSystem(message.Type))
+        if (MessageTypes.IsSystem(message.Type) && !_systemHandlers.ContainsKey(message.Type))
         {
-            await _deviceMessages.HandleAsync(context, message, cancellationToken);
+            _logger.LogDebug("Ignoring unknown system message '{Type}' from {ClientRefId}.", message.Type, context.ClientRefId);
             return;
         }
 
-        if (_systemHandlers.TryGetValue(message.Type, out var handler))
+        // Every handler publishes to the broker. A message that can't be published is dropped and
+        // counted, never fatal: during a broker restart every device that sent anything would otherwise
+        // be disconnected, and reconnect into the same outage.
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        bounded.CancelAfter(DeviceSessions.PublishTimeout);
+        try
         {
-            await handler.HandleAsync(context, message, cancellationToken);
-            return;
+            if (_systemHandlers.TryGetValue(message.Type, out var handler))
+            {
+                await handler.HandleAsync(context, message, bounded.Token);
+            }
+            else
+            {
+                await _deviceMessages.HandleAsync(context, message, bounded.Token);
+            }
         }
-
-        _logger.LogDebug("Ignoring unknown system message '{Type}' from {ClientRefId}.", message.Type, context.ClientRefId);
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _metrics.Dropped("bus");
+            // An outage drops every device's traffic at once; one warning every ten seconds is enough, and the metric counts the rest.
+            var now = Environment.TickCount64;
+            var last = Interlocked.Read(ref _lastDropWarning);
+            if (now - last >= 10_000 && Interlocked.CompareExchange(ref _lastDropWarning, now, last) == last)
+            {
+                _logger.LogWarning("Dropped '{Type}' from client {ClientRefId}: it could not be handed on. {Message}", message.Type, context.ClientRefId, ex.Message);
+            }
+            else
+            {
+                _logger.LogDebug("Dropped '{Type}' from client {ClientRefId}: {Message}", message.Type, context.ClientRefId, ex.Message);
+            }
+        }
     }
 }
