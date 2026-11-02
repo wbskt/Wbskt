@@ -121,6 +121,24 @@ public class TriggerNodeTests
     }
 
     [Fact]
+    public void WebhookTriggerNode_needs_no_method_and_writes_none()
+    {
+        var json = """
+            {
+                "nodeId": "00000000-0000-0000-0000-000000000002",
+                "kind": "trigger:webhook",
+                "name": "Webhook",
+                "ports": [{ "portId": "default", "direction": "Output", "label": "Out" }],
+                "config": { "path": "/water-start" }
+            }
+            """;
+        var webhook = Assert.IsType<WebhookTriggerNode>(JsonSerializer.Deserialize<BaseNode>(json, Options));
+
+        Assert.Null(webhook.Config.Method);
+        Assert.DoesNotContain("\"method\"", JsonSerializer.Serialize<BaseNode>(webhook, Options));
+    }
+
+    [Fact]
     public void ManualTriggerNode_deserialises()
     {
         var json = """
