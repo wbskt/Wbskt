@@ -50,8 +50,6 @@ jobs:
         if: matrix.sdk == 'dotnet'
         with:
           global-json-file: global.json
-          cache: true
-          cache-dependency-path: Directory.Packages.props
       - name: .NET harness
         if: matrix.sdk == 'dotnet'
         run: |
