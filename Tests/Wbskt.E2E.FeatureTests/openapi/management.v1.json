@@ -302,6 +302,13 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "updatingUntil": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "required": [
@@ -531,6 +538,13 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "updatingUntil": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "required": [
