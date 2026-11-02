@@ -74,6 +74,11 @@ The SDK confirms delivery of a command as soon as it arrives, before your handle
 one that arrives after its expiry without calling your handler. Report the outcome as a message of
 your own if it matters. Call `set_capabilities(...)` when the set of commands changes.
 
+## Version
+
+Pass `firmware_version="2.4.1"` to say which version of your own code the device runs. The console
+shows it on the device page. It is not the SDK's version, which is sent for you.
+
 ## State
 
 ```python

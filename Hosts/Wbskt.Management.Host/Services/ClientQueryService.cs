@@ -218,7 +218,8 @@ internal sealed class ClientQueryService : IClientQueryService
             capabilities,
             d.CreatedAt,
             d.Tags,
-            ReadSystem(d.SystemJson)
+            ReadSystem(d.SystemJson),
+            d.FirmwareVersion
         );
     }
 

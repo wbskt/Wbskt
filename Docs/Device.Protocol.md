@@ -144,13 +144,16 @@ the connection is back and `capabilities` has gone out. Never let a new message 
     { "command": "relay.set", "description": "Switch the relay",
       "parameters": [ { "name": "on", "label": "On", "dataType": "boolean", "description": "", "isRequired": true } ] }
   ],
-  "system": [ "ota" ]
+  "system": [ "ota" ],
+  "firmwareVersion": "2.4.1"
 }
 ```
 
 `dataType` is `string`, `number`, `boolean` or `object`. `system` lists the optional platform
 features the device takes; today the only one is `ota` (§4.4). Leave it out when there are none.
-Send `capabilities` again whenever either set changes.
+`firmwareVersion` is the version of the code the device runs: its firmware on a microcontroller,
+the application otherwise. `version` is the SDK's own. Leave it out when unknown; the server keeps at
+most 50 characters. Send `capabilities` again whenever either set changes.
 
 ### 4.3 Commands (server → device)
 
@@ -188,8 +191,10 @@ message carries a link, not the image: an image is 1–2 MB and a message at mos
      `commandId` across the restart for this.
 3. Check the SHA-256 before the new image can boot, and keep the credentials across the update so
    the device signs in as the same client.
-4. Report the running version as the `firmware` state variable (`state.report`) on every
-   connection, so the server sees which firmware a device runs whatever happened.
+4. Send the running version as `firmwareVersion` in `capabilities` on every connection, so the
+   server sees which firmware a device runs whatever happened. Firmware from before this field
+   reported it as the `firmware` state variable; the server still reads that when `firmwareVersion`
+   is missing.
 
 Every firmware shipped must keep an update path. A device whose new firmware can't take
 `sys.ota.update` can only be updated by hand after that.
@@ -238,6 +243,7 @@ An SDK conforms to the message model when it:
 And, if it takes firmware updates (§4.4), when it:
 
 - [ ] lists `ota` under `system` only while updates are on, and answers `sys.ota.update` with `rejected` otherwise;
+- [ ] sends the running version as `firmwareVersion` in `capabilities`;
 - [ ] refuses an expired `sys.ota.update` in its ack and starts nothing;
 - [ ] reports `accepted`, `downloading` and, from the new firmware, `installed` with the version, under the update's `commandId`.
 
