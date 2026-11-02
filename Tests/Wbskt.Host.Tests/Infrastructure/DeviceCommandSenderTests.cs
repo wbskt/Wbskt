@@ -2,6 +2,7 @@ using Moq;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure.Devices;
+using Wbskt.Models;
 using Wbskt.Protocol;
 
 namespace Wbskt.Host.Tests.Infrastructure;
@@ -49,6 +50,20 @@ public sealed class DeviceCommandSenderTests
         Assert.Equal(expiresAt, sent.ExpiresAtUtc);
         Assert.Equal(CommandId, sent.CommandId);
         Assert.Equal(99, sent.ActorUserId);
+    }
+
+    [Theory]
+    [InlineData(true, "socket-a")]
+    [InlineData(false, null)]
+    public async Task An_expiry_past_the_command_lifetime_is_refused_whoever_sends(bool connected, string? hostId)
+    {
+        Target(new ClientCommandTarget(ClientId, WorkspaceId, connected, hostId));
+
+        var result = await Sender.SendAsync(Command(expiresAtUtc: DateTime.UtcNow + CommandLifetime.Max + TimeSpan.FromMinutes(5)), null, CancellationToken.None);
+
+        Assert.Equal(DeviceCommandOutcome.ExpiryInvalid, result.Outcome);
+        Assert.Empty(_queue.Rows);
+        _bus.Verify(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]

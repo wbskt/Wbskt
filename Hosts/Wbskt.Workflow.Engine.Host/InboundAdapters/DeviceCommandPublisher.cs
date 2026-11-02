@@ -23,6 +23,7 @@ public sealed class DeviceCommandPublisher(IDeviceCommandSender sender, IEventBu
 {
     internal const string UnknownClientReason = "The device does not exist in this workspace.";
     internal const string QueueFullReason = "The device is offline and already has as many commands waiting as it may.";
+    internal const string ExpiryInvalidReason = "The step's ack timeout is longer than a command may wait.";
     internal const string InactiveReason = "The device is offline and not registered, so the command cannot wait for it.";
 
     public async Task PublishCommandAsync(Guid commandId, Guid clientRefId, int workspaceId, string command, string payload, TimeSpan expiresIn, CommandSender? sentBy, CancellationToken ct)
@@ -38,6 +39,7 @@ public sealed class DeviceCommandPublisher(IDeviceCommandSender sender, IEventBu
             DeviceCommandOutcome.Inactive => InactiveReason,
             // The validator refuses these at publish time; this catches a definition saved before it did.
             DeviceCommandOutcome.Invalid => result.Violation!.Message,
+            DeviceCommandOutcome.ExpiryInvalid => ExpiryInvalidReason,
             DeviceCommandOutcome.BrokerUnavailable => throw new InvalidOperationException("The event bus is unavailable; the command was not sent."),
             _ => throw new ArgumentOutOfRangeException(nameof(result), result.Outcome, null)
         };

@@ -1,3 +1,4 @@
+using Wbskt.Models;
 using System.Text.Json.Serialization;
 using Wbskt.Workflow.Abstraction.Templates;
 namespace Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
@@ -26,7 +27,8 @@ public sealed record SendClientMessageConfig
 
     public static readonly TimeSpan DefaultAckTimeout = TimeSpan.FromSeconds(30);
 
-    public static readonly TimeSpan MaxAckTimeout = TimeSpan.FromHours(24);
+    /// <summary>The step's command expires when it stops waiting, so the wait is bounded by the command's lifetime.</summary>
+    public static readonly TimeSpan MaxAckTimeout = CommandLifetime.Max;
 
 }
 
