@@ -106,7 +106,8 @@ public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
         await _commandSender.SendAsync(
             new RequeueClientCommand(
                 command.ClientRefId, command.ClientId, command.WorkspaceId, command.Type, command.Payload, commandId, command.ExpiresAtUtc,
-                command.ActorUserId, command.ActorUserRefId, command.ActorSource, command.ActorWorkflowRefId, command.ActorRunRefId),
+                command.ActorUserId, command.ActorUserRefId, command.ActorSource, command.ActorWorkflowRefId, command.ActorRunRefId,
+                command.TargetHostId),
             ct);
     }
 

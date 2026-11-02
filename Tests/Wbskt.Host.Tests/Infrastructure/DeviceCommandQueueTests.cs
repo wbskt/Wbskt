@@ -112,11 +112,29 @@ public sealed class DeviceCommandQueueTests
         var command = new QueuedCommand(Guid.NewGuid(), ClientId, ClientRefId, WorkspaceId, "led.set", "{}", Now.AddHours(1));
         var announcement = new ClientCommandQueuedEvent(ClientRefId, ClientId, WorkspaceId, "led.set", "{}", command.CommandId, command.ExpiresAtUtc);
 
-        Assert.True(await Queue.QueueAsync(command, announcement, 5, CancellationToken.None));
-        Assert.True(await Queue.QueueAsync(command, announcement, 5, CancellationToken.None));
+        Assert.True(await Queue.QueueAsync(command, announcement, 5, returnedByHostId: null, CancellationToken.None));
+        Assert.True(await Queue.QueueAsync(command, announcement, 5, returnedByHostId: null, CancellationToken.None));
 
         Assert.Single(_store.Rows);
         _bus.Verify(b => b.PublishAsync(It.IsAny<ClientCommandQueuedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData("socket-a", 0)]
+    [InlineData("socket-b", 1)]
+    [InlineData(null, 1)]
+    public async Task A_hand_back_is_not_delivered_straight_back_to_the_host_that_returned_it(string? returnedBy, int delivered)
+    {
+        // Presence still names socket-a: its disconnect hasn't landed, or was lost.
+        _targets.Setup(t => t.FindAsync(ClientRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ClientCommandTarget(ClientId, WorkspaceId, IsConnected: true, HostId: "socket-a"));
+        var command = new QueuedCommand(Guid.NewGuid(), ClientId, ClientRefId, WorkspaceId, "led.set", "{}", Now.AddHours(1));
+        var announcement = new ClientCommandQueuedEvent(ClientRefId, ClientId, WorkspaceId, "led.set", "{}", command.CommandId, command.ExpiresAtUtc);
+
+        Assert.True(await Queue.QueueAsync(command, announcement, int.MaxValue, returnedBy, CancellationToken.None));
+
+        Assert.Equal(delivered, _published.OfType<ClientCommandEvent>().Count());
+        Assert.Equal(1 - delivered, _store.Rows.Count);
     }
 
     private sealed class FixedClock(DateTime utcNow) : TimeProvider
