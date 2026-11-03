@@ -42,12 +42,14 @@ BEGIN
 
     SELECT @AbandonedEmail = Email FROM dbo.Users WITH (UPDLOCK) WHERE Id = @UserId;
 
-    -- Every pending change and undo goes, this one included, so a change made with the stolen
-    -- session cannot be confirmed afterwards.
+    -- Every pending change goes, so one made with the stolen session cannot be confirmed afterwards,
+    -- and so does this undo and every later one. Earlier undos stay: whoever holds a later address
+    -- must not be able to spend the owner's way back to the address before it.
     UPDATE dbo.EmailChangeTokens
     SET ConsumedAt = SYSUTCDATETIME()
     WHERE UserId = @UserId
-      AND ConsumedAt IS NULL;
+      AND ConsumedAt IS NULL
+      AND (Kind = 1 OR Id >= @TokenId);
 
     UPDATE dbo.Users
     SET Email = @RestoredEmail,

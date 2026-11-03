@@ -46,9 +46,12 @@ BEGIN
         THROW 50021, 'That address cannot be used.', 1;
     END
 
+    -- Pending changes only. An undo from an earlier change stays live: that is how the owner gets back
+    -- when a stolen session changes the address twice.
     UPDATE dbo.EmailChangeTokens
     SET ConsumedAt = SYSUTCDATETIME()
     WHERE UserId = @UserId
+      AND Kind = 1
       AND ConsumedAt IS NULL;
 
     UPDATE dbo.Users

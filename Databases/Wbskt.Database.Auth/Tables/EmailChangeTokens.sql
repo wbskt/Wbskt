@@ -23,10 +23,11 @@ CREATE TABLE dbo.EmailChangeTokens (
 );
 GO
 
--- At most one pending change, and one live undo, per account. A new request replaces the old one.
+-- At most one pending change per account; a new request replaces the old one. Undos are not limited:
+-- each change leaves its own, so a second change cannot take away the owner's way back from the first.
 CREATE UNIQUE INDEX UX_EmailChangeTokens_Outstanding
-    ON dbo.EmailChangeTokens (UserId, Kind)
-    WHERE ConsumedAt IS NULL;
+    ON dbo.EmailChangeTokens (UserId)
+    WHERE ConsumedAt IS NULL AND Kind = 1;
 GO
 
 CREATE INDEX IX_EmailChangeTokens_ExpiresAt
