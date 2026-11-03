@@ -254,6 +254,18 @@ still resolve.
 | `AUTH_DEL_04` | − | Only administrator of a tenant someone else belongs to | **409** `ACCOUNT_SOLE_ADMINISTRATOR`, naming the tenant; nothing is deleted |
 | `AUTH_DEL_05` | + | An invited member deletes their account | **204**; the administrator's member list no longer has them |
 
+## 6d. Leaving a tenant — `POST /api/v1/tenants/{tenantRef}/leave`
+
+The removal account deletion makes from each shared tenant, for one tenant, by the member themselves.
+
+| ID | ± | Scenario | Expected |
+|---|---|---|---|
+| `AUTH_LEAVE_01` | + | An invited member leaves | **204**; the tenant is gone from their list and they are gone from the administrator's member list |
+| `AUTH_LEAVE_02` | − | Leave the only tenant you belong to | **409** `TENANT_LEAVE_LAST` |
+| `AUTH_LEAVE_03` | − | Leave a tenant nobody else belongs to | **409** `TENANT_LEAVE_SOLE_MEMBER` |
+| `AUTH_LEAVE_04` | − | Its only administrator leaves a shared tenant | **409** `TENANT_SOLE_ADMINISTRATOR` |
+| `AUTH_LEAVE_05` | − | Leave a tenant you are not in | **403** `TENANT_NOT_FOUND` |
+
 ---
 
 ## 7. Rate limiting & transport

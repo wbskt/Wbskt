@@ -32,6 +32,14 @@ public interface ITenantService
     /// from deactivating the account, which locks the user out of every tenant they belong to.
     /// </summary>
     Task<Result> RemoveTenantMemberAsync(int callerId, int tenantId, Guid userRef, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The caller leaves a tenant they belong to, suspended or not, as deleting their account leaves
+    /// each shared tenant: their workspaces there pass to another administrator. Refused when it is
+    /// their only tenant, when nobody else belongs to it, and when nobody else administers it.
+    /// </summary>
+    Task<Result> LeaveTenantAsync(int callerId, Guid tenantRef, CancellationToken cancellationToken = default);
+
     Task<Result> SetMemberSuspendedAsync(int callerId, int tenantId, Guid userRef, bool isSuspended, string ipAddress, CancellationToken cancellationToken = default);
 
     Task<Result<CreatedInvitationResponse>> CreateInvitationAsync(int callerId, int tenantId, CreateInvitationRequest request, CancellationToken cancellationToken = default);

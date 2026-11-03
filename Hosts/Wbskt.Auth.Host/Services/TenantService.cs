@@ -1,3 +1,4 @@
+using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Models;
 using Wbskt.Auth.Host.Providers;
@@ -103,6 +104,35 @@ internal sealed class TenantService : ITenantService
             await _announcer.ToTenantAsync(new MemberRemovedEvent(userRef), resolved.Value.TenantId, cancellationToken);
         });
     }
+
+    public async Task<Result> LeaveTenantAsync(int callerId, Guid tenantRef, CancellationToken cancellationToken = default)
+    {
+        int tenantId;
+        try
+        {
+            tenantId = await _tenants.LeaveTenantAsync(tenantRef, callerId, cancellationToken);
+        }
+        catch (SqlException ex) when (LeaveRefusal(ex) is { } refusal)
+        {
+            _logger.LogInformation("User ID {UserId} could not leave tenant {TenantRef}: {Message}", callerId, tenantRef, ex.Message);
+            return Result.Failure(refusal);
+        }
+
+        _logger.LogInformation("User ID {UserId} left tenant ID {TenantId}", callerId, tenantId);
+        var user = await _announcer.UserPermissionsChangedAsync(callerId, cancellationToken);
+        await _announcer.ToTenantAsync(new MemberLeftEvent(user.RefId), tenantId, cancellationToken);
+        return Result.Success();
+    }
+
+    private static Error? LeaveRefusal(SqlException ex) => ex.Number switch
+    {
+        // Reads like the tenant filter's answer, so leaving cannot probe for tenants.
+        50023 => Error.Forbidden("TENANT_NOT_FOUND", "Tenant not found."),
+        50024 => Error.Conflict("TENANT_LEAVE_LAST", ex.Message),
+        50025 => Error.Conflict("TENANT_LEAVE_SOLE_MEMBER", ex.Message),
+        50026 => Error.Conflict("TENANT_SOLE_ADMINISTRATOR", ex.Message),
+        _ => null
+    };
 
     // ----- Members -----------------------------------------------------------------------------
 

@@ -2246,6 +2246,29 @@
         ]
       }
     },
+    "/api/v1/tenants/{tenantRef}/leave": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenantRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "Management"
+        ]
+      }
+    },
     "/api/v1/tenants/{tenantRef}/members": {
       "get": {
         "parameters": [
