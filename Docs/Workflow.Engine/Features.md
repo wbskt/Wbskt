@@ -35,7 +35,7 @@ copy the inbound payload into the branch as `trigger` and stamp `triggeredAt`.
 | `trigger:clientPresence` | `clientRef`, `state` (`Online`/`Offline`), `forSeconds` (default 60, max 24 h), `correlationKey`, `concurrencyPolicy` | A device has stayed in that state for `forSeconds`. |
 | `trigger:schedule` | `cron`, `correlationKey` | The cron expression fires (UTC). |
 | `trigger:webhook` | `path`, `correlationKey`, `concurrencyPolicy`, `filter`, `secret` | `POST /api/callbacks/webhook/{workspaceRef}/{path}` on the management host. Only POST. With a `secret`, the caller must send it in `X-Wbskt-Secret`. |
-| `trigger:manual` | `description` | A user starts it from the console or API (`POST .../workflows/{workflowRef}/runs`, with an optional idempotency key). |
+| `trigger:manual` | `description`, `inputs` | A user starts it from the console or API (`POST .../workflows/{workflowRef}/runs`, with an optional idempotency key). `inputs` is `[{ name, label?, default? }]`: what Run now asks for before starting, each read as `$trigger.body.NAME`. One the caller leaves out of the payload takes its `default` (any JSON value), on Run now and on a parent's sub-workflow step alike. Names are 1 to 64 letters, digits or underscores, starting with a letter or underscore (`MANUAL_INPUT_NAME_INVALID`), unique ignoring case (`MANUAL_INPUT_NAME_DUPLICATE`), and not `parentRunRefId`, `correlationKey` or `depth`, which the engine writes itself (`MANUAL_INPUT_NAME_RESERVED`). |
 
 ### 2.2 Controls
 

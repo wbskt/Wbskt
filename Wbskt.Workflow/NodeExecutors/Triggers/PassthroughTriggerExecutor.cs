@@ -7,7 +7,7 @@ namespace Wbskt.Workflow.NodeExecutors.Triggers;
 /// <summary>
 /// A trigger executor that records the inbound payload and hands control to the "default" port
 /// without any channel-specific logic. Every trigger that simply starts a run this way (client,
-/// schedule, webhook, manual) has identical behaviour, so one executor serves them all - the DI
+/// schedule, webhook) has identical behaviour, so one executor serves them all - the DI
 /// container registers one instance per <see cref="NodeKind"/> it covers. A trigger that needs its
 /// own behaviour gets its own <see cref="INodeExecutor"/> instead.
 /// </summary>

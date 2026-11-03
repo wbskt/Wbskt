@@ -143,7 +143,7 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<INodeExecutor>(sp => new PassthroughTriggerExecutor(NodeKind.TriggerClientPresence, sp.GetRequiredService<TimeProvider>()));
         services.AddScoped<INodeExecutor>(sp => new PassthroughTriggerExecutor(NodeKind.TriggerSchedule, sp.GetRequiredService<TimeProvider>()));
         services.AddScoped<INodeExecutor>(sp => new PassthroughTriggerExecutor(NodeKind.TriggerWebhook, sp.GetRequiredService<TimeProvider>()));
-        services.AddScoped<INodeExecutor>(sp => new PassthroughTriggerExecutor(NodeKind.TriggerManual, sp.GetRequiredService<TimeProvider>()));
+        services.AddScoped<INodeExecutor>(sp => new ManualTriggerExecutor(sp.GetRequiredService<TimeProvider>()));
         services.AddScoped<INodeExecutor, LogicNodeExecutor>();
         services.AddScoped<INodeExecutor, VariableNodeExecutor>();
         services.AddScoped<INodeExecutor, ForEachNodeExecutor>();
