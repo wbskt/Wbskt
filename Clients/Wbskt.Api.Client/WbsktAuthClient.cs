@@ -493,6 +493,14 @@ public sealed class WbsktAuthClient : WbsktApiClient
     public Task<HttpResponseMessage> RemoveTenantMemberRawAsync(Guid tenantRef, Guid userRef, CancellationToken cancellationToken = default) =>
         SendRawAsync(HttpMethod.Delete, $"/api/v1/tenants/{tenantRef}/members/{userRef}", null, cancellationToken);
 
+    /// <summary>The bearer leaves a tenant they belong to. <c>POST /api/v1/tenants/{tenantRef}/leave</c>.</summary>
+    public Task LeaveTenantAsync(Guid tenantRef, CancellationToken cancellationToken = default) =>
+        ReceiveAsync(LeaveTenantRawAsync(tenantRef, cancellationToken), cancellationToken);
+
+    /// <summary><see cref="LeaveTenantAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
+    public Task<HttpResponseMessage> LeaveTenantRawAsync(Guid tenantRef, CancellationToken cancellationToken = default) =>
+        SendRawAsync(HttpMethod.Post, $"/api/v1/tenants/{tenantRef}/leave", null, cancellationToken);
+
     /// <summary>Suspends a member in one tenant, or lifts the suspension. <c>PUT /api/tenants/{tenantRef}/members/{userRef}/suspended</c>.</summary>
     public Task SetMemberSuspendedAsync(Guid tenantRef, Guid userRef, SetMemberSuspendedRequest request, CancellationToken cancellationToken = default) =>
         ReceiveAsync(SetMemberSuspendedRawAsync(tenantRef, userRef, request, cancellationToken), cancellationToken);

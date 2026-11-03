@@ -68,6 +68,37 @@ public sealed class TenantServiceTests
     }
 
     [Fact]
+    public async Task Leaving_a_tenant_drops_cached_access_and_is_logged_in_that_tenant()
+    {
+        var tenantRef = Guid.NewGuid();
+        _tenants.Setup(p => p.LeaveTenantAsync(tenantRef, MemberId, It.IsAny<CancellationToken>())).ReturnsAsync(TenantId);
+
+        var result = await _service.LeaveTenantAsync(MemberId, tenantRef);
+
+        Assert.True(result.IsSuccess);
+        Assert.Collection(_bus.Published,
+            e => Assert.Equal(MemberId, Assert.IsType<UserPermissionsChangedEvent>(e).UserId),
+            e => Assert.Equal(MemberRef, Assert.IsType<MemberLeftEvent>(e).MemberRefId));
+    }
+
+    [Theory]
+    [InlineData(50023, "TENANT_NOT_FOUND", ErrorType.Forbidden)]
+    [InlineData(50024, "TENANT_LEAVE_LAST", ErrorType.Conflict)]
+    [InlineData(50025, "TENANT_LEAVE_SOLE_MEMBER", ErrorType.Conflict)]
+    [InlineData(50026, "TENANT_SOLE_ADMINISTRATOR", ErrorType.Conflict)]
+    public async Task Leaving_is_refused_when_it_would_strand_someone(int guard, string code, ErrorType type)
+    {
+        _tenants.Setup(p => p.LeaveTenantAsync(It.IsAny<Guid>(), MemberId, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(SqlExceptions.WithNumber(guard, "Nobody else administers Acme."));
+
+        var result = await _service.LeaveTenantAsync(MemberId, Guid.NewGuid());
+
+        Assert.Equal(code, result.Error.Code);
+        Assert.Equal(type, result.Error.Type);
+        Assert.Empty(_bus.Published);
+    }
+
+    [Fact]
     public async Task The_caller_cannot_remove_themselves()
     {
         var self = Guid.NewGuid();

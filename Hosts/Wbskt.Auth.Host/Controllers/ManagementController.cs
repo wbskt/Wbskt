@@ -327,6 +327,23 @@ public class ManagementController(ITenantService tenantService, IAccessControlSe
     }
 
     /// <summary>
+    /// Leaves this tenant. Any member may, a suspended one included; it needs no permission. Workspaces
+    /// the caller owned here pass to another administrator, and everything assigned to them here goes.
+    /// </summary>
+    /// <remarks>
+    /// Refused with 409 when it is the caller's only tenant (<c>TENANT_LEAVE_LAST</c>), when nobody else
+    /// belongs to it (<c>TENANT_LEAVE_SOLE_MEMBER</c>), and when nobody else administers it
+    /// (<c>TENANT_SOLE_ADMINISTRATOR</c>; make someone else an administrator first). A tenant the caller
+    /// does not belong to is 403 <c>TENANT_NOT_FOUND</c>.
+    /// </remarks>
+    [HttpPost("{tenantRef:guid}/leave")]
+    public async Task<IActionResult> LeaveTenant(Guid tenantRef, CancellationToken cancellationToken)
+    {
+        var caller = CurrentUserId();
+        return caller.IsFailure ? MapError(caller.Error) : MapResult(await tenantService.LeaveTenantAsync(caller.Value, tenantRef, cancellationToken));
+    }
+
+    /// <summary>
     /// Suspends a member in this tenant, or lifts the suspension. A suspended member keeps their
     /// account, their other tenants and everything assigned to them here, but holds no permission in
     /// this tenant and cannot see or enter its workspaces until it is lifted. Refused for yourself and

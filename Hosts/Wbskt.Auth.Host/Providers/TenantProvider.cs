@@ -99,6 +99,18 @@ internal sealed class TenantProvider : BaseSqlProvider, ITenantProvider
         }, cancellationToken);
     }
 
+    public async Task<int> LeaveTenantAsync(Guid tenantRef, int userId, CancellationToken cancellationToken = default)
+    {
+        var parameters = await ExecuteNonQueryAsync("dbo.TenantMember_Leave", p =>
+        {
+            p.AddWithValue("@TenantRef", tenantRef);
+            p.AddWithValue("@UserId", userId);
+            p.Add("@TenantId", SqlDbType.Int).Direction = ParameterDirection.Output;
+        }, cancellationToken);
+
+        return (int)parameters["@TenantId"].Value;
+    }
+
     public async Task SetMemberSuspendedAsync(int tenantId, int userId, bool isSuspended, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.TenantMember_SetSuspended", p =>

@@ -29,6 +29,14 @@ internal interface ITenantProvider
     Task RemoveTenantMemberAsync(int tenantId, int userId, int newOwnerUserId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// The user leaves the tenant <paramref name="tenantRef"/> names (<c>TenantMember_Leave</c>), their
+    /// workspaces passing to another administrator, and returns its id. Throws 50023 when they are
+    /// not a member, 50024 when it is their only tenant, 50025 when nobody else belongs to it and
+    /// 50026 when nobody else administers it.
+    /// </summary>
+    Task<int> LeaveTenantAsync(Guid tenantRef, int userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Suspends a member in one tenant or lifts it (<c>TenantMember_SetSuspended</c>). Throws 50008 if
     /// it would leave the tenant without an administrator, 50016 if they are not a member.
     /// </summary>

@@ -8,6 +8,10 @@ namespace Wbskt.Events.Auth;
 [EventCriticality(EventCriticality.Warning)]
 public sealed record MemberRemovedEvent(Guid MemberRefId) : TenantActorEvent;
 
+/// <summary>A member left the tenant of their own accord; workspaces they owned passed to another administrator.</summary>
+[EventCriticality(EventCriticality.Warning)]
+public sealed record MemberLeftEvent(Guid MemberRefId) : TenantActorEvent;
+
 /// <summary>A member was suspended: they keep their account but lose access to this tenant.</summary>
 [EventCriticality(EventCriticality.Warning)]
 public sealed record MemberSuspendedEvent(Guid MemberRefId) : TenantActorEvent;
