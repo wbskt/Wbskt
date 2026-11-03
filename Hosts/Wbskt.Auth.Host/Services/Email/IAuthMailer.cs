@@ -25,4 +25,10 @@ internal interface IAuthMailer
     ValueTask QueuePasswordResetAsync(string to, string username, string token, DateTime expiresAtUtc, CancellationToken ct);
 
     ValueTask QueueAccountAlreadyExistsAsync(string to, string username, CancellationToken ct);
+
+    /// <summary>The link that confirms a change of address, sent to the new address.</summary>
+    ValueTask QueueEmailChangeAsync(string to, string username, string token, DateTime expiresAtUtc, CancellationToken ct);
+
+    /// <summary>Tells the old address the account moved to <paramref name="newEmail"/>, with the link that undoes it.</summary>
+    ValueTask QueueEmailChangedAsync(string to, string username, string newEmail, string revertToken, DateTime expiresAtUtc, CancellationToken ct);
 }

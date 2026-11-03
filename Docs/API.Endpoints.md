@@ -121,22 +121,24 @@ says what it is, `user` or `client`.
 Anonymous except where noted, and rate limited per client IP so the password hasher cannot be used as
 a work amplifier. There are four buckets, so routine traffic cannot spend the sign-in budget:
 `RateLimiting:Authentication` (10/min: register, login, change-password, account/delete,
-forgot-password, reset-password), `RateLimiting:TokenRefresh` (120/min: refresh-token, logout),
+account/change-email, forgot-password, reset-password), `RateLimiting:TokenRefresh` (120/min: refresh-token, logout),
 `RateLimiting:SignUpChallenge` (30/min: register/challenge) and `RateLimiting:EmailVerification`
-(10/min: verify-email, resend-verification).
+(10/min: verify-email, resend-verification, account/confirm-email-change,
+account/revert-email-change).
 
-The endpoints that hash a password (register, login, change-password, account/delete, reset-password) also share one
+The endpoints that hash a password (register, login, change-password, account/delete,
+account/change-email, reset-password) also share one
 host-wide concurrency limit, `RateLimiting:PasswordHashing` (`PermitLimit`, default twice the CPU
 count, with up to `QueueLimit` 20 waiting), so a burst from many addresses queues instead of starving
 every other request of CPU. A request that finds the queue full gets 429. A password stored with
 older hashing settings is re-hashed with the current ones on the next successful sign-in.
 
 **Refresh cookie.** A browser client sends `X-Refresh-Token-Transport: cookie` on login,
-refresh-token, logout, logout-all and change-password. The refresh token then travels only in an
+refresh-token, logout, logout-all, change-password and account/confirm-email-change. The refresh token then travels only in an
 `HttpOnly; Secure` cookie named `wbskt_refresh`, scoped to `/api/auth`, and is left out of the JSON
 body, so script on the page can never read it. refresh-token and logout take an empty body and read
-the cookie; refresh-token sets the replacement cookie, and a refused refresh, logout, logout-all and
-account/delete clear it. The cookie is only read from a request with that header (which forces a CORS preflight)
+the cookie; refresh-token sets the replacement cookie, and a refused refresh, logout, logout-all,
+account/delete and account/revert-email-change clear it, as does a confirm-email-change answered 204. The cookie is only read from a request with that header (which forces a CORS preflight)
 and an allowed `Origin`, so another site cannot spend it. `Auth:RefreshCookie:SameSite` defaults to
 `Strict`. Without the header everything stays in the body as before, for the SDK, devices and tests;
 a body-only refresh-token or logout with no token is still a 400. CORS on this host allows
@@ -181,6 +183,10 @@ is issued, so the link already in the inbox keeps working.
 | `POST logout-all` | authenticated | Revokes the caller's entire refresh-token set. |
 | `POST change-password` | authenticated | Takes `currentPassword` and `newPassword`. Writes the new password and revokes **every** session the account has in one transaction, then returns a fresh token pair for the caller. A wrong current password is 400 `AUTH_CURRENT_PASSWORD_INVALID` (not 401, so a client does not sign out) and counts towards the lockout below; a locked account is 403 `AUTH_ACCOUNT_LOCKED`. Rate limited like the anonymous endpoints. |
 | `POST account/delete` | authenticated | Deletes the caller's account. Takes `password`, checked like `change-password`'s current password (400 `AUTH_CURRENT_PASSWORD_INVALID`, counts towards the lockout, 403 `AUTH_ACCOUNT_LOCKED`). Tenants the caller is the only member of are deleted with their workspaces (each publishes `WorkspaceDeletedEvent`); from every other tenant the caller is removed, their workspaces passing to another administrator. 409 `ACCOUNT_SOLE_ADMINISTRATOR` while nobody else administers a tenant others belong to (the message names it), so promote someone first. Leaving each shared tenant is announced as a removal (`MemberRemovedEvent`), and the deletion as `AccountDeletedEvent`. A deactivated account cannot delete itself. The `Users` row is kept but anonymised (username, address and password cleared), so the address can register again and audit references still resolve. Every session and access token ends. **204** on success. |
+| `PATCH account` | authenticated | Changes fields of the caller's account: for now `username`, a display name (sign-in is by email). 3 to 50 characters, unique (409 `USERNAME_TAKEN`), and not a reserved name or a look-alike of one such as `admin`, `Adm1n_`, `the.support.team` or anything containing `wbskt` (400 `USERNAME_RESERVED`; sign-up refuses the same names). At most one change every 30 days (400 `USERNAME_CHANGED_RECENTLY`, whose message says when). A request naming no field is 400 `ACCOUNT_NO_CHANGES`; the current name again changes nothing. Returns a fresh access token for this session carrying the new name, with no refresh token, since the session's own keeps working. Raises `UserProfileChangedEvent`. |
+| `POST account/change-email` | authenticated | Takes `newEmail` and `password` (checked like `change-password`'s, counted towards the lockout). Mails a confirm link to the new address, valid 24 hours; nothing changes until it is followed, and a new request replaces one still pending. An address another account uses is 409 `EMAIL_CHANGE_CONFLICT` and says no more; the current address is 400 `EMAIL_UNCHANGED`. The per-address mail cooldown applies, and a request it holds back answers **204** like any other. |
+| `POST account/confirm-email-change` | anonymous | Takes the `token` from the confirm link. Switches the account to the new address (checked free again; 409 `EMAIL_CHANGE_CONFLICT`), ends **every** session and access token, and mails the old address a link that undoes the change for 7 days. A caller signed in as the same account gets a fresh token pair (**200**); anyone else gets **204** and signs in with the new address. A spent, expired or unknown token, or one whose account has moved address since, is 400 `EMAIL_CHANGE_TOKEN_INVALID`. Raises `UserProfileChangedEvent`. Pending invitations sent to the old address still work, since accepting goes by token. |
+| `POST account/revert-email-change` | anonymous | Takes the `token` from the undo link mailed to the old address. Puts the old address back whatever it was changed to since, ends every session again, and drops any other pending change. 400 `EMAIL_CHANGE_TOKEN_INVALID` and 409 `EMAIL_CHANGE_CONFLICT` as above. **204**. Raises `UserProfileChangedEvent` with `how: reverted`. |
 | `GET sessions` | authenticated | The caller's live sessions, newest sign-in first: `id` (a GUID that stays the same across refreshes), `createdAt` (the sign-in), `lastUsedAt`, `expiresAt`, `ipAddress` (of the last refresh) and `isCurrent` (the session the request came from). One per signed-in device or browser. |
 | `DELETE sessions/{sessionId}` | authenticated | Ends one of the caller's sessions: its refresh token stops working, and so does the access token that device holds (its `sid` claim names the session). 404 `AUTH_SESSION_NOT_FOUND` for an id that is not a live session of theirs. |
 | `POST forgot-password` | anonymous | Mails a reset link if the address has a usable account. **Always 204** — same status, same empty body, for a registered address, an unknown one, a deactivated one, and a malformed one. |

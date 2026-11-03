@@ -254,6 +254,21 @@ still resolve.
 | `AUTH_DEL_04` | − | Only administrator of a tenant someone else belongs to | **409** `ACCOUNT_SOLE_ADMINISTRATOR`, naming the tenant; nothing is deleted |
 | `AUTH_DEL_05` | + | An invited member deletes their account | **204**; the administrator's member list no longer has them |
 
+## 6c. Changing your username and email — `PATCH /api/auth/account`, `POST /api/auth/account/change-email`
+
+The username is a display name; sign-in is by email. An email change takes effect only when the link
+mailed to the new address is followed, and the old address gets a link that undoes it for 7 days.
+The suite has no inbox, so the links themselves are covered by the unit tests.
+
+| ID | ± | Scenario | Expected |
+|---|---|---|---|
+| `AUTH_PROF_01` | + | Rename, then rename again | **200** with an access token whose `name` is the new one and no refresh token; the second is **400** `USERNAME_CHANGED_RECENTLY`; sign-in still works |
+| `AUTH_PROF_02` | − | Rename to `Adm1n_`, to another user's name, or with no field | **400** `USERNAME_RESERVED`, **409** `USERNAME_TAKEN`, **400** |
+| `AUTH_PROF_03` | ± | Change email with a wrong password, then the right one | **400** `AUTH_CURRENT_PASSWORD_INVALID`, then **204**; the old address still signs in and the new one does not |
+| `AUTH_PROF_04` | − | Change email to an address another account uses | **409** `EMAIL_CHANGE_CONFLICT` |
+| `AUTH_PROF_05` | − | Confirm or revert with a token that was never issued | **400** `EMAIL_CHANGE_TOKEN_INVALID` |
+| `AUTH_PROF_06` | − | Sign up as `Support` | **400** `USERNAME_RESERVED` |
+
 ## 6d. Leaving a tenant — `POST /api/v1/tenants/{tenantRef}/leave`
 
 The removal account deletion makes from each shared tenant, for one tenant, by the member themselves.

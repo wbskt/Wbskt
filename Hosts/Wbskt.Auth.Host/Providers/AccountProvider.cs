@@ -150,6 +150,72 @@ internal sealed class AccountProvider : BaseSqlProvider, IAccountProvider
         }
     }
 
+    public async Task ChangeUsernameAsync(int userId, string username, TimeSpan minInterval, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.User_ChangeUsername", p =>
+        {
+            p.AddWithValue("@UserId", userId);
+            p.AddWithValue("@Username", username);
+            p.AddWithValue("@MinIntervalSeconds", (int)minInterval.TotalSeconds);
+        }, cancellationToken);
+    }
+
+    public async Task CreateEmailChangeTokenAsync(int userId, string newEmail, byte[] tokenHash, DateTime expiresAt, string? requestedByIp, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.EmailChangeToken_Create", p =>
+        {
+            p.AddWithValue("@UserId", userId);
+            p.AddWithValue("@NewEmail", newEmail);
+            p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = tokenHash;
+            p.AddWithValue("@ExpiresAt", expiresAt);
+            p.AddWithValue("@RequestedByIp", (object?)requestedByIp ?? DBNull.Value);
+        }, cancellationToken);
+    }
+
+    public async Task<EmailChange> ConfirmEmailChangeAsync(byte[] tokenHash, byte[] revertTokenHash, DateTime revertExpiresAt, string? revokedByIp, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var parameters = await ExecuteNonQueryAsync("dbo.EmailChange_Confirm", p =>
+            {
+                p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = tokenHash;
+                p.Add("@RevertTokenHash", SqlDbType.VarBinary, 32).Value = revertTokenHash;
+                p.AddWithValue("@RevertExpiresAt", revertExpiresAt);
+                p.AddWithValue("@RevokedByIp", (object?)revokedByIp ?? DBNull.Value);
+                p.Add("@UserId", SqlDbType.Int).Direction = ParameterDirection.Output;
+                p.Add("@OldEmail", SqlDbType.NVarChar, 100).Direction = ParameterDirection.Output;
+                p.Add("@NewEmail", SqlDbType.NVarChar, 100).Direction = ParameterDirection.Output;
+            }, cancellationToken);
+
+            return new EmailChange((int)parameters["@UserId"].Value, (string)parameters["@OldEmail"].Value, (string)parameters["@NewEmail"].Value);
+        }
+        catch (SqlException ex) when (ex.Number == 50020)
+        {
+            throw new SecurityException("Email change token is not valid.");
+        }
+    }
+
+    public async Task<EmailChange> RevertEmailChangeAsync(byte[] tokenHash, string? revokedByIp, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var parameters = await ExecuteNonQueryAsync("dbo.EmailChange_Revert", p =>
+            {
+                p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = tokenHash;
+                p.AddWithValue("@RevokedByIp", (object?)revokedByIp ?? DBNull.Value);
+                p.Add("@UserId", SqlDbType.Int).Direction = ParameterDirection.Output;
+                p.Add("@RestoredEmail", SqlDbType.NVarChar, 100).Direction = ParameterDirection.Output;
+                p.Add("@AbandonedEmail", SqlDbType.NVarChar, 100).Direction = ParameterDirection.Output;
+            }, cancellationToken);
+
+            return new EmailChange((int)parameters["@UserId"].Value, (string)parameters["@AbandonedEmail"].Value, (string)parameters["@RestoredEmail"].Value);
+        }
+        catch (SqlException ex) when (ex.Number == 50020)
+        {
+            throw new SecurityException("Email change token is not valid.");
+        }
+    }
+
     public async Task<IReadOnlyCollection<int>> GetSoleTenantWorkspaceIdsAsync(int userId, CancellationToken cancellationToken = default)
     {
         return await ExecuteCollectionAsync(

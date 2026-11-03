@@ -505,6 +505,10 @@ public sealed class AccountRecoveryTests
             Sent.Add($"exists:{to}");
             return ValueTask.CompletedTask;
         }
+
+        public ValueTask QueueEmailChangeAsync(string to, string username, string token, DateTime expiresAtUtc, CancellationToken ct) => ValueTask.CompletedTask;
+
+        public ValueTask QueueEmailChangedAsync(string to, string username, string newEmail, string revertToken, DateTime expiresAtUtc, CancellationToken ct) => ValueTask.CompletedTask;
     }
 }
 
@@ -619,5 +623,9 @@ public sealed class RegistrationDisclosureTests
             Sent.Add($"exists:{to}");
             return ValueTask.CompletedTask;
         }
+
+        public ValueTask QueueEmailChangeAsync(string to, string username, string token, DateTime expiresAtUtc, CancellationToken ct) => ValueTask.CompletedTask;
+
+        public ValueTask QueueEmailChangedAsync(string to, string username, string newEmail, string revertToken, DateTime expiresAtUtc, CancellationToken ct) => ValueTask.CompletedTask;
     }
 }

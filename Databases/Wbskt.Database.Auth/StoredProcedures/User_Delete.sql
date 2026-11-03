@@ -131,6 +131,7 @@ BEGIN
     DELETE FROM dbo.RefreshTokens WHERE UserId = @UserId;
     DELETE FROM dbo.PasswordResetTokens WHERE UserId = @UserId;
     DELETE FROM dbo.EmailVerificationTokens WHERE UserId = @UserId;
+    DELETE FROM dbo.EmailChangeTokens WHERE UserId = @UserId;
 
     DECLARE @Placeholder NVARCHAR(40) = N'deleted-' + REPLACE(LOWER(CONVERT(NVARCHAR(36), (SELECT RefId FROM dbo.Users WHERE Id = @UserId))), N'-', N'');
     DECLARE @Email NVARCHAR(100) = (SELECT Email FROM dbo.Users WHERE Id = @UserId);
@@ -149,7 +150,9 @@ BEGIN
         FailedLoginCount = 0,
         LockedUntil = NULL,
         LastLoginAt = NULL,
-        PasswordChangedAt = NULL
+        PasswordChangedAt = NULL,
+        UpdatedAt = SYSUTCDATETIME(),
+        UsernameChangedAt = NULL
     WHERE Id = @UserId;
 
     COMMIT TRANSACTION;

@@ -55,6 +55,7 @@ public static class Program
         builder.Services.AddScopedWithQueuedEvents<IPasswordService, PasswordService>();
         builder.Services.AddScopedWithQueuedEvents<IRegistrationService, RegistrationService>();
         builder.Services.AddScopedWithQueuedEvents<IAccountDeletionService, AccountDeletionService>();
+        builder.Services.AddScopedWithQueuedEvents<IAccountProfileService, AccountProfileService>();
         builder.Services.AddScoped<ITenantService, TenantService>();
         builder.Services.AddScoped<IAccessControlService, AccessControlService>();
         builder.Services.AddScoped<IWorkspaceProvider, WorkspaceProvider>();

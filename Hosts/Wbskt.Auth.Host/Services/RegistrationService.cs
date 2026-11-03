@@ -72,6 +72,12 @@ internal sealed class RegistrationService : IRegistrationService
     {
         _logger.LogDebug("Attempting to register user: {Username}", username);
 
+        if (ReservedUsernames.IsReserved(username))
+        {
+            _metrics.RecordRegistration("reserved_username");
+            return Result.Failure(AccountProfileService.UsernameReserved);
+        }
+
         if (await _breachedPasswords.IsBreachedAsync(password, cancellationToken))
         {
             _metrics.RecordRegistration("breached_password");

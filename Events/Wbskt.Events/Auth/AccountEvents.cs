@@ -40,3 +40,11 @@ public sealed record EmailVerifiedEvent(int UserId, Guid UserRefId) : AccountEve
 /// </summary>
 [EventCriticality(EventCriticality.Warning)]
 public sealed record AccountDeletedEvent(int UserId, Guid UserRefId) : AccountEvent(UserId, UserRefId);
+
+/// <summary>
+/// The person's username or email changed. <c>Field</c> is <c>username</c> or <c>email</c>; <c>How</c> is
+/// <c>changed</c>, or <c>reverted</c> when the old address's owner undid an email change from the link
+/// mailed to it.
+/// </summary>
+[EventCriticality(EventCriticality.Warning)]
+public sealed record UserProfileChangedEvent(int UserId, Guid UserRefId, string Field, string OldValue, string NewValue, string How) : AccountEvent(UserId, UserRefId);

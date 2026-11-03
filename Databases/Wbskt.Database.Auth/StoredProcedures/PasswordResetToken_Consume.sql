@@ -47,6 +47,7 @@ BEGIN
     SET PasswordHash = @PasswordHash,
         IsEmailVerified = 1,
         PasswordChangedAt = SYSUTCDATETIME(),
+        UpdatedAt = SYSUTCDATETIME(),
         -- Recovery is how a locked-out owner gets back in, so it lifts the lock too.
         FailedLoginCount = 0,
         LockedUntil = NULL
