@@ -145,7 +145,8 @@ async def test_waits_for_retry_after_when_throttled(api, socket_server, device):
 # On the socket
 
 
-@pytest.mark.parametrize("code", [1000, 1001, 1008, 1009])
+# 1008 is what a gateway from before the per-reason codes sent for superseded, revoked and throttled.
+@pytest.mark.parametrize("code", [1000, 1001, 1008, 1009, 4001, 4002, 4003])
 async def test_reconnects_after_each_close_code(api, socket_server, device, code):
     harness = await device()
     await harness.expect("connected")
@@ -154,10 +155,14 @@ async def test_reconnects_after_each_close_code(api, socket_server, device, code
     await socket_server.close(0, code, "closed by the conformance suite")
     await harness.expect("disconnected")
 
-    # 1001 asks for a spread of up to 30 s; the others for the usual schedule.
-    await socket_server.wait_connections(2, timeout=40.0 if code == 1001 else RECONNECT)
+    # 1001 asks for a spread of up to 30 s, and 4003 for a wait of 30-60 s from an SDK that can read
+    # the code; the others for the usual schedule.
+    timeout = {1001: 40.0, 4003: 70.0}.get(code, RECONNECT)
+    await socket_server.wait_connections(2, timeout=timeout)
     await harness.expect("connected")
-    assert len(api.logins) == 1
+    # After 4002 (revoked) an SDK that can read the code logs in again; one that can't reuses its token.
+    if code != 4002:
+        assert len(api.logins) == 1
 
 
 async def test_a_second_connection_supersedes_the_first(api, socket_server, device):
@@ -170,7 +175,7 @@ async def test_a_second_connection_supersedes_the_first(api, socket_server, devi
     await second.stop()
 
     await first.expect("connected", timeout=RECONNECT)
-    assert socket_server.close_codes[0] == 1008
+    assert socket_server.close_codes[0] == 4001
 
 
 async def test_sends_capabilities_first_on_every_connection(api, socket_server, device):

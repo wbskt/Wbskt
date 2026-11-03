@@ -26,6 +26,10 @@ LOGIN_PATH = API_PREFIX + "/client-auth/login"
 SOCKET_PATH = "/ws"
 
 CLOSE_SERVER_RESTARTING = 1001
+# Why the gateway ended a connection; one from before these codes sends 1008 for all three.
+CLOSE_SUPERSEDED = 4001
+CLOSE_REVOKED = 4002
+CLOSE_THROTTLED = 4003
 
 
 def is_reserved(message_type: str) -> bool:

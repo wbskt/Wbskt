@@ -32,6 +32,7 @@ public static class GatewayCoreExtensions
         // Signs nothing; accepts client tokens signed by the management host (Jwt:TrustedJwksUrl).
         // Every transport takes the same device token.
         services.AddWbsktJwtTrust(JwtIssuers.Management, JwtAudiences.Socket);
+        services.AddSingleton<SupersedeMonitor>();
         services.AddSingleton<DeviceSessions>();
         // What a device sends: one handler per protocol message type, and the device's own messages.
         services.AddSingleton<IInboundMessageHandler, PongHandler>();

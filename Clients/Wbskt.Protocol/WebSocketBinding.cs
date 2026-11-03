@@ -14,4 +14,13 @@ public static class WebSocketBinding
     /// the device as updating rather than offline, for up to <see cref="OtaTiming.UpdateWindow"/>.
     /// </summary>
     public const int UpdatingCloseCode = 4000;
+
+    /// <summary>The gateway closed this connection because a newer one for the same device replaced it.</summary>
+    public const int SupersededCloseCode = 4001;
+
+    /// <summary>The gateway closed this connection because the device lost access: drop the token before reconnecting.</summary>
+    public const int RevokedCloseCode = 4002;
+
+    /// <summary>The gateway closed this connection because the device kept sending over its message budget.</summary>
+    public const int ThrottledCloseCode = 4003;
 }

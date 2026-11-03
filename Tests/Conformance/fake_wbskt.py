@@ -4,8 +4,8 @@ It records what the SDK did (registrations, logins, the token on each upgrade, e
 scenarios can check it against Docs/Device.Protocol.md, and it can misbehave on cue: refuse a token,
 throttle a login, reject credentials, close the socket. Like the real gateway, it refuses a revoked
 device's token with 403 CLIENT_REVOKED, refuses an upgrade offering only unknown subprotocols with 400
-SOCKET_PROTOCOL_UNSUPPORTED, closes a device's older connection when it connects again (1008), and
-enforces the per-device message budget (1008).
+SOCKET_PROTOCOL_UNSUPPORTED, closes a device's older connection when it connects again (4001), and
+enforces the per-device message budget (4003).
 """
 
 import asyncio
@@ -29,8 +29,8 @@ SUBPROTOCOL = "wbskt.v1"
 BUDGET_PER_SECOND = 10.0
 BUDGET_BURST = 100
 BUDGET_CLOSE_AFTER_DROPPED = 500
-CLOSE_THROTTLED = 1008
-CLOSE_SUPERSEDED = 1008
+CLOSE_SUPERSEDED = 4001
+CLOSE_THROTTLED = 4003
 # The one close code a device sends of its own: closing to install a firmware update.
 CLOSE_UPDATING = 4000
 

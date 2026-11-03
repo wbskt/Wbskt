@@ -13,6 +13,9 @@ internal sealed class ReconnectPolicy
     /// <summary>The window when the server closed with <c>EndpointUnavailable</c>: it is restarting.</summary>
     internal static readonly TimeSpan RestartSpread = TimeSpan.FromSeconds(30);
 
+    /// <summary>After a close for sending too much (4003): at least this long, plus up to as long again.</summary>
+    internal static readonly TimeSpan ThrottledWait = TimeSpan.FromSeconds(30);
+
     internal static readonly TimeSpan Base = TimeSpan.FromSeconds(2);
     internal static readonly TimeSpan Cap = TimeSpan.FromMinutes(1);
 
@@ -23,7 +26,12 @@ internal sealed class ReconnectPolicy
         _random = random ?? Random.Shared;
     }
 
-    public TimeSpan FirstDelay(bool serverRestarting) => UpTo(serverRestarting ? RestartSpread : Spread);
+    public TimeSpan FirstDelay(ServerClose close) => close switch
+    {
+        ServerClose.Restarting => UpTo(RestartSpread),
+        ServerClose.Throttled => ThrottledWait + UpTo(ThrottledWait),
+        _ => UpTo(Spread)
+    };
 
     /// <summary>The wait after <paramref name="failures"/> failed attempts in a row: up to base × 2^failures, capped.</summary>
     public TimeSpan RetryDelay(int failures)

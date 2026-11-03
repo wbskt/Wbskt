@@ -26,8 +26,8 @@ internal sealed class SocketClient : IAsyncDisposable
 
     public bool IsConnected => _webSocket.State == WebSocketState.Open;
 
-    /// <summary>The last connection was closed by a server shutting down (<c>EndpointUnavailable</c>).</summary>
-    public bool ServerRestarting { get; private set; }
+    /// <summary>Why the gateway ended the last connection; <see cref="ServerClose.Other"/> when it dropped or closed otherwise.</summary>
+    public ServerClose LastClose { get; private set; }
 
     /// <summary>The last connect attempt was refused with 401: the token is no longer accepted.</summary>
     public bool TokenRejected { get; private set; }
@@ -55,7 +55,7 @@ internal sealed class SocketClient : IAsyncDisposable
         _webSocket.Dispose();
         _webSocket = new ClientWebSocket();
 
-        ServerRestarting = false;
+        LastClose = ServerClose.Other;
         TokenRejected = false;
 
         var uri = new Uri($"{_baseUrl.TrimEnd('/')}/ws");
@@ -114,7 +114,7 @@ internal sealed class SocketClient : IAsyncDisposable
                 switch (read.Kind)
                 {
                     case FrameKind.Closed:
-                        ServerRestarting = _webSocket.CloseStatus == WebSocketCloseStatus.EndpointUnavailable;
+                        LastClose = ServerCloses.From(_webSocket.CloseStatus);
                         await _webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Acknowledged", _cts.Token);
                         return;
                     case FrameKind.TooBig:

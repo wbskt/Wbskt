@@ -59,9 +59,15 @@ How the gateway signals each reason the model gives for ending a connection (mod
 |---|---|---|
 | 1000 NormalClosure | Normal | Reconnect on the schedule. |
 | 1001 EndpointUnavailable | Restarting | Reconnect, 0–30 s spread. |
-| 1008 PolicyViolation | Superseded, revoked, throttled | Reconnect on the schedule; a revoked device's login will then fail with 401. |
 | 1009 MessageTooBig | Too big | Fix the sender; reconnect on the schedule. |
 | 1011 InternalServerError | Server error | Reconnect on the schedule. |
+| 4001 Superseded | Superseded | Reconnect on the schedule. Log it: repeated, it means another device uses these credentials. |
+| 4002 Revoked | Revoked | Drop the access token, then reconnect on the schedule; the login decides what happens next. |
+| 4003 Throttled | Throttled | Wait a random 30–60 s, then reconnect; send less. |
+
+A gateway from before the 4001–4003 codes sends 1008 PolicyViolation for all three; treat 1008 as
+"reconnect on the schedule". A client whose WebSocket library does not pass the close code up treats
+every close alike, which is safe but slower to recover from a revocation.
 
 The close description is text for logs. Branch on the code, not on the description.
 
@@ -78,7 +84,8 @@ Any other code from a device is an ordinary close.
 An SDK conforms to the WebSocket binding when it:
 
 - [ ] offers `wbskt.v1` and sends the token as a bearer header (or `access_token`);
-- [ ] renews the token after a 401 on the upgrade, and keeps it after any other refusal.
+- [ ] renews the token after a 401 on the upgrade, and keeps it after any other refusal;
+- [ ] where its WebSocket library passes the close code up: drops the token after 4002, waits 30–60 s after 4003, and logs 4001.
 
 Together with the [message model's checklist](Device.Protocol.md#6-conformance-checklist), this is
 everything the conformance suite (`Tests/Conformance`) checks.

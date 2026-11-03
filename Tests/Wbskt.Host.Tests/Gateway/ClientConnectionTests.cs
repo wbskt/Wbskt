@@ -15,7 +15,7 @@ public sealed class ClientConnectionTests
 
         await connection.RequestCloseAsync(DisconnectReason.Revoked, "Client deleted.");
 
-        socket.Verify(x => x.CloseOutputAsync(WebSocketCloseStatus.PolicyViolation, "Client deleted.", It.IsAny<CancellationToken>()), Times.Once);
+        socket.Verify(x => x.CloseOutputAsync((WebSocketCloseStatus)4002, "Client deleted.", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -43,9 +43,9 @@ public sealed class ClientConnectionTests
 public sealed class WebSocketCloseStatusesTests
 {
     [Theory]
-    [InlineData(DisconnectReason.Revoked, WebSocketCloseStatus.PolicyViolation)]
-    [InlineData(DisconnectReason.Superseded, WebSocketCloseStatus.PolicyViolation)]
-    [InlineData(DisconnectReason.Throttled, WebSocketCloseStatus.PolicyViolation)]
+    [InlineData(DisconnectReason.Revoked, (WebSocketCloseStatus)4002)]
+    [InlineData(DisconnectReason.Superseded, (WebSocketCloseStatus)4001)]
+    [InlineData(DisconnectReason.Throttled, (WebSocketCloseStatus)4003)]
     [InlineData(DisconnectReason.MessageTooBig, WebSocketCloseStatus.MessageTooBig)]
     [InlineData(DisconnectReason.ServerStopping, WebSocketCloseStatus.EndpointUnavailable)]
     [InlineData(DisconnectReason.Error, WebSocketCloseStatus.InternalServerError)]
