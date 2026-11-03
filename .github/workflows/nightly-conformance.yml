@@ -25,6 +25,38 @@ jobs:
       sqlserver:
         image: mcr.microsoft.com/mssql/server:2022-latest
         env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: Welcome1234
+          # The edition production runs, so a feature Express lacks fails here, not on the VM.
+          MSSQL_PID: Express
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P Welcome1234 -C -Q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 10
+          --health-start-period 30s
+      rabbitmq:
+        image: rabbitmq:4-management
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 10
+          --health-start-period 20s
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
       ConnectionStrings__Redis: localhost:6379
       HOST_SQL_PASSWORD: Wb1-e2e-Host-Login
       ConnectionStrings__AuthDBConnection: Server=localhost;Database=Wbskt.Database.Auth;User ID=wbskt_auth;Password=Wb1-e2e-Host-Login;Encrypt=False;
