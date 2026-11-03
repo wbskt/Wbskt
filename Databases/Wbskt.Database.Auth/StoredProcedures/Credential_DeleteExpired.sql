@@ -1,4 +1,4 @@
--- Retention sweep for spent credentials: refresh, password-reset and email-verification tokens, and
+-- Retention sweep for spent credentials: refresh, password-reset, email-verification and email-change tokens, and
 -- invitations nobody accepted, once they expired before @CutoffUtc. Deletes up to @BatchSize rows from
 -- each table and returns the total; the caller repeats until it comes back 0.
 --
@@ -21,6 +21,9 @@ BEGIN
     SET @Deleted += @@ROWCOUNT;
 
     DELETE TOP (@BatchSize) FROM dbo.EmailVerificationTokens WHERE ExpiresAt < @CutoffUtc;
+    SET @Deleted += @@ROWCOUNT;
+
+    DELETE TOP (@BatchSize) FROM dbo.EmailChangeTokens WHERE ExpiresAt < @CutoffUtc;
     SET @Deleted += @@ROWCOUNT;
 
     DELETE TOP (@BatchSize) FROM dbo.TenantInvitations WHERE ExpiresAt < @CutoffUtc AND AcceptedAt IS NULL;

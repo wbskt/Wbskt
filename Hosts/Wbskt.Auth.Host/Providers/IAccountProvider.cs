@@ -54,6 +54,29 @@ internal interface IAccountProvider : IReferenceProvider
     Task<int> ConsumeEmailVerificationTokenAsync(byte[] tokenHash, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Renames the account (<c>dbo.User_ChangeUsername</c>). Throws SQL guard 50022 when it was renamed
+    /// less than <paramref name="minInterval"/> ago, and a unique-key violation when the name is taken.
+    /// </summary>
+    Task ChangeUsernameAsync(int userId, string username, TimeSpan minInterval, CancellationToken cancellationToken = default);
+
+    /// <summary>Starts a change of address to <paramref name="newEmail"/>, replacing any change still pending.</summary>
+    Task CreateEmailChangeTokenAsync(int userId, string newEmail, byte[] tokenHash, DateTime expiresAt, string? requestedByIp, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Switches the account to the address the confirm token names, revokes every refresh token, and
+    /// stores the revert token, in one transaction. Throws
+    /// <see cref="Wbskt.Primitives.Exceptions.SecurityException"/> when the token is not valid, and SQL
+    /// guard 50021 (or a unique-key violation) when the address is taken.
+    /// </summary>
+    Task<EmailChange> ConfirmEmailChangeAsync(byte[] tokenHash, byte[] revertTokenHash, DateTime revertExpiresAt, string? revokedByIp, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Puts the account back on the address the revert token names and revokes every refresh token.
+    /// Throws as <see cref="ConfirmEmailChangeAsync"/> does.
+    /// </summary>
+    Task<EmailChange> RevertEmailChangeAsync(byte[] tokenHash, string? revokedByIp, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// The workspaces deleting this account deletes with it: those of every tenant the user is the
     /// only member of (<c>dbo.User_GetSoleTenantWorkspaces</c>).
     /// </summary>

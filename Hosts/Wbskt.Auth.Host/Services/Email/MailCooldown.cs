@@ -5,12 +5,16 @@ using StackExchange.Redis;
 
 namespace Wbskt.Auth.Host.Services.Email;
 
-/// <summary>The mail an anonymous caller can make this host send to an address of their choosing.</summary>
+/// <summary>
+/// The mail a caller can make this host send to an address of their choosing: anonymously, or, for
+/// <see cref="EmailChange"/>, by naming it as their account's new address.
+/// </summary>
 internal enum MailKind
 {
     EmailVerification,
     PasswordReset,
-    AccountAlreadyExists
+    AccountAlreadyExists,
+    EmailChange
 }
 
 /// <summary>Bound from <c>Auth:MailCooldown</c>.</summary>

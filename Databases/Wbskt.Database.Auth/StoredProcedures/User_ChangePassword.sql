@@ -16,6 +16,7 @@ BEGIN
     UPDATE dbo.Users
     SET PasswordHash = @PasswordHash,
         PasswordChangedAt = SYSUTCDATETIME(),
+        UpdatedAt = SYSUTCDATETIME(),
         FailedLoginCount = 0,
         LockedUntil = NULL
     WHERE Id = @UserId;

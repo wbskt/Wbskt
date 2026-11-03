@@ -67,6 +67,19 @@ internal class AccountServices
             audit,
             breachedPasswords);
 
+        Profile = new AccountProfileService(
+            Accounts.Object,
+            Sessions.Object,
+            jwt,
+            bus,
+            mailer,
+            cooldown,
+            AccessTokens.Object,
+            Options.Create(new AccessTokenOptions()),
+            NullLogger<AccountProfileService>.Instance,
+            metrics,
+            audit);
+
         Registration = new RegistrationService(
             Accounts.Object,
             Tenants.Object,
@@ -92,4 +105,6 @@ internal class AccountServices
     public PasswordService Passwords { get; }
 
     public RegistrationService Registration { get; }
+
+    public AccountProfileService Profile { get; }
 }

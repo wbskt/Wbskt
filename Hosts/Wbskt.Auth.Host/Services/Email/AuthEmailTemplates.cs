@@ -4,8 +4,8 @@ using System.Text;
 namespace Wbskt.Auth.Host.Services.Email;
 
 /// <summary>
-/// Renders the four messages this host sends. Hand-written rather than backed by a template engine:
-/// four messages with one shared frame does not justify a dependency, and keeping the markup in C#
+/// Renders the messages this host sends. Hand-written rather than backed by a template engine:
+/// a handful of messages with one shared frame does not justify a dependency, and keeping the markup in C#
 /// means the compiler sees every field a template references.
 /// </summary>
 /// <remarks>
@@ -88,6 +88,46 @@ internal static class AuthEmailTemplates
                  <p>If that was you, sign in as usual. If you have forgotten your password, you can reset it.</p>
                  {Button(url, "Reset your password")}
                  <p class="muted">No account was created and nothing about yours has changed. If this was not you, no action is needed.</p>
+                 """));
+    }
+
+    /// <summary>Sent to the new address of an email change. The account keeps its old address until this is followed.</summary>
+    public static OutboundMail EmailChange(AuthEmailOptions options, string to, string username, string token, DateTime expiresAtUtc)
+    {
+        string url = Link(options, "confirm-email-change", token);
+
+        return new OutboundMail(
+            to,
+            Subject($"Confirm your new email address for {options.ProductName}"),
+            Layout(options,
+                "Confirm your new email address",
+                $"""
+                 <p>Hello {Field(username)} — confirm this address to make it the one you sign in to {Field(options.ProductName)} with.</p>
+                 {Button(url, "Use this address")}
+                 {Expiry(expiresAtUtc)}
+                 <p class="muted">Confirming signs you out everywhere; sign in again with this address. If you did not ask for this, ignore this message and nothing changes.</p>
+                 """));
+    }
+
+    /// <summary>
+    /// Sent to the old address once an email change goes through. The way back when the change was
+    /// made with a stolen session, so it names the new address and carries the undo.
+    /// </summary>
+    public static OutboundMail EmailChanged(AuthEmailOptions options, string to, string username, string newEmail, string revertToken, DateTime expiresAtUtc)
+    {
+        string url = Link(options, "revert-email-change", revertToken);
+
+        return new OutboundMail(
+            to,
+            Subject($"Your {options.ProductName} email address was changed"),
+            Layout(options,
+                "Your email address was changed",
+                $"""
+                 <p>Hello {Field(username)} — your {Field(options.ProductName)} account now signs in with {Field(newEmail)} instead of this address, and every session was signed out.</p>
+                 <p>If you made this change, no action is needed. If you did not, put this address back:</p>
+                 {Button(url, "Undo this change")}
+                 {Expiry(expiresAtUtc)}
+                 <p class="muted">Undoing it signs the account out everywhere again. Then reset your password, since whoever made the change may know it.</p>
                  """));
     }
 

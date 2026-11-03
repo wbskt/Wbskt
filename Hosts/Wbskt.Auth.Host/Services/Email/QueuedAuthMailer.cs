@@ -29,6 +29,12 @@ internal sealed class QueuedAuthMailer(
     public ValueTask QueueAccountAlreadyExistsAsync(string to, string username, CancellationToken ct) =>
         Enqueue(AuthEmailTemplates.AccountAlreadyExists(_options, to, username), nameof(QueueAccountAlreadyExistsAsync));
 
+    public ValueTask QueueEmailChangeAsync(string to, string username, string token, DateTime expiresAtUtc, CancellationToken ct) =>
+        Enqueue(AuthEmailTemplates.EmailChange(_options, to, username, token, expiresAtUtc), nameof(QueueEmailChangeAsync));
+
+    public ValueTask QueueEmailChangedAsync(string to, string username, string newEmail, string revertToken, DateTime expiresAtUtc, CancellationToken ct) =>
+        Enqueue(AuthEmailTemplates.EmailChanged(_options, to, username, newEmail, revertToken, expiresAtUtc), nameof(QueueEmailChangedAsync));
+
     private ValueTask Enqueue(OutboundMail mail, string kind)
     {
         // Neither branch below throws. Every caller is midway through an operation that has already

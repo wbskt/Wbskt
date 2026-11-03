@@ -25,6 +25,11 @@ CREATE TABLE dbo.Users (
     LastLoginAt       DATETIME2(3) NULL,
     PasswordChangedAt DATETIME2(3) NULL,
 
+    -- The last change to the profile or the password. UsernameChangedAt is what limits renames to one
+    -- every 30 days (User_ChangeUsername).
+    UpdatedAt         DATETIME2(3) NULL,
+    UsernameChangedAt DATETIME2(3) NULL,
+
     -- Constraints
     CONSTRAINT PK_Users          PRIMARY KEY (Id),
     CONSTRAINT UQ_Users_RefId    UNIQUE (RefId),
