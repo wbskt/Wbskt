@@ -13,6 +13,7 @@ license-files = ["LICENSE"]
 authors = [{ name = "wbskt" }]
 keywords = ["wbskt", "iot", "websocket", "raspberry-pi", "devices"]
 classifiers = [
+  "Development Status :: 4 - Beta",
   "Programming Language :: Python :: 3",
   "Operating System :: OS Independent",
   "Topic :: Home Automation",
