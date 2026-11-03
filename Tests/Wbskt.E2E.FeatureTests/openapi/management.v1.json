@@ -2208,6 +2208,55 @@
         ],
         "type": "object"
       },
+      "RunStepDto": {
+        "properties": {
+          "attempt": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "errorCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "maxAttempts": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nodeId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "nodeId",
+          "name"
+        ],
+        "type": "object"
+      },
       "RunSummaryDto": {
         "properties": {
           "completedAt": {
@@ -2217,6 +2266,45 @@
             "type": [
               "null",
               "string"
+            ]
+          },
+          "creditsUsed": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ]
+          },
+          "currentStep": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RunStepDto"
+              }
+            ]
+          },
+          "endedAt": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RunStepDto"
+              }
+            ]
+          },
+          "failedAt": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RunStepDto"
+              }
             ]
           },
           "refId": {
@@ -2229,6 +2317,16 @@
           "status": {
             "type": "string"
           },
+          "trigger": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RunTriggerDto"
+              }
+            ]
+          },
           "version": {
             "format": "int32",
             "pattern": "^-?(?:0|[1-9]\\d*)$",
@@ -2240,6 +2338,12 @@
           "workflowDefinitionRefId": {
             "format": "uuid",
             "type": "string"
+          },
+          "workflowName": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "required": [
@@ -2250,6 +2354,39 @@
           "correlationKey",
           "startedAt",
           "completedAt"
+        ],
+        "type": "object"
+      },
+      "RunTriggerDto": {
+        "properties": {
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nodeId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "summary": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "nodeId",
+          "kind",
+          "name",
+          "summary"
         ],
         "type": "object"
       },

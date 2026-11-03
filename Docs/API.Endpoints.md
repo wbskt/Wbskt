@@ -431,6 +431,23 @@ in-place edit, which is why there is no update verb.
 | `GET workflows/{workflowRef}/runs` | `workflows.read` | Lists runs of one workflow, filterable by `status`, cursor-paged. |
 | `GET workflows/{workflowRef}/stats` | `workflows.read` | How a workflow is doing over a window (`from`/`to`, default last 30 days): outcome counts, duration p50/p95/max/avg over completed runs, success rate over *finished* runs (null when nothing has finished), the error codes that actually occur, and the slowest nodes. |
 | `GET runs/{runRef}` | `workflows.read` | Run detail with its branches. |
+
+Each run in either list also carries what a one-line row needs, read for the whole page in one call
+(`Run_GetListDetails`), so the console never fetches history per run:
+
+- `trigger`: `{ nodeId, kind, name, summary }`, with `summary` built from the trigger's settings
+  ("Device greenhouse-1 sent temperature", "Webhook /water-start", "Schedule 0 6 * * *", "Started by
+  hand", "Started by another workflow's run").
+- `creditsUsed`: credits charged so far across its steps.
+- `failedAt`: for a Failed, PartiallyFailed or Failing run, `{ nodeId, name, kind, errorCode }` of
+  its first failed step.
+- `endedAt`: for a Succeeded run, the last step it completed: its End step, or the last step of its
+  last branch. Null once that step's Info history has been retired.
+- `currentStep`: for a live run, the step its most recently moved branch is on, with `attempt` and
+  `maxAttempts` while it is being retried ("try 2 of 3").
+- `workflowName`: the workflow's name at the run's version.
+
+Step names come from the run's own version, so a step renamed or removed later still reads as it was.
 | `GET runs/{runRef}/history` | `workflows.read` | The run's history event stream, oldest first, cursor-paged (`limit` default 200) — the execution trace. |
 | `POST runs/{runRef}/cancel` | `workflows.execute` | Requests cancellation with a reason. The engine carries it out, so this answers **202** once the request is on its way and the run reads `Cancelling`, then `Cancelled`, shortly after; poll the run to see it. Cooperative, not immediate. **409** `RUN_NOT_CANCELLABLE` for a run that has already finished, **404** `RUN_NOT_FOUND` for a run that is unknown or another workspace's, **503** `EVENT_BUS_UNAVAILABLE` (with `Retry-After`) when the message broker is unavailable — nothing was sent, so retry. |
 | `POST runs/{runRef}/signals/{signalName}` | `workflows.execute` | Delivers a named signal to a parked run. Verifies the run belongs to the workspace, then relays to the engine. |
