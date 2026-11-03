@@ -246,6 +246,30 @@ async def test_reports_state(api, socket_server, no_jitter):
     assert report["payload"] == {"humidity": 40}
 
 
+async def test_a_revoked_close_logs_in_again_before_reconnecting(api, socket_server, no_jitter):
+    client = make_client(api, socket_server, no_jitter)
+    await client.start()
+    first = await socket_server.wait_connections(1)
+    await first.close(code=protocol.CLOSE_REVOKED, reason="revoked")
+
+    await socket_server.wait_connections(2)
+    await client.stop()
+
+    assert len(api.logins) == 2
+
+
+async def test_a_superseded_close_keeps_the_token(api, socket_server, no_jitter):
+    client = make_client(api, socket_server, no_jitter)
+    await client.start()
+    first = await socket_server.wait_connections(1)
+    await first.close(code=protocol.CLOSE_SUPERSEDED, reason="superseded")
+
+    await socket_server.wait_connections(2)
+    await client.stop()
+
+    assert len(api.logins) == 1
+
+
 async def test_reconnects_quickly_after_a_restart_close(api, socket_server, no_jitter):
     client = make_client(api, socket_server, no_jitter)
     await client.start()

@@ -28,6 +28,7 @@ public sealed class DeviceSessions
     private readonly IHostApplicationLifetime _lifetime;
     private readonly ILogger<DeviceSessions> _logger;
     private readonly ILogger<DeviceInbox> _inboxLogger;
+    private readonly SupersedeMonitor _supersedes;
     private readonly string _hostId;
 
     /// <summary>How long one publish of a device's message or announcement may take before it is given up.</summary>
@@ -43,8 +44,10 @@ public sealed class DeviceSessions
         IOptions<MessageBudgetOptions> budgetOptions,
         IHostApplicationLifetime lifetime,
         ILogger<DeviceSessions> logger,
-        ILogger<DeviceInbox> inboxLogger)
+        ILogger<DeviceInbox> inboxLogger,
+        SupersedeMonitor? supersedes = null)
     {
+        _supersedes = supersedes ?? new SupersedeMonitor();
         _connections = connections;
         _accessGate = accessGate;
         _eventBus = eventBus;
@@ -220,7 +223,11 @@ public sealed class DeviceSessions
 
         // A superseded connection is not the device going offline: its newer connection, here or on
         // another instance, already announced it as connected.
-        if (reason != DisconnectReason.Superseded)
+        if (reason == DisconnectReason.Superseded)
+        {
+            await WarnIfSharedAsync(clientRefId, connection);
+        }
+        else
         {
             var description = connection.CloseRequest?.Description ?? reason.Describe();
             try
@@ -233,6 +240,26 @@ public sealed class DeviceSessions
                 // The session is over either way; a broker outage must not surface as an unhandled request error.
                 _logger.LogWarning(ex, "Could not announce that client {ClientRefId} disconnected.", clientRefId);
             }
+        }
+    }
+
+    private async Task WarnIfSharedAsync(Guid clientRefId, IDeviceConnection connection)
+    {
+        if (_supersedes.Record(clientRefId) is not { } count)
+        {
+            return;
+        }
+
+        _logger.LogWarning("Client {ClientRefId} was superseded {Count} times in {Minutes} minutes; two devices may share its credentials.",
+            clientRefId, count, (int)SupersedeMonitor.Window.TotalMinutes);
+        try
+        {
+            await _eventBus.PublishAsync(new ClientCredentialsSharedEvent(clientRefId, connection.ClientId, connection.WorkspaceId, count,
+                (int)SupersedeMonitor.Window.TotalMinutes), CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not announce that client {ClientRefId} appears to share credentials.", clientRefId);
         }
     }
 }

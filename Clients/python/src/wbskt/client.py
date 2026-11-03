@@ -189,9 +189,15 @@ class AsyncWbsktClient:
                 if delay > 0 and await self._sleep(delay):
                     break
                 try:
-                    server_restarting = await self._connect_once()
+                    close_code = await self._connect_once()
                     failures = 0
-                    delay = self._policy.first_delay(server_restarting)
+                    if close_code == protocol.CLOSE_REVOKED:
+                        # Lost access: the token still validates until it expires, so log in afresh.
+                        self._token = None
+                    elif close_code == protocol.CLOSE_SUPERSEDED:
+                        log.warning("wbskt: a newer connection replaced this one; if this repeats, "
+                                    "another device may be using these credentials")
+                    delay = self._policy.first_delay(close_code)
                 except _Throttled as throttled:
                     log.warning("wbskt: %s", throttled)
                     delay = self._policy.after_throttle(throttled.retry_after)
@@ -218,8 +224,8 @@ class AsyncWbsktClient:
         except asyncio.TimeoutError:
             return False
 
-    async def _connect_once(self) -> bool:
-        """One connection from login to close. Returns whether the server said it was restarting."""
+    async def _connect_once(self) -> Optional[int]:
+        """One connection from login to close. Returns the code the server closed it with, if any."""
         token = await self._access_token()
         try:
             ws = await connect(
@@ -254,7 +260,7 @@ class AsyncWbsktClient:
             if was_connected:
                 await _call(self.on_disconnected)
 
-        return ws.close_code == protocol.CLOSE_SERVER_RESTARTING
+        return ws.close_code
 
     async def _drain(self, ws: ClientConnection) -> None:
         """Send the offline backlog, paced, then mark the client connected."""

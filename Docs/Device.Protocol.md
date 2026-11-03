@@ -232,9 +232,9 @@ uses close codes):
 |---|---|---|
 | Normal | The server closed it with nothing wrong. | Reconnect on the schedule. |
 | Restarting | The gateway is shutting down. | Reconnect, 0–30 s spread. |
-| Superseded | The same device connected again. | Reconnect on the schedule. |
-| Revoked | The device lost access: revoked, deleted or its secret rotated. | Reconnect on the schedule; login will then fail with 401. |
-| Throttled | Over the message rate (§4). | Reconnect on the schedule, and send less. |
+| Superseded | The same device connected again. | Reconnect on the schedule, and log it: a device superseded again and again is sharing its credentials with another, and the server raises a warning for it. |
+| Revoked | The device lost access: revoked, deleted or its secret rotated. | Drop the access token, then reconnect on the schedule; login will then fail with 401. |
+| Throttled | Over the message rate (§4). | Wait a random 30–60 s before reconnecting, and send less. |
 | Too big | A message over 64 KB (§4). | Fix the sender; reconnect on the schedule. |
 | Server error | The server failed while serving the connection. | Reconnect on the schedule. |
 

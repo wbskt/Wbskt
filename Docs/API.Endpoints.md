@@ -468,6 +468,11 @@ management instance; when messages are dropped, the next second opens with
 `OnClientFeedSkipped { clientRefId, skipped, createdAtUtc }`, and the comms history still has them all.
 Like workspace groups, client groups don't survive a reconnect: the console joins again.
 
+A device whose connections keep replacing each other (5 supersedes within 10 minutes on one gateway)
+raises `ClientCredentialsSharedEvent`, a Warning in the event log and `OnClientCredentialsSharedEvent
+{ clientRefId, supersedes, windowMinutes, createdAtUtc }` to the client's watchers, at most once per
+10 minutes per device. It almost always means two boards are using one set of credentials.
+
 > **Known gap.** The workspace feed is per workspace, not per permission. A member holding only
 > `workflows.read` still receives the workspace-wide events. Narrowing it further means
 > per-event-category groups.

@@ -33,6 +33,12 @@ public sealed class WbsktClient : IWbsktClient
     public event Action? OnConnected;
     public event Action? OnDisconnected;
 
+    /// <summary>
+    /// A newer connection with these credentials replaced this one. Now and then that is this device
+    /// reconnecting; raised again and again, another device is probably using the same credentials.
+    /// </summary>
+    public event Action? OnSuperseded;
+
     public int PendingMessageCount => _outbound.Count;
 
     /// <summary>
@@ -198,7 +204,18 @@ public sealed class WbsktClient : IWbsktClient
             {
                 // Just dropped. Every device that shared this socket host noticed at the same moment,
                 // so each waits a random part of the window before its first attempt.
-                await Task.Delay(_reconnect.FirstDelay(_socket.ServerRestarting), _cts.Token);
+                var close = _socket.LastClose;
+                if (close == ServerClose.Revoked)
+                {
+                    // Lost access: the token still validates until it expires, so log in afresh.
+                    _tokens.Invalidate();
+                }
+                else if (close == ServerClose.Superseded)
+                {
+                    OnSuperseded?.Invoke();
+                }
+
+                await Task.Delay(_reconnect.FirstDelay(close), _cts.Token);
             }
 
             try

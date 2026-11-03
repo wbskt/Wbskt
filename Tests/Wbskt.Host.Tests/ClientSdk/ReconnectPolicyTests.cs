@@ -10,7 +10,7 @@ public sealed class ReconnectPolicyTests
         var policy = new ReconnectPolicy(new Random(445));
 
         var perSecond = Enumerable.Range(0, 1000)
-            .Select(_ => policy.FirstDelay(serverRestarting: false))
+            .Select(_ => policy.FirstDelay(ServerClose.Other))
             .GroupBy(d => (int)d.TotalSeconds)
             .ToDictionary(g => g.Key, g => g.Count());
 
@@ -23,10 +23,33 @@ public sealed class ReconnectPolicyTests
     {
         var policy = new ReconnectPolicy(new Random(1));
 
-        var delays = Enumerable.Range(0, 1000).Select(_ => policy.FirstDelay(serverRestarting: true)).ToList();
+        var delays = Enumerable.Range(0, 1000).Select(_ => policy.FirstDelay(ServerClose.Restarting)).ToList();
 
         Assert.All(delays, d => Assert.True(d < ReconnectPolicy.RestartSpread));
         Assert.Contains(delays, d => d > ReconnectPolicy.Spread);
+    }
+
+    [Fact]
+    public void A_close_for_sending_too_much_waits_longer()
+    {
+        var policy = new ReconnectPolicy(new Random(3));
+
+        var delays = Enumerable.Range(0, 1000).Select(_ => policy.FirstDelay(ServerClose.Throttled)).ToList();
+
+        Assert.All(delays, d => Assert.InRange(d, ReconnectPolicy.ThrottledWait, ReconnectPolicy.ThrottledWait * 2));
+    }
+
+    [Theory]
+    [InlineData(1001, nameof(ServerClose.Restarting))]
+    [InlineData(4001, nameof(ServerClose.Superseded))]
+    [InlineData(4002, nameof(ServerClose.Revoked))]
+    [InlineData(4003, nameof(ServerClose.Throttled))]
+    [InlineData(1008, nameof(ServerClose.Other))]
+    [InlineData(1000, nameof(ServerClose.Other))]
+    [InlineData(null, nameof(ServerClose.Other))]
+    public void Each_close_code_is_read_as_its_reason(int? code, string expected)
+    {
+        Assert.Equal(Enum.Parse<ServerClose>(expected), ServerCloses.From((System.Net.WebSockets.WebSocketCloseStatus?)code));
     }
 
     [Theory]

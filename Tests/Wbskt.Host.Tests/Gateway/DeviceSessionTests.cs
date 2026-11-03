@@ -32,6 +32,8 @@ public sealed class DeviceSessionTests
     private readonly CancellationTokenSource _stopping = new();
     private readonly ConnectionManager _connections = new(NullLogger<ConnectionManager>.Instance);
 
+    private readonly SupersedeMonitor _supersedes = new();
+
     private DeviceSessions Sessions(MessageBudgetOptions? budget = null)
     {
         var metrics = new GatewayMetrics(GatewayTransport.WebSocket);
@@ -39,7 +41,7 @@ public sealed class DeviceSessionTests
         var lifetime = new Mock<IHostApplicationLifetime>();
         lifetime.SetupGet(x => x.ApplicationStopping).Returns(_stopping.Token);
         return new DeviceSessions(_connections, _gate.Object, _bus.Object, new BusInstanceId(ThisHost), metrics, dispatcher,
-            Options.Create(budget ?? new MessageBudgetOptions()), lifetime.Object, NullLogger<DeviceSessions>.Instance, NullLogger<DeviceInbox>.Instance);
+            Options.Create(budget ?? new MessageBudgetOptions()), lifetime.Object, NullLogger<DeviceSessions>.Instance, NullLogger<DeviceInbox>.Instance, _supersedes);
     }
 
     private static FakeDeviceConnection Connection() => new() { ClientId = 42, WorkspaceId = 7 };
@@ -178,6 +180,26 @@ public sealed class DeviceSessionTests
     }
 
     [Fact]
+    public async Task A_device_superseded_again_and_again_is_reported_as_sharing_credentials()
+    {
+        for (var i = 0; i < SupersedeMonitor.Threshold; i++)
+        {
+            var old = Connection();
+            await Sessions().RunAsync(Admitted, old,
+                _ =>
+                {
+                    _connections.Register(ClientRefId, Connection());
+                    return Task.FromResult(DisconnectReason.ClientClosed);
+                },
+                _ => Task.CompletedTask);
+        }
+
+        _bus.Verify(x => x.PublishAsync(
+            It.Is<ClientCredentialsSharedEvent>(e => e.ClientRefId == ClientRefId && e.ClientId == 42 && e.WorkspaceId == 7 && e.Supersedes == SupersedeMonitor.Threshold),
+            CancellationToken.None), Times.Once);
+    }
+
+    [Fact]
     public async Task A_loop_cancelled_by_shutdown_ends_as_server_stopping()
     {
         var connection = Connection();
@@ -283,7 +305,7 @@ public sealed class DeviceSessionTests
     }
 
     [Fact]
-    public async Task A_device_that_stays_over_its_budget_is_closed_with_1008()
+    public async Task A_device_that_stays_over_its_budget_is_closed_as_throttled()
     {
         var connection = Connection();
         var results = new List<DisconnectReason?>();

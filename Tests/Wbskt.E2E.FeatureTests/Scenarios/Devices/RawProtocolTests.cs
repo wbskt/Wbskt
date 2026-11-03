@@ -77,7 +77,7 @@ public sealed class RawProtocolTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task RAW_03_ADeviceOverItsMessageBudget_IsClosedForPolicyViolation()
+    public async Task RAW_03_ADeviceOverItsMessageBudget_IsClosedAsThrottled()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -106,7 +106,7 @@ public sealed class RawProtocolTests(ServicesFixture fixture)
         }
 
         (await closed).Should().Be(
-            WebSocketCloseStatus.PolicyViolation,
+            (WebSocketCloseStatus)4003,
             $"{sent} messages in a tight loop exceed a budget of {BudgetBurst} plus {BudgetCloseAfterDropped} dropped in a row");
         socket.CloseStatusDescription.Should().Be("Too many messages.");
         sent.Should().BeGreaterThanOrEqualTo(BudgetBurst + BudgetCloseAfterDropped);
