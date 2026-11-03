@@ -7,6 +7,7 @@ using Wbskt.Auth.Host.Controllers;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services;
 using Wbskt.Auth.Host.Services.Email;
+using Wbskt.Auth.Host.Services.Passwords;
 using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Infrastructure.Events;
 using Wbskt.Infrastructure.Events.Outbox;
@@ -87,6 +88,14 @@ public static class Program
             sp.GetRequiredService<TimeProvider>(),
             sp.GetRequiredService<AuthMetrics>(),
             sp.GetRequiredService<ILogger<SignUpChallenges>>()));
+        var breachedPasswordOptions = builder.Configuration.GetSection("Auth:BreachedPasswordCheck").Get<BreachedPasswordOptions>() ?? new BreachedPasswordOptions();
+        builder.Services.AddSingleton(Options.Create(breachedPasswordOptions));
+        builder.Services.AddHttpClient<IBreachedPasswords, PwnedPasswordsClient>(client =>
+        {
+            client.BaseAddress = new Uri(breachedPasswordOptions.BaseUrl);
+            // HIBP asks every caller to name itself.
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(PwnedPasswordsClient.UserAgent);
+        });
         builder.Services.AddSingleton(Options.Create(builder.Configuration.GetSection("Auth:RefreshCookie").Get<RefreshCookieOptions>() ?? new RefreshCookieOptions()));
         builder.Services.AddSingleton<RefreshTokenCookie>();
 

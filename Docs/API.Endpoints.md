@@ -156,6 +156,16 @@ and `Key` (a base64 HMAC key of at least 32 bytes, checked at startup; unset, ea
 `SignUpProofOfWork` in `Wbskt.Auth.Models` is the reference solver, and `WbsktAuthClient.RegisterAsync`
 solves it for callers that send no challenge.
 
+**Breached passwords.** register, change-password and reset-password refuse a password that has
+appeared in a public data breach with 400 `PASSWORD_BREACHED`, before anything is written (a reset
+link stays usable). The check uses Have I Been Pwned's Pwned Passwords range API by k-anonymity:
+only the first five hex characters of the password's SHA-1 are sent, with `Add-Padding: true`, and
+the match is made here. It fails open: when HIBP errors or takes longer than the timeout, the password
+is accepted and a warning logged (`wbskt_auth_breached_password_checks_total{outcome="unavailable"}`).
+Sign-in is not checked. `Auth:BreachedPasswordCheck` sets `Enabled` (default true; off in
+Development, so the E2E suite never calls HIBP), `MinimumBreachCount` (1), `TimeoutMilliseconds`
+(2000) and `BaseUrl`. The host needs outbound HTTPS to `api.pwnedpasswords.com`.
+
 register, forgot-password and resend-verification also respect a per-address mail cooldown
 (`Auth:MailCooldown`: one mail of each kind per address per 2 minutes, at most 5 per address an hour),
 kept in Redis when it is configured. A suppressed mail is answered with the same 204, and no new token

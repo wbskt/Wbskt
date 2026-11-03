@@ -20,6 +20,7 @@ public sealed class AuthMetrics : IWorkerTickMetrics, IDisposable
         WorkspaceResolutions = _meter.CreateCounter<long>("wbskt_auth_workspace_resolutions_total");
         PermissionChecks = _meter.CreateCounter<long>("wbskt_auth_permission_checks_total");
         MailSuppressed = _meter.CreateCounter<long>("wbskt_auth_mail_suppressed_total");
+        BreachChecks = _meter.CreateCounter<long>("wbskt_auth_breached_password_checks_total");
         
         PasswordHashDuration = _meter.CreateHistogram<double>("wbskt_auth_password_hash_duration_ms");
         WorkerTicks = _meter.CreateCounter<long>("wbskt_auth_worker_ticks_total");
@@ -31,6 +32,9 @@ public sealed class AuthMetrics : IWorkerTickMetrics, IDisposable
     public Counter<long> WorkspaceResolutions { get; }
     public Counter<long> PermissionChecks { get; }
     public Counter<long> MailSuppressed { get; }
+
+    /// <summary>Breached-password lookups, tagged <c>outcome</c>: clean, breached, or unavailable (accepted unchecked).</summary>
+    public Counter<long> BreachChecks { get; }
     public Histogram<double> PasswordHashDuration { get; }
 
     /// <summary>Ticks of the periodic background workers, tagged <c>worker</c> and <c>outcome</c> (ok or failed).</summary>
@@ -60,6 +64,9 @@ public sealed class AuthMetrics : IWorkerTickMetrics, IDisposable
     /// <summary>A mail the per-address cooldown dropped. A steady count is someone aiming our mail at an inbox.</summary>
     public void RecordMailSuppressed(string kind) =>
         MailSuppressed.Add(1, new KeyValuePair<string, object?>("kind", kind));
+
+    public void RecordBreachCheck(string outcome) =>
+        BreachChecks.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
 
     public void RecordPasswordHash(double durationMs) => 
         PasswordHashDuration.Record(durationMs);
