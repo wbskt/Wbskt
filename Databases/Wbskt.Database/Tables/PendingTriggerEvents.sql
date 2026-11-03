@@ -5,7 +5,11 @@ CREATE TABLE dbo.PendingTriggerEvents
     TriggerNodeId    UNIQUEIDENTIFIER NOT NULL,
     CorrelationKey   NVARCHAR(400)    NOT NULL,
     InboundEventJson NVARCHAR(MAX)    NOT NULL,
-    EnqueuedAt       DATETIME2(3)     NOT NULL DEFAULT SYSUTCDATETIME()
+    EnqueuedAt       DATETIME2(3)     NOT NULL DEFAULT SYSUTCDATETIME(),
+    -- Unused: a duplicate of EnqueuedAt that nothing reads or writes any more. It stays because
+    -- sqlpackage refuses to drop a column from a table with rows while BlockOnPossibleDataLoss is
+    -- on, and deploy.sh always runs it that way. Drop it in a deploy that allows data loss.
+    CreatedAt        DATETIME2(3)     NOT NULL DEFAULT SYSUTCDATETIME()
 );
 GO
 

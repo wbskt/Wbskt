@@ -125,32 +125,6 @@ END
 GO
 /*
 --------------------------------------------------------------------------------------
-Pre-Deployment Script: drop PendingTriggerEvents.CreatedAt
---------------------------------------------------------------------------------------
-The column duplicated EnqueuedAt. sqlpackage refuses to drop a column from a table that has rows
-while BlockOnPossibleDataLoss is on, and deploy.sh always runs it that way, so the drop happens here
-and the diff finds nothing left to do. The column's default is system-named, so it is looked up.
-*/
-IF COL_LENGTH('dbo.PendingTriggerEvents', 'CreatedAt') IS NOT NULL
-BEGIN
-    DECLARE @CreatedAtDefault SYSNAME =
-        (SELECT dc.name
-         FROM sys.default_constraints dc
-         JOIN sys.columns c ON c.object_id = dc.parent_object_id AND c.column_id = dc.parent_column_id
-         WHERE dc.parent_object_id = OBJECT_ID('dbo.PendingTriggerEvents') AND c.name = N'CreatedAt');
-
-    IF @CreatedAtDefault IS NOT NULL
-    BEGIN
-        DECLARE @DropDefault NVARCHAR(MAX) = N'ALTER TABLE dbo.PendingTriggerEvents DROP CONSTRAINT ' + QUOTENAME(@CreatedAtDefault) + N';';
-        EXEC sp_executesql @DropDefault;
-    END
-
-    EXEC sp_executesql N'ALTER TABLE dbo.PendingTriggerEvents DROP COLUMN CreatedAt;';
-    PRINT '>>> PendingTriggerEvents: dropped CreatedAt';
-END
-GO
-/*
---------------------------------------------------------------------------------------
 Pre-Deployment Script: settle unknown statuses before the Status CHECK constraints
 --------------------------------------------------------------------------------------
 Runs, Branches and IdempotencyKeys gain CHECK constraints listing the statuses the engine writes
