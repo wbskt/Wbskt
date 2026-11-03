@@ -358,10 +358,9 @@ services:
     logging: *default-logging
     # Declared rather than left to `--scale`, because `docker compose up -d gateway-ws` converges to
     # whatever is declared here - a deploy that omitted --scale would silently drop a 3-replica
-    # tier back to 1. SOCKET_REPLICAS is the variable's old name, still honoured so a .env that
-    # predates the rename keeps its replica count.
+    # tier back to 1.
     deploy:
-      replicas: ${GATEWAY_WS_REPLICAS:-${SOCKET_REPLICAS:-1}}
+      replicas: ${GATEWAY_WS_REPLICAS:-1}
     labels:
       - traefik.enable=true
       # Named for the gateway. During the deploy that renamed it, the old socket containers kept their

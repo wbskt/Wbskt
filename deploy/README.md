@@ -339,49 +339,6 @@ or stops anything and names the variable. A new required variable therefore has 
 VM's `.env` before the commit that requires it is deployed: the deploy resets the checkout first,
 so from then on the nightly backup reads the new compose file as well.
 
-### The socket service became gateway-ws
-
-The WebSocket device host was renamed with the gateway work (wbskt/Wbskt#511): the project is
-`Hosts/Wbskt.Gateway.WebSocket.Host`, and in this stack the image `wbskt-socket` became
-`wbskt-gateway-ws`, the compose service `socket` became `gateway-ws`, the Traefik router and service
-`socket` became `gateway-ws`, `SOCKET_REPLICAS` became `GATEWAY_WS_REPLICAS`, and logs and traces
-say `wbskt-gateway-ws` where they said `wbskt-socket`.
-
-**Devices see no change.** `wss://ws.<DOMAIN>/ws`, the `wbskt.v1` subprotocol, port 8080 behind
-Traefik, the `SOCKET_URL` management hands out, the device token and its `wbskt-socket` audience,
-every message and every close code are as they were. The metric names (`wbskt_socket_*`) and the
-`SocketDisconnectRateHigh` alert are unchanged too.
-
-The first deploy of a commit with the rename does this on its own, and needs nothing up front:
-
-1. The checkout resets, and the new `deploy.sh` takes over, as on every deploy.
-2. It pulls `wbskt-gateway-ws`. If GHCR refuses (the package is new, so check it can be read with
-   the VM's token, as `wbskt-socket` could), the deploy stops here with nothing touched.
-3. It starts `gateway-ws` beside the running `socket` containers, with the same replica count:
-   `SOCKET_REPLICAS` is still read while `GATEWAY_WS_REPLICAS` is absent. Both answer
-   `ws.<DOMAIN>` for the moment, which is safe: every instance can serve every device.
-4. Once `gateway-ws` is healthy, it stops the `socket` containers (10 s grace, as compose does) and
-   removes them. Each closes its devices' connections as a server restart, and they reconnect
-   through the same address to `gateway-ws`. That is the same blip any socket deploy caused, and
-   shorter: the new tier is already up when the old one goes. If stopping or removing them fails,
-   the deploy still succeeds (it already has) and prints a `warning:` with the command to finish
-   by hand.
-
-Afterwards, rename the variable in the VM's `.env` when convenient (`SOCKET_REPLICAS=3` to
-`GATEWAY_WS_REPLICAS=3`); until then the old name keeps working. Saved Grafana or Loki queries that
-filter on `service_name="wbskt-socket"` need the new name; nothing checked in does.
-
-`--services socket` still works and means `gateway-ws`. Pass the default (every host) or `socket`
-on the first deploy rather than `gateway-ws`: the script that checks the arguments is still the old
-one until the checkout has been reset, and it does not know the new name.
-
-**Rolling back past the rename** starts `socket` again from the older commit, whose `deploy.sh` knows
-nothing of `gateway-ws`, so its containers stay up beside it. Remove them once `socket` is healthy:
-
-```bash
-docker rm -f $(docker ps -aq --filter label=com.docker.compose.project=wbskt --filter label=com.docker.compose.service=gateway-ws)
-```
-
 A backend deploy only recreates the five hosts, but it lands every other service's definition and
 config file too. It ends by comparing each running container with the compose file and prints a
 `::warning::` (an annotation on the Deploy run) for each service that is behind: a changed
@@ -511,7 +468,7 @@ Replica counts are declared in `.env` (`GATEWAY_WS_REPLICAS`, `MANAGEMENT_REPLIC
 `ENGINE_REPLICAS`), not passed as `--scale` on the command line:
 
 ```bash
-GATEWAY_WS_REPLICAS=3 # Phase 1 (read as SOCKET_REPLICAS, its old name, when unset)
+GATEWAY_WS_REPLICAS=3 # Phase 1
 MANAGEMENT_REPLICAS=2 # Phase 3
 ENGINE_REPLICAS=1    # Phase 4 - a second replica is a warm standby, not a second worker
 ```
