@@ -147,9 +147,17 @@ public record AcceptInvitationResponse(Guid TenantRef, string TenantName);
 
 /// <summary>
 /// A user as seen by tenant administration. <paramref name="IsActive"/> is the account, across every
-/// tenant; <paramref name="IsSuspended"/> is this tenant only.
+/// tenant; <paramref name="IsSuspended"/> is this tenant only. <paramref name="IsOwner"/> is set only
+/// in a workspace's member list, where it marks the workspace's owner, whom removing refuses
+/// (<c>WORKSPACE_OWNER_PROTECTED</c>); a tenant's member list leaves it out.
 /// </summary>
-public record TenantMemberResponse(Guid RefId, string Username, string Email, bool IsActive, bool IsSuspended);
+public record TenantMemberResponse(
+    Guid RefId,
+    string Username,
+    string Email,
+    bool IsActive,
+    bool IsSuspended,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? IsOwner = null);
 
 /// <summary>A role held by a user or group, with the scope it was granted at.</summary>
 public record RoleAssignmentResponse(Guid RoleRef, string RoleName, Guid? WorkspaceRef);

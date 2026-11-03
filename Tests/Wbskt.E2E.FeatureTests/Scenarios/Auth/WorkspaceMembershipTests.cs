@@ -200,6 +200,23 @@ public sealed class WorkspaceMembershipTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
+    public async Task WS_MEM_11b_ListMembers_MarksTheOwner()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (owner, tenantRef, workspaceRef, member) = await ArrangeAsync();
+        await AddMemberAsync(owner.Token, workspaceRef, member.Email);
+
+        var members = await fixture.Auth.As(owner.Token).GetWorkspaceMembersAsync(workspaceRef, limit: 200);
+
+        members.Items.Should().ContainSingle(m => m.IsOwner == true).Which.Email.Should().BeEquivalentTo(owner.Email);
+        members.Items.Single(m => m.Email.Equals(member.Email, StringComparison.OrdinalIgnoreCase)).IsOwner.Should().BeFalse();
+
+        var tenantMembers = await fixture.Auth.As(owner.Token).GetTenantMembersAsync(tenantRef, limit: 200);
+        tenantMembers.Items.Should().OnlyContain(m => m.IsOwner == null, "ownership is a workspace's, not a tenant's");
+    }
+
+    [SkippableFact]
     public async Task WS_MEM_12_TakeOne_ReturnsOnePageButTheRealTotal()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
