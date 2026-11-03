@@ -29,8 +29,7 @@ public sealed class PendingTriggerEventDrainerTests
                         ["messageType"] = JsonSerializer.SerializeToElement("telemetry")
                     },
                     DateTime.UtcNow)),
-                EnqueuedAt = DateTime.UtcNow,
-                CreatedAt = DateTime.UtcNow
+                EnqueuedAt = DateTime.UtcNow
             }
         ]));
         var inboundHub = new RecordingInboundHub();
@@ -66,8 +65,7 @@ public sealed class PendingTriggerEventDrainerTests
                 InboundEventJson = """
                     {"channelKind":"manual","matchKeys":["manual:x"],"inboundEventId":"evt-2","payload":{},"receivedAt":"2026-10-13T12:00:00Z","startsChildRun":true}
                     """,
-                EnqueuedAt = DateTime.UtcNow,
-                CreatedAt = DateTime.UtcNow
+                EnqueuedAt = DateTime.UtcNow
             }
         ]));
         var inboundHub = new RecordingInboundHub();

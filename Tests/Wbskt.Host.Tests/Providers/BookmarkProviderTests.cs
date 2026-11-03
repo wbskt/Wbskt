@@ -13,7 +13,7 @@ public class BookmarkProviderTests
         {
             new Dictionary<string, object?>
             {
-                ["Id"] = 42,
+                ["Id"] = 42L,
                 ["RefId"] = Guid.Parse("f47ac10b-58cc-4372-a567-0e02b2c3d479"),
                 ["RunId"] = 10,
                 ["BranchRefId"] = Guid.Parse("a47ac10b-58cc-4372-a567-0e02b2c3d479"),
@@ -50,7 +50,7 @@ public class BookmarkProviderTests
         {
             new Dictionary<string, object?>
             {
-                ["Id"] = 42,
+                ["Id"] = 42L,
                 ["RefId"] = Guid.Parse("f47ac10b-58cc-4372-a567-0e02b2c3d479"),
                 ["RunId"] = 10,
                 ["BranchRefId"] = Guid.Parse("a47ac10b-58cc-4372-a567-0e02b2c3d479"),

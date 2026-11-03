@@ -18,8 +18,7 @@ public class PendingTriggerEventProviderTests
                 ["TriggerNodeId"] = Guid.Parse("a47ac10b-58cc-4372-a567-0e02b2c3d479"),
                 ["CorrelationKey"] = "user-123",
                 ["InboundEventJson"] = "{\"event\":\"data\"}",
-                ["EnqueuedAt"] = new DateTime(2026, 5, 25, 12, 0, 0, DateTimeKind.Utc),
-                ["CreatedAt"] = new DateTime(2026, 5, 25, 11, 59, 0, DateTimeKind.Utc)
+                ["EnqueuedAt"] = new DateTime(2026, 5, 25, 12, 0, 0, DateTimeKind.Utc)
             }
         });
 
@@ -32,6 +31,5 @@ public class PendingTriggerEventProviderTests
         row.CorrelationKey.Should().Be("user-123");
         row.InboundEventJson.Should().Be("{\"event\":\"data\"}");
         row.EnqueuedAt.Should().Be(new DateTime(2026, 5, 25, 12, 0, 0, DateTimeKind.Utc));
-        row.CreatedAt.Should().Be(new DateTime(2026, 5, 25, 11, 59, 0, DateTimeKind.Utc));
     }
 }

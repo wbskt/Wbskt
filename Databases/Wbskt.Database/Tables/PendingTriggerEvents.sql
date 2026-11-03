@@ -5,8 +5,7 @@ CREATE TABLE dbo.PendingTriggerEvents
     TriggerNodeId    UNIQUEIDENTIFIER NOT NULL,
     CorrelationKey   NVARCHAR(400)    NOT NULL,
     InboundEventJson NVARCHAR(MAX)    NOT NULL,
-    EnqueuedAt       DATETIME2(3)     NOT NULL DEFAULT SYSUTCDATETIME(),
-    CreatedAt        DATETIME2(3)     NOT NULL DEFAULT SYSUTCDATETIME()
+    EnqueuedAt       DATETIME2(3)     NOT NULL DEFAULT SYSUTCDATETIME()
 );
 GO
 

@@ -44,7 +44,7 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
     {
         return await ExecuteSingleAsync(
             "dbo.Branch_GetById",
-            p => p.AddWithValue("@Id", checked((int)branchId)),
+            p => p.AddWithValue("@Id", branchId),
             Map,
             new KeyNotFoundException($"Branch with Id={branchId} not found."),
             ct
@@ -117,7 +117,7 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
             "dbo.Branch_EndIfLive",
             p =>
             {
-                p.AddWithValue("@Id", checked((int)branchId));
+                p.AddWithValue("@Id", branchId);
                 p.AddWithValue("@ToStatus", toStatus);
                 p.AddWithValue("@LastOutputJson", (object?)lastOutputJson ?? DBNull.Value);
             },
@@ -132,7 +132,7 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
             "dbo.Branch_Update",
             p =>
             {
-                p.AddWithValue("@Id", checked((int)branchId));
+                p.AddWithValue("@Id", branchId);
                 p.AddWithValue("@NodeId", (object?)currentNodeId ?? DBNull.Value);
                 p.AddWithValue("@Status", status);
                 p.AddWithValue("@LocalJson", (object?)localJson ?? DBNull.Value);
@@ -170,7 +170,7 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
     {
         return new BranchRow
         {
-            Id = reader.GetInt32(reader.GetOrdinal("Id")),
+            Id = reader.GetInt64(reader.GetOrdinal("Id")),
             RefId = reader.GetGuid(reader.GetOrdinal("RefId")),
             RunId = reader.GetInt32(reader.GetOrdinal("RunId")),
             ParentBranchId = reader.IsDBNull(reader.GetOrdinal("ParentBranchId")) ? null : reader.GetGuid(reader.GetOrdinal("ParentBranchId")),

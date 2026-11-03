@@ -50,8 +50,7 @@ BEGIN
         TriggerNodeId,
         CorrelationKey,
         InboundEventJson,
-        EnqueuedAt,
-        CreatedAt
+        EnqueuedAt
     FROM dbo.PendingTriggerEvents
     WHERE Id = @NewId;
 END;

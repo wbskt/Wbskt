@@ -2,7 +2,7 @@ namespace Wbskt.Workflow.Abstraction.Entities;
 
 public record BookmarkRow
 {
-    public required int Id { get; init; }
+    public required long Id { get; init; }
     public required Guid RefId { get; init; }
     public required int RunId { get; init; }
     public required Guid BranchRefId { get; init; }

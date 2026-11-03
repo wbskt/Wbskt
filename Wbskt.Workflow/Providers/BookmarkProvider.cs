@@ -60,7 +60,7 @@ internal sealed class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
     {
         return await ExecuteSingleAsync(
             "dbo.Bookmark_GetBy_Id",
-            p => p.AddWithValue("@Id", checked((int)bookmarkId)),
+            p => p.AddWithValue("@Id", bookmarkId),
             Map,
             new KeyNotFoundException($"Bookmark with Id={bookmarkId} not found."),
             ct
@@ -189,7 +189,7 @@ internal sealed class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
     {
         return new BookmarkRow
         {
-            Id = reader.GetInt32(reader.GetOrdinal("Id")),
+            Id = reader.GetInt64(reader.GetOrdinal("Id")),
             RefId = reader.GetGuid(reader.GetOrdinal("RefId")),
             RunId = reader.GetInt32(reader.GetOrdinal("RunId")),
             BranchRefId = reader.GetGuid(reader.GetOrdinal("BranchRefId")),

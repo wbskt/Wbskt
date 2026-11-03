@@ -24,8 +24,7 @@ BEGIN
             TriggerNodeId,
             CorrelationKey,
             InboundEventJson,
-            EnqueuedAt,
-            CreatedAt
+            EnqueuedAt
         FROM dbo.PendingTriggerEvents WITH (ROWLOCK, UPDLOCK, READPAST)
         WHERE WorkflowRefId = @WorkflowRefId
           AND TriggerNodeId = @TriggerNodeId
@@ -39,8 +38,7 @@ BEGIN
         deleted.TriggerNodeId,
         deleted.CorrelationKey,
         deleted.InboundEventJson,
-        deleted.EnqueuedAt,
-        deleted.CreatedAt;
+        deleted.EnqueuedAt;
 
     COMMIT TRANSACTION;
 END;

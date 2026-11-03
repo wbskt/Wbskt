@@ -410,7 +410,7 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
 
     private static RunStartRow MapStart(DbDataReader reader) => new(
         Map(reader),
-        reader.GetInt32(reader.GetOrdinal("RootBranchId")),
+        reader.GetInt64(reader.GetOrdinal("RootBranchId")),
         reader.GetBoolean(reader.GetOrdinal("Created")));
 
     internal static RunRow Map(DbDataReader reader)

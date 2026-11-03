@@ -1,5 +1,5 @@
 CREATE PROCEDURE dbo.Branch_EndIfLive
-    @Id             INT,
+    @Id             BIGINT,
     @ToStatus       NVARCHAR(32),
     @LastOutputJson NVARCHAR(MAX)
 AS

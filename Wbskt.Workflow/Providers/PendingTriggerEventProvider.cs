@@ -84,8 +84,7 @@ internal sealed class PendingTriggerEventProvider : BaseSqlProvider, IPendingTri
             TriggerNodeId = reader.GetGuid(reader.GetOrdinal("TriggerNodeId")),
             CorrelationKey = reader.GetString(reader.GetOrdinal("CorrelationKey")),
             InboundEventJson = reader.GetString(reader.GetOrdinal("InboundEventJson")),
-            EnqueuedAt = reader.GetDateTime(reader.GetOrdinal("EnqueuedAt")),
-            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
+            EnqueuedAt = reader.GetDateTime(reader.GetOrdinal("EnqueuedAt"))
         };
     }
 }

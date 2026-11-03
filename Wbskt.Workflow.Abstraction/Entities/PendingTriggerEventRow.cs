@@ -8,5 +8,4 @@ public record PendingTriggerEventRow
     public required string CorrelationKey { get; init; }
     public required string InboundEventJson { get; init; }
     public required DateTime EnqueuedAt { get; init; }
-    public required DateTime CreatedAt { get; init; }
 }

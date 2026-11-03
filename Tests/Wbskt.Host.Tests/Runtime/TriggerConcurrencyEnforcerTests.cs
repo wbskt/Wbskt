@@ -279,8 +279,7 @@ public sealed class TriggerConcurrencyEnforcerTests
                 TriggerNodeId = triggerNodeId,
                 CorrelationKey = correlationKey,
                 InboundEventJson = inboundEventJson,
-                EnqueuedAt = DateTime.UtcNow,
-                CreatedAt = DateTime.UtcNow
+                EnqueuedAt = DateTime.UtcNow
             });
         }
 

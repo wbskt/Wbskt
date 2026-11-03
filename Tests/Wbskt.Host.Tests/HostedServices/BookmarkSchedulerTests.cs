@@ -161,7 +161,7 @@ public sealed class BookmarkSchedulerTests
             row => row.RefId,
             row => new BranchRow
             {
-                Id = (int)row.Id,
+                Id = row.Id,
                 RefId = row.RefId,
                 RunId = 1,
                 ParentBranchId = null,

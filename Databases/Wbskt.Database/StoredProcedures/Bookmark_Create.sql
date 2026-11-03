@@ -17,7 +17,7 @@ BEGIN
     VALUES
         (@RefId, @RunId, @BranchRefId, @NodeId, @WakeConditionKind, @MatchKey, @WakeConditionJson, @ExpiresAt, @TtlPort);
 
-    DECLARE @NewId INT = SCOPE_IDENTITY();
+    DECLARE @NewId BIGINT = SCOPE_IDENTITY();
 
     SELECT
         Id,

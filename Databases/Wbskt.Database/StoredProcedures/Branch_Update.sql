@@ -1,5 +1,5 @@
 CREATE PROCEDURE dbo.Branch_Update
-    @Id             INT,
+    @Id             BIGINT,
     @NodeId         UNIQUEIDENTIFIER,
     @Status         NVARCHAR(32),
     @LocalJson      NVARCHAR(MAX),
