@@ -31,6 +31,19 @@ public sealed class WorkflowLifecycleTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
+    public async Task WF_LIST_01_TheListSaysWhatStartsEachWorkflow()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (token, workspace) = await fixture.RegisterAndLoginUserAsync();
+        var (refId, _) = await PublishWebhookWorkflowAsync(token, workspace);
+
+        var listed = (await fixture.Management.As(token).GetWorkflowsAsync(workspace)).Items.Single(w => w.RefId == refId);
+
+        listed.TriggerKinds.Should().Equal("webhook");
+    }
+
+    [SkippableFact]
     public async Task WF_DEL_01_ADeletedWorkflow_IsGone_AndCannotBePublishedAgain()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");

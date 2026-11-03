@@ -12,4 +12,10 @@ public record WorkflowDefinitionRow
     public required string DefinitionJson { get; init; }
     public required int PublishedBy { get; init; }
     public required DateTime CreatedAt { get; init; }
+
+    /// <summary>
+    /// The definition's trigger node kinds (<c>trigger:client</c>, ...), distinct and in node order. Only the
+    /// summary list reads it, since it carries no <see cref="DefinitionJson"/>; null elsewhere.
+    /// </summary>
+    public IReadOnlyList<string>? TriggerNodeKinds { get; init; }
 }

@@ -113,7 +113,12 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
                 p.AddWithValue("@Take", take);
                 p.Add("@TotalCount", SqlDbType.Int).Direction = ParameterDirection.Output;
             },
-            Map,
+            reader => Map(reader) with
+            {
+                TriggerNodeKinds = reader.IsDBNull(reader.GetOrdinal("TriggerKinds"))
+                    ? []
+                    : reader.GetString(reader.GetOrdinal("TriggerKinds")).Split(',', StringSplitOptions.RemoveEmptyEntries)
+            },
             ct
         );
     }

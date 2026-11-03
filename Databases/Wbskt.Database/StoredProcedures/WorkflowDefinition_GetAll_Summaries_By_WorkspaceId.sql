@@ -34,7 +34,18 @@ BEGIN
         w.IsEnabled,
         '{}' AS DefinitionJson,
         w.PublishedBy,
-        w.CreatedAt
+        w.CreatedAt,
+        -- The trigger node kinds, distinct, in the order their first node appears, comma separated.
+        -- Read from the definition rather than TriggerRegistrations, which a deprecated version has none of.
+        (
+            SELECT STRING_AGG(T.Kind, ',') WITHIN GROUP (ORDER BY T.FirstAt)
+            FROM (
+                SELECT JSON_VALUE(N.[value], '$.kind') AS Kind, MIN(CAST(N.[key] AS INT)) AS FirstAt
+                FROM OPENJSON(w.DefinitionJson, '$.nodes') N
+                WHERE JSON_VALUE(N.[value], '$.kind') LIKE 'trigger:%'
+                GROUP BY JSON_VALUE(N.[value], '$.kind')
+            ) T
+        ) AS TriggerKinds
     FROM dbo.WorkflowDefinitions w
     INNER JOIN LatestWorkflows lw ON w.RefId = lw.RefId AND w.Version = lw.LatestVersion
     ORDER BY w.Name ASC
