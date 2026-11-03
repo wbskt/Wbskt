@@ -419,6 +419,15 @@ docker compose up -d --no-deps sql rabbitmq
 The stack adds nine containers and roughly 1.2 GB of memory at idle. On a 4 GB VM, add swap first
 (see Fresh install).
 
+### Dashboards
+
+Grafana starts with one provisioned dashboard, **Wbskt overview** (folder *Wbskt*): firing alerts,
+sign-ups and logins, open device sockets with connects and disconnects, workflow runs and their
+failure rate, and the engine's queue depth. It lives in
+`observability/grafana/provisioning/dashboards/wbskt/overview.json` and is read-only in the UI; to
+change it, edit the JSON (or save a copy from the UI and export it over that file) and restart
+`grafana`. Anything else built in the UI is kept in the `grafana-data` volume.
+
 ### Alerts
 
 Rules live in `observability/alerts.yml`, delivered by Alertmanager to `ALERT_EMAIL_TO` (through the

@@ -1,0 +1,12 @@
+# Loads the dashboards checked in under wbskt/ into a "Wbskt" folder. They are read-only in the UI
+# (allowUiUpdates: false): change the JSON here and restart Grafana, or a fresh install loses the edit.
+apiVersion: 1
+
+providers:
+  - name: wbskt
+    folder: Wbskt
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/provisioning/dashboards/wbskt
