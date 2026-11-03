@@ -18,7 +18,7 @@ CREATE TABLE dbo.EmailChangeTokens (
 
     CONSTRAINT PK_EmailChangeTokens PRIMARY KEY CLUSTERED (Id ASC),
     CONSTRAINT UQ_EmailChangeTokens_TokenHash UNIQUE (TokenHash),
-    CONSTRAINT CK_EmailChangeTokens_Kind CHECK (Kind IN (1, 2)),
+    CONSTRAINT CK_EmailChangeTokens_Kind CHECK (Kind = 1 OR Kind = 2),
     CONSTRAINT FK_EmailChangeTokens_Users FOREIGN KEY (UserId) REFERENCES dbo.Users (Id) ON DELETE CASCADE
 );
 GO
