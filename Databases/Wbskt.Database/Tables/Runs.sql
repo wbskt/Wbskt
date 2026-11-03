@@ -26,8 +26,10 @@ CREATE TABLE dbo.Runs
     OutputJson               NVARCHAR(MAX)    NULL,
     CONSTRAINT UQ_Runs_RefId UNIQUE (RefId),
     -- The words RunStatus (Wbskt.Workflow.Abstraction) defines; a change there is a change here.
-    CONSTRAINT CK_Runs_Status CHECK (Status IN (N'Running', N'Failing', N'Cancelling', N'Succeeded',
-        N'Failed', N'PartiallyFailed', N'Cancelled', N'OutOfCredits')),
+    -- Written out with OR, not IN: SQL Server stores IN expanded, and the DACPAC would never match it.
+    CONSTRAINT CK_Runs_Status CHECK (Status = N'Running' OR Status = N'Failing' OR Status = N'Cancelling'
+        OR Status = N'Succeeded' OR Status = N'Failed' OR Status = N'PartiallyFailed'
+        OR Status = N'Cancelled' OR Status = N'OutOfCredits'),
     CONSTRAINT FK_Runs_WorkflowDefinitions
         FOREIGN KEY (WorkflowDefinitionId) REFERENCES dbo.WorkflowDefinitions (Id)
 );

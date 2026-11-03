@@ -19,7 +19,8 @@ CREATE TABLE dbo.Branches
     RowVersion            ROWVERSION       NOT NULL,
     CONSTRAINT UQ_Branches_RefId UNIQUE (RefId),
     -- The words BranchStatus (Wbskt.Workflow.Abstraction) defines; a change there is a change here.
-    CONSTRAINT CK_Branches_Status CHECK (Status IN (N'Active', N'Waiting', N'Completed', N'Failed', N'Cancelled')),
+    CONSTRAINT CK_Branches_Status CHECK (Status = N'Active' OR Status = N'Waiting'
+        OR Status = N'Completed' OR Status = N'Failed' OR Status = N'Cancelled'),
     CONSTRAINT FK_Branches_Runs FOREIGN KEY (RunId) REFERENCES dbo.Runs (Id)
 );
 GO
