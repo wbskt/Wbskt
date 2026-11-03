@@ -8,7 +8,8 @@ on its own after a drop.
 pip install wbskt
 ```
 
-Python 3.9 or later. The only dependency is `websockets`.
+Python 3.9 or later. The only dependency is `websockets`. This is a 0.9 beta: the device protocol
+it speaks may still change before 1.0.
 
 ## Quick start
 

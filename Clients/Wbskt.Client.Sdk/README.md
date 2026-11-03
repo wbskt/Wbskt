@@ -8,6 +8,8 @@ reconnects on its own.
 dotnet add package Wbskt.Client --prerelease
 ```
 
+This is a 0.9 beta (`--prerelease` finds it): the device protocol it speaks may still change before 1.0.
+
 ```csharp
 using Wbskt.Client.Sdk;
 

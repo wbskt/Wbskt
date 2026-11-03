@@ -1,7 +1,7 @@
 name: Publish SDK
 
 # Packs Wbskt.Client and Wbskt.Protocol and pushes them to NuGet when a tag sdk-v<version> is pushed
-# (for example sdk-v1.0.0-preview.1). The tag must match SdkPackageVersion in Clients/Directory.Build.props.
+# (for example sdk-v0.9.0-beta.1). The tag must match SdkPackageVersion in Clients/Directory.Build.props.
 # Needs the NUGET_API_KEY repository secret, scoped to push those two package ids.
 
 on:
