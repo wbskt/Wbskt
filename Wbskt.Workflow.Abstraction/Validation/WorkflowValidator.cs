@@ -467,9 +467,64 @@ public sealed partial class WorkflowValidator
                 case WebhookTriggerNode webhook:
                     WarnOnCorrelation(node.NodeId, webhook.Config?.CorrelationKey, issues);
                     break;
+
+                case ManualTriggerNode manual:
+                    ValidateManualInputs(node.NodeId, manual.Config?.Inputs, issues);
+                    break;
             }
         }
     }
+
+    private const int MaxManualInputNameLength = 64;
+
+    /// <summary>
+    /// Each input is a key of the run's body, read as <c>$trigger.body.NAME</c>, so a name must be one an
+    /// expression can name, must not repeat, and must not be one the engine writes into a child's body.
+    /// </summary>
+    private static void ValidateManualInputs(Guid nodeId, IReadOnlyList<ManualTriggerInput>? inputs, List<ValidationIssue> issues)
+    {
+        if (inputs is null)
+        {
+            return;
+        }
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < inputs.Count; i++)
+        {
+            var name = inputs[i]?.Name ?? string.Empty;
+            var field = $"config.inputs[{i}].name";
+
+            if (!IsInputName(name))
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "MANUAL_INPUT_NAME_INVALID",
+                    $"Manual trigger '{nodeId}' has an input named '{name}'; a name is 1 to {MaxManualInputNameLength} letters, digits or underscores, starting with a letter or underscore.",
+                    nodeId, field));
+            }
+            else if (SubWorkflowConfig.ReservedInputKeys.Contains(name))
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "MANUAL_INPUT_NAME_RESERVED",
+                    $"Manual trigger '{nodeId}' has an input named '{name}', which the engine writes itself; rename it.",
+                    nodeId, field));
+            }
+            else if (!seen.Add(name))
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "MANUAL_INPUT_NAME_DUPLICATE",
+                    $"Manual trigger '{nodeId}' declares the input '{name}' more than once.",
+                    nodeId, field));
+            }
+        }
+    }
+
+    private static bool IsInputName(string name) =>
+        name.Length is > 0 and <= MaxManualInputNameLength
+        && (char.IsAsciiLetter(name[0]) || name[0] == '_')
+        && name.All(c => char.IsAsciiLetterOrDigit(c) || c == '_');
 
     private static void ValidateClientHold(Guid nodeId, ClientTriggerConfig config, List<ValidationIssue> issues)
     {
