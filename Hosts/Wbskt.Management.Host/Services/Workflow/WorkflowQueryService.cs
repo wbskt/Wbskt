@@ -127,7 +127,8 @@ public sealed class WorkflowQueryService : IWorkflowQueryService
             row.IsEnabled ? "Published" : "Deprecated",
             row.Name,
             row.Description,
-            row.CreatedAt
+            row.CreatedAt,
+            WorkflowTriggerKinds.FromNodeKinds(row.TriggerNodeKinds)
         )).ToList();
 
         var pagedResult = new Wbskt.Models.PagedList<WorkflowSummaryDto>(dtos, result.TotalCount) as Wbskt.Models.IPagedList<WorkflowSummaryDto>;
