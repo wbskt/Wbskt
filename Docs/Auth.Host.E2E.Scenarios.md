@@ -371,6 +371,7 @@ The cross-service contract. Every workspace-scoped management-host request passe
 | `WS_MEM_09` | − | Add with a malformed email | model-validation 400 |
 | `WS_MEM_10` | − | Add with an unknown workspace ref | **403** `WORKSPACE_NOT_FOUND` |
 | `WS_MEM_11` | + | List members | **200**, includes owner + added members, `X-Total-Count` set |
+| `WS_MEM_11b` | + | List members, then the tenant's | Only the owner has `isOwner: true` in the workspace list; the tenant list leaves `isOwner` out |
 | `WS_MEM_12` | + | Paging: `take=1` | 1 item; total header unchanged |
 | `WS_MEM_13` | + | `take=0` is clamped to 1, not an error | **200**, 1 item |
 | `WS_MEM_14` | + | `take=99999` is clamped to 200 | **200**, ≤ 200 items |

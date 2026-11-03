@@ -17,7 +17,8 @@ BEGIN
         U.Username,
         U.Email,
         U.IsActive,
-        CAST(ISNULL(TM.IsSuspended, 0) AS BIT) AS IsSuspended
+        CAST(ISNULL(TM.IsSuspended, 0) AS BIT) AS IsSuspended,
+        CAST(IIF(W.OwnerUserId = U.Id, 1, 0) AS BIT) AS IsOwner
     FROM dbo.WorkspaceMembers WM
     INNER JOIN dbo.Users U ON U.Id = WM.UserId
     INNER JOIN dbo.Workspaces W ON W.Id = WM.WorkspaceId
