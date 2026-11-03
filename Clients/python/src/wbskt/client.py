@@ -260,7 +260,8 @@ class AsyncWbsktClient:
             if was_connected:
                 await _call(self.on_disconnected)
 
-        return ws.close_code
+        # Through the protocol object: Connection.close_code only arrived in websockets 13.1.
+        return ws.protocol.close_code
 
     async def _drain(self, ws: ClientConnection) -> None:
         """Send the offline backlog, paced, then mark the client connected."""
