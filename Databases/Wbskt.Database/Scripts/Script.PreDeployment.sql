@@ -123,3 +123,67 @@ BEGIN
         PRINT ''>>> ScheduledFires: removed '' + CAST(@Removed AS NVARCHAR(20)) + '' duplicate schedule(s)'';';
 END
 GO
+/*
+--------------------------------------------------------------------------------------
+Pre-Deployment Script: drop PendingTriggerEvents.CreatedAt
+--------------------------------------------------------------------------------------
+The column duplicated EnqueuedAt. sqlpackage refuses to drop a column from a table that has rows
+while BlockOnPossibleDataLoss is on, and deploy.sh always runs it that way, so the drop happens here
+and the diff finds nothing left to do. The column's default is system-named, so it is looked up.
+*/
+IF COL_LENGTH('dbo.PendingTriggerEvents', 'CreatedAt') IS NOT NULL
+BEGIN
+    DECLARE @CreatedAtDefault SYSNAME =
+        (SELECT dc.name
+         FROM sys.default_constraints dc
+         JOIN sys.columns c ON c.object_id = dc.parent_object_id AND c.column_id = dc.parent_column_id
+         WHERE dc.parent_object_id = OBJECT_ID('dbo.PendingTriggerEvents') AND c.name = N'CreatedAt');
+
+    IF @CreatedAtDefault IS NOT NULL
+    BEGIN
+        DECLARE @DropDefault NVARCHAR(MAX) = N'ALTER TABLE dbo.PendingTriggerEvents DROP CONSTRAINT ' + QUOTENAME(@CreatedAtDefault) + N';';
+        EXEC sp_executesql @DropDefault;
+    END
+
+    EXEC sp_executesql N'ALTER TABLE dbo.PendingTriggerEvents DROP COLUMN CreatedAt;';
+    PRINT '>>> PendingTriggerEvents: dropped CreatedAt';
+END
+GO
+/*
+--------------------------------------------------------------------------------------
+Pre-Deployment Script: settle unknown statuses before the Status CHECK constraints
+--------------------------------------------------------------------------------------
+Runs, Branches and IdempotencyKeys gain CHECK constraints listing the statuses the engine writes
+(RunStatus, BranchStatus, IdempotencyKeyStatus). The constraints are created WITH CHECK, so one row
+with any other word would stop the deploy. No code path writes another word, and the engine could
+not resume such a row anyway, so a row like that is marked Failed: terminal, and visible as a failure
+rather than silently gone. Each runs once, while its constraint does not exist yet.
+*/
+IF OBJECT_ID('dbo.Runs', 'U') IS NOT NULL AND OBJECT_ID('dbo.CK_Runs_Status', 'C') IS NULL
+BEGIN
+    EXEC sp_executesql N'
+        UPDATE dbo.Runs
+        SET Status = N''Failed'', CompletedAt = COALESCE(CompletedAt, SYSUTCDATETIME())
+        WHERE Status NOT IN (N''Running'', N''Failing'', N''Cancelling'', N''Succeeded'', N''Failed'',
+                             N''PartiallyFailed'', N''Cancelled'', N''OutOfCredits'');
+        PRINT ''>>> Runs: marked '' + CAST(@@ROWCOUNT AS NVARCHAR(20)) + '' run(s) with an unknown status Failed'';';
+END
+GO
+IF OBJECT_ID('dbo.Branches', 'U') IS NOT NULL AND OBJECT_ID('dbo.CK_Branches_Status', 'C') IS NULL
+BEGIN
+    EXEC sp_executesql N'
+        UPDATE dbo.Branches
+        SET Status = N''Failed''
+        WHERE Status NOT IN (N''Active'', N''Waiting'', N''Completed'', N''Failed'', N''Cancelled'');
+        PRINT ''>>> Branches: marked '' + CAST(@@ROWCOUNT AS NVARCHAR(20)) + '' branch(es) with an unknown status Failed'';';
+END
+GO
+IF OBJECT_ID('dbo.IdempotencyKeys', 'U') IS NOT NULL AND OBJECT_ID('dbo.CK_IdempotencyKeys_Status', 'C') IS NULL
+BEGIN
+    EXEC sp_executesql N'
+        UPDATE dbo.IdempotencyKeys
+        SET Status = N''Failed''
+        WHERE Status NOT IN (N''Pending'', N''Succeeded'', N''Failed'');
+        PRINT ''>>> IdempotencyKeys: marked '' + CAST(@@ROWCOUNT AS NVARCHAR(20)) + '' key(s) with an unknown status Failed'';';
+END
+GO

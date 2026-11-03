@@ -101,7 +101,7 @@ internal sealed class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
             p => p.AddWithValue("@RefId", refId),
             ct
         );
-        return result is int;
+        return result is long;
     }
 
     public async Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(DateTime nowUtc, int batchSize, CancellationToken ct)

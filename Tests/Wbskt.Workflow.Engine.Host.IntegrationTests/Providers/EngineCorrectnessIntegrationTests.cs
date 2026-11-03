@@ -164,8 +164,8 @@ public sealed class EngineCorrectnessIntegrationTests(SqlEdgeFixture fixture)
         var workflowRefId = Guid.NewGuid();
         await PublishAsync(workflowRefId, Random.Shared.Next(1_000_000, int.MaxValue));
 
-        int oldRun = await InsertRunAsync(workflowRefId, "Completed", "2000-01-01");
-        int recentRun = await InsertRunAsync(workflowRefId, "Completed", "2001-06-01");
+        int oldRun = await InsertRunAsync(workflowRefId, "Succeeded", "2000-01-01");
+        int recentRun = await InsertRunAsync(workflowRefId, "Succeeded", "2001-06-01");
         int liveRun = await InsertRunAsync(workflowRefId, "Running", null);
         foreach (int runId in new[] { oldRun, recentRun, liveRun })
         {
