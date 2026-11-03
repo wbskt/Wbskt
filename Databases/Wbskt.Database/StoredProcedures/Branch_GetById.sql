@@ -1,5 +1,5 @@
 CREATE PROCEDURE dbo.Branch_GetById
-    @Id INT
+    @Id BIGINT
 AS
 BEGIN
     SET NOCOUNT ON;

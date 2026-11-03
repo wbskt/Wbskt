@@ -482,7 +482,7 @@ public sealed class BookmarkResumerTests
             branch => branch.RefId,
             branch => new BranchRow
             {
-                Id = (int)branch.Id,
+                Id = branch.Id,
                 RefId = branch.RefId,
                 RunId = 42,
                 ParentBranchId = null,

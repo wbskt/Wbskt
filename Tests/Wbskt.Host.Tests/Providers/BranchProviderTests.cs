@@ -13,7 +13,7 @@ public class BranchProviderTests
         {
             new Dictionary<string, object?>
             {
-                ["Id"] = 1,
+                ["Id"] = 1L,
                 ["RefId"] = Guid.Parse("f47ac10b-58cc-4372-a567-0e02b2c3d479"),
                 ["RunId"] = 42,
                 ["ParentBranchId"] = Guid.Parse("a47ac10b-58cc-4372-a567-0e02b2c3d479"),

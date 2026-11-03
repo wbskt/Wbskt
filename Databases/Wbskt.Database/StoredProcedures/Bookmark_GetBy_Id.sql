@@ -1,5 +1,5 @@
 CREATE PROCEDURE dbo.Bookmark_GetBy_Id
-    @Id INT
+    @Id BIGINT
 AS
 BEGIN
     SET NOCOUNT ON;

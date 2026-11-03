@@ -1,6 +1,6 @@
 CREATE TABLE dbo.Bookmarks
 (
-    Id                INT              NOT NULL IDENTITY(1,1) PRIMARY KEY,
+    Id                BIGINT           NOT NULL IDENTITY(1,1) PRIMARY KEY,
     RefId             UNIQUEIDENTIFIER NOT NULL,
     RunId             INT              NOT NULL,
     BranchRefId       UNIQUEIDENTIFIER NOT NULL,

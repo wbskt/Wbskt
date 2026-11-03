@@ -25,6 +25,9 @@ CREATE TABLE dbo.Runs
     -- sub-workflow step as childResult.output. Null when no End node set one.
     OutputJson               NVARCHAR(MAX)    NULL,
     CONSTRAINT UQ_Runs_RefId UNIQUE (RefId),
+    -- The words RunStatus (Wbskt.Workflow.Abstraction) defines; a change there is a change here.
+    CONSTRAINT CK_Runs_Status CHECK (Status IN (N'Running', N'Failing', N'Cancelling', N'Succeeded',
+        N'Failed', N'PartiallyFailed', N'Cancelled', N'OutOfCredits')),
     CONSTRAINT FK_Runs_WorkflowDefinitions
         FOREIGN KEY (WorkflowDefinitionId) REFERENCES dbo.WorkflowDefinitions (Id)
 );
@@ -78,4 +81,17 @@ GO
 CREATE INDEX IX_Runs_ParentRunRefId_Active
     ON dbo.Runs (ParentRunRefId)
     WHERE ParentRunRefId IS NOT NULL AND Status IN (N'Running', N'Failing', N'Cancelling');
+GO
+
+-- The stats procedures (Run_GetStatsBy_WorkflowRefId, Run_GetStatsBy_WorkspaceId,
+-- Run_GetStatsPerWorkflowBy_WorkspaceId) read a time window of runs by CreatedAt. Without these they
+-- scan every run a workflow or workspace ever made.
+CREATE INDEX IX_Runs_WorkflowRefId_CreatedAt
+    ON dbo.Runs (WorkflowRefId, CreatedAt)
+    INCLUDE (Status, StartedAt, CompletedAt);
+GO
+
+CREATE INDEX IX_Runs_WorkflowDefinitionId_CreatedAt
+    ON dbo.Runs (WorkflowDefinitionId, CreatedAt)
+    INCLUDE (Status, StartedAt, CompletedAt);
 GO

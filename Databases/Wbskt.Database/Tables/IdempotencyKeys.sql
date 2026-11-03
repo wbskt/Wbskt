@@ -11,7 +11,9 @@ CREATE TABLE dbo.IdempotencyKeys
     ErrorJson   NVARCHAR(MAX)    NULL,
     CreatedAt   DATETIME2(3)     NOT NULL DEFAULT SYSUTCDATETIME(),
     CompletedAt DATETIME2(3)     NULL,
-    CONSTRAINT UQ_IdempotencyKeys_KeyValue UNIQUE (KeyValue)
+    CONSTRAINT UQ_IdempotencyKeys_KeyValue UNIQUE (KeyValue),
+    -- The words IdempotencyKeyStatus (Wbskt.Workflow.Abstraction) defines.
+    CONSTRAINT CK_IdempotencyKeys_Status CHECK (Status IN (N'Pending', N'Succeeded', N'Failed'))
 );
 GO
 

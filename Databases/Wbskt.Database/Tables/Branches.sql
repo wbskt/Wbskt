@@ -1,6 +1,6 @@
 CREATE TABLE dbo.Branches
 (
-    Id                    INT              NOT NULL IDENTITY(1,1) PRIMARY KEY,
+    Id                    BIGINT           NOT NULL IDENTITY(1,1) PRIMARY KEY,
     RefId                 UNIQUEIDENTIFIER NOT NULL,
     RunId                 INT              NOT NULL,
     ParentBranchId        UNIQUEIDENTIFIER NULL,
@@ -18,6 +18,8 @@ CREATE TABLE dbo.Branches
     -- RetryExecutor gives side-effecting actions. Keep it even though no procedure compares it.
     RowVersion            ROWVERSION       NOT NULL,
     CONSTRAINT UQ_Branches_RefId UNIQUE (RefId),
+    -- The words BranchStatus (Wbskt.Workflow.Abstraction) defines; a change there is a change here.
+    CONSTRAINT CK_Branches_Status CHECK (Status IN (N'Active', N'Waiting', N'Completed', N'Failed', N'Cancelled')),
     CONSTRAINT FK_Branches_Runs FOREIGN KEY (RunId) REFERENCES dbo.Runs (Id)
 );
 GO
