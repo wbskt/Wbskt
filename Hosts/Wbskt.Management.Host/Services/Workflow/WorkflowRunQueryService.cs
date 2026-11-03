@@ -28,9 +28,9 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
     /// is still going on its other branches; a 'Cancelling' one is accepted again, as the engine repeats
     /// its cleanup. Every other status is terminal.
     /// </summary>
-    private static readonly JsonSerializerOptions DefinitionJson = new(JsonSerializerDefaults.Web);
-
     private static readonly HashSet<string> CancellableStatuses = new(StringComparer.Ordinal) { RunStatus.Running, RunStatus.Failing, RunStatus.Cancelling };
+
+    private static readonly JsonSerializerOptions DefinitionJson = new(JsonSerializerDefaults.Web);
 
     private readonly IRunProvider _runProvider;
     private readonly IBranchProvider _branchProvider;
