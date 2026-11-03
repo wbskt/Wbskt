@@ -3,6 +3,7 @@ using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services.Email;
+using Wbskt.Auth.Host.Services.Passwords;
 using Wbskt.Auth.Host.Telemetry;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Auth;
@@ -41,6 +42,7 @@ internal sealed class RegistrationService : IRegistrationService
     private readonly AuthMetrics _metrics;
     private readonly IAuditWorkspaces _audit;
     private readonly AccountAnnouncer _announcer;
+    private readonly IBreachedPasswords _breachedPasswords;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
     public RegistrationService(
@@ -51,9 +53,11 @@ internal sealed class RegistrationService : IRegistrationService
         ILogger<RegistrationService> logger,
         AuthMetrics metrics,
         MailCooldown mailCooldown,
-        IAuditWorkspaces? audit = null)
+        IAuditWorkspaces? audit = null,
+        IBreachedPasswords? breachedPasswords = null)
     {
         _audit = audit ?? AuditWorkspaces.None;
+        _breachedPasswords = breachedPasswords ?? BreachedPasswords.None;
         _accounts = accounts;
         _tenants = tenants;
         _eventBus = eventBus;
@@ -67,6 +71,12 @@ internal sealed class RegistrationService : IRegistrationService
     public async Task<Result> RegisterUserAsync(string username, string email, string password, string? invitationToken = null, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Attempting to register user: {Username}", username);
+
+        if (await _breachedPasswords.IsBreachedAsync(password, cancellationToken))
+        {
+            _metrics.RecordRegistration("breached_password");
+            return Result.Failure(BreachedPasswords.Breached);
+        }
 
         // Checked before the account is created, not after. Redeeming an invitation is the last step
         // of registration, so a token that turns out to be unusable would otherwise leave behind an

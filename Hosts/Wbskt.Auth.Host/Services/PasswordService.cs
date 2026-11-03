@@ -4,6 +4,7 @@ using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services.Email;
+using Wbskt.Auth.Host.Services.Passwords;
 using Wbskt.Auth.Host.Telemetry;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Auth;
@@ -38,6 +39,7 @@ internal sealed class PasswordService : IPasswordService
     private readonly IAccessTokenRevocation _accessTokens;
     private readonly SessionTokens _tokens;
     private readonly AccountAnnouncer _announcer;
+    private readonly IBreachedPasswords _breachedPasswords;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
     public PasswordService(
@@ -51,8 +53,10 @@ internal sealed class PasswordService : IPasswordService
         IAccessTokenRevocation accessTokens,
         IOptions<AccessTokenOptions> accessTokenOptions,
         MailCooldown mailCooldown,
-        IAuditWorkspaces? audit = null)
+        IAuditWorkspaces? audit = null,
+        IBreachedPasswords? breachedPasswords = null)
     {
+        _breachedPasswords = breachedPasswords ?? BreachedPasswords.None;
         _accounts = accounts;
         _sessions = sessions;
         _eventBus = eventBus;
@@ -87,6 +91,12 @@ internal sealed class PasswordService : IPasswordService
                 await AccountLockout.RecordFailedPasswordAsync(_accounts, _eventBus, _logger, user, ipAddress, cancellationToken);
                 // 400, not 401: the session is fine, and a 401 would make a client sign the user out.
                 return Result<LoginResponse>.Failure(Error.Validation("AUTH_CURRENT_PASSWORD_INVALID", "The current password is not correct."));
+            }
+
+            // After the current password, so a stolen access token learns nothing from this either.
+            if (await _breachedPasswords.IsBreachedAsync(newPassword, cancellationToken))
+            {
+                return Result<LoginResponse>.Failure(BreachedPasswords.Breached);
             }
 
             await _accounts.ChangePasswordAsync(userId, _passwordHasher.HashPassword(user, newPassword), ipAddress, cancellationToken);
@@ -169,6 +179,12 @@ internal sealed class PasswordService : IPasswordService
 
     public async Task<Result> ResetPasswordAsync(string token, string newPassword, string ipAddress, CancellationToken cancellationToken = default)
     {
+        // Before the token is spent, so a refused password leaves the link usable for a better one.
+        if (await _breachedPasswords.IsBreachedAsync(newPassword, cancellationToken))
+        {
+            return Result.Failure(BreachedPasswords.Breached);
+        }
+
         // Hashed before the token is checked, so an invalid token costs the same work as a valid one
         // and cannot be distinguished by how quickly it comes back. PasswordHasher<T> ignores the
         // user argument when hashing, so a bare instance is correct here - there is no account yet.

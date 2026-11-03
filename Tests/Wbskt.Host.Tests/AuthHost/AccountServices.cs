@@ -6,6 +6,7 @@ using Moq;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services;
 using Wbskt.Auth.Host.Services.Email;
+using Wbskt.Auth.Host.Services.Passwords;
 using Wbskt.Auth.Host.Telemetry;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Infrastructure.Security;
@@ -25,7 +26,8 @@ internal class AccountServices
         bool requireVerifiedEmail = true,
         IJwtService? jwt = null,
         IAuditWorkspaces? audit = null,
-        ILogger<SignInService>? signInLogger = null)
+        ILogger<SignInService>? signInLogger = null,
+        IBreachedPasswords? breachedPasswords = null)
     {
         if (jwt is null)
         {
@@ -62,7 +64,8 @@ internal class AccountServices
             AccessTokens.Object,
             Options.Create(new AccessTokenOptions()),
             cooldown,
-            audit);
+            audit,
+            breachedPasswords);
 
         Registration = new RegistrationService(
             Accounts.Object,
@@ -72,7 +75,8 @@ internal class AccountServices
             NullLogger<RegistrationService>.Instance,
             metrics,
             cooldown,
-            audit);
+            audit,
+            breachedPasswords);
     }
 
     public Mock<IAccountProvider> Accounts { get; } = new();
