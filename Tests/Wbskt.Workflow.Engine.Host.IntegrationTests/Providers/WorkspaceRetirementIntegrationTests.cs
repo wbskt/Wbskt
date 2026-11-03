@@ -163,7 +163,7 @@ public sealed class WorkspaceRetirementIntegrationTests(SqlEdgeFixture fixture)
             INSERT INTO dbo.PendingTriggerEvents (WorkflowRefId, TriggerNodeId, CorrelationKey, InboundEventJson)
             VALUES (@p1, @p2, 'k', '{}');
             INSERT INTO dbo.Runs (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, Status, StartedAt, CompletedAt, CreditBudget)
-            VALUES (NEWID(), @p0, @p1, 1, @p2, N'Completed', SYSUTCDATETIME(), SYSUTCDATETIME(), 0);
+            VALUES (NEWID(), @p0, @p1, 1, @p2, N'Succeeded', SYSUTCDATETIME(), SYSUTCDATETIME(), 0);
             """, definitionId, workflowRefId, triggerNodeId);
 
         long runningRunId = await InsertAsync<int>("""
