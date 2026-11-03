@@ -145,6 +145,43 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
         );
     }
 
+    public async Task<IReadOnlyCollection<RunListDetailRow>> GetListDetailsAsync(IReadOnlyCollection<int> runIds, CancellationToken ct)
+    {
+        if (runIds.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = new DataTable();
+        ids.Columns.Add("Id", typeof(int));
+        foreach (var id in runIds.Distinct())
+        {
+            ids.Rows.Add(id);
+        }
+
+        return await ExecuteCollectionAsync(
+            "dbo.Run_GetListDetails",
+            p =>
+            {
+                var parameter = p.AddWithValue("@RunIds", ids);
+                parameter.SqlDbType = SqlDbType.Structured;
+                parameter.TypeName = "dbo.IdTableType";
+            },
+            r => new RunListDetailRow
+            {
+                RunId = r.GetInt32(r.GetOrdinal("RunId")),
+                CreditsConsumed = r.IsDBNull(r.GetOrdinal("CreditsConsumed")) ? null : r.GetDecimal(r.GetOrdinal("CreditsConsumed")),
+                FailedNodeId = r.IsDBNull(r.GetOrdinal("FailedNodeId")) ? null : r.GetGuid(r.GetOrdinal("FailedNodeId")),
+                FailedErrorCode = r.IsDBNull(r.GetOrdinal("FailedErrorCode")) ? null : r.GetString(r.GetOrdinal("FailedErrorCode")),
+                EndedNodeId = r.IsDBNull(r.GetOrdinal("EndedNodeId")) ? null : r.GetGuid(r.GetOrdinal("EndedNodeId")),
+                CurrentNodeId = r.IsDBNull(r.GetOrdinal("CurrentNodeId")) ? null : r.GetGuid(r.GetOrdinal("CurrentNodeId")),
+                CurrentAttempt = r.IsDBNull(r.GetOrdinal("CurrentAttempt")) ? null : r.GetInt32(r.GetOrdinal("CurrentAttempt")),
+                CurrentMaxAttempts = r.IsDBNull(r.GetOrdinal("CurrentMaxAttempts")) ? null : r.GetInt32(r.GetOrdinal("CurrentMaxAttempts"))
+            },
+            ct
+        );
+    }
+
     public async Task<RunStatsRow> GetStatsAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, CancellationToken ct)
     {
         return await ExecuteSingleAsync(

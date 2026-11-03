@@ -18,6 +18,7 @@ using Wbskt.Primitives.Exceptions;
 using Wbskt.Primitives.Models;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
+using Wbskt.Host.Tests.Abstraction;
 using Wbskt.Host.Tests.Infrastructure;
 
 namespace Wbskt.Host.Tests.ManagementHost;
@@ -199,6 +200,42 @@ public sealed class WorkflowRunsControllerTests
         Assert.Equal(2, response.Value.Items.Count());
         Assert.Equal("42", response.Value.NextCursor);
         Assert.Equal(workflowRefId, response.Value.Items.First().WorkflowDefinitionRefId);
+    }
+
+    [Fact]
+    public async Task ListByWorkspaceAsync_says_what_started_each_run_and_where_it_stopped()
+    {
+        var workflowRefId = Guid.NewGuid();
+        var runProvider = new Mock<IRunProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        var definition = ValidWorkflowBuilder.Build();
+        definitionProvider.Setup(x => x.GetByIdAsync(9, It.IsAny<CancellationToken>())).ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId) with
+        {
+            Name = "Greenhouse",
+            DefinitionJson = JsonSerializer.Serialize(definition, new JsonSerializerOptions(JsonSerializerDefaults.Web))
+        });
+        RunRow Run(int id, string status) => CreateRunRow(id, Guid.NewGuid(), workflowRefId, 1, status) with { TriggerNodeId = ValidWorkflowBuilder.Trigger1Id };
+        runProvider.Setup(x => x.ListByWorkspaceAsync(WorkspaceId, null, 4, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Run(1, "Failed"), Run(2, "Succeeded"), Run(3, "Running")]);
+        runProvider.Setup(x => x.GetListDetailsAsync(It.Is<IReadOnlyCollection<int>>(ids => ids.SequenceEqual(new[] { 1, 2, 3 })), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new RunListDetailRow { RunId = 1, CreditsConsumed = 2.5m, FailedNodeId = ValidWorkflowBuilder.Logic1Id, FailedErrorCode = "WEBHOOK_HTTP_ERROR" },
+                new RunListDetailRow { RunId = 2, CreditsConsumed = 1m, EndedNodeId = ValidWorkflowBuilder.Logic1Id },
+                new RunListDetailRow { RunId = 3, CurrentNodeId = ValidWorkflowBuilder.Logic1Id, CurrentAttempt = 2, CurrentMaxAttempts = 3 }
+            ]);
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
+
+        var response = await service.ListByWorkspaceAsync(WorkspaceId, null, 3, null, CancellationToken.None);
+
+        var runs = response.Value.Items.ToList();
+        Assert.All(runs, r => Assert.Equal("Greenhouse", r.WorkflowName));
+        Assert.All(runs, r => Assert.Equal(new RunTriggerDto(ValidWorkflowBuilder.Trigger1Id, "trigger:client", "Trigger", "Device dev-1 sent telemetry"), r.Trigger));
+        Assert.Equal(new RunStepDto(ValidWorkflowBuilder.Logic1Id, "Gate", "control:logic", "WEBHOOK_HTTP_ERROR"), runs[0].FailedAt);
+        Assert.Equal(2.5m, runs[0].CreditsUsed);
+        Assert.Equal("Gate", runs[1].EndedAt?.Name);
+        Assert.Equal(new RunStepDto(ValidWorkflowBuilder.Logic1Id, "Gate", "control:logic", null, 2, 3), runs[2].CurrentStep);
+        Assert.Null(runs[2].CreditsUsed);
+        definitionProvider.Verify(x => x.GetByIdAsync(9, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -394,7 +431,8 @@ public sealed class WorkflowRunsControllerTests
         Assert.Equal(2, response.Value.Items.Count());
         Assert.Null(response.Value.NextCursor);
         Assert.Equal([workflowA, workflowB], response.Value.Items.Select(r => r.WorkflowDefinitionRefId));
-        definitionProvider.VerifyNoOtherCalls();
+        // Versions are read for their step names, but never checked for ownership one by one.
+        definitionProvider.Verify(x => x.FindCurrentByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

@@ -43,6 +43,10 @@ public interface IRunProvider
     /// </summary>
     Task<IReadOnlyCollection<RunRow>> ListByWorkspaceAsync(int workspaceId, string? statusFilter, int top, long? cursorId, CancellationToken ct);
 
+    /// <summary>Credits, failure point, end point and current step for a page of runs. Defaulted so the engine's test doubles need no stub.</summary>
+    Task<IReadOnlyCollection<RunListDetailRow>> GetListDetailsAsync(IReadOnlyCollection<int> runIds, CancellationToken ct)
+        => throw new NotSupportedException();
+
     /// <summary>Outcome counts and duration percentiles for runs started in the window.</summary>
     Task<RunStatsRow> GetStatsAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, CancellationToken ct);
 

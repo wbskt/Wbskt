@@ -1,6 +1,9 @@
+using System.Text.Json;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Models;
+using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 
@@ -25,6 +28,8 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
     /// is still going on its other branches; a 'Cancelling' one is accepted again, as the engine repeats
     /// its cleanup. Every other status is terminal.
     /// </summary>
+    private static readonly JsonSerializerOptions DefinitionJson = new(JsonSerializerDefaults.Web);
+
     private static readonly HashSet<string> CancellableStatuses = new(StringComparer.Ordinal) { RunStatus.Running, RunStatus.Failing, RunStatus.Cancelling };
 
     private readonly IRunProvider _runProvider;
@@ -59,7 +64,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
         // on the end, so clients always fetched one empty page.
         IReadOnlyCollection<RunRow> rows = await _runProvider.ListByWorkflowAsync(workflowRefId, statusFilter, top + 1, cursorId, ct);
 
-        return Result<RunListResponse>.Success(BuildPage(rows, top));
+        return Result<RunListResponse>.Success(await BuildPageAsync(rows, top, ct));
     }
 
     public async Task<Result<RunListResponse>> ListByWorkspaceAsync(int workspaceId, string? statusFilter, int top, long? cursorId, CancellationToken ct)
@@ -70,7 +75,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
         // to do here - a run cannot appear unless its definition belongs to this workspace.
         IReadOnlyCollection<RunRow> rows = await _runProvider.ListByWorkspaceAsync(workspaceId, statusFilter, top + 1, cursorId, ct);
 
-        return Result<RunListResponse>.Success(BuildPage(rows, top));
+        return Result<RunListResponse>.Success(await BuildPageAsync(rows, top, ct));
     }
 
     private static Result<TimeRange> ResolveStatsRange(DateTimeOffset? from, DateTimeOffset? to)
@@ -80,14 +85,69 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
     /// Trims the extra row fetched to probe for a next page, and derives the cursor from whether that
     /// row was actually there.
     /// </summary>
-    private static RunListResponse BuildPage(IReadOnlyCollection<RunRow> rows, int top)
+    private async Task<RunListResponse> BuildPageAsync(IReadOnlyCollection<RunRow> rows, int top, CancellationToken ct)
     {
         bool hasMore = rows.Count > top;
         IReadOnlyList<RunRow> page = rows.Take(top).ToList();
         long? nextKey = hasMore && page.Count > 0 ? page[^1].Id : null;
 
-        return new RunListResponse { Items = page.Select(MapRun).ToList(), NextCursor = PageRequest.KeyCursor(nextKey) };
+        var details = (await _runProvider.GetListDetailsAsync([.. page.Select(r => r.Id)], ct) ?? []).ToDictionary(d => d.RunId);
+        var versions = await LoadVersionsAsync(page.Select(r => r.WorkflowDefinitionId).Distinct(), ct);
+
+        var items = page.Select(run => MapListedRun(run, details.GetValueOrDefault(run.Id), versions.GetValueOrDefault(run.WorkflowDefinitionId))).ToList();
+        return new RunListResponse { Items = items, NextCursor = PageRequest.KeyCursor(nextKey) };
     }
+
+    // Definition rows never change once published, so a page reads each version it spans once.
+    private async Task<Dictionary<int, ListedVersion>> LoadVersionsAsync(IEnumerable<int> definitionIds, CancellationToken ct)
+    {
+        var versions = new Dictionary<int, ListedVersion>();
+        foreach (int id in definitionIds)
+        {
+            WorkflowDefinitionRow? row = await _workflowDefinitionProvider.GetByIdAsync(id, ct);
+            if (row is null)
+            {
+                continue;
+            }
+
+            IReadOnlyDictionary<Guid, BaseNode> nodes;
+            try
+            {
+                WorkflowDefinition? definition = JsonSerializer.Deserialize<WorkflowDefinition>(row.DefinitionJson, DefinitionJson);
+                nodes = definition?.Nodes.GroupBy(n => n.NodeId).ToDictionary(g => g.Key, g => g.First()) ?? [];
+            }
+            catch (JsonException ex)
+            {
+                // A run list must still load when one old version no longer parses; its rows just lose their step names.
+                _logger.LogWarning(ex, "Could not read workflow definition {DefinitionId} for the run list.", id);
+                nodes = new Dictionary<Guid, BaseNode>();
+            }
+
+            versions[id] = new ListedVersion(row.Name, nodes);
+        }
+
+        return versions;
+    }
+
+    private static RunSummaryDto MapListedRun(RunRow row, RunListDetailRow? detail, ListedVersion? version)
+    {
+        BaseNode? Node(Guid id) => version?.Nodes.GetValueOrDefault(id);
+        RunStepDto? Step(Guid? id, string? errorCode = null, int? attempt = null, int? maxAttempts = null) =>
+            id is { } nodeId ? new RunStepDto(nodeId, Node(nodeId)?.Name, Node(nodeId)?.Kind, errorCode, attempt, maxAttempts) : null;
+
+        BaseNode? trigger = Node(row.TriggerNodeId);
+        return MapRun(row) with
+        {
+            Trigger = new RunTriggerDto(row.TriggerNodeId, trigger?.Kind, trigger?.Name, RunTriggerSummaries.For(trigger, row.ParentRunRefId)),
+            CreditsUsed = detail?.CreditsConsumed,
+            FailedAt = Step(detail?.FailedNodeId, detail?.FailedErrorCode),
+            EndedAt = Step(detail?.EndedNodeId),
+            CurrentStep = Step(detail?.CurrentNodeId, attempt: detail?.CurrentAttempt, maxAttempts: detail?.CurrentMaxAttempts),
+            WorkflowName = version?.Name
+        };
+    }
+
+    private sealed record ListedVersion(string Name, IReadOnlyDictionary<Guid, BaseNode> Nodes);
 
     public async Task<Result<WorkflowStatsResponse>> GetStatsAsync(int workspaceId, Guid workflowRefId, DateTimeOffset? from, DateTimeOffset? to, CancellationToken ct)
     {
