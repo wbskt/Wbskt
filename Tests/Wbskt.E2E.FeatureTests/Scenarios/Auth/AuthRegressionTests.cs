@@ -239,10 +239,10 @@ public sealed class AuthRegressionTests(ServicesFixture fixture)
         await fixture.CreateRoleAsync(adminToken, tenantRef);
 
         var (itemCount, totalCount) = await fixture.GetPageAsync(
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/roles?skip=0&take=1"), adminToken);
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/roles?limit=1"), adminToken);
 
         itemCount.Should().Be(1);
-        totalCount.Should().NotBeNull("X-Total-Count is what makes skip/take usable");
+        totalCount.Should().NotBeNull("totalCount is what makes an offset list usable");
         totalCount.Should().BeGreaterThan(1, "the total must describe the collection, not the page");
     }
 
@@ -258,10 +258,10 @@ public sealed class AuthRegressionTests(ServicesFixture fixture)
 
         string[] paths =
         [
-            $"/api/tenants/{tenantRef}/roles?take=1",
-            $"/api/tenants/{tenantRef}/groups?take=1",
-            $"/api/tenants/{tenantRef}/permissions?take=1",
-            $"/api/tenants/{tenantRef}/members?take=1"
+            $"/api/tenants/{tenantRef}/roles?limit=1",
+            $"/api/tenants/{tenantRef}/groups?limit=1",
+            $"/api/tenants/{tenantRef}/permissions?limit=1",
+            $"/api/tenants/{tenantRef}/members?limit=1"
         ];
 
         foreach (var path in paths)
@@ -279,7 +279,7 @@ public sealed class AuthRegressionTests(ServicesFixture fixture)
         var (adminToken, workspaceRef) = await fixture.LoginAsAdminAsync();
 
         var (itemCount, totalCount) = await fixture.GetPageAsync(
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members?take=1"), adminToken);
+            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members?limit=1"), adminToken);
 
         itemCount.Should().BeLessThanOrEqualTo(1);
         totalCount.Should().NotBeNull();
@@ -296,10 +296,10 @@ public sealed class AuthRegressionTests(ServicesFixture fixture)
 
         // The permission catalogue is seeded and static, so it pages predictably.
         var (_, firstPageTotal) = await fixture.GetPageAsync(
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/permissions?skip=0&take=1"), adminToken);
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/permissions?limit=1"), adminToken);
 
         var (_, secondPageTotal) = await fixture.GetPageAsync(
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/permissions?skip=1&take=1"), adminToken);
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/permissions?cursor=1&limit=1"), adminToken);
 
         firstPageTotal.Should().NotBeNull();
         secondPageTotal.Should().Be(firstPageTotal, "the total describes the collection, not the window");

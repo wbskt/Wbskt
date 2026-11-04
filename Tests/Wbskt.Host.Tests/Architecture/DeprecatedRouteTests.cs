@@ -60,10 +60,6 @@ public sealed partial class DeprecatedRouteTests
             }
         }
 
-        // The rule reads what it finds, so pin that it finds the routes deprecated when it arrived.
-        Assert.Contains("ClientsController.GetByPolicy", deprecated);
-        Assert.Contains("ClientsController.UpdateStatus", deprecated);
-
         Assert.True(offending.Count == 0, string.Join(Environment.NewLine, offending.Order(StringComparer.Ordinal)));
     }
 

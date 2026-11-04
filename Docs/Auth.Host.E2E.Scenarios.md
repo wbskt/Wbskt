@@ -42,7 +42,7 @@ All present on `ServicesFixture`. The ones worth knowing before writing a new sc
   negative scenarios can read the status, the error body, or a header. The typed helpers all call
   `EnsureSuccessStatusCode` and are for arranging, not asserting.
 - `ReadErrorCodeAsync(response)` → the `code` off the problem body, or null when there is no body.
-- `GetPageAsync(url, token)` → item count plus the `X-Total-Count` header.
+- `GetPageAsync(url, token)` → item count plus the page's `totalCount`.
 - `GetEffectivePermissionsAsync(token, workspaceRef)` → the resolved slug set, for asserting what an
   assignment actually delivered.
 
@@ -106,10 +106,10 @@ Highest priority: these encode defects that shipped, so they must fail against t
 | `REG_09` | − | Grant a *user* permission with an unknown slug | **400** `AUTH_OPERATION_REJECTED` |
 | `REG_10` | + | Grant a role permission with a valid slug | **204**, and the slug appears in `GET .../roles/{ref}/permissions` |
 | `REG_11` | − | `POST .../roles/{ref}/permissions` with `workspaceRef` in the body | **model-validation 400** — the field is no longer part of the contract and unmapped members are rejected (was silently dropped) |
-| `REG_12` | + | `GET /api/tenants/{t}/roles?skip=0&take=1` | **200**, exactly 1 item, and header `X-Total-Count` ≥ 2 |
-| `REG_13` | + | Same for `/groups`, `/permissions`, `/members` | `X-Total-Count` present on all four |
-| `REG_14` | + | `GET /api/workspaces/{ref}/members?take=1` | **200**, 1 item, `X-Total-Count` present |
-| `REG_15` | + | `X-Total-Count` is invariant across pages: request `take=1&skip=0` then `take=1&skip=1` | Same header value both times |
+| `REG_12` | + | `GET /api/tenants/{t}/roles?limit=1` | **200**, exactly 1 item, and `totalCount` ≥ 2 |
+| `REG_13` | + | Same for `/groups`, `/permissions`, `/members` | `totalCount` present on all four |
+| `REG_14` | + | `GET /api/workspaces/{ref}/members?limit=1` | **200**, 1 item, `totalCount` present |
+| `REG_15` | + | `totalCount` is invariant across pages: request `limit=1` then `cursor=1&limit=1` | Same value both times |
 
 ---
 
@@ -385,13 +385,12 @@ The cross-service contract. Every workspace-scoped management-host request passe
 | `WS_MEM_08` | − | Add to a workspace the caller is not in | **403** |
 | `WS_MEM_09` | − | Add with a malformed email | model-validation 400 |
 | `WS_MEM_10` | − | Add with an unknown workspace ref | **403** `WORKSPACE_NOT_FOUND` |
-| `WS_MEM_11` | + | List members | **200**, includes owner + added members, `X-Total-Count` set |
+| `WS_MEM_11` | + | List members | **200**, includes owner + added members, `totalCount` set |
 | `WS_MEM_11b` | + | List members, then the tenant's | Only the owner has `isOwner: true` in the workspace list; the tenant list leaves `isOwner` out |
-| `WS_MEM_12` | + | Paging: `take=1` | 1 item; total header unchanged |
-| `WS_MEM_13` | + | `take=0` is clamped to 1, not an error | **200**, 1 item |
-| `WS_MEM_14` | + | `take=99999` is clamped to 200 | **200**, ≤ 200 items |
-| `WS_MEM_15` | + | `skip=-5` is treated as 0 | **200** |
-| `WS_MEM_16` | + | `skip` beyond the end | **200**, empty `items`, `X-Total-Count` still the real total |
+| `WS_MEM_12` | + | Paging: `limit=1` | 1 item; total unchanged |
+| `WS_MEM_13` | + | `limit=0` is clamped to 1, not an error | **200**, 1 item |
+| `WS_MEM_14` | + | `limit=99999` is clamped to 200 | **200**, ≤ 200 items |
+| `WS_MEM_16` | + | `cursor` beyond the end | **200**, empty `items`, `totalCount` still the real total |
 | `WS_MEM_17` | − | List by a member lacking `users.read` | **403** |
 | `WS_MEM_18` | + | Remove a member | **204**; gone from the list; they can no longer resolve |
 | `WS_MEM_19` | − | Remove the **owner** | **400** `WORKSPACE_OWNER_PROTECTED` — a workspace with no owner cannot be administered |

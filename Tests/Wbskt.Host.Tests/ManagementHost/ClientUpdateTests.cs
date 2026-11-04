@@ -87,27 +87,4 @@ public sealed class ClientUpdateTests
         ProblemAssert.Is(result, StatusCodes.Status409Conflict);
         clients.Verify(x => x.RenameAsync(It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
-
-    [Fact]
-    public async Task The_old_routes_change_one_field_each()
-    {
-        var (controller, clients) = CreateController();
-
-        Assert.IsType<NoContentResult>(await controller.UpdateStatus(WorkspaceId, ClientRef, new UpdateClientStatusRequest(ClientStatus.Revoked), CancellationToken.None));
-        Assert.IsType<NoContentResult>(await controller.Rename(WorkspaceId, ClientRef, new UpdateClientNameRequest("garage"), CancellationToken.None));
-
-        clients.Verify(x => x.UpdateStatusAsync(WorkspaceId, ClientRef, ClientStatus.Revoked, It.IsAny<CancellationToken>()), Times.Once);
-        clients.Verify(x => x.RenameAsync(WorkspaceId, ClientRef, "garage", It.IsAny<CancellationToken>()), Times.Once);
-        clients.VerifyNoOtherCalls();
-    }
-
-    [Fact]
-    public async Task The_old_rename_route_still_rejects_a_blank_name()
-    {
-        var (controller, _) = CreateController();
-
-        var result = await controller.Rename(WorkspaceId, ClientRef, new UpdateClientNameRequest(" "), CancellationToken.None);
-
-        Assert.Equal("CLIENT_NAME_INVALID", ProblemAssert.Is(result, StatusCodes.Status400BadRequest));
-    }
 }

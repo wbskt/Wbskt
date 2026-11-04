@@ -312,22 +312,14 @@ public sealed class ServicesFixture : IDisposable
         (await ApiProblem.ReadAsync(response))?.Code;
 
     /// <summary>
-    /// GETs a paged list endpoint and returns how many items came back alongside the X-Total-Count
-    /// header. A null total means the header was absent, which is the pagination bug itself.
+    /// GETs a paged list endpoint and returns how many items came back alongside the page's
+    /// <c>totalCount</c>. A null total means the list did not count itself.
     /// </summary>
     public async Task<(int ItemCount, int? TotalCount)> GetPageAsync(string url, string token)
     {
         using var resp = await SendAsync(HttpMethod.Get, url, token);
         var page = await WbsktApiClient.ReadAsync<Page<JsonElement>>(resp);
-
-        int? total = null;
-        if (resp.Headers.TryGetValues("X-Total-Count", out var values)
-            && int.TryParse(values.FirstOrDefault(), out var parsed))
-        {
-            total = parsed;
-        }
-
-        return (page.Items.Count(), total);
+        return (page.Items.Count(), page.TotalCount);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

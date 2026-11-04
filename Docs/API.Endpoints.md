@@ -96,8 +96,7 @@ with two extensions:
 - `traceId` ties the response to the host's logs. A 500's `detail` is generic; the cause is only in
   the log under that id.
 - Model validation is `VALIDATION_FAILED`, with `errors` mapping each field to its messages.
-- `message` repeats `detail` for one release, for callers that read the body this replaced
-  (`{ code, message, type }`).
+- A model-validation failure's `detail` is the first field's message.
 
 ## Tokens
 
@@ -297,8 +296,7 @@ role or user belonging to another tenant reads as nonexistent.
 
 The member, invitation, role, group and permission lists page like the management host's (see
 [Paging](#2-management-host)): `cursor` and `limit` (default 100, clamped to 1–200), answering
-`{ items, nextCursor, totalCount }` with `X-Total-Count`. `skip`/`take` are still accepted for a
-release. The lists that return a bare array (tenants, a role's permissions, a group's roles, a
+`{ items, nextCursor, totalCount }`. The lists that return a bare array (tenants, a role's permissions, a group's roles, a
 member's roles, groups and permissions) are unchanged until the console reads pages.
 
 ### 1.4 Workspaces — `api/v1/workspaces`
@@ -338,13 +336,11 @@ membership gate; the permission slug is the second gate.
 page's `nextCursor` back for the next one, until it is null. The cursor is opaque: store it and send
 it back, never build or parse it. A cursor no page handed out is 400 `PAGE_CURSOR_INVALID`. `limit`
 is clamped to 1–200 rather than rejected, and each list has its own default. Lists that count
-cheaply (clients, policies, templates, workflows) also return `totalCount`, and still send it as
-`X-Total-Count` for one release. Lists that are never long (a client's tags and state, a workflow's
+cheaply (clients, policies, templates, workflows) also return `totalCount`. Lists that are never long (a client's tags and state, a workflow's
 versions) use the same shape and return everything on one page.
 
-The parameters lists took before (`skip`, `take`, `top`, `fromEventId`) are still accepted for one
-release so the console can move first; when both are sent, `cursor` and `limit` win. Run and
-history pages also still carry their items as `runs` and `events` for that release.
+The parameters lists took before (`skip`, `take`, `top`, `fromEventId`), the `X-Total-Count`
+header and the `runs`/`events` copies of `items` were removed before launch (#351).
 
 **Time ranges.** `from` and `to` are ISO 8601 instants with an offset (`DateTimeOffset`) on every
 endpoint that takes them. `to` defaults to now and `from` to a per-endpoint span before it; a range
@@ -377,10 +373,9 @@ that is empty or backwards is 400 `TIME_RANGE_INVALID`, and one longer than 400 
 | `POST {clientRef}/ping` | `clients.ping` | Triggers a round-trip latency measurement. |
 | `GET {clientRef}/comms` | `logs.read` | Recent in/out message history, filterable by `direction=in\|out`. Backfills the Live Comms panel before the realtime stream attaches. Uses `logs.read` rather than `clients.read` because it is a projection of the event log — so the client detail page needs both grants to render fully. Paged like the event log. |
 
-Routes replaced by the API style guide still answer for one release, hidden from the OpenAPI
-document: `GET policy/{policyRef}` (now `GET ?policyRefId=`), `PATCH {clientRef}/status` and
-`PATCH {clientRef}/name` (now `PATCH {clientRef}`), and `POST {clientRef}/command` (now
-`/commands`).
+The routes the API style guide replaced were removed before launch (#351): `GET policy/{policyRef}`
+(use `GET ?policyRefId=`), `PATCH {clientRef}/status` and `PATCH {clientRef}/name` (use
+`PATCH {clientRef}`), and `POST {clientRef}/command` (use `/commands`).
 
 Command and ping publish onto the event bus, and the gateway dispatches on `ClientRefId` alone —
 it has no workspace of its own to check against. The controller's ownership check is therefore the

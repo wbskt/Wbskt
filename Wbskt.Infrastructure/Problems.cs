@@ -15,11 +15,6 @@ namespace Wbskt.Infrastructure;
 /// escaped exception, a model-validation failure, an authentication challenge, a rate-limit rejection
 /// and the engine's own refusals all come out in this shape.
 /// </summary>
-/// <remarks>
-/// <c>message</c> repeats <c>detail</c> for one release: the body before this one was
-/// <c>{ code, message, type }</c> and the console shows <c>message</c>. Remove it once the console
-/// reads <c>detail</c>.
-/// </remarks>
 public static class Problems
 {
     public const string ContentType = "application/problem+json";
@@ -28,7 +23,6 @@ public static class Problems
 
     public const string CodeKey = "code";
     public const string TraceIdKey = "traceId";
-    public const string MessageKey = "message";
 
     public static ProblemDetails Create(int status, string code, string? detail)
     {
@@ -39,7 +33,6 @@ public static class Problems
             Detail = detail
         };
         problem.Extensions[CodeKey] = code;
-        problem.Extensions[MessageKey] = detail;
         return problem;
     }
 
@@ -92,7 +85,7 @@ public static class Problems
             string? firstFieldError = (problem as ValidationProblemDetails)?.Errors.Values.SelectMany(messages => messages).FirstOrDefault();
             problem.Extensions.TryAdd(CodeKey, problem is ValidationProblemDetails ? ValidationFailed : CodeFor(status));
             problem.Extensions[TraceIdKey] = TraceId(context.HttpContext);
-            problem.Extensions.TryAdd(MessageKey, firstFieldError ?? problem.Detail ?? problem.Title);
+            problem.Detail ??= firstFieldError;
         });
 
         services.Configure<ApiBehaviorOptions>(options => options.InvalidModelStateResponseFactory = context =>
@@ -102,10 +95,10 @@ public static class Problems
                 Status = StatusCodes.Status400BadRequest,
                 Title = "One or more fields are invalid."
             };
-            string? first = problem.Errors.Values.SelectMany(messages => messages).FirstOrDefault();
+            // The first field's message, so a caller that shows one line shows something useful.
+            problem.Detail = problem.Errors.Values.SelectMany(messages => messages).FirstOrDefault();
             problem.Extensions[CodeKey] = ValidationFailed;
             problem.Extensions[TraceIdKey] = TraceId(context.HttpContext);
-            problem.Extensions[MessageKey] = first ?? problem.Title;
 
             return new BadRequestObjectResult(problem) { ContentTypes = { ContentType } };
         });
