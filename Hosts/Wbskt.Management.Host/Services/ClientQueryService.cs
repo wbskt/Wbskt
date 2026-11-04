@@ -117,7 +117,7 @@ internal sealed class ClientQueryService : IClientQueryService
 
         var variables = await _clientProvider.GetStateVariablesAsync(lookup.Value.Id, cancellationToken);
         IReadOnlyCollection<ClientStateVariableResponse> response = variables
-            .Select(v => new ClientStateVariableResponse(v.Name, v.DataType, v.ValueJson, v.UpdatedAt))
+            .Select(v => new ClientStateVariableResponse(v.Name, v.DataType, v.ValueJson, v.UpdatedAt.ToUtcOffset()))
             .ToList()
             .AsReadOnly();
 
@@ -175,10 +175,10 @@ internal sealed class ClientQueryService : IClientQueryService
             c.Name,
             c.Status,
             c.IsConnected,
-            c.ConnectedAt,
-            c.LastActivityAt,
+            c.ConnectedAt.ToUtcOffset(),
+            c.LastActivityAt.ToUtcOffset(),
             c.LastRttMs,
-            c.CreatedAt,
+            c.CreatedAt.ToUtcOffset(),
             c.Tags,
             AsUtc(c.UpdatingUntil)
         );
@@ -209,15 +209,15 @@ internal sealed class ClientQueryService : IClientQueryService
             d.Name,
             d.Status,
             d.IsConnected,
-            d.ConnectedAt,
-            d.LastActivityAt,
+            d.ConnectedAt.ToUtcOffset(),
+            d.LastActivityAt.ToUtcOffset(),
             d.LastRttMs,
-            d.RttMeasuredAt,
+            d.RttMeasuredAt.ToUtcOffset(),
             d.AgentName,
             d.AgentVersion,
             d.Platform,
             capabilities,
-            d.CreatedAt,
+            d.CreatedAt.ToUtcOffset(),
             d.Tags,
             ReadSystem(d.SystemJson),
             d.FirmwareVersion,

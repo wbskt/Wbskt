@@ -1,3 +1,4 @@
+using Wbskt.Models;
 using Wbskt.Management.Host.Services.Integrations;
 using System.Text.Json;
 using Wbskt.Infrastructure;
@@ -109,7 +110,7 @@ public sealed class WorkflowQueryService : IWorkflowQueryService
             r.Name,
             r.Description,
             r.RunCount,
-            r.CreatedAt)).ToList();
+            r.CreatedAt.ToUtcOffset())).ToList();
 
         return Result<IReadOnlyList<WorkflowVersionDto>>.Success(versions);
     }
@@ -127,7 +128,7 @@ public sealed class WorkflowQueryService : IWorkflowQueryService
             row.IsEnabled ? "Published" : "Deprecated",
             row.Name,
             row.Description,
-            row.CreatedAt,
+            row.CreatedAt.ToUtcOffset(),
             WorkflowTriggerKinds.FromNodeKinds(row.TriggerNodeKinds)
         )).ToList();
 
@@ -156,6 +157,6 @@ public sealed class WorkflowQueryService : IWorkflowQueryService
             row.Name,
             row.Description,
             definition,
-            row.CreatedAt);
+            row.CreatedAt.ToUtcOffset());
     }
 }

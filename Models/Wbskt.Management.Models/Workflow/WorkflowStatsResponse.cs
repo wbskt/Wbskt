@@ -18,7 +18,7 @@ public record RunOutcomeCountsDto(
 /// </summary>
 public record RunDurationsDto(double P50Ms, double P95Ms, double MaxMs, double AvgMs);
 
-public record FailureBucketDto(string ErrorCode, Guid? NodeId, int Occurrences, DateTime LastSeenAt);
+public record FailureBucketDto(string ErrorCode, Guid? NodeId, int Occurrences, DateTimeOffset LastSeenAt);
 
 public record NodeTimingDto(Guid NodeId, int Executions, int FailureCount, double AvgDurationMs, double MaxDurationMs);
 
@@ -31,8 +31,8 @@ public record NodeTimingDto(Guid NodeId, int Executions, int FailureCount, doubl
 /// </param>
 public record WorkflowStatsResponse(
     Guid WorkflowRefId,
-    DateTime FromUtc,
-    DateTime ToUtc,
+    DateTimeOffset FromUtc,
+    DateTimeOffset ToUtc,
     RunOutcomeCountsDto Counts,
     RunDurationsDto Durations,
     double? SuccessRate,
@@ -65,8 +65,8 @@ public record WorkflowRunSummaryDto(
 /// </param>
 /// <param name="Workflows">Per-workflow breakdown, highest volume first.</param>
 public record WorkspaceStatsResponse(
-    DateTime FromUtc,
-    DateTime ToUtc,
+    DateTimeOffset FromUtc,
+    DateTimeOffset ToUtc,
     RunOutcomeCountsDto Counts,
     RunDurationsDto Durations,
     double? SuccessRate,

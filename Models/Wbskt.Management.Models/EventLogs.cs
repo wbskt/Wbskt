@@ -13,7 +13,7 @@ public record EventLogResponse(
     Guid? PolicyRefId,
     Guid? ClientRefId,
     Guid? WorkflowRefId,
-    DateTime CreatedAtUtc,
+    DateTimeOffset CreatedAtUtc,
     // Who caused it, for an action taken through the API (or the user a sign-in event is about).
     Guid? UserRefId = null,
     // The entry's own id, so a detail view can name one entry. Page cursors are made from it.
@@ -31,8 +31,8 @@ public record EventLogResponse(
 /// traffic out when the summary is asked to.
 /// </summary>
 public sealed record EventLogSummaryResponse(
-    DateTime FromUtc,
-    DateTime ToUtc,
+    DateTimeOffset FromUtc,
+    DateTimeOffset ToUtc,
     long Total,
     IReadOnlyDictionary<string, long> Groups,
     IReadOnlyDictionary<string, long>? Events = null,

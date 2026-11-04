@@ -61,7 +61,7 @@ public sealed record TelegramChatResponse(string Id, string Type, string? Title,
 /// </summary>
 public sealed record TelegramChatsResponse(bool Ok, string? Code, string? Message, IReadOnlyList<TelegramChatResponse> Chats);
 
-public sealed record IntegrationLastTest(DateTime At, bool Ok, string? Code, string? Message);
+public sealed record IntegrationLastTest(DateTimeOffset At, bool Ok, string? Code, string? Message);
 
 /// <summary>How many live workflows, and how many of their steps, send through the integration.</summary>
 public sealed record IntegrationUsageSummary(int Workflows, int Steps);
@@ -83,12 +83,12 @@ public sealed record IntegrationResponse(
     string? SecretHint,
     JsonElement? Metadata,
     IntegrationLastTest? LastTest,
-    DateTime? LastUsedAt,
+    DateTimeOffset? LastUsedAt,
     IntegrationUsageSummary Usage,
     IntegrationCreator CreatedBy,
-    DateTime CreatedAt,
-    DateTime UpdatedAt,
-    DateTime? SecretRotatedAt);
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt,
+    DateTimeOffset? SecretRotatedAt);
 
 /// <summary>
 /// One step that sends through an integration, in a live workflow's current version.

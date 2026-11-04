@@ -1,3 +1,4 @@
+using Wbskt.Models;
 using System.Globalization;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
@@ -80,7 +81,7 @@ public sealed class ClientReadingService : IClientReadingService
         }
 
         var buckets = await _provider.GetBucketsAsync(clientId, name, fromUtc, toUtc, bucketSeconds, cancellationToken);
-        return Result<ClientReadingsResponse>.Success(new ClientReadingsResponse(name, fromUtc, toUtc, bucketSeconds, buckets));
+        return Result<ClientReadingsResponse>.Success(new ClientReadingsResponse(name, fromUtc.ToUtcOffset(), toUtc.ToUtcOffset(), bucketSeconds, buckets));
     }
 
     public async Task<Result<IReadOnlyCollection<ClientReading>>> GetRangeAsync(int clientId, string? name, DateTimeOffset? from, DateTimeOffset? to, CancellationToken cancellationToken = default)

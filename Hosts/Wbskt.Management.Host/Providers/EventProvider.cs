@@ -149,7 +149,7 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
             reader.IsDBNull(reader.GetOrdinal("PolicyRefId")) ? null : reader.GetGuid(reader.GetOrdinal("PolicyRefId")),
             reader.IsDBNull(reader.GetOrdinal("ClientRefId")) ? null : reader.GetGuid(reader.GetOrdinal("ClientRefId")),
             reader.IsDBNull(reader.GetOrdinal("WorkflowRefId")) ? null : reader.GetGuid(reader.GetOrdinal("WorkflowRefId")),
-            reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+            reader.GetDateTime(reader.GetOrdinal("CreatedAt")).ToUtcOffset(),
             reader.IsDBNull(reader.GetOrdinal("UserRefId")) ? null : reader.GetGuid(reader.GetOrdinal("UserRefId")),
             reader.GetInt64(reader.GetOrdinal("Id")),
             reader.IsDBNull(reader.GetOrdinal("Source")) ? null : ((EventSource)reader.GetByte(reader.GetOrdinal("Source"))).ToString(),

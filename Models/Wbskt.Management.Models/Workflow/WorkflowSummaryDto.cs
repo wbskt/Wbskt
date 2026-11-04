@@ -6,4 +6,4 @@ namespace Wbskt.Management.Models.Workflow;
 /// <c>manual</c>, distinct and in node order, so a client can show an icon and offer Run now only when
 /// <c>manual</c> is there.
 /// </summary>
-public record WorkflowSummaryDto(Guid RefId, int Version, string Status, string Name, string? Description, DateTime CreatedAt, IReadOnlyList<string>? TriggerKinds = null);
+public record WorkflowSummaryDto(Guid RefId, int Version, string Status, string Name, string? Description, DateTimeOffset CreatedAt, IReadOnlyList<string>? TriggerKinds = null);

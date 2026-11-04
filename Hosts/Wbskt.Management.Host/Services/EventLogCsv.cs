@@ -17,7 +17,7 @@ public static class EventLogCsv
         foreach (var entry in entries)
         {
             csv.Append(entry.Id.ToString(CultureInfo.InvariantCulture)).Append(',')
-                .Append(entry.CreatedAtUtc.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture)).Append(',')
+                .Append(entry.CreatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture)).Append(',')
                 .Append(ClientReadingsCsv.Field(entry.EventName)).Append(',')
                 .Append(entry.Criticality.ToString()).Append(',')
                 .Append(entry.UserRefId?.ToString()).Append(',')

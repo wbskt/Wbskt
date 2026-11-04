@@ -200,8 +200,8 @@ internal sealed class TenantProvider : BaseSqlProvider, ITenantProvider
             reader.GetString(reader.GetOrdinal("Email")),
             reader.IsDBNull(reader.GetOrdinal("RoleRefId")) ? null : reader.GetGuid(reader.GetOrdinal("RoleRefId")),
             reader.IsDBNull(reader.GetOrdinal("RoleName")) ? null : reader.GetString(reader.GetOrdinal("RoleName")),
-            reader.GetDateTime(reader.GetOrdinal("ExpiresAt")),
-            reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+            reader.GetDateTime(reader.GetOrdinal("ExpiresAt")).ToUtcOffset(),
+            reader.GetDateTime(reader.GetOrdinal("CreatedAt")).ToUtcOffset(),
             reader.IsDBNull(reader.GetOrdinal("WorkspaceRefIds"))
                 ? []
                 : reader.GetString(reader.GetOrdinal("WorkspaceRefIds")).Split(',').Select(Guid.Parse).ToArray()

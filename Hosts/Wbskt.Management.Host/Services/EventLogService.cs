@@ -282,8 +282,8 @@ internal sealed class EventLogService : IEventLogService
             .ToList();
 
         return new EventLogSummaryResponse(
-            range.FromUtc,
-            range.ToUtc,
+            range.FromUtc.ToUtcOffset(),
+            range.ToUtc.ToUtcOffset(),
             kept.Sum(c => c.Count),
             groups,
             Events: kept.GroupBy(c => c.EventName, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Sum(c => c.Count), StringComparer.Ordinal),

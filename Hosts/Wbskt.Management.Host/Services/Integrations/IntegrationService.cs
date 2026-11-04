@@ -1,3 +1,4 @@
+using Wbskt.Models;
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.Data.SqlClient;
@@ -445,11 +446,11 @@ internal sealed class IntegrationService(
         JsonSerializer.Deserialize<JsonElement>(i.ConfigJson),
         i.SecretHint,
         i.Metadata is null ? null : JsonSerializer.Deserialize<JsonElement>(i.Metadata),
-        i.LastTestAt is { } at ? new IntegrationLastTest(at, i.LastTestOk == true, i.LastTestCode, i.LastTestError) : null,
-        i.LastUsedAt,
+        i.LastTestAt is { } at ? new IntegrationLastTest(at.ToUtcOffset(), i.LastTestOk == true, i.LastTestCode, i.LastTestError) : null,
+        i.LastUsedAt.ToUtcOffset(),
         new IntegrationUsageSummary(i.UsageWorkflows, i.UsageSteps),
         new IntegrationCreator(i.CreatedByRefId),
-        i.CreatedAt,
-        i.UpdatedAt,
-        i.SecretRotatedAt);
+        i.CreatedAt.ToUtcOffset(),
+        i.UpdatedAt.ToUtcOffset(),
+        i.SecretRotatedAt.ToUtcOffset());
 }

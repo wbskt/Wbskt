@@ -79,7 +79,7 @@ public record ChangePasswordRequest(
 /// used again, never later than the session's absolute lifetime. <c>IsCurrent</c> marks the session
 /// the request was made from.
 /// </summary>
-public record SessionResponse(Guid Id, DateTime CreatedAt, DateTime LastUsedAt, DateTime ExpiresAt, string? IpAddress, bool IsCurrent = false);
+public record SessionResponse(Guid Id, DateTimeOffset CreatedAt, DateTimeOffset LastUsedAt, DateTimeOffset ExpiresAt, string? IpAddress, bool IsCurrent = false);
 
 public record VerifyEmailRequest(
     [Required]
