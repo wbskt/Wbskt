@@ -110,13 +110,7 @@
       },
       "ClientCommandRequest": {
         "properties": {
-          "expiresAt": {
-            "format": "date-time",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
+          "expiresAt": {},
           "payload": {
             "type": "string"
           },
@@ -137,11 +131,7 @@
             "type": "string"
           },
           "expiresAt": {
-            "format": "date-time",
-            "type": [
-              "null",
-              "string"
-            ]
+            "format": "date-time"
           },
           "status": {
             "type": "string"
@@ -303,13 +293,7 @@
             },
             "type": "array"
           },
-          "updatingUntil": {
-            "format": "date-time",
-            "type": [
-              "null",
-              "string"
-            ]
-          }
+          "updatingUntil": {}
         },
         "required": [
           "clientRefId",
@@ -343,15 +327,13 @@
             ]
           },
           "firstSeenAt": {
-            "format": "date-time",
-            "type": "string"
+            "format": "date-time"
           },
           "isPlatform": {
             "type": "boolean"
           },
           "lastSeenAt": {
-            "format": "date-time",
-            "type": "string"
+            "format": "date-time"
           },
           "samplePayload": {
             "oneOf": [
@@ -379,13 +361,7 @@
       },
       "ClientOtaRequest": {
         "properties": {
-          "expiresAt": {
-            "format": "date-time",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
+          "expiresAt": {},
           "sha256": {
             "type": "string"
           },
@@ -539,13 +515,7 @@
             },
             "type": "array"
           },
-          "updatingUntil": {
-            "format": "date-time",
-            "type": [
-              "null",
-              "string"
-            ]
-          }
+          "updatingUntil": {}
         },
         "required": [
           "clientRefId",
@@ -914,15 +884,6 @@
       },
       "HistoryListResponse": {
         "properties": {
-          "events": {
-            "items": {
-              "$ref": "#/components/schemas/HistoryEventDto"
-            },
-            "type": [
-              "null",
-              "array"
-            ]
-          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/HistoryEventDto"
@@ -1860,15 +1821,13 @@
             "type": "string"
           },
           "expiresAt": {
-            "format": "date-time",
-            "type": "string"
+            "format": "date-time"
           },
           "payload": {
             "type": "string"
           },
           "queuedAt": {
-            "format": "date-time",
-            "type": "string"
+            "format": "date-time"
           },
           "type": {
             "type": "string"
@@ -2103,15 +2062,6 @@
             "type": [
               "null",
               "string"
-            ]
-          },
-          "runs": {
-            "items": {
-              "$ref": "#/components/schemas/RunSummaryDto"
-            },
-            "type": [
-              "null",
-              "array"
             ]
           },
           "totalCount": {
@@ -2652,22 +2602,13 @@
       "TriggerHoldStateDto": {
         "properties": {
           "dueAt": {
-            "format": "date-time",
-            "type": [
-              "null",
-              "string"
-            ]
+            "format": "date-time"
           },
           "lastEventAt": {
-            "format": "date-time",
-            "type": "string"
+            "format": "date-time"
           },
           "sinceAt": {
-            "format": "date-time",
-            "type": [
-              "null",
-              "string"
-            ]
+            "format": "date-time"
           },
           "state": {
             "type": "string"
@@ -2699,8 +2640,7 @@
             ]
           },
           "occurredAt": {
-            "format": "date-time",
-            "type": "string"
+            "format": "date-time"
           },
           "outcome": {
             "type": "string"
@@ -3412,54 +3352,6 @@
             }
           },
           {
-            "in": "query",
-            "name": "skip",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "take",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "top",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "fromEventId",
-            "schema": {
-              "format": "int64",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
             "in": "path",
             "name": "workspaceRef",
             "required": true,
@@ -3976,54 +3868,6 @@
             }
           },
           {
-            "in": "query",
-            "name": "skip",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "take",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "top",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "fromEventId",
-            "schema": {
-              "format": "int64",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
             "in": "path",
             "name": "workspaceRef",
             "required": true,
@@ -4233,16 +4077,14 @@
             "in": "query",
             "name": "from",
             "schema": {
-              "format": "date-time",
-              "type": "string"
+              "format": "date-time"
             }
           },
           {
             "in": "query",
             "name": "to",
             "schema": {
-              "format": "date-time",
-              "type": "string"
+              "format": "date-time"
             }
           },
           {
@@ -4312,16 +4154,14 @@
             "in": "query",
             "name": "from",
             "schema": {
-              "format": "date-time",
-              "type": "string"
+              "format": "date-time"
             }
           },
           {
             "in": "query",
             "name": "to",
             "schema": {
-              "format": "date-time",
-              "type": "string"
+              "format": "date-time"
             }
           },
           {
@@ -4616,16 +4456,14 @@
             "in": "query",
             "name": "From",
             "schema": {
-              "format": "date-time",
-              "type": "string"
+              "format": "date-time"
             }
           },
           {
             "in": "query",
             "name": "To",
             "schema": {
-              "format": "date-time",
-              "type": "string"
+              "format": "date-time"
             }
           },
           {
@@ -4654,54 +4492,6 @@
             "name": "limit",
             "schema": {
               "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "skip",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "take",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "top",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "fromEventId",
-            "schema": {
-              "format": "int64",
               "pattern": "^-?(?:0|[1-9]\\d*)$",
               "type": [
                 "integer",
@@ -4857,16 +4647,14 @@
             "in": "query",
             "name": "From",
             "schema": {
-              "format": "date-time",
-              "type": "string"
+              "format": "date-time"
             }
           },
           {
             "in": "query",
             "name": "To",
             "schema": {
-              "format": "date-time",
-              "type": "string"
+              "format": "date-time"
             }
           },
           {
@@ -4904,16 +4692,14 @@
             "in": "query",
             "name": "from",
             "schema": {
-              "format": "date-time",
-              "type": "string"
+              "format": "date-time"
             }
           },
           {
             "in": "query",
             "name": "to",
             "schema": {
-              "format": "date-time",
-              "type": "string"
+              "format": "date-time"
             }
           },
           {
@@ -5401,54 +5187,6 @@
             }
           },
           {
-            "in": "query",
-            "name": "skip",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "take",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "top",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "fromEventId",
-            "schema": {
-              "format": "int64",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
             "in": "path",
             "name": "workspaceRef",
             "required": true,
@@ -5654,54 +5392,6 @@
             "name": "limit",
             "schema": {
               "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "skip",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "take",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "top",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "fromEventId",
-            "schema": {
-              "format": "int64",
               "pattern": "^-?(?:0|[1-9]\\d*)$",
               "type": [
                 "integer",
@@ -5933,38 +5623,6 @@
         ]
       }
     },
-    "/api/v1/workspaces/{workspaceRef}/registration-policies/{policyRef}/disable": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "policyRef",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "workspaceRef",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "tags": [
-          "RegistrationPolicies"
-        ]
-      }
-    },
     "/api/v1/workspaces/{workspaceRef}/registration-policies/{policyRef}/rotate-pin": {
       "post": {
         "parameters": [
@@ -6036,54 +5694,6 @@
             "name": "limit",
             "schema": {
               "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "skip",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "take",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "top",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "fromEventId",
-            "schema": {
-              "format": "int64",
               "pattern": "^-?(?:0|[1-9]\\d*)$",
               "type": [
                 "integer",
@@ -6261,54 +5871,6 @@
             }
           },
           {
-            "in": "query",
-            "name": "skip",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "take",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "top",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "fromEventId",
-            "schema": {
-              "format": "int64",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
             "in": "path",
             "name": "workspaceRef",
             "required": true,
@@ -6429,16 +5991,14 @@
             "in": "query",
             "name": "from",
             "schema": {
-              "format": "date-time",
-              "type": "string"
+              "format": "date-time"
             }
           },
           {
             "in": "query",
             "name": "to",
             "schema": {
-              "format": "date-time",
-              "type": "string"
+              "format": "date-time"
             }
           },
           {
@@ -6493,54 +6053,6 @@
             "name": "limit",
             "schema": {
               "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "skip",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "take",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "top",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "fromEventId",
-            "schema": {
-              "format": "int64",
               "pattern": "^-?(?:0|[1-9]\\d*)$",
               "type": [
                 "integer",
@@ -6944,54 +6456,6 @@
             }
           },
           {
-            "in": "query",
-            "name": "skip",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "take",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "top",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "fromEventId",
-            "schema": {
-              "format": "int64",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
             "in": "path",
             "name": "workspaceRef",
             "required": true,
@@ -7111,16 +6575,14 @@
             "in": "query",
             "name": "from",
             "schema": {
-              "format": "date-time",
-              "type": "string"
+              "format": "date-time"
             }
           },
           {
             "in": "query",
             "name": "to",
             "schema": {
-              "format": "date-time",
-              "type": "string"
+              "format": "date-time"
             }
           },
           {
