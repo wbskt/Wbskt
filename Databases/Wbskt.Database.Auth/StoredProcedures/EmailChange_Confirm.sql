@@ -3,7 +3,8 @@
 -- outlive the switch and the undo always exists once the switch does.
 --
 -- 50020: the token is unknown, spent or expired, or the address has moved since it was issued.
--- 50021: the new address belongs to another account by now. UQ_Users_Email is the backstop.
+-- 50021: the new address belongs to another account by now, or another account's live undo holds it.
+-- UQ_Users_Email is the backstop for the first.
 CREATE PROCEDURE dbo.EmailChange_Confirm
     @TokenHash       VARBINARY(32),
     @RevertTokenHash VARBINARY(32),
@@ -41,6 +42,14 @@ BEGIN
     END
 
     IF EXISTS (SELECT 1 FROM dbo.Users WITH (UPDLOCK, HOLDLOCK) WHERE Email = @NewEmail AND Id <> @UserId)
+       OR EXISTS (
+           SELECT 1
+           FROM dbo.EmailChangeTokens WITH (UPDLOCK, HOLDLOCK)
+           WHERE OldEmail = @NewEmail
+             AND UserId <> @UserId
+             AND Kind = 2
+             AND ConsumedAt IS NULL
+             AND ExpiresAt > SYSUTCDATETIME())
     BEGIN
         ROLLBACK TRANSACTION;
         THROW 50021, 'That address cannot be used.', 1;

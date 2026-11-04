@@ -83,6 +83,73 @@ public sealed class EmailChangeProcedureTests(AuthSqlFixture fixture)
         Assert.Equal(50020, (await Assert.ThrowsAsync<SqlException>(() => ConfirmAsync(pending, NewTokenHash()))).Number);
     }
 
+    /// <summary>
+    /// The address an account moved off is free in UQ_Users_Email, so without the hold a sign-up on it
+    /// would leave the owner's undo failing with 50021 for good.
+    /// </summary>
+    [SkippableFact]
+    public async Task A_live_undo_holds_the_old_address_against_sign_up()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+
+        (int userId, string original) = await SeedUserAsync("hold-signup");
+        byte[] undo = NewTokenHash();
+        byte[] confirm = await RequestAsync(userId, Address("moved"));
+        await ConfirmAsync(confirm, undo);
+
+        var refused = await Assert.ThrowsAsync<SqlException>(() => CreateUserAsync(original));
+        Assert.Equal(50027, refused.Number);
+
+        await RevertAsync(undo);
+        Assert.Equal(original, await EmailOfAsync(userId));
+    }
+
+    [SkippableFact]
+    public async Task A_live_undo_holds_the_old_address_against_another_accounts_change()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+
+        (int ownerId, string original) = await SeedUserAsync("hold-owner");
+        (int otherId, _) = await SeedUserAsync("hold-other");
+        byte[] undo = NewTokenHash();
+        await ConfirmAsync(await RequestAsync(ownerId, Address("moved")), undo);
+
+        byte[] grab = await RequestAsync(otherId, original);
+        var refused = await Assert.ThrowsAsync<SqlException>(() => ConfirmAsync(grab, NewTokenHash()));
+        Assert.Equal(50021, refused.Number);
+
+        // The owner may still move back to it by hand, not only through the undo.
+        await ConfirmAsync(await RequestAsync(ownerId, original), NewTokenHash());
+        Assert.Equal(original, await EmailOfAsync(ownerId));
+    }
+
+    [SkippableFact]
+    public async Task An_expired_undo_releases_the_address()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+
+        (int userId, string original) = await SeedUserAsync("hold-expired");
+        await ConfirmAsync(await RequestAsync(userId, Address("moved")), NewTokenHash());
+
+        await using (var conn = await OpenAsync())
+        await using (var cmd = new SqlCommand("UPDATE dbo.EmailChangeTokens SET ExpiresAt = DATEADD(minute, -1, SYSUTCDATETIME()) WHERE UserId = @Id AND Kind = 2", conn))
+        {
+            cmd.Parameters.AddWithValue("@Id", userId);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        await CreateUserAsync(original);
+    }
+
+    private Task CreateUserAsync(string email) =>
+        RunAsync("dbo.User_Create", cmd =>
+        {
+            cmd.Parameters.AddWithValue("@Username", $"signup-{Guid.NewGuid():N}"[..30]);
+            cmd.Parameters.AddWithValue("@Email", email);
+            cmd.Parameters.AddWithValue("@PasswordHash", "hash");
+            cmd.Parameters.Add("@Id", SqlDbType.Int).Direction = ParameterDirection.Output;
+        });
+
     private static string Address(string tag) => $"{tag}-{Guid.NewGuid():N}"[..30] + "@example.test";
 
     private async Task<(int Id, string Email)> SeedUserAsync(string tag)
