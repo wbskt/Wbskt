@@ -33,3 +33,10 @@ GO
 CREATE INDEX IX_EmailChangeTokens_ExpiresAt
     ON dbo.EmailChangeTokens (ExpiresAt);
 GO
+
+-- Sign-up and confirm look up whether a live undo holds an address.
+CREATE INDEX IX_EmailChangeTokens_LiveUndo
+    ON dbo.EmailChangeTokens (OldEmail)
+    INCLUDE (UserId, ExpiresAt)
+    WHERE ConsumedAt IS NULL AND Kind = 2;
+GO

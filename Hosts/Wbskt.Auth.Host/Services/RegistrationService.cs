@@ -169,6 +169,15 @@ internal sealed class RegistrationService : IRegistrationService
                 return Result.Failure(InvalidInvitation);
             }
 
+            // Another account's live email-change undo holds the address. Answered like an address in
+            // use, so the form says nothing about the account, but nobody is mailed: the holder already
+            // has the undo link.
+            if (ex is SqlException { Number: 50027 })
+            {
+                _metrics.RecordRegistration("reserved_address");
+                return Result.Success();
+            }
+
             if (ex is SqlException { Number: 2601 or 2627 })
             {
                 return await HandleRegistrationConflictAsync(username, email, ex, cancellationToken);
