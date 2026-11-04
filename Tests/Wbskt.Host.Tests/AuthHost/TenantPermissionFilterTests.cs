@@ -105,7 +105,7 @@ public sealed class TenantPermissionFilterTests
     [InlineData(nameof(ManagementController.UpdateTenant), PermissionNames.UsersManage)]
     [InlineData(nameof(ManagementController.CreateInvitation), PermissionNames.UsersManage)]
     [InlineData(nameof(ManagementController.RemoveMember), PermissionNames.UsersManage)]
-    [InlineData(nameof(ManagementController.SetMemberSuspended), PermissionNames.UsersManage)]
+    [InlineData(nameof(ManagementController.UpdateMember), PermissionNames.UsersManage)]
     [InlineData(nameof(ManagementController.GetMembers), PermissionNames.UsersRead)]
     [InlineData(nameof(ManagementController.GetRoles), PermissionNames.RolesRead)]
     [InlineData(nameof(ManagementController.CreateRole), PermissionNames.RolesManage)]

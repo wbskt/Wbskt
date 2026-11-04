@@ -79,7 +79,8 @@ public record GrantRolePermissionRequest(
 
     bool IsDeny = false);
 
-public record SetMemberSuspendedRequest(bool IsSuspended);
+/// <summary>A member's fields to change in one tenant; a field left null stays as it is.</summary>
+public record UpdateMemberRequest(bool? IsSuspended);
 
 public record CreateTenantRequest(
     [Required]

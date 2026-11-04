@@ -142,15 +142,6 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
         }
     }
 
-    public async Task DisableAsync(int workspaceId, int id, CancellationToken cancellationToken = default)
-    {
-        await ExecuteNonQueryAsync("dbo.RegistrationPolicy_Disable", p =>
-        {
-            p.AddWithValue("@WorkspaceId", workspaceId);
-            p.AddWithValue("@Id", id);
-        }, cancellationToken);
-    }
-
     public async Task<PolicyDeleteOutcome> DeleteAsync(int workspaceId, int id, CancellationToken cancellationToken = default)
     {
         return await ExecuteSingleAsync("dbo.RegistrationPolicy_Delete", p =>

@@ -171,28 +171,6 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
         return Result<RegistrationPolicyResponse>.Success(MapToResponse(rotated));
     }
 
-    public async Task<Result> DisableAsync(int workspaceId, Guid policyRefId, CancellationToken cancellationToken = default)
-    {
-        _logger.LogInformation("Disabling registration policy '{PolicyRefId}' in WorkspaceId: {WorkspaceId}", policyRefId, workspaceId);
-
-        var lookup = await WorkspaceOwnership.LoadAsync(workspaceId, () => _provider.FindByRefIdAsync(policyRefId, cancellationToken), WorkspaceOwnership.PolicyNotFound);
-        if (lookup.IsFailure)
-        {
-            _logger.LogWarning("Policy disable rejected: Policy '{PolicyRefId}' not found in WorkspaceId: {WorkspaceId}", policyRefId, workspaceId);
-            return Result.Failure(lookup.Error);
-        }
-
-        var policy = lookup.Value;
-        var policyId = policy.Id;
-
-        await _provider.DisableAsync(workspaceId, policyId, cancellationToken);
-        _logger.LogInformation("Registration policy ID {PolicyId} disabled successfully", policyId);
-
-        await _eventBus.PublishAsync(Disabled(policy, workspaceId), cancellationToken);
-
-        return Result.Success();
-    }
-
     public async Task<Result> DeleteAsync(int workspaceId, Guid policyRefId, CancellationToken cancellationToken = default)
     {
         var lookup = await FindInWorkspaceAsync(workspaceId, policyRefId, cancellationToken);

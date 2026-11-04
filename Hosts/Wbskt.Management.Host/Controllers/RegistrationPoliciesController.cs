@@ -114,21 +114,6 @@ public class RegistrationPoliciesController : ApiControllerBase
     }
 
     /// <summary>
-    /// Disables a specific registration policy.
-    /// </summary>
-    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
-    /// <param name="policyRef">The unique reference ID of the policy to disable.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    [HttpPost("{policyRef:guid}/disable")]
-    [RequiresPermission(PermissionNames.PoliciesManage)]
-    public async Task<IActionResult> Disable([FromWorkspace] int workspaceId, Guid policyRef, CancellationToken cancellationToken)
-    {
-        var result = await _policyService.DisableAsync(workspaceId, policyRef, cancellationToken);
-        return MapResult(result);
-    }
-
-    /// <summary>
     /// Deletes a registration policy, which cannot be undone. Its PIN stops registering devices,
     /// message templates pinned to it are unpinned, and its event-log history stays. Refused while any
     /// client is still enrolled through it.

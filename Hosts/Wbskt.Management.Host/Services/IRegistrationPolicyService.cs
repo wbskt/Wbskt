@@ -20,7 +20,6 @@ public interface IRegistrationPolicyService
     Task<Result> UpdateAsync(int workspaceId, Guid policyRefId, UpdateRegistrationPolicyRequest request, CancellationToken cancellationToken = default);
     /// <summary>Replaces the policy's PIN. Devices already registered are unaffected.</summary>
     Task<Result<RegistrationPolicyResponse>> RotatePinAsync(int workspaceId, Guid policyRefId, CancellationToken cancellationToken = default);
-    Task<Result> DisableAsync(int workspaceId, Guid policyRefId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Deletes a policy, which cannot be undone. Refused with <c>POLICY_HAS_CLIENTS</c> (409) while any

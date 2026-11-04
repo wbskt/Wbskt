@@ -16,7 +16,6 @@ public interface IRegistrationPolicyProvider : IReferenceProvider
     Task UpdateAsync(int workspaceId, int id, UpdateRegistrationPolicyRequest request, CancellationToken cancellationToken = default);
     /// <summary>Draws a new PIN for the policy, retrying on a clash, and returns the updated policy.</summary>
     Task<RegistrationPolicy> RotatePinAsync(int workspaceId, int id, CancellationToken cancellationToken = default);
-    Task DisableAsync(int workspaceId, int id, CancellationToken cancellationToken = default);
 
     /// <summary>Deletes a policy with no clients, unpinning its templates; see <c>dbo.RegistrationPolicy_Delete</c>.</summary>
     Task<PolicyDeleteOutcome> DeleteAsync(int workspaceId, int id, CancellationToken cancellationToken = default);

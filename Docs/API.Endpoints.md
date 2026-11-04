@@ -258,7 +258,7 @@ role or user belonging to another tenant reads as nonexistent.
 | `DELETE {tenantRef}/roles/{roleRef}` | `roles.manage` | Deletes a role and its assignments. |
 | `GET {tenantRef}/roles/{roleRef}/permissions` | `roles.read` | Lists the role's allow/deny entries. |
 | `POST {tenantRef}/roles/{roleRef}/permissions` | `roles.manage` | Grants or denies a slug on the role. `RolePermissions` is part of the role *definition* and is unscoped — scope is applied when the role is assigned. |
-| `DELETE {tenantRef}/roles/{roleRef}/permissions/{slug}` | `roles.manage` | Removes the entry entirely. Distinct from denying it. |
+| `DELETE {tenantRef}/roles/{roleRef}/permissions/{permissionSlug}` | `roles.manage` | Removes the entry entirely. Distinct from denying it. |
 
 **Groups**
 
@@ -283,9 +283,9 @@ role or user belonging to another tenant reads as nonexistent.
 | `POST` / `DELETE {tenantRef}/members/{userRef}/groups/{groupRef}` | `users.manage` | Adds or removes a group membership. |
 | `POST` / `DELETE {tenantRef}/members/{userRef}/roles/{roleRef}` | `roles.manage` | Assigns or removes a role, scoped tenant-wide or to one workspace. |
 | `POST {tenantRef}/members/{userRef}/permissions` | `roles.manage` | Grants or denies a slug directly on the user. A user-level entry outranks anything role-derived. |
-| `DELETE {tenantRef}/members/{userRef}/permissions/{slug}` | `roles.manage` | **Deletes the override, does not deny it.** Denying would leave the override in place; deleting returns the decision to the user's roles. Without this an accidental grant could never be undone through the API. |
+| `DELETE {tenantRef}/members/{userRef}/permissions/{permissionSlug}` | `roles.manage` | **Deletes the override, does not deny it.** Denying would leave the override in place; deleting returns the decision to the user's roles. Without this an accidental grant could never be undone through the API. |
 | `DELETE {tenantRef}/members/{userRef}` | `users.manage` | Offboards a member: removes every assignment scoped to the tenant and transfers workspaces they owned to the caller. Refuses to remove the last administrator, and refuses self-removal (the transfer would have no recipient). |
-| `PUT {tenantRef}/members/{userRef}/suspended` | `users.manage` | Body `{ "isSuspended": bool }`. Suspends the member **in this tenant only**: they keep their account, sessions and other tenants, and their assignments here, but hold nothing here until it is lifted. Refuses self-suspension (`AUTH_CANNOT_SUSPEND_SELF`) and leaving the tenant without an administrator. |
+| `PATCH {tenantRef}/members/{userRef}` | `users.manage` | Body `{ "isSuspended": bool }`; empty is `MEMBER_UPDATE_EMPTY`. Suspends the member **in this tenant only**: they keep their account, sessions and other tenants, and their assignments here, but hold nothing here until it is lifted. Refuses self-suspension (`AUTH_CANNOT_SUSPEND_SELF`) and leaving the tenant without an administrator. |
 | `POST {tenantRef}/leave` | member (none) | The caller leaves the tenant, suspended or not, and every assignment they held there goes; workspaces they owned pass to another administrator. The same removal deleting the account makes from each shared tenant. 409 `TENANT_LEAVE_LAST` when it is their only tenant, `TENANT_LEAVE_SOLE_MEMBER` when nobody else belongs to it, `TENANT_SOLE_ADMINISTRATOR` when nobody else administers it (the message names it). Cached workspace access is dropped, and the tenant's log records `MemberLeftEvent`. **204**. |
 
 **Catalogue**
@@ -391,8 +391,7 @@ approval is automatic or manual.
 | `GET /` | `policies.read` | Lists policies, filterable by `autoApproval` and `name`, each enriched with its registered and connected client counts. |
 | `GET {policyRef}` | `policies.read` | One policy, after verifying it belongs to the workspace. |
 | `POST /` | `policies.manage` | Creates a policy. The enrolment PIN is generated server-side, not supplied by the caller. |
-| `PATCH {policyRef}` | `policies.manage` | Updates name, auto-approval or enabled state. |
-| `POST {policyRef}/disable` | `policies.manage` | Stops the policy accepting new registrations. Already-registered clients are unaffected. |
+| `PATCH {policyRef}` | `policies.manage` | Updates name, client limit, auto-approval and enabled state: a full replace, so send every field. Disabling stops the policy accepting new registrations and leaves registered clients as they are; `isEnabled: true` turns it back on. |
 | `POST {policyRef}/rotate-pin` | `policies.manage` | Replaces the PIN and returns the policy with the new one. The old PIN stops registering devices; already-registered clients are unaffected. |
 | `DELETE {policyRef}` | `policies.manage` | Deletes a policy no client is enrolled through, in any status; otherwise `409 POLICY_HAS_CLIENTS` with the count. Templates pinned to it are unpinned and stay in the workspace; its event-log history is kept. Raises `PolicyDeletedEvent`. |
 
