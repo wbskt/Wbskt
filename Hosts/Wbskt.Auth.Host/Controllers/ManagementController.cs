@@ -143,11 +143,11 @@ public class ManagementController(ITenantService tenantService, IAccessControlSe
     }
 
     /// <summary>Detaches a permission from a role, as distinct from denying it.</summary>
-    [HttpDelete("{tenantRef:guid}/roles/{roleRef:guid}/permissions/{slug}")]
+    [HttpDelete("{tenantRef:guid}/roles/{roleRef:guid}/permissions/{permissionSlug}")]
     [RequiresTenantPermission(PermissionNames.RolesManage)]
-    public async Task<IActionResult> RemoveRolePermission([FromTenant] int tenantId, Guid roleRef, string slug, CancellationToken cancellationToken)
+    public async Task<IActionResult> RemoveRolePermission([FromTenant] int tenantId, Guid roleRef, string permissionSlug, CancellationToken cancellationToken)
     {
-        return MapResult(await accessControlService.RemoveRolePermissionAsync(tenantId, roleRef, slug, cancellationToken));
+        return MapResult(await accessControlService.RemoveRolePermissionAsync(tenantId, roleRef, permissionSlug, cancellationToken));
     }
 
     // ----- Groups ------------------------------------------------------------------------------
@@ -306,11 +306,11 @@ public class ManagementController(ITenantService tenantService, IAccessControlSe
     /// same as denying it — a user-level row wins over any role, so without this an accidental grant
     /// could never be undone.
     /// </summary>
-    [HttpDelete("{tenantRef:guid}/members/{userRef:guid}/permissions/{slug}")]
+    [HttpDelete("{tenantRef:guid}/members/{userRef:guid}/permissions/{permissionSlug}")]
     [RequiresTenantPermission(PermissionNames.RolesManage)]
-    public async Task<IActionResult> RemoveUserPermission([FromTenant] int tenantId, Guid userRef, string slug, [FromQuery] Guid? workspaceRef, CancellationToken cancellationToken)
+    public async Task<IActionResult> RemoveUserPermission([FromTenant] int tenantId, Guid userRef, string permissionSlug, [FromQuery] Guid? workspaceRef, CancellationToken cancellationToken)
     {
-        return MapResult(await accessControlService.RemoveUserPermissionAsync(tenantId, userRef, slug, workspaceRef, cancellationToken));
+        return MapResult(await accessControlService.RemoveUserPermissionAsync(tenantId, userRef, permissionSlug, workspaceRef, cancellationToken));
     }
 
     /// <summary>
@@ -344,7 +344,7 @@ public class ManagementController(ITenantService tenantService, IAccessControlSe
     }
 
     /// <summary>
-    /// Suspends a member in this tenant, or lifts the suspension. A suspended member keeps their
+    /// Changes a member in this tenant. <c>isSuspended</c> suspends them or lifts the suspension. A suspended member keeps their
     /// account, their other tenants and everything assigned to them here, but holds no permission in
     /// this tenant and cannot see or enter its workspaces until it is lifted. Refused for yourself and
     /// for the tenant's last administrator.
@@ -354,10 +354,15 @@ public class ManagementController(ITenantService tenantService, IAccessControlSe
     /// say over. To remove someone from this tenant, use <see cref="RemoveMember"/>.
     /// </para>
     /// </summary>
-    [HttpPut("{tenantRef:guid}/members/{userRef:guid}/suspended")]
+    [HttpPatch("{tenantRef:guid}/members/{userRef:guid}")]
     [RequiresTenantPermission(PermissionNames.UsersManage)]
-    public async Task<IActionResult> SetMemberSuspended([FromTenant] int tenantId, Guid userRef, [FromBody] SetMemberSuspendedRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> UpdateMember([FromTenant] int tenantId, Guid userRef, [FromBody] UpdateMemberRequest request, CancellationToken cancellationToken)
     {
+        if (request.IsSuspended is not { } isSuspended)
+        {
+            return MapError(Error.Validation("MEMBER_UPDATE_EMPTY", "Name a field to change: 'isSuspended'."));
+        }
+
         var caller = CurrentUserId();
         if (caller.IsFailure)
         {
@@ -365,7 +370,7 @@ public class ManagementController(ITenantService tenantService, IAccessControlSe
         }
 
         var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        return MapResult(await tenantService.SetMemberSuspendedAsync(caller.Value, tenantId, userRef, request.IsSuspended, ipAddress, cancellationToken));
+        return MapResult(await tenantService.SetMemberSuspendedAsync(caller.Value, tenantId, userRef, isSuspended, ipAddress, cancellationToken));
     }
 
     // ----- Shared plumbing ---------------------------------------------------------------------

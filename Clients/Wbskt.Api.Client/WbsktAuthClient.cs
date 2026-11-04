@@ -501,11 +501,11 @@ public sealed class WbsktAuthClient : WbsktApiClient
     public Task<HttpResponseMessage> LeaveTenantRawAsync(Guid tenantRef, CancellationToken cancellationToken = default) =>
         SendRawAsync(HttpMethod.Post, $"/api/v1/tenants/{tenantRef}/leave", null, cancellationToken);
 
-    /// <summary>Suspends a member in one tenant, or lifts the suspension. <c>PUT /api/tenants/{tenantRef}/members/{userRef}/suspended</c>.</summary>
-    public Task SetMemberSuspendedAsync(Guid tenantRef, Guid userRef, SetMemberSuspendedRequest request, CancellationToken cancellationToken = default) =>
-        ReceiveAsync(SetMemberSuspendedRawAsync(tenantRef, userRef, request, cancellationToken), cancellationToken);
+    /// <summary>Changes a member in one tenant, such as suspending them. <c>PATCH /api/v1/tenants/{tenantRef}/members/{userRef}</c>.</summary>
+    public Task UpdateMemberAsync(Guid tenantRef, Guid userRef, UpdateMemberRequest request, CancellationToken cancellationToken = default) =>
+        ReceiveAsync(UpdateMemberRawAsync(tenantRef, userRef, request, cancellationToken), cancellationToken);
 
-    /// <summary><see cref="SetMemberSuspendedAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
-    public Task<HttpResponseMessage> SetMemberSuspendedRawAsync(Guid tenantRef, Guid userRef, SetMemberSuspendedRequest request, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Put, $"/api/v1/tenants/{tenantRef}/members/{userRef}/suspended", request, cancellationToken);
+    /// <summary><see cref="UpdateMemberAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
+    public Task<HttpResponseMessage> UpdateMemberRawAsync(Guid tenantRef, Guid userRef, UpdateMemberRequest request, CancellationToken cancellationToken = default) =>
+        SendRawAsync(HttpMethod.Patch, $"/api/v1/tenants/{tenantRef}/members/{userRef}", request, cancellationToken);
 }

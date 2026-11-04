@@ -21,7 +21,6 @@ public sealed class ForeignReferenceTests(ServicesFixture fixture)
     [InlineData("GET", "registration-policies/{policy}", "POLICY_NOT_FOUND")]
     [InlineData("PATCH", "registration-policies/{policy}", "POLICY_NOT_FOUND")]
     [InlineData("POST", "registration-policies/{policy}/rotate-pin", "POLICY_NOT_FOUND")]
-    [InlineData("POST", "registration-policies/{policy}/disable", "POLICY_NOT_FOUND")]
     [InlineData("GET", "clients?policyRefId={policy}", "POLICY_NOT_FOUND")]
     [InlineData("GET", "message-templates?policyRefId={policy}", "POLICY_NOT_FOUND")]
     [InlineData("GET", "event-logs?policyRefId={policy}", "POLICY_NOT_FOUND")]

@@ -70,14 +70,6 @@ public sealed class WbsktManagementClient : WbsktApiClient
     public Task<HttpResponseMessage> RotatePolicyPinRawAsync(Guid workspaceRef, Guid policyRef, CancellationToken cancellationToken = default) =>
         SendRawAsync(HttpMethod.Post, $"/api/v1/workspaces/{workspaceRef}/registration-policies/{policyRef}/rotate-pin", null, cancellationToken);
 
-    /// <summary>Disables a registration policy. <c>POST /api/workspaces/{workspaceRef}/registration-policies/{policyRef}/disable</c>.</summary>
-    public Task DisablePolicyAsync(Guid workspaceRef, Guid policyRef, CancellationToken cancellationToken = default) =>
-        ReceiveAsync(DisablePolicyRawAsync(workspaceRef, policyRef, cancellationToken), cancellationToken);
-
-    /// <summary><see cref="DisablePolicyAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
-    public Task<HttpResponseMessage> DisablePolicyRawAsync(Guid workspaceRef, Guid policyRef, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Post, $"/api/v1/workspaces/{workspaceRef}/registration-policies/{policyRef}/disable", null, cancellationToken);
-
     // ── Device registration ───────────────────────────────────────────────────────────────────────
 
     /// <summary>Registers a device under a policy with its PIN. Anonymous; the response carries the device's secret, the only time it is shown. <c>POST /api/client-registrations/initiate</c>.</summary>

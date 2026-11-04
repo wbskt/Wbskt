@@ -64,14 +64,11 @@ public sealed class WorkspaceOwnershipTests
 
         var update = await service.UpdateAsync(WorkspaceId, foreign.RefId, new UpdateRegistrationPolicyRequest("lab", null, false, true));
         var rotate = await service.RotatePinAsync(WorkspaceId, foreign.RefId);
-        var disable = await service.DisableAsync(WorkspaceId, foreign.RefId);
 
         update.Error.Should().Be(WorkspaceOwnership.PolicyNotFound);
         rotate.Error.Should().Be(WorkspaceOwnership.PolicyNotFound);
-        disable.Error.Should().Be(WorkspaceOwnership.PolicyNotFound);
         provider.Verify(p => p.UpdateAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<UpdateRegistrationPolicyRequest>(), It.IsAny<CancellationToken>()), Times.Never);
         provider.Verify(p => p.RotatePinAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
-        provider.Verify(p => p.DisableAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
         bus.VerifyNoOtherCalls();
     }
 

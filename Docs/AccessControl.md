@@ -158,7 +158,7 @@ that tenant, and transfers workspaces they owned to the caller — access resolu
 be unreachable to everyone. It refuses to remove the last administrator (`THROW 50008`) and refuses
 self-removal, since the transfer would have no recipient.
 
-**Suspending:** `PUT /{tenantRef}/members/{userRef}/suspended` with `{ "isSuspended": true }` keeps the
+**Suspending:** `PATCH /{tenantRef}/members/{userRef}` with `{ "isSuspended": true }` keeps the
 member and every assignment but makes access resolution treat them as holding nothing in this
 tenant (`Permission_Verify`, `Permission_EffectiveSet`, `WorkspaceMember_Verify`), and hides the
 tenant and its workspaces from their lists. It takes effect on their next request, since access is
@@ -187,9 +187,9 @@ their tenant's permission graph.
 |---|---|
 | Tenants | `GET /api/v1/tenants`, `POST /api/v1/tenants`, `PUT /{tenantRef}` |
 | Invitations | `GET/POST /{tenantRef}/invitations`, `DELETE /{tenantRef}/invitations/{invitationRef}`, `POST /api/v1/invitations/accept` |
-| Roles | `GET/POST /roles`, `PUT/DELETE /roles/{roleRef}`, `GET/POST /roles/{roleRef}/permissions`, `DELETE /roles/{roleRef}/permissions/{slug}` |
+| Roles | `GET/POST /roles`, `PUT/DELETE /roles/{roleRef}`, `GET/POST /roles/{roleRef}/permissions`, `DELETE /roles/{roleRef}/permissions/{permissionSlug}` |
 | Groups | `GET/POST /groups`, `PUT/DELETE /groups/{groupRef}`, `GET /groups/{groupRef}/roles`, `POST/DELETE /groups/{groupRef}/roles/{roleRef}` |
-| Members | `GET /members`, `GET /members/{userRef}/roles\|permissions\|groups`, `POST/DELETE /members/{userRef}/roles/{roleRef}`, `POST /members/{userRef}/permissions`, `DELETE /members/{userRef}/permissions/{slug}`, `POST/DELETE /members/{userRef}/groups/{groupRef}`, `PUT /members/{userRef}/suspended` |
+| Members | `GET /members`, `GET /members/{userRef}/roles\|permissions\|groups`, `POST/DELETE /members/{userRef}/roles/{roleRef}`, `POST /members/{userRef}/permissions`, `DELETE /members/{userRef}/permissions/{permissionSlug}`, `POST/DELETE /members/{userRef}/groups/{groupRef}`, `PATCH /members/{userRef}` |
 | Catalogue | `GET /permissions` |
 
 Assignment scope travels in the body as `workspaceRef` on POST (null = tenant-wide) and as a query
@@ -239,7 +239,7 @@ the slug is the second gate.
 | Clients | `POST clients/{ref}/ota` | `clients.firmware` |
 | Clients | `GET clients/{ref}/comms` | `logs.read` — it is a projection of the event log, not client state |
 | Policies | `GET registration-policies…` | `policies.read` |
-| Policies | `POST`, `PATCH {ref}`, `POST {ref}/disable`, `POST {ref}/rotate-pin` | `policies.manage` |
+| Policies | `POST`, `PATCH {ref}`, `POST {ref}/rotate-pin` | `policies.manage` |
 | Templates | `GET message-templates` | `templates.read` |
 | Templates | `POST`, `PUT {ref}`, `DELETE {ref}` | `templates.manage` |
 | Logs | `GET event-logs` | `logs.read` |
@@ -291,7 +291,7 @@ Two structural notes on scoping, since neither is enforced by the resolve call:
   rather than left sharing a live token with an attacker.
 - `POST /api/auth/logout` revokes one token; `POST /api/auth/logout-all` revokes the caller's whole
   set. Both succeed regardless of whether the token existed, so neither can be used to probe.
-- Suspending a member (`PUT /api/v1/tenants/{tenantRef}/members/{userRef}/suspended`) does not touch
+- Suspending a member (`PATCH /api/v1/tenants/{tenantRef}/members/{userRef}` with `isSuspended`) does not touch
   their tokens; it closes that one tenant to them on their next request.
 - The credential endpoints are rate limited per client IP, in three buckets (`RateLimiting:Authentication`,
   `RateLimiting:TokenRefresh`, `RateLimiting:EmailVerification`), and mail they send is throttled per

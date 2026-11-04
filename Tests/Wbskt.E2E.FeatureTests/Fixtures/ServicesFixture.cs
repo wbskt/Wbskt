@@ -421,7 +421,7 @@ public sealed class ServicesFixture : IDisposable
 
     /// <summary>Suspends a member in one tenant, or lifts it. Requires a caller with tenant-wide users.manage.</summary>
     public Task<HttpResponseMessage> SetMemberSuspendedAsync(string adminToken, Guid tenantRef, Guid userRef, bool isSuspended) =>
-        Auth.As(adminToken).SetMemberSuspendedRawAsync(tenantRef, userRef, new SetMemberSuspendedRequest(isSuspended));
+        Auth.As(adminToken).UpdateMemberRawAsync(tenantRef, userRef, new UpdateMemberRequest(isSuspended));
 
     /// <summary>The caller's first tenant reference — every /api/tenants route needs one.</summary>
     public async Task<Guid> GetTenantRefAsync(string token)
