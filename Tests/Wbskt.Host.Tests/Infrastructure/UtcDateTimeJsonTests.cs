@@ -66,6 +66,7 @@ public sealed class UtcDateTimeJsonTests
     [Theory]
     [InlineData("\"2026-10-04T12:30:15Z\"")]
     [InlineData("\"2026-10-04T18:00:15+05:30\"")]
+    [InlineData("\"2026-10-04T12:30:15\"")]
     public void An_offset_time_in_a_request_is_read_as_utc(string json)
     {
         var value = JsonSerializer.Deserialize<DateTimeOffset>(json, WbsktJsonExtensions.Apply(new JsonSerializerOptions()));

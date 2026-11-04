@@ -135,7 +135,7 @@ internal sealed class ClientQueryService : IClientQueryService
         var types = await _messageTypeProvider.GetByClientAsync(lookup.Value.Id, cancellationToken);
         IReadOnlyCollection<ClientMessageTypeResponse> response =
         [
-            .. types.Select(t => new ClientMessageTypeResponse(t.Type, t.Count, new DateTimeOffset(t.FirstSeenAt), new DateTimeOffset(t.LastSeenAt), MessageTypes.IsReserved(t.Type), ParseSample(t.SamplePayload)))
+            .. types.Select(t => new ClientMessageTypeResponse(t.Type, t.Count, t.FirstSeenAt.ToUtcOffset(), t.LastSeenAt.ToUtcOffset(), MessageTypes.IsReserved(t.Type), ParseSample(t.SamplePayload)))
         ];
         return Result<IReadOnlyCollection<ClientMessageTypeResponse>>.Success(response);
     }
@@ -180,7 +180,7 @@ internal sealed class ClientQueryService : IClientQueryService
             c.LastRttMs,
             c.CreatedAt.ToUtcOffset(),
             c.Tags,
-            AsUtc(c.UpdatingUntil)
+            c.UpdatingUntil.ToUtcOffset()
         );
     }
 
@@ -221,11 +221,9 @@ internal sealed class ClientQueryService : IClientQueryService
             d.Tags,
             ReadSystem(d.SystemJson),
             d.FirmwareVersion,
-            AsUtc(d.UpdatingUntil)
+            d.UpdatingUntil.ToUtcOffset()
         );
     }
-
-    private static DateTimeOffset? AsUtc(DateTime? value) => value is { } at ? new DateTimeOffset(DateTime.SpecifyKind(at, DateTimeKind.Utc)) : null;
 
     private static IReadOnlyList<string> ReadSystem(string? json)
     {
