@@ -15,20 +15,10 @@ public sealed class PageRequestTests
     }
 
     [Fact]
-    public void The_old_page_size_parameters_still_count_but_limit_wins()
-    {
-        Assert.Equal(9, new PageRequest { Take = 9 }.LimitOr(50));
-        Assert.Equal(8, new PageRequest { Top = 8 }.LimitOr(50));
-        Assert.Equal(4, new PageRequest { Limit = 4, Take = 9, Top = 8 }.LimitOr(50));
-    }
-
-    [Fact]
     public void A_keyset_cursor_is_the_key_to_read_after()
     {
         Assert.Null(new PageRequest().AfterKey().Value);
         Assert.Equal(42, new PageRequest { Cursor = "42" }.AfterKey().Value);
-        Assert.Equal(17, new PageRequest { FromEventId = 17 }.AfterKey().Value);
-        Assert.Equal(42, new PageRequest { Cursor = "42", FromEventId = 17 }.AfterKey().Value);
     }
 
     [Theory]
@@ -48,13 +38,10 @@ public sealed class PageRequestTests
     }
 
     [Fact]
-    public void An_offset_list_reads_its_cursor_then_the_old_skip()
+    public void An_offset_list_starts_at_its_cursor()
     {
         Assert.Equal(0, new PageRequest().Offset().Value);
         Assert.Equal(20, new PageRequest { Cursor = "20" }.Offset().Value);
-        Assert.Equal(10, new PageRequest { Skip = 10 }.Offset().Value);
-        Assert.Equal(0, new PageRequest { Skip = -5 }.Offset().Value);
-        Assert.Equal(20, new PageRequest { Cursor = "20", Skip = 10 }.Offset().Value);
     }
 
     [Fact]

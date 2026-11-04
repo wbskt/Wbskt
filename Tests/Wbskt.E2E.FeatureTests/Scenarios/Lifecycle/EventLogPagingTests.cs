@@ -65,7 +65,7 @@ public sealed class EventLogPagingTests(ServicesFixture fixture)
 
         var (token, workspace) = await fixture.RegisterAndLoginUserAsync();
 
-        foreach (var query in new[] { "clients?skip=-5&take=2147483647", "registration-policies?take=-1", "event-logs?take=2147483647", "runs?top=2147483647", "clients?limit=2147483647", "runs?limit=-1" })
+        foreach (var query in new[] { "registration-policies?limit=-1", "event-logs?limit=2147483647", "runs?limit=2147483647", "clients?limit=2147483647", "runs?limit=-1" })
         {
             var response = await fixture.SendAsync(HttpMethod.Get, ServicesFixture.ManagementUrl($"/api/workspaces/{workspace}/{query}"), token);
             response.StatusCode.Should().Be(HttpStatusCode.OK, query);

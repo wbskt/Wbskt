@@ -200,7 +200,7 @@ user-level row wins over any role-derived permission, so denying leaves the over
 deleting returns the decision to the user's roles. Without the delete an accidental grant could
 never be undone through the API.
 
-List endpoints take `skip`/`take`, clamped to 200 rather than rejected.
+List endpoints take `cursor`/`limit`, with `limit` clamped to 200 rather than rejected.
 
 These endpoints require a **tenant-wide** permission in the target tenant:
 `roles.read`/`roles.manage` for roles, permissions and assignments; `users.read`/`users.manage` for

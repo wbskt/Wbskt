@@ -127,20 +127,6 @@ public class ClientsController : ApiControllerBase
         return Ok(new Page<ClientTagCountResponse> { Items = result.Value });
     }
 
-    /// <summary>Deprecated: <c>GET /clients?policyRefId=</c>. Kept for one release.</summary>
-    [HttpGet("policy/{policyRef:guid}")]
-    [ApiExplorerSettings(IgnoreApi = true)]
-    [RequiresPermission(PermissionNames.ClientsRead)]
-    public Task<ActionResult<Page<ClientResponse>>> GetByPolicy(
-        [FromWorkspace] int workspaceId,
-        Guid policyRef,
-        [FromQuery] ClientStatus[]? status,
-        [FromQuery] string? name,
-        [FromQuery] string? tag,
-        [FromQuery] PageRequest page,
-        CancellationToken cancellationToken = default)
-        => GetAll(workspaceId, status, name, tag, policyRef, page, cancellationToken);
-
     /// <summary>
     /// Retrieves the full detail of a single client: presence, uptime anchor, latency,
     /// self-reported SDK metadata and command capabilities.
@@ -197,13 +183,6 @@ public class ClientsController : ApiControllerBase
 
         return NoContent();
     }
-
-    /// <summary>Deprecated: <c>PATCH /clients/{clientRef}</c> with <c>status</c>. Kept for one release.</summary>
-    [HttpPatch("{clientRef:guid}/status")]
-    [ApiExplorerSettings(IgnoreApi = true)]
-    [RequiresPermission(PermissionNames.ClientsUpdate)]
-    public Task<IActionResult> UpdateStatus([FromWorkspace] int workspaceId, Guid clientRef, UpdateClientStatusRequest request, CancellationToken cancellationToken)
-        => Update(workspaceId, clientRef, new UpdateClientRequest(null, request.Status), cancellationToken);
 
     /// <summary>
     /// Applies one status to many clients: approving or revoking a batch of pending devices at once.
@@ -300,13 +279,6 @@ public class ClientsController : ApiControllerBase
         return Ok(new Page<ClientMessageTypeResponse> { Items = result.Value, TotalCount = result.Value.Count });
     }
 
-    /// <summary>Deprecated: <c>PATCH /clients/{clientRef}</c> with <c>name</c>. Kept for one release.</summary>
-    [HttpPatch("{clientRef:guid}/name")]
-    [ApiExplorerSettings(IgnoreApi = true)]
-    [RequiresPermission(PermissionNames.ClientsUpdate)]
-    public Task<IActionResult> Rename([FromWorkspace] int workspaceId, Guid clientRef, UpdateClientNameRequest request, CancellationToken cancellationToken)
-        => Update(workspaceId, clientRef, new UpdateClientRequest(request.Name ?? "", null), cancellationToken);
-
     /// <summary>
     /// Replaces a client's tags. Tags are trimmed and lower-cased, duplicates collapse, and an empty
     /// list clears them.
@@ -398,13 +370,6 @@ public class ClientsController : ApiControllerBase
         var result = await _commandService.CancelAsync(workspaceId, clientRef, commandId, cancellationToken);
         return result.IsSuccess ? NoContent() : MapError(result.Error);
     }
-
-    /// <summary>Deprecated: <c>POST /clients/{clientRef}/commands</c>. Kept for one release.</summary>
-    [HttpPost("{clientRef:guid}/command")]
-    [ApiExplorerSettings(IgnoreApi = true)]
-    [RequiresPermission(PermissionNames.ClientsCommand)]
-    public Task<ActionResult<ClientCommandResponse>> SendCommandLegacy([FromWorkspace] int workspaceId, Guid clientRef, ClientCommandRequest request, CancellationToken cancellationToken)
-        => SendCommand(workspaceId, clientRef, request, cancellationToken);
 
     /// <summary>
     /// Retrieves the recent in/out communication history for a specific client

@@ -9,11 +9,6 @@ namespace Wbskt.Infrastructure;
 /// <c>nextCursor</c>, left out for the first page) and <c>limit</c>. Bind it with
 /// <c>[FromQuery] PageRequest page</c>.
 /// </summary>
-/// <remarks>
-/// The parameters lists took before this contract (<c>skip</c>, <c>take</c>, <c>top</c> and
-/// <c>fromEventId</c>) are still read for one release, so callers can move over first; when both are
-/// sent, <c>cursor</c> and <c>limit</c> win.
-/// </remarks>
 public sealed class PageRequest
 {
     /// <summary>The <c>nextCursor</c> of the previous page; leave out for the first page.</summary>
@@ -24,26 +19,10 @@ public sealed class PageRequest
     [FromQuery(Name = "limit")]
     public int? Limit { get; set; }
 
-    /// <summary>Deprecated: use <c>cursor</c>.</summary>
-    [FromQuery(Name = "skip")]
-    public int? Skip { get; set; }
-
-    /// <summary>Deprecated: use <c>limit</c>.</summary>
-    [FromQuery(Name = "take")]
-    public int? Take { get; set; }
-
-    /// <summary>Deprecated: use <c>limit</c>.</summary>
-    [FromQuery(Name = "top")]
-    public int? Top { get; set; }
-
-    /// <summary>Deprecated: use <c>cursor</c>.</summary>
-    [FromQuery(Name = "fromEventId")]
-    public long? FromEventId { get; set; }
-
     public static readonly Error CursorInvalid = Error.Validation("PAGE_CURSOR_INVALID", "'cursor' must be the nextCursor of a previous page of this list.");
 
     /// <summary>The page size asked for, or <paramref name="defaultLimit"/>, clamped to 1..<see cref="Paging.MaxPageSize"/>.</summary>
-    public int LimitOr(int defaultLimit) => Paging.Take(Limit ?? Take ?? Top ?? defaultLimit);
+    public int LimitOr(int defaultLimit) => Paging.Take(Limit ?? defaultLimit);
 
     /// <summary>
     /// The key a keyset list reads after, or null for the first page. A list ordered by an increasing
@@ -53,7 +32,7 @@ public sealed class PageRequest
     {
         if (Cursor is null)
         {
-            return Result<long?>.Success(FromEventId);
+            return Result<long?>.Success(null);
         }
 
         return long.TryParse(Cursor, NumberStyles.None, CultureInfo.InvariantCulture, out var key)
@@ -61,12 +40,12 @@ public sealed class PageRequest
             : Result<long?>.Failure(CursorInvalid);
     }
 
-    /// <summary>The row an offset list starts at: from the cursor, else the legacy <c>skip</c>, else 0.</summary>
+    /// <summary>The row an offset list starts at: from the cursor, else 0.</summary>
     public Result<int> Offset()
     {
         if (Cursor is null)
         {
-            return Result<int>.Success(Paging.Skip(Skip ?? 0));
+            return Result<int>.Success(0);
         }
 
         return int.TryParse(Cursor, NumberStyles.None, CultureInfo.InvariantCulture, out var offset)

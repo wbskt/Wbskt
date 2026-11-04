@@ -15,7 +15,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Contract;
 /// route promises:
 /// <list type="bullet">
 /// <item><see cref="Paging.Offset"/>: a page (<c>items</c>, <c>nextCursor</c>) that also carries
-/// <c>totalCount</c>, repeated in the <c>X-Total-Count</c> header.</item>
+/// <c>totalCount</c>.</item>
 /// <item><see cref="Paging.Keyset"/>: a page with no count, in the body or the header.</item>
 /// <item><see cref="Paging.Whole"/> and <see cref="Paging.WholeCounted"/>: a page that always holds
 /// the whole list (<c>nextCursor</c> null, <c>limit</c> ignored), with <c>totalCount</c> only on the
@@ -27,8 +27,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Contract;
 ///
 /// <para>
 /// Not covered: the readings series (<c>clients/{clientRef}/readings</c> answers buckets, not a
-/// list), the CSV exports, the event-log summary, the deprecated <c>clients/policy/{policyRef}</c>
-/// alias, and the internal routes, which callers outside the backend never see.
+/// list), the CSV exports, the event-log summary and the internal routes, which callers outside the backend never see.
 /// </para>
 ///
 /// Requires the auth, management and engine hosts running (the run lists need runs). Skips
@@ -40,7 +39,7 @@ public sealed class ListRoutesContractTests(ServicesFixture fixture)
     /// <summary>How a list route pages, which is what its theory row expects to see.</summary>
     public enum Paging
     {
-        /// <summary><c>items</c>, <c>nextCursor</c> and <c>totalCount</c>, plus <c>X-Total-Count</c>.</summary>
+        /// <summary><c>items</c>, <c>nextCursor</c> and <c>totalCount</c>.</summary>
         Offset,
 
         /// <summary><c>items</c> and <c>nextCursor</c>; no count.</summary>
@@ -372,8 +371,7 @@ public sealed class ListRoutesContractTests(ServicesFixture fixture)
                 hasTotal.Should().BeTrue($"{because} is offset-paged and counts the whole list");
                 total.ValueKind.Should().Be(JsonValueKind.Number, $"{because}: totalCount is a number");
                 total.GetInt32().Should().BeGreaterThanOrEqualTo(items.GetArrayLength(), $"{because}: the whole list holds at least this page");
-                reading.TotalCountHeader.Should().Be(total.GetInt32().ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    $"{because}: {TotalCountHeader} repeats totalCount for the callers that read the header");
+                reading.TotalCountHeader.Should().BeNull($"{because}: the count is in the body only since #351");
                 break;
 
             case Paging.Keyset:

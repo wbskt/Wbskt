@@ -87,7 +87,7 @@ public sealed class WorkspaceMembershipTests(ServicesFixture fixture)
         second.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         var (itemCount, _) = await fixture.GetPageAsync(
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members?take=200"), owner.Token);
+            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members?limit=200"), owner.Token);
 
         itemCount.Should().Be(2, "the owner plus one member, added once");
     }
@@ -193,10 +193,10 @@ public sealed class WorkspaceMembershipTests(ServicesFixture fixture)
         await AddMemberAsync(owner.Token, workspaceRef, member.Email);
 
         var (itemCount, totalCount) = await fixture.GetPageAsync(
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members?take=200"), owner.Token);
+            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members?limit=200"), owner.Token);
 
         itemCount.Should().Be(2);
-        totalCount.Should().Be(2, "X-Total-Count must describe the collection");
+        totalCount.Should().Be(2, "totalCount must describe the collection");
     }
 
     [SkippableFact]
@@ -225,7 +225,7 @@ public sealed class WorkspaceMembershipTests(ServicesFixture fixture)
         await AddMemberAsync(owner.Token, workspaceRef, member.Email);
 
         var (itemCount, totalCount) = await fixture.GetPageAsync(
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members?skip=0&take=1"), owner.Token);
+            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members?limit=1"), owner.Token);
 
         itemCount.Should().Be(1);
         totalCount.Should().Be(2);
@@ -240,7 +240,7 @@ public sealed class WorkspaceMembershipTests(ServicesFixture fixture)
 
         // Clamped rather than rejected: an out-of-range page size is not worth failing a read over.
         var (itemCount, _) = await fixture.GetPageAsync(
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members?take=0"), owner.Token);
+            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members?limit=0"), owner.Token);
 
         itemCount.Should().Be(1);
     }
@@ -254,22 +254,9 @@ public sealed class WorkspaceMembershipTests(ServicesFixture fixture)
 
         // The clamp is what stops a caller pulling the whole table in one request.
         var (itemCount, _) = await fixture.GetPageAsync(
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members?take=99999"), owner.Token);
+            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members?limit=99999"), owner.Token);
 
         itemCount.Should().BeLessThanOrEqualTo(200);
-    }
-
-    [SkippableFact]
-    public async Task WS_MEM_15_NegativeSkip_IsTreatedAsZero()
-    {
-        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
-
-        var (owner, _, workspaceRef, _) = await ArrangeAsync();
-
-        var (itemCount, _) = await fixture.GetPageAsync(
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members?skip=-5&take=10"), owner.Token);
-
-        itemCount.Should().BeGreaterThan(0);
     }
 
     [SkippableFact]
@@ -280,7 +267,7 @@ public sealed class WorkspaceMembershipTests(ServicesFixture fixture)
         var (owner, _, workspaceRef, _) = await ArrangeAsync();
 
         var (itemCount, totalCount) = await fixture.GetPageAsync(
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members?skip=500&take=10"), owner.Token);
+            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members?cursor=500&limit=10"), owner.Token);
 
         itemCount.Should().Be(0);
         totalCount.Should().BeGreaterThan(0, "the total describes the collection, not the window");

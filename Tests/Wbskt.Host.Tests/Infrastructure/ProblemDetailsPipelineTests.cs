@@ -120,7 +120,8 @@ public sealed class ProblemDetailsPipelineTests : IAsyncLifetime
         Assert.Equal(Problems.ValidationFailed, ProblemAssert.Is(result, StatusCodes.Status400BadRequest));
         var problem = Assert.IsType<ValidationProblemDetails>(((ObjectResult)result).Value);
         Assert.Equal(["The name is required."], problem.Errors["name"]);
-        Assert.Equal("The name is required.", problem.Extensions[Problems.MessageKey]);
+        Assert.Equal("The name is required.", problem.Detail);
+        Assert.False(problem.Extensions.ContainsKey("message"));
     }
 
     private async Task<(HttpResponseMessage Response, JsonElement Problem)> GetAsync(string path)

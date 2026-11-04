@@ -61,7 +61,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var (admin, tenantRef) = await ArrangeAsync();
 
         var (itemCount, totalCount) = await fixture.GetPageAsync(
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members?take=200"), admin.Token);
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members?limit=200"), admin.Token);
 
         itemCount.Should().Be(1, "a freshly registered tenant contains only its creator");
         totalCount.Should().Be(1);
@@ -106,7 +106,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var (member, _, _) = await ArrangeMemberAsync(admin, tenantRef);
 
         var (_, unfiltered) = await fixture.GetPageAsync(
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members?take=200"), admin.Token);
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members?limit=200"), admin.Token);
         var (_, filtered) = await fixture.GetPageAsync(
             ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members?search={Uri.EscapeDataString(member.Email)}"),
             admin.Token);
