@@ -73,6 +73,6 @@ public sealed class SharedVariableService : ISharedVariableService
 
     private static SharedVariableDto Map(SharedVariableRow row)
     {
-        return new SharedVariableDto(row.WorkflowRefId, row.VarName, row.VarType, row.ValueJson, row.UpdatedAt);
+        return new SharedVariableDto(row.WorkflowRefId, row.VarName, row.VarType, row.ValueJson, row.UpdatedAt.ToUtcOffset());
     }
 }

@@ -1,3 +1,4 @@
+using Wbskt.Models;
 using System.Text.Json;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Models.Workflow;
@@ -179,8 +180,8 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
 
         return Result<WorkflowStatsResponse>.Success(new WorkflowStatsResponse(
             workflowRefId,
-            fromUtc,
-            toUtc,
+            fromUtc.ToUtcOffset(),
+            toUtc.ToUtcOffset(),
             new RunOutcomeCountsDto(
                 stats.TotalRuns,
                 stats.SucceededCount,
@@ -192,7 +193,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
                 stats.ActiveCount),
             new RunDurationsDto(stats.P50DurationMs, stats.P95DurationMs, stats.MaxDurationMs, stats.AvgDurationMs),
             successRate,
-            failures.Select(f => new FailureBucketDto(f.ErrorCode, f.NodeId, f.Occurrences, f.LastSeenAt)).ToList(),
+            failures.Select(f => new FailureBucketDto(f.ErrorCode, f.NodeId, f.Occurrences, f.LastSeenAt.ToUtcOffset())).ToList(),
             timings.Select(t => new NodeTimingDto(t.NodeId, t.Executions, t.FailureCount, t.AvgDurationMs, t.MaxDurationMs)).ToList()));
     }
 
@@ -214,8 +215,8 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
         IReadOnlyCollection<WorkflowRunSummaryRow> perWorkflow = await _runProvider.GetPerWorkflowStatsAsync(workspaceId, fromUtc, toUtc, TopWorkflows, ct);
 
         return Result<WorkspaceStatsResponse>.Success(new WorkspaceStatsResponse(
-            fromUtc,
-            toUtc,
+            fromUtc.ToUtcOffset(),
+            toUtc.ToUtcOffset(),
             new RunOutcomeCountsDto(
                 stats.TotalRuns,
                 stats.SucceededCount,
@@ -324,11 +325,11 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
 
     private static RunSummaryDto MapRun(RunRow row)
     {
-        return new RunSummaryDto(row.RefId, row.WorkflowRefId, row.WorkflowVersion, row.Status, row.CorrelationKey, row.StartedAt, row.CompletedAt);
+        return new RunSummaryDto(row.RefId, row.WorkflowRefId, row.WorkflowVersion, row.Status, row.CorrelationKey, row.StartedAt.ToUtcOffset(), row.CompletedAt.ToUtcOffset());
     }
 
     private static BranchSummaryDto MapBranch(BranchRow row)
     {
-        return new BranchSummaryDto(row.RefId, row.Status, row.NodeId, row.CreatedAt, row.UpdatedAt, row.LocalJson);
+        return new BranchSummaryDto(row.RefId, row.Status, row.NodeId, row.CreatedAt.ToUtcOffset(), row.UpdatedAt.ToUtcOffset(), row.LocalJson);
     }
 }

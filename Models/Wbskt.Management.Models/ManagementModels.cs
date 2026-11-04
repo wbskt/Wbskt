@@ -17,7 +17,7 @@ public record RegistrationPolicyResponse(
     int? MaxClients,
     bool AutoApproval,
     bool IsEnabled,
-    DateTime CreatedAt,
+    DateTimeOffset CreatedAt,
     int RegisteredClientCount,
     int ConnectedClientCount
 );
@@ -53,10 +53,10 @@ public record ClientResponse(
     string Name,
     ClientStatus Status,
     bool IsConnected,
-    DateTime? ConnectedAt,
-    DateTime? LastActivityAt,
+    DateTimeOffset? ConnectedAt,
+    DateTimeOffset? LastActivityAt,
     int? LastRttMs,
-    DateTime CreatedAt,
+    DateTimeOffset CreatedAt,
     IReadOnlyList<string> Tags,
     DateTimeOffset? UpdatingUntil = null
 );
@@ -71,15 +71,15 @@ public record ClientDetailResponse(
     string Name,
     ClientStatus Status,
     bool IsConnected,
-    DateTime? ConnectedAt,
-    DateTime? LastActivityAt,
+    DateTimeOffset? ConnectedAt,
+    DateTimeOffset? LastActivityAt,
     int? LastRttMs,
-    DateTime? RttMeasuredAt,
+    DateTimeOffset? RttMeasuredAt,
     string? AgentName,
     string? AgentVersion,
     string? Platform,
     IReadOnlyList<CommandCapability>? Capabilities,
-    DateTime CreatedAt,
+    DateTimeOffset CreatedAt,
     IReadOnlyList<string> Tags,
     IReadOnlyList<string> System,
     string? FirmwareVersion = null,
@@ -110,7 +110,7 @@ public record ClientStateVariableResponse(
     string Name,
     string DataType,
     string Value,
-    DateTime UpdatedAt
+    DateTimeOffset UpdatedAt
 );
 
 public record MessageTemplateRequest(
@@ -126,8 +126,8 @@ public record MessageTemplateResponse(
     string MessageType,
     string PayloadJson,
     Guid? PolicyRefId,
-    DateTime CreatedAt,
-    DateTime UpdatedAt
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt
 );
 
 /// <summary>A client's fields to change; a field left null stays as it is.</summary>

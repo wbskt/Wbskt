@@ -222,7 +222,7 @@ internal sealed class TenantService : ITenantService
             await _announcer.ToTenantAsync(new InvitationSentEvent(created.RefId, request.Email, request.RoleRef, expiresAt), tenantId, cancellationToken);
 
             // The raw token appears here and nowhere else — not in the store, and not in this log line.
-            return new CreatedInvitationResponse(created.RefId, request.Email, expiresAt, token);
+            return new CreatedInvitationResponse(created.RefId, request.Email, expiresAt.ToUtcOffset(), token);
         });
     }
 

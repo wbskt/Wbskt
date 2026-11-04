@@ -19,61 +19,12 @@ public sealed class ContractTimestampTests
     ];
 
     /// <summary>
-    /// The <see cref="DateTime"/> fields the contracts already had when the rule arrived, as
-    /// <c>Type.Property</c>. Shrink this list, never grow it: a new field is a
-    /// <see cref="DateTimeOffset"/>, and moving one of these is a wire change for its readers (the
-    /// console, the SDK, the typed client), so it goes out with them. An entry that is no longer a
-    /// <see cref="DateTime"/> fails the test too, so the fix also removes it here.
+    /// The <see cref="DateTime"/> fields left, as <c>Type.Property</c>: the device protocol's ping,
+    /// which firmware already in the field parses. Shrink this list, never grow it. An entry that is
+    /// no longer a <see cref="DateTime"/> fails the test too, so the fix also removes it here.
     /// </summary>
     private static readonly HashSet<string> ExistingDateTimeFields =
     [
-        // Wbskt.Auth.Models
-        "CreatedInvitationResponse.ExpiresAt",
-        "InvitationResponse.CreatedAt",
-        "InvitationResponse.ExpiresAt",
-        "SessionResponse.CreatedAt",
-        "SessionResponse.ExpiresAt",
-        "SessionResponse.LastUsedAt",
-        "WorkspaceResponse.CreatedAt",
-
-        // Wbskt.Management.Models
-        "BranchSummaryDto.CreatedAt",
-        "BranchSummaryDto.UpdatedAt",
-        "ClientDetailResponse.ConnectedAt",
-        "ClientDetailResponse.CreatedAt",
-        "ClientDetailResponse.LastActivityAt",
-        "ClientDetailResponse.RttMeasuredAt",
-        "ClientReadingBucket.Start",
-        "ClientReadingsResponse.From",
-        "ClientReadingsResponse.To",
-        "ClientResponse.ConnectedAt",
-        "ClientResponse.CreatedAt",
-        "ClientResponse.LastActivityAt",
-        "ClientStateVariableResponse.UpdatedAt",
-        "EventLogResponse.CreatedAtUtc",
-        "EventLogSummaryResponse.FromUtc",
-        "EventLogSummaryResponse.ToUtc",
-        "FailureBucketDto.LastSeenAt",
-        "HistoryEventDto.Timestamp",
-        "IntegrationLastTest.At",
-        "IntegrationResponse.CreatedAt",
-        "IntegrationResponse.LastUsedAt",
-        "IntegrationResponse.SecretRotatedAt",
-        "IntegrationResponse.UpdatedAt",
-        "MessageTemplateResponse.CreatedAt",
-        "MessageTemplateResponse.UpdatedAt",
-        "RegistrationPolicyResponse.CreatedAt",
-        "RunSummaryDto.CompletedAt",
-        "RunSummaryDto.StartedAt",
-        "SharedVariableDto.UpdatedAt",
-        "WorkflowDefinitionDto.CreatedAt",
-        "WorkflowStatsResponse.FromUtc",
-        "WorkflowStatsResponse.ToUtc",
-        "WorkflowSummaryDto.CreatedAt",
-        "WorkflowVersionDto.CreatedAt",
-        "WorkspaceStatsResponse.FromUtc",
-        "WorkspaceStatsResponse.ToUtc",
-
         // Wbskt.Protocol
         "PingPayload.Timestamp",
         "PongPayload.OriginalTimestamp",

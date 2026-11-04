@@ -32,6 +32,19 @@ public sealed class UtcDateTimeJsonConverter : JsonConverter<DateTime>
     };
 }
 
+/// <summary>
+/// Writes every <see cref="DateTimeOffset"/> in UTC with a <c>Z</c>, the same as <see cref="UtcDateTimeJsonConverter"/>,
+/// so a contract field's wire format does not depend on which of the two types holds it.
+/// </summary>
+public sealed class UtcDateTimeOffsetJsonConverter : JsonConverter<DateTimeOffset>
+{
+    public override DateTimeOffset Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        reader.GetDateTimeOffset().ToUniversalTime();
+
+    public override void Write(Utf8JsonWriter writer, DateTimeOffset value, JsonSerializerOptions options) =>
+        writer.WriteStringValue(value.UtcDateTime);
+}
+
 public static class WbsktJsonExtensions
 {
     /// <summary>
@@ -51,6 +64,11 @@ public static class WbsktJsonExtensions
         if (!options.Converters.Any(c => c is UtcDateTimeJsonConverter))
         {
             options.Converters.Add(new UtcDateTimeJsonConverter());
+        }
+
+        if (!options.Converters.Any(c => c is UtcDateTimeOffsetJsonConverter))
+        {
+            options.Converters.Add(new UtcDateTimeOffsetJsonConverter());
         }
 
         return options;

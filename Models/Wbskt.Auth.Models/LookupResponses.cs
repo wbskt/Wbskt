@@ -117,7 +117,7 @@ public record CreateInvitationRequest(
 /// A pending invitation as listed by an administrator. Deliberately carries no token: the raw value
 /// is returned once, by the call that issued it, and is not recoverable afterwards.
 /// </summary>
-public record InvitationResponse(Guid RefId, string Email, Guid? RoleRef, string? RoleName, DateTime ExpiresAt, DateTime CreatedAt, IReadOnlyList<Guid> WorkspaceRefs);
+public record InvitationResponse(Guid RefId, string Email, Guid? RoleRef, string? RoleName, DateTimeOffset ExpiresAt, DateTimeOffset CreatedAt, IReadOnlyList<Guid> WorkspaceRefs);
 
 /// <summary>
 /// The result of issuing an invitation. <c>Token</c> is the only time the raw token exists outside
@@ -128,7 +128,7 @@ public record InvitationResponse(Guid RefId, string Email, Guid? RoleRef, string
 /// the link, which is the "copy invite link" behaviour of most consoles anyway.
 /// </para>
 /// </summary>
-public record CreatedInvitationResponse(Guid RefId, string Email, DateTime ExpiresAt, string Token);
+public record CreatedInvitationResponse(Guid RefId, string Email, DateTimeOffset ExpiresAt, string Token);
 
 /// <summary>
 /// What <c>TenantInvitation_Create</c> hands back: the new invitation's reference and the display

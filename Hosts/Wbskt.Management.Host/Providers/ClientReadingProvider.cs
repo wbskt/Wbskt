@@ -1,3 +1,4 @@
+using Wbskt.Models;
 using System.Data;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
@@ -42,7 +43,7 @@ internal sealed class ClientReadingProvider : BaseSqlProvider, IClientReadingPro
                 p.AddWithValue("@BucketSeconds", bucketSeconds);
             },
             reader => new ClientReadingBucket(
-                DateTime.SpecifyKind(reader.GetDateTime(reader.GetOrdinal("BucketStart")), DateTimeKind.Utc),
+                reader.GetDateTime(reader.GetOrdinal("BucketStart")).ToUtcOffset(),
                 reader.GetInt64(reader.GetOrdinal("ReadingCount")),
                 reader.GetDouble(reader.GetOrdinal("MinValue")),
                 reader.GetDouble(reader.GetOrdinal("AvgValue")),

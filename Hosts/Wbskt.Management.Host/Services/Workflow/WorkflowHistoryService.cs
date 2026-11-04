@@ -1,3 +1,4 @@
+using Wbskt.Models;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Workflow.Abstraction.Entities;
@@ -34,7 +35,7 @@ public sealed class WorkflowHistoryService : IWorkflowHistoryService
         {
             Items = page.Select(row => new HistoryEventDto(
                 row.HistoryEventId,
-                row.Timestamp,
+                row.Timestamp.ToUtcOffset(),
                 row.EventKind,
                 row.Severity,
                 row.BranchRefId,

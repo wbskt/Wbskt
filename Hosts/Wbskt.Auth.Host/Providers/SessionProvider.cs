@@ -1,3 +1,4 @@
+using Wbskt.Models;
 using System.Data;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Services;
@@ -95,9 +96,9 @@ internal sealed class SessionProvider : BaseSqlProvider, ISessionProvider
             p => p.AddWithValue("@UserId", userId),
             r => new SessionResponse(
                 r.GetGuid(r.GetOrdinal("SessionId")),
-                r.GetDateTime(r.GetOrdinal("SessionStarted")),
-                r.GetDateTime(r.GetOrdinal("Created")),
-                r.GetDateTime(r.GetOrdinal("Expires")),
+                r.GetDateTime(r.GetOrdinal("SessionStarted")).ToUtcOffset(),
+                r.GetDateTime(r.GetOrdinal("Created")).ToUtcOffset(),
+                r.GetDateTime(r.GetOrdinal("Expires")).ToUtcOffset(),
                 r.IsDBNull(r.GetOrdinal("CreatedByIp")) ? null : r.GetString(r.GetOrdinal("CreatedByIp"))),
             cancellationToken);
     }

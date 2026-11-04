@@ -165,8 +165,8 @@ internal sealed class MessageTemplateService : IMessageTemplateService
             t.MessageType,
             t.PayloadJson,
             t.PolicyRefId,
-            t.CreatedAt,
-            t.UpdatedAt
+            t.CreatedAt.ToUtcOffset(),
+            t.UpdatedAt.ToUtcOffset()
         );
     }
 }

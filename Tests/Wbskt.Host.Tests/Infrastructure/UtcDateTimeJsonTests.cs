@@ -54,6 +54,36 @@ public sealed class UtcDateTimeJsonTests
     }
 
     [Fact]
+    public void An_offset_time_is_written_in_utc_with_a_z()
+    {
+        var value = new DateTimeOffset(2026, 10, 4, 18, 0, 15, TimeSpan.FromHours(5.5));
+
+        var json = JsonSerializer.Serialize(value, WbsktJsonExtensions.Apply(new JsonSerializerOptions()));
+
+        Assert.Equal("\"2026-10-04T12:30:15Z\"", json);
+    }
+
+    [Theory]
+    [InlineData("\"2026-10-04T12:30:15Z\"")]
+    [InlineData("\"2026-10-04T18:00:15+05:30\"")]
+    public void An_offset_time_in_a_request_is_read_as_utc(string json)
+    {
+        var value = JsonSerializer.Deserialize<DateTimeOffset>(json, WbsktJsonExtensions.Apply(new JsonSerializerOptions()));
+
+        Assert.Equal(TimeSpan.Zero, value.Offset);
+        Assert.Equal(new DateTimeOffset(2026, 10, 4, 12, 30, 15, TimeSpan.Zero), value);
+    }
+
+    [Fact]
+    public void A_time_read_from_the_database_becomes_a_utc_offset()
+    {
+        var value = Wbskt.Models.UtcTime.ToUtcOffset(FromSql);
+
+        Assert.Equal(TimeSpan.Zero, value.Offset);
+        Assert.Equal(DateTime.SpecifyKind(FromSql, DateTimeKind.Utc), value.UtcDateTime);
+    }
+
+    [Fact]
     public void Controllers_and_minimal_endpoints_both_get_it()
     {
         var services = new ServiceCollection();
