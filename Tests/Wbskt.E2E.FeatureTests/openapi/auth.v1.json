@@ -737,17 +737,6 @@
         ],
         "type": "object"
       },
-      "SetMemberSuspendedRequest": {
-        "properties": {
-          "isSuspended": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "isSuspended"
-        ],
-        "type": "object"
-      },
       "SignUpChallengeResponse": {
         "properties": {
           "challenge": {
@@ -762,8 +751,7 @@
             ]
           },
           "expiresAt": {
-            "format": "date-time",
-            "type": "string"
+            "format": "date-time"
           }
         },
         "required": [
@@ -854,6 +842,20 @@
         },
         "required": [
           "name"
+        ],
+        "type": "object"
+      },
+      "UpdateMemberRequest": {
+        "properties": {
+          "isSuspended": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        },
+        "required": [
+          "isSuspended"
         ],
         "type": "object"
       },
@@ -1864,54 +1866,6 @@
             }
           },
           {
-            "in": "query",
-            "name": "skip",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "take",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "top",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "fromEventId",
-            "schema": {
-              "format": "int64",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
             "in": "path",
             "name": "tenantRef",
             "required": true,
@@ -2277,54 +2231,6 @@
             }
           },
           {
-            "in": "query",
-            "name": "skip",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "take",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "top",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "fromEventId",
-            "schema": {
-              "format": "int64",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
             "in": "path",
             "name": "tenantRef",
             "required": true,
@@ -2504,54 +2410,6 @@
             }
           },
           {
-            "in": "query",
-            "name": "skip",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "take",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "top",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "fromEventId",
-            "schema": {
-              "format": "int64",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
             "in": "path",
             "name": "tenantRef",
             "required": true,
@@ -2610,6 +2468,56 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "Management"
+        ]
+      },
+      "patch": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "tenantRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMemberRequest"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMemberRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMemberRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "OK"
@@ -2866,7 +2774,7 @@
         ]
       }
     },
-    "/api/v1/tenants/{tenantRef}/members/{userRef}/permissions/{slug}": {
+    "/api/v1/tenants/{tenantRef}/members/{userRef}/permissions/{permissionSlug}": {
       "delete": {
         "parameters": [
           {
@@ -2880,7 +2788,7 @@
           },
           {
             "in": "path",
-            "name": "slug",
+            "name": "permissionSlug",
             "required": true,
             "schema": {
               "type": "string"
@@ -3080,58 +2988,6 @@
         ]
       }
     },
-    "/api/v1/tenants/{tenantRef}/members/{userRef}/suspended": {
-      "put": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "userRef",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "tenantRef",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetMemberSuspendedRequest"
-              }
-            },
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetMemberSuspendedRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetMemberSuspendedRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "tags": [
-          "Management"
-        ]
-      }
-    },
     "/api/v1/tenants/{tenantRef}/permissions": {
       "get": {
         "parameters": [
@@ -3147,54 +3003,6 @@
             "name": "limit",
             "schema": {
               "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "skip",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "take",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "top",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "fromEventId",
-            "schema": {
-              "format": "int64",
               "pattern": "^-?(?:0|[1-9]\\d*)$",
               "type": [
                 "integer",
@@ -3254,54 +3062,6 @@
             "name": "limit",
             "schema": {
               "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "skip",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "take",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "top",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "fromEventId",
-            "schema": {
-              "format": "int64",
               "pattern": "^-?(?:0|[1-9]\\d*)$",
               "type": [
                 "integer",
@@ -3594,7 +3354,7 @@
         ]
       }
     },
-    "/api/v1/tenants/{tenantRef}/roles/{roleRef}/permissions/{slug}": {
+    "/api/v1/tenants/{tenantRef}/roles/{roleRef}/permissions/{permissionSlug}": {
       "delete": {
         "parameters": [
           {
@@ -3608,7 +3368,7 @@
           },
           {
             "in": "path",
-            "name": "slug",
+            "name": "permissionSlug",
             "required": true,
             "schema": {
               "type": "string"
@@ -3798,54 +3558,6 @@
             "name": "limit",
             "schema": {
               "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "skip",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "take",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "top",
-            "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "fromEventId",
-            "schema": {
-              "format": "int64",
               "pattern": "^-?(?:0|[1-9]\\d*)$",
               "type": [
                 "integer",
