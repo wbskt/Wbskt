@@ -92,6 +92,15 @@ DROP PROCEDURE IF EXISTS dbo.Client_Verify;
 GO
 /*
 --------------------------------------------------------------------------------------
+Pre-Deployment Script: drop RegistrationPolicy_Disable
+--------------------------------------------------------------------------------------
+POST /registration-policies/{ref}/disable went with #352: PATCH sets isEnabled both ways. Nothing
+calls the procedure, and DropObjectsNotInSource is off, so it is dropped here as Client_Verify is.
+*/
+DROP PROCEDURE IF EXISTS dbo.RegistrationPolicy_Disable;
+GO
+/*
+--------------------------------------------------------------------------------------
 Pre-Deployment Script: one ScheduledFires row per (WorkflowDefinitionId, TriggerNodeId)
 --------------------------------------------------------------------------------------
 The table gains UQ_ScheduledFires_WorkflowDefinitionId_TriggerNodeId. Registering the same version
