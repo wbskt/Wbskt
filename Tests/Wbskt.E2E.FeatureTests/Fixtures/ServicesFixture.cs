@@ -24,7 +24,7 @@ namespace Wbskt.E2E.FeatureTests.Fixtures;
 /// <c>client.As(token)</c> speaks for one user; every endpoint has an <c>XAsync</c> method that returns
 /// the contract type and throws <see cref="ApiException"/> on a failure status, and an <c>XRawAsync</c>
 /// twin for a scenario that asserts on the status. What is left here is arrangement: creating users,
-/// workspaces and devices, and waiting for what a scenario needs to observe.
+/// workspaces and clients, and waiting for what a scenario needs to observe.
 /// </para>
 ///
 /// <para>
@@ -72,10 +72,10 @@ public sealed class ServicesFixture : IDisposable
     public bool EngineAvailable { get; }
 
     /// <summary>
-    /// A devices-only management host is reachable at DevicesBaseUrl (start-hosts.sh starts one).
+    /// A client-auth host is reachable at ClientAuthBaseUrl (start-hosts.sh starts one).
     /// The scenarios that exercise it skip without it.
     /// </summary>
-    public bool DevicesHostAvailable { get; }
+    public bool ClientAuthHostAvailable { get; }
 
     public ServicesFixture()
     {
@@ -96,7 +96,7 @@ public sealed class ServicesFixture : IDisposable
         // whose threads were all blocked here would never finish.
         HostsAvailable = Task.Run(() => ProbePublicHostsAsync()).GetAwaiter().GetResult();
         EngineAvailable = Task.Run(() => ProbeHostAsync(E2EConfig.WorkflowBaseUrl)).GetAwaiter().GetResult();
-        DevicesHostAvailable = Task.Run(() => ProbeHostAsync(E2EConfig.DevicesBaseUrl)).GetAwaiter().GetResult();
+        ClientAuthHostAvailable = Task.Run(() => ProbeHostAsync(E2EConfig.ClientAuthBaseUrl)).GetAwaiter().GetResult();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -150,7 +150,7 @@ public sealed class ServicesFixture : IDisposable
     /// <para>
     /// Only for scenarios about the seeded administrator or its tenant and Default Workspace
     /// themselves (the Auth folder). A scenario that just needs somewhere to publish workflows,
-    /// register devices or start runs wants <see cref="CreateIsolatedWorkspaceAsync"/>: the
+    /// register clients or start runs wants <see cref="CreateIsolatedWorkspaceAsync"/>: the
     /// Default Workspace is shared by every run of the suite and nothing in it is ever cleaned up.
     /// </para>
     /// </summary>
@@ -494,7 +494,7 @@ public sealed class ServicesFixture : IDisposable
     /// <summary>
     /// Registers a brand-new user and creates a workspace they own, for one scenario to arrange
     /// everything in. The user lands in a tenant of their own with the tenant's Admin role, so every
-    /// workspace-scoped operation a scenario arranges (policies, devices, workflow publish, runs,
+    /// workspace-scoped operation a scenario arranges (policies, clients, workflow publish, runs,
     /// integrations, event logs) is allowed.
     /// <para>
     /// This exists so scenarios never share the seeded Default Workspace (see
@@ -898,7 +898,7 @@ public sealed class ServicesFixture : IDisposable
     /// <summary>
     /// The runs of a workflow whose branch state contains <paramref name="marker"/>. A run's root
     /// branch keeps its trigger data under <c>trigger</c>, so a unique value sent in a webhook body or
-    /// device message identifies the runs that delivery started.
+    /// client message identifies the runs that delivery started.
     /// </summary>
     public async Task<IReadOnlyList<Guid>> ListRunsCarryingAsync(string token, Guid workspaceRef, Guid workflowRefId, string marker)
     {

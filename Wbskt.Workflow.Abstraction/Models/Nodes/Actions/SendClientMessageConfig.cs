@@ -15,7 +15,7 @@ public sealed record SendClientMessageConfig
     public System.Text.Json.JsonElement? Payload { get; init; } = null;
 
     /// <summary>
-    /// Wait for the device to acknowledge the command before moving on, leaving by "acked", "failed"
+    /// Wait for the client to acknowledge the command before moving on, leaving by "acked", "failed"
     /// or "timeout" instead of "default". Off by default, so existing workflows keep moving at once.
     /// </summary>
     [JsonPropertyName("awaitAck")]

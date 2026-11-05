@@ -4,7 +4,7 @@ using Wbskt.Protocol;
 namespace Wbskt.Host.Tests.ClientSdk;
 
 /// <summary>
-/// The device contract is decided in one place. These pin the decisions every host now shares: a
+/// The client contract is decided in one place. These pin the decisions every host now shares: a
 /// reserved type is reserved in any case, and the records the SDK and the management host exchange
 /// keep their wire names.
 /// </summary>
@@ -24,10 +24,10 @@ public sealed class ProtocolRulesTests
     [InlineData("capabilities")]
     [InlineData("Capabilities")]
     [InlineData("STATE.REPORT")]
-    public void The_types_the_server_reads_from_devices_cannot_be_sent_to_one(string type)
+    public void The_types_the_server_reads_from_clients_cannot_be_sent_to_one(string type)
     {
         Assert.False(MessageTypes.IsSystem(type));
-        Assert.NotNull(DeviceMessageRules.FindViolation(type, "{}"));
+        Assert.NotNull(ClientMessageRules.FindViolation(type, "{}"));
     }
 
     [Theory]
@@ -35,14 +35,14 @@ public sealed class ProtocolRulesTests
     [InlineData("system.reboot")]
     public void An_ordinary_type_may_be_sent(string type)
     {
-        Assert.Null(DeviceMessageRules.FindViolation(type, "{}"));
+        Assert.Null(ClientMessageRules.FindViolation(type, "{}"));
     }
 
     [Fact]
     public void A_payload_is_capped_at_half_a_socket_message()
     {
-        Assert.Equal(DeviceProtocol.MaxMessageBytes / 2, DeviceMessageRules.MaxPayloadChars);
-        Assert.NotNull(DeviceMessageRules.FindViolation("led.set", new string('x', DeviceMessageRules.MaxPayloadChars + 1)));
+        Assert.Equal(ClientProtocol.MaxMessageBytes / 2, ClientMessageRules.MaxPayloadChars);
+        Assert.NotNull(ClientMessageRules.FindViolation("led.set", new string('x', ClientMessageRules.MaxPayloadChars + 1)));
     }
 
     [Fact]

@@ -2,7 +2,7 @@ namespace Wbskt.Protocol;
 
 /// <summary>
 /// A token bucket: <see cref="Burst"/> tokens to start with, refilled at <see cref="PerSecond"/>.
-/// The gateway uses one to drop a device's excess messages; the SDKs use one to pace their own sends
+/// The gateway uses one to drop a client's excess messages; the SDKs use one to pace their own sends
 /// below that budget. It refills from elapsed time rather than a timer and is not thread-safe.
 /// </summary>
 public sealed class TokenBucket

@@ -1,4 +1,4 @@
-"""Where a device keeps the credentials it got when it registered."""
+"""Where a client keeps the credentials it got when it registered."""
 
 import json
 import os
@@ -19,15 +19,15 @@ class Storage(Protocol):
 
 
 class FileStorage:
-    """Credentials in a JSON file, so the device registers once and signs in with them afterwards."""
+    """Credentials in a JSON file, so the client registers once and signs in with them afterwards."""
 
     def __init__(self, path) -> None:
         self.path = Path(path)
 
     @classmethod
-    def for_device(cls, device_name: str) -> "FileStorage":
+    def for_client(cls, client_name: str) -> "FileStorage":
         """``wbskt/<name>.json`` in the user's data folder (``~/.local/share`` on Linux)."""
-        safe = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", device_name)
+        safe = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", client_name)
         return cls(_data_dir() / "wbskt" / f"{safe}.json")
 
     def load(self) -> Credentials:
@@ -55,7 +55,7 @@ class FileStorage:
 
 
 class MemoryStorage:
-    """Credentials held in memory only: for tests, or a device that is given them some other way."""
+    """Credentials held in memory only: for tests, or a client that is given them some other way."""
 
     def __init__(self, client_ref_id: Optional[str] = None, secret: Optional[str] = None) -> None:
         self._creds: Credentials = (client_ref_id, secret)

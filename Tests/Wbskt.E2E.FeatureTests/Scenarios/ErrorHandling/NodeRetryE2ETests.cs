@@ -68,22 +68,22 @@ public sealed class NodeRetryE2ETests(ServicesFixture fixture)
         // 2. Auth and setup
         var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, "DeviceRetryTest");
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, "ClientRetryTest");
         
         var storage = new InMemoryClientStorage(clientRefId, secret);
         var clientConfig = new ClientConfig(
             BaseApiUrl: E2EConfig.ManagementBaseUrl,
             BaseSocketUrl: E2EConfig.SocketWsBaseUrl,
-            DeviceName: "DeviceRetryTest",
+            ClientName: "ClientRetryTest",
             PolicyPin: null);
 
         var workflowRefId = Guid.NewGuid();
-        var deviceRefStr = clientRefId.ToString();
+        var clientRefStr = clientRefId.ToString();
         var builder = new WorkflowBuilder($"E2E-Retry-{workflowRefId:N}", workflowRefId)
-            .AddClientTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
+            .AddClientTrigger(clientRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
             .AddWebhook("POST", url, null, webhook => 
             {
-                webhook.OnSuccess(b => b.AddClientMessage(deviceRefStr, "WebhookSucceeded", "Webhook Succeeded"));
+                webhook.OnSuccess(b => b.AddClientMessage(clientRefStr, "WebhookSucceeded", "Webhook Succeeded"));
                 webhook.OnError(b => b.AddFailRun("Webhook failed permanently"));
             });
 

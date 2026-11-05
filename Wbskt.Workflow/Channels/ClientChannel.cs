@@ -6,7 +6,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Channels;
 
-/// <summary>A message a client device sent. Keys: <c>client:{clientRef}:{type}</c>, with <c>*</c> as the any-type trigger.</summary>
+/// <summary>A message a client client sent. Keys: <c>client:{clientRef}:{type}</c>, with <c>*</c> as the any-type trigger.</summary>
 public sealed class ClientChannel : TriggerChannel
 {
     public const string Name = "client";
@@ -18,7 +18,7 @@ public sealed class ClientChannel : TriggerChannel
     public static string Key(string clientRef, string type) => $"{Name}:{clientRef}:{type}";
 
     // The platform's own messages (state.report, capabilities) reach only the triggers that name
-    // them: an any-type trigger means "this device's messages", and would otherwise run on every
+    // them: an any-type trigger means "this client's messages", and would otherwise run on every
     // reconnect and state change.
     public static InboundEvent Event(ClientMessage message, string inboundEventId) => new(
         Name,

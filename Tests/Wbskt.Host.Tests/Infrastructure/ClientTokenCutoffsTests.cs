@@ -6,7 +6,7 @@ using Wbskt.Infrastructure.Security;
 namespace Wbskt.Host.Tests.Infrastructure;
 
 /// <summary>
-/// The per-device cutoffs the management host writes and the socket host reads. Redis is mocked, so
+/// The per-client cutoffs the management host writes and the socket host reads. Redis is mocked, so
 /// these pin down what is written and how a stored cutoff is read; the raise-only rotation script
 /// runs in Redis and is exercised end to end.
 /// </summary>
@@ -58,7 +58,7 @@ public sealed class ClientTokenCutoffsTests
     [Theory]
     [InlineData(-60, true)]
     [InlineData(-1, true)]
-    [InlineData(0, false)] // the cutoff's own second: the device that signed in straight after
+    [InlineData(0, false)] // the cutoff's own second: the client that signed in straight after
     [InlineData(60, false)]
     public async Task A_token_is_refused_when_issued_before_the_stored_cutoff(int issuedOffsetSeconds, bool refused)
     {
@@ -71,7 +71,7 @@ public sealed class ClientTokenCutoffsTests
     }
 
     [Fact]
-    public async Task A_revoked_device_is_refused_whenever_its_token_was_issued()
+    public async Task A_revoked_client_is_refused_whenever_its_token_was_issued()
     {
         var (cutoffs, database) = Create();
         Stored(database, long.MaxValue);
@@ -81,7 +81,7 @@ public sealed class ClientTokenCutoffsTests
     }
 
     [Fact]
-    public async Task A_device_with_no_cutoff_is_accepted()
+    public async Task A_client_with_no_cutoff_is_accepted()
     {
         var (cutoffs, database) = Create();
         database.Setup(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>())).ReturnsAsync(RedisValue.Null);
@@ -91,7 +91,7 @@ public sealed class ClientTokenCutoffsTests
 
     /// <summary>
     /// Commands against a disconnected multiplexer wait out their timeout, and the read sits on every
-    /// device connect, so a Redis that is down is not asked at all and the answer is "don't know".
+    /// client connect, so a Redis that is down is not asked at all and the answer is "don't know".
     /// </summary>
     [Fact]
     public async Task A_disconnected_Redis_is_not_asked()

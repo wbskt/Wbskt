@@ -1,7 +1,7 @@
-# Releasing the device SDKs
+# Releasing the client SDKs
 
-The three SDKs ship separately, each from a tag. They are on 0.9 betas until the v1 device protocol
-(`Device.Protocol.md`) is declared stable; 1.0.0 is that promise.
+The three SDKs ship separately, each from a tag. They are on 0.9 betas until the v1 client protocol
+(`Client.Protocol.md`) is declared stable; 1.0.0 is that promise.
 
 | SDK | Package | Version lives in | Tag | Workflow |
 |---|---|---|---|---|

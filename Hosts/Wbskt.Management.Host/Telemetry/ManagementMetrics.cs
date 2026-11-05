@@ -6,7 +6,7 @@ using Wbskt.Infrastructure.Telemetry;
 namespace Wbskt.Management.Host.Telemetry;
 
 /// <summary>
-/// The management host's own counters: device registrations, device logins and console commands, each
+/// The management host's own counters: client registrations, client logins and console commands, each
 /// by outcome, the ticks of its periodic workers, and the deleted workspaces its sweep had to retire. The outcome is <c>success</c> or the error code, a
 /// fixed set, so it is safe as a label; nothing caller-supplied (a PIN, a client ref) ever is.
 /// </summary>
@@ -19,15 +19,15 @@ public sealed class ManagementMetrics : IWorkerTickMetrics, IDisposable
     {
         _meter = new Meter(MeterName);
 
-        Registrations = _meter.CreateCounter<long>("wbskt_management_device_registrations_total");
-        DeviceLogins = _meter.CreateCounter<long>("wbskt_management_device_logins_total");
+        Registrations = _meter.CreateCounter<long>("wbskt_management_client_registrations_total");
+        ClientLogins = _meter.CreateCounter<long>("wbskt_management_client_logins_total");
         Commands = _meter.CreateCounter<long>("wbskt_management_commands_total");
         WorkerTicks = _meter.CreateCounter<long>("wbskt_management_worker_ticks_total");
         WorkspacesRetiredBySweep = _meter.CreateCounter<long>("wbskt_management_workspaces_retired_by_sweep_total");
     }
 
     public Counter<long> Registrations { get; }
-    public Counter<long> DeviceLogins { get; }
+    public Counter<long> ClientLogins { get; }
     public Counter<long> Commands { get; }
 
     /// <summary>Ticks of the periodic background workers, tagged <c>worker</c> and <c>outcome</c> (ok or failed).</summary>
@@ -41,7 +41,7 @@ public sealed class ManagementMetrics : IWorkerTickMetrics, IDisposable
 
     public void RecordRegistration(Result result) => Registrations.Add(1, Outcome(result));
 
-    public void RecordDeviceLogin(Result result) => DeviceLogins.Add(1, Outcome(result));
+    public void RecordClientLogin(Result result) => ClientLogins.Add(1, Outcome(result));
 
     public void RecordCommand(Result result) => Commands.Add(1, Outcome(result));
 

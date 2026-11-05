@@ -101,10 +101,10 @@ public class ControlNodeTests
     [Fact]
     public void ParallelForEachNode_deserialises_collection()
     {
-        var json = """{ "nodeId": "00000000-0000-0000-0000-000000000022", "kind": "control:parallelForEach", "name": "ParallelForEach", "ports": [], "config": { "collection": "$trigger.devices" } }""";
+        var json = """{ "nodeId": "00000000-0000-0000-0000-000000000022", "kind": "control:parallelForEach", "name": "ParallelForEach", "ports": [], "config": { "collection": "$trigger.clients" } }""";
         var node = JsonSerializer.Deserialize<BaseNode>(json, Options);
         var pfe = Assert.IsType<ParallelForEachNode>(node);
-        Assert.Equal("$trigger.devices", pfe.Config!.Collection);
+        Assert.Equal("$trigger.clients", pfe.Config!.Collection);
     }
 
     [Fact]

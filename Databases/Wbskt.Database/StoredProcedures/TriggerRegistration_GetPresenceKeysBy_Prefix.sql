@@ -1,5 +1,5 @@
 -- The presence triggers a client's connect or disconnect should park a check for. Scoped to the
--- client's own workspace: a workflow cannot watch another workspace's device by knowing its id.
+-- client's own workspace: a workflow cannot watch another workspace's client by knowing its id.
 CREATE PROCEDURE dbo.TriggerRegistration_GetPresenceKeysBy_Prefix
     @KeyPrefix   NVARCHAR(200),
     @WorkspaceId INT

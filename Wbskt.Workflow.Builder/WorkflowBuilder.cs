@@ -75,7 +75,7 @@ public sealed class WorkflowBuilder
         nodeId = id;
         _nodes.Add(new ClientTriggerNode {
             NodeId = id,
-            Name = name ?? "Device Trigger",
+            Name = name ?? "Client Trigger",
             Ports = [new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
             Config = new ClientTriggerConfig { ClientRef = clientRef, Type = type, CorrelationKey = correlationExpression, ConcurrencyPolicy = concurrencyPolicy, Filter = filter, HoldSeconds = holdSeconds } });
         _head = (id, PortNames.Default);
@@ -88,7 +88,7 @@ public sealed class WorkflowBuilder
         nodeId = id;
         _nodes.Add(new ClientPresenceTriggerNode {
             NodeId = id,
-            Name = name ?? "Device Presence Trigger",
+            Name = name ?? "Client Presence Trigger",
             Ports = [new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
             Config = new ClientPresenceTriggerConfig { ClientRef = clientRef, State = state, ForSeconds = forSeconds } });
         _head = (id, PortNames.Default);
@@ -155,7 +155,7 @@ public sealed class WorkflowBuilder
 
     /// <summary>
     /// Raises a toast to everyone watching the workspace. Unlike <see cref="AddClientMessage"/> this
-    /// has no device target - it goes to the workspace's dashboard connections.
+    /// has no client target - it goes to the workspace's dashboard connections.
     /// </summary>
     public WorkflowBuilder AddToast(string title, string message, string? name = null)
     {

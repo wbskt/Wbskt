@@ -86,7 +86,7 @@ public sealed class TriggerRegistrationCacheTests
     public async Task Clear_evicts_an_empty_answer_so_a_newly_published_trigger_is_seen()
     {
         // The case that matters: the key had no registrations, a workflow was then published on it, and
-        // the announcement arrived. Serving the old "nothing listens" would drop the device's messages.
+        // the announcement arrived. Serving the old "nothing listens" would drop the client's messages.
         var source = new CountingSource();
         using var cache = CreateCache();
         await cache.LoadUnlessKnownEmptyAsync(Channel, Key, source.LoadAsync, CancellationToken.None);

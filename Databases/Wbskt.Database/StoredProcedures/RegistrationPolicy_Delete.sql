@@ -1,9 +1,9 @@
 -- Deletes a policy that no longer has clients. Message templates pinned to it are unpinned, so they
--- stay in the workspace for every device; its event-log rows stay, under its RefId.
+-- stay in the workspace for every client; its event-log rows stay, under its RefId.
 --
 -- Scoped by workspace. Returns one row: ClientCount, the clients still enrolled through it (any
 -- status), and Deleted. A policy with clients is left as it is (Deleted 0, ClientCount > 0); one that
--- is not in @WorkspaceId returns Deleted 0, ClientCount 0. The policy row is locked first, so a device
+-- is not in @WorkspaceId returns Deleted 0, ClientCount 0. The policy row is locked first, so a client
 -- registering with its PIN either lands before the count (and refuses the delete) or fails after it.
 CREATE PROCEDURE dbo.RegistrationPolicy_Delete
     @Id          INT,

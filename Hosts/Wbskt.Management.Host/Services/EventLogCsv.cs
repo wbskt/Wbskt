@@ -24,7 +24,7 @@ public static class EventLogCsv
                 .Append(entry.ClientRefId?.ToString()).Append(',')
                 .Append(entry.PolicyRefId?.ToString()).Append(',')
                 .Append(entry.WorkflowRefId?.ToString()).Append(',')
-                // The data holds names devices and people chose, so it is guarded like any other field.
+                // The data holds names clients and people chose, so it is guarded like any other field.
                 .Append(ClientReadingsCsv.Field(entry.EventData))
                 .Append("\r\n");
         }

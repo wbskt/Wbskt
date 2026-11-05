@@ -31,8 +31,8 @@ copy the inbound payload into the branch as `trigger` and stamp `triggeredAt`.
 
 | Kind | Config | Starts a run when |
 |---|---|---|
-| `trigger:client` | `clientRef`, `type` (`*` for any), `correlationKey`, `concurrencyPolicy` (default `Queue`), `filter`, `holdSeconds` | A device sends a message of that type. With `holdSeconds` > 0 it fires only once `filter` has kept matching for that long (needs a filter; at most 24 h), and stays quiet until a message stops matching. |
-| `trigger:clientPresence` | `clientRef`, `state` (`Online`/`Offline`), `forSeconds` (default 60, max 24 h), `correlationKey`, `concurrencyPolicy` | A device has stayed in that state for `forSeconds`. |
+| `trigger:client` | `clientRef`, `type` (`*` for any), `correlationKey`, `concurrencyPolicy` (default `Queue`), `filter`, `holdSeconds` | A client sends a message of that type. With `holdSeconds` > 0 it fires only once `filter` has kept matching for that long (needs a filter; at most 24 h), and stays quiet until a message stops matching. |
+| `trigger:clientPresence` | `clientRef`, `state` (`Online`/`Offline`), `forSeconds` (default 60, max 24 h), `correlationKey`, `concurrencyPolicy` | A client has stayed in that state for `forSeconds`. |
 | `trigger:schedule` | `cron`, `correlationKey` | The cron expression fires (UTC). |
 | `trigger:webhook` | `path`, `correlationKey`, `concurrencyPolicy`, `filter`, `secret` | `POST /api/callbacks/webhook/{workspaceRef}/{path}` on the management host. Only POST. With a `secret`, the caller must send it in `X-Wbskt-Secret`. |
 | `trigger:manual` | `description`, `inputs` | A user starts it from the console or API (`POST .../workflows/{workflowRef}/runs`, with an optional idempotency key). `inputs` is `[{ name, label?, default? }]`: what Run now asks for before starting, each read as `$trigger.body.NAME`. One the caller leaves out of the payload takes its `default` (any JSON value), on Run now and on a parent's sub-workflow step alike. Names are 1 to 64 letters, digits or underscores, starting with a letter or underscore (`MANUAL_INPUT_NAME_INVALID`), unique ignoring case (`MANUAL_INPUT_NAME_DUPLICATE`), and not `parentRunRefId`, `correlationKey` or `depth`, which the engine writes itself (`MANUAL_INPUT_NAME_RESERVED`). |
@@ -60,7 +60,7 @@ Action nodes accept `retry` and `onFailure` ([§6](#6-retries), [§7](#7-failure
 
 | Kind | Credits | Ports | Config and behaviour |
 |---|---|---|---|
-| `action:clientMessage` | 1.0 | `default`; or `acked`, `failed`, `timeout` with `awaitAck` | `clientRef` (the device's RefId), `type`, `payload` (JSON), `awaitAck`, `ackTimeout` (default 30 s, max 24 h). With `awaitAck` the step parks, then sends the command, and leaves by what became of it; the outcome lands in `command`. A command to an offline, registered device waits in its queue until it connects or the ack timeout passes, so the step leaves by `timeout` if the device stays away; a full queue or an inactive device counts as `failed` at once. |
+| `action:clientMessage` | 1.0 | `default`; or `acked`, `failed`, `timeout` with `awaitAck` | `clientRef` (the client's RefId), `type`, `payload` (JSON), `awaitAck`, `ackTimeout` (default 30 s, max 24 h). With `awaitAck` the step parks, then sends the command, and leaves by what became of it; the outcome lands in `command`. A command to an offline, registered client waits in its queue until it connects or the ack timeout passes, so the step leaves by `timeout` if the client stays away; a full queue or an inactive client counts as `failed` at once. |
 | `action:toast` | 0.5 | `default` | `title`, `message`. A notification to everyone watching the workspace in the console. |
 | `action:webhook` | 5.0 | `default`, `error` | `url`, `method`, `headers` (max 20), `body`, `timeoutSeconds` (default 30, max 60), optional `integrationRef` (an HTTP-auth integration). Writes `status`, `body` and, for a JSON reply, `json`. Responses over 256 KB fail. Redirects are not followed, private and reserved addresses are refused, and an integration's credential is only sent to its own origin. 5xx, timeouts and network errors are retryable; 4xx is not. |
 | `action:email` | 5.0 | `default` | `integrationRef` (SMTP), `to`, `subject`, `body`. |
@@ -125,8 +125,8 @@ patches it. Keys nodes write: `trigger`, `triggeredAt`, `item`, `index`, `status
 
 Each run has a correlation key. A trigger's `correlationKey` is either a `$trigger.<path>` into the
 payload or a constant. The concurrency policy groups runs by workflow and correlation key. With no
-`correlationKey`, the trigger's channel supplies one: device and message type for a device trigger,
-device and state for presence, the path for a webhook. So a policy always has a group to apply to.
+`correlationKey`, the trigger's channel supplies one: client and message type for a client trigger,
+client and state for presence, the path for a webhook. So a policy always has a group to apply to.
 
 ### 4.2 Concurrency policies
 

@@ -15,8 +15,8 @@ namespace Wbskt.Infrastructure.Middlewares;
 /// Partitioned on the user, not the client address, so colleagues behind one NAT do not share a budget,
 /// and one tenant's script or leaked token is throttled without touching anyone else. Not on the tenant:
 /// a user token names only its user (#306), and the tenant a request acts in is known only once its
-/// workspace is resolved, which is after this. Device tokens and anonymous calls are not counted here:
-/// devices have their own limits on the socket host and the device endpoints, and a fleet reconnecting
+/// workspace is resolved, which is after this. Client tokens and anonymous calls are not counted here:
+/// clients have their own limits on the socket host and the client endpoints, and a fleet reconnecting
 /// after a restart is legitimate traffic; the anonymous edges have their per-IP policies.
 /// </remarks>
 public sealed class UserRateLimiter : IDisposable

@@ -211,7 +211,7 @@ public sealed class AccountSecurityTests
 
     /// <summary>
     /// The access token goes too. Without it, a session ended from the list kept working on that
-    /// device until its access token ran out.
+    /// client until its access token ran out.
     /// </summary>
     [Fact]
     public async Task Ending_your_own_session_ends_its_access_token_too()

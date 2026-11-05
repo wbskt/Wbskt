@@ -26,7 +26,7 @@ public sealed class ClientDeletedHandler : IConsumer<ClientDeletedEvent>
 
 /// <summary>
 /// A rotated secret: refuse tokens issued before the rotation and close the connection, which was
-/// opened with one of them. The device reconnects once it signs in with the new secret.
+/// opened with one of them. The client reconnects once it signs in with the new secret.
 /// </summary>
 public sealed class ClientSecretRotatedHandler : IConsumer<ClientSecretRotatedEvent>
 {
@@ -48,7 +48,7 @@ public sealed class ClientSecretRotatedHandler : IConsumer<ClientSecretRotatedEv
 }
 
 /// <summary>
-/// A status change: approved again, the device may sign in afresh; any other status refuses every
+/// A status change: approved again, the client may sign in afresh; any other status refuses every
 /// token it holds and closes its connection.
 /// </summary>
 public sealed class ClientStatusChangedHandler : IConsumer<ClientStatusChangedEvent>

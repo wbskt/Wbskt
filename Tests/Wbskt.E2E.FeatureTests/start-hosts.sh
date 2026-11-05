@@ -10,8 +10,8 @@
 # Extra host configuration passes through the environment, e.g.
 #   RateLimiting__Authentication__PermitLimit=10 Tests/Wbskt.E2E.FeatureTests/start-hosts.sh auth
 #
-# "devices" is a second management host serving only device registration and login (Host:Role
-# Devices), on its own ports, as the devices container does in deploy/compose.
+# "client-auth" is a second management host serving only client registration and login (Host:Role
+# ClientAuth), on its own ports, as the client-auth container does in deploy/compose.
 #
 # Logs and pid files go to $E2E_HOST_LOGS (default: e2e-hosts/ at the repo root).
 
@@ -24,35 +24,35 @@ mkdir -p "$logs"
 declare -A projects=(
   [auth]=Hosts/Wbskt.Auth.Host
   [management]=Hosts/Wbskt.Management.Host
-  [devices]=Hosts/Wbskt.Management.Host
+  [client-auth]=Hosts/Wbskt.Management.Host
   [gateway-ws]=Hosts/Wbskt.Gateway.WebSocket.Host
   [engine]=Hosts/Wbskt.Workflow.Engine.Host
 )
 # The plain-HTTP dev port of each host, for the liveness probe.
-declare -A ports=([auth]=5000 [management]=5010 [devices]=5015 [gateway-ws]=5020 [engine]=5030)
+declare -A ports=([auth]=5000 [management]=5010 [client-auth]=5015 [gateway-ws]=5020 [engine]=5030)
 # Per-service settings on top of appsettings.Development.json, as space-separated KEY=VALUE pairs.
 declare -A settings=(
-  [devices]="Host__Role=Devices Kestrel__Endpoints__Http__Url=http://localhost:5015 Kestrel__Endpoints__Https__Url=https://localhost:7015"
+  [client-auth]="Host__Role=ClientAuth Kestrel__Endpoints__Http__Url=http://localhost:5015 Kestrel__Endpoints__Https__Url=https://localhost:7015"
 )
 
-# Management and devices sign device tokens with one key, as both read MANAGEMENT_JWT_SIGNING_KEY in
+# Management and client-auth sign client tokens with one key, as both read MANAGEMENT_JWT_SIGNING_KEY in
 # deploy/compose. Left unset, each would generate its own, and the WebSocket gateway, which trusts only
-# management's JWKS, would refuse every token devices issues. Kept in a file so restarting one of
+# management's JWKS, would refuse every token client-auth issues. Kept in a file so restarting one of
 # them alone keeps the key the other is using.
 if [[ -z "${Jwt__SigningKey:-}" ]]; then
   key_file="$logs/management-signing-key"
   if [[ ! -s "$key_file" ]]; then
     openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt | base64 -w0 > "$key_file"
   fi
-  device_token_key="Jwt__SigningKey=$(cat "$key_file")"
-  settings[management]="$device_token_key"
-  settings[devices]+=" $device_token_key"
+  client_token_key="Jwt__SigningKey=$(cat "$key_file")"
+  settings[management]="$client_token_key"
+  settings[client-auth]+=" $client_token_key"
 fi
 
 if [[ $# -gt 0 ]]; then
   services=("$@")
 else
-  services=(auth management devices gateway-ws engine)
+  services=(auth management client-auth gateway-ws engine)
   for project in $(printf '%s\n' "${projects[@]}" | sort -u); do
     dotnet build "$root/$project" --nologo -v q
   done

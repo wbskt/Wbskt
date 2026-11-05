@@ -23,7 +23,7 @@ internal static class PublicCallbackPolicy
 /// <summary>
 /// How the public callbacks are throttled. A webhook's budget belongs to its target, the workspace
 /// and path, not to the address it comes from: LoRaWAN network servers (The Things Network,
-/// ChirpStack) and vendor clouds forward every device's uplink from a few shared addresses, so a
+/// ChirpStack) and vendor clouds forward every client's uplink from a few shared addresses, so a
 /// per-IP budget turned one busy fleet, or two unrelated workspaces behind the same forwarder, into
 /// lost readings. The address keeps a much higher ceiling across every callback, as flood protection
 /// and to bound how fast one caller can try paths. A wake token names one parked run, so wakes stay

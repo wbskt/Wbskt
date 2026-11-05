@@ -7,16 +7,16 @@ internal sealed class ConnectionManager : IConnectionManager
     internal const string SupersededDescription = "Superseded by a newer connection.";
 
     private readonly ILogger<ConnectionManager> _logger;
-    private readonly ConcurrentDictionary<Guid, IDeviceConnection> _connections = new();
+    private readonly ConcurrentDictionary<Guid, IClientConnection> _connections = new();
 
     public ConnectionManager(ILogger<ConnectionManager> logger)
     {
         _logger = logger;
     }
 
-    public void Register(Guid clientRefId, IDeviceConnection connection)
+    public void Register(Guid clientRefId, IClientConnection connection)
     {
-        IDeviceConnection? replaced = null;
+        IClientConnection? replaced = null;
         _connections.AddOrUpdate(clientRefId, connection, (_, existing) =>
         {
             replaced = existing;
@@ -25,14 +25,14 @@ internal sealed class ConnectionManager : IConnectionManager
 
         if (replaced != null && !ReferenceEquals(replaced, connection))
         {
-            // A device that reconnects before this host noticed its old socket die (Wi-Fi drop, a
+            // A client that reconnects before this host noticed its old socket die (Wi-Fi drop, a
             // half-open TCP connection) is let in at once; the old connection is the stale one.
             _logger.LogInformation("Client {ClientRefId} connected again; closing its previous connection.", clientRefId);
             _ = replaced.RequestCloseAsync(DisconnectReason.Superseded, SupersededDescription);
         }
     }
 
-    public bool Unregister(Guid clientRefId, IDeviceConnection connection)
+    public bool Unregister(Guid clientRefId, IClientConnection connection)
     {
         return _connections.TryRemove(KeyValuePair.Create(clientRefId, connection));
     }
@@ -48,13 +48,13 @@ internal sealed class ConnectionManager : IConnectionManager
         return true;
     }
 
-    public IDeviceConnection? GetConnection(Guid clientRefId)
+    public IClientConnection? GetConnection(Guid clientRefId)
     {
         _connections.TryGetValue(clientRefId, out var connection);
         return connection;
     }
 
-    public IReadOnlyCollection<KeyValuePair<Guid, IDeviceConnection>> GetConnections()
+    public IReadOnlyCollection<KeyValuePair<Guid, IClientConnection>> GetConnections()
     {
         return _connections.ToArray();
     }

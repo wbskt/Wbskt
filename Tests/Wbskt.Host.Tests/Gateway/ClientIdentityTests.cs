@@ -11,7 +11,7 @@ public sealed class ClientIdentityTests
     private static readonly Guid ClientRefId = Guid.Parse("77777777-7777-7777-7777-777777777777");
 
     [Fact]
-    public void A_device_token_is_read_in_full()
+    public void A_client_token_is_read_in_full()
     {
         var principal = Principal(Claims());
 
@@ -20,7 +20,7 @@ public sealed class ClientIdentityTests
     }
 
     [Fact]
-    public void A_device_token_from_before_the_claims_contract_is_still_read()
+    public void A_client_token_from_before_the_claims_contract_is_still_read()
     {
         // #306: sub under its mapped name and the old "type" claim, for one token lifetime.
         Claim[] legacy =
@@ -47,7 +47,7 @@ public sealed class ClientIdentityTests
     }
 
     [Fact]
-    public void A_user_token_is_not_a_device()
+    public void A_user_token_is_not_a_client()
     {
         var claims = Claims().Select(c => c.Type == WbsktClaims.Type ? new Claim(WbsktClaims.Type, WbsktClaims.UserType) : c);
 

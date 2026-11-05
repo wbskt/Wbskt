@@ -140,7 +140,7 @@ internal sealed class ClientQueryService : IClientQueryService
         return Result<IReadOnlyCollection<ClientMessageTypeResponse>>.Success(response);
     }
 
-    // A device's payload is any JSON, stored as it arrived; one that does not parse is left out.
+    // A client's payload is any JSON, stored as it arrived; one that does not parse is left out.
     private static JsonElement? ParseSample(string? payload)
     {
         if (string.IsNullOrEmpty(payload))
@@ -184,7 +184,7 @@ internal sealed class ClientQueryService : IClientQueryService
         );
     }
 
-    /// <summary>Capabilities are stored as the device reported them, so their casing is not ours to rely on.</summary>
+    /// <summary>Capabilities are stored as the client reported them, so their casing is not ours to rely on.</summary>
     private static readonly JsonSerializerOptions CapabilitiesJson = new() { PropertyNameCaseInsensitive = true };
 
     private static ClientDetailResponse MapToDetailResponse(ClientDetail d)

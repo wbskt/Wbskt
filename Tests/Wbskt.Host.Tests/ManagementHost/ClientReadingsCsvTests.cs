@@ -16,7 +16,7 @@ public sealed class ClientReadingsCsvTests
         ]);
 
         Assert.Equal(
-            "name,deviceTime,receivedAt,value,late\r\n" +
+            "name,sentAt,receivedAt,value,late\r\n" +
             "temp,2026-10-04T06:07:08.009Z,2026-10-04T06:27:08.009Z,4.25,true\r\n" +
             "battery,2026-10-04T06:07:08.009Z,2026-10-04T06:07:08.009Z,87,false\r\n",
             csv);

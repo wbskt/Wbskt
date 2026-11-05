@@ -1,5 +1,5 @@
--- Commands sent to a device while it was offline, held until it connects or they expire. A row lives
--- only while its command waits: delivery, expiry, cancellation and the device being revoked or deleted
+-- Commands sent to a client while it was offline, held until it connects or they expire. A row lives
+-- only while its command waits: delivery, expiry, cancellation and the client being revoked or deleted
 -- each take it out, and what became of the command is in the event log.
 -- The actor columns carry who sent it, so the command published at delivery is attributed to them
 -- rather than to the background work that delivers it.
@@ -27,7 +27,7 @@ CREATE TABLE dbo.QueuedCommands (
 );
 GO
 
--- A device's queue, oldest first: delivery on connect, the per-device limit and the waiting list.
+-- A client's queue, oldest first: delivery on connect, the per-client limit and the waiting list.
 CREATE INDEX IX_QueuedCommands_ClientId
     ON dbo.QueuedCommands (ClientId, Id);
 GO

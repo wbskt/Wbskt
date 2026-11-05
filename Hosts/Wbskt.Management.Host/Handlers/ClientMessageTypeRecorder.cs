@@ -9,7 +9,7 @@ namespace Wbskt.Management.Host.Handlers;
 /// <summary>
 /// Keeps dbo.ClientMessageTypes current, so <c>GET clients/{ref}/message-types</c> is one indexed read
 /// rather than a scan of the event log. Messages come in batches and are summed per client and type
-/// first, so a chatty device costs one row write per batch, not one per message.
+/// first, so a chatty client costs one row write per batch, not one per message.
 /// </summary>
 public sealed class ClientMessageTypeRecorder : IConsumer<Batch<ClientMessageReceivedEvent>>
 {
@@ -33,7 +33,7 @@ public sealed class ClientMessageTypeRecorder : IConsumer<Batch<ClientMessageRec
     {
         // Types compare ignoring case everywhere, the table's key included; the latest spelling wins.
         return messages
-            .Where(m => DeviceMessageRules.IsValidType(m.Type))
+            .Where(m => ClientMessageRules.IsValidType(m.Type))
             .GroupBy(m => (m.ClientId, Type: m.Type.ToLowerInvariant()))
             .Select(g =>
             {

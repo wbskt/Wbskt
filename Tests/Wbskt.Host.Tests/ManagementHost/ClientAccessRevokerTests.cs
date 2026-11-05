@@ -11,7 +11,7 @@ namespace Wbskt.Host.Tests.ManagementHost;
 
 /// <summary>
 /// The rule the revoker exists for: the token cutoff is written before the event goes out, so a
-/// revoked device is refused even when the broker is down or a socket host misses the event.
+/// revoked client is refused even when the broker is down or a socket host misses the event.
 /// </summary>
 public sealed class ClientAccessRevokerTests
 {

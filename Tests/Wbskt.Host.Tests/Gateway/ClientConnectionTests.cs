@@ -5,7 +5,7 @@ using Wbskt.Gateway.WebSocket.Host.Infrastructure;
 
 namespace Wbskt.Host.Tests.Gateway;
 
-/// <summary>The WebSocket host's connection: what it does with the socket. The core is tested through <see cref="FakeDeviceConnection"/>.</summary>
+/// <summary>The WebSocket host's connection: what it does with the socket. The core is tested through <see cref="FakeClientConnection"/>.</summary>
 public sealed class ClientConnectionTests
 {
     [Fact]
@@ -39,7 +39,7 @@ public sealed class ClientConnectionTests
     }
 }
 
-/// <summary>The close codes are part of the device protocol: moving the reasons into Gateway.Core must not change them.</summary>
+/// <summary>The close codes are part of the client protocol: moving the reasons into Gateway.Core must not change them.</summary>
 public sealed class WebSocketCloseStatusesTests
 {
     [Theory]

@@ -17,11 +17,11 @@ BEGIN
         AVG(r.NumberValue) AS AvgValue,
         MAX(r.NumberValue) AS MaxValue
     FROM dbo.ClientReadings r
-    CROSS APPLY (SELECT DATEDIFF_BIG(SECOND, @FromUtc, r.DeviceTime) / @BucketSeconds AS Bucket) b
+    CROSS APPLY (SELECT DATEDIFF_BIG(SECOND, @FromUtc, r.SentAt) / @BucketSeconds AS Bucket) b
     WHERE r.ClientId = @ClientId
       AND r.Name = @Name
-      AND r.DeviceTime >= @FromUtc
-      AND r.DeviceTime < @ToUtc
+      AND r.SentAt >= @FromUtc
+      AND r.SentAt < @ToUtc
     GROUP BY b.Bucket
     ORDER BY b.Bucket;
 END

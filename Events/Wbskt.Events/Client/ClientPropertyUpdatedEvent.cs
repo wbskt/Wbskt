@@ -4,7 +4,7 @@ using Wbskt.Models;
 
 namespace Wbskt.Events.Client;
 
-[DeviceTraffic]
+[ClientTraffic]
 [EventCriticality(EventCriticality.Info)]
 [SignalRNotify("OnClientPropertyUpdatedEvent")]
 public sealed record ClientPropertyUpdatedEvent(Guid ClientRefId, int ClientId, int WorkspaceId, string PropertyName,

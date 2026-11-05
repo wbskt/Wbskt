@@ -30,7 +30,7 @@ string Env(string name) => Environment.GetEnvironmentVariable(name) ?? "";
 var config = new ClientConfig(
     Env("WBSKT_API_URL"),
     Env("WBSKT_SOCKET_URL"),
-    Env("WBSKT_DEVICE_NAME"),
+    Env("WBSKT_CLIENT_NAME"),
     Env("WBSKT_POLICY_PIN") is { Length: > 0 } pin ? pin : null);
 
 var webJson = new JsonSerializerOptions(JsonSerializerDefaults.Web);

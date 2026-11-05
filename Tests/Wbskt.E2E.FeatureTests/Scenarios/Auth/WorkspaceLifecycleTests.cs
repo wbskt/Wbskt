@@ -364,18 +364,18 @@ public sealed class WorkspaceLifecycleTests(ServicesFixture fixture)
 
     /// <summary>
     /// Deleting a workspace retires what the main database holds for it: its registration PIN stops
-    /// accepting devices and its existing devices can no longer sign in. That happens on the
+    /// accepting clients and its existing clients can no longer sign in. That happens on the
     /// management host in response to an event, so the test waits for it rather than asserting at once.
     /// </summary>
     [SkippableFact]
-    public async Task WS_CRD_22_DeletedWorkspace_StopsItsPoliciesAndDevices()
+    public async Task WS_CRD_22_DeletedWorkspace_StopsItsPoliciesAndClients()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
         var user = await fixture.CreateUserAsync();
         var workspaceRef = await fixture.CreateWorkspaceAsync(user.Token);
         var (_, pin) = await fixture.CreatePolicyAsync(user.Token, workspaceRef);
-        var (clientRef, secret) = await fixture.RegisterClientAsync(pin, $"e2e-device-{Guid.NewGuid():N}");
+        var (clientRef, secret) = await fixture.RegisterClientAsync(pin, $"e2e-client-{Guid.NewGuid():N}");
 
         await fixture.Auth.As(user.Token).DeleteWorkspaceRawAsync(workspaceRef);
 
@@ -396,6 +396,6 @@ public sealed class WorkspaceLifecycleTests(ServicesFixture fixture)
         }
 
         registrationRefused.Should().BeTrue("the deleted workspace's policy is disabled");
-        loginRefused.Should().BeTrue("the deleted workspace's devices are revoked");
+        loginRefused.Should().BeTrue("the deleted workspace's clients are revoked");
     }
 }

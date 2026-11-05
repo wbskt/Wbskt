@@ -1,6 +1,6 @@
 name: SDK conformance
 
-# Runs the device protocol checklist (Tests/Conformance) against every SDK in this repository. The
+# Runs the client protocol checklist (Tests/Conformance) against every SDK in this repository. The
 # suite fakes the API and socket hosts, so no database, broker or Wbskt host is started.
 
 on:
@@ -8,8 +8,8 @@ on:
     paths:
       - 'Clients/**'
       - 'Tests/Conformance/**'
-      - 'Docs/Device.Protocol.md'
-      - 'Docs/Device.Protocol.WebSocket.md'
+      - 'Docs/Client.Protocol.md'
+      - 'Docs/Client.Protocol.WebSocket.md'
       - '.github/workflows/sdk-conformance.yml'
   push:
     branches: [master]

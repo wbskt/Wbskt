@@ -5,7 +5,7 @@ Tests exercise the **public HTTP APIs** and the real `WbsktClient` SDK end-to-en
 
 ## Prerequisites
 
-The five dev hosts (auth, management, devices, gateway-ws, engine), SQL Server with both databases
+The five dev hosts (auth, management, clients, gateway-ws, engine), SQL Server with both databases
 deployed, RabbitMQ and Redis must be running **before** executing these tests.
 
 ### One command
@@ -54,7 +54,7 @@ docker run -d --hostname wbskt-rabbit --name wbskt-rabbit -p 5672:5672 -p 15672:
 docker run -d --name wbskt-redis -p 6379:6379 redis:7-alpine
 ```
 
-The auth host, the management host and the WebSocket gateway find Redis at `localhost:6379` through `ConnectionStrings:Redis` in their `appsettings.Development.json` (override it with `ConnectionStrings__Redis`). It carries access-token revocations between the auth and management hosts and device revocations from the management host to the WebSocket gateway, so without it the revocation scenarios (`AUTH_TK_10`, `AUTH_OUT_11`, `DEV_REV_01`) fail.
+The auth host, the management host and the WebSocket gateway find Redis at `localhost:6379` through `ConnectionStrings:Redis` in their `appsettings.Development.json` (override it with `ConnectionStrings__Redis`). It carries access-token revocations between the auth and management hosts and client revocations from the management host to the WebSocket gateway, so without it the revocation scenarios (`AUTH_TK_10`, `AUTH_OUT_11`, `DEV_REV_01`) fail.
 
 ### 2. Deploy databases
 
@@ -100,7 +100,7 @@ The suite is three xUnit collections, by folder (`Fixtures/E2ECollections.cs`):
 | Collection | Folders |
 |---|---|
 | `E2E auth` (`AuthCollection`) | `Scenarios/Auth` |
-| `E2E devices` (`DevicesCollection`) | `Scenarios/Devices` |
+| `E2E clients` (`ClientsCollection`) | `Scenarios/Clients` |
 | `E2E engine` (`EngineCollection`) | every other folder under `Scenarios` |
 
 `xunit.runner.json` runs the three at the same time (`maxParallelThreads: 3`, one per collection);
@@ -108,19 +108,19 @@ the classes inside a collection still run one after another. That is safe becaus
 arranges a user and workspace of its own (see [Identities](#identities-a-fresh-user-and-workspace-per-scenario)),
 and the Development rate limits sit far above what the three spend together. A new scenario class
 goes in the collection of its folder: `[Collection(AuthCollection.Name)]`,
-`[Collection(DevicesCollection.Name)]` or `[Collection(EngineCollection.Name)]`. Each collection gets
+`[Collection(ClientsCollection.Name)]` or `[Collection(EngineCollection.Name)]`. Each collection gets
 its own `ServicesFixture`, so the fixture must not hold anything that has to be process-wide.
 
 To run one collection, filter by its folders' namespace:
 
 ```bash
 dotnet test Tests/Wbskt.E2E.FeatureTests --filter "FullyQualifiedName~Scenarios.Auth"
-dotnet test Tests/Wbskt.E2E.FeatureTests --filter "FullyQualifiedName~Scenarios.Devices"
+dotnet test Tests/Wbskt.E2E.FeatureTests --filter "FullyQualifiedName~Scenarios.Clients"
 ```
 
 The three opt-in passes below must still run **alone**, with `--filter`: the rate-limit scenarios spend
 the per-IP budget the other collections are signing in with, the gateway restart drops every live
-device connection, the engine collection's included, and the outage pass stops the broker, Redis and
+client connection, the engine collection's included, and the outage pass stops the broker, Redis and
 the engine under everything else.
 
 The integration scenarios (`Scenarios/Integrations`) stand in for Telegram, Discord, ntfy, mail relays and HTTP APIs with local fakes on 127.0.0.1. The engine's Development settings (`WorkflowEngine:Integrations`) give it a fixed master key, allow plain http and any SMTP port, and point Telegram at `http://127.0.0.1:5098/telegram`, so port 5098 must be free while they run. The other fakes take a free port each.
@@ -153,11 +153,11 @@ E2E_RATE_LIMIT_TESTS=1 E2E_AUTH_PERMIT_LIMIT=10 \
 
 ### 6. WebSocket gateway restart scenario (opt-in)
 
-`DeviceRevocationTests.DEV_REV_02` revokes, deletes and rotates the secret of devices, restarts the WebSocket gateway, and checks their old tokens are still refused: the WebSocket gateway forgets every revocation event it heard, so this proves the cutoffs the management host keeps in Redis. It skips unless `E2E_SOCKET_RESTART_COMMAND` holds a command that restarts the WebSocket gateway, and since the restart drops every live device connection, run it on its own:
+`ClientRevocationTests.DEV_REV_02` revokes, deletes and rotates the secret of clients, restarts the WebSocket gateway, and checks their old tokens are still refused: the WebSocket gateway forgets every revocation event it heard, so this proves the cutoffs the management host keeps in Redis. It skips unless `E2E_SOCKET_RESTART_COMMAND` holds a command that restarts the WebSocket gateway, and since the restart drops every live client connection, run it on its own:
 
 ```bash
 E2E_SOCKET_RESTART_COMMAND="$PWD/Tests/Wbskt.E2E.FeatureTests/start-hosts.sh gateway-ws" \
-  dotnet test Tests/Wbskt.E2E.FeatureTests --filter FullyQualifiedName~DeviceRevocationTests.DEV_REV_02
+  dotnet test Tests/Wbskt.E2E.FeatureTests --filter FullyQualifiedName~ClientRevocationTests.DEV_REV_02
 ```
 
 Against the hosts `e2e-up.sh` started, the restart command is
@@ -194,7 +194,7 @@ E2E_RABBITMQ_CONTAINER=wbskt-rabbit E2E_REDIS_CONTAINER=wbskt-redis \
 | Class | What it asserts |
 |---|---|
 | `BrokerOutageE2ETests` | With RabbitMQ stopped, a command and a ping answer 503 `EVENT_BUS_UNAVAILABLE` with `Retry-After`, sign-in still works, and a webhook to the public callback answers 503 with `Retry-After`. Once it is back, pings and commands go through again and the retried webhook starts its run. The callback does not hold a delivery it could not queue: it is the sender's retry that drains it. |
-| `RedisOutageE2ETests` | With Redis stopped, a device revoked before the outage and one revoked during it are refused at the socket (the WebSocket gateway falls back to the revocations it heard by event), and an untouched device still connects. A member removed from a workspace during the outage is refused by the auth host at once and by the management host within its access-cache lifetime (`WorkspaceAccessCache:Seconds`, 30 s). |
+| `RedisOutageE2ETests` | With Redis stopped, a client revoked before the outage and one revoked during it are refused at the socket (the WebSocket gateway falls back to the revocations it heard by event), and an untouched client still connects. A member removed from a workspace during the outage is refused by the auth host at once and by the management host within its access-cache lifetime (`WorkspaceAccessCache:Seconds`, 30 s). |
 | `EngineFailoverE2ETests` | With a second engine running, the standby answers inbound calls 503 `ENGINE_NOT_LEADER` with `Retry-After` and is not ready. A run parks on a signal; the leader is killed; the standby keeps refusing until it holds the lease, then serves. The signal, sent to it, resumes the parked branch and the run succeeds, with one run, one `BranchStarted`, one `BranchParked` and one `BranchResumed`. |
 
 The management host calls the one engine URL it is configured with, so after the kill its engine
@@ -228,14 +228,14 @@ one feature does. Both are theories with a row per case, so a new route or statu
 
 **`ListRoutesContractTests`**: one row per list route of the auth and management hosts, carrying the
 paging the route is expected to answer with. Each row arranges just enough data (a workspace, a
-policy and devices, published workflows and their runs, roles, groups, invitations, tenant members),
+policy and clients, published workflows and their runs, roles, groups, invitations, tenant members),
 reads the list as raw JSON and checks:
 
 | Paging | Routes | Shape |
 |---|---|---|
 | Offset | registration policies, clients, message templates, workflows; workspace members; tenant invitations, roles, groups, permissions, members | `items`, `nextCursor`, `totalCount`, and the same count in `X-Total-Count` |
-| Keyset | event logs, a device's comms, a workflow's runs, the workspace's runs, a run's history | `items` and `nextCursor`; no count anywhere |
-| Whole | client tags, a device's state, a workflow's versions | the page shape around the whole list: `nextCursor` null, `limit` ignored |
+| Keyset | event logs, a client's comms, a workflow's runs, the workspace's runs, a run's history | `items` and `nextCursor`; no count anywhere |
+| Whole | client tags, a client's state, a workflow's versions | the page shape around the whole list: `nextCursor` null, `limit` ignored |
 | Whole, counted | integrations | as Whole, with `totalCount` |
 | Array | the caller's workspaces, sessions and tenants; a role's permissions, a group's roles, a member's roles, permissions and groups | a bare JSON array |
 
@@ -252,7 +252,7 @@ non-empty `traceId`:
 | `Validation400` | creating a workspace with an empty name; also checks `errors` names the field | `VALIDATION_FAILED` |
 | `Unauthenticated401` | no token on a management route | `AUTH_UNAUTHORIZED` |
 | `Forbidden403` | another user's workspace | `WORKSPACE_FORBIDDEN` |
-| `NotFound404` | an unknown device in one's own workspace | `CLIENT_NOT_FOUND` |
+| `NotFound404` | an unknown client in one's own workspace | `CLIENT_NOT_FOUND` |
 | `Conflict409` | a second role of the same name in a tenant | `AUTH_ROLE_CONFLICT` |
 | `RateLimited429` | failed logins past the credential limit; also checks `Retry-After`. Opt-in: `E2E_RATE_LIMIT_TESTS=1`, run alone (see [5](#5-rate-limit-scenarios-opt-in)) | `RATE_LIMITED` |
 | `Unavailable503` | always skipped: nothing answers 503 on demand against Development hosts (the 503s are an unreachable auth host or broker, a non-leader engine, and unset internal or engine API keys, which only Production refuses) | |
@@ -291,7 +291,7 @@ All base URLs can be overridden so the tests can target non-default environments
 |-----------------------|----------------------------|
 | `E2E_AUTH_URL`        | `https://localhost:7000`   |
 | `E2E_MANAGEMENT_URL`  | `https://localhost:7010`   |
-| `E2E_DEVICES_URL`     | `https://localhost:7015`   |
+| `E2E_CLIENT_AUTH_URL`     | `https://localhost:7015`   |
 | `E2E_SOCKET_URL`      | `https://localhost:7020`   |
 | `E2E_SOCKET_WS_URL`   | `ws://localhost:5020`      |
 | `E2E_WORKFLOW_URL`    | `https://localhost:7030`   |
@@ -306,13 +306,13 @@ All base URLs can be overridden so the tests can target non-default environments
 | Class | What it tests |
 |---|---|
 | `AuthAndRegistrationTests` | A new user can register + login; then the **seeded admin** creates an AutoApproval policy → client registration → client login |
-| `WorkflowCommandLoopTests` | Full round-trip: publish `DeviceTrigger→action:clientMessage` workflow, connect WbsktClient, send telemetry, assert OpenVent command received and run completes |
+| `WorkflowCommandLoopTests` | Full round-trip: publish `ClientTrigger→action:clientMessage` workflow, connect WbsktClient, send telemetry, assert OpenVent command received and run completes |
 
 ---
 
 ## Identities: a fresh user and workspace per scenario
 
-Every scenario that publishes workflows, registers devices, starts runs or reads a workspace's lists
+Every scenario that publishes workflows, registers clients, starts runs or reads a workspace's lists
 and event feed arranges a **workspace of its own**:
 
 ```csharp
@@ -325,7 +325,7 @@ tenant with them as its tenant-wide `Admin`, which holds every permission, so po
 workflow publish, run start/cancel, integrations and event-log reads are all allowed. Nothing a
 scenario creates is ever cleaned up, but because no two scenarios share a workspace, a scenario's
 run list and event feed hold only its own rows and the per-workspace ceilings (100 workflows,
-1000 devices) stay at their production defaults.
+1000 clients) stay at their production defaults.
 
 ### The seeded admin
 
@@ -366,7 +366,7 @@ helpers in `Fixtures/ServicesFixture.cs`:
   null or `Guid.Empty`.
 
 For a negative assertion, wait for the competing positive signal and then assert: a sentinel workflow
-on the same device whose run can only start after the moment in question (see `ClientHoldTriggerE2ETests`,
+on the same client whose run can only start after the moment in question (see `ClientHoldTriggerE2ETests`,
 `ClientPresenceTriggerE2ETests`, `OfflineBufferE2ETests`), a later delivery's run, or a finished run's
 history, which is complete once the run is terminal (a command node that ran twice shows there even
 while its second command is still in flight).
@@ -379,7 +379,7 @@ are generous (at least twice what the wait usually takes): they cost nothing whe
 ## Workflow definition published by Task 3
 
 ```
-DeviceTrigger
+ClientTrigger
   config: { clientRef: <clientRefId>, type: "telemetry", concurrencyPolicy: "AllowParallel" }
   ports:  [{ portId: "default", direction: "Output" }]
       |

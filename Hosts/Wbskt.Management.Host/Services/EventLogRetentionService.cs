@@ -9,9 +9,9 @@ namespace Wbskt.Management.Host.Services;
 
 /// <summary>
 /// Deletes event log entries older than <see cref="EventLoggingOptions.RetentionDays"/>, in batches,
-/// on <see cref="EventLoggingOptions.RetentionInterval"/>. Raw device traffic (events marked
-/// <see cref="DeviceTrafficAttribute"/>, kept in dbo.DeviceTraffic) goes sooner, after
-/// <see cref="EventLoggingOptions.DeviceTrafficRetentionDays"/>: it arrives at the rate devices talk,
+/// on <see cref="EventLoggingOptions.RetentionInterval"/>. Raw client traffic (events marked
+/// <see cref="ClientTrafficAttribute"/>, kept in dbo.ClientTraffic) goes sooner, after
+/// <see cref="EventLoggingOptions.ClientTrafficRetentionDays"/>: it arrives at the rate clients talk,
 /// and the audit records (sign-ins, policy and workflow changes) are what is worth keeping longer.
 /// </summary>
 public sealed class EventLogRetentionService : PeriodicWorker
@@ -20,7 +20,7 @@ public sealed class EventLogRetentionService : PeriodicWorker
 
     private readonly TimeProvider _timeProvider;
     private readonly TimeSpan _retention;
-    private readonly TimeSpan _deviceTrafficRetention;
+    private readonly TimeSpan _clientTrafficRetention;
 
     public EventLogRetentionService(
         IServiceScopeFactory scopeFactory,
@@ -40,7 +40,7 @@ public sealed class EventLogRetentionService : PeriodicWorker
         Interval = options.Value.RetentionInterval;
         _timeProvider = timeProvider;
         _retention = TimeSpan.FromDays(options.Value.RetentionDays);
-        _deviceTrafficRetention = TimeSpan.FromDays(Math.Min(options.Value.DeviceTrafficRetentionDays, options.Value.RetentionDays));
+        _clientTrafficRetention = TimeSpan.FromDays(Math.Min(options.Value.ClientTrafficRetentionDays, options.Value.RetentionDays));
     }
 
     protected override string Name => "Event log retention";
@@ -60,9 +60,9 @@ public sealed class EventLogRetentionService : PeriodicWorker
         return await SweepAsync(scope.ServiceProvider, cancellationToken);
     }
 
-    /// <summary>One sweep: device traffic past its window, then everything past the audit window. Returns the total.</summary>
+    /// <summary>One sweep: client traffic past its window, then everything past the audit window. Returns the total.</summary>
     /// <remarks>
-    /// Traffic logged before it moved to dbo.DeviceTraffic is still in dbo.EventLogs, so the shorter
+    /// Traffic logged before it moved to dbo.ClientTraffic is still in dbo.EventLogs, so the shorter
     /// window is applied there too, by event, until those rows have aged out.
     /// </remarks>
     private async Task<long> SweepAsync(IServiceProvider services, CancellationToken cancellationToken)
@@ -71,21 +71,21 @@ public sealed class EventLogRetentionService : PeriodicWorker
         var registry = services.GetRequiredService<IEventRegistry>();
         var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
 
-        var trafficCutoffUtc = nowUtc - _deviceTrafficRetention;
+        var trafficCutoffUtc = nowUtc - _clientTrafficRetention;
         long total = await DeleteBatchesAsync(
-            batchSize => provider.DeleteDeviceTrafficBeforeAsync(trafficCutoffUtc, batchSize, cancellationToken),
+            batchSize => provider.DeleteClientTrafficBeforeAsync(trafficCutoffUtc, batchSize, cancellationToken),
             trafficCutoffUtc,
-            "device traffic");
-        if (_deviceTrafficRetention < _retention)
+            "client traffic");
+        if (_clientTrafficRetention < _retention)
         {
-            // Only the device traffic events this database has seen; one never logged has no id yet.
-            int[] deviceTrafficIds = DeviceTrafficAttribute.EventNames
+            // Only the client traffic events this database has seen; one never logged has no id yet.
+            int[] clientTrafficIds = ClientTrafficAttribute.EventNames
                 .Select(registry.GetEventId)
                 .Where(id => id > 0)
                 .ToArray();
-            if (deviceTrafficIds.Length > 0)
+            if (clientTrafficIds.Length > 0)
             {
-                total += await DeleteAsync(provider, trafficCutoffUtc, deviceTrafficIds, "device traffic still in the event log", cancellationToken);
+                total += await DeleteAsync(provider, trafficCutoffUtc, clientTrafficIds, "client traffic still in the event log", cancellationToken);
             }
         }
 

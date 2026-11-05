@@ -21,7 +21,7 @@ public sealed class RefreshCookieOptions
 /// Keeps a browser's refresh token in an HttpOnly cookie, so script on the page (and so an XSS bug)
 /// can never read the long-lived half of the session. A client opts in per request with the
 /// <see cref="TransportHeader"/>; without it the token travels in the JSON body as before, which is
-/// what the SDK, devices and tests use.
+/// what the SDK, clients and tests use.
 /// </summary>
 /// <remarks>
 /// The cookie is only ever read from a request that also carries the header. A custom header cannot

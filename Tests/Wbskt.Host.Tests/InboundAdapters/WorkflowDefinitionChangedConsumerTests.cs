@@ -60,7 +60,7 @@ public sealed class WorkflowDefinitionChangedConsumerTests
     [Fact]
     public async Task A_trigger_reinstated_on_the_management_host_is_seen_by_the_engine_after_one_event()
     {
-        // The engine has cached "no hold trigger listens for this device". The workflow is then
+        // The engine has cached "no hold trigger listens for this client". The workflow is then
         // reinstated in the management host, which registers the trigger and announces the change.
         var holds = new MutableHoldStateProvider();
         var engine = new EngineSide(holds);

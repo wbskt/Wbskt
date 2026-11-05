@@ -18,7 +18,7 @@ see [Features.md](Features.md); for the patterns behind the code, see
 
 ## 2. Where the engine sits
 
-* The **Socket host** holds device connections. It publishes `ClientMessageReceivedEvent`,
+* The **Socket host** holds client connections. It publishes `ClientMessageReceivedEvent`,
   `ClientConnectedEvent`, `ClientDisconnectedEvent` and command acks or failures on RabbitMQ.
 * The **Management host** is the only HTTP caller of the engine. It calls the engine's inbound API
   for manual runs, signals and integration seal/test (`WorkflowEngineClient`, with the shared API key
@@ -27,7 +27,7 @@ see [Features.md](Features.md); for the patterns behind the code, see
   `CancelWorkflowRun` command, so the engine stays the only writer of run state.
 * The **Engine** reads and writes SQL Server for everything: definitions, registrations, runs,
   branches, bookmarks, history, idempotency keys, shared variables and its own leader lease.
-* Outbound, the engine sends device commands through `IDeviceCommandSender` (the same path the
+* Outbound, the engine sends client commands through `IClientCommandSender` (the same path the
   console uses) and calls webhooks, SMTP, Telegram, Discord and ntfy directly.
 
 ## 3. Leadership: one active engine
@@ -86,7 +86,7 @@ For each inbound event:
    (and `__wake_node`), and dispatches the branch with reason `BookmarkResumed`. Wake-only channels
    (`signal`, `http-wake`, `child-completed`, `command`) stop here.
 3. **Load registrations.** For the `client` channel this goes through `TriggerRegistrationCache`
-   (`LoadUnlessKnownEmptyAsync`): most device messages match no workflow, and a cached "no
+   (`LoadUnlessKnownEmptyAsync`): most client messages match no workflow, and a cached "no
    registrations" answer saves a database read. The cache is generation-stamped, cleared by
    `WorkflowDefinitionChangedEvent`, and entries live 1 minute at most.
 4. **Per registration:**
@@ -203,7 +203,7 @@ An executor returns one `NodeExecutionResult`. `BranchResultDispatcher` picks th
 |---|---|
 | `Continue(port, patch, removeKeys)` | Apply the patch; follow the edge from `port` (a node id when used as `JumpTo`). No edge: decline any join the branch belongs to, then complete the branch. |
 | `Fork(children, continuePort, patch)` | One child and no continue port: take it inline. Otherwise derive cohort and child ids deterministically (SHA-256 of branch, node, row version), count the children on the run before creating them (`CreateIfAbsent`, so a replay never duplicates), and dispatch each with reason `ForkChild`. |
-| `WaitForBookmark(condition, patch)` | Set the branch `Waiting`, journal `BranchParked`, write one bookmark (match key from the condition's channel, `ExpiresAt`, `TtlPort`), then run the executor's `AfterParked` hook (for example, send the device command only once the bookmark exists). |
+| `WaitForBookmark(condition, patch)` | Set the branch `Waiting`, journal `BranchParked`, write one bookmark (match key from the condition's channel, `ExpiresAt`, `TtlPort`), then run the executor's `AfterParked` hook (for example, send the client command only once the bookmark exists). |
 | `Fail(code, message, retryable, cause)` | Apply the node's `onFailure` (see [Features.md §7](Features.md#7-failure-handling)), or end the branch Failed. Contribute `failed` to a join; release the branch. |
 | `Terminal(reason, output?)` | `Cancelled` cancels the branch. Otherwise decline the join (unless this node is the join), store the run output if given, and complete the branch. |
 
@@ -376,7 +376,7 @@ run was made from a path that doesn't exist.
 
 `wbskt_workflow_inbound_events_total{channel, outcome}` counts every event `InboundHub` handles,
 by dispatch outcome or `Failed`. It counts attempts: a message the bus retries counts once per
-attempt, typically `Failed` then its final outcome. It replaces the per-event log line, which is Debug: at device
+attempt, typically `Failed` then its final outcome. It replaces the per-event log line, which is Debug: at client
 message rates a line each would fill Loki, so "how many messages matched nothing" is
 `sum by (outcome) (rate(wbskt_workflow_inbound_events_total[5m]))`, not a log search.
 

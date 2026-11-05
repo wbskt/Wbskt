@@ -3,7 +3,7 @@ using Wbskt.Workflow.Abstraction.Entities;
 namespace Wbskt.Workflow.Abstraction.Runtime;
 
 /// <summary>
-/// The trigger registrations last read for a <c>(channel, key)</c> lookup, kept so a device message
+/// The trigger registrations last read for a <c>(channel, key)</c> lookup, kept so a client message
 /// whose triggers have not changed is not another read of <c>dbo.TriggerRegistrations</c>. An empty
 /// answer ("nothing listens for this") is kept like any other.
 /// </summary>
@@ -11,7 +11,7 @@ namespace Wbskt.Workflow.Abstraction.Runtime;
 /// Registrations change only in the management host, which announces each change with a
 /// <c>WorkflowDefinitionChangedEvent</c>; the engine calls <see cref="Clear"/> when one arrives. That
 /// drops every entry, in every workspace and empty ones included: the key alone does not say which
-/// workspace it belongs to, and a change is rare next to device traffic. An announcement can be late
+/// workspace it belongs to, and a change is rare next to client traffic. An announcement can be late
 /// or lost (it is queued after the commit), so an entry also lives for a bounded time only
 /// (<c>WorkflowEngineOptions.TriggerRegistrationCacheLifetime</c>).
 /// </remarks>

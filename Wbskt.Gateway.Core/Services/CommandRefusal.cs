@@ -5,7 +5,7 @@ namespace Wbskt.Gateway.Core.Services;
 
 /// <summary>
 /// Reads the refusal an SDK puts on a <c>sys.ack</c> (<c>{ commandId, type, refused }</c>) when it
-/// will not act on a command. Both strings come from the device, so they are length-capped before
+/// will not act on a command. Both strings come from the client, so they are length-capped before
 /// they reach the event log.
 /// </summary>
 internal static class CommandRefusal
@@ -25,7 +25,7 @@ internal static class CommandRefusal
             return false;
         }
 
-        reason = $"Refused by the device: {Cap(refused.GetString()!, MaxReasonLength)}";
+        reason = $"Refused by the client: {Cap(refused.GetString()!, MaxReasonLength)}";
         if (element.TryGetProperty("type", out var typeElement) && typeElement.ValueKind == JsonValueKind.String)
         {
             type = Cap(typeElement.GetString() ?? string.Empty, MessageTypes.MaxTypeLength);

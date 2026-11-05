@@ -18,7 +18,7 @@ public record EventLogResponse(
     Guid? UserRefId = null,
     // The entry's own id, so a detail view can name one entry. Page cursors are made from it.
     long Id = 0,
-    // Where it came from: Console, Api, Device, Workflow or System; null when not known.
+    // Where it came from: Console, Api, Client, Workflow or System; null when not known.
     string? Source = null,
     // The caller's address and user agent, for an action taken through the API.
     string? ClientAddress = null,
@@ -27,7 +27,7 @@ public record EventLogResponse(
 
 /// <summary>
 /// How many entries a window holds, for the audit log's view counts: each group, each event, each
-/// person who caused one (by user reference), and each source. All but the groups leave device
+/// person who caused one (by user reference), and each source. All but the groups leave client
 /// traffic out when the summary is asked to.
 /// </summary>
 public sealed record EventLogSummaryResponse(

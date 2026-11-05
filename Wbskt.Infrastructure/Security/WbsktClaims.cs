@@ -7,7 +7,7 @@ namespace Wbskt.Infrastructure.Security;
 
 /// <summary>
 /// The one claims contract for every token the hosts issue (#306): <c>sub</c> is the principal's
-/// RefId, <c>typ</c> says whether that is a user or a device, and a user token carries no internal
+/// RefId, <c>typ</c> says whether that is a user or a client, and a user token carries no internal
 /// id. A host that needs a user's internal id resolves it from the RefId (<see cref="IUserIdLookup"/>).
 /// </summary>
 /// <remarks>
@@ -19,14 +19,14 @@ namespace Wbskt.Infrastructure.Security;
 /// </para>
 /// <para>
 /// Tokens issued before this contract (user: <c>sub</c> the internal id, <c>uref</c> the RefId,
-/// <c>type</c>; device: <c>type</c>) are still read for one token lifetime. The legacy readers go in
+/// <c>type</c>; client: <c>type</c>) are still read for one token lifetime. The legacy readers go in
 /// the release after.
 /// </para>
 /// <para>
-/// A device token still carries the device's internal id and workspace id (<c>id</c>,
+/// A client token still carries the client's internal id and workspace id (<c>id</c>,
 /// <c>workspace_id</c>): the socket host has no data source of its own to resolve them from, and it
-/// stamps them on every event it publishes. The token is held by the device it names, so it reveals
-/// only that device's own row.
+/// stamps them on every event it publishes. The token is held by the client it names, so it reveals
+/// only that client's own row.
 /// </para>
 /// </remarks>
 public static class WbsktClaims

@@ -215,7 +215,7 @@ public sealed class TriggerChannelTests
     {
         Guid command = Guid.NewGuid();
         InboundEvent acked = CommandChannel.Event(command, CommandChannel.Acked, null);
-        InboundEvent failed = CommandChannel.Event(command, CommandChannel.Failed, "The device is not connected.");
+        InboundEvent failed = CommandChannel.Event(command, CommandChannel.Failed, "The client is not connected.");
 
         Assert.Equal(CommandChannel.Key(command), new CommandChannel().CorrelationKey(acked));
         Assert.Contains(CommandChannel.Key(command), failed.MatchKeys);

@@ -10,7 +10,7 @@ internal sealed class ClientReadingProvider : BaseSqlProvider, IClientReadingPro
 {
     public ClientReadingProvider(IConfiguration configuration) : base(configuration) { }
 
-    public async Task InsertAsync(int clientId, DateTime deviceTime, DateTime receivedAt, bool isLate, IReadOnlyCollection<ClientReadingValue> readings, CancellationToken cancellationToken = default)
+    public async Task InsertAsync(int clientId, DateTime sentAt, DateTime receivedAt, bool isLate, IReadOnlyCollection<ClientReadingValue> readings, CancellationToken cancellationToken = default)
     {
         using var table = new DataTable();
         table.Columns.Add("Name", typeof(string));
@@ -23,7 +23,7 @@ internal sealed class ClientReadingProvider : BaseSqlProvider, IClientReadingPro
         await ExecuteNonQueryAsync("dbo.ClientReadings_InsertBatch", p =>
         {
             p.AddWithValue("@ClientId", clientId);
-            p.Add("@DeviceTime", SqlDbType.DateTime2).Value = deviceTime;
+            p.Add("@SentAt", SqlDbType.DateTime2).Value = sentAt;
             p.Add("@ReceivedAt", SqlDbType.DateTime2).Value = receivedAt;
             p.AddWithValue("@IsLate", isLate);
             var parameter = p.AddWithValue("@Readings", table);
@@ -63,7 +63,7 @@ internal sealed class ClientReadingProvider : BaseSqlProvider, IClientReadingPro
             },
             reader => new ClientReading(
                 reader.GetString(reader.GetOrdinal("Name")),
-                DateTime.SpecifyKind(reader.GetDateTime(reader.GetOrdinal("DeviceTime")), DateTimeKind.Utc),
+                DateTime.SpecifyKind(reader.GetDateTime(reader.GetOrdinal("SentAt")), DateTimeKind.Utc),
                 DateTime.SpecifyKind(reader.GetDateTime(reader.GetOrdinal("ReceivedAt")), DateTimeKind.Utc),
                 reader.GetDouble(reader.GetOrdinal("NumberValue")),
                 reader.GetBoolean(reader.GetOrdinal("IsLate"))),

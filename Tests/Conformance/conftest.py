@@ -107,9 +107,9 @@ async def socket_server():
 
 
 @pytest.fixture
-async def device(api, socket_server, tmp_path: Path):
-    """Starts harnesses for one device; each start shares the device's storage, like a reboot."""
-    socket_server.token_devices = api.token_devices
+async def client(api, socket_server, tmp_path: Path):
+    """Starts harnesses for one client; each start shares the client's storage, like a reboot."""
+    socket_server.token_clients = api.token_clients
     started: List[Harness] = []
     command = harness_command()
 
@@ -117,7 +117,7 @@ async def device(api, socket_server, tmp_path: Path):
         env = {
             "WBSKT_API_URL": api.url,
             "WBSKT_SOCKET_URL": socket_server.url,
-            "WBSKT_DEVICE_NAME": "conformance-device",
+            "WBSKT_CLIENT_NAME": "conformance-client",
             "WBSKT_POLICY_PIN": pin or "",
             "WBSKT_STORAGE": str(tmp_path / "credentials.json"),
             "WBSKT_COMMANDS": json.dumps(commands if commands is not None else [RELAY]),

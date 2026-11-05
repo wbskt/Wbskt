@@ -124,7 +124,7 @@ public sealed class AccountSecurityTests(ServicesFixture fixture)
 
     /// <summary>
     /// A session keeps its id through refreshes, so an id the list showed still names the session
-    /// after the device behind it has refreshed.
+    /// after the client behind it has refreshed.
     /// </summary>
     [SkippableFact]
     public async Task AUTH_SES_03_ASessionKeepsItsIdAcrossRefreshes()
@@ -144,7 +144,7 @@ public sealed class AccountSecurityTests(ServicesFixture fixture)
     }
 
     /// <summary>
-    /// Ending a session ends the access token that device holds, on the auth host and on the
+    /// Ending a session ends the access token that client holds, on the auth host and on the
     /// management host, not just its refresh token. The user's other sessions carry on.
     /// </summary>
     [SkippableFact]

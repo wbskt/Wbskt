@@ -12,7 +12,7 @@ namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 public sealed class ClientPresenceParker(IClientPresenceCheckProvider provider)
 {
     /// <param name="extraGrace">
-    /// Added to every trigger's own grace period: a device that closed to install an update is not offline
+    /// Added to every trigger's own grace period: a client that closed to install an update is not offline
     /// until the update has had its time.
     /// </param>
     public async Task ParkAsync(Guid clientRefId, int workspaceId, ClientPresenceState state, DateTime changedAtUtc, CancellationToken ct,

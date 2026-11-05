@@ -17,7 +17,7 @@ public sealed class ClientAccessHandlerTests
         var gate = new Mock<IClientAccessGate>();
 
         await new ClientDeletedHandler(gate.Object, NullLogger<ClientDeletedHandler>.Instance)
-            .Consume(Context(new ClientDeletedEvent(ClientRefId, 42, Guid.NewGuid(), 5, 7, "device")));
+            .Consume(Context(new ClientDeletedEvent(ClientRefId, 42, Guid.NewGuid(), 5, 7, "client")));
 
         gate.Verify(x => x.RevokeAsync(ClientRefId, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }

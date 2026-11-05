@@ -1,4 +1,4 @@
--- A set of device tags, already normalised by the caller.
+-- A set of client tags, already normalised by the caller.
 CREATE TYPE dbo.TagTableType AS TABLE
 (
     Tag NVARCHAR(32) NOT NULL PRIMARY KEY

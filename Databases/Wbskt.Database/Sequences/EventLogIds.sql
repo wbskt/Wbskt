@@ -1,4 +1,4 @@
--- Ids for dbo.EventLogs and dbo.DeviceTraffic. Both tables draw from this one sequence so an id is
+-- Ids for dbo.EventLogs and dbo.ClientTraffic. Both tables draw from this one sequence so an id is
 -- unique across them and orders them together: the event log and the client comms readers page
 -- over both by id, with the same cursor the API has always handed out. The post-deployment script
 -- moves it past the highest id already in either table.

@@ -1,4 +1,4 @@
--- Stores a device's capabilities report unless a newer one is already stored: reports are consumed
+-- Stores a client's capabilities report unless a newer one is already stored: reports are consumed
 -- independently and retried, so a quick reconnect can deliver them out of order. @ReportedAt is when
 -- the gateway received it. Returns Applied = 1 when it was stored.
 CREATE PROCEDURE dbo.ClientCapabilities_Upsert

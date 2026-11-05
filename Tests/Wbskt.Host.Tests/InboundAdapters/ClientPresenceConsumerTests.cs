@@ -32,7 +32,7 @@ public sealed class ClientPresenceConsumerTests
     }
 
     [Fact]
-    public async Task A_device_closing_to_update_is_not_offline_until_the_update_has_had_its_time()
+    public async Task A_client_closing_to_update_is_not_offline_until_the_update_has_had_its_time()
     {
         string oneMinute = ClientPresenceTriggerKey.Build(ClientRef, ClientPresenceState.Offline, 60, Guid.NewGuid(), Guid.NewGuid());
         var provider = new RecordingPresenceCheckProvider(oneMinute);

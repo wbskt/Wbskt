@@ -3,7 +3,7 @@ using Wbskt.EventBus.Abstractions;
 namespace Wbskt.Events.Abstractions;
 
 /// <summary>
-/// An event a person caused through the API (renamed a device, published a workflow…), carrying who.
+/// An event a person caused through the API (renamed a client, published a workflow…), carrying who.
 /// The event log records the actor in its UserId/UserRefId columns. Both are null when the event was
 /// raised without a signed-in user, such as by a workflow or a background job.
 /// </summary>

@@ -242,20 +242,20 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
     private static readonly IReadOnlyCollection<TriggerRegistrationRow> NoRegistrations = [];
 
     /// <summary>
-    /// The registrations for the event's keys. For a device message, "nothing listens" may come from the
-    /// cache, which is the answer most device messages get; registrations, which claim the event and start
+    /// The registrations for the event's keys. For a client message, "nothing listens" may come from the
+    /// cache, which is the answer most client messages get; registrations, which claim the event and start
     /// runs below, are always read from the database. A stale cache can therefore cost a read, or (until
     /// the change is announced) miss a trigger published a moment ago, but never act on a removed one.
     /// </summary>
     /// <remarks>
-    /// Only device messages, the channel that arrives at the rate devices talk. Every other channel is
+    /// Only client messages, the channel that arrives at the rate clients talk. Every other channel is
     /// read each time, so a webhook fired or a run started by hand right after a publish never waits on
     /// the announcement that clears the cache.
     /// </remarks>
     private Task<IReadOnlyCollection<TriggerRegistrationRow>> GetRegistrationsAsync(InboundEvent evt, CancellationToken ct)
     {
         // Nothing can register a trigger on a command's outcome: it only wakes the step waiting for it.
-        // Every device ack comes through here, so it skips the registration read.
+        // Every client ack comes through here, so it skips the registration read.
         if (string.Equals(evt.ChannelKind, CommandChannel.Name, StringComparison.Ordinal))
         {
             return Task.FromResult(NoRegistrations);

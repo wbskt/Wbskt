@@ -4,11 +4,11 @@
 -- expensive part, and nothing needs it. The CSV export reads through here too, with @Take as its cap.
 --
 -- @EventNames and @ExcludeEventNames are comma-separated exact names (event names have no commas):
--- the first keeps only those events (a view such as "policies"), the second drops them (device
+-- the first keeps only those events (a view such as "policies"), the second drops them (client
 -- traffic). @EventName is the older single filter, matched as a substring. @Sources is a
 -- comma-separated list of EventSource values. @SinceId keeps only entries newer than the newest one
 -- the caller already has, for a view that stays live by asking again. It reads the audit log and
--- device traffic together (dbo.EventLogEntries); @IncludeDeviceTraffic = 0, for a query that leaves
+-- client traffic together (dbo.EventLogEntries); @IncludeClientTraffic = 0, for a query that leaves
 -- every traffic event out, skips the traffic table instead of reading it to drop each row.
 CREATE PROCEDURE dbo.EventLog_GetBy_Workspace
     @WorkspaceId INT,
@@ -29,7 +29,7 @@ CREATE PROCEDURE dbo.EventLog_GetBy_Workspace
     @Search NVARCHAR(200) = NULL,
     @CursorId BIGINT = NULL,
     @Take INT = 50,
-    @IncludeDeviceTraffic BIT = 1
+    @IncludeClientTraffic BIT = 1
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -66,7 +66,7 @@ BEGIN
     FROM dbo.EventLogEntries el
     JOIN dbo.Events e ON el.EventId = e.Id
     WHERE el.WorkspaceId = @WorkspaceId
-      AND (@IncludeDeviceTraffic = 1 OR el.IsDeviceTraffic = 0)
+      AND (@IncludeClientTraffic = 1 OR el.IsClientTraffic = 0)
       AND (@CursorId IS NULL OR el.Id < @CursorId)
       AND (@SinceId IS NULL OR el.Id > @SinceId)
       AND (@PolicyId IS NULL OR el.PolicyId = @PolicyId)

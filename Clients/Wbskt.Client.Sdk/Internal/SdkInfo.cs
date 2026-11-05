@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 namespace Wbskt.Client.Sdk.Internal;
 
 // Auto-detected metadata reported to the platform in the "capabilities" message,
-// so every device shows its SDK and platform without any app code.
+// so every client shows its SDK and platform without any app code.
 internal static class SdkInfo
 {
     public const string AgentName = "csharp-sdk";

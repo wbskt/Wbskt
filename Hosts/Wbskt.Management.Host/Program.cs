@@ -8,7 +8,7 @@ using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Events;
 using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Infrastructure;
-using Wbskt.Infrastructure.Devices;
+using Wbskt.Infrastructure.Clients;
 using Wbskt.Infrastructure.Hosting;
 using Wbskt.Infrastructure.Configuration;
 using Wbskt.Infrastructure.Events;
@@ -44,7 +44,7 @@ public static class Program
         var builder = WbsktHost.CreateBuilder(typeof(Program), args, "serilog.json", "connectionstrings.json", "rabbitmq.json");
         builder.AddWbsktTelemetry(ManagementMetrics.MeterName, QueuedEventBus.MeterName);
 
-        // A Devices instance serves only device registration and login (see HostRole). It keeps the
+        // A Clients instance serves only client registration and login (see HostRole). It keeps the
         // same service registrations, minus the console's background work and live feed.
         var role = HostRoles.FromConfiguration(builder.Configuration);
 
@@ -52,13 +52,13 @@ public static class Program
         builder.Services.AddSingleton<IIdentityService, IdentityService>();
         builder.Services.AddSingleton<ManagementMetrics>();
         builder.Services.AddSingleton<IWorkerTickMetrics>(sp => sp.GetRequiredService<ManagementMetrics>());
-        // Signs client (device) tokens for the socket host; accepts user tokens signed by the auth host,
+        // Signs client (client) tokens for the socket host; accepts user tokens signed by the auth host,
         // whose public keys it fetches from Jwt:TrustedJwksUrl.
         builder.Services.AddWbsktTokenIssuer(JwtIssuers.Management);
         builder.Services.AddWbsktJwtTrust(JwtIssuers.Auth, JwtAudiences.Api);
         builder.Services.AddAccessTokenRevocation(builder.Configuration);
-        // Device revocations, written before answering so a socket host that restarts or misses the
-        // event still refuses the device; see ClientTokenCutoffs.
+        // Client revocations, written before answering so a socket host that restarts or misses the
+        // event still refuses the client; see ClientTokenCutoffs.
         builder.Services.AddClientTokenCutoffs(builder.Configuration);
         builder.Services.AddScoped<IRegistrationPolicyProvider, RegistrationPolicyProvider>();
         // These services publish after their change is committed, so they publish through the queued
@@ -104,13 +104,13 @@ public static class Program
         builder.Services.AddScoped<IIntegrationProvider, IntegrationProvider>();
         builder.Services.AddScopedWithQueuedEvents<IIntegrationService, IntegrationService>();
         builder.Services.AddScoped<IntegrationReferenceCheck>();
-        builder.Services.AddScoped<DeviceReferenceCheck>();
+        builder.Services.AddScoped<ClientReferenceCheck>();
         builder.Services.AddScoped<IWorkflowQueryService, WorkflowQueryService>();
         builder.Services.AddScopedWithQueuedEvents<IWorkflowLifecycleService, WorkflowLifecycleService>();
         builder.Services.AddScoped<IWorkflowRunQueryService, WorkflowRunQueryService>();
         builder.Services.AddScoped<ITriggerActivityService, TriggerActivityService>();
         builder.Services.AddScopedWithQueuedEvents<IWorkflowRunService, WorkflowRunService>();
-        builder.Services.AddDeviceCommandSender();
+        builder.Services.AddClientCommandSender();
         if (role == HostRole.All)
         {
             builder.Services.AddHostedService<QueuedCommandExpirySweeper>();
@@ -164,7 +164,7 @@ public static class Program
         })
         .AddHttpMessageHandler<WorkflowEngineApiKeyHandler>();
         // Every engine operation goes through the gateway: start, signal, wake and webhook over the
-        // client above, cancel as a command on the real bus (its send is the action, like a device
+        // client above, cancel as a command on the real bus (its send is the action, like a client
         // command). The engine client itself is only the gateway's transport.
         builder.Services.AddScoped<IWorkflowEngineGateway, WorkflowEngineGateway>();
 
@@ -179,7 +179,7 @@ public static class Program
             {
                 dbEventLoggingBusConfig(configurator);
 
-                // Register Auto SignalR Forwarding Consumers. Not on a Devices instance: it has no
+                // Register Auto SignalR Forwarding Consumers. Not on a Clients instance: it has no
                 // hub, so it would only take broadcasts off the shared queue for nobody.
                 if (role == HostRole.All)
                 {
@@ -215,7 +215,7 @@ public static class Program
         builder.Services.AddDefaultDenyAuthorization();
 
         // Throttles for the anonymous edges: the public callback (see PublicCallbackRateLimits),
-        // device enrollment (see ClientRegistrationsController) and device login (ClientAuthController).
+        // client enrollment (see ClientRegistrationsController) and client login (ClientAuthController).
         var callbackLimits = new PublicCallbackRateLimits(builder.Configuration);
         builder.Services.AddRateLimiter(options =>
         {
@@ -223,12 +223,12 @@ public static class Program
             options.AddPolicy(PublicCallbackPolicy.RateLimitPolicy, callbackLimits.ForTarget);
             options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(callbackLimits.ForAddress);
 
-            // Device enrollment. A fleet being provisioned from one site shares an address, so the
+            // Client enrollment. A fleet being provisioned from one site shares an address, so the
             // budget is per IP and configurable; the default still makes walking the PIN space hopeless.
-            options.AddPerIpPolicy(builder.Configuration, RateLimitPolicies.DeviceRegistration, "DeviceRegistration", defaultPermitLimit: 20);
+            options.AddPerIpPolicy(builder.Configuration, RateLimitPolicies.ClientRegistration, "ClientRegistration", defaultPermitLimit: 20);
 
-            // Device login. Same per-IP partitioning, with room for a fleet behind one address.
-            options.AddPerIpPolicy(builder.Configuration, RateLimitPolicies.DeviceLogin, "DeviceLogin", defaultPermitLimit: 300);
+            // Client login. Same per-IP partitioning, with room for a fleet behind one address.
+            options.AddPerIpPolicy(builder.Configuration, RateLimitPolicies.ClientLogin, "ClientLogin", defaultPermitLimit: 300);
 
             // Integration tests, per workspace: generous for someone setting one up, a wall for a loop.
             int testPermitLimit = builder.Configuration.GetValue("RateLimiting:IntegrationTest:PermitLimit", 20);

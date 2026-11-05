@@ -9,7 +9,7 @@ namespace Wbskt.Client.Sdk.Internal;
 /// </summary>
 internal sealed class OutboundBuffer(int capacity)
 {
-    private readonly LinkedList<DeviceMessage> _items = new();
+    private readonly LinkedList<ProtocolMessage> _items = new();
     private readonly object _gate = new();
 
     public int Capacity { get; } = capacity;
@@ -21,7 +21,7 @@ internal sealed class OutboundBuffer(int capacity)
 
     public long DroppedCount { get; private set; }
 
-    public void Enqueue(DeviceMessage message)
+    public void Enqueue(ProtocolMessage message)
     {
         lock (_gate)
         {
@@ -41,7 +41,7 @@ internal sealed class OutboundBuffer(int capacity)
         }
     }
 
-    public bool TryPeek(out DeviceMessage message)
+    public bool TryPeek(out ProtocolMessage message)
     {
         lock (_gate)
         {
@@ -60,7 +60,7 @@ internal sealed class OutboundBuffer(int capacity)
     /// Removes <paramref name="message"/> if it is still at the head. It may already be gone
     /// when the buffer overflowed while it was being sent.
     /// </summary>
-    public void RemoveIfHead(DeviceMessage message)
+    public void RemoveIfHead(ProtocolMessage message)
     {
         lock (_gate)
         {

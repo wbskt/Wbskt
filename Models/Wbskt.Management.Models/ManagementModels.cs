@@ -46,7 +46,7 @@ public record BulkClientStatusResponse(IReadOnlyList<Guid> Updated, IReadOnlyLis
 
 public record BulkClientStatusFailure(Guid ClientRefId, string Code, string Message);
 
-/// <param name="UpdatingUntil">Set when the device's last disconnect was to install a firmware update: while it is later than now the device counts as updating, not offline. Cleared on its next connect.</param>
+/// <param name="UpdatingUntil">Set when the client's last disconnect was to install a firmware update: while it is later than now the client counts as updating, not offline. Cleared on its next connect.</param>
 public record ClientResponse(
     Guid ClientRefId,
     Guid PolicyRefId,
@@ -61,9 +61,9 @@ public record ClientResponse(
     DateTimeOffset? UpdatingUntil = null
 );
 
-/// <param name="System">The platform features the device last said it takes, such as <c>ota</c>; empty when none.</param>
+/// <param name="System">The platform features the client last said it takes, such as <c>ota</c>; empty when none.</param>
 /// <param name="UpdatingUntil">As on <see cref="ClientResponse"/>.</param>
-/// <param name="FirmwareVersion">The version of the code the device runs, from its capabilities report; null when it never said.</param>
+/// <param name="FirmwareVersion">The version of the code the client runs, from its capabilities report; null when it never said.</param>
 public record ClientDetailResponse(
     Guid ClientRefId,
     Guid PolicyRefId,
@@ -95,7 +95,7 @@ public record ClientCountsResponse(int Total, int Pending, int Registered, int R
 
 /// <summary>A message type a client has sent, for a type picker.</summary>
 /// <param name="Count">How many messages of this type have arrived since the platform started counting them.</param>
-/// <param name="IsPlatform">A type the platform reads itself (<c>state.report</c>, <c>capabilities</c>), shown apart from the device's own.</param>
+/// <param name="IsPlatform">A type the platform reads itself (<c>state.report</c>, <c>capabilities</c>), shown apart from the client's own.</param>
 /// <param name="SamplePayload">The latest payload of this type, when it was small enough to keep (4,000 characters).</param>
 public record ClientMessageTypeResponse(
     string Type,

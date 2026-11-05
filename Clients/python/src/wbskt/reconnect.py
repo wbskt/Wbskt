@@ -1,4 +1,4 @@
-"""When to try again after the connection drops (Docs/Device.Protocol.md §5).
+"""When to try again after the connection drops (Docs/Client.Protocol.md §5).
 
 Every delay is drawn at random from zero up to a ceiling ("full jitter"), so a fleet that lost its
 socket host at the same moment comes back spread out instead of logging in all at once.

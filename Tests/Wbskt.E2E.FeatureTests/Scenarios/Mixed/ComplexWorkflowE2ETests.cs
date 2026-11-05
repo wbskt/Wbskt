@@ -17,7 +17,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Mixed;
 /// explicit terminal node in a single workflow, proving they compose end-to-end.
 ///
 /// Topology:
-///   DeviceTrigger ─► LogicGate("true") ──true──► Delay(5s) ─► action:clientMessage (OpenVent) ─► End
+///   ClientTrigger ─► LogicGate("true") ──true──► Delay(5s) ─► action:clientMessage (OpenVent) ─► End
 ///                                       └─false─► (unused)
 ///
 /// Telemetry starts the run; the gate routes to the true port; the Delay node parks on a durable
@@ -41,8 +41,8 @@ public sealed class ComplexWorkflowE2ETests(ServicesFixture fixture)
         var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
 
-        var deviceName = $"e2e-complex-{Guid.NewGuid():N}";
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, deviceName);
+        var clientName = $"e2e-complex-{Guid.NewGuid():N}";
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, clientName);
 
         var workflowRefId = Guid.NewGuid();
         var definition = BuildComplexDefinition(workflowRefId, clientRefId.ToString());
@@ -56,7 +56,7 @@ public sealed class ComplexWorkflowE2ETests(ServicesFixture fixture)
             JsonSerializer.SerializeToElement(definition, JsonOpts));
 
         var storage = new InMemoryClientStorage(clientRefId, secret);
-        var clientConfig = new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, deviceName, null);
+        var clientConfig = new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, clientName, null);
 
         var commandTcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var wbsktClient = new WbsktClient(clientConfig, storage);

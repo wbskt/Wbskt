@@ -258,7 +258,7 @@ one are separate grants; an operator with `workflows.execute` alone cannot chang
 It is kept in the catalogue rather than removed so that role configurations already granting it
 stay valid.
 
-`clients.manage` gates the device lifecycle operations that go beyond a status change: deleting a
+`clients.manage` gates the client lifecycle operations that go beyond a status change: deleting a
 client and rotating its secret. Approving and revoking, singly or in bulk, stay on `clients.update`.
 
 Two structural notes on scoping, since neither is enforced by the resolve call:

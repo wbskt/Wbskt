@@ -19,25 +19,25 @@ public sealed class TriggerConcurrencyE2ETests(ServicesFixture fixture)
         
         var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, "DeviceConcurrency1");
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, "ClientConcurrency1");
         
         var storage = new InMemoryClientStorage(clientRefId, secret);
         var clientConfig = new ClientConfig(
             BaseApiUrl: E2EConfig.ManagementBaseUrl,
             BaseSocketUrl: E2EConfig.SocketWsBaseUrl,
-            DeviceName: "DeviceConcurrency1",
+            ClientName: "ClientConcurrency1",
             PolicyPin: null);
 
         var workflowRefId = Guid.NewGuid();
-        var deviceRefStr = clientRefId.ToString();
+        var clientRefStr = clientRefId.ToString();
         var builder = new WorkflowBuilder($"E2E-Concurrency-DropIfRunning-{workflowRefId:N}", workflowRefId)
             // Use DropIfRunning policy with correlation based on the client ref
-            .AddClientTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.DropIfRunning, "trigger.clientRefId", out var triggerNodeId)
+            .AddClientTrigger(clientRefStr, "telemetry", WorkflowConcurrencyPolicy.DropIfRunning, "trigger.clientRefId", out var triggerNodeId)
             // Add an AwaitSignal so the run stays Active. We don't care if it times out or signals.
             .AddAwaitSignal("continue", TimeSpan.FromSeconds(5), awaitSignal => 
             {
                 awaitSignal.OnSuccess(b => b.AddFailRun("Should not have received signal"));
-                awaitSignal.OnTimeout(b => b.AddClientMessage(deviceRefStr, "TimeoutFired", "Timeout Fired"));
+                awaitSignal.OnTimeout(b => b.AddClientMessage(clientRefStr, "TimeoutFired", "Timeout Fired"));
             });
 
         var definition = builder.BuildAndValidate();
@@ -45,12 +45,12 @@ public sealed class TriggerConcurrencyE2ETests(ServicesFixture fixture)
             token, workspaceRef, workflowRefId, definition.Name,
             JsonSerializer.SerializeToElement(definition, JsonOpts));
 
-        // A sentinel on the same device and message type that runs for every event. A client message
+        // A sentinel on the same client and message type that runs for every event. A client message
         // is matched against every trigger watching it in one pass, so once the sentinel has a run
         // per event, the trigger under test has been offered all five as well.
         var sentinelRefId = Guid.NewGuid();
         var sentinel = new WorkflowBuilder($"E2E-Concurrency-Sentinel-{sentinelRefId:N}", sentinelRefId)
-            .AddClientTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddClientTrigger(clientRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
             .BuildAndValidate();
         var sentinelPublishedRef = await fixture.PublishWorkflowAsync(
             token, workspaceRef, sentinelRefId, sentinel.Name,

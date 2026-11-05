@@ -9,7 +9,7 @@ public sealed record ManualTriggerConfig
     public string? Description { get; init; } = null;
 
     /// <summary>
-    /// What a run started by hand asks for, such as <c>device</c> and <c>reason</c>: a client shows a
+    /// What a run started by hand asks for, such as <c>client</c> and <c>reason</c>: a client shows a
     /// small form from these before Run now. Each becomes a key of the run's body
     /// (<c>$trigger.body.NAME</c>); one the caller leaves out takes its <see cref="ManualTriggerInput.Default"/>.
     /// Names are unique, and may not be one the engine writes itself (<c>parentRunRefId</c>,

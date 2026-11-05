@@ -10,7 +10,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 /// pre-deployment script, run against databases shaped the way real ones can be when it reaches them.
 ///
 /// The schema diff that follows the script drops the plaintext column, so any row the script fails to
-/// hash is a device that can never authenticate again, with nothing left to recover it from. The script
+/// hash is a client that can never authenticate again, with nothing left to recover it from. The script
 /// under test is the shipped one, read off disk.
 /// </summary>
 [Collection("SqlEdge")]
@@ -150,7 +150,7 @@ public sealed class ClientSecretMigrationTests
         {
             await using var conn = new SqlConnection(connectionString);
             await conn.OpenAsync();
-            await using var cmd = new SqlCommand("INSERT INTO dbo.Clients (Name, Secret) VALUES (N'device', @Secret);", conn);
+            await using var cmd = new SqlCommand("INSERT INTO dbo.Clients (Name, Secret) VALUES (N'client', @Secret);", conn);
             cmd.Parameters.AddWithValue("@Secret", secret);
             await cmd.ExecuteNonQueryAsync();
         }

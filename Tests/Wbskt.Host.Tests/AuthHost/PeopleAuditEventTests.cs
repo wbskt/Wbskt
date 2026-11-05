@@ -85,8 +85,8 @@ public sealed class PeopleAuditEventTests
         var roleRef = Guid.NewGuid();
         _accessControl.Setup(p => p.FindRoleIdByRefIdAsync(roleRef, TenantId, It.IsAny<CancellationToken>())).ReturnsAsync(42);
         _accessControl.SetupSequence(p => p.GetRolePermissionsAsync(42, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new RolePermissionAssignmentResponse("devices.read", false)])
-            .ReturnsAsync([new RolePermissionAssignmentResponse("users.manage", true), new RolePermissionAssignmentResponse("devices.read", false)]);
+            .ReturnsAsync([new RolePermissionAssignmentResponse("clients.read", false)])
+            .ReturnsAsync([new RolePermissionAssignmentResponse("users.manage", true), new RolePermissionAssignmentResponse("clients.read", false)]);
 
         await _accessControlService.GrantRolePermissionAsync(TenantId, roleRef, new GrantRolePermissionRequest("users.manage", true), CancellationToken.None);
 
@@ -94,7 +94,7 @@ public sealed class PeopleAuditEventTests
         Assert.Contains(_published, e => e is RolePermissionsChangedEvent { RoleId: 42 });
         var updated = Assert.Single(_published.OfType<RolePermissionsUpdatedEvent>());
         Assert.Equal(roleRef, updated.RoleRefId);
-        Assert.Equal([new FieldChange("permissions", "devices.read", "!users.manage,devices.read")], updated.Changes);
+        Assert.Equal([new FieldChange("permissions", "clients.read", "!users.manage,clients.read")], updated.Changes);
         Assert.Equal(TenantWorkspaces, updated.WorkspaceIds);
     }
 

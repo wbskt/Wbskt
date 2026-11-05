@@ -4,7 +4,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 namespace Wbskt.Workflow.Channels;
 
 /// <summary>
-/// What became of a command a workflow sent: the device acknowledged it, or the platform reported it
+/// What became of a command a workflow sent: the client acknowledged it, or the platform reported it
 /// failed. Only wakes a send-command step waiting for that outcome; nothing registers a trigger on
 /// it. Keys: <c>command:{commandId}</c>.
 /// </summary>

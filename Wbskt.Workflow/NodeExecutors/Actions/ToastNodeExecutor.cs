@@ -7,7 +7,7 @@ using Wbskt.Workflow.Runtime;
 namespace Wbskt.Workflow.NodeExecutors.Actions;
 
 /// <summary>
-/// Raises a toast to everyone watching the workspace. A toast has no device target - unlike
+/// Raises a toast to everyone watching the workspace. A toast has no client target - unlike
 /// <see cref="CommandNodeExecutor"/> it addresses the workspace's dashboard connections - so it
 /// publishes a workspace-scoped event and lets the management host fan it out over SignalR.
 /// </summary>

@@ -1,4 +1,4 @@
--- Queues a command for an offline device, unless the device already has @MaxPerClient waiting.
+-- Queues a command for an offline client, unless the client already has @MaxPerClient waiting.
 -- The count and the insert are one locked step, so two senders cannot both take the last place.
 -- Queueing a command id that is already waiting is a no-op, so a retried hand-back from a socket
 -- host does not fail on the unique key.

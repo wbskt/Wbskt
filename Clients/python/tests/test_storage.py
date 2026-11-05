@@ -30,10 +30,10 @@ def test_a_corrupt_file_reads_as_no_credentials(tmp_path):
     assert FileStorage(tmp_path / "creds.json").load() == (None, None)
 
 
-def test_device_names_become_safe_file_names(tmp_path, monkeypatch):
+def test_client_names_become_safe_file_names(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
 
-    path = FileStorage.for_device('pi/kitchen:"1"').path
+    path = FileStorage.for_client('pi/kitchen:"1"').path
 
     assert path.name == "pi_kitchen__1_.json"

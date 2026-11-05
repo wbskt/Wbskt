@@ -1,5 +1,5 @@
 <Project>
-  <!-- Shared by the packages published from Clients/ (the device SDK and its protocol types). -->
+  <!-- Shared by the packages published from Clients/ (the client SDK and its protocol types). -->
   <PropertyGroup>
     <SdkPackageVersion>0.9.0-beta.1</SdkPackageVersion>
     <Authors>wbskt</Authors>
@@ -10,7 +10,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <!-- The rest of the repository is PolyForm Noncommercial; Clients/LICENSE carves the SDKs out. -->
-    <PackageTags>wbskt;iot;websocket;devices;realtime;raspberry-pi</PackageTags>
+    <PackageTags>wbskt;iot;websocket;clients;realtime;raspberry-pi</PackageTags>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>

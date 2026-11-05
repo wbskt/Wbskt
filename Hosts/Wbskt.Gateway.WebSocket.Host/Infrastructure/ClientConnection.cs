@@ -5,14 +5,14 @@ using Wbskt.Gateway.Core.Infrastructure;
 namespace Wbskt.Gateway.WebSocket.Host.Infrastructure;
 
 /// <summary>
-/// One device's socket. Its receive loop (SocketHandler) owns its end: it alone unregisters it,
+/// One client's socket. Its receive loop (SocketHandler) owns its end: it alone unregisters it,
 /// disposes the socket, records the metric and announces the disconnect. Anyone else who wants it
-/// closed calls <see cref="DeviceConnection.RequestCloseAsync"/>, which sends the Close frame and lets
+/// closed calls <see cref="ClientConnectionBase.RequestCloseAsync"/>, which sends the Close frame and lets
 /// the loop finish.
 /// </summary>
-public sealed class ClientConnection : DeviceConnection, IDisposable
+public sealed class ClientConnection : ClientConnectionBase, IDisposable
 {
-    // How long a device has to answer our Close before its connection is cut.
+    // How long a client has to answer our Close before its connection is cut.
     internal static readonly TimeSpan CloseGrace = TimeSpan.FromSeconds(5);
 
     private readonly SemaphoreSlim _sendLock = new(1, 1);
@@ -44,7 +44,7 @@ public sealed class ClientConnection : DeviceConnection, IDisposable
 
     /// <summary>
     /// Sends a Close frame under the send lock, so it cannot interleave with a message being sent: the
-    /// answer to a device's Close, or the last word on a connection that is ending.
+    /// answer to a client's Close, or the last word on a connection that is ending.
     /// </summary>
     public async Task CloseOutputAsync(WebSocketCloseStatus status, string description, CancellationToken cancellationToken)
     {
@@ -63,7 +63,7 @@ public sealed class ClientConnection : DeviceConnection, IDisposable
     }
 
     /// <summary>
-    /// Sends the Close frame (the device answers with its own, which ends the receive loop) and cuts
+    /// Sends the Close frame (the client answers with its own, which ends the receive loop) and cuts
     /// the connection if no answer comes within <see cref="CloseGrace"/>.
     /// </summary>
     protected override async Task CloseAsync(DisconnectReason reason, string description)

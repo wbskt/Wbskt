@@ -1,7 +1,7 @@
 -- What each workflow trigger did with the latest messages that reached it: started a run, filtered
 -- it out, queued it, dropped it, held it. Answers "I sent the message and nothing happened" (#416).
 -- A ring buffer, not a log: TriggerDispatchOutcome_RecordMany keeps only the newest @Keep rows for each
--- trigger node, so the table stays at (triggers x @Keep) rows however busy a device is.
+-- trigger node, so the table stays at (triggers x @Keep) rows however busy a client is.
 CREATE TABLE dbo.TriggerDispatchOutcomes
 (
     Id             BIGINT           NOT NULL IDENTITY(1,1) PRIMARY KEY,

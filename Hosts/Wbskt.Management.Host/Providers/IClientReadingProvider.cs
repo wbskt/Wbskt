@@ -6,7 +6,7 @@ namespace Wbskt.Management.Host.Providers;
 public interface IClientReadingProvider
 {
     /// <summary>Stores the numbers from one state report. A reading already stored is skipped.</summary>
-    Task InsertAsync(int clientId, DateTime deviceTime, DateTime receivedAt, bool isLate, IReadOnlyCollection<ClientReadingValue> readings, CancellationToken cancellationToken = default);
+    Task InsertAsync(int clientId, DateTime sentAt, DateTime receivedAt, bool isLate, IReadOnlyCollection<ClientReadingValue> readings, CancellationToken cancellationToken = default);
 
     /// <summary>One variable's readings in [from, to), summarised per bucket counted from <paramref name="fromUtc"/>.</summary>
     Task<IReadOnlyCollection<ClientReadingBucket>> GetBucketsAsync(int clientId, string name, DateTime fromUtc, DateTime toUtc, int bucketSeconds, CancellationToken cancellationToken = default);

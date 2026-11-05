@@ -12,10 +12,10 @@ public sealed class WbsktClient : IWbsktClient
     private readonly SocketClient _socket;
     private readonly OutboundBuffer _outbound;
     private readonly SemaphoreSlim _flushLock = new(1, 1);
-    private readonly TokenBucket _pacer = new(DeviceProtocol.SendPerSecond, DeviceProtocol.SendBurst);
+    private readonly TokenBucket _pacer = new(ClientProtocol.SendPerSecond, ClientProtocol.SendBurst);
     private readonly CancellationTokenSource _cts = new();
     private readonly ReconnectPolicy _reconnect = new();
-    private readonly DeviceTokenCache _tokens;
+    private readonly ClientTokenCache _tokens;
 
     /// <summary>How often a connected client checks whether its socket is still open.</summary>
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
@@ -34,26 +34,26 @@ public sealed class WbsktClient : IWbsktClient
     public event Action? OnDisconnected;
 
     /// <summary>
-    /// A newer connection with these credentials replaced this one. Now and then that is this device
-    /// reconnecting; raised again and again, another device is probably using the same credentials.
+    /// A newer connection with these credentials replaced this one. Now and then that is this client
+    /// reconnecting; raised again and again, another client is probably using the same credentials.
     /// </summary>
     public event Action? OnSuperseded;
 
     public int PendingMessageCount => _outbound.Count;
 
     /// <summary>
-    /// A device named <paramref name="deviceName"/> on the hosted service, enrolling with
+    /// A client named <paramref name="clientName"/> on the hosted service, enrolling with
     /// <paramref name="policyPin"/> the first time and keeping its credentials in a file
-    /// (<see cref="FileClientStorage.ForDevice"/>) for every start after that.
+    /// (<see cref="FileClientStorage.ForClient"/>) for every start after that.
     /// </summary>
-    public WbsktClient(string deviceName, string policyPin)
-        : this(new ClientConfig(WbsktDefaults.ApiUrl, WbsktDefaults.SocketUrl, deviceName, policyPin), FileClientStorage.ForDevice(deviceName))
+    public WbsktClient(string clientName, string policyPin)
+        : this(new ClientConfig(WbsktDefaults.ApiUrl, WbsktDefaults.SocketUrl, clientName, policyPin), FileClientStorage.ForClient(clientName))
     {
     }
 
     /// <summary>Custom URLs (self-hosted, staging) and buffering, with credentials kept in a file.</summary>
     public WbsktClient(ClientConfig config)
-        : this(config, FileClientStorage.ForDevice(config.DeviceName))
+        : this(config, FileClientStorage.ForClient(config.ClientName))
     {
     }
 
@@ -64,7 +64,7 @@ public sealed class WbsktClient : IWbsktClient
         _auth = new AuthClient(config);
         _socket = new SocketClient(config.BaseSocketUrl);
         _outbound = new OutboundBuffer(config.OfflineBufferSize);
-        _tokens = new DeviceTokenCache(() => _auth.LoginAsync(_resolvedRefId!.Value, _resolvedSecret!));
+        _tokens = new ClientTokenCache(() => _auth.LoginAsync(_resolvedRefId!.Value, _resolvedSecret!));
 
         // Forward internal events to public surface
         _socket.OnMessageReceived += (type, payload, commandId) => OnMessageReceived?.Invoke(type, payload, commandId);
@@ -156,7 +156,7 @@ public sealed class WbsktClient : IWbsktClient
         try
         {
             // Capabilities describe the connection, so they go out first and are never buffered.
-            await _socket.SendAsync(new DeviceMessage(MessageTypes.Capabilities, BuildEffectiveCapabilities()));
+            await _socket.SendAsync(new ProtocolMessage(MessageTypes.Capabilities, BuildEffectiveCapabilities()));
         }
         catch (Exception)
         {
@@ -202,7 +202,7 @@ public sealed class WbsktClient : IWbsktClient
 
             if (failures == 0)
             {
-                // Just dropped. Every device that shared this socket host noticed at the same moment,
+                // Just dropped. Every client that shared this socket host noticed at the same moment,
                 // so each waits a random part of the window before its first attempt.
                 var close = _socket.LastClose;
                 if (close == ServerClose.Revoked)
@@ -231,7 +231,7 @@ public sealed class WbsktClient : IWbsktClient
     }
 
     private TimeSpan FailureDelay(Exception error, int failures) =>
-        error is DeviceLoginThrottledException { RetryAfter: { } retryAfter }
+        error is ClientLoginThrottledException { RetryAfter: { } retryAfter }
             ? _reconnect.AfterThrottle(retryAfter)
             : _reconnect.RetryDelay(failures);
 
@@ -241,7 +241,7 @@ public sealed class WbsktClient : IWbsktClient
 
         if (_socket.IsConnected)
         {
-            await _socket.SendAsync(new DeviceMessage(MessageTypes.Capabilities, BuildEffectiveCapabilities()));
+            await _socket.SendAsync(new ProtocolMessage(MessageTypes.Capabilities, BuildEffectiveCapabilities()));
         }
     }
 
@@ -250,7 +250,7 @@ public sealed class WbsktClient : IWbsktClient
     /// </exception>
     public Task SendAsync(string type, object payload)
     {
-        if (DeviceMessageRules.Check(type, null) is { } violation)
+        if (ClientMessageRules.Check(type, null) is { } violation)
         {
             throw new ArgumentException(violation.Message, nameof(type));
         }
@@ -260,7 +260,7 @@ public sealed class WbsktClient : IWbsktClient
 
     private async Task EnqueueAsync(string type, object payload)
     {
-        var message = new DeviceMessage(type, payload) { SentAt = DateTimeOffset.UtcNow };
+        var message = new ProtocolMessage(type, payload) { SentAt = DateTimeOffset.UtcNow };
 
         if (_outbound.Capacity <= 0)
         {

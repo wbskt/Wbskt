@@ -20,8 +20,8 @@ public sealed class ScheduleTriggerE2ETests(ServicesFixture fixture)
         var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
 
-        var deviceName = $"e2e-sched-{Guid.NewGuid():N}";
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, deviceName);
+        var clientName = $"e2e-sched-{Guid.NewGuid():N}";
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, clientName);
 
         var workflowRefId = Guid.NewGuid();
         
@@ -33,7 +33,7 @@ public sealed class ScheduleTriggerE2ETests(ServicesFixture fixture)
             JsonSerializer.SerializeToElement(definition, JsonOpts));
 
         var storage = new InMemoryClientStorage(clientRefId, secret);
-        var clientConfig = new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, deviceName, null);
+        var clientConfig = new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, clientName, null);
 
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
         await wbsktClient.StartAsync();

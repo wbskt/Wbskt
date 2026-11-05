@@ -15,7 +15,7 @@ async def test_registers_once_and_stores_the_credentials(api, socket_server, no_
     await socket_server.wait_connections(1)
     await client.stop()
 
-    assert api.registrations == [{"pin": "483920", "name": "test-device"}]
+    assert api.registrations == [{"pin": "483920", "name": "test-client"}]
     assert storage.load()[0] is not None
 
     second = make_client(api, socket_server, no_jitter, storage=storage)

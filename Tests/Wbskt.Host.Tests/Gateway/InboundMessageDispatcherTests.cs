@@ -20,7 +20,7 @@ public sealed class InboundMessageDispatcherTests
     private static readonly Guid CommandId = Guid.Parse("88888888-8888-8888-8888-888888888888");
 
     private readonly RecordingEventBus _bus = new();
-    private readonly FakeDeviceConnection _connection = new() { ClientId = 1, WorkspaceId = 2 };
+    private readonly FakeClientConnection _connection = new() { ClientId = 1, WorkspaceId = 2 };
     private readonly InboundMessageDispatcher _dispatcher;
 
     public InboundMessageDispatcherTests()
@@ -31,13 +31,13 @@ public sealed class InboundMessageDispatcherTests
             new AckHandler(_bus, NullLogger<AckHandler>.Instance),
             new OtaStatusHandler(_bus, NullLogger<OtaStatusHandler>.Instance)
         ];
-        _dispatcher = new InboundMessageDispatcher(handlers, new DeviceMessageHandler(_bus), new GatewayMetrics(GatewayTransport.WebSocket), NullLogger<InboundMessageDispatcher>.Instance);
+        _dispatcher = new InboundMessageDispatcher(handlers, new ClientMessageHandler(_bus), new GatewayMetrics(GatewayTransport.WebSocket), NullLogger<InboundMessageDispatcher>.Instance);
     }
 
     private Task Dispatch(string json) => _dispatcher.DispatchAsync(new InboundContext(ClientRefId, _connection), json, CancellationToken.None);
 
     [Fact]
-    public async Task A_device_message_is_published_as_the_devices_own()
+    public async Task A_client_message_is_published_as_the_clients_own()
     {
         await Dispatch("""{"type":"temp.reading","payload":{"c":21.5}}""");
 
@@ -68,7 +68,7 @@ public sealed class InboundMessageDispatcherTests
     }
 
     [Fact]
-    public async Task An_unknown_system_message_is_ignored_and_never_reaches_the_device_log()
+    public async Task An_unknown_system_message_is_ignored_and_never_reaches_the_client_log()
     {
         await Dispatch("""{"type":"sys.whatever","payload":{}}""");
 
@@ -144,7 +144,7 @@ public sealed class InboundMessageDispatcherTests
         var ping = await SendPing();
         await Task.Delay(50);
 
-        // The echoed timestamp is ignored: a device cannot make its latency look better than it is.
+        // The echoed timestamp is ignored: a client cannot make its latency look better than it is.
         await Dispatch($$$"""{"type":"sys.pong","payload":{"originalTimestamp":"{{{DateTime.UtcNow:O}}}","id":"{{{ping.Id}}}"}}""");
 
         _bus.Published.Should().ContainSingle().Which.Should().BeOfType<ClientLatencyMeasuredEvent>()

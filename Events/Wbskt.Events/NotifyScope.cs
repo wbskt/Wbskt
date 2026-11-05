@@ -7,8 +7,8 @@ public enum NotifyScope
     Workspace,
 
     /// <summary>
-    /// Only connections that joined the event's client with <c>JoinClient</c>. For per-device traffic,
-    /// which only the device page shows and which arrives at the rate devices talk. The event must
+    /// Only connections that joined the event's client with <c>JoinClient</c>. For per-client traffic,
+    /// which only the client page shows and which arrives at the rate clients talk. The event must
     /// implement <c>IClientContext</c>.
     /// </summary>
     Client,

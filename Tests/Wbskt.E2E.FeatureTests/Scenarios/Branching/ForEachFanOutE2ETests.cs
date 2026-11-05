@@ -15,7 +15,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Branching;
 /// BranchId, so the siblings are NOT deduped against each other.
 ///
 /// Topology:
-///   DeviceTrigger ─► Variable(Set Local "items"=[a,b,c]) ─► ForEach("items")
+///   ClientTrigger ─► Variable(Set Local "items"=[a,b,c]) ─► ForEach("items")
 ///                                                              ├─body─► action:clientMessage (OpenVent)
 ///                                                              └─done─► End
 ///
@@ -42,10 +42,10 @@ public sealed class ForEachFanOutE2ETests(ServicesFixture fixture)
         var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
 
-        var deviceName = $"e2e-foreach-{Guid.NewGuid():N}";
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, deviceName);
+        var clientName = $"e2e-foreach-{Guid.NewGuid():N}";
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, clientName);
 
-        // ── 2. Publish DeviceTrigger → Variable(items) → ForEach → command ───
+        // ── 2. Publish ClientTrigger → Variable(items) → ForEach → command ───
         var workflowRefId = Guid.NewGuid();
         var definition = BuildForEachDefinition(workflowRefId, clientRefId.ToString());
 
@@ -62,7 +62,7 @@ public sealed class ForEachFanOutE2ETests(ServicesFixture fixture)
         var clientConfig = new ClientConfig(
             BaseApiUrl: E2EConfig.ManagementBaseUrl,
             BaseSocketUrl: E2EConfig.SocketWsBaseUrl,
-            DeviceName: deviceName,
+            ClientName: clientName,
             PolicyPin: null);
 
         var commandLock = new object();

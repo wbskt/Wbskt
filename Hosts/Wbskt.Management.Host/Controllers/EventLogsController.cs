@@ -28,7 +28,7 @@ public sealed class EventLogsController : ApiControllerBase
     /// The workspace's event log, newest first, narrowed by any of the filters in <paramref name="query"/>.
     /// </summary>
     /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
-    /// <param name="query">The filters: event names and groups, criticality, policy, client, workflow, user, time range, device traffic and text search.</param>
+    /// <param name="query">The filters: event names and groups, criticality, policy, client, workflow, user, time range, client traffic and text search.</param>
     /// <param name="page">The page to read: <c>cursor</c> (left out for the newest entries) and <c>limit</c> (default 50).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A page of event logs, newest first, with the cursor for the next page.</returns>

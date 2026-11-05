@@ -1,4 +1,4 @@
--- A device's waiting commands, oldest first, for the client page's "waiting" list and count.
+-- A client's waiting commands, oldest first, for the client page's "waiting" list and count.
 CREATE PROCEDURE dbo.QueuedCommand_GetBy_Client
     @ClientId INT
 AS

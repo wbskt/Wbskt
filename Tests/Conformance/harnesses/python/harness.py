@@ -39,7 +39,7 @@ async def read_lines(queue: "asyncio.Queue[str]") -> None:
 
 async def main() -> None:
     client = AsyncWbsktClient(
-        os.environ["WBSKT_DEVICE_NAME"],
+        os.environ["WBSKT_CLIENT_NAME"],
         os.environ.get("WBSKT_POLICY_PIN") or None,
         api_url=os.environ["WBSKT_API_URL"],
         socket_url=os.environ["WBSKT_SOCKET_URL"],

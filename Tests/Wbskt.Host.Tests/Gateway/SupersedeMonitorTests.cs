@@ -4,17 +4,17 @@ namespace Wbskt.Host.Tests.Gateway;
 
 public sealed class SupersedeMonitorTests
 {
-    private static readonly Guid Device = Guid.NewGuid();
+    private static readonly Guid Client = Guid.NewGuid();
 
     [Fact]
-    public void A_device_reconnecting_now_and_then_is_not_reported()
+    public void A_client_reconnecting_now_and_then_is_not_reported()
     {
         var time = new SettableTime(DateTimeOffset.UtcNow);
         var monitor = new SupersedeMonitor(time);
 
         for (var i = 0; i < 10; i++)
         {
-            Assert.Null(monitor.Record(Device));
+            Assert.Null(monitor.Record(Client));
             time.Advance(TimeSpan.FromMinutes(3));
         }
     }
@@ -28,7 +28,7 @@ public sealed class SupersedeMonitorTests
         var reports = new List<int?>();
         for (var i = 0; i < 20; i++)
         {
-            reports.Add(monitor.Record(Device));
+            reports.Add(monitor.Record(Client));
             time.Advance(TimeSpan.FromSeconds(5));
         }
 
@@ -37,24 +37,24 @@ public sealed class SupersedeMonitorTests
         time.Advance(SupersedeMonitor.Window);
         for (var i = 0; i < SupersedeMonitor.Threshold - 1; i++)
         {
-            Assert.Null(monitor.Record(Device));
+            Assert.Null(monitor.Record(Client));
         }
 
-        Assert.Equal(SupersedeMonitor.Threshold, monitor.Record(Device));
+        Assert.Equal(SupersedeMonitor.Threshold, monitor.Record(Client));
     }
 
     [Fact]
-    public void Devices_are_counted_apart()
+    public void Clients_are_counted_apart()
     {
         var monitor = new SupersedeMonitor(new SettableTime(DateTimeOffset.UtcNow));
 
         for (var i = 0; i < SupersedeMonitor.Threshold - 1; i++)
         {
-            monitor.Record(Device);
+            monitor.Record(Client);
             Assert.Null(monitor.Record(Guid.NewGuid()));
         }
 
-        Assert.NotNull(monitor.Record(Device));
+        Assert.NotNull(monitor.Record(Client));
     }
 
     private sealed class SettableTime(DateTimeOffset now) : TimeProvider

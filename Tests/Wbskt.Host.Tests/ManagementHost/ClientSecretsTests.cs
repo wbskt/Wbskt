@@ -85,7 +85,7 @@ public sealed class ClientSecretsTests
     /// <summary>
     /// A truncated or otherwise malformed stored hash must be refused, not throw:
     /// <c>FixedTimeEquals</c> is length-sensitive, and an exception here would surface as a 500 on
-    /// the device login path rather than a clean rejection.
+    /// the client login path rather than a clean rejection.
     /// </summary>
     [Fact]
     public void Wrong_length_stored_hash_is_rejected_without_throwing()

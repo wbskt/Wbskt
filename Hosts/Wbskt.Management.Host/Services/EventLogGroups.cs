@@ -11,7 +11,7 @@ namespace Wbskt.Management.Host.Services;
 
 /// <summary>
 /// The audit log's views, as named sets of events. Every group but security follows the namespace
-/// its events live in, so a new event joins its group without an edit here. Device traffic is never
+/// its events live in, so a new event joins its group without an edit here. Client traffic is never
 /// in a group: it is what happened on the wire, not something anyone did.
 /// </summary>
 public static class EventLogGroups
@@ -73,8 +73,8 @@ public static class EventLogGroups
 
     private static IReadOnlyDictionary<string, IReadOnlySet<string>> Build()
     {
-        var traffic = DeviceTrafficAttribute.EventNames.ToHashSet(StringComparer.Ordinal);
-        var events = typeof(DeviceTrafficAttribute).Assembly.GetTypes()
+        var traffic = ClientTrafficAttribute.EventNames.ToHashSet(StringComparer.Ordinal);
+        var events = typeof(ClientTrafficAttribute).Assembly.GetTypes()
             .Where(t => t is { IsClass: true, IsAbstract: false, IsNested: false } && typeof(BaseEvent).IsAssignableFrom(t))
             .Where(t => !traffic.Contains(t.Name))
             .ToList();

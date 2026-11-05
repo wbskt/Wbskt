@@ -9,8 +9,8 @@ using Wbskt.Workflow.Abstraction.Models;
 namespace Wbskt.E2E.FeatureTests.Scenarios.Triggers;
 
 /// <summary>
-/// A device going offline (or coming online) and staying that way for the trigger's grace period
-/// starts a run; a device that comes back within it does not.
+/// A client going offline (or coming online) and staying that way for the trigger's grace period
+/// starts a run; a client that comes back within it does not.
 /// </summary>
 [Collection(EngineCollection.Name)]
 public sealed class ClientPresenceTriggerE2ETests(ServicesFixture fixture)
@@ -18,66 +18,66 @@ public sealed class ClientPresenceTriggerE2ETests(ServicesFixture fixture)
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
     [SkippableFact]
-    public async Task Offline_trigger_runs_once_the_device_has_stayed_offline()
+    public async Task Offline_trigger_runs_once_the_client_has_stayed_offline()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
-        var (token, workspaceRef, clientRefId, secret, deviceName) = await RegisterDeviceAsync("offline");
+        var (token, workspaceRef, clientRefId, secret, clientName) = await RegisterTestClientAsync("offline");
         var workflowRefId = await PublishAsync(token, workspaceRef, clientRefId, ClientPresenceState.Offline, forSeconds: 2);
 
-        var client = await ConnectAsync(clientRefId, secret, deviceName);
+        var client = await ConnectAsync(clientRefId, secret, clientName);
         await client.DisposeAsync();
 
         var runRefId = await fixture.WaitForFirstRunAsync(token, workspaceRef, workflowRefId, TimeSpan.FromSeconds(60));
-        runRefId.Should().NotBe(Guid.Empty, "the device stayed offline past the grace period");
+        runRefId.Should().NotBe(Guid.Empty, "the client stayed offline past the grace period");
         var summary = await fixture.WaitForRunTerminalAsync(token, workspaceRef, runRefId, TimeSpan.FromSeconds(30));
         summary!.Status.Should().Be("Succeeded");
     }
 
     [SkippableFact]
-    public async Task Offline_trigger_does_not_run_when_the_device_comes_back_within_the_grace_period()
+    public async Task Offline_trigger_does_not_run_when_the_client_comes_back_within_the_grace_period()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
-        var (token, workspaceRef, clientRefId, secret, deviceName) = await RegisterDeviceAsync("blip");
+        var (token, workspaceRef, clientRefId, secret, clientName) = await RegisterTestClientAsync("blip");
         var workflowRefId = await PublishAsync(token, workspaceRef, clientRefId, ClientPresenceState.Offline, forSeconds: 15);
-        // A sentinel on the same device: it runs once the device has stayed online for 20 seconds
+        // A sentinel on the same client: it runs once the client has stayed online for 20 seconds
         // after coming back, so its run can only start after the offline check, due 15 seconds after
         // the disconnect, has been judged by the same ticker.
         var sentinelRefId = await PublishAsync(token, workspaceRef, clientRefId, ClientPresenceState.Online, forSeconds: 20);
 
-        var first = await ConnectAsync(clientRefId, secret, deviceName);
+        var first = await ConnectAsync(clientRefId, secret, clientName);
         await first.DisposeAsync();
-        // The blip itself: the device is away for a moment, well inside the grace period.
+        // The blip itself: the client is away for a moment, well inside the grace period.
         await Task.Delay(TimeSpan.FromSeconds(1));
-        await using var second = await ConnectAsync(clientRefId, secret, deviceName);
+        await using var second = await ConnectAsync(clientRefId, secret, clientName);
 
         await fixture.WaitForFirstRunAsync(token, workspaceRef, sentinelRefId, TimeSpan.FromSeconds(90));
 
         var runs = await fixture.ListRunsAsync(token, workspaceRef, workflowRefId);
-        runs.Should().BeEmpty("the device was back online before the grace period ran out");
+        runs.Should().BeEmpty("the client was back online before the grace period ran out");
     }
 
     [SkippableFact]
-    public async Task Online_trigger_runs_when_the_device_connects()
+    public async Task Online_trigger_runs_when_the_client_connects()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
-        var (token, workspaceRef, clientRefId, secret, deviceName) = await RegisterDeviceAsync("online");
+        var (token, workspaceRef, clientRefId, secret, clientName) = await RegisterTestClientAsync("online");
         var workflowRefId = await PublishAsync(token, workspaceRef, clientRefId, ClientPresenceState.Online, forSeconds: 0);
 
-        await using var client = await ConnectAsync(clientRefId, secret, deviceName);
+        await using var client = await ConnectAsync(clientRefId, secret, clientName);
 
         var runRefId = await fixture.WaitForFirstRunAsync(token, workspaceRef, workflowRefId, TimeSpan.FromSeconds(60));
-        runRefId.Should().NotBe(Guid.Empty, "the device came online");
+        runRefId.Should().NotBe(Guid.Empty, "the client came online");
         var summary = await fixture.WaitForRunTerminalAsync(token, workspaceRef, runRefId, TimeSpan.FromSeconds(30));
         summary!.Status.Should().Be("Succeeded");
     }
 
-    private async Task<(string Token, Guid WorkspaceRef, Guid ClientRefId, string Secret, string DeviceName)> RegisterDeviceAsync(string label)
+    private async Task<(string Token, Guid WorkspaceRef, Guid ClientRefId, string Secret, string ClientName)> RegisterTestClientAsync(string label)
     {
         var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
-        var deviceName = $"e2e-presence-{label}-{Guid.NewGuid():N}";
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, deviceName);
-        return (token, workspaceRef, clientRefId, secret, deviceName);
+        var clientName = $"e2e-presence-{label}-{Guid.NewGuid():N}";
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, clientName);
+        return (token, workspaceRef, clientRefId, secret, clientName);
     }
 
     private async Task<Guid> PublishAsync(string token, Guid workspaceRef, Guid clientRefId, ClientPresenceState state, int forSeconds)
@@ -93,10 +93,10 @@ public sealed class ClientPresenceTriggerE2ETests(ServicesFixture fixture)
             JsonSerializer.SerializeToElement(definition, JsonOpts));
     }
 
-    private static async Task<WbsktClient> ConnectAsync(Guid clientRefId, string secret, string deviceName)
+    private static async Task<WbsktClient> ConnectAsync(Guid clientRefId, string secret, string clientName)
     {
         var storage = new InMemoryClientStorage(clientRefId, secret);
-        var clientConfig = new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, deviceName, null);
+        var clientConfig = new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, clientName, null);
         var client = new WbsktClient(clientConfig, storage);
         await client.StartAsync();
         return client;

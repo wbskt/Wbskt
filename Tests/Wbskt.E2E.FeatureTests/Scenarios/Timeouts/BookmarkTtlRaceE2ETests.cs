@@ -20,23 +20,23 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
         
         var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, "Device1");
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, "Client1");
         
         var storage = new InMemoryClientStorage(clientRefId, secret);
         var clientConfig = new ClientConfig(
             BaseApiUrl: E2EConfig.ManagementBaseUrl,
             BaseSocketUrl: E2EConfig.SocketWsBaseUrl,
-            DeviceName: "Device1",
+            ClientName: "Client1",
             PolicyPin: null);
 
         var workflowRefId = Guid.NewGuid();
-        var deviceRefStr = clientRefId.ToString();
+        var clientRefStr = clientRefId.ToString();
         var builder = new WorkflowBuilder($"E2E-TTL-Timeout-{workflowRefId:N}", workflowRefId)
-            .AddClientTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
+            .AddClientTrigger(clientRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
             .AddAwaitSignal("continue", TimeSpan.FromSeconds(2), awaitSignal => 
             {
                 awaitSignal.OnSuccess(b => b.AddFailRun("Should not have received signal"));
-                awaitSignal.OnTimeout(b => b.AddClientMessage(deviceRefStr, "TimeoutFired", "Timeout Fired"));
+                awaitSignal.OnTimeout(b => b.AddClientMessage(clientRefStr, "TimeoutFired", "Timeout Fired"));
             });
 
         var definition = builder.BuildAndValidate();
@@ -86,22 +86,22 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
         
         var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, "Device2");
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, "Client2");
         
         var storage = new InMemoryClientStorage(clientRefId, secret);
         var clientConfig = new ClientConfig(
             BaseApiUrl: E2EConfig.ManagementBaseUrl,
             BaseSocketUrl: E2EConfig.SocketWsBaseUrl,
-            DeviceName: "Device2",
+            ClientName: "Client2",
             PolicyPin: null);
 
         var workflowRefId = Guid.NewGuid();
-        var deviceRefStr = clientRefId.ToString();
+        var clientRefStr = clientRefId.ToString();
         var builder = new WorkflowBuilder($"E2E-TTL-Signal-{workflowRefId:N}", workflowRefId)
-            .AddClientTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
+            .AddClientTrigger(clientRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
             .AddAwaitSignal("continue", TimeSpan.FromSeconds(10), awaitSignal => 
             {
-                awaitSignal.OnSuccess(b => b.AddClientMessage(deviceRefStr, "SignalFired", "Signal Fired"));
+                awaitSignal.OnSuccess(b => b.AddClientMessage(clientRefStr, "SignalFired", "Signal Fired"));
                 awaitSignal.OnTimeout(b => b.AddFailRun("Should not have timed out"));
             });
 
@@ -156,23 +156,23 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
         
         var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, "Device3");
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, "Client3");
         
         var storage = new InMemoryClientStorage(clientRefId, secret);
         var clientConfig = new ClientConfig(
             BaseApiUrl: E2EConfig.ManagementBaseUrl,
             BaseSocketUrl: E2EConfig.SocketWsBaseUrl,
-            DeviceName: "Device3",
+            ClientName: "Client3",
             PolicyPin: null);
 
         var workflowRefId = Guid.NewGuid();
-        var deviceRefStr = clientRefId.ToString();
+        var clientRefStr = clientRefId.ToString();
         var builder = new WorkflowBuilder($"E2E-TTL-Race-{workflowRefId:N}", workflowRefId)
-            .AddClientTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
+            .AddClientTrigger(clientRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
             .AddAwaitSignal("continue", TimeSpan.FromSeconds(3), awaitSignal => 
             {
-                awaitSignal.OnSuccess(b => b.AddClientMessage(deviceRefStr, "SignalFired", "Signal Fired"));
-                awaitSignal.OnTimeout(b => b.AddClientMessage(deviceRefStr, "TimeoutFired", "Timeout Fired"));
+                awaitSignal.OnSuccess(b => b.AddClientMessage(clientRefStr, "SignalFired", "Signal Fired"));
+                awaitSignal.OnTimeout(b => b.AddClientMessage(clientRefStr, "TimeoutFired", "Timeout Fired"));
             });
 
         var definition = builder.BuildAndValidate();

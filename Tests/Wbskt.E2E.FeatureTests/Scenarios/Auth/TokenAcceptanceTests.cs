@@ -97,7 +97,7 @@ public sealed class TokenAcceptanceTests(ServicesFixture fixture)
         var response = await fixture.Auth.As(clientToken).GetWorkspacesRawAsync();
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
-            "a device credential must never be accepted as a user identity — it is signed by another "
+            "a client credential must never be accepted as a user identity — it is signed by another "
             + "issuer, for another audience");
     }
 

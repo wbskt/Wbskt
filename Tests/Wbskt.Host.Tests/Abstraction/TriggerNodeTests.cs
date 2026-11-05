@@ -10,7 +10,7 @@ public class TriggerNodeTests
     private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web);
 
     [Fact]
-    public void DeviceTriggerNode_deserialises_from_json()
+    public void ClientTriggerNode_deserialises_from_json()
     {
         var json = """
             {
@@ -21,7 +21,7 @@ public class TriggerNodeTests
                 "config": {
                     "clientRef": "sensor-A",
                     "type": "telemetry",
-                    "correlationKey": "$trigger.deviceId",
+                    "correlationKey": "$trigger.clientId",
                     "concurrencyPolicy": "CancelExisting"
                 }
             }
@@ -33,12 +33,12 @@ public class TriggerNodeTests
         Assert.Equal(new Guid("11111111-1111-1111-1111-111111111111"), trigger.NodeId);
         Assert.Equal("sensor-A", trigger.Config.ClientRef);
         Assert.Equal("telemetry", trigger.Config.Type);
-        Assert.Equal("$trigger.deviceId", trigger.Config.CorrelationKey);
+        Assert.Equal("$trigger.clientId", trigger.Config.CorrelationKey);
         Assert.Equal(WorkflowConcurrencyPolicy.CancelExisting, trigger.Config.ConcurrencyPolicy);
     }
 
     [Fact]
-    public void DeviceTriggerNode_defaults_concurrencyPolicy_to_Queue_when_omitted()
+    public void ClientTriggerNode_defaults_concurrencyPolicy_to_Queue_when_omitted()
     {
         var json = """
             {
@@ -57,7 +57,7 @@ public class TriggerNodeTests
     }
 
     [Fact]
-    public void DeviceTriggerNode_reads_holdSeconds()
+    public void ClientTriggerNode_reads_holdSeconds()
     {
         var json = """
             {

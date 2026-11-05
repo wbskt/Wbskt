@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Operations Version="1.0" xmlns="http://schemas.microsoft.com/sqlserver/dac/Serialization/2012/02">
+  <Operation Name="Rename Refactor" Key="e6c66a92-c73c-445e-b69c-9e7dc3438c04" ChangeDateTime="11/05/2026 15:00:00">
+    <Property Name="ElementName" Value="[dbo].[DeviceTraffic]" />
+    <Property Name="ElementType" Value="SqlTable" />
+    <Property Name="ParentElementName" Value="[dbo]" />
+    <Property Name="ParentElementType" Value="SqlSchema" />
+    <Property Name="NewName" Value="ClientTraffic" />
+  </Operation>
+  <Operation Name="Rename Refactor" Key="95ee65a0-50b6-4634-8052-8d5189c77ac5" ChangeDateTime="11/05/2026 15:01:00">
+    <Property Name="ElementName" Value="[dbo].[ClientReadings].[DeviceTime]" />
+    <Property Name="ElementType" Value="SqlSimpleColumn" />
+    <Property Name="ParentElementName" Value="[dbo].[ClientReadings]" />
+    <Property Name="ParentElementType" Value="SqlTable" />
+    <Property Name="NewName" Value="SentAt" />
+  </Operation>
+  <Operation Name="Rename Refactor" Key="462e2a9f-dab3-4594-98a3-b1b1d885acbf" ChangeDateTime="11/05/2026 15:02:00">
+    <Property Name="ElementName" Value="[dbo].[PK_DeviceTraffic]" />
+    <Property Name="ElementType" Value="SqlPrimaryKeyConstraint" />
+    <Property Name="ParentElementName" Value="[dbo]" />
+    <Property Name="ParentElementType" Value="SqlSchema" />
+    <Property Name="NewName" Value="PK_ClientTraffic" />
+  </Operation>
+  <Operation Name="Rename Refactor" Key="007d46bf-21f4-4a42-a071-8285fced7a91" ChangeDateTime="11/05/2026 15:03:00">
+    <Property Name="ElementName" Value="[dbo].[FK_DeviceTraffic_Events]" />
+    <Property Name="ElementType" Value="SqlForeignKeyConstraint" />
+    <Property Name="ParentElementName" Value="[dbo]" />
+    <Property Name="ParentElementType" Value="SqlSchema" />
+    <Property Name="NewName" Value="FK_ClientTraffic_Events" />
+  </Operation>
+  <Operation Name="Rename Refactor" Key="ba405731-18b2-4782-99b2-d19db3c2c08e" ChangeDateTime="11/05/2026 15:04:00">
+    <Property Name="ElementName" Value="[dbo].[DF_DeviceTraffic_Id]" />
+    <Property Name="ElementType" Value="SqlDefaultConstraint" />
+    <Property Name="ParentElementName" Value="[dbo]" />
+    <Property Name="ParentElementType" Value="SqlSchema" />
+    <Property Name="NewName" Value="DF_ClientTraffic_Id" />
+  </Operation>
+  <Operation Name="Rename Refactor" Key="75e7037d-9f6e-42ed-80a0-8bf73a22e60c" ChangeDateTime="11/05/2026 15:05:00">
+    <Property Name="ElementName" Value="[dbo].[DF_DeviceTraffic_CreatedAt]" />
+    <Property Name="ElementType" Value="SqlDefaultConstraint" />
+    <Property Name="ParentElementName" Value="[dbo]" />
+    <Property Name="ParentElementType" Value="SqlSchema" />
+    <Property Name="NewName" Value="DF_ClientTraffic_CreatedAt" />
+  </Operation>
+  <Operation Name="Rename Refactor" Key="670b172a-b173-4745-8b3b-bc0b724bc551" ChangeDateTime="11/05/2026 15:06:00">
+    <Property Name="ElementName" Value="[dbo].[ClientTraffic].[IX_DeviceTraffic_WorkspaceId_Id]" />
+    <Property Name="ElementType" Value="SqlIndex" />
+    <Property Name="ParentElementName" Value="[dbo].[ClientTraffic]" />
+    <Property Name="ParentElementType" Value="SqlTable" />
+    <Property Name="NewName" Value="IX_ClientTraffic_WorkspaceId_Id" />
+  </Operation>
+  <Operation Name="Rename Refactor" Key="c21c23be-b7af-4113-af46-face0517523d" ChangeDateTime="11/05/2026 15:07:00">
+    <Property Name="ElementName" Value="[dbo].[ClientTraffic].[IX_DeviceTraffic_ClientId_Id]" />
+    <Property Name="ElementType" Value="SqlIndex" />
+    <Property Name="ParentElementName" Value="[dbo].[ClientTraffic]" />
+    <Property Name="ParentElementType" Value="SqlTable" />
+    <Property Name="NewName" Value="IX_ClientTraffic_ClientId_Id" />
+  </Operation>
+  <Operation Name="Rename Refactor" Key="ef6f15c6-b743-4cfa-b5f3-9fa44a34c7f7" ChangeDateTime="11/05/2026 15:08:00">
+    <Property Name="ElementName" Value="[dbo].[ClientTraffic].[UX_DeviceTraffic_MessageId]" />
+    <Property Name="ElementType" Value="SqlIndex" />
+    <Property Name="ParentElementName" Value="[dbo].[ClientTraffic]" />
+    <Property Name="ParentElementType" Value="SqlTable" />
+    <Property Name="NewName" Value="UX_ClientTraffic_MessageId" />
+  </Operation>
+</Operations>

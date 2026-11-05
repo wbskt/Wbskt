@@ -11,13 +11,13 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    SELECT TOP (@MaxRows) Name, DeviceTime, ReceivedAt, NumberValue, IsLate
+    SELECT TOP (@MaxRows) Name, SentAt, ReceivedAt, NumberValue, IsLate
     FROM dbo.ClientReadings
     WHERE ClientId = @ClientId
       AND (@Name IS NULL OR Name = @Name)
-      AND DeviceTime >= @FromUtc
-      AND DeviceTime < @ToUtc
-    ORDER BY DeviceTime, Name
+      AND SentAt >= @FromUtc
+      AND SentAt < @ToUtc
+    ORDER BY SentAt, Name
     OPTION (RECOMPILE);
 END
 GO

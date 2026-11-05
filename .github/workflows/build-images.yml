@@ -80,7 +80,7 @@ jobs:
       # an Exe, not a test project, and `dotnet test` on the solution would try to run it.
       # The SDK packages also target net8.0, which nothing else here builds; packing them catches an
       # API the older target lacks before a publish does (publish-sdk.yml).
-      - name: Pack the device SDK
+      - name: Pack the client SDK
         run: |
           dotnet pack Clients/Wbskt.Protocol/Wbskt.Protocol.csproj -c Release -o packages --nologo -v q
           dotnet pack Clients/Wbskt.Client.Sdk/Wbskt.Client.Sdk.csproj -c Release -o packages --nologo -v q
@@ -237,7 +237,7 @@ jobs:
   # ways by folder. The last shard is "everything the other two do not take", so a new folder always
   # lands in one shard and no test can fall between them. The engine collection runs its classes one
   # after another, so the split follows its folders: Lifecycle, then Triggers with Timeouts, then the
-  # rest (auth, devices and the smaller engine folders, which still run as parallel collections).
+  # rest (auth, clients and the smaller engine folders, which still run as parallel collections).
   e2e:
     needs: changes
     if: needs.changes.outputs.hosts == 'true'
@@ -369,7 +369,7 @@ jobs:
             --nologo -v q --logger "console;verbosity=normal" \
             --logger "trx;LogFileName=e2e.trx" --results-directory TestResults 2>&1 | tee e2e-output.txt
 
-      # The device-revocation scenario that restarts the WebSocket gateway: a revoked device's token
+      # The client-revocation scenario that restarts the WebSocket gateway: a revoked client's token
       # must still be refused once the host has forgotten every event it heard. It shares the outage
       # leg because both take things down under the hosts, and neither may run under the main pass.
       - name: Gateway restart tests
@@ -379,7 +379,7 @@ jobs:
         run: |
           set -o pipefail
           dotnet test Tests/Wbskt.E2E.FeatureTests/Wbskt.E2E.FeatureTests.csproj --no-build \
-            --filter "FullyQualifiedName~DeviceRevocationTests.DEV_REV_02" \
+            --filter "FullyQualifiedName~ClientRevocationTests.DEV_REV_02" \
             --nologo -v q --logger "console;verbosity=normal" \
             --logger "trx;LogFileName=sr.trx" --results-directory TestResults 2>&1 | tee sr-output.txt
 

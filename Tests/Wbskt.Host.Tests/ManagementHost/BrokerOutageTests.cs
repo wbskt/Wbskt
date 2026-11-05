@@ -28,7 +28,7 @@ namespace Wbskt.Host.Tests.ManagementHost;
 
 /// <summary>
 /// With RabbitMQ down, a change that has already been committed still gets its normal answer: a
-/// rotated secret is handed back rather than lost behind a 500, and a registering device receives
+/// rotated secret is handed back rather than lost behind a 500, and a registering client receives
 /// its secret rather than retrying into a second client. The events go out once the broker is back.
 /// Commands and pings are the exception, because their publish is the action: those report the
 /// outage as a 503.
@@ -82,13 +82,13 @@ public sealed class BrokerOutageTests
     {
         var clientRef = Guid.NewGuid();
         var clientService = new Mock<IClientQueryService>();
-        var targets = new Mock<Wbskt.Infrastructure.Devices.IClientCommandTargetProvider>();
+        var targets = new Mock<Wbskt.Infrastructure.Clients.IClientCommandTargetProvider>();
         targets.Setup(x => x.FindAsync(clientRef, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Wbskt.Infrastructure.Devices.ClientCommandTarget(42, WorkspaceId, true, "socket-a"));
+            .ReturnsAsync(new Wbskt.Infrastructure.Clients.ClientCommandTarget(42, WorkspaceId, true, "socket-a"));
         var bus = new Mock<IEventBus>();
         bus.Setup(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("broker down"));
-        var controller = new ClientsController(clientService.Object, Mock.Of<IClientLifecycleService>(), new ClientCommandService(clientService.Object, Wbskt.Host.Tests.Infrastructure.TestDeviceCommands.Sender(targets.Object, bus.Object), new Wbskt.Host.Tests.Infrastructure.InMemoryQueuedCommandStore(), bus.Object, Microsoft.Extensions.Options.Options.Create(new Wbskt.Infrastructure.Devices.CommandQueueOptions()), NullLogger<ClientCommandService>.Instance, new Wbskt.Management.Host.Telemetry.ManagementMetrics()), Mock.Of<IRegistrationPolicyService>(), Mock.Of<IEventLogService>())
+        var controller = new ClientsController(clientService.Object, Mock.Of<IClientLifecycleService>(), new ClientCommandService(clientService.Object, Wbskt.Host.Tests.Infrastructure.TestClientCommands.Sender(targets.Object, bus.Object), new Wbskt.Host.Tests.Infrastructure.InMemoryQueuedCommandStore(), bus.Object, Microsoft.Extensions.Options.Options.Create(new Wbskt.Infrastructure.Clients.CommandQueueOptions()), NullLogger<ClientCommandService>.Instance, new Wbskt.Management.Host.Telemetry.ManagementMetrics()), Mock.Of<IRegistrationPolicyService>(), Mock.Of<IEventLogService>())
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };
@@ -172,7 +172,7 @@ public sealed class BrokerOutageTests
                 WorkspaceId = WorkspaceId,
                 PolicyId = 5,
                 PolicyRefId = Guid.NewGuid(),
-                Name = $"device-{_nextId}",
+                Name = $"client-{_nextId}",
                 Status = ClientStatus.Registered
             };
             Clients.Setup(p => p.FindDetailByRefIdAsync(client.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(client);

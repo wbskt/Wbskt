@@ -75,7 +75,7 @@ public sealed class LogicGateRoutingE2ETests(ServicesFixture fixture)
     private static WorkflowDefinition BuildLogicGateDefinition(Guid workflowRefId, string clientRef)
     {
         // Topology:
-        // DeviceTrigger -> LogicGate ("trigger.payload.data.value")
+        // ClientTrigger -> LogicGate ("trigger.payload.data.value")
         //                 --true--> SendCommand("AlertHigh")
         //                 --false-> SendCommand("AlertLow")
 

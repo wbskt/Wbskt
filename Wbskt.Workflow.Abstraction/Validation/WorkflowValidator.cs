@@ -553,7 +553,7 @@ public sealed partial class WorkflowValidator
                 nodeId, "config.filter"));
         }
 
-        // An any-type hold is recorded against every message the device sends, and a message of another
+        // An any-type hold is recorded against every message the client sends, and a message of another
         // type (its own state.report, say) fails the filter and clears the hold, so it would rarely fire.
         if (config.Type == "*")
         {
@@ -604,17 +604,17 @@ public sealed partial class WorkflowValidator
     {
         foreach (var node in def.Nodes)
         {
-            // The same rules the console applies, so a workflow cannot send a device a sys.* frame.
+            // The same rules the console applies, so a workflow cannot send a client a sys.* frame.
             if (node is SendClientMessageNode sendMessage
                 && !string.IsNullOrWhiteSpace(sendMessage.Config?.Type)
-                && DeviceMessageRules.Check(sendMessage.Config.Type, sendMessage.Config.Payload?.GetRawText()) is { } violation)
+                && ClientMessageRules.Check(sendMessage.Config.Type, sendMessage.Config.Payload?.GetRawText()) is { } violation)
             {
                 issues.Add(new ValidationIssue(
                     ValidationSeverity.Error,
                     "CLIENT_MESSAGE_INVALID",
                     $"ClientMessage node '{node.NodeId}': {violation.Message}",
                     node.NodeId,
-                    violation.Rule == DeviceMessageRule.PayloadSize ? "config.payload" : "config.type"));
+                    violation.Rule == ClientMessageRule.PayloadSize ? "config.payload" : "config.type"));
             }
 
             if (node is SendClientMessageNode { Config.AckTimeout: { } ackTimeout }

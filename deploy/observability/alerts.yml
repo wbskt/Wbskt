@@ -99,7 +99,7 @@ groups:
             more and webhook callers are answered 503 until it drains.
 
       - alert: SocketDisconnectRateHigh
-        # Abnormal disconnects only: client_closed is a device signing off, server_stopping a deploy.
+        # Abnormal disconnects only: client_closed is a client signing off, server_stopping a deploy.
         expr: |
           sum(increase(wbskt_socket_disconnects_total{reason=~"aborted|error"}[10m]))
             / clamp_min(sum(wbskt_socket_connections_open), 10)
@@ -108,9 +108,9 @@ groups:
         labels:
           severity: warn
         annotations:
-          summary: "Devices are dropping off the socket tier faster than usual"
+          summary: "Clients are dropping off the socket tier faster than usual"
           description: >-
-            More abnormal disconnects in 10 minutes than half the connected devices. Look for a
+            More abnormal disconnects in 10 minutes than half the connected clients. Look for a
             network or proxy problem in front of ws.<domain>, or a socket host restarting.
 
       - alert: DeletedWorkspaceRetiredBySweep

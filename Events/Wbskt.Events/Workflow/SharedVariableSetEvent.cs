@@ -14,10 +14,10 @@ public sealed record SharedVariableSetEvent(Guid WorkflowRefId, int WorkspaceId,
 
 /// <summary>
 /// A workflow run wrote a shared variable (set, increment, decrement or a compare-and-set that won).
-/// The run is the actor. Runs write at the rate they fire, so this is kept and hidden like device
+/// The run is the actor. Runs write at the rate they fire, so this is kept and hidden like client
 /// traffic rather than as part of the audit trail.
 /// </summary>
-[DeviceTraffic]
+[ClientTraffic]
 [EventCriticality(EventCriticality.Info)]
 public sealed record SharedVariableSetByRunEvent(Guid WorkflowRefId, int WorkflowId, int WorkspaceId, string Name, string Operation, string? Value)
     : ActorEvent, IWorkflowContext;

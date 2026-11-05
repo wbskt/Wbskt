@@ -1,5 +1,5 @@
 -- Records a batch of trigger outcomes, in order, and trims each trigger it touched to its newest
--- @Keep rows. The engine buffers outcomes and writes them every few seconds, so a chatty device costs
+-- @Keep rows. The engine buffers outcomes and writes them every few seconds, so a chatty client costs
 -- one call per flush rather than two statements per message per trigger. Two concurrent batches can
 -- briefly leave more than @Keep rows; the next batch for that trigger trims them.
 CREATE PROCEDURE dbo.TriggerDispatchOutcome_RecordMany

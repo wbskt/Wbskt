@@ -13,7 +13,7 @@ namespace Wbskt.Management.Host.Services;
 /// </summary>
 public static class EventSources
 {
-    private static readonly IReadOnlyDictionary<string, Type> Events = typeof(DeviceTrafficAttribute).Assembly.GetTypes()
+    private static readonly IReadOnlyDictionary<string, Type> Events = typeof(ClientTrafficAttribute).Assembly.GetTypes()
         .Where(t => t is { IsClass: true, IsAbstract: false, IsNested: false } && typeof(EventBus.Abstractions.BaseEvent).IsAssignableFrom(t))
         .ToDictionary(t => t.Name, StringComparer.Ordinal);
 
@@ -40,13 +40,13 @@ public static class EventSources
             return hasUser ? EventSource.Api : EventSource.System;
         }
 
-        if (type.IsDefined(typeof(DeviceTrafficAttribute), inherit: false)
+        if (type.IsDefined(typeof(ClientTrafficAttribute), inherit: false)
             || type.Namespace == typeof(ClientConnectedEvent).Namespace
-            // A device joining through a policy, and the joins a policy turned away.
+            // A client joining through a policy, and the joins a policy turned away.
             || (type.Namespace == typeof(PolicyCreatedEvent).Namespace
                 && (type.Name.StartsWith("Client", StringComparison.Ordinal) || type.Name.StartsWith("PolicyRegistration", StringComparison.Ordinal))))
         {
-            return EventSource.Device;
+            return EventSource.Client;
         }
 
         if (type.Namespace == typeof(WorkflowRunStartedEvent).Namespace)

@@ -1,11 +1,11 @@
-"""A fake Wbskt for the conformance suite: the two HTTPS endpoints and the device socket.
+"""A fake Wbskt for the conformance suite: the two HTTPS endpoints and the client socket.
 
 It records what the SDK did (registrations, logins, the token on each upgrade, every frame) so the
-scenarios can check it against Docs/Device.Protocol.md, and it can misbehave on cue: refuse a token,
+scenarios can check it against Docs/Client.Protocol.md, and it can misbehave on cue: refuse a token,
 throttle a login, reject credentials, close the socket. Like the real gateway, it refuses a revoked
-device's token with 403 CLIENT_REVOKED, refuses an upgrade offering only unknown subprotocols with 400
-SOCKET_PROTOCOL_UNSUPPORTED, closes a device's older connection when it connects again (4001), and
-enforces the per-device message budget (4003).
+client's token with 403 CLIENT_REVOKED, refuses an upgrade offering only unknown subprotocols with 400
+SOCKET_PROTOCOL_UNSUPPORTED, closes a client's older connection when it connects again (4001), and
+enforces the per-client message budget (4003).
 """
 
 import asyncio
@@ -31,7 +31,7 @@ BUDGET_BURST = 100
 BUDGET_CLOSE_AFTER_DROPPED = 500
 CLOSE_SUPERSEDED = 4001
 CLOSE_THROTTLED = 4003
-# The one close code a device sends of its own: closing to install a firmware update.
+# The one close code a client sends of its own: closing to install a firmware update.
 CLOSE_UPDATING = 4000
 
 Answer = Tuple[int, Dict[str, Any], Dict[str, str]]
@@ -45,8 +45,8 @@ class FakeApi:
         # Answers for the next logins, before the normal 200.
         self.login_answers: List[Answer] = []
         self.known: Dict[str, str] = {}
-        # Which device each issued token belongs to; the socket reads it to supersede connections.
-        self.token_devices: Dict[str, str] = {}
+        # Which client each issued token belongs to; the socket reads it to supersede connections.
+        self.token_clients: Dict[str, str] = {}
         self._lock = threading.Lock()
         self._server: Optional[ThreadingHTTPServer] = None
         self.url = ""
@@ -66,11 +66,11 @@ class FakeApi:
                 if not secret or self.known.get(str(body.get("clientRefId"))) != secret:
                     return 401, {"code": "CLIENT_UNAUTHORIZED"}, {}
                 token = f"token-{len(self.logins)}"
-                self.token_devices[token] = str(body.get("clientRefId"))
+                self.token_clients[token] = str(body.get("clientRefId"))
                 return 200, {"accessToken": token, "expiresIn": 3600}, {}
             return 404, {}, {}
 
-    def forget_all_devices(self) -> None:
+    def forget_all_clients(self) -> None:
         with self._lock:
             self.known.clear()
 
@@ -148,15 +148,15 @@ class FakeSocket:
         self.subprotocols: List[Optional[str]] = []
         self.rejected_tokens: set = set()
         self.revoked_tokens: set = set()
-        # Shared with FakeApi.token_devices by the fixture.
-        self.token_devices: Dict[str, str] = {}
+        # Shared with FakeApi.token_clients by the fixture.
+        self.token_clients: Dict[str, str] = {}
         self.refused: List[Tuple[int, str]] = []
         self._live: Dict[str, ServerConnection] = {}
         # Messages dropped over the budget, and the close code the fake sent on each connection.
         self.dropped = 0
         self.close_codes: Dict[int, int] = {}
-        # The close code each connection's device sent, when it closed first (1006: it sent none).
-        self.device_close_codes: Dict[int, int] = {}
+        # The close code each connection's client sent, when it closed first (1006: it sent none).
+        self.client_close_codes: Dict[int, int] = {}
         # While set, every upgrade is answered 503, as by a host that is down.
         self.down = False
         self.url = ""
@@ -190,10 +190,10 @@ class FakeSocket:
         self.connections.append(ws)
         self.subprotocols.append(ws.subprotocol)
         authorization = ws.request.headers.get("Authorization", "") if ws.request is not None else ""
-        device = self.token_devices.get(authorization[7:] if authorization.startswith("Bearer ") else authorization)
-        if device is not None:
-            older = self._live.get(device)
-            self._live[device] = ws
+        client = self.token_clients.get(authorization[7:] if authorization.startswith("Bearer ") else authorization)
+        if client is not None:
+            older = self._live.get(client)
+            self._live[client] = ws
             if older is not None:
                 self.close_codes[self.connections.index(older)] = CLOSE_SUPERSEDED
                 await older.close(CLOSE_SUPERSEDED, "Superseded by a new connection.")
@@ -214,7 +214,7 @@ class FakeSocket:
             pass
         finally:
             if index not in self.close_codes and ws.close_code is not None:
-                self.device_close_codes[index] = ws.close_code
+                self.client_close_codes[index] = ws.close_code
 
     async def start(self) -> None:
         self._server = await serve(

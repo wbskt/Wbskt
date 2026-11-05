@@ -191,7 +191,7 @@ internal sealed class WorkspaceService : IWorkspaceService
 
     public async Task<Result> DeleteWorkspaceAsync(int callerId, int workspaceId, CancellationToken cancellationToken = default)
     {
-        // The workspace's policies, devices and workflows live in the main database, which the
+        // The workspace's policies, clients and workflows live in the main database, which the
         // management host retires on this event. It is written to the outbox in the delete's own
         // transaction (see OutboxDispatcher), so a broker outage or a restart right after the
         // delete delays the retirement instead of leaving them running.

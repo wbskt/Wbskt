@@ -76,7 +76,7 @@ internal sealed class SocketClient : IAsyncDisposable
         _ = Task.Run(ReceiveLoopAsync, _cts.Token);
     }
 
-    public async Task SendAsync(DeviceMessage message)
+    public async Task SendAsync(ProtocolMessage message)
     {
         if (_webSocket.State != WebSocketState.Open)
         {
@@ -105,7 +105,7 @@ internal sealed class SocketClient : IAsyncDisposable
 
     private async Task ReceiveLoopAsync()
     {
-        using var reader = new WebSocketMessageReader(_webSocket, DeviceProtocol.MaxMessageBytes);
+        using var reader = new WebSocketMessageReader(_webSocket, ClientProtocol.MaxMessageBytes);
         try
         {
             while (_webSocket.State == WebSocketState.Open && !_cts.Token.IsCancellationRequested)
@@ -164,7 +164,7 @@ internal sealed class SocketClient : IAsyncDisposable
 
             if (MessageTypes.Comparer.Equals(type, MessageTypes.Ping))
             {
-                await SendAsync(new DeviceMessage(MessageTypes.Pong, ReadPing(root)));
+                await SendAsync(new ProtocolMessage(MessageTypes.Pong, ReadPing(root)));
                 return;
             }
 
@@ -183,12 +183,12 @@ internal sealed class SocketClient : IAsyncDisposable
                 if (CommandExpiry.IsExpired(root, DateTimeOffset.UtcNow))
                 {
                     // Answered, so the platform reports it as refused rather than lost.
-                    await SendAsync(new DeviceMessage(MessageTypes.Ack, new AckPayload(commandId, type, AckPayload.Expired)));
+                    await SendAsync(new ProtocolMessage(MessageTypes.Ack, new AckPayload(commandId, type, AckPayload.Expired)));
                     return;
                 }
 
                 // Transport-level delivery ack; app-level acks are ordinary messages.
-                await SendAsync(new DeviceMessage(MessageTypes.Ack, new AckPayload(commandId)));
+                await SendAsync(new ProtocolMessage(MessageTypes.Ack, new AckPayload(commandId)));
             }
 
             // Handed to the app on its own task, so a slow or throwing handler neither delays pongs nor ends the connection.

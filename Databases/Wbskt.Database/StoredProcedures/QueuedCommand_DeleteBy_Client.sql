@@ -1,4 +1,4 @@
--- Drops every command a device has waiting, when it is revoked: it will not connect again to take them.
+-- Drops every command a client has waiting, when it is revoked: it will not connect again to take them.
 CREATE PROCEDURE dbo.QueuedCommand_DeleteBy_Client
     @ClientId INT
 AS

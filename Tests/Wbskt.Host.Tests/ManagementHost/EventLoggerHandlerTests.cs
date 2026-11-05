@@ -11,7 +11,7 @@ using Wbskt.Management.Host.Providers;
 
 namespace Wbskt.Host.Tests.ManagementHost;
 
-/// <summary>Which table each event of a batch is written to: device traffic to its own, the rest to the audit log.</summary>
+/// <summary>Which table each event of a batch is written to: client traffic to its own, the rest to the audit log.</summary>
 public sealed class EventLoggerHandlerTests
 {
     private readonly Mock<IEventProvider> _provider = new();
@@ -23,13 +23,13 @@ public sealed class EventLoggerHandlerTests
         _provider.Setup(p => p.InsertBatchAsync(It.IsAny<DataTable>(), It.IsAny<CancellationToken>()))
             .Callback<DataTable, CancellationToken>((table, _) => _audit.Add(table))
             .Returns(Task.CompletedTask);
-        _provider.Setup(p => p.InsertDeviceTrafficBatchAsync(It.IsAny<DataTable>(), It.IsAny<CancellationToken>()))
+        _provider.Setup(p => p.InsertClientTrafficBatchAsync(It.IsAny<DataTable>(), It.IsAny<CancellationToken>()))
             .Callback<DataTable, CancellationToken>((table, _) => _traffic.Add(table))
             .Returns(Task.CompletedTask);
     }
 
     [Fact]
-    public async Task Device_traffic_and_audit_events_in_one_batch_go_to_their_own_tables()
+    public async Task Client_traffic_and_audit_events_in_one_batch_go_to_their_own_tables()
     {
         var clientRefId = Guid.NewGuid();
         await ConsumeAsync(
@@ -47,7 +47,7 @@ public sealed class EventLoggerHandlerTests
         await ConsumeAsync(new ClientConnectedEvent(Guid.NewGuid(), 7, 3, "socket-1"));
 
         Assert.Single(_audit);
-        _provider.Verify(p => p.InsertDeviceTrafficBatchAsync(It.IsAny<DataTable>(), It.IsAny<CancellationToken>()), Times.Never);
+        _provider.Verify(p => p.InsertClientTrafficBatchAsync(It.IsAny<DataTable>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private async Task ConsumeAsync(params IEvent[] events)

@@ -276,7 +276,7 @@ internal sealed class SignInService : ISignInService
         var sessionId = await _sessions.RevokeRefreshTokenAsync(token, ipAddress, null, cancellationToken);
         if (sessionId is not null)
         {
-            // The refresh token is gone, so this ends the access token the device still holds.
+            // The refresh token is gone, so this ends the access token the client still holds.
             await _accessTokens.RevokeSessionAsync(sessionId.Value, cancellationToken);
         }
 
@@ -311,7 +311,7 @@ internal sealed class SignInService : ISignInService
             return Result.Failure(Error.NotFound("AUTH_SESSION_NOT_FOUND", "Session not found."));
         }
 
-        // After the refresh token, so the device cannot mint an access token the revocation misses.
+        // After the refresh token, so the client cannot mint an access token the revocation misses.
         await _accessTokens.RevokeSessionAsync(sessionId, cancellationToken);
 
         _logger.LogInformation("User {UserId} ended session {SessionId}. IP: {IpAddress}", userId, sessionId, ipAddress);

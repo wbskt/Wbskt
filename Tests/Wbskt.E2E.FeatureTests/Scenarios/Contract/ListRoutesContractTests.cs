@@ -109,7 +109,7 @@ public sealed class ListRoutesContractTests(ServicesFixture fixture)
         }),
         new("management clients/{clientRef}/comms", Paging.Keyset, async f =>
         {
-            // A device that never connected has said nothing, so this checks the shape only.
+            // A client that never connected has said nothing, so this checks the shape only.
             var ws = await f.CreateIsolatedWorkspaceAsync();
             var client = await RegisterOneClientAsync(f, ws);
             return Workspace(ws, $"clients/{client}/comms", rows: 0);
@@ -124,7 +124,7 @@ public sealed class ListRoutesContractTests(ServicesFixture fixture)
         }),
         new("management event-logs", Paging.Keyset, async f =>
         {
-            // Two device registrations log two entries (through the bus, so the read polls for them).
+            // Two client registrations log two entries (through the bus, so the read polls for them).
             var ws = await f.CreateIsolatedWorkspaceAsync();
             var (_, pin) = await f.CreatePolicyAsync(ws.Token, ws.WorkspaceRef);
             await f.RegisterClientAsync(pin, "contract-a");
@@ -471,7 +471,7 @@ public sealed class ListRoutesContractTests(ServicesFixture fixture)
     private static async Task<Guid> RegisterOneClientAsync(ServicesFixture f, ServicesFixture.WorkspaceHandle ws)
     {
         var (_, pin) = await f.CreatePolicyAsync(ws.Token, ws.WorkspaceRef);
-        return (await f.RegisterClientAsync(pin, "contract-device")).ClientRefId;
+        return (await f.RegisterClientAsync(pin, "contract-client")).ClientRefId;
     }
 
     /// <summary>Publishes a workflow that is only a manual trigger under <paramref name="refId"/>; again under the same one is a new version.</summary>

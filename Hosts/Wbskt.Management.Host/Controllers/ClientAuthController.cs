@@ -8,7 +8,7 @@ using Wbskt.Management.Host.Services;
 
 namespace Wbskt.Management.Host.Controllers;
 
-// Pre-auth device flow (a client logging in has no JWT yet), so this is deliberately anonymous.
+// Pre-auth client flow (a client logging in has no JWT yet), so this is deliberately anonymous.
 [Route("api/v1/client-auth")]
 [ApiController]
 [AllowAnonymous]
@@ -25,7 +25,7 @@ public class ClientAuthController : ApiControllerBase
     }
 
     [HttpPost("login")]
-    [EnableRateLimiting(RateLimitPolicies.DeviceLogin)]
+    [EnableRateLimiting(RateLimitPolicies.ClientLogin)]
     public async Task<ActionResult<ClientLoginResponse>> Login(ClientLoginRequest request, CancellationToken cancellationToken)
     {
         _logger.LogDebug("API: Client Login requested for ClientRefId: {ClientRefId}", request.ClientRefId);

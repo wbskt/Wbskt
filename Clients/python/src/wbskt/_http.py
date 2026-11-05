@@ -1,4 +1,4 @@
-"""The two HTTPS calls a device makes, on the standard library so the SDK has one dependency."""
+"""The two HTTPS calls a client makes, on the standard library so the SDK has one dependency."""
 
 import json
 import urllib.error

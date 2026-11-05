@@ -14,8 +14,8 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 /// hold. The hold is then marked fired, so the trigger stays quiet until a message stops matching.
 /// </summary>
 /// <remarks>
-/// The hold is judged on the messages that arrived. A device that stops sending while its last
-/// reading matched is still holding when the time is up, and fires; a device going quiet is what the
+/// The hold is judged on the messages that arrived. A client that stops sending while its last
+/// reading matched is still holding when the time is up, and fires; a client going quiet is what the
 /// presence trigger is for.
 /// </remarks>
 public sealed class ClientHoldTicker(

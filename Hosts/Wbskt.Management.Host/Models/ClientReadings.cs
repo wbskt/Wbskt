@@ -15,4 +15,4 @@ public sealed class ReadingsOptions
 public sealed record ClientReadingValue(string Name, double Value);
 
 /// <summary>One stored reading, for export.</summary>
-public sealed record ClientReading(string Name, DateTime DeviceTime, DateTime ReceivedAt, double Value, bool IsLate);
+public sealed record ClientReading(string Name, DateTime SentAt, DateTime ReceivedAt, double Value, bool IsLate);

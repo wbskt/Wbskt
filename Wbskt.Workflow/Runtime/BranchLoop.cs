@@ -224,7 +224,7 @@ internal sealed class BranchLoop : IBranchLoop
     {
         NodeExecutionResult? result = null;
         await _journal.AppendBranchEventAsync(runRow.Id, branchRow.RefId, node.NodeId, HistoryEventKind.NodeStarted, ct);
-        // Per-node lines are Debug: a workflow triggered by every device message would otherwise log
+        // Per-node lines are Debug: a workflow triggered by every client message would otherwise log
         // two lines per node per message, and NodeStarted/NodeCompleted are journaled to history anyway.
         _logger?.LogDebug("Executing node {NodeId} ({NodeKind}) on run {RunId} branch {BranchId}", node.NodeId, node.Kind, runId, branchId);
 

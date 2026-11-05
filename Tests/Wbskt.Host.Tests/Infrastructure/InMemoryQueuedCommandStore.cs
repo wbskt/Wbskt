@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Wbskt.EventBus.Abstractions;
-using Wbskt.Infrastructure.Devices;
+using Wbskt.Infrastructure.Clients;
 
 namespace Wbskt.Host.Tests.Infrastructure;
 
@@ -55,11 +55,11 @@ internal sealed class InMemoryQueuedCommandStore : IQueuedCommandStore
 }
 
 /// <summary>The real sender and queue over test doubles of the database and the bus.</summary>
-internal static class TestDeviceCommands
+internal static class TestClientCommands
 {
-    public static DeviceCommandQueue Queue(IQueuedCommandStore store, IClientCommandTargetProvider targets, IEventBus bus, TimeProvider? clock = null, CommandQueueOptions? options = null) =>
-        new(store, targets, bus, Options.Create(options ?? new CommandQueueOptions()), clock ?? TimeProvider.System, NullLogger<DeviceCommandQueue>.Instance);
+    public static ClientCommandQueue Queue(IQueuedCommandStore store, IClientCommandTargetProvider targets, IEventBus bus, TimeProvider? clock = null, CommandQueueOptions? options = null) =>
+        new(store, targets, bus, Options.Create(options ?? new CommandQueueOptions()), clock ?? TimeProvider.System, NullLogger<ClientCommandQueue>.Instance);
 
-    public static DeviceCommandSender Sender(IClientCommandTargetProvider targets, IEventBus bus, IQueuedCommandStore? store = null, TimeProvider? clock = null, CommandQueueOptions? options = null) =>
-        new(targets, Queue(store ?? new InMemoryQueuedCommandStore(), targets, bus, clock, options), bus, clock ?? TimeProvider.System, NullLogger<DeviceCommandSender>.Instance);
+    public static ClientCommandSender Sender(IClientCommandTargetProvider targets, IEventBus bus, IQueuedCommandStore? store = null, TimeProvider? clock = null, CommandQueueOptions? options = null) =>
+        new(targets, Queue(store ?? new InMemoryQueuedCommandStore(), targets, bus, clock, options), bus, clock ?? TimeProvider.System, NullLogger<ClientCommandSender>.Instance);
 }

@@ -8,7 +8,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 
 /// <summary>
 /// Procedure-level guards against replays and races: a branch contributing to a join twice, a run
-/// counter decremented below zero, a first publish of one workflow from two workspaces, and a device
+/// counter decremented below zero, a first publish of one workflow from two workspaces, and a client
 /// growing its state variables without bound.
 /// </summary>
 [Collection("SqlEdge")]

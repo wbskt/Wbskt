@@ -20,6 +20,7 @@
     <ItemGroup>
         <PostDeploy Include="Scripts\Script.PostDeployment.sql"/>
         <PreDeploy Include="Scripts\Script.PreDeployment.sql"/>
+        <RefactorLog Include="Wbskt.Database.refactorlog"/>
     </ItemGroup>
 
     <!-- Passwords for the per-host SQL logins the post-deployment script creates. Empty skips them. -->

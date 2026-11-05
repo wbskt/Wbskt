@@ -25,7 +25,7 @@ internal sealed class PasswordService : IPasswordService
 
     /// <summary>
     /// Short, because a reset link in an unattended inbox is a live credential for the account. An
-    /// hour is long enough to survive a user reading mail on another device.
+    /// hour is long enough to survive a user reading mail on another client.
     /// </summary>
     private static readonly TimeSpan PasswordResetLifetime = TimeSpan.FromHours(1);
 

@@ -126,7 +126,7 @@ def make_client(api, socket_server, no_jitter, storage=None, **options: Any):
     from wbskt import AsyncWbsktClient, MemoryStorage
 
     return AsyncWbsktClient(
-        "test-device",
+        "test-client",
         "483920",
         api_url=api.url,
         socket_url=socket_server.url,

@@ -1,8 +1,8 @@
 namespace Wbskt.Models;
 
 /// <summary>
-/// How long a command to a device may live, whoever sends it: the console, the API or a workflow
-/// step. The device command sender refuses an expiry past it, so no caller can act later than this.
+/// How long a command to a client may live, whoever sends it: the console, the API or a workflow
+/// step. The client command sender refuses an expiry past it, so no caller can act later than this.
 /// </summary>
 public static class CommandLifetime
 {

@@ -19,22 +19,22 @@ public sealed class CreditBudgetE2ETests(ServicesFixture fixture)
 
         var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, "DeviceCreditBudget");
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, "ClientCreditBudget");
         
         var storage = new InMemoryClientStorage(clientRefId, secret);
         var clientConfig = new ClientConfig(
             BaseApiUrl: E2EConfig.ManagementBaseUrl,
             BaseSocketUrl: E2EConfig.SocketWsBaseUrl,
-            DeviceName: "DeviceCreditBudget",
+            ClientName: "ClientCreditBudget",
             PolicyPin: null);
 
         var workflowRefId = Guid.NewGuid();
-        var deviceRefStr = clientRefId.ToString();
+        var clientRefStr = clientRefId.ToString();
         var builder = new WorkflowBuilder($"E2E-CreditBudget-{workflowRefId:N}", workflowRefId)
             // A small per-run budget so the infinite loop exhausts credits in a handful of node
             // executions - deterministic and fast, rather than burning the 10k default for minutes.
             .WithCreditBudget(25)
-            .AddClientTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _);
+            .AddClientTrigger(clientRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _);
 
         builder.AddLogicGate("true", logic =>
         {
@@ -42,7 +42,7 @@ public sealed class CreditBudgetE2ETests(ServicesFixture fixture)
             builder.Connect(logic.GateId, PortNames.True, logic.GateId, PortNames.In);
             
             // We'll also wire "false" to a success node just in case (though it won't be hit)
-            logic.OnFalse(b => b.AddClientMessage(deviceRefStr, "Done", "Done"));
+            logic.OnFalse(b => b.AddClientMessage(clientRefStr, "Done", "Done"));
         });
 
         var definition = builder.BuildAndValidate();

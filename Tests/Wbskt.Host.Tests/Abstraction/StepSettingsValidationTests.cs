@@ -19,7 +19,7 @@ public sealed class StepSettingsValidationTests
     private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web);
 
     [Fact]
-    public void A_device_step_with_no_command_asks_for_one_on_the_type_field()
+    public void A_client_step_with_no_command_asks_for_one_on_the_type_field()
     {
         var issue = Assert.Single(Errors(Send(Guid.NewGuid().ToString(), "")));
 
@@ -29,8 +29,8 @@ public sealed class StepSettingsValidationTests
 
     [Theory]
     [InlineData("", "CLIENT_REF_REQUIRED")]
-    [InlineData("$trigger.deviceId", "CLIENT_REF_INVALID")]
-    public void A_device_step_must_name_a_device_by_id(string clientRef, string code)
+    [InlineData("$trigger.clientId", "CLIENT_REF_INVALID")]
+    public void A_client_step_must_name_a_client_by_id(string clientRef, string code)
     {
         var issue = Assert.Single(Errors(Send(clientRef, "led.set")));
 

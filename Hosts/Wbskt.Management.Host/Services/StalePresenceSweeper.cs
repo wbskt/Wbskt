@@ -15,7 +15,7 @@ namespace Wbskt.Management.Host.Services;
 /// <remarks>
 /// A host's own start (SocketHostStartedEvent) only clears what a host restarting under the same id
 /// left behind. A deploy starts a new container, which is a new host id, and a replica that is scaled
-/// away never starts again; without this, a device that was really offline would stay "online" and
+/// away never starts again; without this, a client that was really offline would stay "online" and
 /// its offline trigger would never fire.
 /// </remarks>
 public sealed class StalePresenceSweeper : PeriodicWorker

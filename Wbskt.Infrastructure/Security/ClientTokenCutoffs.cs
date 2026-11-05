@@ -3,58 +3,58 @@ using StackExchange.Redis;
 
 namespace Wbskt.Infrastructure.Security;
 
-/// <summary>Ends a device's tokens before they expire, on every socket host. See <see cref="ClientTokenCutoffs"/>.</summary>
+/// <summary>Ends a client's tokens before they expire, on every socket host. See <see cref="ClientTokenCutoffs"/>.</summary>
 public interface IClientTokenCutoffs
 {
-    /// <summary>Refuses every token the device holds (it was revoked, rejected or deleted).</summary>
+    /// <summary>Refuses every token the client holds (it was revoked, rejected or deleted).</summary>
     Task RevokeAsync(Guid clientRefId);
 
     /// <summary>Refuses tokens issued before <paramref name="rotatedAt"/> (its secret was rotated).</summary>
     Task RevokeIssuedBeforeAsync(Guid clientRefId, DateTime rotatedAt);
 
     /// <summary>
-    /// The device may connect again, with a token issued from <paramref name="reinstatedAt"/> on. It
+    /// The client may connect again, with a token issued from <paramref name="reinstatedAt"/> on. It
     /// could not sign in while it had no access, so any older token predates the revocation.
     /// </summary>
     Task ReinstateAsync(Guid clientRefId, DateTime reinstatedAt);
 
     /// <summary>
-    /// Whether a token for the device issued at <paramref name="issuedAt"/> (UTC) is refused, or
+    /// Whether a token for the client issued at <paramref name="issuedAt"/> (UTC) is refused, or
     /// <c>null</c> when Redis could not say.
     /// </summary>
     Task<bool?> IsRevokedAsync(Guid clientRefId, DateTime issuedAt, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
-/// Per-device cutoffs in Redis: a device token issued before its device's cutoff is refused. The
-/// management host writes one whenever a device loses access, before it answers; the socket host
-/// reads it when a device connects.
+/// Per-client cutoffs in Redis: a client token issued before its client's cutoff is refused. The
+/// management host writes one whenever a client loses access, before it answers; the socket host
+/// reads it when a client connects.
 /// </summary>
 /// <remarks>
 /// <para>
-/// A device token lives for <see cref="TokenLifetime"/> and is checked against nothing but its
-/// signature, so revoking a device, deleting it or rotating its secret has to reach the socket host
+/// A client token lives for <see cref="TokenLifetime"/> and is checked against nothing but its
+/// signature, so revoking a client, deleting it or rotating its secret has to reach the socket host
 /// some other way. The events that do that are kept in memory there, so a socket host that restarts,
-/// or misses one, would let a revoked device back in until its token ran out. The cutoff in Redis is
+/// or misses one, would let a revoked client back in until its token ran out. The cutoff in Redis is
 /// what makes revocation hold regardless; the events stay as the fast path that also closes the live
 /// connection.
 /// </para>
 /// <para>
-/// One key per device, <c>wbskt:client-cutoff:&lt;clientRef&gt;</c>, holding unix seconds, and kept
-/// only as long as a token it refuses could still be alive. Revoking or deleting a device sets it to
+/// One key per client, <c>wbskt:client-cutoff:&lt;clientRef&gt;</c>, holding unix seconds, and kept
+/// only as long as a token it refuses could still be alive. Revoking or deleting a client sets it to
 /// the end of time; rotating the secret raises it to the rotation, never lowers it; approving the
-/// device again sets it to that moment, so the device signs in afresh, as the SDK does on every
+/// client again sets it to that moment, so the client signs in afresh, as the SDK does on every
 /// connect anyway, and a token from before it lost access stays refused.
 /// </para>
 /// <para>
 /// Best effort, like access-token revocation: with Redis unreachable the write is logged and the
 /// event still goes out, and the read answers "don't know" so the socket host falls back to its own
-/// list. A device can connect while Redis is down only if the socket host also missed its event.
+/// list. A client can connect while Redis is down only if the socket host also missed its event.
 /// </para>
 /// </remarks>
 public sealed class ClientTokenCutoffs : IClientTokenCutoffs
 {
-    /// <summary>How long a device token is valid for. The management host issues them for this long.</summary>
+    /// <summary>How long a client token is valid for. The management host issues them for this long.</summary>
     public static readonly TimeSpan TokenLifetime = TimeSpan.FromHours(1);
 
     internal const string KeyPrefix = "wbskt:client-cutoff:";
@@ -115,7 +115,7 @@ public sealed class ClientTokenCutoffs : IClientTokenCutoffs
             }
 
             // iat has whole seconds, and so does the cutoff, so a token from the cutoff's own second
-            // is accepted: the device that signs in straight after a rotation or a re-approval.
+            // is accepted: the client that signs in straight after a rotation or a re-approval.
             return ToUnixSeconds(issuedAt) < cutoff;
         }
         catch (Exception ex) when (ex is RedisException or TimeoutException)

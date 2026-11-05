@@ -17,7 +17,7 @@ namespace Wbskt.Management.Host.Services;
 /// <para>
 /// Workspaces live in the auth database, so deleting one cascades to nothing here. This runs
 /// <c>dbo.Workspace_Retire</c> - the same end state as disabling each policy, revoking each client
-/// and deprecating each workflow by hand - then tells socket hosts to drop the revoked devices, tells
+/// and deprecating each workflow by hand - then tells socket hosts to drop the revoked clients, tells
 /// the engine to cancel each run still in flight, and tells it to drop what it cached of the
 /// workspace's definitions and trigger registrations. The engine owns run state, so the cancels are
 /// commands to it, not done here.

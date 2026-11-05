@@ -59,8 +59,8 @@ async def eventually(read: Callable[[], Any], check: Callable[[Any], bool], time
 
 
 @pytest.fixture
-async def live_device(tmp_path: Path):
-    """Starts harnesses for one fresh device on the real hosts; each start shares its storage."""
+async def live_client(tmp_path: Path):
+    """Starts harnesses for one fresh client on the real hosts; each start shares its storage."""
     started: List[Harness] = []
     command = harness_command()
     name = f"conformance-{uuid.uuid4().hex[:12]}"
@@ -69,7 +69,7 @@ async def live_device(tmp_path: Path):
         env = {
             "WBSKT_API_URL": LIVE["API_URL"],
             "WBSKT_SOCKET_URL": LIVE["SOCKET_URL"],
-            "WBSKT_DEVICE_NAME": name,
+            "WBSKT_CLIENT_NAME": name,
             "WBSKT_POLICY_PIN": LIVE["PIN"],
             "WBSKT_STORAGE": str(tmp_path / "credentials.json"),
             "WBSKT_COMMANDS": json.dumps([RELAY]),
@@ -91,20 +91,20 @@ async def client_ref(name: str) -> str:
     return page["items"][0]["clientRefId"]
 
 
-async def test_live_registers_connects_and_announces_capabilities(live_device):
-    harness = await live_device()
+async def test_live_registers_connects_and_announces_capabilities(live_client):
+    harness = await live_client()
     await harness.expect("connected", timeout=CONNECT)
-    ref = await client_ref(live_device.name)
+    ref = await client_ref(live_client.name)
 
     detail = await eventually(lambda: api("GET", f"/clients/{ref}"), lambda d: d["isConnected"] and d["agentName"])
 
     assert [c["command"] for c in detail["capabilities"]] == ["relay.set"]
 
 
-async def test_live_a_backlog_past_the_burst_arrives_whole(live_device):
-    harness = await live_device()
+async def test_live_a_backlog_past_the_burst_arrives_whole(live_client):
+    harness = await live_client()
     await harness.expect("connected", timeout=CONNECT)
-    ref = await client_ref(live_device.name)
+    ref = await client_ref(live_client.name)
 
     await harness.command("send-many", type="live.reading", count=150)
     await harness.expect("sent", type="live.reading", count=150)
@@ -117,10 +117,10 @@ async def test_live_a_backlog_past_the_burst_arrives_whole(live_device):
     assert not [e for e in harness.log if e["event"] == "disconnected"]
 
 
-async def test_live_a_command_is_acked_and_survives_a_throwing_handler(live_device):
-    harness = await live_device()
+async def test_live_a_command_is_acked_and_survives_a_throwing_handler(live_client):
+    harness = await live_client()
     await harness.expect("connected", timeout=CONNECT)
-    ref = await client_ref(live_device.name)
+    ref = await client_ref(live_client.name)
 
     await harness.command("throw-next")
     await harness.expect("armed")
@@ -133,21 +133,21 @@ async def test_live_a_command_is_acked_and_survives_a_throwing_handler(live_devi
     assert not [e for e in harness.log if e["event"] == "disconnected"]
 
 
-async def test_live_answers_a_ping(live_device):
-    harness = await live_device()
+async def test_live_answers_a_ping(live_client):
+    harness = await live_client()
     await harness.expect("connected", timeout=CONNECT)
-    ref = await client_ref(live_device.name)
+    ref = await client_ref(live_client.name)
 
     await api("POST", f"/clients/{ref}/ping")
 
     await eventually(lambda: api("GET", f"/clients/{ref}"), lambda d: d["lastRttMs"] is not None)
 
 
-async def test_live_a_second_connection_supersedes_the_first(live_device):
-    first = await live_device()
+async def test_live_a_second_connection_supersedes_the_first(live_client):
+    first = await live_client()
     await first.expect("connected", timeout=CONNECT)
 
-    second = await live_device()
+    second = await live_client()
     await second.expect("connected", timeout=CONNECT)
     await first.expect("disconnected")
     await second.stop()

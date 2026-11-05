@@ -8,10 +8,10 @@ public sealed class TokenBucketTests
     public void After_the_burst_the_next_token_is_one_interval_away()
     {
         var time = new ManualTime();
-        var bucket = new TokenBucket(DeviceProtocol.SendPerSecond, DeviceProtocol.SendBurst, time);
+        var bucket = new TokenBucket(ClientProtocol.SendPerSecond, ClientProtocol.SendBurst, time);
 
-        Assert.Equal(DeviceProtocol.SendBurst, Enumerable.Range(0, 100).Count(_ => bucket.TryTake()));
-        Assert.Equal(TimeSpan.FromSeconds(1 / DeviceProtocol.SendPerSecond), bucket.TimeUntilNext());
+        Assert.Equal(ClientProtocol.SendBurst, Enumerable.Range(0, 100).Count(_ => bucket.TryTake()));
+        Assert.Equal(TimeSpan.FromSeconds(1 / ClientProtocol.SendPerSecond), bucket.TimeUntilNext());
 
         time.Advance(TimeSpan.FromSeconds(1));
         Assert.Equal(TimeSpan.Zero, bucket.TimeUntilNext());
@@ -23,8 +23,8 @@ public sealed class TokenBucketTests
     {
         var gateway = new Wbskt.Gateway.Core.Infrastructure.MessageBudgetOptions();
 
-        Assert.True(DeviceProtocol.SendPerSecond < gateway.PerSecond);
-        Assert.True(DeviceProtocol.SendBurst < gateway.Burst);
+        Assert.True(ClientProtocol.SendPerSecond < gateway.PerSecond);
+        Assert.True(ClientProtocol.SendBurst < gateway.Burst);
     }
 
     private sealed class ManualTime : TimeProvider

@@ -35,13 +35,13 @@ public sealed class EventLogQueryTests
     }
 
     [Fact]
-    public void Every_group_has_events_and_none_holds_device_traffic()
+    public void Every_group_has_events_and_none_holds_client_traffic()
     {
         EventLogGroups.All.Keys.Should().BeEquivalentTo(["people", "clients", "policies", "workflows", "integrations", "security"]);
         foreach (var (group, events) in EventLogGroups.All)
         {
             events.Should().NotBeEmpty(group);
-            events.Should().NotIntersectWith(DeviceTrafficAttribute.EventNames, group);
+            events.Should().NotIntersectWith(ClientTrafficAttribute.EventNames, group);
         }
 
         EventLogGroups.All["clients"].Should().Contain(["ClientRenamedEvent", "ClientAutoApprovedEvent"]).And.NotContain("PolicyCreatedEvent");
@@ -53,7 +53,7 @@ public sealed class EventLogQueryTests
     [Fact]
     public void Every_security_event_is_a_real_warning_or_error()
     {
-        var events = typeof(DeviceTrafficAttribute).Assembly.GetTypes().ToDictionary(t => t.Name);
+        var events = typeof(ClientTrafficAttribute).Assembly.GetTypes().ToDictionary(t => t.Name);
 
         foreach (var name in EventLogGroups.All["security"])
         {
@@ -72,7 +72,7 @@ public sealed class EventLogQueryTests
 
         _asked!.EventNames.Should().BeEquivalentTo(EventLogGroups.All["policies"].Concat(["ClientDeletedEvent", "ClientRenamedEvent", "WorkflowDeletedEvent"]));
         _asked.ExcludeEventNames.Should().BeNull();
-        _asked.IncludeDeviceTraffic.Should().BeFalse("no event it names is device traffic, so the traffic table has nothing to give");
+        _asked.IncludeClientTraffic.Should().BeFalse("no event it names is client traffic, so the traffic table has nothing to give");
     }
 
     [Fact]
@@ -81,10 +81,10 @@ public sealed class EventLogQueryTests
         var service = CreateService();
 
         await service.GetLogsAsync(WorkspaceId, new EventLogQuery(), null, 50);
-        _asked!.IncludeDeviceTraffic.Should().BeTrue();
+        _asked!.IncludeClientTraffic.Should().BeTrue();
 
-        await service.GetLogsAsync(WorkspaceId, new EventLogQuery { EventNames = ["PolicyCreatedEvent", DeviceTrafficAttribute.EventNames[0]] }, null, 50);
-        _asked.IncludeDeviceTraffic.Should().BeTrue();
+        await service.GetLogsAsync(WorkspaceId, new EventLogQuery { EventNames = ["PolicyCreatedEvent", ClientTrafficAttribute.EventNames[0]] }, null, 50);
+        _asked.IncludeClientTraffic.Should().BeTrue();
     }
 
     [Fact]
@@ -103,14 +103,14 @@ public sealed class EventLogQueryTests
         await CreateService().GetLogsAsync(WorkspaceId, new EventLogQuery { Traffic = EventLogTraffic.Exclude }, null, 50);
 
         _asked!.EventNames.Should().BeNull();
-        _asked.ExcludeEventNames.Should().BeEquivalentTo(DeviceTrafficAttribute.EventNames);
-        _asked.IncludeDeviceTraffic.Should().BeFalse();
+        _asked.ExcludeEventNames.Should().BeEquivalentTo(ClientTrafficAttribute.EventNames);
+        _asked.IncludeClientTraffic.Should().BeFalse();
     }
 
     [Fact]
     public async Task Asking_only_for_traffic_while_excluding_it_finds_nothing_without_asking_the_database()
     {
-        var trafficEvent = DeviceTrafficAttribute.EventNames[0];
+        var trafficEvent = ClientTrafficAttribute.EventNames[0];
 
         var result = await CreateService().GetLogsAsync(WorkspaceId, new EventLogQuery { EventNames = [trafficEvent], Traffic = EventLogTraffic.Exclude }, null, 50);
 
@@ -191,7 +191,7 @@ public sealed class EventLogQueryTests
     [Fact]
     public async Task The_summary_folds_events_into_groups_and_leaves_traffic_out_of_the_total_when_asked()
     {
-        var traffic = DeviceTrafficAttribute.EventNames[0];
+        var traffic = ClientTrafficAttribute.EventNames[0];
         _provider.Setup(p => p.CountAsync(WorkspaceId, Now.UtcDateTime.AddDays(-7), Now.UtcDateTime, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(
             [
@@ -224,7 +224,7 @@ public sealed class EventLogQueryTests
     {
         var pika = Guid.NewGuid();
         var amal = Guid.NewGuid();
-        var traffic = DeviceTrafficAttribute.EventNames[0];
+        var traffic = ClientTrafficAttribute.EventNames[0];
         _provider.Setup(p => p.CountAsync(WorkspaceId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(
             [

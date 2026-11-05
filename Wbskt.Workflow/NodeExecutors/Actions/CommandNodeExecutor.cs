@@ -15,11 +15,11 @@ namespace Wbskt.Workflow.NodeExecutors.Actions;
 /// host-side publisher so the emitted event can be attributed to the client in event logs.
 ///
 /// <para>With <see cref="SendClientMessageConfig.AwaitAck"/> the step waits for the outcome: it parks
-/// on the command's id, sends once parked, and leaves by "acked" when the device acknowledges it,
+/// on the command's id, sends once parked, and leaves by "acked" when the client acknowledges it,
 /// "failed" when the platform reports it undelivered or it could not be sent at all, or "timeout" when
 /// neither comes in time (the bookmark's TTL takes that port without running the step again).</para>
 /// </summary>
-internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher, IBookmarkResumer bookmarkResumer, ActionTemplates templates, TimeProvider? clock = null)
+internal sealed class CommandNodeExecutor(IClientCommandPublisher publisher, IBookmarkResumer bookmarkResumer, ActionTemplates templates, TimeProvider? clock = null)
     : ParkingNodeExecutor(clock ?? TimeProvider.System)
 {
     public const string AckedPort = CommandChannel.Acked;
@@ -116,7 +116,7 @@ internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher, IBo
 
     // A command that could not be sent will never be answered, so the step is woken by "failed" at
     // once instead of waiting out its whole ack timeout and leaving by "timeout", which would read as
-    // a device that did not answer. The send failure is still rethrown, for the branch loop to log.
+    // a client that did not answer. The send failure is still rethrown, for the branch loop to log.
     private async Task SendWhileParkedAsync(NodeContext ctx, SendClientMessageConfig config, Guid commandId, Guid clientRefId, CancellationToken ct)
     {
         try

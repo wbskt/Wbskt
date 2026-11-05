@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace Wbskt.Client.Sdk;
 
 /// <summary>
-/// Keeps the device's credentials in a JSON file, so it registers once and signs in with them on
+/// Keeps the client's credentials in a JSON file, so it registers once and signs in with them on
 /// every later start. The default for <see cref="WbsktClient(string, string)"/>.
 /// </summary>
 public sealed class FileClientStorage : IClientStorage
@@ -16,11 +16,11 @@ public sealed class FileClientStorage : IClientStorage
     }
 
     /// <summary>
-    /// The file for a device named <paramref name="deviceName"/>: <c>wbskt/{name}.json</c> in the
+    /// The file for a client named <paramref name="clientName"/>: <c>wbskt/{name}.json</c> in the
     /// user's local application data folder (<c>~/.local/share</c> on Linux), or the working
-    /// directory where there is none. Named per device, so several on one machine don't share one.
+    /// directory where there is none. Named per client, so several on one machine don't share one.
     /// </summary>
-    public static FileClientStorage ForDevice(string deviceName)
+    public static FileClientStorage ForClient(string clientName)
     {
         string root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.Create);
         if (string.IsNullOrEmpty(root))
@@ -28,7 +28,7 @@ public sealed class FileClientStorage : IClientStorage
             root = Directory.GetCurrentDirectory();
         }
 
-        string safeName = string.Concat(deviceName.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+        string safeName = string.Concat(clientName.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
         return new FileClientStorage(Path.Combine(root, "wbskt", $"{safeName}.json"));
     }
 

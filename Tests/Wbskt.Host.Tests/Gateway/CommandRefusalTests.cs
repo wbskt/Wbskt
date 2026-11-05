@@ -20,18 +20,18 @@ public sealed class CommandRefusalTests
         CommandRefusal.TryRead(Payload("""{"commandId":"c","type":"pump.start","refused":"expired"}"""), out var type, out var reason).Should().BeTrue();
 
         type.Should().Be("pump.start");
-        reason.Should().Be("Refused by the device: expired");
+        reason.Should().Be("Refused by the client: expired");
     }
 
     [Fact]
-    public void Device_supplied_strings_are_capped()
+    public void Client_supplied_strings_are_capped()
     {
         var json = JsonSerializer.Serialize(new { commandId = "c", type = new string('t', 500), refused = new string('r', 500) });
 
         CommandRefusal.TryRead(Payload(json), out var type, out var reason).Should().BeTrue();
 
         type.Should().HaveLength(100);
-        reason.Should().HaveLength("Refused by the device: ".Length + 100);
+        reason.Should().HaveLength("Refused by the client: ".Length + 100);
     }
 
     [Theory]

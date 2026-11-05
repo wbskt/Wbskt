@@ -15,7 +15,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Outage;
 /// <para>
 /// What the code promises while it is gone: a command or a ping is the publish itself, so the
 /// management host answers 503 <c>EVENT_BUS_UNAVAILABLE</c> with <c>Retry-After</c> rather than
-/// reporting something sent that was not (ClientCommandService, DeviceCommandSender). Sign-in puts its
+/// reporting something sent that was not (ClientCommandService, ClientCommandSender). Sign-in puts its
 /// events on the queued bus (QueuedEventBus in the auth host), so it does not wait on the broker. The
 /// public webhook callback is sent to the engine's durable queue, and when the broker cannot take it
 /// the answer is 503 with <c>Retry-After</c> (PublicCallbackController): nothing is held in the
@@ -23,13 +23,13 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Outage;
 /// sender's retry, after the broker is back, that starts the run. That is what is asserted here.
 /// </para>
 /// <para>
-/// A connected device keeps its session through the outage: a message the gateway can't publish is
-/// dropped and counted, never fatal (InboundMessageDispatcher), so the device is not disconnected and
+/// A connected client keeps its session through the outage: a message the gateway can't publish is
+/// dropped and counted, never fatal (InboundMessageDispatcher), so the client is not disconnected and
 /// its presence is still right afterwards.
 /// </para>
 /// <para>
 /// The outage is kept short on purpose. Socket hosts report in over the broker, and one silent for
-/// <c>Presence:HostStaleAfterSeconds</c> (120 s) has its devices marked offline, after which a
+/// <c>Presence:HostStaleAfterSeconds</c> (120 s) has its clients marked offline, after which a
 /// command is queued for the next connect (202 <c>queued</c>) instead of reaching the publish.
 /// </para>
 /// Runs only with <c>E2E_OUTAGE_COMMAND</c> (see <see cref="OutageControl"/>), on its own.
@@ -45,25 +45,25 @@ public sealed class BrokerOutageE2ETests(ServicesFixture fixture)
         Skip.IfNot(E2EConfig.OutageTestsEnabled, OutageControl.SkipReason);
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
-        // ── Arrange, with the broker up: a connected device and a live webhook trigger ─────────
+        // ── Arrange, with the broker up: a connected client and a live webhook trigger ─────────
         var workspace = await fixture.CreateIsolatedWorkspaceAsync();
         var (token, workspaceRef) = workspace;
         var management = fixture.Management.As(token);
 
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef);
-        var deviceName = $"e2e-mq-outage-{Guid.NewGuid():N}";
-        var (clientRef, secret) = await fixture.RegisterClientAsync(pin, deviceName);
-        await using var device = new WbsktClient(
-            new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, deviceName, null),
+        var clientName = $"e2e-mq-outage-{Guid.NewGuid():N}";
+        var (clientRef, secret) = await fixture.RegisterClientAsync(pin, clientName);
+        await using var client = new WbsktClient(
+            new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, clientName, null),
             new InMemoryClientStorage(clientRef, secret));
         var disconnects = 0;
-        device.OnDisconnected += () => Interlocked.Increment(ref disconnects);
-        await device.StartAsync();
+        client.OnDisconnected += () => Interlocked.Increment(ref disconnects);
+        await client.StartAsync();
 
-        // Presence reaches the management host over the bus, so the device is "connected" there once
+        // Presence reaches the management host over the bus, so the client is "connected" there once
         // a command is accepted; only then does a command get as far as the publish.
         await ServicesFixture.PollUntilAsync(
-            "a command to the connected device to be accepted",
+            "a command to the connected client to be accepted",
             async () =>
             {
                 using var response = await management.SendClientCommandRawAsync(workspaceRef, clientRef, Command());
@@ -99,10 +99,10 @@ public sealed class BrokerOutageE2ETests(ServicesFixture fixture)
                 await ShouldBeRetryLaterAsync(ping, "EVENT_BUS_UNAVAILABLE", "a ping is the publish, and the broker cannot take it");
             }
 
-            // Before #549 the failed publish ended the session, and the device reconnected into the outage.
+            // Before #549 the failed publish ended the session, and the client reconnected into the outage.
             for (var i = 0; i < 3; i++)
             {
-                await device.SendAsync("e2e.during-outage", new { i });
+                await client.SendAsync("e2e.during-outage", new { i });
             }
 
             using (var login = await fixture.Auth.LoginRawAsync(new LoginRequest(workspace.User.Email, workspace.User.Password)))
@@ -133,7 +133,7 @@ public sealed class BrokerOutageE2ETests(ServicesFixture fixture)
                 TimeSpan.FromSeconds(2));
 
             await ServicesFixture.PollUntilAsync(
-                "a command to the device to be accepted again after the broker restart",
+                "a command to the client to be accepted again after the broker restart",
                 async () =>
                 {
                     using var response = await management.SendClientCommandRawAsync(workspaceRef, clientRef, Command());
@@ -156,11 +156,11 @@ public sealed class BrokerOutageE2ETests(ServicesFixture fixture)
                 TimeSpan.FromSeconds(120),
                 TimeSpan.FromSeconds(2));
 
-            Volatile.Read(ref disconnects).Should().Be(0, "a broker outage drops what the device sent, not its session");
+            Volatile.Read(ref disconnects).Should().Be(0, "a broker outage drops what the client sent, not its session");
             using var detail = await fixture.SendAsync(HttpMethod.Get, ServicesFixture.ManagementUrl($"/api/v1/workspaces/{workspaceRef}/clients/{clientRef}"), token);
             detail.StatusCode.Should().Be(HttpStatusCode.OK);
             using var body = JsonDocument.Parse(await detail.Content.ReadAsStringAsync());
-            body.RootElement.GetProperty("isConnected").GetBoolean().Should().BeTrue("the device was connected throughout");
+            body.RootElement.GetProperty("isConnected").GetBoolean().Should().BeTrue("the client was connected throughout");
         });
     }
 

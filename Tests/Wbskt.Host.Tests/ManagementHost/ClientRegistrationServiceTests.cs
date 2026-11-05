@@ -18,7 +18,7 @@ using Wbskt.Host.Tests.Infrastructure;
 namespace Wbskt.Host.Tests.ManagementHost;
 
 /// <summary>
-/// A device registering into a workspace that is already at its ceiling on registered clients:
+/// A client registering into a workspace that is already at its ceiling on registered clients:
 /// <c>dbo.Client_Create</c> refuses it with 50025, and the API answers 409 with the configured number.
 /// </summary>
 public sealed class ClientRegistrationServiceTests

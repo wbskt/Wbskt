@@ -45,7 +45,7 @@ public sealed class EventLogRetentionServiceTests
     }
 
     [Fact]
-    public async Task Device_traffic_goes_after_its_own_shorter_window_and_audit_events_after_theirs()
+    public async Task Client_traffic_goes_after_its_own_shorter_window_and_audit_events_after_theirs()
     {
         var registry = new EventRegistry();
         registry.RegisterEvent("ClientMessageReceivedEvent", 11);
@@ -55,7 +55,7 @@ public sealed class EventLogRetentionServiceTests
         provider.Setup(p => p.DeleteBeforeAsync(It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(3);
 
-        var total = await CreateService(provider.Object, registry, retentionDays: 90, deviceTrafficRetentionDays: 14).SweepAsync(CancellationToken.None);
+        var total = await CreateService(provider.Object, registry, retentionDays: 90, clientTrafficRetentionDays: 14).SweepAsync(CancellationToken.None);
 
         Assert.Equal(6, total);
         provider.Verify(p => p.DeleteBeforeAsync(
@@ -66,27 +66,27 @@ public sealed class EventLogRetentionServiceTests
     }
 
     [Fact]
-    public async Task The_device_traffic_table_is_swept_batch_by_batch_after_its_own_window()
+    public async Task The_client_traffic_table_is_swept_batch_by_batch_after_its_own_window()
     {
         var provider = new Mock<IEventProvider>();
-        provider.SetupSequence(p => p.DeleteDeviceTrafficBeforeAsync(It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+        provider.SetupSequence(p => p.DeleteClientTrafficBeforeAsync(It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(EventLogRetentionService.BatchSize)
             .ReturnsAsync(7);
 
-        var total = await CreateService(provider.Object, new EventRegistry(), retentionDays: 90, deviceTrafficRetentionDays: 2).SweepAsync(CancellationToken.None);
+        var total = await CreateService(provider.Object, new EventRegistry(), retentionDays: 90, clientTrafficRetentionDays: 2).SweepAsync(CancellationToken.None);
 
         Assert.Equal(EventLogRetentionService.BatchSize + 7, total);
-        provider.Verify(p => p.DeleteDeviceTrafficBeforeAsync(Now.UtcDateTime.AddDays(-2), EventLogRetentionService.BatchSize, It.IsAny<CancellationToken>()), Times.Exactly(2));
+        provider.Verify(p => p.DeleteClientTrafficBeforeAsync(Now.UtcDateTime.AddDays(-2), EventLogRetentionService.BatchSize, It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
     [Fact]
-    public void Device_traffic_is_kept_two_days_unless_configured()
+    public void Client_traffic_is_kept_two_days_unless_configured()
     {
-        Assert.Equal(2, new EventLoggingOptions().DeviceTrafficRetentionDays);
+        Assert.Equal(2, new EventLoggingOptions().ClientTrafficRetentionDays);
     }
 
     [Fact]
-    public async Task No_separate_device_traffic_pass_when_its_window_is_not_shorter()
+    public async Task No_separate_client_traffic_pass_when_its_window_is_not_shorter()
     {
         var registry = new EventRegistry();
         registry.RegisterEvent("ClientMessageReceivedEvent", 11);
@@ -94,29 +94,29 @@ public sealed class EventLogRetentionServiceTests
         provider.Setup(p => p.DeleteBeforeAsync(It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(0);
 
-        await CreateService(provider.Object, registry, retentionDays: 7, deviceTrafficRetentionDays: 14).SweepAsync(CancellationToken.None);
+        await CreateService(provider.Object, registry, retentionDays: 7, clientTrafficRetentionDays: 14).SweepAsync(CancellationToken.None);
 
         provider.Verify(p => p.DeleteBeforeAsync(It.IsAny<DateTime>(), It.IsAny<int>(), It.IsNotNull<IReadOnlyCollection<int>?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public void Device_traffic_is_device_chatter_not_actions_people_take()
+    public void Client_traffic_is_client_chatter_not_actions_people_take()
     {
-        Assert.Contains("ClientMessageReceivedEvent", DeviceTrafficAttribute.EventNames);
-        Assert.Contains("ClientCommandDeliveredEvent", DeviceTrafficAttribute.EventNames);
+        Assert.Contains("ClientMessageReceivedEvent", ClientTrafficAttribute.EventNames);
+        Assert.Contains("ClientCommandDeliveredEvent", ClientTrafficAttribute.EventNames);
         // Sending a command or a ping is something a person did, so it stays in the audit log.
-        Assert.DoesNotContain("ClientCommandEvent", DeviceTrafficAttribute.EventNames);
-        Assert.DoesNotContain("ClientPingEvent", DeviceTrafficAttribute.EventNames);
-        Assert.DoesNotContain("ClientConnectedEvent", DeviceTrafficAttribute.EventNames);
+        Assert.DoesNotContain("ClientCommandEvent", ClientTrafficAttribute.EventNames);
+        Assert.DoesNotContain("ClientPingEvent", ClientTrafficAttribute.EventNames);
+        Assert.DoesNotContain("ClientConnectedEvent", ClientTrafficAttribute.EventNames);
     }
 
-    private static EventLogRetentionService CreateService(IEventProvider provider, IEventRegistry registry, int retentionDays, int deviceTrafficRetentionDays = 14)
+    private static EventLogRetentionService CreateService(IEventProvider provider, IEventRegistry registry, int retentionDays, int clientTrafficRetentionDays = 14)
     {
         var services = new ServiceCollection().AddSingleton(provider).AddSingleton(registry).BuildServiceProvider();
         return new EventLogRetentionService(
             services.GetRequiredService<IServiceScopeFactory>(),
             new FixedTimeProvider(Now),
-            Options.Create(new EventLoggingOptions { RetentionDays = retentionDays, DeviceTrafficRetentionDays = deviceTrafficRetentionDays }),
+            Options.Create(new EventLoggingOptions { RetentionDays = retentionDays, ClientTrafficRetentionDays = clientTrafficRetentionDays }),
             NullLogger<EventLogRetentionService>.Instance);
     }
 

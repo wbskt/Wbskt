@@ -15,14 +15,14 @@ and a snapshot disagree, the snapshot is right and this page is behind.
 | Host | Routed publicly | Callers | How a request is authenticated |
 |---|---|---|---|
 | **Auth** (`Wbskt.Auth.Host`) | yes | console, other hosts | JWT bearer; the credential endpoints are anonymous and rate limited |
-| **Management** (`Wbskt.Management.Host`) | yes | console, device SDK | JWT bearer, plus three deliberately anonymous edges (below) |
-| **WebSocket gateway** (`Wbskt.Gateway.WebSocket.Host`, over `Wbskt.Gateway.Core`) | yes | device SDK | JWT bearer on the WebSocket upgrade, header or `access_token` query |
+| **Management** (`Wbskt.Management.Host`) | yes | console, client SDK | JWT bearer, plus three deliberately anonymous edges (below) |
+| **WebSocket gateway** (`Wbskt.Gateway.WebSocket.Host`, over `Wbskt.Gateway.Core`) | yes | client SDK | JWT bearer on the WebSocket upgrade, header or `access_token` query |
 | **Workflow Engine** (`Wbskt.Workflow.Engine.Host`) | **no** — backend network only | management host | shared API key header on `/api/inbound/*` |
 
 **Where a public URL lands.** `api.${DOMAIN}` is the one public API host: tenant administration
 (`/api/v1/tenants`, `/api/v1/invitations`) and the auth host's workspace routes (`/api/v1/workspaces`, one
-workspace, its `members` and `owner`) go to the auth host, device sign-in and registration to the
-devices role, and everything else to the management host. `auth.${DOMAIN}` serves sign-in, refresh
+workspace, its `members` and `owner`) go to the auth host, client sign-in and registration to the
+client-auth role, and everything else to the management host. `auth.${DOMAIN}` serves sign-in, refresh
 and sessions (`/api/auth`, where the refresh cookie is scoped), and for one release still answers the
 administration routes too, so the console can move over. Nothing under `/api/internal` is routed
 publicly: those are host-to-host calls over the backend network (`InternalRoutes`). The Traefik
@@ -39,7 +39,7 @@ anonymously and the anonymous surface is an explicit, auditable choice:
   roles and permissions. `AuthController`'s credential endpoints carry `[AllowAnonymous]`
   individually, and so does the one internal route a background job calls with no user token
   (`GET /api/internal/workspaces/deleted`), which `[InternalApiKey]` guards with a shared key instead.
-- **WebSocket gateway** — has no controllers at all. `/ws` requires the `ClientOnly` policy (a device
+- **WebSocket gateway** — has no controllers at all. `/ws` requires the `ClientOnly` policy (a client
   token: `type=client`), validated by the same bearer handler as the other hosts. Browsers cannot set
   headers on a WebSocket, so on `/ws` the handler also reads `?access_token=` (`AcceptQueryToken`,
   shared with the management host's SignalR hub). `HostArchitectureTests` fails if a controller
@@ -77,7 +77,7 @@ public contract ships as `/api/v2` next to it, never as a change to `/v1`. These
 **Aliases for one release (#312).** The auth and management hosts still answer the unversioned
 paths (`/api/workspaces/…` and so on) by handling them as `/api/v1/…`
 (`UnversionedApiAliasMiddleware`), and they answer those requests with `Deprecation: true`, so a
-console or device that hasn't moved yet keeps working. The OpenAPI documents list only `/api/v1`.
+console or client that hasn't moved yet keeps working. The OpenAPI documents list only `/api/v1`.
 Remove the aliases once the console and SDKs no longer call them.
 
 ## Errors
@@ -107,8 +107,8 @@ says what it is, `user` or `client`.
   `sid` (the session). No internal id: a host that keys records by the user's internal id resolves it
   from `sub` (the auth host from its database, the management host from
   `GET /api/internal/users/me`), cached.
-- **Device token** (management host, audience `wbskt-socket`): `sub`, `typ: "client"`, `name`,
-  `policy_ref`, and for now the device's internal `id` and `workspace_id`, which the WebSocket gateway
+- **Client token** (management host, audience `wbskt-socket`): `sub`, `typ: "client"`, `name`,
+  `policy_ref`, and for now the client's internal `id` and `workspace_id`, which the WebSocket gateway
   stamps on every event it publishes and has no database to read from.
 - Tokens issued before this contract (`sub` the internal id, `uref`, `type`) are still accepted until
   they expire. Revocation ("sign out everywhere", a password change) is keyed by the user's RefId.
@@ -139,7 +139,7 @@ body, so script on the page can never read it. refresh-token and logout take an 
 the cookie; refresh-token sets the replacement cookie, and a refused refresh, logout, logout-all,
 account/delete and account/revert-email-change clear it, as does a confirm-email-change answered 204. The cookie is only read from a request with that header (which forces a CORS preflight)
 and an allowed `Origin`, so another site cannot spend it. `Auth:RefreshCookie:SameSite` defaults to
-`Strict`. Without the header everything stays in the body as before, for the SDK, devices and tests;
+`Strict`. Without the header everything stays in the body as before, for the SDK, clients and tests;
 a body-only refresh-token or logout with no token is still a 400. CORS on this host allows
 credentials.
 
@@ -186,8 +186,8 @@ is issued, so the link already in the inbox keeps working.
 | `POST account/change-email` | authenticated | Takes `newEmail` and `password` (checked like `change-password`'s, counted towards the lockout). Mails a confirm link to the new address, valid 24 hours; nothing changes until it is followed, and a new request replaces one still pending. An address another account uses is 409 `EMAIL_CHANGE_CONFLICT` and says no more; the current address is 400 `EMAIL_UNCHANGED`. The per-address mail cooldown applies, and a request it holds back answers **204** like any other. |
 | `POST account/confirm-email-change` | anonymous | Takes the `token` from the confirm link. Switches the account to the new address (checked free again, and not held by another account's live undo; 409 `EMAIL_CHANGE_CONFLICT`), ends **every** session and access token, and mails the old address a link that undoes the change for 7 days. A caller signed in as the same account gets a fresh token pair (**200**); anyone else gets **204** and signs in with the new address. A spent, expired or unknown token, or one whose account has moved address since, is 400 `EMAIL_CHANGE_TOKEN_INVALID`. Raises `UserProfileChangedEvent`. Pending invitations sent to the old address still work, since accepting goes by token. |
 | `POST account/revert-email-change` | anonymous | Takes the `token` from the undo link mailed to the old address. Puts the old address back whatever it was changed to since, ends every session again, drops any pending change, and spends this undo and any from later changes. An undo from an earlier change stays live, so a second change cannot take away the owner's way back. 400 `EMAIL_CHANGE_TOKEN_INVALID` and 409 `EMAIL_CHANGE_CONFLICT` as above. **204**. Raises `UserProfileChangedEvent` with `how: reverted`. |
-| `GET sessions` | authenticated | The caller's live sessions, newest sign-in first: `id` (a GUID that stays the same across refreshes), `createdAt` (the sign-in), `lastUsedAt`, `expiresAt`, `ipAddress` (of the last refresh) and `isCurrent` (the session the request came from). One per signed-in device or browser. |
-| `DELETE sessions/{sessionId}` | authenticated | Ends one of the caller's sessions: its refresh token stops working, and so does the access token that device holds (its `sid` claim names the session). 404 `AUTH_SESSION_NOT_FOUND` for an id that is not a live session of theirs. |
+| `GET sessions` | authenticated | The caller's live sessions, newest sign-in first: `id` (a GUID that stays the same across refreshes), `createdAt` (the sign-in), `lastUsedAt`, `expiresAt`, `ipAddress` (of the last refresh) and `isCurrent` (the session the request came from). One per signed-in client or browser. |
+| `DELETE sessions/{sessionId}` | authenticated | Ends one of the caller's sessions: its refresh token stops working, and so does the access token that client holds (its `sid` claim names the session). 404 `AUTH_SESSION_NOT_FOUND` for an id that is not a live session of theirs. |
 | `POST forgot-password` | anonymous | Mails a reset link if the address has a usable account. **Always 204** — same status, same empty body, for a registered address, an unknown one, a deactivated one, and a malformed one. |
 | `POST reset-password` | anonymous | Redeems a reset token, writes the new password, and revokes **every** refresh token the account holds — in one transaction, so a session an attacker already has cannot outlive the recovery. Unknown, spent and expired tokens are all `RESET_TOKEN_INVALID`. |
 | `POST verify-email` | anonymous | Redeems a confirmation token and marks the address verified. Single-use. |
@@ -358,16 +358,16 @@ that is empty or backwards is 400 `TIME_RANGE_INVALID`, and one longer than 400 
 | `GET /` | `clients.read` | Lists clients, filterable by `status`, `name`, `tag` and `policyRefId` (case-insensitive; an invalid one is 400 `CLIENT_TAG_INVALID`). `status` can be repeated to list several statuses together (`?status=2&status=3` is every removed client). Each client carries its `tags`. Paged, with `totalCount`. |
 | `GET counts` | `clients.read` | How many clients the workspace has in each status, and how many are connected now (`{ total, pending, registered, revoked, rejected, connected }`), in one read. `policyRefId` counts one policy's clients (404 for one this workspace does not own). |
 | `GET tags` | `clients.read` | Every tag in use in the workspace with its client count (`{ tag, clientCount }`), sorted, for a tag filter. |
-| `GET {clientRef}` | `clients.read` | Full client detail: presence, uptime anchor, latency, self-reported SDK metadata and command capabilities, and `system`: the platform features the device said it takes (`["ota"]` for firmware updates; empty when none), and `firmwareVersion`: the version of its own code from its last capabilities; null when it never said. `updatingUntil` (here and on the list) is set when the device last disconnected to install a firmware update: while it is in the future the device counts as updating, not offline; its next connect clears it. |
+| `GET {clientRef}` | `clients.read` | Full client detail: presence, uptime anchor, latency, self-reported SDK metadata and command capabilities, and `system`: the platform features the client said it takes (`["ota"]` for firmware updates; empty when none), and `firmwareVersion`: the version of its own code from its last capabilities; null when it never said. `updatingUntil` (here and on the list) is set when the client last disconnected to install a firmware update: while it is in the future the client counts as updating, not offline; its next connect clears it. |
 | `GET {clientRef}/state` | `clients.read` | The client's last-known self-reported state variables. |
 | `GET {clientRef}/message-types` | `clients.read` | The message types the client has sent, most recently seen first, as one page (`items`, `totalCount`): `type`, `count`, `firstSeenAt`, `lastSeenAt`, `isPlatform` (`state.report` and `capabilities`, which the platform reads itself) and `samplePayload` (the latest payload of that type, as JSON, when it was at most 4,000 characters). Kept up to date as messages arrive (`dbo.ClientMessageTypes`, written in batches), so it is one indexed read. Types compare ignoring case. At most 100 types per client; past that new ones are not recorded. Counts start from when the table was deployed, not from the client's first message, and are approximate: a batch redelivered after it was written is counted twice. |
 | `PATCH {clientRef}` | `clients.update` | Changes a client's `name` (1–100 characters), its `status` (approving or revoking it; approving enforces the policy's `MaxClients` ceiling), or both. A field left out stays as it is; naming neither is 400 `CLIENT_UPDATE_EMPTY`. The status changes first, so a refused status leaves the name unchanged too. |
 | `PATCH status` | `clients.update` | Gives up to 100 clients one status (`{ clientRefIds, status }`), each handled as the single-client endpoint would. Answers 200 with `updated` and `failed` (ref, code, message), so one client that cannot change (the policy is full, or it is not in this workspace) does not stop the rest. Approvals are taken in the order given. |
-| `DELETE {clientRef}` | `clients.manage` | Deletes a client with its capabilities and state, closes its connection and refuses its still-valid token. Its event-log history stays. The device must register again to come back. |
+| `DELETE {clientRef}` | `clients.manage` | Deletes a client with its capabilities and state, closes its connection and refuses its still-valid token. Its event-log history stays. The client must register again to come back. |
 | `POST {clientRef}/rotate-secret` | `clients.manage` | Replaces the client's secret and returns the new one once (`{ clientRefId, secret }`). The old secret stops working, tokens issued before the rotation are refused, and the live connection is closed. |
 | `PUT {clientRef}/tags` | `clients.update` | Replaces the client's tags (`{ tags }`; an empty list clears them) and returns them as stored. Tags are trimmed and lower-cased, and repeats collapse. Each is 1–32 letters, digits, spaces, `-`, `_` or `.`, starting and ending with a letter or digit (else 400 `CLIENT_TAG_INVALID`); at most 10 per client (else 400 `CLIENT_TAGS_TOO_MANY`). |
-| `POST {clientRef}/commands` | `clients.command` | Sends a command to a client and returns a `commandId` for correlating the delivery/ack events that follow, with `status` `sent` or `queued`. Rejects reserved protocol message types and payloads over 32 KiB. A connected client gets it at once. An offline, registered client has it queued (`status: "queued"`, `expiresAt` = when it stops waiting) and delivered, oldest first, when it next connects; a client that drops before delivery has the command put back in its queue. Queuing is refused with 409 `COMMAND_QUEUE_FULL` past `CommandQueue:MaxPerClient` waiting commands (default 100), and with 409 `DEVICE_INACTIVE` for an offline client that is pending, revoked or rejected. Optional `expiresAt` (at most 24 h ahead, else 400 `COMMAND_EXPIRY_INVALID`); without one a queued command waits `CommandQueue:DefaultExpiryMinutes` (24 h). A command that expires while queued, or whose client is revoked, ends with `ClientCommandFailedEvent`; past `expiresAt` the gateway does not send the command and the SDK refuses it. A workflow's send-message step goes through the same sender (`IDeviceCommandSender`) and its command always expires when the step would stop waiting for the answer: its ack timeout, 30 s by default. |
-| `POST {clientRef}/ota` | `clients.firmware` | Tells the client to update its firmware (`sys.ota.update`): `{ url, sha256, version?, size?, expiresAt? }`. `url` must be `https` (400 `OTA_URL_INVALID`), `sha256` 64 hex digits (400 `OTA_SHA256_INVALID`), `version` at most 50 characters (400 `OTA_VERSION_INVALID`), `size` a byte count (400 `OTA_SIZE_INVALID`). Refused with 409 `OTA_NOT_SUPPORTED` unless the client's last capabilities list `ota` under `system`. Sent like a command, with the same answers and errors: connected now, or queued for an offline client. It always expires: `expiresAt`, or `CommandQueue:DefaultExpiryMinutes` from now. A newer update cancels any older one still queued for the client (each with `ClientCommandCancelledEvent`), since the device takes one at a time and would otherwise install the oldest. The `url` is kept as given, query string included, in the queued-command list and the event log, so anyone with `clients.read` sees it: use a presigned URL that expires with the command, not a long-lived secret. The client reports progress with `sys.ota.status`, raised as `ClientOtaStatusEvent` (`OnClientOtaStatusEvent` to the client's watchers, and in its activity): `accepted`, `downloading` (with `progress` when the device can send it), `installed` with `version` once the new firmware connects, or `rejected` / `failed` with `error`. |
+| `POST {clientRef}/commands` | `clients.command` | Sends a command to a client and returns a `commandId` for correlating the delivery/ack events that follow, with `status` `sent` or `queued`. Rejects reserved protocol message types and payloads over 32 KiB. A connected client gets it at once. An offline, registered client has it queued (`status: "queued"`, `expiresAt` = when it stops waiting) and delivered, oldest first, when it next connects; a client that drops before delivery has the command put back in its queue. Queuing is refused with 409 `COMMAND_QUEUE_FULL` past `CommandQueue:MaxPerClient` waiting commands (default 100), and with 409 `CLIENT_INACTIVE` for an offline client that is pending, revoked or rejected. Optional `expiresAt` (at most 24 h ahead, else 400 `COMMAND_EXPIRY_INVALID`); without one a queued command waits `CommandQueue:DefaultExpiryMinutes` (24 h). A command that expires while queued, or whose client is revoked, ends with `ClientCommandFailedEvent`; past `expiresAt` the gateway does not send the command and the SDK refuses it. A workflow's send-message step goes through the same sender (`IClientCommandSender`) and its command always expires when the step would stop waiting for the answer: its ack timeout, 30 s by default. |
+| `POST {clientRef}/ota` | `clients.firmware` | Tells the client to update its firmware (`sys.ota.update`): `{ url, sha256, version?, size?, expiresAt? }`. `url` must be `https` (400 `OTA_URL_INVALID`), `sha256` 64 hex digits (400 `OTA_SHA256_INVALID`), `version` at most 50 characters (400 `OTA_VERSION_INVALID`), `size` a byte count (400 `OTA_SIZE_INVALID`). Refused with 409 `OTA_NOT_SUPPORTED` unless the client's last capabilities list `ota` under `system`. Sent like a command, with the same answers and errors: connected now, or queued for an offline client. It always expires: `expiresAt`, or `CommandQueue:DefaultExpiryMinutes` from now. A newer update cancels any older one still queued for the client (each with `ClientCommandCancelledEvent`), since the client takes one at a time and would otherwise install the oldest. The `url` is kept as given, query string included, in the queued-command list and the event log, so anyone with `clients.read` sees it: use a presigned URL that expires with the command, not a long-lived secret. The client reports progress with `sys.ota.status`, raised as `ClientOtaStatusEvent` (`OnClientOtaStatusEvent` to the client's watchers, and in its activity): `accepted`, `downloading` (with `progress` when the client can send it), `installed` with `version` once the new firmware connects, or `rejected` / `failed` with `error`. |
 | `GET {clientRef}/commands?status=queued` | `clients.read` | The commands waiting for an offline client, oldest first, as one page (`items`, `totalCount`): `commandId`, `type`, `payload`, `queuedAt`, `expiresAt`. `status` must be `queued` (400 `COMMAND_STATUS_INVALID` otherwise); sent commands are in the comms feed. |
 | `DELETE {clientRef}/commands/{commandId}` | `clients.command` | Cancels a waiting command (204, raising `ClientCommandCancelledEvent`); 404 `COMMAND_NOT_QUEUED` once it was delivered, expired or cancelled. |
 | `POST {clientRef}/ping` | `clients.ping` | Triggers a round-trip latency measurement. |
@@ -383,7 +383,7 @@ only one in the path.
 
 ### 2.2 Registration policies — `…/registration-policies`
 
-A policy is the enrolment ticket a device presents: a PIN, an optional client ceiling, and whether
+A policy is the enrolment ticket a client presents: a PIN, an optional client ceiling, and whether
 approval is automatic or manual.
 
 | Endpoint | Permission | What it does |
@@ -392,7 +392,7 @@ approval is automatic or manual.
 | `GET {policyRef}` | `policies.read` | One policy, after verifying it belongs to the workspace. |
 | `POST /` | `policies.manage` | Creates a policy. The enrolment PIN is generated server-side, not supplied by the caller. |
 | `PATCH {policyRef}` | `policies.manage` | Updates name, client limit, auto-approval and enabled state: a full replace, so send every field. Disabling stops the policy accepting new registrations and leaves registered clients as they are; `isEnabled: true` turns it back on. |
-| `POST {policyRef}/rotate-pin` | `policies.manage` | Replaces the PIN and returns the policy with the new one. The old PIN stops registering devices; already-registered clients are unaffected. |
+| `POST {policyRef}/rotate-pin` | `policies.manage` | Replaces the PIN and returns the policy with the new one. The old PIN stops registering clients; already-registered clients are unaffected. |
 | `DELETE {policyRef}` | `policies.manage` | Deletes a policy no client is enrolled through, in any status; otherwise `409 POLICY_HAS_CLIENTS` with the count. Templates pinned to it are unpinned and stay in the workspace; its event-log history is kept. Raises `PolicyDeletedEvent`. |
 
 ### 2.3 Message templates — `…/message-templates`
@@ -410,8 +410,8 @@ Saved send-panel payloads, optionally pinned to a policy.
 
 | Endpoint | Permission | What it does |
 |---|---|---|
-| `GET /` | `logs.read` | The workspace's event log, newest first, `limit` per page (default 50), no total count. Filters, all optional and combined with AND: `eventName` (substring, the older single filter), `eventNames` and `group` (exact names and named groups, repeated or comma-separated; an event named by either is kept), `criticality` (exactly) and `minCriticality` (that level or worse: `Warning` is warnings and errors), `source` (`Console`, `Api`, `Device`, `Workflow`, `System`, repeated or comma-separated; an unknown one is **400** `EVENT_LOG_SOURCE_UNKNOWN`), `sinceId` (only entries newer than this id, for a live view that asks again for what is newer than the newest one it shows), `policyRefId` and `clientRefId` (**404** for one this workspace does not own), `workflowRefId` (every version; a deleted workflow can still be named), `userRefId` (who did it), `from` / `to` (half-open, on the time logged; without them, all of retention), `traffic=include\|exclude` (raw device traffic; included by default) and `q` (text in the entry's data or event name, at most 100 characters). Groups: `people`, `clients`, `policies`, `workflows`, `security` (the warnings and errors about sign-ins, passwords, who has access, keys, PINs, deletions and blocked joins: failed sign-ins, password changes and resets, members removed or suspended, a role's permissions changed, a workspace handed to a new owner); an unknown one is **400** `EVENT_LOG_GROUP_UNKNOWN`. Each entry carries its `id` and `userRefId`: who took the action, for one taken through the API (device and policy changes, commands and pings, workflow publish, deprecate, reinstate, delete, manual run, cancel and signal); null for events with no signed-in user behind them. `source` says where it came from: `Console` (a browser on an allowed console origin), `Api` (a user token used anywhere else), `Device`, `Workflow` (a command a run sent, or a shared variable a run wrote; its `eventData` names the run in `actorWorkflowRefId` and `actorRunRefId`, and the entry is listed under that workflow too; a run's variable writes are device traffic, kept and hidden like it) or `System`; null for sign-ins and for changes people make to their own account. The `people` group holds what happens to people, logged in each workspace it touches: sign-ins (success and failure) and a person's own password changes and resets, signing out everywhere or ending one session, and verifying an email, in every workspace they belong to; invitations sent, revoked, accepted and expired, members removed, suspended and restored, and roles assigned, removed or changed, in every workspace of the tenant; a workspace created, renamed, handed to a new owner, or a member added or removed, in that workspace. An expired invitation is logged at the time it expired. `clientAddress` and `userAgent` are the caller's, for an action taken through the API and for sign-ins and account changes; they are kept on the entry, never inside `eventData`, and go with it at retention. A change event's `eventData` holds `changes: [{field, before, after}]` (policy name, client limit and enabled, including turning it back on; client name and status; workflow version and status; a shared variable's value set by hand, cut to 256 characters; a workspace's name, description and owner; a role's `permissions`, as a comma list where `!slug` is a deny). |
-| `GET summary` | `logs.read` | How many entries each group has over `from` / `to` (default the last 7 days, at most 400), and the `total`. Also `events` (event name to count), `people` (the user reference of whoever caused it to count) and `sources` (source to count). With `traffic=exclude`, the total, `events`, `people` and `sources` leave device traffic out. |
+| `GET /` | `logs.read` | The workspace's event log, newest first, `limit` per page (default 50), no total count. Filters, all optional and combined with AND: `eventName` (substring, the older single filter), `eventNames` and `group` (exact names and named groups, repeated or comma-separated; an event named by either is kept), `criticality` (exactly) and `minCriticality` (that level or worse: `Warning` is warnings and errors), `source` (`Console`, `Api`, `Client`, `Workflow`, `System`, repeated or comma-separated; an unknown one is **400** `EVENT_LOG_SOURCE_UNKNOWN`), `sinceId` (only entries newer than this id, for a live view that asks again for what is newer than the newest one it shows), `policyRefId` and `clientRefId` (**404** for one this workspace does not own), `workflowRefId` (every version; a deleted workflow can still be named), `userRefId` (who did it), `from` / `to` (half-open, on the time logged; without them, all of retention), `traffic=include\|exclude` (raw client traffic; included by default) and `q` (text in the entry's data or event name, at most 100 characters). Groups: `people`, `clients`, `policies`, `workflows`, `security` (the warnings and errors about sign-ins, passwords, who has access, keys, PINs, deletions and blocked joins: failed sign-ins, password changes and resets, members removed or suspended, a role's permissions changed, a workspace handed to a new owner); an unknown one is **400** `EVENT_LOG_GROUP_UNKNOWN`. Each entry carries its `id` and `userRefId`: who took the action, for one taken through the API (client and policy changes, commands and pings, workflow publish, deprecate, reinstate, delete, manual run, cancel and signal); null for events with no signed-in user behind them. `source` says where it came from: `Console` (a browser on an allowed console origin), `Api` (a user token used anywhere else), `Client`, `Workflow` (a command a run sent, or a shared variable a run wrote; its `eventData` names the run in `actorWorkflowRefId` and `actorRunRefId`, and the entry is listed under that workflow too; a run's variable writes are client traffic, kept and hidden like it) or `System`; null for sign-ins and for changes people make to their own account. The `people` group holds what happens to people, logged in each workspace it touches: sign-ins (success and failure) and a person's own password changes and resets, signing out everywhere or ending one session, and verifying an email, in every workspace they belong to; invitations sent, revoked, accepted and expired, members removed, suspended and restored, and roles assigned, removed or changed, in every workspace of the tenant; a workspace created, renamed, handed to a new owner, or a member added or removed, in that workspace. An expired invitation is logged at the time it expired. `clientAddress` and `userAgent` are the caller's, for an action taken through the API and for sign-ins and account changes; they are kept on the entry, never inside `eventData`, and go with it at retention. A change event's `eventData` holds `changes: [{field, before, after}]` (policy name, client limit and enabled, including turning it back on; client name and status; workflow version and status; a shared variable's value set by hand, cut to 256 characters; a workspace's name, description and owner; a role's `permissions`, as a comma list where `!slug` is a deny). |
+| `GET summary` | `logs.read` | How many entries each group has over `from` / `to` (default the last 7 days, at most 400), and the `total`. Also `events` (event name to count), `people` (the user reference of whoever caused it to count) and `sources` (source to count). With `traffic=exclude`, the total, `events`, `people` and `sources` leave client traffic out. |
 | `GET csv` | `logs.read` | The entries `GET /` would list for the same filters, as one CSV file, newest first: `id,createdAt,event,criticality,userRefId,clientRefId,policyRefId,workflowRefId,data`. The range defaults to the last 7 days (at most 400), and the file holds at most 100,000 rows. |
 
 ### 2.5 Workflows — `…/workflows`
@@ -422,8 +422,8 @@ in-place edit, which is why there is no update verb.
 | Endpoint | Permission | What it does |
 |---|---|---|
 | `POST /` | `workflows.create` | Publishes a definition — new workflow or a new version of one — after validation. The version is assigned by the database under lock, not by the caller. A failure after the row is inserted rolls the publish back and restores the superseded version. |
-| `POST validate` | `workflows.create` | Validates a definition **without publishing**. Returns `IsValid` plus every issue (warnings included) with code, message, `nodeId` and, for a problem with one setting, `field`: its path in the node (`config.chatId`, `config.condition`, `retry.factor`). Besides the graph and the triggers it checks what is filled in on each step: required settings (a device and a command, a recipient, a URL, a variable name, a list to loop over, a workflow to start), ranges (a Delay of 0 to 365 days, a positive wait), expressions that read nothing or hold a broken template, and the workspace's devices (`CLIENT_NOT_FOUND` is an error; a device that is pending, revoked or rejected is the warning `CLIENT_NOT_REGISTERED`). A setting left out of the JSON reads as blank and is listed with the rest, rather than failing the request. Warnings also flag a `$shared.NAME` read of a variable no step sets (`SHARED_VARIABLE_UNDECLARED`), an action whose error port leads nowhere or straight to an End (`ERROR_PATH_ENDS`) and a zero Delay. An invalid definition is a 200 with `IsValid: false`, not an error. |
-| `GET /` | `workflows.read` | Lists workflow summaries. Paged. Each carries `triggerKinds`, what can start it: `client` (a device message, held or not), `presence`, `schedule`, `webhook` and `manual`, distinct and in node order, read from the newest version's definition whether or not it is published. Offer Run now only when `manual` is there. |
+| `POST validate` | `workflows.create` | Validates a definition **without publishing**. Returns `IsValid` plus every issue (warnings included) with code, message, `nodeId` and, for a problem with one setting, `field`: its path in the node (`config.chatId`, `config.condition`, `retry.factor`). Besides the graph and the triggers it checks what is filled in on each step: required settings (a client and a command, a recipient, a URL, a variable name, a list to loop over, a workflow to start), ranges (a Delay of 0 to 365 days, a positive wait), expressions that read nothing or hold a broken template, and the workspace's clients (`CLIENT_NOT_FOUND` is an error; a client that is pending, revoked or rejected is the warning `CLIENT_NOT_REGISTERED`). A setting left out of the JSON reads as blank and is listed with the rest, rather than failing the request. Warnings also flag a `$shared.NAME` read of a variable no step sets (`SHARED_VARIABLE_UNDECLARED`), an action whose error port leads nowhere or straight to an End (`ERROR_PATH_ENDS`) and a zero Delay. An invalid definition is a 200 with `IsValid: false`, not an error. |
+| `GET /` | `workflows.read` | Lists workflow summaries. Paged. Each carries `triggerKinds`, what can start it: `client` (a client message, held or not), `presence`, `schedule`, `webhook` and `manual`, distinct and in node order, read from the newest version's definition whether or not it is published. Offer Run now only when `manual` is there. |
 | `GET {workflowRef}` | `workflows.read` | The current published version. |
 | `GET {workflowRef}/versions` | `workflows.read` | Every version, newest first, without definitions: number, status (`Published` or `Deprecated` for the newest, `Superseded` for the rest), name, run count and publish time. **404** for a deleted workflow. |
 | `GET {workflowRef}/versions/{version}` | `workflows.read` | A specific historical version. Still readable after the workflow is deleted, so a past run's definition can be shown. |
@@ -447,7 +447,7 @@ Each run in either list also carries what a one-line row needs, read for the who
 (`Run_GetListDetails`), so the console never fetches history per run:
 
 - `trigger`: `{ nodeId, kind, name, summary }`, with `summary` built from the trigger's settings
-  ("Device greenhouse-1 sent temperature", "Webhook /water-start", "Schedule 0 6 * * *", "Started by
+  ("Client greenhouse-1 sent temperature", "Webhook /water-start", "Schedule 0 6 * * *", "Started by
   hand", "Started by another workflow's run").
 - `creditsUsed`: credits charged so far across its steps.
 - `failedAt`: for a Failed, PartiallyFailed or Failing run, `{ nodeId, name, kind, errorCode }` of
@@ -488,36 +488,36 @@ join their workspaces again; a group joined on the old connection does not carry
 | `JoinClient(workspaceRef, clientRef)` | `workspace.join` + `logs.read` | Subscribes the connection to one client's live traffic: the events marked `NotifyScope.Client` (message received, command, delivered, acked, failed, ping). The same permission as reading its comms history. A client in another workspace fails like one that doesn't exist. |
 | `LeaveClient(clientRef)` | none | Stops that client's traffic, using the mapping the join recorded; ungated for the same reason as `LeaveWorkspace`. |
 
-Per-device traffic is **not** sent to the workspace group: only connections that called `JoinClient`
-get it, so a tab that isn't on that device's page receives none of it and no backplane publish is
+Per-client traffic is **not** sent to the workspace group: only connections that called `JoinClient`
+get it, so a tab that isn't on that client's page receives none of it and no backplane publish is
 spent on it. Lifecycle events (connected, disconnected, status, rename, latency) stay workspace-wide
-because lists show them. The client feed is capped at 20 messages per device per second per
+because lists show them. The client feed is capped at 20 messages per client per second per
 management instance; when messages are dropped, the next second opens with
 `OnClientFeedSkipped { clientRefId, skipped, createdAtUtc }`, and the comms history still has them all.
 Like workspace groups, client groups don't survive a reconnect: the console joins again.
 
-A device whose connections keep replacing each other (5 supersedes within 10 minutes on one gateway)
+A client whose connections keep replacing each other (5 supersedes within 10 minutes on one gateway)
 raises `ClientCredentialsSharedEvent`, a Warning in the event log and `OnClientCredentialsSharedEvent
 { clientRefId, supersedes, windowMinutes, createdAtUtc }` to the client's watchers, at most once per
-10 minutes per device. It almost always means two boards are using one set of credentials.
+10 minutes per client. It almost always means two boards are using one set of credentials.
 
 > **Known gap.** The workspace feed is per workspace, not per permission. A member holding only
 > `workflows.read` still receives the workspace-wide events. Narrowing it further means
 > per-event-category groups.
 
-### 2.9 Device edges (anonymous)
+### 2.9 Client edges (anonymous)
 
-Pre-authentication device flows: a client enrolling or signing in has no token yet. The whole device flow is in [Device.Protocol.md](Device.Protocol.md), and the socket in its [WebSocket binding](Device.Protocol.WebSocket.md). Both are hidden
+Pre-authentication client flows: a client enrolling or signing in has no token yet. The whole client flow is in [Client.Protocol.md](Client.Protocol.md), and the socket in its [WebSocket binding](Client.Protocol.WebSocket.md). Both are hidden
 from the API docs.
 
-In production the `devices` container serves these two paths on the same `api.` host: a management
-host running as `Host__Role=Devices`, which serves nothing else. The console API's containers serve
-them too, and take over while no devices instance is healthy (see deploy/README.md).
+In production the `clients` container serves these two paths on the same `api.` host: a management
+host running as `Host__Role=ClientAuth`, which serves nothing else. The console API's containers serve
+them too, and take over while no client-auth instance is healthy (see deploy/README.md).
 
 | Endpoint | What it does |
 |---|---|
-| `POST api/v1/client-registrations/initiate` | A device presents a policy PIN and a name; gets back its `RefId` and secret. Auto-approval policies return it registered, otherwise it waits for an operator. |
-| `POST api/v1/client-auth/login` | A device exchanges its `RefId` + secret for a short-lived access token, which it then presents to the WebSocket gateway. |
+| `POST api/v1/client-registrations/initiate` | A client presents a policy PIN and a name; gets back its `RefId` and secret. Auto-approval policies return it registered, otherwise it waits for an operator. |
+| `POST api/v1/client-auth/login` | A client exchanges its `RefId` + secret for a short-lived access token, which it then presents to the WebSocket gateway. |
 
 ### 2.10 Public workflow callbacks (anonymous)
 
@@ -539,7 +539,7 @@ Hardened for an anonymous edge, on three axes:
 
 - **Rate limited per target.** A webhook's budget is its workspace and path (600 requests/minute,
   `RateLimiting:Webhook`), not the caller's IP, because LoRaWAN network servers and vendor clouds
-  forward many devices, and many workspaces, from a few shared addresses. A wake is limited per
+  forward many clients, and many workspaces, from a few shared addresses. A wake is limited per
   client IP (60/minute, `RateLimiting:Wake`). Every callback from one IP also shares a ceiling
   (1200/minute, `RateLimiting:PublicCallbacks`) that throttles token and path enumeration and blunts
   floods. Each section takes `PermitLimit` and `WindowSeconds`.
@@ -563,41 +563,41 @@ engine is never exposed publicly and the manual/signal channels never get a publ
 
 ## 3. WebSocket gateway
 
-The device data plane. One long-lived WebSocket per client; everything else is a bus event.
+The client data plane. One long-lived WebSocket per client; everything else is a bus event.
 `Wbskt.Gateway.WebSocket.Host` is the transport only (the upgrade, the subprotocol, the frame
 loop and the close codes); the session logic it runs (the token check and revocation, one connection
-per device, the message budget and size limit, command delivery and acks, pings and presence) is
-`Wbskt.Gateway.Core`, which later gateways for other transports will share. Devices reach it as
+per client, the message budget and size limit, command delivery and acks, pings and presence) is
+`Wbskt.Gateway.Core`, which later gateways for other transports will share. Clients reach it as
 `wss://ws.${DOMAIN}/ws`; the compose service is `gateway-ws`, once called `socket`.
 
-A gateway for another transport takes two calls from Core's `DeviceSessions`. `AdmitAsync` reads
-the device's identity from its authenticated token and checks it was not revoked since it was issued;
+A gateway for another transport takes two calls from Core's `ClientSessions`. `AdmitAsync` reads
+the client's identity from its authenticated token and checks it was not revoked since it was issued;
 the transport turns a refusal into its own answer. `RunAsync` then takes that admission and runs
-the session around the transport's receive loop and close, both passed in, so registering the device, announcing it, routing
+the session around the transport's receive loop and close, both passed in, so registering the client, announcing it, routing
 its messages and recording its end happen in one order for every transport. The transport implements
-`IDeviceConnection` (sending a text message and closing) and caps each read at 64 KB. An architecture
+`IClientConnection` (sending a text message and closing) and caps each read at 64 KB. An architecture
 test keeps WebSocket and HTTP types out of Core.
 
 Some names keep "socket" on purpose:
 
 | Name | Why it stays |
 |---|---|
-| `wbskt-socket` token audience (`JwtAudiences.Socket`) | It is in every device token already issued. |
+| `wbskt-socket` token audience (`JwtAudiences.Socket`) | It is in every client token already issued. |
 | `SocketHostHeartbeat`, `SocketHostPresenceSnapshot`, `SocketHostStartedEvent` | MassTransit names exchanges after message types; renaming one needs management and every gateway deployed together. |
 | `wbskt_socket_*` metrics | The `SocketDisconnectRateHigh` alert and the dashboards are built on them. |
-| `SOCKET_URL`, `E2E_SOCKET_RESTART_COMMAND` | Device and SDK configuration, and an E2E variable CI and developers set. |
+| `SOCKET_URL`, `E2E_SOCKET_RESTART_COMMAND` | Client and SDK configuration, and an E2E variable CI and developers set. |
 
-`Gateway:MessageBudget` (once `Socket:MessageBudget`) holds the per-device message budget.
+`Gateway:MessageBudget` (once `Socket:MessageBudget`) holds the per-client message budget.
 
 | Endpoint | Auth | What it does |
 |---|---|---|
-| `GET /ws` (upgrade) | client JWT, `Authorization: Bearer` **or** `?access_token=` | Establishes the client's connection. The query fallback exists for browser WebSocket clients, which cannot set headers. Refuses before any socket is opened: 401 for a token that does not validate, 401 `CLIENT_TOKEN_INVALID` for one missing a device claim, 403 for a token that is not a device token, 403 `CLIENT_REVOKED` for a revoked device, 400 `SOCKET_PROTOCOL_UNSUPPORTED` and 400 `SOCKET_UPGRADE_REQUIRED`. |
+| `GET /ws` (upgrade) | client JWT, `Authorization: Bearer` **or** `?access_token=` | Establishes the client's connection. The query fallback exists for browser WebSocket clients, which cannot set headers. Refuses before any socket is opened: 401 for a token that does not validate, 401 `CLIENT_TOKEN_INVALID` for one missing a client claim, 403 for a token that is not a client token, 403 `CLIENT_REVOKED` for a revoked client, 400 `SOCKET_PROTOCOL_UNSUPPORTED` and 400 `SOCKET_UPGRADE_REQUIRED`. |
 | `GET /healthz` | anonymous | Liveness — the process is up. Probes nothing, so a dependency failure cannot trigger a restart loop. |
 | `GET /healthz/ready` | anonymous | Readiness — dependencies reachable. 503 when not. This is what the compose healthcheck consumes, so it also drives Traefik's routing table and `deploy.sh`'s health wait. |
 
 The protocol is versioned by WebSocket subprotocol: a client offers `Sec-WebSocket-Protocol: wbskt.v1`
 and the host accepts it. A client that offers none is spoken to as v1; one that offers only other
-versions is refused with 400 before the upgrade. Everything a device speaks lives in
+versions is refused with 400 before the upgrade. Everything a client speaks lives in
 `Clients/Wbskt.Protocol`: the message types and which of them are reserved (compared ignoring case,
 so `SYS.ping` is as reserved as `sys.ping`), the payloads including `capabilities`, the limits, and
 the register and login records of the two HTTP calls before the socket opens. Every host and the

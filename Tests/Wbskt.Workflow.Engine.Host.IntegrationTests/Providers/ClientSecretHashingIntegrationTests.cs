@@ -6,7 +6,7 @@ using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 
 /// <summary>
-/// Pins the SQL and C# halves of the device-secret hash to the same bytes.
+/// Pins the SQL and C# halves of the client-secret hash to the same bytes.
 ///
 /// The migration backfills <c>Clients.SecretHash</c> with
 /// <c>HASHBYTES('SHA2_256', CONVERT(VARCHAR(255), Secret))</c>, and every subsequent login is
@@ -14,7 +14,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 /// agree only because the secrets are base64 and therefore pure ASCII — drop the
 /// <c>CONVERT(VARCHAR(255), ...)</c> and <c>HASHBYTES</c> silently hashes UTF-16LE instead.
 ///
-/// The consequence of getting it wrong is the reason this test exists: every device on the platform
+/// The consequence of getting it wrong is the reason this test exists: every client on the platform
 /// fails to authenticate at once, on the same deploy that drops the plaintext column needed to
 /// diagnose it.
 /// </summary>

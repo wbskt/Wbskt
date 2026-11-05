@@ -93,7 +93,7 @@ public sealed class WorkflowEngineOptions
     public int ClientHoldLeaseBatchSize { get; init; } = 64;
 
     /// <summary>
-    /// How long the trigger registrations read for a device message are reused before they are read
+    /// How long the trigger registrations read for a client message are reused before they are read
     /// again (<c>ITriggerRegistrationCache</c>). A <c>WorkflowDefinitionChangedEvent</c> from the
     /// management host drops them at once; this only bounds how long a late or lost one goes unnoticed.
     /// Zero turns the cache off.

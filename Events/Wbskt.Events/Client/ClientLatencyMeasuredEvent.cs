@@ -4,7 +4,7 @@ using Wbskt.Models;
 
 namespace Wbskt.Events.Client;
 
-[DeviceTraffic]
+[ClientTraffic]
 [EventCriticality(EventCriticality.Info)]
 [SignalRNotify("OnClientLatencyMeasuredEvent")]
 public sealed record ClientLatencyMeasuredEvent(Guid ClientRefId, int ClientId, int WorkspaceId, double RoundTripMs) : BaseEvent, IClientContext;

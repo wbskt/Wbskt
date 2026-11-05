@@ -1,6 +1,6 @@
 -- Shuts down everything in this database that belongs to a workspace the auth host has deleted.
 -- Workspaces live in the auth database, so nothing here can cascade from them; without this a
--- deleted workspace's policies keep accepting their PIN, its devices keep connecting, and its
+-- deleted workspace's policies keep accepting their PIN, its clients keep connecting, and its
 -- schedules and webhooks keep starting runs.
 --
 -- Rows are disabled or revoked rather than deleted, so the history (clients, definitions, runs)

@@ -9,7 +9,7 @@ namespace Wbskt.Gateway.Core.Handlers;
 // ClientConnectedEvent, including ones published by other instances. If another instance just
 // accepted a connection for a client we're still holding locally with an older connection, ours
 // is the stale duplicate (e.g. the client's previous host never noticed the network drop) -
-// close it. A superseded connection publishes no ClientDisconnectedEvent: the device is not offline,
+// close it. A superseded connection publishes no ClientDisconnectedEvent: the client is not offline,
 // and the new host already owns ConnectedHostId (see Client_UpdatePresence.sql).
 //
 // EstablishedAtUtc/CreatedAtUtc are stamped by two different containers' clocks with no sync

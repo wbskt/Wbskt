@@ -1,4 +1,4 @@
-"""Connect a device to Wbskt. See README.md, and Docs/Device.Protocol.md for the wire protocol."""
+"""Connect a client to Wbskt. See README.md, and Docs/Client.Protocol.md for the wire protocol."""
 
 from .client import DEFAULT_API_URL, DEFAULT_SOCKET_URL, AsyncWbsktClient, WbsktClient
 from .models import Command, DataType, Message, Parameter, RegistrationRequired, WbsktError

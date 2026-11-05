@@ -12,10 +12,10 @@ using Wbskt.Workflow.Abstraction.Models.Expressions;
 namespace Wbskt.E2E.FeatureTests.Scenarios.Triggers;
 
 /// <summary>
-/// A device trigger with a hold time: a reading that stays out of range for the whole hold starts one
+/// A client trigger with a hold time: a reading that stays out of range for the whole hold starts one
 /// run, however many more out-of-range readings follow; a reading that drops back in range first
 /// starts nothing. A hold needs one message type and a filter: the management API refuses either
-/// missing, and a device's other message types never reset a hold on one type.
+/// missing, and a client's other message types never reset a hold on one type.
 /// </summary>
 [Collection(EngineCollection.Name)]
 public sealed class ClientHoldTriggerE2ETests(ServicesFixture fixture)
@@ -26,14 +26,14 @@ public sealed class ClientHoldTriggerE2ETests(ServicesFixture fixture)
     public async Task A_reading_that_stays_too_warm_starts_one_run()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
-        var (token, workspaceRef, clientRefId, secret, deviceName) = await RegisterDeviceAsync("warm");
+        var (token, workspaceRef, clientRefId, secret, clientName) = await RegisterTestClientAsync("warm");
         var workflowRefId = await PublishAsync(token, workspaceRef, clientRefId, holdSeconds: 2, Celsius(BinaryOperator.GreaterThan, 8));
-        // A sentinel on the same device that only a reading above 11 starts holding, for 4 seconds.
+        // A sentinel on the same client that only a reading above 11 starts holding, for 4 seconds.
         // The last reading below is the only one that warm, so the sentinel's run starts after every
         // reading before it has been recorded and any hold they could have started (2 seconds at
         // most) was due: by then a second run of the trigger under test would have started.
         var sentinelRefId = await PublishAsync(token, workspaceRef, clientRefId, holdSeconds: 4, Celsius(BinaryOperator.GreaterThan, 11));
-        await using var client = await ConnectAsync(clientRefId, secret, deviceName);
+        await using var client = await ConnectAsync(clientRefId, secret, clientName);
 
         for (int i = 0; i < 4; i++)
         {
@@ -62,14 +62,14 @@ public sealed class ClientHoldTriggerE2ETests(ServicesFixture fixture)
     public async Task A_reading_that_recovers_within_the_hold_starts_nothing()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
-        var (token, workspaceRef, clientRefId, secret, deviceName) = await RegisterDeviceAsync("recovers");
+        var (token, workspaceRef, clientRefId, secret, clientName) = await RegisterTestClientAsync("recovers");
         var workflowRefId = await PublishAsync(token, workspaceRef, clientRefId, holdSeconds: 10, Celsius(BinaryOperator.GreaterThan, 8));
-        // A sentinel on the same device that holds on an in-range reading, for 12 seconds. The
+        // A sentinel on the same client that holds on an in-range reading, for 12 seconds. The
         // in-range reading comes 3 seconds after the warm one, so the sentinel is due 15 seconds after
         // the warm reading, past the 10 seconds the trigger under test would have needed: once the
         // sentinel has run, the hold ticker has looked at that hold too.
         var sentinelRefId = await PublishAsync(token, workspaceRef, clientRefId, holdSeconds: 12, Celsius(BinaryOperator.LessThan, 8));
-        await using var client = await ConnectAsync(clientRefId, secret, deviceName);
+        await using var client = await ConnectAsync(clientRefId, secret, clientName);
 
         // Warm for a few seconds, then back in range well within the hold.
         await client.SendAsync("temperature", new { celsius = 10 });
@@ -86,9 +86,9 @@ public sealed class ClientHoldTriggerE2ETests(ServicesFixture fixture)
     public async Task A_message_of_another_type_does_not_reset_the_hold()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
-        var (token, workspaceRef, clientRefId, secret, deviceName) = await RegisterDeviceAsync("other-type");
+        var (token, workspaceRef, clientRefId, secret, clientName) = await RegisterTestClientAsync("other-type");
         var workflowRefId = await PublishAsync(token, workspaceRef, clientRefId, holdSeconds: 3, Celsius(BinaryOperator.GreaterThan, 8));
-        await using var client = await ConnectAsync(clientRefId, secret, deviceName);
+        await using var client = await ConnectAsync(clientRefId, secret, clientName);
 
         // One warm reading, then only heartbeats, which carry no celsius. The trigger listens for
         // temperature alone, so the heartbeats are never checked against its filter and the hold runs out.
@@ -137,7 +137,7 @@ public sealed class ClientHoldTriggerE2ETests(ServicesFixture fixture)
     public async Task Any_message_type_with_a_filter_and_no_hold_is_accepted()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
-        var (token, workspaceRef, clientRefId, _, _) = await RegisterDeviceAsync("any-type");
+        var (token, workspaceRef, clientRefId, _, _) = await RegisterTestClientAsync("any-type");
 
         var (validation, publish) = await ValidateAndPublishAsync(token, workspaceRef, "*", 0, Celsius(BinaryOperator.LessThan, 2), clientRefId);
 
@@ -145,13 +145,13 @@ public sealed class ClientHoldTriggerE2ETests(ServicesFixture fixture)
         publish.IsSuccessStatusCode.Should().BeTrue("only the hold time needs one message type, not the filter");
     }
 
-    private async Task<(string Token, Guid WorkspaceRef, Guid ClientRefId, string Secret, string DeviceName)> RegisterDeviceAsync(string label)
+    private async Task<(string Token, Guid WorkspaceRef, Guid ClientRefId, string Secret, string ClientName)> RegisterTestClientAsync(string label)
     {
         var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
-        var deviceName = $"e2e-hold-{label}-{Guid.NewGuid():N}";
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, deviceName);
-        return (token, workspaceRef, clientRefId, secret, deviceName);
+        var clientName = $"e2e-hold-{label}-{Guid.NewGuid():N}";
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, clientName);
+        return (token, workspaceRef, clientRefId, secret, clientName);
     }
 
     // payload.celsius {op} {limit}
@@ -175,7 +175,7 @@ public sealed class ClientHoldTriggerE2ETests(ServicesFixture fixture)
             JsonSerializer.SerializeToElement(definition, JsonOpts));
     }
 
-    // Validates, then publishes, a device trigger the builder would refuse, as a hand-edited definition would be.
+    // Validates, then publishes, a client trigger the builder would refuse, as a hand-edited definition would be.
     private async Task<(WorkflowValidationResponse Validation, HttpResponseMessage Publish)> ValidateAndPublishAsync(
         string token, Guid workspaceRef, string type, int holdSeconds, WorkflowExpression? filter, Guid? clientRefId = null)
     {
@@ -192,10 +192,10 @@ public sealed class ClientHoldTriggerE2ETests(ServicesFixture fixture)
         return (validation, publish);
     }
 
-    private static async Task<WbsktClient> ConnectAsync(Guid clientRefId, string secret, string deviceName)
+    private static async Task<WbsktClient> ConnectAsync(Guid clientRefId, string secret, string clientName)
     {
         var storage = new InMemoryClientStorage(clientRefId, secret);
-        var clientConfig = new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, deviceName, null);
+        var clientConfig = new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, clientName, null);
         var client = new WbsktClient(clientConfig, storage);
         await client.StartAsync();
         return client;

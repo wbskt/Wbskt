@@ -1,6 +1,6 @@
 CREATE TABLE dbo.EventLogs (
-    -- From dbo.EventLogIds, shared with dbo.DeviceTraffic, so the readers can page over both tables
-    -- by one id. BIGINT: device traffic used to land here too, and would exhaust INT within a year.
+    -- From dbo.EventLogIds, shared with dbo.ClientTraffic, so the readers can page over both tables
+    -- by one id. BIGINT: client traffic used to land here too, and would exhaust INT within a year.
     Id          BIGINT        NOT NULL CONSTRAINT DF_EventLogs_Id DEFAULT (NEXT VALUE FOR dbo.EventLogIds),
     EventId     INT           NOT NULL,
     WorkspaceId INT           NULL,
@@ -20,7 +20,7 @@ CREATE TABLE dbo.EventLogs (
     -- acknowledges it, so a crash in between redelivers messages already saved; the insert skips a
     -- MessageId that is already here. Last, so adding it to an existing table needs no rebuild.
     MessageId   UNIQUEIDENTIFIER NULL,
-    -- Where it came from (Wbskt.Events.Abstractions.EventSource): 1 console, 2 API, 3 device,
+    -- Where it came from (Wbskt.Events.Abstractions.EventSource): 1 console, 2 API, 3 client,
     -- 4 workflow, 5 system. NULL for rows from before the column, and for sign-ins and other changes a
     -- person makes to their own account.
     Source      TINYINT       NULL,

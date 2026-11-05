@@ -5,32 +5,32 @@ using Wbskt.Gateway.Core.Telemetry;
 namespace Wbskt.Gateway.Core.Services.Inbound;
 
 /// <summary>
-/// Parses a device's text message and routes it: a reserved <c>sys.*</c> type to its handler (an
-/// unknown one is ignored), anything else to <see cref="DeviceMessageHandler"/>, which publishes it as
-/// the device's own message.
+/// Parses a client's text message and routes it: a reserved <c>sys.*</c> type to its handler (an
+/// unknown one is ignored), anything else to <see cref="ClientMessageHandler"/>, which publishes it as
+/// the client's own message.
 /// </summary>
 public sealed class InboundMessageDispatcher
 {
     private readonly IReadOnlyDictionary<string, IInboundMessageHandler> _systemHandlers;
-    private readonly DeviceMessageHandler _deviceMessages;
+    private readonly ClientMessageHandler _clientMessages;
     private readonly GatewayMetrics _metrics;
     private readonly ILogger<InboundMessageDispatcher> _logger;
     private long _lastDropWarning = long.MinValue / 2;
 
-    public InboundMessageDispatcher(IEnumerable<IInboundMessageHandler> handlers, DeviceMessageHandler deviceMessages, GatewayMetrics metrics, ILogger<InboundMessageDispatcher> logger)
+    public InboundMessageDispatcher(IEnumerable<IInboundMessageHandler> handlers, ClientMessageHandler clientMessages, GatewayMetrics metrics, ILogger<InboundMessageDispatcher> logger)
     {
         _systemHandlers = handlers.ToDictionary(h => h.Type, StringComparer.Ordinal);
-        _deviceMessages = deviceMessages;
+        _clientMessages = clientMessages;
         _metrics = metrics;
         _logger = logger;
     }
 
     public async Task DispatchAsync(InboundContext context, string json, CancellationToken cancellationToken)
     {
-        DeviceMessage? message;
+        ProtocolMessage? message;
         try
         {
-            message = JsonSerializer.Deserialize<DeviceMessage>(json);
+            message = JsonSerializer.Deserialize<ProtocolMessage>(json);
         }
         catch (JsonException ex)
         {
@@ -54,10 +54,10 @@ public sealed class InboundMessageDispatcher
         }
 
         // Every handler publishes to the broker. A message that can't be published is dropped and
-        // counted, never fatal: during a broker restart every device that sent anything would otherwise
+        // counted, never fatal: during a broker restart every client that sent anything would otherwise
         // be disconnected, and reconnect into the same outage.
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        bounded.CancelAfter(DeviceSessions.PublishTimeout);
+        bounded.CancelAfter(ClientSessions.PublishTimeout);
         try
         {
             if (_systemHandlers.TryGetValue(message.Type, out var handler))
@@ -66,13 +66,13 @@ public sealed class InboundMessageDispatcher
             }
             else
             {
-                await _deviceMessages.HandleAsync(context, message, bounded.Token);
+                await _clientMessages.HandleAsync(context, message, bounded.Token);
             }
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
             _metrics.Dropped("bus");
-            // An outage drops every device's traffic at once; one warning every ten seconds is enough, and the metric counts the rest.
+            // An outage drops every client's traffic at once; one warning every ten seconds is enough, and the metric counts the rest.
             var now = Environment.TickCount64;
             var last = Interlocked.Read(ref _lastDropWarning);
             if (now - last >= 10_000 && Interlocked.CompareExchange(ref _lastDropWarning, now, last) == last)

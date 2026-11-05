@@ -26,8 +26,8 @@ public static class Permissions
     public static readonly PermissionSlug ClientsPing = PermissionSlug.CreateInternal(PermissionNames.ClientsPing);
 
     /// <summary>
-    /// Updating a device's firmware over the air. Its own grant rather than <see cref="ClientsCommand"/>:
-    /// a firmware image replaces the code the device runs, so an operator who may send commands does
+    /// Updating a client's firmware over the air. Its own grant rather than <see cref="ClientsCommand"/>:
+    /// a firmware image replaces the code the client runs, so an operator who may send commands does
     /// not also get the right to replace it.
     /// </summary>
     public static readonly PermissionSlug ClientsFirmware = PermissionSlug.CreateInternal(PermissionNames.ClientsFirmware);

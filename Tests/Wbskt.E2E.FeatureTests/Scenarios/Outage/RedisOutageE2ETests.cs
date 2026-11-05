@@ -11,11 +11,11 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Outage;
 /// both are documented as best effort, so neither may fail open while it is gone:
 /// <list type="bullet">
 /// <item>
-/// The per-device token cutoffs (ClientTokenCutoffs). With Redis unreachable the socket host's read
+/// The per-client token cutoffs (ClientTokenCutoffs). With Redis unreachable the socket host's read
 /// answers "don't know" and ClientAccessGate falls back to its own revocation list, which the
 /// revocation events fill; the management host still sends the event when it cannot write the
-/// cutoff. So a device revoked before the outage, and one revoked during it, are both refused at the
-/// socket, and a device nobody revoked still gets in.
+/// cutoff. So a client revoked before the outage, and one revoked during it, are both refused at the
+/// socket, and a client nobody revoked still gets in.
 /// </item>
 /// <item>
 /// The workspace-access change feed (WorkspaceAccessChanges) that lets the management host keep a
@@ -35,7 +35,7 @@ public sealed class RedisOutageE2ETests(ServicesFixture fixture)
     private static readonly TimeSpan AccessCacheBound = TimeSpan.FromSeconds(90);
 
     [SkippableFact]
-    public async Task OUT_REDIS_01_RevokedDevices_AreStillRefusedAtTheSocket()
+    public async Task OUT_REDIS_01_RevokedClients_AreStillRefusedAtTheSocket()
     {
         Skip.IfNot(E2EConfig.OutageTestsEnabled, OutageControl.SkipReason);
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
@@ -55,7 +55,7 @@ public sealed class RedisOutageE2ETests(ServicesFixture fixture)
         using (var live = await OpenAsync(beforeToken))
         {
             (await RevokeAsync(workspaceRef, beforeRef, token)).StatusCode.Should().Be(HttpStatusCode.NoContent);
-            await WaitForServerCloseAsync(live, "the revocation event closes the device's live connection");
+            await WaitForServerCloseAsync(live, "the revocation event closes the client's live connection");
         }
 
         await OutageControl.RunWithRestoreAsync(OutageControl.RedisStart, async () =>
@@ -68,9 +68,9 @@ public sealed class RedisOutageE2ETests(ServicesFixture fixture)
             // The management host cannot write the cutoff now, and says so in its log; the event it
             // sends regardless is the only way the socket host hears of this one.
             (await RevokeAsync(workspaceRef, duringRef, token)).StatusCode.Should().Be(HttpStatusCode.NoContent,
-                "revoking a device does not depend on Redis");
+                "revoking a client does not depend on Redis");
             await ServicesFixture.PollUntilAsync(
-                "the device revoked during the Redis outage to be refused at the socket",
+                "the client revoked during the Redis outage to be refused at the socket",
                 async () =>
                 {
                     var status = await ConnectAsync(duringToken);
@@ -80,10 +80,10 @@ public sealed class RedisOutageE2ETests(ServicesFixture fixture)
                 TimeSpan.FromSeconds(1));
 
             (await ConnectAsync(untouchedToken)).Should().Be(HttpStatusCode.SwitchingProtocols,
-                "a device nobody revoked is not locked out because Redis is down");
+                "a client nobody revoked is not locked out because Redis is down");
         });
 
-        // Redis back: the cutoff for the device revoked before the outage was written then, and the
+        // Redis back: the cutoff for the client revoked before the outage was written then, and the
         // socket host's list still holds both.
         (await ConnectAsync(beforeToken)).Should().Be(HttpStatusCode.Forbidden);
         (await ConnectAsync(duringToken)).Should().Be(HttpStatusCode.Forbidden);
@@ -147,10 +147,10 @@ public sealed class RedisOutageE2ETests(ServicesFixture fixture)
     private static Uri SocketUri => new($"{E2EConfig.SocketWsBaseUrl.TrimEnd('/')}/ws");
 
     /// <summary>Opens a websocket with the token and closes it again; returns the upgrade's status.</summary>
-    private static async Task<HttpStatusCode> ConnectAsync(string deviceToken)
+    private static async Task<HttpStatusCode> ConnectAsync(string clientToken)
     {
         using var socket = new ClientWebSocket();
-        socket.Options.SetRequestHeader("Authorization", $"Bearer {deviceToken}");
+        socket.Options.SetRequestHeader("Authorization", $"Bearer {clientToken}");
         socket.Options.CollectHttpResponseDetails = true;
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
@@ -168,10 +168,10 @@ public sealed class RedisOutageE2ETests(ServicesFixture fixture)
     }
 
     /// <summary>Opens a websocket with the token and leaves it open.</summary>
-    private static async Task<ClientWebSocket> OpenAsync(string deviceToken)
+    private static async Task<ClientWebSocket> OpenAsync(string clientToken)
     {
         var socket = new ClientWebSocket();
-        socket.Options.SetRequestHeader("Authorization", $"Bearer {deviceToken}");
+        socket.Options.SetRequestHeader("Authorization", $"Bearer {clientToken}");
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         await socket.ConnectAsync(SocketUri, timeout.Token);
         return socket;

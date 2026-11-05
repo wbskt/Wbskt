@@ -39,7 +39,7 @@
 >
 > Nothing in Phase 1 is workflow-engine work. The engine is the most finished part of this system;
 > resisting the pull to add the twenty-second node kind, and spending that time on the operational
-> floor and the device SDKs instead, is the whole strategic decision behind this ordering.
+> floor and the client SDKs instead, is the whole strategic decision behind this ordering.
 
 ---
 
@@ -105,7 +105,7 @@ Assume your change must pass all three.
 - **Adding a method to `IRunProvider`/`IHistoryEventProvider`** means patching ~15 test doubles.
   Expect it; batch it.
 - **`AddWorkflowEngine` is not independently usable.** It registers every node executor but not
-  three of their dependencies: `IDeviceCommandPublisher`, `IToastPublisher` (outbound RabbitMQ
+  three of their dependencies: `IClientCommandPublisher`, `IToastPublisher` (outbound RabbitMQ
   adapters) and `IHttpClientFactory` (from `AddHttpClient`). The engine host supplies all three in
   `Program.cs`. The gap only surfaces when something resolves the executor registry, so it is easy
   to hit one dependency at a time. For tests, use
@@ -116,7 +116,7 @@ Assume your change must pass all three.
   to `BlockOnPossibleDataLoss=True` and that default is load-bearing.
 - **`HASHBYTES` over `NVARCHAR` hashes UTF-16LE**, while C# `Encoding.UTF8.GetBytes` hashes UTF-8.
   They agree only if the SQL side does `CONVERT(VARCHAR(n), …)` and the content is ASCII. Getting
-  this wrong fails every device at once. `ClientSecretHashingIntegrationTests` pins it.
+  this wrong fails every client at once. `ClientSecretHashingIntegrationTests` pins it.
 
 ---
 
@@ -128,7 +128,7 @@ Merged to `master`. Relevant because later items build on it.
 |---|---|
 | **F1** | CI runs unit + integration + vulnerable-package jobs; image publishing gated behind them. Fixed two Linux-only bugs in `DatabaseDeployer` (DACPAC path missing the TFM folder; `FindSqlPackage` probing with Windows-only `where`) that had made the integration suite unrunnable — it now executes 39 tests instead of silently skipping. |
 | **F2** | `/healthz` is liveness (probes nothing, so a dependency failure cannot cause a restart loop); `/healthz/ready` runs real probes. Auth probes SQL + bus, Management SQL + bus, Socket bus only (it has no database), Engine SQL + bus + leadership. Compose healthchecks point at readiness for auth/management/socket; the engine deliberately stays on liveness so standby replicas do not hang `deploy.sh`. |
-| **F3** | Device secrets are SHA-256 in `Clients.SecretHash`, compared in C# with `FixedTimeEquals`. `Client_Verify` replaced by `Client_GetCredentialBy_RefId`. |
+| **F3** | Client secrets are SHA-256 in `Clients.SecretHash`, compared in C# with `FixedTimeEquals`. `Client_Verify` replaced by `Client_GetCredentialBy_RefId`. |
 | **F4** | `deploy/scripts/backup.sh` (backup → verify → mandatory off-box upload) and `restore.sh` (defaults to a scratch DB; `--force` for real recovery). |
 | **F7** | Default-deny `FallbackPolicy` on Auth and Socket. `/ws` opts out explicitly because it authenticates in middleware before `UseAuthentication`. `HostArchitectureTests` enforces that every controller action states its posture. |
 
@@ -418,7 +418,7 @@ single runaway loop; nothing caps a thousand of them.
 **Traps.**
 - These ceilings become plan tiers in Phase 3 (`P3-2`). Put the numbers in configuration, not
   constants, so they can vary per tenant later without a redeploy.
-- Do not throttle the device data plane the same way as the console API. A fleet of 5,000 devices
+- Do not throttle the client data plane the same way as the console API. A fleet of 5,000 clients
   reconnecting after a gateway restart is legitimate traffic.
 - `UseRateLimiter` must sit after `UseForwardedHeaders` so the partition key is the real client, not
   Traefik. The Auth host already gets this right — copy the ordering.
@@ -512,7 +512,7 @@ question — stale test or real bug — rather than something to make green.**
 
 **Why.** Every host signs and validates with the same HS256 secret from `Jwt:Key`, and every host
 disables issuer and audience validation (`ValidateIssuer = false, ValidateAudience = false`). Three
-consequences: any compromised host can mint tokens accepted by all the others; a device token and a
+consequences: any compromised host can mint tokens accepted by all the others; a client token and a
 console token are structurally interchangeable at the signature layer; and rotating the key requires
 restarting the whole platform at once.
 
@@ -529,8 +529,8 @@ a control. Read it before starting.
 JWKS. If that is too large a step, distinct audiences per host with validation **on** is most of the
 benefit for an afternoon.
 
-**Traps.** Device tokens on `/ws` go through the same `AddWbsktJwtBearer` pipeline (the token taken
-from `?access_token=` by `AcceptQueryToken`). It must be updated in lockstep or every device disconnects.
+**Traps.** Client tokens on `/ws` go through the same `AddWbsktJwtBearer` pipeline (the token taken
+from `?access_token=` by `AcceptQueryToken`). It must be updated in lockstep or every client disconnects.
 
 **Effort.** ~2–3 days asymmetric, ~0.5 day for audiences only.
 
@@ -542,7 +542,7 @@ from `?access_token=` by `AcceptQueryToken`). It must be updated in lockstep or 
 "a deactivated account keeps working until its current access token expires." Disabling a compromised
 administrator leaves them fully operational for up to an hour.
 
-The shape is already solved for devices: `Wbskt.Gateway.Core/Infrastructure/ClientAccessGate.cs`
+The shape is already solved for clients: `Wbskt.Gateway.Core/Infrastructure/ClientAccessGate.cs`
 (this host's `RevocationCache` in front of the token cutoffs the management host keeps in Redis)
 exists precisely because a revoked client's JWT stays valid for an hour. Humans need the same.
 
@@ -584,12 +584,12 @@ on its own.
 **Goal:** the market you are aiming at can actually adopt the product, and you can charge them.
 
 **Strategic context, because it decides the ordering here.** The review's recommendation was to
-target **connected-device automation** — fleet operators of roughly 100–10,000 devices needing
-*stateful* reactions to device events — and specifically the systems integrators and OEMs who run
-devices for many end-customers and need each to see only their own. That is what the tenant →
+target **connected-client automation** — fleet operators of roughly 100–10,000 clients needing
+*stateful* reactions to client events — and specifically the systems integrators and OEMs who run
+clients for many end-customers and need each to see only their own. That is what the tenant →
 workspace → group → scoped-role hierarchy is for, and it is the thing competitors cannot match:
-AWS IoT has the device plane but a stateless rules engine; n8n has flows and no device plane;
-Temporal has durability and nothing device-shaped.
+AWS IoT has the client plane but a stateless rules engine; n8n has flows and no client plane;
+Temporal has durability and nothing client-shaped.
 
 If that positioning holds, **P3-1 is the single highest-value item in this document** and breadth of
 action nodes is the wrong investment.
@@ -604,7 +604,7 @@ which means today there is **no supported way for anyone outside this repository
 client at all**.
 
 `Docs/RoughFeatures.md` promises "client libraries in most languages and platforms" for "embedded
-devices, IoT devices, applications, scripts, websites". .NET 10 does not run on an ESP32, a Pi Pico,
+clients, IoT clients, applications, scripts, websites". .NET 10 does not run on an ESP32, a Pi Pico,
 or most of the hardware that description implies.
 
 **Where.** `Clients/Wbskt.Client.Sdk/` — `IWbsktClient`, `WbsktClient`, `IClientStorage`,
@@ -626,7 +626,7 @@ every SDK then implements the same document.
 - The browser path must use `?access_token=` because browsers cannot set headers on a WebSocket
   upgrade. Phase 0's F7 work depends on that path staying anonymous to the authorization pipeline —
   see the comment on `/ws` in `Hosts/Wbskt.Gateway.WebSocket.Host/Program.cs`.
-- Devices store the secret locally and replay it. Phase 0 hashed it server-side; the client side is
+- Clients store the secret locally and replay it. Phase 0 hashed it server-side; the client side is
   unchanged and must stay that way.
 - A revoked client is rejected at connect by the revocation cache. SDKs need a sane backoff rather
   than a reconnect storm.
@@ -658,7 +658,7 @@ Aggregation must be exact; a run that goes `OutOfCredits` is a terminal status u
 ### P3-3 · Transform node (F18)
 
 **Why.** Twenty-one node kinds, all implemented, and none reshapes data. You can route on an
-expression and set a variable, but you cannot map an array, rename fields, or convert a device's
+expression and set a variable, but you cannot map an array, rename fields, or convert a client's
 payload into the shape an API expects. Every comparable product has this node and users reach for it
 constantly.
 
@@ -697,7 +697,7 @@ Ask before guessing — each changes the shape of the work.
 | **D2** | Managed SQL/RabbitMQ, or stay self-hosted? | P2-5, and retroactively F4 | **Answered 2026-10-02: stay self-hosted.** P2-5 stays documented future work; the nightly verified, off-box backups (Phase 0) and P2-1's backup and dead-letter alerts carry the risk until it is revisited. |
 | **D3** | What may an unverified account do — nothing, or read-only until verified? | P1-2 | Affects registration UX and the console. |
 | **D4** | Audit log retention, and who can read it? | P1-5 | **Retention answered (pika, 2026-10-03): 90 days**, enforced by `EventLogRetentionService` in the management host (`EventLogging:RetentionDays`). Who can read it is still open. |
-| **D5** | Does the positioning hold — connected-device automation, integrators and OEMs first? | All of Phase 3 | If it does, P3-1 outranks everything else in that phase. |
+| **D5** | Does the positioning hold — connected-client automation, integrators and OEMs first? | All of Phase 3 | If it does, P3-1 outranks everything else in that phase. |
 
 ---
 
@@ -711,7 +711,7 @@ Not part of Phases 1–3, but they will surface. Recorded so nobody rediscovers 
 - **`AddWorkflowEngine` is not independently usable** — see [Working in this repo](#working-in-this-repo).
   Worth revisiting as a design question, not a bug.
 - **No API versioning.** No `/v1` anywhere, so the first breaking change breaks every deployed
-  device simultaneously. Cheapest to fix before P3-1 ships SDKs that bake in URLs.
+  client simultaneously. Cheapest to fix before P3-1 ships SDKs that bake in URLs.
 - **No root README.** MIT-licensed repository with no front door.
 - **`Runs` has no `WorkspaceId`**; tenant scoping joins through `WorkflowDefinitions`.
 - **Toasts reach every workspace member** — the notification hub feed is per workspace, not per

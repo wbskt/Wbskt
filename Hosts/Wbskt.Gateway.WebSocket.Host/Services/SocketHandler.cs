@@ -15,20 +15,20 @@ public interface ISocketHandler
 
 /// <summary>
 /// The WebSocket transport: the upgrade, the subprotocol, the frame loop and the close. Who may
-/// connect and what a session means (registering the device, announcing it, budgeting and routing its
-/// messages, recording its end) is Gateway.Core's <see cref="DeviceSessions"/>.
+/// connect and what a session means (registering the client, announcing it, budgeting and routing its
+/// messages, recording its end) is Gateway.Core's <see cref="ClientSessions"/>.
 /// </summary>
 internal sealed class SocketHandler : ISocketHandler
 {
     // Messages are assembled across frames up to this cap; larger senders are disconnected.
-    private const int MaxMessageBytes = DeviceProtocol.MaxMessageBytes;
+    private const int MaxMessageBytes = ClientProtocol.MaxMessageBytes;
 
-    private readonly DeviceSessions _sessions;
+    private readonly ClientSessions _sessions;
     private readonly ILogger<SocketHandler> _logger;
     private readonly IHostApplicationLifetime _appLifetime;
 
     public SocketHandler(
-        DeviceSessions sessions,
+        ClientSessions sessions,
         ILogger<SocketHandler> logger,
         IHostApplicationLifetime appLifetime)
     {
@@ -45,7 +45,7 @@ internal sealed class SocketHandler : ISocketHandler
             return;
         }
 
-        // The ClientOnly policy on /ws has already authenticated a device token. Whether this device may
+        // The ClientOnly policy on /ws has already authenticated a client token. Whether this client may
         // connect (a well-formed token, not revoked since it was issued) is the session's to decide.
         var admission = await _sessions.AdmitAsync(context.User, context.RequestAborted);
         if (!admission.IsAdmitted)
@@ -75,7 +75,7 @@ internal sealed class SocketHandler : ISocketHandler
             WorkspaceId = identity.WorkspaceId
         };
 
-        // Ends the receive loop when the device goes away, the host stops, or a close someone asked
+        // Ends the receive loop when the client goes away, the host stops, or a close someone asked
         // for (see ClientConnection.CloseAsync) is not answered in time.
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(
             context.RequestAborted,
@@ -91,8 +91,8 @@ internal sealed class SocketHandler : ISocketHandler
 
     private static Task RefuseAsync(HttpContext context, AdmissionRefusal refusal) => refusal switch
     {
-        AdmissionRefusal.Revoked => Problems.WriteAsync(context, StatusCodes.Status403Forbidden, "CLIENT_REVOKED", "This device's access has been revoked."),
-        _ => Problems.WriteAsync(context, StatusCodes.Status401Unauthorized, "CLIENT_TOKEN_INVALID", "The device token is missing a claim this host needs.")
+        AdmissionRefusal.Revoked => Problems.WriteAsync(context, StatusCodes.Status403Forbidden, "CLIENT_REVOKED", "This client's access has been revoked."),
+        _ => Problems.WriteAsync(context, StatusCodes.Status401Unauthorized, "CLIENT_TOKEN_INVALID", "The client token is missing a claim this host needs.")
     };
 
     private static async Task CloseQuietlyAsync(ClientConnection connection, DisconnectReason reason)
@@ -116,11 +116,11 @@ internal sealed class SocketHandler : ISocketHandler
         }
         catch (Exception ex) when (ex is WebSocketException or OperationCanceledException)
         {
-            // The device has already gone; its session ends the same way.
+            // The client has already gone; its session ends the same way.
         }
     }
 
-    private async Task<DisconnectReason> ReceiveLoopAsync(Guid clientRefId, ClientConnection connection, DeviceInbox inbox, CancellationToken cancellationToken)
+    private async Task<DisconnectReason> ReceiveLoopAsync(Guid clientRefId, ClientConnection connection, ClientInbox inbox, CancellationToken cancellationToken)
     {
         try
         {
@@ -133,7 +133,7 @@ internal sealed class SocketHandler : ISocketHandler
         }
     }
 
-    private async Task<DisconnectReason> ReadFramesAsync(Guid clientRefId, ClientConnection connection, DeviceInbox inbox, CancellationToken cancellationToken)
+    private async Task<DisconnectReason> ReadFramesAsync(Guid clientRefId, ClientConnection connection, ClientInbox inbox, CancellationToken cancellationToken)
     {
         var webSocket = connection.Socket;
         using var reader = new WebSocketMessageReader(webSocket, MaxMessageBytes);
@@ -144,12 +144,12 @@ internal sealed class SocketHandler : ISocketHandler
             switch (read.Kind)
             {
                 case FrameKind.Closed:
-                    // Read before answering: the device's reason holds even if the answer can't be sent.
+                    // Read before answering: the client's reason holds even if the answer can't be sent.
                     var closed = webSocket.CloseStatus == (WebSocketCloseStatus)WebSocketBinding.UpdatingCloseCode
                         ? DisconnectReason.Updating
                         : DisconnectReason.ClientClosed;
 
-                    // Either the device closed, or it answered a close we sent (the handshake is then complete).
+                    // Either the client closed, or it answered a close we sent (the handshake is then complete).
                     if (webSocket.State == WebSocketState.CloseReceived)
                     {
                         await AcknowledgeCloseAsync(connection, cancellationToken);
@@ -158,14 +158,14 @@ internal sealed class SocketHandler : ISocketHandler
                     return closed;
                 case FrameKind.TooBig:
                     _logger.LogWarning("Client {ClientRefId} exceeded the {MaxMessageBytes}-byte message limit; closing.", clientRefId, MaxMessageBytes);
-                    await connection.RequestCloseAsync(DisconnectReason.MessageTooBig, DeviceInbox.TooBigDescription);
+                    await connection.RequestCloseAsync(DisconnectReason.MessageTooBig, ClientInbox.TooBigDescription);
                     return DisconnectReason.MessageTooBig;
                 case FrameKind.Binary:
                     continue;
             }
 
             // The size backstop, the budget, the rate limit and routing are the session's; it says when
-            // the device must go.
+            // the client must go.
             if (await inbox.ReceiveAsync(read.Text!, cancellationToken) is { } ended)
             {
                 return ended;

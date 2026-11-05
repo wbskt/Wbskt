@@ -1,6 +1,6 @@
 # Wbskt.Client
 
-Connect a device, script or service to [Wbskt](https://wbskt.com). It registers with a policy PIN
+Connect a client, script or service to [Wbskt](https://wbskt.com). It registers with a policy PIN
 once, keeps the credentials it gets, holds a WebSocket open, buffers messages while offline and
 reconnects on its own.
 
@@ -8,7 +8,7 @@ reconnects on its own.
 dotnet add package Wbskt.Client --prerelease
 ```
 
-This is a 0.9 beta (`--prerelease` finds it): the device protocol it speaks may still change before 1.0.
+This is a 0.9 beta (`--prerelease` finds it): the client protocol it speaks may still change before 1.0.
 
 ```csharp
 using Wbskt.Client.Sdk;
@@ -25,7 +25,7 @@ await wbskt.ReportStateAsync(new Dictionary<string, object?> { ["celsius"] = 21.
 ```
 
 The PIN comes from a registration policy in the console (Policies). The first start registers the
-device and saves its credentials in `wbskt/greenhouse-sensor.json` under your local application data
+client and saves its credentials in `wbskt/greenhouse-sensor.json` under your local application data
 folder (`~/.local/share` on Linux); later starts sign in with them.
 
 **Your own server or storage.** Pass a `ClientConfig` with your API and socket URLs, and optionally
@@ -33,10 +33,10 @@ an `IClientStorage` of your own (a database row, a secrets store):
 
 ```csharp
 var config = new ClientConfig("https://api.example.com", "wss://ws.example.com", "greenhouse-sensor", "your-policy-pin");
-await using var wbskt = new WbsktClient(config, new FileClientStorage("/etc/wbskt/device.json"));
+await using var wbskt = new WbsktClient(config, new FileClientStorage("/etc/wbskt/client.json"));
 ```
 
-**Commands.** Declare the commands the device takes with `UpdateCapabilitiesAsync` and they show up
+**Commands.** Declare the commands the client takes with `UpdateCapabilitiesAsync` and they show up
 in the console's send panel. Delivery acks and expired-command refusals are sent for you.
 
 **Offline.** `SendAsync` while disconnected queues the message (1,000 by default,
@@ -48,5 +48,5 @@ two minutes to drain.
 handler that throws doesn't drop the connection; the exception is raised on `OnHandlerError`.
 
 The wire protocol every Wbskt SDK implements is documented in
-[Docs/Device.Protocol.md](https://github.com/wbskt/Wbskt/blob/master/Docs/Device.Protocol.md), with the
-WebSocket specifics in [Docs/Device.Protocol.WebSocket.md](https://github.com/wbskt/Wbskt/blob/master/Docs/Device.Protocol.WebSocket.md).
+[Docs/Client.Protocol.md](https://github.com/wbskt/Wbskt/blob/master/Docs/Client.Protocol.md), with the
+WebSocket specifics in [Docs/Client.Protocol.WebSocket.md](https://github.com/wbskt/Wbskt/blob/master/Docs/Client.Protocol.WebSocket.md).
