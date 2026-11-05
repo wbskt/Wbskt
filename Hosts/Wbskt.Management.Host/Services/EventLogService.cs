@@ -236,6 +236,8 @@ internal sealed class EventLogService : IEventLogService
         return Result<IReadOnlyCollection<string>?>.Success(events);
     }
 
+    private const string LegacyClientSourceName = "Device";
+
     /// <summary>The sources the query names, or null when it names none; an unknown one is <c>EVENT_LOG_SOURCE_UNKNOWN</c>.</summary>
     private static Result<IReadOnlyCollection<EventSource>?> ResolveSources(EventLogQuery query)
     {
@@ -248,6 +250,13 @@ internal sealed class EventLogService : IEventLogService
         var sources = new List<EventSource>();
         foreach (var name in names)
         {
+            // Saved filters and links from before wbskt/Wbskt#580 say Device, the old name of Client.
+            if (string.Equals(name, LegacyClientSourceName, StringComparison.OrdinalIgnoreCase))
+            {
+                sources.Add(EventSource.Client);
+                continue;
+            }
+
             // Names only: a number would also parse, and would name a source that does not exist.
             if (!Enum.TryParse<EventSource>(name, ignoreCase: true, out var source) || !Enum.IsDefined(source) || char.IsDigit(name[0]))
             {

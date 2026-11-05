@@ -3,7 +3,7 @@ using System.Security.Claims;
 namespace Wbskt.Infrastructure.Security;
 
 /// <summary>
-/// The claims of a client (client) token beyond <see cref="WbsktClaims"/>: issued by the management
+/// The claims of a client token beyond <see cref="WbsktClaims"/>: issued by the management
 /// host, accepted by the socket host.
 /// </summary>
 public static class ClientClaims

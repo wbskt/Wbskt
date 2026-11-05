@@ -379,7 +379,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(wbskt_management_client_logins_total{outcome=\"success\"}[$__range])) or vector(0)",
+          "expr": "(sum(increase(wbskt_management_client_logins_total{outcome=\"success\"}[$__range])) or vector(0)) + (sum(increase(wbskt_management_device_logins_total{outcome=\"success\"}[$__range])) or vector(0))",
           "legendFormat": "client logins",
           "refId": "A",
           "range": true

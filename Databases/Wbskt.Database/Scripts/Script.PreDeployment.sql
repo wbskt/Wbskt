@@ -170,15 +170,3 @@ BEGIN
         PRINT ''>>> IdempotencyKeys: marked '' + CAST(@@ROWCOUNT AS NVARCHAR(20)) + '' key(s) with an unknown status Failed'';';
 END
 GO
-/*
---------------------------------------------------------------------------------------
-Pre-Deployment Script: drop the DeviceTraffic procedures
---------------------------------------------------------------------------------------
-The table and column renames of wbskt/Wbskt#583 are in Wbskt.Database.refactorlog, so sqlpackage
-applies them with sp_rename and keeps the rows. The procedures were renamed by file and are
-created fresh by the diff; DropObjectsNotInSource is off, so the old ones are dropped here.
-*/
-DROP PROCEDURE IF EXISTS dbo.DeviceTraffic_InsertBatch;
-GO
-DROP PROCEDURE IF EXISTS dbo.DeviceTraffic_DeleteBefore;
-GO

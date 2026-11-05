@@ -44,6 +44,10 @@ port_of() {
 # Management and client-auth sign client tokens with one key (see the compose file). Kept in a file so
 # a host recreated on its own keeps the key the other is using.
 key_file="$state/client-token-key"
+# Called device-token-key before wbskt/Wbskt#584; reused so hosts still running keep their key.
+if [[ ! -s "$key_file" && -s "$state/device-token-key" ]]; then
+  mv "$state/device-token-key" "$key_file"
+fi
 if [[ ! -s "$key_file" ]]; then
   openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt | base64 | tr -d '\n' > "$key_file"
 fi
@@ -84,7 +88,9 @@ case "${1:-up}" in
   up)
     export_dev_cert
     # Returns once the hosts are started; they start only after the migrator has succeeded.
-    compose up -d --build
+    # --remove-orphans: a service renamed since the stack last ran (devices, now client-auth) would
+    # otherwise keep its port.
+    compose up -d --build --remove-orphans
     wait_for "${hosts[@]}"
     ;;
   infra)

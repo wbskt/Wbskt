@@ -44,7 +44,7 @@ public static class Program
         var builder = WbsktHost.CreateBuilder(typeof(Program), args, "serilog.json", "connectionstrings.json", "rabbitmq.json");
         builder.AddWbsktTelemetry(ManagementMetrics.MeterName, QueuedEventBus.MeterName);
 
-        // A Clients instance serves only client registration and login (see HostRole). It keeps the
+        // A ClientAuth instance serves only client registration and login (see HostRole). It keeps the
         // same service registrations, minus the console's background work and live feed.
         var role = HostRoles.FromConfiguration(builder.Configuration);
 
@@ -52,7 +52,7 @@ public static class Program
         builder.Services.AddSingleton<IIdentityService, IdentityService>();
         builder.Services.AddSingleton<ManagementMetrics>();
         builder.Services.AddSingleton<IWorkerTickMetrics>(sp => sp.GetRequiredService<ManagementMetrics>());
-        // Signs client (client) tokens for the socket host; accepts user tokens signed by the auth host,
+        // Signs client tokens for the socket host; accepts user tokens signed by the auth host,
         // whose public keys it fetches from Jwt:TrustedJwksUrl.
         builder.Services.AddWbsktTokenIssuer(JwtIssuers.Management);
         builder.Services.AddWbsktJwtTrust(JwtIssuers.Auth, JwtAudiences.Api);
@@ -179,7 +179,7 @@ public static class Program
             {
                 dbEventLoggingBusConfig(configurator);
 
-                // Register Auto SignalR Forwarding Consumers. Not on a Clients instance: it has no
+                // Register Auto SignalR Forwarding Consumers. Not on a ClientAuth instance: it has no
                 // hub, so it would only take broadcasts off the shared queue for nobody.
                 if (role == HostRole.All)
                 {
