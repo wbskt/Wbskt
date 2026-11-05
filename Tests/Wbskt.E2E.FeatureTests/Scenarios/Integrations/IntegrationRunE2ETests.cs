@@ -163,7 +163,7 @@ public sealed class IntegrationRunE2ETests(ServicesFixture fixture)
         using var body = JsonDocument.Parse(post.Body);
         body.RootElement.GetProperty("content").GetString().Should().Be("@everyone the door is open");
         body.RootElement.GetProperty("username").GetString().Should().Be("Garage");
-        body.RootElement.GetProperty("allowed_mentions").GetProperty("parse").GetArrayLength().Should().Be(0, "device data must not be able to ping @everyone");
+        body.RootElement.GetProperty("allowed_mentions").GetProperty("parse").GetArrayLength().Should().Be(0, "client data must not be able to ping @everyone");
     }
 
     [SkippableFact]

@@ -12,7 +12,7 @@ using Wbskt.Infrastructure.Security;
 namespace Wbskt.Host.Tests.Infrastructure;
 
 /// <summary>
-/// Device, policy and workflow actions taken through the API record who took them. The actor is
+/// Client, policy and workflow actions taken through the API record who took them. The actor is
 /// stamped as the event is published, while the request's identity is still in scope.
 /// </summary>
 public sealed class ActorStampingEventBusTests

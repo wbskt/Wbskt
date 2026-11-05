@@ -24,7 +24,7 @@ public sealed record EventLogSearch
     /// <summary>This criticality or worse: <c>Warning</c> is warnings and errors.</summary>
     public EventCriticality? MinCriticality { get; init; }
 
-    /// <summary>Where entries came from: Console, Api, Device, Workflow, System.</summary>
+    /// <summary>Where entries came from: Console, Api, Client, Workflow, System.</summary>
     public IReadOnlyList<string>? Sources { get; init; }
 
     /// <summary>Only entries newer than this id: the newest one a live view already shows.</summary>
@@ -43,8 +43,8 @@ public sealed record EventLogSearch
 
     public DateTimeOffset? To { get; init; }
 
-    /// <summary>Leave raw device traffic (messages, pings, readings) out.</summary>
-    public bool ExcludeDeviceTraffic { get; init; }
+    /// <summary>Leave raw client traffic (messages, pings, readings) out.</summary>
+    public bool ExcludeClientTraffic { get; init; }
 
     /// <summary>Text to find in an entry's data or event name.</summary>
     public string? Q { get; init; }
@@ -64,7 +64,7 @@ public sealed record EventLogSearch
         yield return ("userRefId", UserRefId);
         yield return ("from", From);
         yield return ("to", To);
-        yield return ("traffic", ExcludeDeviceTraffic ? "exclude" : null);
+        yield return ("traffic", ExcludeClientTraffic ? "exclude" : null);
         yield return ("q", Q);
     }
 }

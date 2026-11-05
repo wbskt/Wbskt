@@ -31,7 +31,7 @@ GO
 --------------------------------------------------------------------------------------
 Pre-Deployment Script: Clients.Secret -> Clients.SecretHash
 --------------------------------------------------------------------------------------
-Device secrets used to be stored in plaintext and compared inside Client_Verify. They are now
+Client secrets used to be stored in plaintext and compared inside Client_Verify. They are now
 stored as SHA-256 and compared in C#. The plaintext column is dropped by the schema diff that
 follows this script, so the backfill has to happen HERE - once the diff runs, there is nothing
 left to hash.
@@ -50,7 +50,7 @@ same reasoning that already puts invitation tokens on plain SHA-256.
 
 CONVERT(VARCHAR(255), ...) is load-bearing, not tidying. HASHBYTES over an NVARCHAR hashes UTF-16LE
 bytes, while the C# side hashes Encoding.UTF8.GetBytes. The secrets are base64 and therefore pure
-ASCII, so the VARCHAR conversion makes the two byte-identical. Without it every device on the
+ASCII, so the VARCHAR conversion makes the two byte-identical. Without it every client on the
 platform fails to authenticate at once, and the plaintext needed to diagnose it is already gone.
 ClientSecretHashingIntegrationTests pins the two against each other.
 
@@ -169,4 +169,16 @@ BEGIN
         WHERE Status NOT IN (N''Pending'', N''Succeeded'', N''Failed'');
         PRINT ''>>> IdempotencyKeys: marked '' + CAST(@@ROWCOUNT AS NVARCHAR(20)) + '' key(s) with an unknown status Failed'';';
 END
+GO
+/*
+--------------------------------------------------------------------------------------
+Pre-Deployment Script: drop the DeviceTraffic procedures
+--------------------------------------------------------------------------------------
+The table and column renames of wbskt/Wbskt#583 are in Wbskt.Database.refactorlog, so sqlpackage
+applies them with sp_rename and keeps the rows. The procedures were renamed by file and are
+created fresh by the diff; DropObjectsNotInSource is off, so the old ones are dropped here.
+*/
+DROP PROCEDURE IF EXISTS dbo.DeviceTraffic_InsertBatch;
+GO
+DROP PROCEDURE IF EXISTS dbo.DeviceTraffic_DeleteBefore;
 GO

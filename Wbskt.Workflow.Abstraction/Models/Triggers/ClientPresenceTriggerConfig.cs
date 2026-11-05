@@ -16,7 +16,7 @@ public sealed record ClientPresenceTriggerConfig
     public ClientPresenceState State { get; init; } = ClientPresenceState.Offline;
 
     /// <summary>
-    /// How long the client must stay in <see cref="State"/> before a run starts. A device that
+    /// How long the client must stay in <see cref="State"/> before a run starts. A client that
     /// reboots or roams between access points drops its socket for a few seconds; without a grace
     /// period every blip would page its owner.
     /// </summary>

@@ -1,7 +1,7 @@
 {
   "uid": "wbskt-overview",
   "title": "Wbskt overview",
-  "description": "Sign-ups, logins, device sockets, workflow runs and firing alerts. Provisioned from deploy/observability/grafana; edits in the UI are not saved back.",
+  "description": "Sign-ups, logins, client sockets, workflow runs and firing alerts. Provisioned from deploy/observability/grafana; edits in the UI are not saved back.",
   "tags": [
     "wbskt"
   ],
@@ -360,8 +360,8 @@
     },
     {
       "type": "stat",
-      "title": "Device logins",
-      "description": "Successful device logins (management host) over the selected range.",
+      "title": "Client logins",
+      "description": "Successful client logins (management host) over the selected range.",
       "id": 8,
       "datasource": {
         "type": "prometheus",
@@ -379,8 +379,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(wbskt_management_device_logins_total{outcome=\"success\"}[$__range])) or vector(0)",
-          "legendFormat": "device logins",
+          "expr": "sum(increase(wbskt_management_client_logins_total{outcome=\"success\"}[$__range])) or vector(0)",
+          "legendFormat": "client logins",
           "refId": "A",
           "range": true
         }
@@ -539,7 +539,7 @@
     },
     {
       "type": "row",
-      "title": "Devices",
+      "title": "Clients",
       "id": 11,
       "collapsed": false,
       "gridPos": {
@@ -552,8 +552,8 @@
     },
     {
       "type": "stat",
-      "title": "Open device sockets",
-      "description": "Device connections open on the gateways right now.",
+      "title": "Open client sockets",
+      "description": "Client connections open on the gateways right now.",
       "id": 12,
       "datasource": {
         "type": "prometheus",
@@ -614,7 +614,7 @@
     {
       "type": "timeseries",
       "title": "Open sockets by transport",
-      "description": "Open device connections per gateway transport.",
+      "description": "Open client connections per gateway transport.",
       "id": 13,
       "datasource": {
         "type": "prometheus",

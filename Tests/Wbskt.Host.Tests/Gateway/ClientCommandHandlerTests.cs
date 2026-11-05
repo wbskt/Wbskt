@@ -13,8 +13,8 @@ namespace Wbskt.Host.Tests.Gateway;
 
 /// <summary>
 /// Every socket host receives every command. A missing connection is handled exactly once (by the host
-/// the sender saw holding it, which hands the command back to the device's queue), and an expired
-/// command must never reach the device.
+/// the sender saw holding it, which hands the command back to the client's queue), and an expired
+/// command must never reach the client.
 /// </summary>
 public sealed class ClientCommandHandlerTests
 {
@@ -26,7 +26,7 @@ public sealed class ClientCommandHandlerTests
     private readonly Mock<IConnectionManager> _connections = new();
     private readonly Mock<IEventBus> _bus = new();
     private readonly Mock<ICommandSender> _commands = new();
-    private readonly FakeDeviceConnection _connection = new() { ClientId = 42, WorkspaceId = 7 };
+    private readonly FakeClientConnection _connection = new() { ClientId = 42, WorkspaceId = 7 };
 
     private IReadOnlyList<string> _sentFrames => _connection.Sent;
 
@@ -89,9 +89,9 @@ public sealed class ClientCommandHandlerTests
     }
 
     [Fact]
-    public async Task A_host_the_sender_did_not_address_leaves_the_command_alone_even_holding_the_device()
+    public async Task A_host_the_sender_did_not_address_leaves_the_command_alone_even_holding_the_client()
     {
-        // The device moved here after the sender looked; its old host hands the command back to the queue.
+        // The client moved here after the sender looked; its old host hands the command back to the queue.
         Connected();
 
         await CreateHandler().Consume(Context(targetHostId: "socket-b"));
@@ -101,7 +101,7 @@ public sealed class ClientCommandHandlerTests
     }
 
     [Fact]
-    public async Task A_command_from_a_sender_that_names_no_host_is_delivered_by_whichever_holds_the_device()
+    public async Task A_command_from_a_sender_that_names_no_host_is_delivered_by_whichever_holds_the_client()
     {
         Connected();
 
@@ -140,7 +140,7 @@ public sealed class ClientCommandHandlerTests
     }
 
     [Fact]
-    public async Task A_platform_command_goes_out_with_its_payload_as_an_object_and_a_device_command_as_sent()
+    public async Task A_platform_command_goes_out_with_its_payload_as_an_object_and_a_client_command_as_sent()
     {
         Connected();
         var ota = new Mock<ConsumeContext<ClientCommandEvent>>();
@@ -173,7 +173,7 @@ public sealed class ClientCommandHandlerTests
     [Fact]
     public async Task A_sent_command_whose_delivery_cannot_be_announced_is_not_failed_or_retried()
     {
-        // Throwing here would make the bus retry the message and send the command to the device twice.
+        // Throwing here would make the bus retry the message and send the command to the client twice.
         Connected();
         _bus.Setup(x => x.PublishAsync(It.IsAny<ClientCommandDeliveredEvent>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("broker unavailable"));

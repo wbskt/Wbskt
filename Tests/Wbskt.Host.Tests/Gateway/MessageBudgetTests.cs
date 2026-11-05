@@ -32,7 +32,7 @@ public sealed class MessageBudgetTests
     }
 
     [Fact]
-    public void A_device_in_a_tight_loop_exhausts_its_budget()
+    public void A_client_in_a_tight_loop_exhausts_its_budget()
     {
         var time = new ManualTime();
         var budget = new MessageBudget(new MessageBudgetOptions { PerSecond = 10, Burst = 10, CloseAfterDropped = 50 }, time);
@@ -46,7 +46,7 @@ public sealed class MessageBudgetTests
     }
 
     [Fact]
-    public void A_device_within_its_rate_never_loses_a_message()
+    public void A_client_within_its_rate_never_loses_a_message()
     {
         var time = new ManualTime();
         var budget = new MessageBudget(new MessageBudgetOptions { PerSecond = 10, Burst = 1, CloseAfterDropped = 5 }, time);

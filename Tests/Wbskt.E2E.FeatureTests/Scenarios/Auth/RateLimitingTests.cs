@@ -22,7 +22,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 /// </code>
 /// <para>
 /// Alone matters more now that the suite's three collections run side by side: with the gate set and
-/// no filter, these would spend the budget while the devices and engine collections are signing in.
+/// no filter, these would spend the budget while the clients and engine collections are signing in.
 /// The filter above is what keeps them alone, as CI's rate-limit pass does.
 /// </para>
 /// <para>

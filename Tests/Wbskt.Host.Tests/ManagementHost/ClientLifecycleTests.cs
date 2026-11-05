@@ -81,7 +81,7 @@ public sealed class ClientLifecycleTests
     }
 
     [Fact]
-    public async Task Revoking_a_device_records_a_cutoff_for_every_token_it_holds()
+    public async Task Revoking_a_client_records_a_cutoff_for_every_token_it_holds()
     {
         var harness = new Harness();
         var client = harness.AddClient(status: ClientStatus.Registered);
@@ -94,7 +94,7 @@ public sealed class ClientLifecycleTests
     }
 
     [Fact]
-    public async Task Approving_a_device_again_lets_it_back_in_with_a_fresh_token_only()
+    public async Task Approving_a_client_again_lets_it_back_in_with_a_fresh_token_only()
     {
         var harness = new Harness();
         var client = harness.AddClient(status: ClientStatus.Revoked);
@@ -108,7 +108,7 @@ public sealed class ClientLifecycleTests
     }
 
     [Fact]
-    public async Task Rejecting_a_pending_device_records_nothing_because_it_holds_no_token()
+    public async Task Rejecting_a_pending_client_records_nothing_because_it_holds_no_token()
     {
         var harness = new Harness();
         var client = harness.AddClient(status: ClientStatus.Pending);
@@ -264,7 +264,7 @@ public sealed class ClientLifecycleTests
                 WorkspaceId = workspaceId,
                 PolicyId = 5,
                 PolicyRefId = Guid.NewGuid(),
-                Name = $"device-{_nextId}",
+                Name = $"client-{_nextId}",
                 Status = status
             };
             Provider.Setup(p => p.FindDetailByRefIdAsync(client.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(client);

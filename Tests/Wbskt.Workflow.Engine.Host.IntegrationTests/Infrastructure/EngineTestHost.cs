@@ -10,7 +10,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 ///
 /// <c>AddWorkflowEngine</c> alone is not enough to construct every node executor. It registers all
 /// 21 of them, but three of their dependencies are deliberately not its to provide:
-/// <see cref="IDeviceCommandPublisher"/> and <see cref="IToastPublisher"/> are outbound adapters onto
+/// <see cref="IClientCommandPublisher"/> and <see cref="IToastPublisher"/> are outbound adapters onto
 /// RabbitMQ, and <c>IHttpClientFactory</c> comes from <c>AddHttpClient</c>. The engine host supplies
 /// all three in <c>Program.cs</c> so that <c>Wbskt.Workflow</c> takes no dependency on a transport.
 ///
@@ -40,7 +40,7 @@ internal static class EngineTestHost
         // workflow-webhook, the telegram timeout) is host policy rather than anything these tests assert.
         services.AddHttpClient();
 
-        services.AddScoped<IDeviceCommandPublisher, NoopDeviceCommandPublisher>();
+        services.AddScoped<IClientCommandPublisher, NoopClientCommandPublisher>();
         services.AddScoped<IToastPublisher, NoopToastPublisher>();
 
         return services;
@@ -48,11 +48,11 @@ internal static class EngineTestHost
 }
 
 /// <summary>
-/// No-op stand-in for the engine host's event-bus-backed device command publisher. A no-op rather
+/// No-op stand-in for the engine host's event-bus-backed client command publisher. A no-op rather
 /// than a recording double because the tests using it are about a run reaching a terminal state, not
 /// about what was published; anything asserting on published commands should register its own.
 /// </summary>
-internal sealed class NoopDeviceCommandPublisher : IDeviceCommandPublisher
+internal sealed class NoopClientCommandPublisher : IClientCommandPublisher
 {
     public Task PublishCommandAsync(
         Guid commandId,

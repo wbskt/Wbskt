@@ -19,7 +19,7 @@ public static class Program
         var builder = WbsktHost.CreateBuilder(typeof(Program), args, "serilog.json", "rabbitmq.json");
         builder.AddWbsktTelemetry(GatewayMetrics.MeterName);
 
-        // The device sessions, the bus and its consumers, and the presence and latency services.
+        // The client sessions, the bus and its consumers, and the presence and latency services.
         // This host adds only the WebSocket transport.
         builder.Services.AddGatewayCore(builder.Configuration, GatewayTransport.WebSocket);
         builder.Services.AddScoped<ISocketHandler, SocketHandler>();
@@ -27,7 +27,7 @@ public static class Program
         // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
 
-        // Device tokens through the framework's bearer handler, from the Authorization header or, for
+        // Client tokens through the framework's bearer handler, from the Authorization header or, for
         // browsers, which cannot set headers on a WebSocket, from ?access_token= on /ws.
         builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddWbsktJwtBearer(x => x.Events = new JwtBearerEvents().AcceptQueryToken("/ws"));
@@ -47,7 +47,7 @@ public static class Program
         // AddMassTransit (masstransit-bus, tagged "ready").
         builder.Services.AddHealthChecks();
 
-        // No controllers and so no API docs: the device protocol on /ws is this host's whole API.
+        // No controllers and so no API docs: the client protocol on /ws is this host's whole API.
         builder.Services.AddWbsktJson();
 
         var app = builder.Build();
@@ -57,7 +57,7 @@ public static class Program
         app.UseWbsktPipeline();
 
         // The server pings every interval and drops a connection that has not answered within the
-        // timeout. Without the timeout, a device that loses power or Wi-Fi leaves a half-open socket
+        // timeout. Without the timeout, a client that loses power or Wi-Fi leaves a half-open socket
         // that keeps it "online" (and its offline triggers silent) until TCP itself gives up, which
         // can take many minutes. Client libraries answer pings on their own; a client that cannot
         // can be accommodated by raising the timeout, or setting it to 0 to turn the check off.

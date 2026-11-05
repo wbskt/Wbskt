@@ -8,14 +8,14 @@ namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 
 public sealed class ClientPayloadReceivedConsumer(IInboundHub hub, ClientHoldRecorder holdRecorder) : IConsumer<ClientMessageReceivedEvent>
 {
-    /// <summary>A message that reached the platform this long after the device sent it was buffered offline.</summary>
+    /// <summary>A message that reached the platform this long after the client sent it was buffered offline.</summary>
     public static readonly TimeSpan LateThreshold = TimeSpan.FromSeconds(30);
 
     public async Task Consume(ConsumeContext<ClientMessageReceivedEvent> context)
     {
         ClientMessageReceivedEvent evt = context.Message;
         DateTime receivedAt = DateTime.SpecifyKind(evt.CreatedAtUtc, DateTimeKind.Utc);
-        DateTime sentAt = evt.SentAtUtc is { } deviceTime ? DateTime.SpecifyKind(deviceTime, DateTimeKind.Utc) : receivedAt;
+        DateTime sentAt = evt.SentAtUtc is { } reported ? DateTime.SpecifyKind(reported, DateTimeKind.Utc) : receivedAt;
         bool late = receivedAt - sentAt > LateThreshold;
 
         InboundEvent inboundEvent = ClientChannel.Event(

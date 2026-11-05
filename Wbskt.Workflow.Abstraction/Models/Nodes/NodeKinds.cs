@@ -108,7 +108,7 @@ public static class NodeKinds
     private static IReadOnlyCollection<PortDefinition> AwaitSignalPorts(BaseNode node) =>
         node is AwaitSignalNode { Config.Ttl: not null } ? [In, Default, Timeout] : PassThroughPorts;
 
-    // A send-command step that waits for the device leaves by what became of the command.
+    // A send-command step that waits for the client leaves by what became of the command.
     private static IReadOnlyCollection<PortDefinition> ClientMessagePorts(BaseNode node) =>
         node is SendClientMessageNode { Config.AwaitAck: true } ? [In, Acked, Failed, Timeout] : PassThroughPorts;
 

@@ -29,7 +29,7 @@ console app. It must look like a real, shipping product — not a wireframe.
 - **No inline styles**, no frameworks beyond Tailwind CDN + your `theme.css`. No React/Vue.
 - Provide an **`index.html`** that is a site map: a grid of thumbnails/links to every screen
   and every notable state (empty, populated, error, modal‑open).
-- Use **placeholder data that looks real** (plausible device names, timestamps, PINs, JSON
+- Use **placeholder data that looks real** (plausible client names, timestamps, PINs, JSON
   payloads, run IDs). Never show "Lorem ipsum".
 - Icons: use an inline SVG icon set (Lucide/Phosphor style). Fonts: **Inter** (UI) +
   **JetBrains Mono** (code, IDs, payloads, PINs).
@@ -278,16 +278,16 @@ mints a unique **PIN**.
   eye toggle + copy button. Explain: clients use this PIN to register under the policy.
 - **Capacity:** if Limited, show **remaining slots** ("7 of 10 remaining") with a bar;
   if Unlimited, show ∞. Mode + enabled toggle.
-- **Registered devices:** table of clients enrolled via this policy (name, ID, enrolled‑at,
+- **Registered clients:** table of clients enrolled via this policy (name, ID, enrolled‑at,
   status) with a link to each client page.
 - **Pending approval:** (only meaningful for On‑approval mode) queue of requests with
-  **Approve / Reject** actions and device metadata.
+  **Approve / Reject** actions and client metadata.
 - **Rejected / Revoked:** list with a **Revive/Restore** action.
-- **Activity log (timeline):** chronological events — **policy created**, **device
-  request**, **device approved**, **device rejected**, **device revived**, **policy
+- **Activity log (timeline):** chronological events — **policy created**, **client
+  request**, **client approved**, **client rejected**, **client revived**, **policy
   disabled**, **limit exceeded** — each with icon, actor, timestamp, and detail.
 - Header actions: **Disable policy** (confirm), **Regenerate PIN**, **Edit**.
-- **Empty state** for a policy with no devices yet.
+- **Empty state** for a policy with no clients yet.
 
 ---
 

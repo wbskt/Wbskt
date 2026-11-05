@@ -68,7 +68,7 @@ public sealed class BranchResultDispatcherTests
         services.AddHttpClient();
         services.AddWorkflowProviders();
         services.AddWorkflowRuntime();
-        services.AddScoped<IDeviceCommandPublisher>(_ => Mock.Of<IDeviceCommandPublisher>());
+        services.AddScoped<IClientCommandPublisher>(_ => Mock.Of<IClientCommandPublisher>());
         services.AddScoped<IToastPublisher>(_ => Mock.Of<IToastPublisher>());
 
         using ServiceProvider provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });

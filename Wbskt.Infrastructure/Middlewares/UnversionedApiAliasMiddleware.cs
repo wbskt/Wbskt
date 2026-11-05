@@ -5,7 +5,7 @@ namespace Wbskt.Infrastructure.Middlewares;
 
 /// <summary>
 /// Serves the pre-<c>/v1</c> paths for one release: <c>/api/clients…</c> is handled as
-/// <c>/api/v1/clients…</c> and answered with <c>Deprecation: true</c>, so a console or device that
+/// <c>/api/v1/clients…</c> and answered with <c>Deprecation: true</c>, so a console or client that
 /// hasn't moved yet keeps working. Paths in <see cref="PublicApi.Unversioned"/> pass through untouched.
 /// Must run before routing; see <see cref="UnversionedApiAliasExtensions.UseUnversionedApiAliases"/>.
 /// </summary>

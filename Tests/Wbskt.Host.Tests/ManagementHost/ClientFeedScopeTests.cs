@@ -39,7 +39,7 @@ public sealed class ClientFeedScopeTests
     }
 
     [Fact]
-    public async Task A_device_message_goes_to_its_watchers_not_the_workspace()
+    public async Task A_client_message_goes_to_its_watchers_not_the_workspace()
     {
         var hub = new FakeHub();
         var handler = new SignalRForwardingHandler<ClientMessageReceivedEvent>(hub.Context, new ClientFeedThrottle(new FixedTimeProvider(Now)));
@@ -62,7 +62,7 @@ public sealed class ClientFeedScopeTests
     }
 
     [Fact]
-    public async Task A_fast_device_is_capped_and_the_watchers_are_told_how_many_were_skipped()
+    public async Task A_fast_client_is_capped_and_the_watchers_are_told_how_many_were_skipped()
     {
         var hub = new FakeHub();
         var time = new FixedTimeProvider(Now);
@@ -84,7 +84,7 @@ public sealed class ClientFeedScopeTests
     }
 
     [Fact]
-    public void The_cap_is_per_device()
+    public void The_cap_is_per_client()
     {
         var throttle = new ClientFeedThrottle(new FixedTimeProvider(Now));
 

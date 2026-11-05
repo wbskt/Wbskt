@@ -1,5 +1,5 @@
 -- Adds a batch of received messages, already summed per client and type, to dbo.ClientMessageTypes.
--- A new type is stored only while the client has fewer than @MaxPerClient, so a device cannot grow
+-- A new type is stored only while the client has fewer than @MaxPerClient, so a client cannot grow
 -- the table without bound by varying types; the newest new types are kept first. A client deleted
 -- meanwhile is skipped rather than failing the batch.
 -- One transaction: when two consumers race to insert the same new type, the loser rolls back whole and

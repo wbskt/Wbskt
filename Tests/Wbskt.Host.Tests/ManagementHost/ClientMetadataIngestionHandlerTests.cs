@@ -252,7 +252,7 @@ public sealed class ClientMetadataIngestionHandlerTests
     }
 
     [Fact]
-    public async Task State_report_numbers_go_to_the_readings_history_at_the_devices_time()
+    public async Task State_report_numbers_go_to_the_readings_history_at_the_clients_time()
     {
         var (handler, provider, _) = CreateHandler();
         Report(provider, stored: true, oldValueJson: null);

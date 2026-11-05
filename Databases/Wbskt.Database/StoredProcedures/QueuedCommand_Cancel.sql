@@ -1,5 +1,5 @@
--- Takes one waiting command out of the queue, scoped to its device. No row when it is not waiting
--- (already delivered, expired, cancelled, or another device's).
+-- Takes one waiting command out of the queue, scoped to its client. No row when it is not waiting
+-- (already delivered, expired, cancelled, or another client's).
 CREATE PROCEDURE dbo.QueuedCommand_Cancel
     @ClientId  INT,
     @CommandId UNIQUEIDENTIFIER

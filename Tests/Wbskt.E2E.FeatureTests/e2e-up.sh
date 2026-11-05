@@ -26,7 +26,7 @@ state="${E2E_HOST_LOGS:-$root/e2e-hosts}/compose"
 compose_file="$root/deploy/compose/docker-compose.e2e.yml"
 mkdir -p "$state"
 
-hosts=(auth management devices gateway-ws engine)
+hosts=(auth management client-auth gateway-ws engine)
 
 # The plain-HTTP dev port of each host, for the liveness probe. A function rather than an
 # associative array, which the bash macOS ships does not have.
@@ -34,21 +34,21 @@ port_of() {
   case "$1" in
     auth) echo 5000 ;;
     management) echo 5010 ;;
-    devices) echo 5015 ;;
+    client-auth) echo 5015 ;;
     gateway-ws) echo 5020 ;;
     engine) echo 5030 ;;
     *) echo "unknown host: $1 (one of: ${hosts[*]})" >&2; exit 2 ;;
   esac
 }
 
-# Management and devices sign device tokens with one key (see the compose file). Kept in a file so
+# Management and client-auth sign client tokens with one key (see the compose file). Kept in a file so
 # a host recreated on its own keeps the key the other is using.
-key_file="$state/device-token-key"
+key_file="$state/client-token-key"
 if [[ ! -s "$key_file" ]]; then
   openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt | base64 | tr -d '\n' > "$key_file"
 fi
-export E2E_DEVICE_TOKEN_KEY
-E2E_DEVICE_TOKEN_KEY="$(cat "$key_file")"
+export E2E_CLIENT_TOKEN_KEY
+E2E_CLIENT_TOKEN_KEY="$(cat "$key_file")"
 export E2E_DEV_CERT_DIR="$state/https"
 export E2E_DEV_CERT_PASSWORD="${E2E_DEV_CERT_PASSWORD:-wbskt-e2e-dev}"
 mkdir -p "$E2E_DEV_CERT_DIR"

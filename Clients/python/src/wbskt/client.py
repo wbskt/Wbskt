@@ -1,6 +1,6 @@
-"""The device client: register once, keep a token, hold the socket open, and come back after a drop.
+"""The Python client: register once, keep a token, hold the socket open, and come back after a drop.
 
-Follows Docs/Device.Protocol.md; ``Clients/Wbskt.Client.Sdk`` is the reference implementation.
+Follows Docs/Client.Protocol.md; ``Clients/Wbskt.Client.Sdk`` is the reference implementation.
 """
 
 import asyncio
@@ -48,7 +48,7 @@ class _LoginRefused(Exception):
 
 
 class AsyncWbsktClient:
-    """A device connection for asyncio code.
+    """A client connection for asyncio code.
 
     >>> client = AsyncWbsktClient("greenhouse-sensor", policy_pin="483920")
     >>> client.on_message = handle
@@ -61,7 +61,7 @@ class AsyncWbsktClient:
 
     def __init__(
         self,
-        device_name: str,
+        client_name: str,
         policy_pin: Optional[str] = None,
         *,
         api_url: str = DEFAULT_API_URL,
@@ -72,13 +72,13 @@ class AsyncWbsktClient:
         reconnect_policy: Optional[ReconnectPolicy] = None,
         firmware_version: Optional[str] = None,
     ) -> None:
-        if not device_name:
-            raise ValueError("device_name is required")
-        self.device_name = device_name
+        if not client_name:
+            raise ValueError("client_name is required")
+        self.client_name = client_name
         self.policy_pin = policy_pin
         self.api_url = api_url.rstrip("/")
         self.socket_url = socket_url.rstrip("/")
-        self.storage: Storage = storage if storage is not None else FileStorage.for_device(device_name)
+        self.storage: Storage = storage if storage is not None else FileStorage.for_client(client_name)
         self.on_message: Optional[Handler] = None
         self.on_connected: Optional[Handler] = None
         self.on_disconnected: Optional[Handler] = None
@@ -151,7 +151,7 @@ class AsyncWbsktClient:
         await self._send_or_buffer(_encode(protocol.STATE_REPORT, dict(values), sent_at=_now()))
 
     async def set_capabilities(self, capabilities: Iterable[Command]) -> None:
-        """Replace the commands the device accepts, and tell the server if connected."""
+        """Replace the commands the client accepts, and tell the server if connected."""
         self._capabilities = list(capabilities)
         ws = self._ws
         if self._connected and ws is not None:
@@ -196,7 +196,7 @@ class AsyncWbsktClient:
                         self._token = None
                     elif close_code == protocol.CLOSE_SUPERSEDED:
                         log.warning("wbskt: a newer connection replaced this one; if this repeats, "
-                                    "another device may be using these credentials")
+                                    "another client may be using these credentials")
                     delay = self._policy.first_delay(close_code)
                 except _Throttled as throttled:
                     log.warning("wbskt: %s", throttled)
@@ -279,7 +279,7 @@ class AsyncWbsktClient:
                 self._connected = True
         except ConnectionClosed:
             return
-        log.info("wbskt: connected as %s", self.device_name)
+        log.info("wbskt: connected as %s", self.client_name)
         try:
             await _call(self.on_connected)
         except Exception:
@@ -348,7 +348,7 @@ class AsyncWbsktClient:
     async def _register(self):
         if not self.policy_pin:
             raise RegistrationRequired("no stored credentials and no policy PIN to register with")
-        status, body, headers = await _post(f"{self.api_url}{protocol.REGISTER_PATH}", {"pin": self.policy_pin, "name": self.device_name})
+        status, body, headers = await _post(f"{self.api_url}{protocol.REGISTER_PATH}", {"pin": self.policy_pin, "name": self.client_name})
         if status == 429:
             raise _Throttled(_retry_after(headers))
         if status not in (200, 201) or not isinstance(body, dict) or not body.get("clientRefId"):
@@ -356,10 +356,10 @@ class AsyncWbsktClient:
             raise _LoginRefused(f"registration answered {status} {code or ''}".strip())
 
         client_ref_id, secret = str(body["clientRefId"]), str(body["secret"])
-        # Saved even when pending approval: registering again would make a second device.
+        # Saved even when pending approval: registering again would make a second client.
         self.storage.save(client_ref_id, secret)
         if body.get("status") == protocol.PENDING:
-            log.warning("wbskt: registered %s; waiting for approval in the console", self.device_name)
+            log.warning("wbskt: registered %s; waiting for approval in the console", self.client_name)
         return client_ref_id, secret
 
     def _capabilities_frame(self) -> str:
@@ -385,10 +385,10 @@ class WbsktClient:
     Handlers run on the client's thread, so keep them short or hand work off.
     """
 
-    def __init__(self, device_name: str, policy_pin: Optional[str] = None, **options: Any) -> None:
+    def __init__(self, client_name: str, policy_pin: Optional[str] = None, **options: Any) -> None:
         self._loop = asyncio.new_event_loop()
         self._thread: Optional[threading.Thread] = None
-        self._options = (device_name, policy_pin, options)
+        self._options = (client_name, policy_pin, options)
         self._client: Optional[AsyncWbsktClient] = None
         self.on_message: Optional[Callable[[Message], None]] = None
         self.on_connected: Optional[Callable[[], None]] = None
@@ -434,8 +434,8 @@ class WbsktClient:
         self._call(self._require_client().set_capabilities(capabilities))
 
     async def _create(self) -> AsyncWbsktClient:
-        device_name, policy_pin, options = self._options
-        client = AsyncWbsktClient(device_name, policy_pin, **options)
+        client_name, policy_pin, options = self._options
+        client = AsyncWbsktClient(client_name, policy_pin, **options)
         # Looked up on each call, so handlers can be set before or after start().
         client.on_message = lambda message: _call(self.on_message, message)
         client.on_connected = lambda: _call(self.on_connected)

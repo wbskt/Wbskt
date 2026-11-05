@@ -60,7 +60,7 @@ public sealed class LoginTests(ServicesFixture fixture)
 
         second.RefreshToken.Should().NotBe(first.RefreshToken);
 
-        // Multi-device: signing in on a second device must not invalidate the first.
+        // Multi-client: signing in on a second client must not invalidate the first.
         (await fixture.RefreshAsync(first.RefreshToken)).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 

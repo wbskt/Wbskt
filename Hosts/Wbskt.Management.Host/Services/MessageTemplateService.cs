@@ -118,19 +118,19 @@ internal sealed class MessageTemplateService : IMessageTemplateService
         }
 
         var messageType = request.MessageType?.Trim();
-        if (!DeviceMessageRules.IsValidType(messageType))
+        if (!ClientMessageRules.IsValidType(messageType))
         {
             return (Result.Failure(Error.Validation("TEMPLATE_TYPE_INVALID", "Message type must be 1-100 characters.")), null);
         }
 
-        if (DeviceMessageRules.IsReserved(messageType))
+        if (ClientMessageRules.IsReserved(messageType))
         {
             return (Result.Failure(Error.Validation("TEMPLATE_TYPE_RESERVED", "Message type is reserved for the platform protocol.")), null);
         }
 
-        if (string.IsNullOrWhiteSpace(request.PayloadJson) || request.PayloadJson.Length > DeviceMessageRules.MaxPayloadChars)
+        if (string.IsNullOrWhiteSpace(request.PayloadJson) || request.PayloadJson.Length > ClientMessageRules.MaxPayloadChars)
         {
-            return (Result.Failure(Error.Validation("TEMPLATE_PAYLOAD_INVALID", $"Payload must be 1-{DeviceMessageRules.MaxPayloadChars} characters.")), null);
+            return (Result.Failure(Error.Validation("TEMPLATE_PAYLOAD_INVALID", $"Payload must be 1-{ClientMessageRules.MaxPayloadChars} characters.")), null);
         }
 
         try

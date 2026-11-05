@@ -1,4 +1,4 @@
--- Replaces a policy's PIN, so a leaked one stops registering devices. Devices already registered
+-- Replaces a policy's PIN, so a leaked one stops registering clients. Clients already registered
 -- are unaffected: the PIN is only used to register. @Pin comes from the caller (RegistrationPins);
 -- a clash fails on UQ_RegistrationPolicies_Pin and the caller draws again, as for a new policy.
 CREATE PROCEDURE dbo.RegistrationPolicy_UpdatePin

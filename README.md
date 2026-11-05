@@ -1,6 +1,6 @@
 # Wbskt
 
-Wbskt is a real-time platform for connecting devices, scripts and apps. A client (an ESP32, a
+Wbskt is a real-time platform for connecting boards, scripts and apps. A client (an ESP32, a
 Raspberry Pi, a script, a web page) registers under a policy, holds a WebSocket open to Wbskt, and
 sends and receives JSON messages. Workflows react to those messages and to clients coming and
 going, and act on them: notify you, message other clients, call an integration.
@@ -111,5 +111,5 @@ research, and use by charities, schools and public institutions are all allowed.
 Commercial use is not covered by that license. If you want to use Wbskt commercially, contact
 the maintainers for a commercial license.
 
-The device SDKs and protocol types under [`Clients/`](Clients/) are the exception: they are
-[MIT licensed](Clients/LICENSE), so they can ship inside any device or product, commercial or not.
+The client SDKs and protocol types under [`Clients/`](Clients/) are the exception: they are
+[MIT licensed](Clients/LICENSE), so they can ship inside any client or product, commercial or not.

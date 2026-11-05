@@ -9,8 +9,8 @@ namespace Wbskt.Gateway.Core.Infrastructure;
 // Each entry is a cutoff: tokens issued before it are refused, with the same rules as
 // ClientTokenCutoffs in Redis so the two never disagree. A status revocation or a delete refuses
 // everything (cutoff at the end of time); a secret rotation raises the cutoff to the rotation, so the
-// device, once given the new secret, can sign in and connect straight away; a re-approval sets it to
-// that moment, so the device signs in afresh and a token from before it lost access, an old secret's
+// client, once given the new secret, can sign in and connect straight away; a re-approval sets it to
+// that moment, so the client signs in afresh and a token from before it lost access, an old secret's
 // included, stays refused.
 internal sealed class RevocationCache : IRevocationCache
 {

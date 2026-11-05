@@ -9,7 +9,7 @@ namespace Wbskt.Management.Host.Handlers;
 /// <summary>
 /// Repairs presence a live socket host lost: a client the database has on that host which connected
 /// before the host's snapshot but isn't in it is cleared and announced as disconnected, so offline
-/// triggers fire and sends queue instead of going to a host that no longer has the device.
+/// triggers fire and sends queue instead of going to a host that no longer has the client.
 /// </summary>
 public sealed class SocketHostPresenceSnapshotHandler : IConsumer<SocketHostPresenceSnapshot>
 {

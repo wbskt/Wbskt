@@ -13,11 +13,11 @@ internal static class E2EConfig
         Environment.GetEnvironmentVariable("E2E_MANAGEMENT_URL") ?? "https://localhost:7010";
 
     /// <summary>
-    /// A management host running as Host:Role Devices: device registration and login only, as the
-    /// devices container serves them in production. start-hosts.sh starts one on these ports.
+    /// A management host running as Host:Role ClientAuth: client registration and login only, as the
+    /// client-auth container serves them in production. start-hosts.sh starts one on these ports.
     /// </summary>
-    public static string DevicesBaseUrl =>
-        Environment.GetEnvironmentVariable("E2E_DEVICES_URL") ?? "https://localhost:7015";
+    public static string ClientAuthBaseUrl =>
+        Environment.GetEnvironmentVariable("E2E_CLIENT_AUTH_URL") ?? "https://localhost:7015";
 
     public static string SocketHttpBaseUrl =>
         Environment.GetEnvironmentVariable("E2E_SOCKET_URL") ?? "https://localhost:7020";
@@ -46,8 +46,8 @@ internal static class E2EConfig
 
     /// <summary>
     /// Opt-in: a shell command that restarts the socket host and returns once it is serving again,
-    /// e.g. <c>Tests/Wbskt.E2E.FeatureTests/start-hosts.sh gateway-ws</c>. The device-revocation
-    /// scenarios that need a restart skip without it; they drop every live device connection, so
+    /// e.g. <c>Tests/Wbskt.E2E.FeatureTests/start-hosts.sh gateway-ws</c>. The client-revocation
+    /// scenarios that need a restart skip without it; they drop every live client connection, so
     /// they are meant to run on their own.
     /// </summary>
     public static string? SocketRestartCommand =>

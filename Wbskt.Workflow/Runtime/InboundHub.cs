@@ -49,7 +49,7 @@ internal sealed class InboundHub : IInboundHub
             // both the volume and the access question: each row belongs to one workflow. An arrival
             // that matched nothing has no workspace to scope it to, so it is still only this log line.
             var result = await _triggerDispatcher.DispatchAsync(normalizedEvent, ct);
-            // Debug, not Information: this runs for every device message, and at 100 msg/s a line each
+            // Debug, not Information: this runs for every client message, and at 100 msg/s a line each
             // costs ~11 GB of Loki. The counter keeps the outcome totals visible instead.
             _logger.LogDebug("Dispatched inbound event {InboundEventId} with outcome {Outcome}", normalizedEvent.InboundEventId, result.Outcome);
             _metrics?.RecordInboundEvent(normalizedEvent.ChannelKind, result.Outcome.ToString());

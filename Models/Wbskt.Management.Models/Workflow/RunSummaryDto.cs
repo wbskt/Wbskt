@@ -22,7 +22,7 @@ public record RunSummaryDto(
     string? WorkflowName = null);
 
 /// <param name="Kind">The trigger node's kind, such as <c>trigger:client</c>; null when the version no longer has the node.</param>
-/// <param name="Summary">A short description from the trigger's settings, such as <c>Device greenhouse-1 sent temperature</c>.</param>
+/// <param name="Summary">A short description from the trigger's settings, such as <c>Client greenhouse-1 sent temperature</c>.</param>
 public record RunTriggerDto(Guid NodeId, string? Kind, string? Name, string? Summary);
 
 /// <param name="Name">The step's name in the run's version; null when the version no longer has the node.</param>

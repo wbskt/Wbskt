@@ -1,5 +1,5 @@
-"""Firmware updates (Docs/Device.Protocol.md §4.4), for an SDK that takes them. A harness that does
-turns them on when WBSKT_OTA is set; every scenario here is skipped for one whose device does not then
+"""Firmware updates (Docs/Client.Protocol.md §4.4), for an SDK that takes them. A harness that does
+turns them on when WBSKT_OTA is set; every scenario here is skipped for one whose client does not then
 list "ota" under "system" in its capabilities.
 """
 
@@ -13,7 +13,7 @@ from fake_wbskt import CLOSE_UPDATING
 
 RECONNECT = 25.0
 
-# Settled by the first scenario to start a device, so an SDK without updates pays for one start.
+# Settled by the first scenario to start a client, so an SDK without updates pays for one start.
 _takes_ota: Dict[str, bool] = {}
 
 DIGEST = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
@@ -42,17 +42,17 @@ async def next_ota_status(socket_server, timeout: float = RECONNECT) -> Dict[str
     return (await socket_server.next_of("sys.ota.status", timeout=timeout))["payload"]
 
 
-async def start_with_ota(device, socket_server, monkeypatch, version: str = "1.0.0"):
-    harness, _ = await start_with_ota_capabilities(device, socket_server, monkeypatch, version)
+async def start_with_ota(client, socket_server, monkeypatch, version: str = "1.0.0"):
+    harness, _ = await start_with_ota_capabilities(client, socket_server, monkeypatch, version)
     return harness
 
 
-async def start_with_ota_capabilities(device, socket_server, monkeypatch, version: str = "1.0.0"):
+async def start_with_ota_capabilities(client, socket_server, monkeypatch, version: str = "1.0.0"):
     harness_command = os.environ.get("WBSKT_HARNESS", "")
     if _takes_ota.get(harness_command) is False:
         pytest.skip("this SDK does not take firmware updates")
     monkeypatch.setenv("WBSKT_OTA", version)
-    harness = await device()
+    harness = await client()
     await harness.expect("connected")
     capabilities = await socket_server.next_of("capabilities")
     _takes_ota[harness_command] = "ota" in system_of(capabilities)
@@ -61,18 +61,18 @@ async def start_with_ota_capabilities(device, socket_server, monkeypatch, versio
     return harness, capabilities
 
 
-async def test_lists_ota_and_reports_the_firmware_version(api, socket_server, device, monkeypatch):
-    _, capabilities = await start_with_ota_capabilities(device, socket_server, monkeypatch)
+async def test_lists_ota_and_reports_the_firmware_version(api, socket_server, client, monkeypatch):
+    _, capabilities = await start_with_ota_capabilities(client, socket_server, monkeypatch)
 
     assert firmware_version_of(capabilities) == "1.0.0"
 
 
-async def test_rejects_an_update_while_ota_is_off(api, socket_server, device, monkeypatch):
-    probe = await start_with_ota(device, socket_server, monkeypatch)
+async def test_rejects_an_update_while_ota_is_off(api, socket_server, client, monkeypatch):
+    probe = await start_with_ota(client, socket_server, monkeypatch)
     await probe.stop()
     monkeypatch.delenv("WBSKT_OTA")
 
-    harness = await device()
+    harness = await client()
     await harness.expect("connected")
     capabilities = await socket_server.next_of("capabilities")
     assert "ota" not in system_of(capabilities)
@@ -87,8 +87,8 @@ async def test_rejects_an_update_while_ota_is_off(api, socket_server, device, mo
     assert status.get("error")
 
 
-async def test_refuses_an_expired_update_and_starts_nothing(api, socket_server, device, monkeypatch):
-    await start_with_ota(device, socket_server, monkeypatch)
+async def test_refuses_an_expired_update_and_starts_nothing(api, socket_server, client, monkeypatch):
+    await start_with_ota(client, socket_server, monkeypatch)
 
     await socket_server.send(0, ota_update("o2", expiresAt="2020-01-01T00:00:00Z"))
     ack = await socket_server.next_of("sys.ack")
@@ -104,8 +104,8 @@ async def test_refuses_an_expired_update_and_starts_nothing(api, socket_server, 
     assert "sys.ota.status" not in seen
 
 
-async def test_rejects_an_update_over_plain_http(api, socket_server, device, monkeypatch):
-    await start_with_ota(device, socket_server, monkeypatch)
+async def test_rejects_an_update_over_plain_http(api, socket_server, client, monkeypatch):
+    await start_with_ota(client, socket_server, monkeypatch)
 
     await socket_server.send(0, ota_update("o3", url="http://firmware.example/fw.bin"))
     status = await next_ota_status(socket_server)
@@ -115,25 +115,25 @@ async def test_rejects_an_update_over_plain_http(api, socket_server, device, mon
     assert status.get("error")
 
 
-async def test_reports_accepted_downloading_and_installed_from_the_new_firmware(api, socket_server, device, monkeypatch):
+async def test_reports_accepted_downloading_and_installed_from_the_new_firmware(api, socket_server, client, monkeypatch):
     # WBSKT_OTA_INSTALL=ok has the harness install whatever it is sent and exit as if restarting.
     monkeypatch.setenv("WBSKT_OTA_INSTALL", "ok")
-    old = await start_with_ota(device, socket_server, monkeypatch)
+    old = await start_with_ota(client, socket_server, monkeypatch)
 
     await socket_server.send(0, ota_update("o4"))
     accepted = await next_ota_status(socket_server)
     await old.expect("restart")
-    # A device that closed its connection to download said why, so the server shows it as updating.
+    # A client that closed its connection to download said why, so the server shows it as updating.
     # One that kept it open until it restarted just drops it (1006).
     for _ in range(100):
-        if 0 in socket_server.device_close_codes:
+        if 0 in socket_server.client_close_codes:
             break
         await asyncio.sleep(0.05)
-    assert socket_server.device_close_codes.get(0) in (CLOSE_UPDATING, 1006)
+    assert socket_server.client_close_codes.get(0) in (CLOSE_UPDATING, 1006)
 
-    # A device may close the socket to download, so progress can arrive late or not at all.
+    # A client may close the socket to download, so progress can arrive late or not at all.
     monkeypatch.setenv("WBSKT_OTA", "1.1.0")
-    new = await device()
+    new = await client()
     await new.expect("connected", timeout=RECONNECT)
     # The new firmware's capabilities come first on its connection, before its statuses.
     capabilities = await socket_server.next_of("capabilities", timeout=RECONNECT)

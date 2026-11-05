@@ -47,7 +47,7 @@ public sealed class BookmarkResumerTests
     [Fact]
     public async Task MatchInbound_writes_no_claim_when_nothing_listens()
     {
-        // Arrange: no bookmark and no trigger registration, as for most device messages.
+        // Arrange: no bookmark and no trigger registration, as for most client messages.
         var bookmarkProvider = new RecordingBookmarkProvider();
         var idempotency = RecordingIdempotencyKeyProvider.NewClaim();
         var resumer = new BookmarkResumer(bookmarkProvider, idempotency, new RecordingBranchProvider(), new RecordingRunDispatcher());

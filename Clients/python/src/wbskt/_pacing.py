@@ -1,4 +1,4 @@
-"""A token bucket that paces the device's sends below the gateway's message budget."""
+"""A token bucket that paces the client's sends below the gateway's message budget."""
 
 import asyncio
 import time

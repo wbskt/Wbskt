@@ -56,7 +56,7 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
     /// <summary>The answer when a registration or an approval would take the workspace past its ceiling.</summary>
     internal static Error WorkspaceLimitReached(int maxPerWorkspace) => Error.Conflict(
         "WORKSPACE_CLIENT_LIMIT_REACHED",
-        $"This workspace can have at most {maxPerWorkspace} devices. Remove one it no longer uses.");
+        $"This workspace can have at most {maxPerWorkspace} clients. Remove one it no longer uses.");
 
     public async Task<Result<ClientRegistrationResponse>> InitiateRegistrationAsync(ClientRegistrationRequest request, CancellationToken cancellationToken = default)
     {

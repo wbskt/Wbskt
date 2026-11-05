@@ -30,7 +30,7 @@ var tasks = Enumerable.Range(0, clientCount).Select(i => Task.Run(async () =>
     var config = new ClientConfig(
         BaseApiUrl: baseApiUrl,
         BaseSocketUrl: baseSocketUrl,
-        DeviceName: clientName,
+        ClientName: clientName,
         PolicyPin: policyPin
     );
 

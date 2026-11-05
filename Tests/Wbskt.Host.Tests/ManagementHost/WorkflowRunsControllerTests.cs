@@ -229,7 +229,7 @@ public sealed class WorkflowRunsControllerTests
 
         var runs = response.Value.Items.ToList();
         Assert.All(runs, r => Assert.Equal("Greenhouse", r.WorkflowName));
-        Assert.All(runs, r => Assert.Equal(new RunTriggerDto(ValidWorkflowBuilder.Trigger1Id, "trigger:client", "Trigger", "Device dev-1 sent telemetry"), r.Trigger));
+        Assert.All(runs, r => Assert.Equal(new RunTriggerDto(ValidWorkflowBuilder.Trigger1Id, "trigger:client", "Trigger", "Client dev-1 sent telemetry"), r.Trigger));
         Assert.Equal(new RunStepDto(ValidWorkflowBuilder.Logic1Id, "Gate", "control:logic", "WEBHOOK_HTTP_ERROR"), runs[0].FailedAt);
         Assert.Equal(2.5m, runs[0].CreditsUsed);
         Assert.Equal("Gate", runs[1].EndedAt?.Name);

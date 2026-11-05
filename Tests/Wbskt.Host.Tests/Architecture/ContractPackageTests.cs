@@ -13,7 +13,7 @@ namespace Wbskt.Host.Tests.Architecture;
 /// </summary>
 /// <remarks>
 /// A contract package is an assembly whose name ends in <c>.Models</c>, or <c>Wbskt.Protocol</c>, the
-/// device protocol the device-facing routes speak. BCL types (<c>JsonElement</c>, <c>string</c>, ...)
+/// client protocol the client-facing routes speak. BCL types (<c>JsonElement</c>, <c>string</c>, ...)
 /// are allowed as they are. Collections, arrays, nullables and generic contract wrappers such as
 /// <c>Page&lt;T&gt;</c> are unwrapped, and every type they carry is checked. Routes under
 /// <see cref="InternalRoutes.Prefix"/> are checked too: their contracts live in the packages as well.
@@ -23,7 +23,7 @@ public sealed class ContractPackageTests
     private static readonly Assembly AuthHost = typeof(global::Wbskt.Auth.Host.Program).Assembly;
     private static readonly Assembly ManagementHost = typeof(global::Wbskt.Management.Host.Program).Assembly;
 
-    private const string DeviceProtocol = "Wbskt.Protocol";
+    private const string ClientProtocol = "Wbskt.Protocol";
 
     [Fact]
     public void Every_public_action_returns_and_binds_types_from_a_contract_package()
@@ -64,7 +64,7 @@ public sealed class ContractPackageTests
         Assert.True(
             offending.Count == 0,
             "Public request and response types must live in a contract package (an assembly named *.Models, or "
-            + $"{DeviceProtocol}), not in a host. Move each of these into Wbskt.Auth.Models or Wbskt.Management.Models:"
+            + $"{ClientProtocol}), not in a host. Move each of these into Wbskt.Auth.Models or Wbskt.Management.Models:"
             + Environment.NewLine + string.Join(Environment.NewLine, offending.Distinct().Order(StringComparer.Ordinal)));
     }
 
@@ -72,7 +72,7 @@ public sealed class ContractPackageTests
     {
         string assembly = type.Assembly.GetName().Name ?? string.Empty;
         return assembly.EndsWith(".Models", StringComparison.Ordinal)
-               || assembly == DeviceProtocol
+               || assembly == ClientProtocol
                || IsBcl(type);
     }
 

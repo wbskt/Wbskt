@@ -14,7 +14,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Timeouts;
 /// Durable-delay round-trip — proves the bookmark "timer" wake path end-to-end.
 ///
 /// Topology:
-///   DeviceTrigger (event="telemetry") ─► Delay(4s) ─► action:clientMessage (OpenVent)
+///   ClientTrigger (event="telemetry") ─► Delay(4s) ─► action:clientMessage (OpenVent)
 ///
 /// When the telemetry arrives the run starts, reaches the Delay node, parks itself with a
 /// timer bookmark, and returns. The BookmarkScheduler (polling ~1s) later leases the due
@@ -38,10 +38,10 @@ public sealed class DelayWorkflowE2ETests(ServicesFixture fixture)
         var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
 
-        var deviceName = $"e2e-delay-{Guid.NewGuid():N}";
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, deviceName);
+        var clientName = $"e2e-delay-{Guid.NewGuid():N}";
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, clientName);
 
-        // ── 2. Publish the DeviceTrigger → Delay → action:clientMessage workflow ───
+        // ── 2. Publish the ClientTrigger → Delay → action:clientMessage workflow ───
         var workflowRefId = Guid.NewGuid();
         var definition = BuildDelayDefinition(workflowRefId, clientRefId.ToString());
 
@@ -62,7 +62,7 @@ public sealed class DelayWorkflowE2ETests(ServicesFixture fixture)
         var clientConfig = new ClientConfig(
             BaseApiUrl: E2EConfig.ManagementBaseUrl,
             BaseSocketUrl: E2EConfig.SocketWsBaseUrl,
-            DeviceName: deviceName,
+            ClientName: clientName,
             PolicyPin: null);
 
         var commandTcs = new TaskCompletionSource<(string Action, string? Payload)>(

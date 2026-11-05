@@ -1,26 +1,26 @@
 # SDK conformance suite
 
-Checks a device SDK against the device protocol: the
-[message model](../../Docs/Device.Protocol.md) (checklist in §6) and the
-[WebSocket binding](../../Docs/Device.Protocol.WebSocket.md) (checklist in §5). Every scenario checks
+Checks a client SDK against the client protocol: the
+[message model](../../Docs/Client.Protocol.md) (checklist in §6) and the
+[WebSocket binding](../../Docs/Client.Protocol.WebSocket.md) (checklist in §5). Every scenario checks
 an item on one of those two checklists:
 
 | Checklist | Scenarios |
 |---|---|
 | Message model | registering once, pending approval, registering again, reusing the token, `Retry-After`, `capabilities` first, ping and pong, command acks, expired commands, plain messages, a throwing handler and malformed frames, `sentAt` and the offline backlog, pacing a large backlog under the message budget, reserved types |
 | Firmware updates (optional) | listing `ota`, rejecting while off, an expired update, plain `http`, accepted → downloading → installed |
-| WebSocket binding | the subprotocol and bearer token, renewing after a 401 on the upgrade, keeping the token while the gateway is down or the device is revoked (403 `CLIENT_REVOKED`), reconnecting after each close code (1000, 1001, 1008, 1009, 4001–4003), a second connection superseding the first |
+| WebSocket binding | the subprotocol and bearer token, renewing after a 401 on the upgrade, keeping the token while the gateway is down or the client is revoked (403 `CLIENT_REVOKED`), reconnecting after each close code (1000, 1001, 1008, 1009, 4001–4003), a second connection superseding the first |
 
 A future binding (MQTT, HTTPS) adds its own checklist and its own scenarios.
 
 The suite fakes the two HTTP endpoints and the WebSocket gateway (`fake_wbskt.py`), so nothing else
 has to run, and each scenario takes a few seconds. The fake can misbehave on cue: refuse a token,
-throttle a login, forget a device, close or refuse the socket. It also does what the real gateway
+throttle a login, forget a client, close or refuse the socket. It also does what the real gateway
 does unprompted:
 
-- refuses a revoked device's token with 403 `CLIENT_REVOKED`, and an upgrade that offers only unknown
+- refuses a revoked client's token with 403 `CLIENT_REVOKED`, and an upgrade that offers only unknown
   subprotocols with 400 `SOCKET_PROTOCOL_UNSUPPORTED`, as Problem Details;
-- closes a device's older connection with 4001 when it connects again;
+- closes a client's older connection with 4001 when it connects again;
 - enforces the default message budget (10 a second, burst 100, closed with 4003 after 500 drops in a
   row) and counts what it dropped.
 
@@ -53,7 +53,7 @@ settings from the environment:
 |---|---|
 | `WBSKT_API_URL` | Base URL of the fake API (`http://127.0.0.1:<port>`). |
 | `WBSKT_SOCKET_URL` | Base URL of the fake socket host (`ws://127.0.0.1:<port>`); the SDK adds `/ws`. |
-| `WBSKT_DEVICE_NAME` | The device name to register with. |
+| `WBSKT_CLIENT_NAME` | The client name to register with. |
 | `WBSKT_POLICY_PIN` | The policy PIN, or empty. |
 | `WBSKT_STORAGE` | A file for the credentials. The same file is used across restarts of one scenario. |
 | `WBSKT_COMMANDS` | The commands to declare, as the JSON array of the `capabilities` message's `capabilities`. |
@@ -80,7 +80,7 @@ may log there.
 | `{"event":"rejected","type":"…","reason":"…"}` | The SDK refused to send the message, for example for a reserved type. |
 
 An SDK that takes firmware updates (protocol §4.4) is also run through `test_ota.py`; for any other,
-those scenarios are skipped, since its device doesn't list `ota` in its capabilities. Its harness
+those scenarios are skipped, since its client doesn't list `ota` in its capabilities. Its harness
 reads two more variables:
 
 | Variable | |

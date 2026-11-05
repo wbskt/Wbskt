@@ -5,7 +5,7 @@ namespace Wbskt.Infrastructure.Security;
 
 /// <summary>
 /// The one hash for high-entropy secrets that are stored only as a digest: the auth host's mailed
-/// tokens and refresh tokens, and the management host's device secrets. A second copy that drifted
+/// tokens and refresh tokens, and the management host's client secrets. A second copy that drifted
 /// from this one would make every stored digest unmatchable at once.
 /// </summary>
 public static class SecretHash

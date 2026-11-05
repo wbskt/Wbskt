@@ -21,7 +21,7 @@ namespace Wbskt.Host.Tests.Runtime;
 public sealed class InboundEventToRunStartE2ETests
 {
     [Fact]
-    public async Task HandleAsync_device_event_starts_run_and_completes_branch_loop()
+    public async Task HandleAsync_client_event_starts_run_and_completes_branch_loop()
     {
         // Arrange
         var definition = CreateDefinition();

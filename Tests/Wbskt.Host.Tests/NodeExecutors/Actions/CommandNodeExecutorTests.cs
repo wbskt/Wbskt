@@ -16,7 +16,7 @@ public sealed class CommandNodeExecutorTests
     [Fact]
     public async Task ExecuteAsync_publishes_command_and_returns_Continue()
     {
-        var publisher = new Mock<IDeviceCommandPublisher>();
+        var publisher = new Mock<IClientCommandPublisher>();
         publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
@@ -43,7 +43,7 @@ public sealed class CommandNodeExecutorTests
     [Fact]
     public async Task ExecuteAsync_returns_Continue_with_empty_patch()
     {
-        var publisher = new Mock<IDeviceCommandPublisher>();
+        var publisher = new Mock<IClientCommandPublisher>();
         publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
@@ -62,7 +62,7 @@ public sealed class CommandNodeExecutorTests
     [Fact]
     public async Task ExecuteAsync_returns_Fail_with_CLIENT_MESSAGE_NO_TARGET_when_ClientRef_is_not_a_guid()
     {
-        var publisher = new Mock<IDeviceCommandPublisher>();
+        var publisher = new Mock<IClientCommandPublisher>();
         var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>(), TestTemplates.Create());
         NodeContext ctx = BuildContext("client-1", "OpenVent", null);
 
@@ -77,7 +77,7 @@ public sealed class CommandNodeExecutorTests
     [Fact]
     public async Task ExecuteAsync_returns_Fail_retryable_when_publisher_throws()
     {
-        var publisher = new Mock<IDeviceCommandPublisher>();
+        var publisher = new Mock<IClientCommandPublisher>();
         var exception = new InvalidOperationException("broker down");
         publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(exception);
@@ -97,7 +97,7 @@ public sealed class CommandNodeExecutorTests
     [Fact]
     public async Task Awaiting_the_ack_parks_on_the_command_and_sends_it_only_once_parked()
     {
-        var publisher = new Mock<IDeviceCommandPublisher>();
+        var publisher = new Mock<IClientCommandPublisher>();
         var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>(), TestTemplates.Create());
         NodeContext ctx = BuildContext(ClientRefId.ToString(), "OpenVent", null, AwaitAck());
 
@@ -118,8 +118,8 @@ public sealed class CommandNodeExecutorTests
     public async Task A_command_that_cannot_be_sent_wakes_its_wait_as_failed_at_once()
     {
         // Otherwise the step would sit out its whole ack timeout and leave by "timeout", as if the
-        // device had not answered.
-        var publisher = new Mock<IDeviceCommandPublisher>();
+        // client had not answered.
+        var publisher = new Mock<IClientCommandPublisher>();
         var sendFailure = new InvalidOperationException("broker down");
         publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(sendFailure);
@@ -146,7 +146,7 @@ public sealed class CommandNodeExecutorTests
     [InlineData("failed", "failed")]
     public async Task A_wake_for_the_awaited_command_leaves_by_its_outcome_and_clears_the_wait(string outcome, string expectedPort)
     {
-        var executor = new CommandNodeExecutor(Mock.Of<IDeviceCommandPublisher>(), Mock.Of<IBookmarkResumer>(), TestTemplates.Create());
+        var executor = new CommandNodeExecutor(Mock.Of<IClientCommandPublisher>(), Mock.Of<IBookmarkResumer>(), TestTemplates.Create());
         Guid commandId = Guid.NewGuid();
         NodeContext ctx = BuildContext(ClientRefId.ToString(), "OpenVent", null, AwaitAck(), new Dictionary<string, JsonElement>
         {
@@ -166,7 +166,7 @@ public sealed class CommandNodeExecutorTests
     public async Task A_wake_left_by_another_wait_is_not_taken_for_this_commands_answer()
     {
         // A step revisited in a loop, or one after an Await Signal, still finds the old "__wake".
-        var executor = new CommandNodeExecutor(Mock.Of<IDeviceCommandPublisher>(), Mock.Of<IBookmarkResumer>(), TestTemplates.Create());
+        var executor = new CommandNodeExecutor(Mock.Of<IClientCommandPublisher>(), Mock.Of<IBookmarkResumer>(), TestTemplates.Create());
         NodeContext ctx = BuildContext(ClientRefId.ToString(), "OpenVent", null, AwaitAck(), new Dictionary<string, JsonElement>
         {
             ["__command_awaiting"] = JsonSerializer.SerializeToElement(Guid.NewGuid()),
@@ -182,7 +182,7 @@ public sealed class CommandNodeExecutorTests
     public async Task A_wake_tagged_for_another_node_is_cleared_and_the_step_waits_on_without_sending_again()
     {
         // It used to be taken for a fresh visit: the step parked on a new command and sent it again.
-        var publisher = new Mock<IDeviceCommandPublisher>();
+        var publisher = new Mock<IClientCommandPublisher>();
         var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>(), TestTemplates.Create());
         Guid commandId = Guid.NewGuid();
         NodeContext ctx = BuildContext(ClientRefId.ToString(), "OpenVent", null, AwaitAck(), new Dictionary<string, JsonElement>

@@ -12,8 +12,8 @@ public enum EventSource : byte
     /// <summary>A person's token used outside the console: a script, a CLI, an integration.</summary>
     Api = 2,
 
-    /// <summary>A device: its messages, connections and registrations.</summary>
-    Device = 3,
+    /// <summary>A client: its messages, connections and registrations.</summary>
+    Client = 3,
 
     /// <summary>A workflow run, such as a command a run sent.</summary>
     Workflow = 4,

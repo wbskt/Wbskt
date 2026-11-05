@@ -2,7 +2,7 @@ name: Nightly stress
 
 # The load the pull-request gate (build-images.yml) leaves out because it takes minutes: the
 # thousand-run ConcurrencyStressE2ETests scenario and Tests/Wbskt.LoadTester holding a few hundred
-# devices on the WebSocket gateway. Same hosts, started from source as Development, against the same
+# clients on the WebSocket gateway. Same hosts, started from source as Development, against the same
 # services as the e2e job in build-images.yml; the setup is copied from there, so keep the two in
 # step. Nothing here gates a merge or an image.
 
@@ -117,9 +117,9 @@ jobs:
             exit 1
           fi
 
-      # 200 devices register under a fresh policy, connect, and send telemetry for five minutes. The
+      # 200 clients register under a fresh policy, connect, and send telemetry for five minutes. The
       # load tester runs until stopped, so `timeout` ends it; exit 124 is that, and is the expected
-      # outcome. It fails on a device that could not start, or on a host that went down under it.
+      # outcome. It fails on a client that could not start, or on a host that went down under it.
       - name: Load tester
         if: ${{ !cancelled() }}
         timeout-minutes: 12
@@ -150,12 +150,12 @@ jobs:
             exit 1
           fi
           if ! grep -q 'Client spin-up process finished' load-output.txt; then
-            echo "::error::the load tester did not finish starting its devices"
+            echo "::error::the load tester did not finish starting its clients"
             exit 1
           fi
           failed=$(grep -c 'Failed to start client' load-output.txt || true)
           if [[ "$failed" -gt 0 ]]; then
-            echo "::error::${failed} load-tester devices failed to start"
+            echo "::error::${failed} load-tester clients failed to start"
             exit 1
           fi
           for port in 5000 5010 5020 5030; do

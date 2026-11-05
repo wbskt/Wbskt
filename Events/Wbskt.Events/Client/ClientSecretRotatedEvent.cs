@@ -6,7 +6,7 @@ namespace Wbskt.Events.Client;
 
 /// <summary>
 /// A client's secret was replaced. Socket hosts close its connection and refuse tokens issued
-/// before <see cref="RotatedAt"/>, so only a device holding the new secret gets back in. Never
+/// before <see cref="RotatedAt"/>, so only a client holding the new secret gets back in. Never
 /// carries the secret.
 /// </summary>
 [EventCriticality(EventCriticality.Warning)]

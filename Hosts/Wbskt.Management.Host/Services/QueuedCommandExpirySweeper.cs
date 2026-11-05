@@ -1,11 +1,11 @@
 using Wbskt.Infrastructure.Hosting;
-using Wbskt.Infrastructure.Devices;
+using Wbskt.Infrastructure.Clients;
 
 namespace Wbskt.Management.Host.Services;
 
 /// <summary>
-/// Ends the commands whose expiry passed while their device stayed offline, each with a failed command
-/// event ("expired before the device came back"), so the console stops showing them as waiting and a
+/// Ends the commands whose expiry passed while their client stayed offline, each with a failed command
+/// event ("expired before the client came back"), so the console stops showing them as waiting and a
 /// workflow step waiting on one leaves by its failure path.
 /// </summary>
 public sealed class QueuedCommandExpirySweeper : PeriodicWorker
@@ -23,7 +23,7 @@ public sealed class QueuedCommandExpirySweeper : PeriodicWorker
 
     protected override async Task RunOnceAsync(IServiceProvider services, CancellationToken ct)
     {
-        var queue = services.GetRequiredService<DeviceCommandQueue>();
+        var queue = services.GetRequiredService<ClientCommandQueue>();
 
         // A full batch means there may be more; keep going rather than leave them for the next tick.
         int expired;
@@ -37,7 +37,7 @@ public sealed class QueuedCommandExpirySweeper : PeriodicWorker
 
         if (total > 0)
         {
-            Logger.LogInformation("Expired {Count} queued commands whose devices did not come back in time.", total);
+            Logger.LogInformation("Expired {Count} queued commands whose clients did not come back in time.", total);
         }
     }
 }

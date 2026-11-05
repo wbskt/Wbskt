@@ -6,11 +6,11 @@ using Wbskt.Protocol;
 namespace Wbskt.Api.Client;
 
 /// <summary>
-/// The management host's API: registration policies, devices (registration, login, clients, tags,
+/// The management host's API: registration policies, clients (registration, login, clients, tags,
 /// readings, commands), message templates, the event log, integrations, workflows and their runs, and
 /// the public callbacks. Each method sends the request, throws <see cref="ApiException"/> on a failure
 /// status and returns the contract type from <c>Wbskt.Management.Models</c> (or <c>Wbskt.Protocol</c>
-/// for the device calls); its <c>RawAsync</c> twin returns the response untouched.
+/// for the client calls); its <c>RawAsync</c> twin returns the response untouched.
 /// </summary>
 public sealed class WbsktManagementClient : WbsktApiClient
 {
@@ -70,9 +70,9 @@ public sealed class WbsktManagementClient : WbsktApiClient
     public Task<HttpResponseMessage> RotatePolicyPinRawAsync(Guid workspaceRef, Guid policyRef, CancellationToken cancellationToken = default) =>
         SendRawAsync(HttpMethod.Post, $"/api/v1/workspaces/{workspaceRef}/registration-policies/{policyRef}/rotate-pin", null, cancellationToken);
 
-    // ── Device registration ───────────────────────────────────────────────────────────────────────
+    // ── Client registration ───────────────────────────────────────────────────────────────────────
 
-    /// <summary>Registers a device under a policy with its PIN. Anonymous; the response carries the device's secret, the only time it is shown. <c>POST /api/client-registrations/initiate</c>.</summary>
+    /// <summary>Registers a client under a policy with its PIN. Anonymous; the response carries the client's secret, the only time it is shown. <c>POST /api/client-registrations/initiate</c>.</summary>
     public Task<ClientRegistrationResponse> RegisterClientAsync(ClientRegistrationRequest request, CancellationToken cancellationToken = default) =>
         ReceiveAsync<ClientRegistrationResponse>(RegisterClientRawAsync(request, cancellationToken), cancellationToken);
 
@@ -80,7 +80,7 @@ public sealed class WbsktManagementClient : WbsktApiClient
     public Task<HttpResponseMessage> RegisterClientRawAsync(ClientRegistrationRequest request, CancellationToken cancellationToken = default) =>
         SendRawAsync(HttpMethod.Post, "/api/v1/client-registrations/initiate", request, cancellationToken);
 
-    /// <summary>Exchanges a device's reference and secret for the access token the socket host takes. <c>POST /api/client-auth/login</c>.</summary>
+    /// <summary>Exchanges a client's reference and secret for the access token the socket host takes. <c>POST /api/client-auth/login</c>.</summary>
     public Task<ClientLoginResponse> LoginClientAsync(ClientLoginRequest request, CancellationToken cancellationToken = default) =>
         ReceiveAsync<ClientLoginResponse>(LoginClientRawAsync(request, cancellationToken), cancellationToken);
 
@@ -247,12 +247,12 @@ public sealed class WbsktManagementClient : WbsktApiClient
         SendRawAsync(HttpMethod.Get, $"/api/v1/workspaces/{workspaceRef}/event-logs{SearchQuery(search, ("cursor", cursor), ("limit", limit))}", null, cancellationToken);
 
     /// <summary>How many entries a window of the event log holds, by group, event, person and source. <c>GET /api/workspaces/{workspaceRef}/event-logs/summary</c>.</summary>
-    public Task<EventLogSummaryResponse> GetEventLogSummaryAsync(Guid workspaceRef, DateTimeOffset? from = null, DateTimeOffset? to = null, bool excludeDeviceTraffic = false, CancellationToken cancellationToken = default) =>
-        ReceiveAsync<EventLogSummaryResponse>(GetEventLogSummaryRawAsync(workspaceRef, from, to, excludeDeviceTraffic, cancellationToken), cancellationToken);
+    public Task<EventLogSummaryResponse> GetEventLogSummaryAsync(Guid workspaceRef, DateTimeOffset? from = null, DateTimeOffset? to = null, bool excludeClientTraffic = false, CancellationToken cancellationToken = default) =>
+        ReceiveAsync<EventLogSummaryResponse>(GetEventLogSummaryRawAsync(workspaceRef, from, to, excludeClientTraffic, cancellationToken), cancellationToken);
 
     /// <summary><see cref="GetEventLogSummaryAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
-    public Task<HttpResponseMessage> GetEventLogSummaryRawAsync(Guid workspaceRef, DateTimeOffset? from = null, DateTimeOffset? to = null, bool excludeDeviceTraffic = false, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Get, $"/api/v1/workspaces/{workspaceRef}/event-logs/summary{Query(("from", from), ("to", to), ("traffic", excludeDeviceTraffic ? "exclude" : null))}", null, cancellationToken);
+    public Task<HttpResponseMessage> GetEventLogSummaryRawAsync(Guid workspaceRef, DateTimeOffset? from = null, DateTimeOffset? to = null, bool excludeClientTraffic = false, CancellationToken cancellationToken = default) =>
+        SendRawAsync(HttpMethod.Get, $"/api/v1/workspaces/{workspaceRef}/event-logs/summary{Query(("from", from), ("to", to), ("traffic", excludeClientTraffic ? "exclude" : null))}", null, cancellationToken);
 
     /// <summary>The event log narrowed by <paramref name="search"/>, as CSV. <c>GET /api/workspaces/{workspaceRef}/event-logs/csv</c>.</summary>
     public Task<string> GetEventLogsCsvAsync(Guid workspaceRef, EventLogSearch? search = null, CancellationToken cancellationToken = default) =>

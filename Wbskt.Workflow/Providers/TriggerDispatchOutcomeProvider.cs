@@ -94,7 +94,7 @@ internal sealed class TriggerDispatchOutcomeProvider : BaseSqlProvider, ITrigger
         );
     }
 
-    // The columns are bounded; a longer value (a device's free-form message type) is cut rather than
+    // The columns are bounded; a longer value (a client's free-form message type) is cut rather than
     // failing the record.
     private static string? Truncate(string? value, int max) => value is { Length: var length } && length > max ? value[..max] : value;
 

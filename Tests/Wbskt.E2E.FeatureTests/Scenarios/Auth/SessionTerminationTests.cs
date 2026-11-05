@@ -87,13 +87,13 @@ public sealed class SessionTerminationTests(ServicesFixture fixture)
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
         var user = await fixture.CreateUserAsync();
-        var deviceOne = await fixture.LoginAsync(user.Email, user.Password);
-        var deviceTwo = await fixture.LoginAsync(user.Email, user.Password);
+        var clientOne = await fixture.LoginAsync(user.Email, user.Password);
+        var clientTwo = await fixture.LoginAsync(user.Email, user.Password);
 
-        await fixture.LogoutAsync(deviceOne.RefreshToken);
+        await fixture.LogoutAsync(clientOne.RefreshToken);
 
-        (await fixture.RefreshAsync(deviceTwo.RefreshToken)).StatusCode
-            .Should().Be(HttpStatusCode.OK, "signing out of one device must not sign out the others");
+        (await fixture.RefreshAsync(clientTwo.RefreshToken)).StatusCode
+            .Should().Be(HttpStatusCode.OK, "signing out of one client must not sign out the others");
     }
 
     [SkippableFact]
@@ -115,14 +115,14 @@ public sealed class SessionTerminationTests(ServicesFixture fixture)
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
         var user = await fixture.CreateUserAsync();
-        var deviceOne = await fixture.LoginAsync(user.Email, user.Password);
-        var deviceTwo = await fixture.LoginAsync(user.Email, user.Password);
-        var deviceThree = await fixture.LoginAsync(user.Email, user.Password);
+        var clientOne = await fixture.LoginAsync(user.Email, user.Password);
+        var clientTwo = await fixture.LoginAsync(user.Email, user.Password);
+        var clientThree = await fixture.LoginAsync(user.Email, user.Password);
 
-        (await fixture.LogoutAllAsync(deviceOne.AccessToken)).StatusCode
+        (await fixture.LogoutAllAsync(clientOne.AccessToken)).StatusCode
             .Should().Be(HttpStatusCode.NoContent);
 
-        foreach (var session in new[] { deviceOne, deviceTwo, deviceThree })
+        foreach (var session in new[] { clientOne, clientTwo, clientThree })
         {
             (await fixture.RefreshAsync(session.RefreshToken)).StatusCode
                 .Should().Be(HttpStatusCode.Unauthorized);
@@ -182,7 +182,7 @@ public sealed class SessionTerminationTests(ServicesFixture fixture)
         await fixture.LogoutAllAsync(session.AccessToken);
 
         // "Sign out everywhere" is a containment measure only if it reaches the access tokens
-        // already handed out - including the one that asked, and one from another device.
+        // already handed out - including the one that asked, and one from another client.
         foreach (var token in new[] { session.AccessToken, other.AccessToken })
         {
             var response = await fixture.Auth.As(token).GetWorkspacesRawAsync();

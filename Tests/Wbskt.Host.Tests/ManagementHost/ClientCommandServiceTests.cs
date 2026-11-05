@@ -10,7 +10,7 @@ using Wbskt.Management.Host.Telemetry;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure;
-using Wbskt.Infrastructure.Devices;
+using Wbskt.Infrastructure.Clients;
 using Wbskt.Management.Models;
 using Wbskt.Management.Host.Services;
 using Wbskt.Host.Tests.Infrastructure;
@@ -19,7 +19,7 @@ namespace Wbskt.Host.Tests.ManagementHost;
 
 /// <summary>
 /// For a command or a ping the publish is the action, so the outcomes a caller can act on (queued for
-/// an offline device, a full queue, broker down, a bad request) come back as results, without a
+/// an offline client, a full queue, broker down, a bad request) come back as results, without a
 /// controller in the way.
 /// </summary>
 public sealed class ClientCommandServiceTests
@@ -36,7 +36,7 @@ public sealed class ClientCommandServiceTests
     private readonly ManagementMetrics _metrics = new();
 
     private ClientCommandService Service =>
-        new(_clients.Object, TestDeviceCommands.Sender(_targets.Object, _bus.Object, _queue, options: _options), _queue, _bus.Object, Options.Create(_options), NullLogger<ClientCommandService>.Instance, _metrics);
+        new(_clients.Object, TestClientCommands.Sender(_targets.Object, _bus.Object, _queue, options: _options), _queue, _bus.Object, Options.Create(_options), NullLogger<ClientCommandService>.Instance, _metrics);
 
     private void InWorkspace(int clientId) =>
         _clients.Setup(c => c.EnsureClientInWorkspaceAsync(WorkspaceId, ClientRef, It.IsAny<CancellationToken>())).ReturnsAsync(Result<int>.Success(clientId));
@@ -59,11 +59,11 @@ public sealed class ClientCommandServiceTests
 
         await Service.SendAsync(WorkspaceId, ClientRef, new ClientCommandRequest("reboot", "{}"));
 
-        outcomes.Should().Equal("DEVICE_INACTIVE");
+        outcomes.Should().Equal("CLIENT_INACTIVE");
     }
 
     [Fact]
-    public async Task A_command_to_an_offline_device_is_queued_with_its_expiry()
+    public async Task A_command_to_an_offline_client_is_queued_with_its_expiry()
     {
         _targets.Setup(t => t.FindAsync(ClientRef, It.IsAny<CancellationToken>())).ReturnsAsync(new ClientCommandTarget(42, WorkspaceId, false, null));
         var expiresAt = new DateTimeOffset(DateTime.UtcNow.AddHours(1).Ticks / TimeSpan.TicksPerSecond * TimeSpan.TicksPerSecond, TimeSpan.Zero);
@@ -78,7 +78,7 @@ public sealed class ClientCommandServiceTests
     }
 
     [Fact]
-    public async Task A_command_to_an_offline_device_with_a_full_queue_is_a_conflict()
+    public async Task A_command_to_an_offline_client_with_a_full_queue_is_a_conflict()
     {
         _targets.Setup(t => t.FindAsync(ClientRef, It.IsAny<CancellationToken>())).ReturnsAsync(new ClientCommandTarget(42, WorkspaceId, false, null));
         _options.MaxPerClient = 0;
@@ -90,13 +90,13 @@ public sealed class ClientCommandServiceTests
     }
 
     [Fact]
-    public async Task A_command_to_an_offline_device_that_is_not_registered_is_a_conflict()
+    public async Task A_command_to_an_offline_client_that_is_not_registered_is_a_conflict()
     {
         _targets.Setup(t => t.FindAsync(ClientRef, It.IsAny<CancellationToken>())).ReturnsAsync(new ClientCommandTarget(42, WorkspaceId, false, null, ClientStatus.Pending));
 
         var result = await Service.SendAsync(WorkspaceId, ClientRef, new ClientCommandRequest("reboot", "{}"));
 
-        result.Error.Code.Should().Be("DEVICE_INACTIVE");
+        result.Error.Code.Should().Be("CLIENT_INACTIVE");
         _bus.VerifyNoOtherCalls();
     }
 
@@ -107,7 +107,7 @@ public sealed class ClientCommandServiceTests
         var later = DateTime.UtcNow.AddHours(1);
         await _queue.EnqueueAsync(new QueuedCommand(Guid.NewGuid(), 42, ClientRef, WorkspaceId, "first", "{}", later), 10, CancellationToken.None);
         await _queue.EnqueueAsync(new QueuedCommand(Guid.NewGuid(), 42, ClientRef, WorkspaceId, "second", "{}", later), 10, CancellationToken.None);
-        await _queue.EnqueueAsync(new QueuedCommand(Guid.NewGuid(), 43, Guid.NewGuid(), WorkspaceId, "other device", "{}", later), 10, CancellationToken.None);
+        await _queue.EnqueueAsync(new QueuedCommand(Guid.NewGuid(), 43, Guid.NewGuid(), WorkspaceId, "other client", "{}", later), 10, CancellationToken.None);
 
         var result = await Service.GetQueuedAsync(WorkspaceId, ClientRef);
 
@@ -141,7 +141,7 @@ public sealed class ClientCommandServiceTests
     }
 
     [Fact]
-    public async Task Another_devices_command_cannot_be_cancelled_through_this_one()
+    public async Task Another_clients_command_cannot_be_cancelled_through_this_one()
     {
         InWorkspace(42);
         var commandId = Guid.NewGuid();
@@ -176,7 +176,7 @@ public sealed class ClientCommandServiceTests
     }
 
     [Fact]
-    public async Task A_reserved_command_type_is_refused_before_the_device_is_looked_up()
+    public async Task A_reserved_command_type_is_refused_before_the_client_is_looked_up()
     {
         var result = await Service.SendAsync(WorkspaceId, ClientRef, new ClientCommandRequest(MessageTypes.StateReport, "{}"));
 

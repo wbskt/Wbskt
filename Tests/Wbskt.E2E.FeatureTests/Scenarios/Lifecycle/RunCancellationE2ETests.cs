@@ -33,22 +33,22 @@ public sealed class RunCancellationE2ETests(ServicesFixture fixture)
 
         var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, "DeviceCancellation1");
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, "ClientCancellation1");
 
         var storage = new InMemoryClientStorage(clientRefId, secret);
         var clientConfig = new ClientConfig(
             BaseApiUrl: E2EConfig.ManagementBaseUrl,
             BaseSocketUrl: E2EConfig.SocketWsBaseUrl,
-            DeviceName: "DeviceCancellation1",
+            ClientName: "ClientCancellation1",
             PolicyPin: null);
 
         var workflowRefId = Guid.NewGuid();
-        var deviceRefStr = clientRefId.ToString();
+        var clientRefStr = clientRefId.ToString();
         var builder = new WorkflowBuilder($"E2E-RunCancel-{workflowRefId:N}", workflowRefId)
-            .AddClientTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
+            .AddClientTrigger(clientRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
             .AddAwaitSignal("continue", TimeSpan.FromSeconds(60), awaitSignal =>
             {
-                awaitSignal.OnSuccess(b => b.AddClientMessage(deviceRefStr, "SignalFired", "Signal Fired"));
+                awaitSignal.OnSuccess(b => b.AddClientMessage(clientRefStr, "SignalFired", "Signal Fired"));
                 awaitSignal.OnTimeout(b => b.AddFailRun("Should not have timed out"));
             });
 

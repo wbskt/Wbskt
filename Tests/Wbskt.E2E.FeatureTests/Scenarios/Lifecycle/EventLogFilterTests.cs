@@ -8,7 +8,7 @@ using Wbskt.E2E.FeatureTests.Fixtures;
 namespace Wbskt.E2E.FeatureTests.Scenarios.Lifecycle;
 
 /// <summary>
-/// The audit log's reads of <c>GET event-logs</c>: groups, device traffic, text search, time range,
+/// The audit log's reads of <c>GET event-logs</c>: groups, client traffic, text search, time range,
 /// the per-group summary and the CSV export, each against what a real workspace logged.
 ///
 /// Requires the auth, management and socket hosts running. Skips gracefully when they are down.
@@ -28,19 +28,19 @@ public sealed class EventLogFilterTests(ServicesFixture fixture)
         (await Send(workspace, $"clients/{clientRef}", token, HttpMethod.Patch, new { Name = name + "-renamed" }))
             .StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        // A message from the device is device traffic, which the audit views leave out.
+        // A message from the client is client traffic, which the audit views leave out.
         var storage = new InMemoryClientStorage(clientRef, secret);
-        await using (var device = new WbsktClient(new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, name, null), storage))
+        await using (var client = new WbsktClient(new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, name, null), storage))
         {
-            await device.StartAsync();
-            await device.SendAsync("telemetry", new { value = 1 });
+            await client.StartAsync();
+            await client.SendAsync("telemetry", new { value = 1 });
 
             var logged = await ServicesFixture.PollAsync(async () =>
             {
                 var names = (await ItemsAsync(workspace, "event-logs?limit=200", token)).Select(Event).ToList();
                 return names.Contains("ClientRenamedEvent") && names.Contains("ClientMessageReceivedEvent") && names.Contains("PolicyCreatedEvent");
             }, TimeSpan.FromSeconds(30), TimeSpan.FromMilliseconds(500));
-            logged.Should().BeTrue("the policy, the rename and the device's message all reach the log");
+            logged.Should().BeTrue("the policy, the rename and the client's message all reach the log");
         }
 
         var all = await ItemsAsync(workspace, "event-logs?limit=200", token);
@@ -99,7 +99,7 @@ public sealed class EventLogFilterTests(ServicesFixture fixture)
             summary.RootElement.GetProperty("events").GetProperty("ClientRenamedEvent").GetInt64().Should().BeGreaterThanOrEqualTo(1);
             summary.RootElement.GetProperty("sources").GetProperty("Api").GetInt64().Should().BeGreaterThanOrEqualTo(1);
             summary.RootElement.GetProperty("people").EnumerateObject().Should().NotBeEmpty("the rename was made by a signed-in user");
-            // At least: the device's disconnect can land after the list above was read.
+            // At least: the client's disconnect can land after the list above was read.
             summary.RootElement.GetProperty("total").GetInt64().Should().BeGreaterThanOrEqualTo(withoutTraffic.Count, "the window holds every entry this new workspace has");
         }
 

@@ -92,7 +92,7 @@ public sealed class PendingTriggerEventGuardIntegrationTests(SqlEdgeFixture fixt
             PublishedBy = 1, CreatedAt = DateTime.UtcNow
         }, CancellationToken.None);
 
-        return await ActiveRunSeeder.StartAsync(fixture.ConnectionString, wd.Id, wd.RefId, Guid.NewGuid(), $"device-{Guid.NewGuid():N}");
+        return await ActiveRunSeeder.StartAsync(fixture.ConnectionString, wd.Id, wd.RefId, Guid.NewGuid(), $"client-{Guid.NewGuid():N}");
     }
 
     private async Task FinishAsync(RunRow run)

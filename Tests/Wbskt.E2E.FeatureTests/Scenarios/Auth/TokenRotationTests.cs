@@ -272,18 +272,18 @@ public sealed class TokenRotationTests(ServicesFixture fixture)
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
         var user = await fixture.CreateUserAsync();
-        var deviceOne = await fixture.LoginAsync(user.Email, user.Password);
-        var deviceTwo = await fixture.LoginAsync(user.Email, user.Password);
+        var clientOne = await fixture.LoginAsync(user.Email, user.Password);
+        var clientTwo = await fixture.LoginAsync(user.Email, user.Password);
 
-        await fixture.LogoutAsync(deviceOne.RefreshToken);
+        await fixture.LogoutAsync(clientOne.RefreshToken);
 
         // Logout marks the token revoked, and the rotation path cannot tell a deliberate logout from
-        // a stolen-token replay — both are "a retired token came back". So one device retrying its
-        // refresh after signing out takes every other device down with it, and raises a
+        // a stolen-token replay — both are "a retired token came back". So one client retrying its
+        // refresh after signing out takes every other client down with it, and raises a
         // RefreshTokenReplay security alert while doing it.
-        await fixture.RefreshAsync(deviceOne.RefreshToken);
+        await fixture.RefreshAsync(clientOne.RefreshToken);
 
-        var sibling = await fixture.RefreshAsync(deviceTwo.RefreshToken);
+        var sibling = await fixture.RefreshAsync(clientTwo.RefreshToken);
 
         sibling.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
             "documents current behaviour: a benign post-logout retry is indistinguishable from theft");
@@ -295,17 +295,17 @@ public sealed class TokenRotationTests(ServicesFixture fixture)
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
         var user = await fixture.CreateUserAsync();
-        var deviceOne = await fixture.LoginAsync(user.Email, user.Password);
-        var deviceTwo = await fixture.LoginAsync(user.Email, user.Password);
+        var clientOne = await fixture.LoginAsync(user.Email, user.Password);
+        var clientTwo = await fixture.LoginAsync(user.Email, user.Password);
 
-        var logoutAll = await fixture.LogoutAllAsync(deviceOne.AccessToken);
+        var logoutAll = await fixture.LogoutAllAsync(clientOne.AccessToken);
         logoutAll.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        (await fixture.RefreshAsync(deviceOne.RefreshToken)).StatusCode
+        (await fixture.RefreshAsync(clientOne.RefreshToken)).StatusCode
             .Should().Be(HttpStatusCode.Unauthorized);
 
-        (await fixture.RefreshAsync(deviceTwo.RefreshToken)).StatusCode
-            .Should().Be(HttpStatusCode.Unauthorized, "logout-all means every device, not just this one");
+        (await fixture.RefreshAsync(clientTwo.RefreshToken)).StatusCode
+            .Should().Be(HttpStatusCode.Unauthorized, "logout-all means every client, not just this one");
     }
 
     [SkippableFact]

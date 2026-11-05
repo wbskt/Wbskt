@@ -10,7 +10,7 @@ using Wbskt.Workflow.Runtime;
 namespace Wbskt.Host.Tests.Runtime;
 
 /// <summary>
-/// How the dispatcher reads a device message's trigger registrations through the cache: "nothing
+/// How the dispatcher reads a client message's trigger registrations through the cache: "nothing
 /// listens" is served from it, anything else is read again before it can claim the event or start a
 /// run, and a change announcement makes a newly published trigger visible to the next message.
 /// </summary>
@@ -20,12 +20,12 @@ public sealed class TriggerDispatcherRegistrationCacheTests
     private static readonly string TelemetryKey = ClientChannel.Key(ClientRef.ToString(), "telemetry");
 
     [Fact]
-    public async Task A_device_message_nothing_listens_for_is_answered_from_the_cache_the_next_time()
+    public async Task A_client_message_nothing_listens_for_is_answered_from_the_cache_the_next_time()
     {
         var harness = new Harness();
 
-        TriggerDispatchResult first = await harness.Dispatcher.DispatchAsync(DeviceMessage("m-1"), CancellationToken.None);
-        TriggerDispatchResult second = await harness.Dispatcher.DispatchAsync(DeviceMessage("m-2"), CancellationToken.None);
+        TriggerDispatchResult first = await harness.Dispatcher.DispatchAsync(ProtocolMessage("m-1"), CancellationToken.None);
+        TriggerDispatchResult second = await harness.Dispatcher.DispatchAsync(ProtocolMessage("m-2"), CancellationToken.None);
 
         Assert.Equal(TriggerDispatchOutcome.NoRegistration, first.Outcome);
         Assert.Equal(TriggerDispatchOutcome.NoRegistration, second.Outcome);
@@ -35,14 +35,14 @@ public sealed class TriggerDispatcherRegistrationCacheTests
     }
 
     [Fact]
-    public async Task After_a_change_is_announced_the_next_device_message_reaches_the_trigger_published_since()
+    public async Task After_a_change_is_announced_the_next_client_message_reaches_the_trigger_published_since()
     {
         var harness = new Harness();
-        await harness.Dispatcher.DispatchAsync(DeviceMessage("m-1"), CancellationToken.None);
+        await harness.Dispatcher.DispatchAsync(ProtocolMessage("m-1"), CancellationToken.None);
 
         harness.Registrations.Rows = [Registration(5, TelemetryKey)];
         harness.Cache.Clear();
-        TriggerDispatchResult result = await harness.Dispatcher.DispatchAsync(DeviceMessage("m-2"), CancellationToken.None);
+        TriggerDispatchResult result = await harness.Dispatcher.DispatchAsync(ProtocolMessage("m-2"), CancellationToken.None);
 
         Assert.Equal(TriggerDispatchOutcome.StartedRun, result.Outcome);
         Assert.Equal(2, harness.Registrations.Reads);
@@ -55,10 +55,10 @@ public sealed class TriggerDispatcherRegistrationCacheTests
         // Deprecated in the management host, announcement not yet here: the cache still holds the
         // registration, and the dispatcher must not act on it.
         var harness = new Harness(Registration(5, TelemetryKey));
-        TriggerDispatchResult first = await harness.Dispatcher.DispatchAsync(DeviceMessage("m-1"), CancellationToken.None);
+        TriggerDispatchResult first = await harness.Dispatcher.DispatchAsync(ProtocolMessage("m-1"), CancellationToken.None);
 
         harness.Registrations.Rows = [];
-        TriggerDispatchResult second = await harness.Dispatcher.DispatchAsync(DeviceMessage("m-2"), CancellationToken.None);
+        TriggerDispatchResult second = await harness.Dispatcher.DispatchAsync(ProtocolMessage("m-2"), CancellationToken.None);
 
         Assert.Equal(TriggerDispatchOutcome.StartedRun, first.Outcome);
         Assert.Equal(TriggerDispatchOutcome.NoRegistration, second.Outcome);
@@ -83,7 +83,7 @@ public sealed class TriggerDispatcherRegistrationCacheTests
     [Fact]
     public async Task A_command_outcome_never_reads_registrations()
     {
-        // Every device ack arrives on the command channel, and nothing can register a trigger there.
+        // Every client ack arrives on the command channel, and nothing can register a trigger there.
         var harness = new Harness();
 
         TriggerDispatchResult result = await harness.Dispatcher.DispatchAsync(CommandChannel.Event(Guid.NewGuid(), CommandChannel.Acked, null), CancellationToken.None);
@@ -93,7 +93,7 @@ public sealed class TriggerDispatcherRegistrationCacheTests
         Assert.Equal([false], harness.Bookmarks.HasRegistrations);
     }
 
-    private static InboundEvent DeviceMessage(string messageId) => ClientChannel.Event(
+    private static InboundEvent ProtocolMessage(string messageId) => ClientChannel.Event(
         new ClientMessage(ClientRef, 12, 34, "telemetry", JsonSerializer.SerializeToElement(new { celsius = 21 }), DateTime.UtcNow, DateTime.UtcNow, false),
         $"client-message:{ClientRef}:{messageId}");
 

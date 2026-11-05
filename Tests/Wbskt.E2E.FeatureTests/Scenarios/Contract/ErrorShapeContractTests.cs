@@ -75,7 +75,7 @@ public sealed class ErrorShapeContractTests(ServicesFixture fixture)
             return new Provoked(response, HttpStatusCode.Forbidden, "WORKSPACE_FORBIDDEN");
         },
 
-        // In one's own workspace, a device that does not exist.
+        // In one's own workspace, a client that does not exist.
         ["NotFound404"] = async f =>
         {
             var ws = await f.CreateIsolatedWorkspaceAsync();

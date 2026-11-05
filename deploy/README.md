@@ -78,13 +78,13 @@ published on the Dashboard repo's own cadence and tracked by its own `CONSOLE_IM
 Every push to master deploys itself: once the tests, E2E, the upgrade rehearsal (below, under
 Database migrations) and all five images succeed, **Build
 images** calls the **Deploy** workflow with that run's tag, deploying every host (auth,
-management, devices, gateway-ws, engine) with migrations. If the `production` GitHub Environment has required reviewers, that deploy waits for
+management, client-auth, gateway-ws, engine) with migrations. If the `production` GitHub Environment has required reviewers, that deploy waits for
 an approval. To redeploy or pick services, dispatch **Deploy** by hand:
 
 | Input | Meaning |
 |---|---|
 | `tag` | `sha-abc1234` — also determines the commit the VM checkout is reset to |
-| `services` | blank for every host, or e.g. `auth management devices` |
+| `services` | blank for every host, or e.g. `auth management client-auth` |
 | `skip_migrations` | leave unchecked. Migrations run by **default** — the incremental publish is idempotent, so skipping is what needs justifying |
 
 Rollback is dispatching an older tag by hand. Because the tag encodes the commit, the VM's
@@ -159,10 +159,10 @@ docker compose up -d sql                                    # wait for it to rep
 docker compose --profile migrate pull migrator
 MIGRATE_FRESH=true docker compose --profile migrate run --rm migrator   # first run only - creates the DBs
 
-docker compose pull auth management devices gateway-ws engine
+docker compose pull auth management client-auth gateway-ws engine
 docker compose up -d rabbitmq redis
 docker compose up -d otel-collector prometheus alertmanager pushgateway loki tempo grafana node-exporter cadvisor
-docker compose up -d --no-build auth management devices gateway-ws engine traefik
+docker compose up -d --no-build auth management client-auth gateway-ws engine traefik
 docker compose ps                                           # everything should report healthy
 ```
 
@@ -212,10 +212,10 @@ Two hosts sign tokens, each with its own EC P-256 key, and neither key leaves it
 | Key | Signs | Validated by |
 |---|---|---|
 | `AUTH_JWT_SIGNING_KEY` | user tokens (issuer `wbskt-auth`, audience `wbskt-api`) | auth itself; management, via `http://auth:8080/.well-known/jwks.json` |
-| `MANAGEMENT_JWT_SIGNING_KEY` | device tokens (issuer `wbskt-management`, audience `wbskt-socket`) | gateway-ws, via `http://management:8080/.well-known/jwks.json` |
+| `MANAGEMENT_JWT_SIGNING_KEY` | client tokens (issuer `wbskt-management`, audience `wbskt-socket`) | gateway-ws, via `http://management:8080/.well-known/jwks.json` |
 
-So a user token is useless at `/ws` and a device token is useless at the API, and the WebSocket
-gateway holds no secret at all. (The audience keeps its old name, `wbskt-socket`: every device token
+So a user token is useless at `/ws` and a client token is useless at the API, and the WebSocket
+gateway holds no secret at all. (The audience keeps its old name, `wbskt-socket`: every client token
 in the field carries it.) Generate each key with
 
 ```bash
@@ -226,7 +226,7 @@ Compose refuses to start without both. Replicas of one host share its key.
 
 **Upgrading from the shared `JWT_KEY`.** Set both keys and delete `JWT_KEY`. Every access token
 issued before the deploy stops validating. The console refreshes on the 401 (refresh tokens are
-not JWTs and are unaffected), and the device SDK logs in afresh on every connect, so nobody is
+not JWTs and are unaffected), and the client SDK logs in afresh on every connect, so nobody is
 signed out; expect one burst of 401s in the logs.
 
 **Rotating a key.** Validators refetch the issuer's keys when they see a token signed by one they do
@@ -241,8 +241,8 @@ docker compose up -d --no-deps auth
 #    AUTH_JWT_PREVIOUS_PUBLIC_KEY and restart auth again.
 ```
 
-The same steps apply to management with the `MANAGEMENT_` variables, restarting devices with it
-(`docker compose up -d --no-deps devices management`): devices signs device tokens with the same key.
+The same steps apply to management with the `MANAGEMENT_` variables, restarting client-auth with it
+(`docker compose up -d --no-deps client-auth management`): client-auth signs client tokens with the same key.
 
 **Email fingerprints.** Auth logs and events name an address by a 12-character HMAC fingerprint, never
 the address. The key is `AUTH_EMAIL_FINGERPRINT_KEY` when set, otherwise one derived from
@@ -267,17 +267,18 @@ engine, set `WorkflowEngine__Integrations__ActiveKeyId: 2`, and restart the engi
 secrets are sealed with key 2 and existing ones still open with key 1. Key 1 can be removed once
 every integration's secret has been saved again.
 
-### Device login and registration (`devices`)
+### Client login and registration (`client-auth`)
 
-`devices` runs the management image with `Host__Role=Devices`. It serves only
+`client-auth` runs the management image with `Host__Role=ClientAuth`. It serves only
 `/api/v1/client-registrations` and `/api/v1/client-auth` (plus their unversioned aliases, `/healthz` and the JWKS), and Traefik sends
-it those paths on `api.<DOMAIN>`, so a console deploy or a heavy console query does not stop devices
-signing in. Device URLs and SDK settings do not change.
+it those paths on `api.<DOMAIN>`, so a console deploy or a heavy console query does not stop clients
+signing in. Client URLs and SDK settings do not change.
 
 Management still serves the same paths. Its router matches every path on `api.<DOMAIN>`, so while no
-devices instance is healthy (during its restart, say) Traefik sends device traffic there instead.
-`deploy.sh` relies on that: it restarts devices first and waits for it to be healthy before it
-touches management, so device login always has one of the two. Scale it with `DEVICES_REPLICAS`.
+client-auth instance is healthy (during its restart, say) Traefik sends client traffic there instead.
+`deploy.sh` relies on that: it restarts client-auth first and waits for it to be healthy before it
+touches management, so client login always has one of the two. Scale it with `CLIENT_AUTH_REPLICAS`. The service was called `devices` until wbskt/Wbskt#574; `deploy.sh` still
+takes that name in `--services`, and removes the old `devices` container once `client-auth` is healthy.
 
 ### Running a local console against this backend
 
@@ -393,7 +394,7 @@ static config (entrypoints, ACME settings, etc.), not for routine host redeploys
 
 Every host sends traces, metrics and logs over OTLP to `otel-collector`, which fans them out to
 Tempo (traces, 72h), Prometheus (metrics, `METRICS_RETENTION`, default 15d) and Loki (logs, 7d).
-MassTransit carries the trace context in message headers, so one trace follows a device message
+MassTransit carries the trace context in message headers, so one trace follows a client message
 from the WebSocket gateway, across the bus, into the engine and the management host. Logs carry the
 trace and span ids, and Grafana links the two both ways. `docker compose logs` keeps working too:
 the hosts still write to stdout, now rotated (20 MB x 5 per container).
@@ -422,7 +423,7 @@ The stack adds nine containers and roughly 1.2 GB of memory at idle. On a 4 GB V
 ### Dashboards
 
 Grafana starts with one provisioned dashboard, **Wbskt overview** (folder *Wbskt*): firing alerts,
-sign-ups and logins, open device sockets with connects and disconnects, workflow runs and their
+sign-ups and logins, open client sockets with connects and disconnects, workflow runs and their
 failure rate, and the engine's queue depth. It lives in
 `observability/grafana/provisioning/dashboards/wbskt/overview.json` and is read-only in the UI; to
 change it, edit the JSON (or save a copy from the UI and export it over that file) and restart
@@ -440,7 +441,7 @@ alerts fire and reach nobody, and Alertmanager says so in its log.
 | `WorkflowWakeBacklog` | timers or timeouts are over a minute past due and unclaimed |
 | `WorkflowDispatchBacklog` | over 500 branches queued in the engine for 10 minutes |
 | `DeadLetteredMessages` | any MassTransit `_error` or `_skipped` queue holds messages |
-| `SocketDisconnectRateHigh` | abnormal device disconnects exceed half the connected devices in 10 minutes |
+| `SocketDisconnectRateHigh` | abnormal client disconnects exceed half the connected clients in 10 minutes |
 | `BackupMissing` / `BackupNeverReported` | no successful backup for 26 hours |
 | `BackupFailed` | `backup.sh` failed (raised immediately by `scripts/alert.sh`) |
 | `DatabaseNearExpressLimit` | a database's data files pass 8 GiB of the Express edition's 10 GB (pushed nightly by `backup.sh`) |
@@ -521,7 +522,7 @@ MIGRATE_ALLOW_DATA_LOSS=true docker compose --profile migrate run --rm migrator
 
 A statement may run for 30 minutes (`MIGRATE_COMMAND_TIMEOUT`, in seconds; sqlpackage's own
 default is 60). A change that rebuilds a table copies it in one statement, and on the production
-disk that outlasts a minute for a table of a few hundred MB, failing the publish. The device traffic
+disk that outlasts a minute for a table of a few hundred MB, failing the publish. The client traffic
 split (#442) is one: its first deploy rebuilds `dbo.EventLogs`. A rebuild holds the table for its
 length, so the event logger's inserts wait and retry; nothing is lost.
 
@@ -602,14 +603,14 @@ python3 -c 'import base64,getpass,hashlib,os,struct; p=getpass.getpass().encode(
 An existing deployment is unaffected: its root row is already there. If it was created by an
 older migrator, its password is the one that used to be documented here; change it in the console.
 
-### The device-secret migration needs this flag, once
+### The client-secret migration needs this flag, once
 
 The change that moved `Clients.Secret` (plaintext) to `Clients.SecretHash` (SHA-256) drops a column,
 so the deploy carrying it fails the incremental publish until you pass `MIGRATE_ALLOW_DATA_LOSS=true`
 for that one run.
 
 The loss is intended and bounded: the pre-deployment script hashes every existing secret into the
-new column *before* the schema diff drops the old one, so devices already registered keep working
+new column *before* the schema diff drops the old one, so clients already registered keep working
 with the secret they hold. What is destroyed is the plaintext, which is the point.
 
 ### The compensation cut needs this flag, once
@@ -619,7 +620,7 @@ it also fails the incremental publish until `MIGRATE_ALLOW_DATA_LOSS=true` is pa
 run. The column was written but never read, so nothing is lost but the column itself.
 
 Nothing is recoverable afterwards, so take a backup first — `deploy/scripts/backup.sh` — and confirm
-a device can still log in before moving on.
+a client can still log in before moving on.
 
 ### Email verification is additive, and needs no flag
 
@@ -642,7 +643,7 @@ See [Mail relay: required before production](#mail-relay-required-before-product
 The `sql` service (container + volume) is the staging/dev path. For production, prefer a
 VM-installed or managed SQL Server instance instead — the deciding factor is the backup/patching
 story, not performance, since both DBs stay on one SQL instance regardless (no partitioning below
-~5k devices; `WorkspaceId` is the future partition key). Either way it must be reachable as
+~5k clients; `WorkspaceId` is the future partition key). Either way it must be reachable as
 `sql:1433` on the `backend` network so `ConnectionStrings__DefaultConnection` /
 `ConnectionStrings__AuthDBConnection` don't need to change.
 
@@ -756,7 +757,7 @@ a copy restored under a scratch name cannot collide with the live database's fil
 With `--force`, the target is taken `SINGLE_USER WITH ROLLBACK IMMEDIATE` immediately before the
 restore, which disconnects the hosts. The restored database comes back `MULTI_USER`, and so does
 the original if the restore fails. To be sure no host reconnects in between, stop them first
-(`docker compose stop auth management devices gateway-ws engine`) and start them again afterwards.
+(`docker compose stop auth management client-auth gateway-ws engine`) and start them again afterwards.
 
 **Rehearse it at least once, and confirm the row counts.** Until a restore has actually been
 performed, what exists is a backup script, not a backup. A rehearsal, start to finish:
@@ -778,7 +779,7 @@ performed, what exists is a backup script, not a backup. A rehearsal, start to f
 Both decisions, written down so the next person does not have to guess:
 
 - **Redis** — a SignalR backplane and cache, plus token revocations that live at most a little
-  over an hour (signed-out users, revoked or rotated devices). Losing it costs reconnects, and
+  over an hour (signed-out users, revoked or rotated clients). Losing it costs reconnects, and
   revocations from that last hour then hold only on hosts that have not restarted since.
 - **RabbitMQ** — holds in-flight events only. Losing it drops whatever was queued at that instant,
   which is a real but bounded loss; the durable record of every run lives in SQL.
@@ -791,7 +792,7 @@ running stack keeps its own), then refuses to continue if less than 3 GB is free
 store. That check runs before anything is stopped, so a failure there leaves production as it was.
 Rolling back to an older tag simply pulls it from GHCR again.
 
-If a deploy stops on that check, or a pull fails with `no space left on device`, on the VM:
+If a deploy stops on that check, or a pull fails with `no space left on client`, on the VM:
 
 ```bash
 df -h / /var/lib/containerd /var/lib/docker   # which filesystem is full

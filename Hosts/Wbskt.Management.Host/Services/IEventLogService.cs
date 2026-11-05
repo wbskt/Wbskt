@@ -29,7 +29,7 @@ public interface IEventLogService
 
     /// <summary>
     /// How many entries each group has over [from, to), which defaults to the last
-    /// <see cref="EventLogService.DefaultRange"/>. Device traffic counts toward the total only when
+    /// <see cref="EventLogService.DefaultRange"/>. Client traffic counts toward the total only when
     /// <paramref name="traffic"/> includes it.
     /// </summary>
     Task<Result<EventLogSummaryResponse>> GetSummaryAsync(

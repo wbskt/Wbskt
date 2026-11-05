@@ -44,7 +44,7 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
     private readonly IEventBus _eventBus;
     private readonly ILogger<WorkflowLifecycleService> _logger;
     private readonly IConfiguration? _configuration;
-    private readonly DeviceReferenceCheck? _deviceCheck;
+    private readonly ClientReferenceCheck? _clientCheck;
 
     public WorkflowLifecycleService(
         IWorkflowDefinitionProvider workflowDefinitionProvider,
@@ -56,10 +56,10 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
         IEventBus eventBus,
         ILogger<WorkflowLifecycleService> logger,
         IConfiguration? configuration = null,
-        DeviceReferenceCheck? deviceCheck = null)
+        ClientReferenceCheck? clientCheck = null)
     {
         _configuration = configuration;
-        _deviceCheck = deviceCheck;
+        _clientCheck = clientCheck;
         _eventBus = eventBus;
         _engine = engine;
         _workflowDefinitionProvider = workflowDefinitionProvider;
@@ -98,14 +98,14 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
             return Result<WorkflowPublishResponse>.Failure(ValidationFailed(integrationRefs.Issues));
         }
 
-        // A device that is gone fails every command to it and never fires its triggers; one that is
+        // A client that is gone fails every command to it and never fires its triggers; one that is
         // only revoked is a warning, as it can be registered again.
-        if (_deviceCheck is not null)
+        if (_clientCheck is not null)
         {
-            var deviceIssues = await _deviceCheck.CheckAsync(workspaceId, request.Definition, ct);
-            if (deviceIssues.Any(issue => issue.Severity == ValidationSeverity.Error))
+            var clientIssues = await _clientCheck.CheckAsync(workspaceId, request.Definition, ct);
+            if (clientIssues.Any(issue => issue.Severity == ValidationSeverity.Error))
             {
-                return Result<WorkflowPublishResponse>.Failure(ValidationFailed(deviceIssues));
+                return Result<WorkflowPublishResponse>.Failure(ValidationFailed(clientIssues));
             }
         }
 

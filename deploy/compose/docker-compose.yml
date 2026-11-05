@@ -109,8 +109,8 @@ services:
       AUTH_URL: https://auth.${DOMAIN:?DOMAIN is required - see .env.example}
       WORKSPACE_URL: https://api.${DOMAIN}
       NOTIFICATIONS_URL: https://api.${DOMAIN}/hubs/notifications
-      # Where devices connect. The console never connects here itself; it only puts this in the
-      # device pairing QR code on a policy, which it hides when this is unset.
+      # Where clients connect. The console never connects here itself; it only puts this in the
+      # client pairing QR code on a policy, which it hides when this is unset.
       SOCKET_URL: wss://ws.${DOMAIN}
     healthcheck:
       # 127.0.0.1, not localhost: the container's /etc/hosts maps localhost to both 127.0.0.1 and
@@ -229,7 +229,7 @@ services:
       # Its own login, limited to running the core database's procedures; the migrator creates it.
       ConnectionStrings__DefaultConnection: Server=sql;Database=Wbskt.Database;User Id=wbskt_management;Password=${SQL_MANAGEMENT_PASSWORD:?SQL_MANAGEMENT_PASSWORD is required - see .env.example};TrustServerCertificate=True;Encrypt=True;
       ConnectionStrings__Redis: redis:6379
-      # Signs client tokens for the device gateways, and validates user tokens against auth's public keys.
+      # Signs client tokens for the client gateways, and validates user tokens against auth's public keys.
       Jwt__SigningKey: ${MANAGEMENT_JWT_SIGNING_KEY:?MANAGEMENT_JWT_SIGNING_KEY is required - see .env.example}
       Jwt__AdditionalPublicKeys__0: ${MANAGEMENT_JWT_PREVIOUS_PUBLIC_KEY:-}
       Jwt__TrustedJwksUrl: http://auth:8080/.well-known/jwks.json
@@ -272,14 +272,14 @@ services:
       - traefik.http.services.management.loadbalancer.sticky.cookie.secure=true
       - traefik.http.services.management.loadbalancer.sticky.cookie.httpOnly=true
 
-  # Device registration and login, split off the console API (wbskt/Wbskt#163) so a console deploy or a
-  # heavy console query does not stop devices signing in. The same image as management, run with
-  # Host__Role=Devices: it serves only /api/client-registrations and /api/client-auth (plus health
-  # and JWKS), and Traefik sends it those paths on api.${DOMAIN}, so device URLs and SDKs are
+  # Client registration and login, split off the console API (wbskt/Wbskt#163) so a console deploy or a
+  # heavy console query does not stop clients signing in. The same image as management, run with
+  # Host__Role=ClientAuth: it serves only /api/client-registrations and /api/client-auth (plus health
+  # and JWKS), and Traefik sends it those paths on api.${DOMAIN}, so client URLs and SDKs are
   # unchanged. Management keeps serving the same paths, and its router (matching every path on the
-  # host) takes them while no devices instance is healthy, as during its own restart. deploy.sh
+  # host) takes them while no client-auth instance is healthy, as during its own restart. deploy.sh
   # never restarts the two together.
-  devices:
+  client-auth:
     image: ${REGISTRY:-ghcr.io/wbskt}/wbskt-management:${IMAGE_TAG:-latest}
     build:
       context: ../..
@@ -289,8 +289,8 @@ services:
         HOST_DLL: Wbskt.Management.Host.dll
     environment:
       <<: *management-env
-      OTEL_SERVICE_NAME: wbskt-devices
-      Host__Role: Devices
+      OTEL_SERVICE_NAME: wbskt-client-auth
+      Host__Role: ClientAuth
       ApiDocs__Enabled: "false"
     volumes:
       - ../config:/Config:ro
@@ -311,19 +311,19 @@ services:
     restart: unless-stopped
     logging: *default-logging
     deploy:
-      replicas: ${DEVICES_REPLICAS:-1}
+      replicas: ${CLIENT_AUTH_REPLICAS:-1}
     labels:
       - traefik.enable=true
       # Longer than the management router's rule, so Traefik's default priority (rule length)
       # already prefers it; set explicitly so a longer management rule later cannot take over.
-      - traefik.http.routers.devices.rule=Host(`api.${DOMAIN}`) && (PathPrefix(`/api/v1/client-auth`) || PathPrefix(`/api/v1/client-registrations`) || PathPrefix(`/api/client-auth`) || PathPrefix(`/api/client-registrations`))
-      - traefik.http.routers.devices.priority=1000
-      - traefik.http.routers.devices.entrypoints=websecure
-      - traefik.http.routers.devices.tls.certresolver=letsencrypt
-      - traefik.http.services.devices.loadbalancer.server.port=8080
+      - traefik.http.routers.client-auth.rule=Host(`api.${DOMAIN}`) && (PathPrefix(`/api/v1/client-auth`) || PathPrefix(`/api/v1/client-registrations`) || PathPrefix(`/api/client-auth`) || PathPrefix(`/api/client-registrations`))
+      - traefik.http.routers.client-auth.priority=1000
+      - traefik.http.routers.client-auth.entrypoints=websecure
+      - traefik.http.routers.client-auth.tls.certresolver=letsencrypt
+      - traefik.http.services.client-auth.loadbalancer.server.port=8080
 
-  # The WebSocket device gateway (Hosts/Wbskt.Gateway.WebSocket.Host), the service once called
-  # "socket". Devices still reach it as wss://ws.${DOMAIN}/ws; only names on this side changed. See
+  # The WebSocket client gateway (Hosts/Wbskt.Gateway.WebSocket.Host), the service once called
+  # "socket". Clients still reach it as wss://ws.${DOMAIN}/ws; only names on this side changed. See
   # "The socket service became gateway-ws" in deploy/README.md for the deploy that renamed it.
   gateway-ws:
     image: ${REGISTRY:-ghcr.io/wbskt}/wbskt-gateway-ws:${IMAGE_TAG:-latest}
@@ -338,7 +338,7 @@ services:
       OTEL_SERVICE_NAME: wbskt-gateway-ws
       # Signs nothing; validates client tokens against management's public keys, fetched on first use.
       Jwt__TrustedJwksUrl: http://management:8080/.well-known/jwks.json
-      # Device revocations the management host records, checked when a device connects.
+      # Client revocations the management host records, checked when a client connects.
       ConnectionStrings__Redis: redis:6379
     volumes:
       - ../config:/Config:ro
@@ -365,7 +365,7 @@ services:
       - traefik.enable=true
       # Named for the gateway. During the deploy that renamed it, the old socket containers kept their
       # own router (socket) on the same rule until deploy.sh stopped them; either could take a new
-      # connection meanwhile, which is safe because every instance can serve every device.
+      # connection meanwhile, which is safe because every instance can serve every client.
       - traefik.http.routers.gateway-ws.rule=Host(`ws.${DOMAIN}`)
       - traefik.http.routers.gateway-ws.entrypoints=websecure
       - traefik.http.routers.gateway-ws.tls.certresolver=letsencrypt
@@ -610,7 +610,7 @@ services:
       - --whitelisted_container_labels=com.docker.compose.service
       - --enable_metrics=cpu,memory
     privileged: true
-    devices:
+    client-auth:
       - /dev/kmsg
     volumes:
       - /:/rootfs:ro

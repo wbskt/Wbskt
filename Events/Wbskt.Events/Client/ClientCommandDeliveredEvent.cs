@@ -5,11 +5,11 @@ using Wbskt.Models;
 namespace Wbskt.Events.Client;
 
 /// <summary>
-/// A socket host wrote a command to the device's connection. Carries no payload: the
+/// A socket host wrote a command to the client's connection. Carries no payload: the
 /// <see cref="ClientCommandEvent"/> it answers already does, and <see cref="CommandId"/> joins the
-/// two in the device-traffic log, so each command is stored once.
+/// two in the client-traffic log, so each command is stored once.
 /// </summary>
-[DeviceTraffic]
+[ClientTraffic]
 [EventCriticality(EventCriticality.Info)]
 [SignalRNotify("OnClientCommandDeliveredEvent", Scope = NotifyScope.Client)]
 public sealed record ClientCommandDeliveredEvent(Guid ClientRefId, int ClientId, int WorkspaceId, string Type, Guid? CommandId = null) : BaseEvent, IClientContext;

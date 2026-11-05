@@ -36,7 +36,7 @@ public class ClientReadingsController : ApiControllerBase
     /// </summary>
     /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="clientRef">The unique reference ID of the client.</param>
-    /// <param name="name">The state variable, as the device names it in its state reports.</param>
+    /// <param name="name">The state variable, as the client names it in its state reports.</param>
     /// <param name="from">Start of the range (inclusive). Defaults to a day before <paramref name="to"/>.</param>
     /// <param name="to">End of the range (exclusive). Defaults to now.</param>
     /// <param name="bucket">Bucket size: seconds, or a number with s, m, h or d (e.g. 5m). Picked from the range when left out.</param>
@@ -62,7 +62,7 @@ public class ClientReadingsController : ApiControllerBase
     }
 
     /// <summary>
-    /// Every reading over a time range as CSV (name, deviceTime, receivedAt, value, late), for one
+    /// Every reading over a time range as CSV (name, sentAt, receivedAt, value, late), for one
     /// state variable or all of them.
     /// </summary>
     /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>

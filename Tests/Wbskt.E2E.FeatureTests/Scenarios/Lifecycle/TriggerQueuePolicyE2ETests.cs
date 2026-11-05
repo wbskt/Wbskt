@@ -26,24 +26,24 @@ public sealed class TriggerQueuePolicyE2ETests(ServicesFixture fixture)
 
         var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, "DeviceQueuePolicy1");
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, "ClientQueuePolicy1");
 
         var storage = new InMemoryClientStorage(clientRefId, secret);
         var clientConfig = new ClientConfig(
             BaseApiUrl: E2EConfig.ManagementBaseUrl,
             BaseSocketUrl: E2EConfig.SocketWsBaseUrl,
-            DeviceName: "DeviceQueuePolicy1",
+            ClientName: "ClientQueuePolicy1",
             PolicyPin: null);
 
         var workflowRefId = Guid.NewGuid();
-        var deviceRefStr = clientRefId.ToString();
+        var clientRefStr = clientRefId.ToString();
         var builder = new WorkflowBuilder($"E2E-Concurrency-Queue-{workflowRefId:N}", workflowRefId)
             // Queue policy: same-correlation events must run one-at-a-time, not be dropped.
-            .AddClientTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.Queue, "trigger.clientRefId", out var triggerNodeId)
+            .AddClientTrigger(clientRefStr, "telemetry", WorkflowConcurrencyPolicy.Queue, "trigger.clientRefId", out var triggerNodeId)
             .AddAwaitSignal("continue", AwaitTimeout, awaitSignal =>
             {
                 awaitSignal.OnSuccess(b => b.AddFailRun("Should not have received signal"));
-                awaitSignal.OnTimeout(b => b.AddClientMessage(deviceRefStr, "RunDone", "Run finished"));
+                awaitSignal.OnTimeout(b => b.AddClientMessage(clientRefStr, "RunDone", "Run finished"));
             });
 
         var definition = builder.BuildAndValidate();

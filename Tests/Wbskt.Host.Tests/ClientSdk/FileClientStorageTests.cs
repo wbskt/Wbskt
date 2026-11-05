@@ -9,7 +9,7 @@ public sealed class FileClientStorageTests : IDisposable
     [Fact]
     public async Task Credentials_saved_are_loaded_back_and_cleared()
     {
-        var storage = new FileClientStorage(Path.Combine(_dir, "nested", "device.json"));
+        var storage = new FileClientStorage(Path.Combine(_dir, "nested", "client.json"));
         var refId = Guid.NewGuid();
 
         Assert.Equal((null, null), await storage.LoadCredentialsAsync());
@@ -25,19 +25,19 @@ public sealed class FileClientStorageTests : IDisposable
     public async Task A_corrupt_file_reads_as_no_credentials()
     {
         Directory.CreateDirectory(_dir);
-        string path = Path.Combine(_dir, "device.json");
+        string path = Path.Combine(_dir, "client.json");
         await File.WriteAllTextAsync(path, "{ not json");
 
         Assert.Equal((null, null), await new FileClientStorage(path).LoadCredentialsAsync());
     }
 
     [Fact]
-    public async Task Each_device_name_gets_its_own_file()
+    public async Task Each_client_name_gets_its_own_file()
     {
         string a = $"sensor-{Guid.NewGuid():N}";
         string b = $"sensor/{Guid.NewGuid():N}";
-        var first = FileClientStorage.ForDevice(a);
-        var second = FileClientStorage.ForDevice(b);
+        var first = FileClientStorage.ForClient(a);
+        var second = FileClientStorage.ForClient(b);
         var refId = Guid.NewGuid();
 
         try

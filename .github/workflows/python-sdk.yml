@@ -1,12 +1,12 @@
 name: Python SDK
 
-# Tests the Python device SDK (Clients/python) on the oldest and newest supported Python, and on
+# Tests the Python client SDK (Clients/python) on the oldest and newest supported Python, and on
 # a tag py-v<version> builds it and publishes it to PyPI as `wbskt` through trusted publishing:
 # the PyPI project must trust this repository, this workflow and the `pypi` environment. No token.
 
 on:
   pull_request:
-    paths: ['Clients/python/**', 'Docs/Device.Protocol.md', 'Docs/Device.Protocol.WebSocket.md', '.github/workflows/python-sdk.yml']
+    paths: ['Clients/python/**', 'Docs/Client.Protocol.md', 'Docs/Client.Protocol.WebSocket.md', '.github/workflows/python-sdk.yml']
   push:
     branches: [master]
     paths: ['Clients/python/**', '.github/workflows/python-sdk.yml']

@@ -1117,7 +1117,7 @@ public sealed class WorkflowValidatorRuleTests
         Assert.DoesNotContain(result.Issues, i => i.Code == "INVALID_CRON");
     }
 
-    // With no key, the dispatcher groups runs by the channel's own default (device and message type
+    // With no key, the dispatcher groups runs by the channel's own default (client and message type
     // here), so a policy still applies: there is nothing to warn about.
     [Theory]
     [InlineData(WorkflowConcurrencyPolicy.Queue)]

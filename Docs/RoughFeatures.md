@@ -23,13 +23,13 @@ now the components/entities within a workspace is
 - audit logs
 - integrations
 
-1. clients: these are connections to realtime/online/offline (socket connection to the socket server in the backend) the wbskt company provides client libraries in most of the languages and platform. people can use this linraries to integrate into embedded devies, iot devices, applications, scripts. websites.. ect.
+1. clients: these are connections to realtime/online/offline (socket connection to the socket server in the backend) the wbskt company provides client libraries in most of the languages and platform. people can use this linraries to integrate into embedded devies, iot clients, applications, scripts. websites.. ect.
    once a client is registered, it will show up in the client's explorer.
 
    when a client's page is opened, it will show, a text editor to send json payload, another section where it show's the recent/live in/out messages/comm, the uptime or the last online at time, the ping., capablities/properties/state variables of the client.
 
 2. policies: client-policies, creating a policy will ask for a name and the mode (auto/onapprovel enroll , limited/unlimited num) it will create a unique pin for the policy and this pinn will be used by the client to register to the wbskt platform under a policy.
-   so when a policy is selected, we should show the pin(masked, visible if cliked), remaining number of clients that can be registered if its mode is limited num. and showws the list of deivces that are registered using this policy. approvel pending deivces/ regiected devices/ and logs of when it was policy created/ device request/ device approvel/ device regect/ device revive/ policy desabled/ limit exeeded
+   so when a policy is selected, we should show the pin(masked, visible if cliked), remaining number of clients that can be registered if its mode is limited num. and showws the list of deivces that are registered using this policy. approvel pending deivces/ regiected clients/ and logs of when it was policy created/ client request/ client approvel/ client regect/ client revive/ policy desabled/ limit exeeded
 
 3. workflow: this is the main heighlight. this is a workflow node based editor. we have 3 set's of nodes . trigger/ control/ action. another page will show the executions history/queue of the workflows. state/ properties. logs.
 

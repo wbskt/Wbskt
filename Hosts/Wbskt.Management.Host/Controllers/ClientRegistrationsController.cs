@@ -8,7 +8,7 @@ using Wbskt.Management.Host.Services;
 
 namespace Wbskt.Management.Host.Controllers;
 
-// Pre-auth device flow (registration happens before a client has credentials), so this is
+// Pre-auth client flow (registration happens before a client has credentials), so this is
 // deliberately anonymous.
 [Route("api/v1/client-registrations")]
 [ApiController]
@@ -26,7 +26,7 @@ public class ClientRegistrationsController : ApiControllerBase
     }
 
     [HttpPost("initiate")]
-    [EnableRateLimiting(RateLimitPolicies.DeviceRegistration)]
+    [EnableRateLimiting(RateLimitPolicies.ClientRegistration)]
     public async Task<ActionResult<ClientRegistrationResponse>> Initiate(ClientRegistrationRequest request, CancellationToken cancellationToken)
     {
         _logger.LogDebug("API: Client Registration initiated for Client Name: '{ClientName}'", request.Name);

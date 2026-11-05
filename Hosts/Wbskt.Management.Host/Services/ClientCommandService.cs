@@ -4,7 +4,7 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure;
 using Wbskt.Events.Abstractions;
-using Wbskt.Infrastructure.Devices;
+using Wbskt.Infrastructure.Clients;
 using Wbskt.Infrastructure.Events;
 using Wbskt.Infrastructure.Security;
 using Microsoft.Extensions.Options;
@@ -19,11 +19,11 @@ public sealed class ClientCommandService : IClientCommandService
     /// <summary>How long a ping waits for the broker before the caller is told to retry.</summary>
     internal static readonly TimeSpan ActionPublishTimeout = TimeSpan.FromSeconds(5);
 
-    public static readonly Error BrokerUnavailable = Error.Unavailable("EVENT_BUS_UNAVAILABLE", "The device could not be reached right now. Try again shortly.");
+    public static readonly Error BrokerUnavailable = Error.Unavailable("EVENT_BUS_UNAVAILABLE", "The client could not be reached right now. Try again shortly.");
 
-    private static readonly Error DeviceInactive = Error.Conflict("DEVICE_INACTIVE", "The device is offline and not registered, so a command cannot wait for it.");
+    private static readonly Error ClientInactive = Error.Conflict("CLIENT_INACTIVE", "The client is offline and not registered, so a command cannot wait for it.");
 
-    private static readonly Error OtaNotSupported = Error.Conflict("OTA_NOT_SUPPORTED", "The device does not take firmware updates: its capabilities do not list 'ota'.");
+    private static readonly Error OtaNotSupported = Error.Conflict("OTA_NOT_SUPPORTED", "The client does not take firmware updates: its capabilities do not list 'ota'.");
 
     private const int MaxOtaUrlLength = 2048;
     private const int MaxOtaVersionLength = 50;
@@ -31,7 +31,7 @@ public sealed class ClientCommandService : IClientCommandService
     private static readonly Error NotQueued = Error.NotFound("COMMAND_NOT_QUEUED", "The command is not waiting: it was delivered, expired or cancelled.");
 
     private readonly IClientQueryService _clientService;
-    private readonly IDeviceCommandSender _sender;
+    private readonly IClientCommandSender _sender;
     private readonly IQueuedCommandStore _queue;
     private readonly IEventBus _eventBus;
     private readonly IIdentityService? _identity;
@@ -44,7 +44,7 @@ public sealed class ClientCommandService : IClientCommandService
 
     public ClientCommandService(
         IClientQueryService clientService,
-        IDeviceCommandSender sender,
+        IClientCommandSender sender,
         IQueuedCommandStore queue,
         IEventBus eventBus,
         IOptions<CommandQueueOptions> queueOptions,
@@ -82,7 +82,7 @@ public sealed class ClientCommandService : IClientCommandService
             return Result<ClientCommandResponse>.Failure(invalid);
         }
 
-        return await DispatchAsync(new DeviceCommand(Guid.NewGuid(), clientRefId, workspaceId, request.Type, request.Payload, request.ExpiresAt?.UtcDateTime), request.ExpiresAt, cancellationToken);
+        return await DispatchAsync(new ClientCommand(Guid.NewGuid(), clientRefId, workspaceId, request.Type, request.Payload, request.ExpiresAt?.UtcDateTime), request.ExpiresAt, cancellationToken);
     }
 
     public async Task<Result<ClientCommandResponse>> SendOtaAsync(int workspaceId, Guid clientRefId, ClientOtaRequest request, CancellationToken cancellationToken = default)
@@ -100,7 +100,7 @@ public sealed class ClientCommandService : IClientCommandService
             return Result<ClientCommandResponse>.Failure(invalid);
         }
 
-        // What the device last reported decides; one that is offline now is judged by its last connection.
+        // What the client last reported decides; one that is offline now is judged by its last connection.
         var detail = await _clientService.GetDetailAsync(workspaceId, clientRefId, cancellationToken);
         if (detail.IsFailure)
         {
@@ -116,7 +116,7 @@ public sealed class ClientCommandService : IClientCommandService
         var expiresAt = request.ExpiresAt ?? _clock.GetUtcNow().Add(_defaultExpiry);
         var payload = JsonSerializer.Serialize(new OtaUpdatePayload(request.Url, request.Sha256.ToLowerInvariant(), NullIfEmpty(request.Version), request.Size));
         var sent = await DispatchAsync(
-            new DeviceCommand(Guid.NewGuid(), clientRefId, workspaceId, MessageTypes.OtaUpdate, payload, expiresAt.UtcDateTime, Platform: true),
+            new ClientCommand(Guid.NewGuid(), clientRefId, workspaceId, MessageTypes.OtaUpdate, payload, expiresAt.UtcDateTime, Platform: true),
             expiresAt,
             cancellationToken);
         if (sent.IsSuccess)
@@ -127,7 +127,7 @@ public sealed class ClientCommandService : IClientCommandService
         return sent;
     }
 
-    // Queued updates are delivered oldest first, and a device takes one at a time, so an older one
+    // Queued updates are delivered oldest first, and a client takes one at a time, so an older one
     // still waiting would install instead of this one and get this one rejected as "already in progress".
     private async Task CancelOlderUpdatesAsync(int workspaceId, Guid clientRefId, Guid newest, CancellationToken cancellationToken)
     {
@@ -144,23 +144,23 @@ public sealed class ClientCommandService : IClientCommandService
         }
     }
 
-    private async Task<Result<ClientCommandResponse>> DispatchAsync(DeviceCommand command, DateTimeOffset? expiresAt, CancellationToken cancellationToken)
+    private async Task<Result<ClientCommandResponse>> DispatchAsync(ClientCommand command, DateTimeOffset? expiresAt, CancellationToken cancellationToken)
     {
         var commandId = command.CommandId;
         var result = await _sender.SendAsync(command, StampActor, cancellationToken);
 
         return result.Outcome switch
         {
-            DeviceCommandOutcome.Sent => Result<ClientCommandResponse>.Success(new ClientCommandResponse(commandId, ClientCommandStatus.Sent, expiresAt)),
-            DeviceCommandOutcome.Queued => Result<ClientCommandResponse>.Success(new ClientCommandResponse(commandId, ClientCommandStatus.Queued, Utc(result.ExpiresAtUtc!.Value))),
-            DeviceCommandOutcome.QueueFull => Result<ClientCommandResponse>.Failure(Error.Conflict(
+            ClientCommandOutcome.Sent => Result<ClientCommandResponse>.Success(new ClientCommandResponse(commandId, ClientCommandStatus.Sent, expiresAt)),
+            ClientCommandOutcome.Queued => Result<ClientCommandResponse>.Success(new ClientCommandResponse(commandId, ClientCommandStatus.Queued, Utc(result.ExpiresAtUtc!.Value))),
+            ClientCommandOutcome.QueueFull => Result<ClientCommandResponse>.Failure(Error.Conflict(
                 "COMMAND_QUEUE_FULL",
-                $"The device is offline and already has {_maxQueuedPerClient} commands waiting. Cancel some, or wait for it to come back.")),
-            DeviceCommandOutcome.Inactive => Result<ClientCommandResponse>.Failure(DeviceInactive),
-            DeviceCommandOutcome.UnknownClient => Result<ClientCommandResponse>.Failure(WorkspaceOwnership.ClientNotFound),
-            DeviceCommandOutcome.BrokerUnavailable => Result<ClientCommandResponse>.Failure(BrokerUnavailable),
-            DeviceCommandOutcome.Invalid => Result<ClientCommandResponse>.Failure(ToError(result.Violation!)),
-            DeviceCommandOutcome.ExpiryInvalid => Result<ClientCommandResponse>.Failure(ExpiryInvalid),
+                $"The client is offline and already has {_maxQueuedPerClient} commands waiting. Cancel some, or wait for it to come back.")),
+            ClientCommandOutcome.Inactive => Result<ClientCommandResponse>.Failure(ClientInactive),
+            ClientCommandOutcome.UnknownClient => Result<ClientCommandResponse>.Failure(WorkspaceOwnership.ClientNotFound),
+            ClientCommandOutcome.BrokerUnavailable => Result<ClientCommandResponse>.Failure(BrokerUnavailable),
+            ClientCommandOutcome.Invalid => Result<ClientCommandResponse>.Failure(ToError(result.Violation!)),
+            ClientCommandOutcome.ExpiryInvalid => Result<ClientCommandResponse>.Failure(ExpiryInvalid),
             _ => throw new ArgumentOutOfRangeException(nameof(result), result.Outcome, null)
         };
     }
@@ -245,7 +245,7 @@ public sealed class ClientCommandService : IClientCommandService
 
     private Error? Validate(ClientCommandRequest request)
     {
-        if (DeviceMessageRules.Check(request.Type, request.Payload) is { } violation)
+        if (ClientMessageRules.Check(request.Type, request.Payload) is { } violation)
         {
             return ToError(violation);
         }
@@ -296,10 +296,10 @@ public sealed class ClientCommandService : IClientCommandService
 
     private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
-    private static Error ToError(DeviceMessageViolation violation) => violation.Rule switch
+    private static Error ToError(ClientMessageViolation violation) => violation.Rule switch
     {
-        DeviceMessageRule.TypeLength => Error.Validation("COMMAND_TYPE_INVALID", violation.Message),
-        DeviceMessageRule.TypeReserved => Error.Validation("COMMAND_TYPE_RESERVED", violation.Message),
+        ClientMessageRule.TypeLength => Error.Validation("COMMAND_TYPE_INVALID", violation.Message),
+        ClientMessageRule.TypeReserved => Error.Validation("COMMAND_TYPE_RESERVED", violation.Message),
         _ => Error.Validation("COMMAND_PAYLOAD_TOO_LARGE", violation.Message)
     };
 

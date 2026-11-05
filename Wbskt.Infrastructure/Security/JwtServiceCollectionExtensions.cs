@@ -63,8 +63,8 @@ public static class JwtServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Per-device token cutoffs shared through Redis (<c>ConnectionStrings:Redis</c>): the management
-    /// host writes them, the socket host checks them when a device connects.
+    /// Per-client token cutoffs shared through Redis (<c>ConnectionStrings:Redis</c>): the management
+    /// host writes them, the socket host checks them when a client connects.
     /// </summary>
     public static IServiceCollection AddClientTokenCutoffs(this IServiceCollection services, IConfiguration configuration)
     {

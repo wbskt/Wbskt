@@ -25,8 +25,8 @@ set -euo pipefail
 # Backing services (sql/rabbitmq/redis/traefik) are deliberately absent - they are not rebuilt per
 # release and restarting them is a separate, more disruptive decision. Console is absent too; it
 # has its own mode above.
-readonly ALLOWED_SERVICES=(auth management devices gateway-ws engine)
-readonly DEFAULT_SERVICES=(auth management devices gateway-ws engine)
+readonly ALLOWED_SERVICES=(auth management client-auth gateway-ws engine)
+readonly DEFAULT_SERVICES=(auth management client-auth gateway-ws engine)
 readonly HEALTH_TIMEOUT_SECONDS=240
 # Free space required on the image store after pruning, before anything is pulled. A full disk
 # fails layer extraction halfway through a pull; failing here instead says why, and still happens
@@ -53,7 +53,7 @@ usage: deploy.sh --tag <image-tag> [--services <a,b,c>] [--ref <git-ref>] [--ski
 
   --tag              Backend image tag, e.g. sha-abc1234. Also selects the commit this
                      checkout is reset to.
-  --services         Comma- or space-separated subset of: auth management devices gateway-ws
+  --services         Comma- or space-separated subset of: auth management client-auth gateway-ws
                      engine. Defaults to all of them. Use commas over SSH: the remote side word-splits
                      the command line, so a quoted space-separated list arrives as separate
                      arguments.
@@ -118,6 +118,8 @@ validate_backend() {
     local -a named=("${SERVICES[@]}")
     SERVICES=()
     for svc in "${named[@]}"; do
+        # The service's name until the Device wording went (wbskt/Wbskt#574).
+        [[ "$svc" == devices ]] && svc=client-auth
         is_allowed_service "$svc" || die "unknown service '$svc' (allowed: ${ALLOWED_SERVICES[*]})"
         [[ " ${SERVICES[*]} " == *" $svc "* ]] || SERVICES+=("$svc")
     done
@@ -333,17 +335,18 @@ deploy_backend() {
             docker compose --profile migrate run --rm --no-deps migrator
     fi
 
-    # devices and management both serve device login and registration: Traefik sends those paths to
-    # devices and falls back to management while no devices instance is healthy. Restarting them
-    # together would leave devices with neither, so devices goes first and must be healthy before
+    # client-auth and management both serve client login and registration: Traefik sends those paths to
+    # client-auth and falls back to management while no client-auth instance is healthy. Restarting them
+    # together would leave client login with neither, so client-auth goes first and must be healthy before
     # the rest (management among them) are touched.
     local -a rest=()
     local svc
-    if [[ " ${SERVICES[*]} " == *" devices "* && " ${SERVICES[*]} " == *" management "* ]]; then
-        echo "==> starting devices before management"
-        start_services devices
+    if [[ " ${SERVICES[*]} " == *" client-auth "* && " ${SERVICES[*]} " == *" management "* ]]; then
+        echo "==> starting client-auth before management"
+        start_services client-auth
+        remove_legacy_devices_container
         for svc in "${SERVICES[@]}"; do
-            [[ "$svc" == devices ]] || rest+=("$svc")
+            [[ "$svc" == client-auth ]] || rest+=("$svc")
         done
         start_services "${rest[@]}"
     else
@@ -415,6 +418,20 @@ report_drift() {
     fi
     if (( ${#lagging[@]} > 0 )); then
         echo "    hosts: deploy.sh --tag $TAG --services $(IFS=,; echo "${lagging[*]}")"
+    fi
+}
+
+# client-auth was called devices (wbskt/Wbskt#574). Compose no longer knows that service, so its
+# old container would keep running beside client-auth with its own Traefik router. Removed only once
+# client-auth is healthy, so client login always has a host.
+remove_legacy_devices_container() {
+    local ids
+    ids=$(docker ps -aq --filter "label=com.docker.compose.project=wbskt" \
+        --filter "label=com.docker.compose.service=devices")
+    if [[ -n "$ids" ]]; then
+        echo "==> removing the old devices container, now client-auth"
+        # shellcheck disable=SC2086
+        docker rm -f $ids
     fi
 }
 

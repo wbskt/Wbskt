@@ -9,7 +9,7 @@ namespace Wbskt.Host.Tests.InboundAdapters;
 public sealed class ClientPayloadReceivedConsumerTests
 {
     [Fact]
-    public async Task Consume_invokes_inbound_hub_with_device_channel_and_device_correlation_key()
+    public async Task Consume_invokes_inbound_hub_with_client_channel_and_client_correlation_key()
     {
         // Arrange
         var hub = new Mock<IInboundHub>();
@@ -40,7 +40,7 @@ public sealed class ClientPayloadReceivedConsumerTests
     }
 
     [Fact]
-    public async Task Consume_uses_device_ref_id_and_message_type_as_correlation_key()
+    public async Task Consume_uses_client_ref_id_and_message_type_as_correlation_key()
     {
         // Arrange
         var hub = new Mock<IInboundHub>();
@@ -114,7 +114,7 @@ public sealed class ClientPayloadReceivedConsumerTests
     }
 
     [Theory]
-    [InlineData(null, false)]   // no device time: treated as sent on arrival
+    [InlineData(null, false)]   // no client time: treated as sent on arrival
     [InlineData(5, false)]      // ordinary network delay
     [InlineData(30, false)]     // right at the threshold
     [InlineData(31, true)]

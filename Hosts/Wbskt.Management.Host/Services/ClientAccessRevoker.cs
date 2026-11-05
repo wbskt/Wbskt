@@ -8,8 +8,8 @@ using Wbskt.Management.Host.Models;
 namespace Wbskt.Management.Host.Services;
 
 /// <summary>
-/// The one place a device gains or loses access: it writes the token cutoff and then announces the
-/// change, in that order, so a revoked device is refused before anyone hears it was revoked. The
+/// The one place a client gains or loses access: it writes the token cutoff and then announces the
+/// change, in that order, so a revoked client is refused before anyone hears it was revoked. The
 /// cutoff in Redis is what holds when a socket host restarts or misses the event; the event is the
 /// fast path that also closes the live connection. See <see cref="ClientTokenCutoffs"/>.
 /// </summary>

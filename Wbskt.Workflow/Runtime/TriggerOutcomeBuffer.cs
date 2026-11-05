@@ -6,7 +6,7 @@ namespace Wbskt.Workflow.Runtime;
 /// <summary>
 /// Trigger outcomes waiting to be written, kept off the dispatch path. Only the newest
 /// <see cref="ITriggerDispatchOutcomeProvider.Keep"/> per trigger are held, since the table keeps no
-/// more, so a chatty device costs memory and writes bounded by its triggers, not its messages.
+/// more, so a chatty client costs memory and writes bounded by its triggers, not its messages.
 /// </summary>
 public sealed class TriggerOutcomeBuffer
 {

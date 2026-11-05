@@ -25,7 +25,7 @@ public sealed partial class PublicRoutingTests
         string internalPath = "/" + InternalRoutes.ResolveWorkspace;
 
         var reaching = Routers.Values
-            .Where(r => r.Public && r.Service is "auth" or "management" or "devices")
+            .Where(r => r.Public && r.Service is "auth" or "management" or "client-auth")
             .Where(r => !r.Rule.Contains($"!PathPrefix(`/{InternalRoutes.Prefix}`)", StringComparison.Ordinal) && r.Admits(internalPath))
             .Select(r => r.Name);
 
@@ -55,11 +55,11 @@ public sealed partial class PublicRoutingTests
     }
 
     [Fact]
-    public void The_auth_router_on_the_api_host_outranks_management_and_yields_to_devices()
+    public void The_auth_router_on_the_api_host_outranks_management_and_yields_to_client_auth()
     {
         // Without an explicit priority Traefik ranks by rule length, which says nothing about intent.
         Assert.True(Routers["auth-api"].Priority > Routers["management"].Priority);
-        Assert.True(Routers["auth-api"].Priority < Routers["devices"].Priority);
+        Assert.True(Routers["auth-api"].Priority < Routers["client-auth"].Priority);
     }
 
     [Fact]
@@ -79,9 +79,9 @@ public sealed partial class PublicRoutingTests
     [InlineData("/api/v1/client-registrations/initiate")]
     [InlineData("/api/client-auth/login")]
     [InlineData("/api/client-registrations/initiate")]
-    public void Device_sign_in_reaches_the_devices_role_with_or_without_the_version(string path)
+    public void Client_sign_in_reaches_the_client_auth_role_with_or_without_the_version(string path)
     {
-        Assert.True(Routers["devices"].Admits(path));
+        Assert.True(Routers["client-auth"].Admits(path));
     }
 
     [Theory]

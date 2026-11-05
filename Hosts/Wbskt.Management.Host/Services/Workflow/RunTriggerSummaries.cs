@@ -15,8 +15,8 @@ internal static class RunTriggerSummaries
 
         return trigger switch
         {
-            ClientTriggerNode { Config: { } c } => c.Type == "*" ? $"Device {c.ClientRef} sent a message" : $"Device {c.ClientRef} sent {c.Type}",
-            ClientPresenceTriggerNode { Config: { } c } => $"Device {c.ClientRef} {c.State.ToString().ToLowerInvariant()} for {c.ForSeconds} s",
+            ClientTriggerNode { Config: { } c } => c.Type == "*" ? $"Client {c.ClientRef} sent a message" : $"Client {c.ClientRef} sent {c.Type}",
+            ClientPresenceTriggerNode { Config: { } c } => $"Client {c.ClientRef} {c.State.ToString().ToLowerInvariant()} for {c.ForSeconds} s",
             ScheduleTriggerNode { Config: { } c } => $"Schedule {c.Cron}",
             WebhookTriggerNode { Config: { } c } => $"Webhook /{c.Path.TrimStart('/')}",
             ManualTriggerNode => "Started by hand",

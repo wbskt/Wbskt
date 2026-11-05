@@ -17,7 +17,7 @@ namespace Wbskt.Management.Host.Controllers.Workflow;
 //
 // Hardening for the anonymous edge:
 //   - rate limiting (PublicCallbackRateLimits): a webhook's budget is its workspace and path, so
-//     devices forwarded through a shared network server are not starved, while a per-IP ceiling
+//     clients forwarded through a shared network server are not starved, while a per-IP ceiling
 //     across every callback throttles enumeration of tokens/paths and blunts request floods;
 //   - a request-body cap (RequestSizeLimit) bounds how much attacker-controlled data one call can
 //     push into persisted workflow state;

@@ -6,7 +6,7 @@ namespace Wbskt.Protocol;
 
 /// <summary>
 /// Reads an optional timestamp without failing the whole message: anything that is not an
-/// ISO 8601 string becomes null, so a device with a bad clock format still gets its data through.
+/// ISO 8601 string becomes null, so a client with a bad clock format still gets its data through.
 /// </summary>
 internal sealed class LenientDateTimeOffsetConverter : JsonConverter<DateTimeOffset?>
 {

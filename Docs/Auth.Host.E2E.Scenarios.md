@@ -80,7 +80,7 @@ administrator of their own tenant instead.
 - **Test data accumulates.** Registration, workspace creation and role creation have no cleanup path
   (no delete-user endpoint). Every scenario must use a unique suffix. The rule that keeps this from
   leaking between scenarios is **a fresh user and workspace per scenario**: anything that publishes
-  workflows, registers devices, starts runs or reads a workspace's lists and event feed arranges its
+  workflows, registers clients, starts runs or reads a workspace's lists and event feed arranges its
   own with `ServicesFixture.CreateIsolatedWorkspaceAsync()` (or `RegisterAndLoginUserAsync()` /
   `CreateUserAsync()` + `CreateWorkspaceAsync()`), never the seeded Default Workspace. Only scenarios
   about the seeded administrator, its tenant or the Default Workspace themselves call
@@ -151,7 +151,7 @@ Highest priority: these encode defects that shipped, so they must fail against t
 |---|---|---|---|
 | `AUTH_LOG_01` | + | Correct credentials | **200**, non-empty `accessToken` + `refreshToken` |
 | `AUTH_LOG_02` | + | Access token is a JWT carrying `sub` (the user's RefId), `typ: "user"`, `name`, `email`, `sid` and no internal id | Decodes; `typ` is `user` |
-| `AUTH_LOG_03` | + | Two consecutive logins issue **different** refresh tokens | Both usable independently (multi-device) |
+| `AUTH_LOG_03` | + | Two consecutive logins issue **different** refresh tokens | Both usable independently (multi-client) |
 | `AUTH_LOG_04` | − | Correct email, wrong password | **401** `AUTH_INVALID_CREDENTIALS` |
 | `AUTH_LOG_05` | − | Unregistered email | **401** `AUTH_INVALID_CREDENTIALS` — **identical code and message to `04`**; asserting they match is the point, it prevents account enumeration |
 | `AUTH_LOG_06` | − | Deactivated account, correct password | Retired: tenant administrators suspend members instead, so only an operator can disable an account. The login still answers **401** `AUTH_USER_INACTIVE` for one, which distinguishes it from `04`/`05` |
@@ -189,7 +189,7 @@ The most security-sensitive area, and entirely uncovered today.
 | `AUTH_RT_15` | − | Two concurrent refreshes with the same token | Exactly one 200; the other 401. Must not mint two live families |
 | `AUTH_RT_16` | + | Rotation is anonymous (no `Authorization` header) | **200** — the refresh token is the credential |
 | `AUTH_RT_17` | + | Access token issued before rotation stays valid until expiry | Documents that rotation does not retro-invalidate access tokens |
-| `AUTH_RT_18` | − | Log out on device A, then device A retries its refresh; check device B | B is **also** revoked. Logout marks the token revoked, and rotation cannot tell a deliberate logout from a stolen-token replay — both are "a retired token came back". A benign post-logout retry therefore signs out every device and raises a `RefreshTokenReplay` alert. Assert current behaviour; the false positive is a separate decision |
+| `AUTH_RT_18` | − | Log out on client A, then client A retries its refresh; check client B | B is **also** revoked. Logout marks the token revoked, and rotation cannot tell a deliberate logout from a stolen-token replay — both are "a retired token came back". A benign post-logout retry therefore signs out every client and raises a `RefreshTokenReplay` alert. Assert current behaviour; the false positive is a separate decision |
 
 
 ### 5a. Refresh cookie — `X-Refresh-Token-Transport: cookie`
@@ -213,13 +213,13 @@ The most security-sensitive area, and entirely uncovered today.
 | `AUTH_OUT_02` | + | Logout with an **unknown** token | **204** — deliberately indistinguishable from `01`. Assert both status *and* empty body, so the endpoint cannot be used as a token oracle |
 | `AUTH_OUT_03` | + | Logout twice with the same token | **204** both times (idempotent) |
 | `AUTH_OUT_04` | + | Logout is anonymous | No `Authorization` header required |
-| `AUTH_OUT_05` | + | Logout revokes only the presented session | A second device's refresh token still works |
+| `AUTH_OUT_05` | + | Logout revokes only the presented session | A second client's refresh token still works |
 | `AUTH_OUT_06` | − | Missing `refreshToken` field | model-validation 400 |
 | `AUTH_OUT_07` | + | `logout-all` with a valid access token | **204**; **every** refresh token for that user fails afterwards |
 | `AUTH_OUT_08` | − | `logout-all` with no token | **401** |
 | `AUTH_OUT_09` | − | `logout-all` with an expired/garbage bearer token | **401** |
 | `AUTH_OUT_10` | + | `logout-all` does not affect other users | A second user's session survives |
-| `AUTH_OUT_11` | − | Access tokens (the caller's and another device's) after `logout-all` | **401** — logout-all revokes issued access tokens too |
+| `AUTH_OUT_11` | − | Access tokens (the caller's and another client's) after `logout-all` | **401** — logout-all revokes issued access tokens too |
 | `AUTH_OUT_12` | + | `logout-all` is idempotent | Second call also **204** |
 
 ---
@@ -414,46 +414,46 @@ The cross-service contract. Every workspace-scoped management-host request passe
 
 ---
 
-## 11b. Devices — delete, rotate, status, rename, state, tags, devices host (management host)
+## 11b. Clients — delete, rotate, status, rename, state, tags, client-auth host (management host)
 
-Covered by `Scenarios/Devices/DeviceLifecycleTests.cs`, `Scenarios/Devices/DeviceStatusTests.cs`, `Scenarios/Devices/DeviceTagTests.cs` and `Scenarios/Devices/DeviceHostTests.cs`; listed here so device lifecycle sits beside the
+Covered by `Scenarios/Clients/ClientLifecycleE2ETests.cs`, `Scenarios/Clients/ClientStatusTests.cs`, `Scenarios/Clients/ClientTagTests.cs` and `Scenarios/Clients/ClientHostTests.cs`; listed here so client lifecycle sits beside the
 workspace scenarios it depends on.
 
 | ID | ± | Scenario | Expected |
 |---|---|---|---|
-| `DEV_DEL_01` | + | Delete a registered device | **204**; its secret no longer signs in (**401**) and its detail is **404** |
-| `DEV_DEL_02` | − | Delete another workspace's device | **404** `CLIENT_NOT_FOUND`; the device still signs in |
-| `DEV_SEC_01` | + | Rotate a device's secret | **200** with a new secret; the old one is **401**, the new one signs in |
-| `DEV_PIN_01` | + | Rotate a policy's PIN | **200** with a new PIN; the old PIN no longer registers, the new one does, and existing devices still sign in |
-| `DEV_BULK_01` | + | Approve two pending devices and an unknown ref | **200**; both approved, the unknown ref reported as `CLIENT_NOT_FOUND` |
-| `DEV_BULK_02` | − | Approve two pending devices under a one-device policy | The first is approved, the second reported as `POLICY_LIMIT_REACHED` |
+| `DEV_DEL_01` | + | Delete a registered client | **204**; its secret no longer signs in (**401**) and its detail is **404** |
+| `DEV_DEL_02` | − | Delete another workspace's client | **404** `CLIENT_NOT_FOUND`; the client still signs in |
+| `DEV_SEC_01` | + | Rotate a client's secret | **200** with a new secret; the old one is **401**, the new one signs in |
+| `DEV_PIN_01` | + | Rotate a policy's PIN | **200** with a new PIN; the old PIN no longer registers, the new one does, and existing clients still sign in |
+| `DEV_BULK_01` | + | Approve two pending clients and an unknown ref | **200**; both approved, the unknown ref reported as `CLIENT_NOT_FOUND` |
+| `DEV_BULK_02` | − | Approve two pending clients under a one-client policy | The first is approved, the second reported as `POLICY_LIMIT_REACHED` |
 | `DEV_BULK_03` | − | Empty batch, or more than 100 | **400** |
-| `DEV_BULK_04` | − | Approve three pending devices, in the order c, a, b, under a two-device policy | c and a are approved; b is reported as `POLICY_LIMIT_REACHED` and stays pending |
-| `DEV_BULK_05` | − | Approve a pending device twice, an already-registered one, another workspace's and an unknown ref | **200**; the pending and registered devices are each listed once as updated; the foreign and unknown refs are both `CLIENT_NOT_FOUND`; the foreign device stays pending |
-| `DEV_BULK_06` | + | Revoke two registered devices | Both updated; neither signs in (**401**) |
-| `DEV_STATUS_01` | + | Approve a pending device | **204**; status Registered and it signs in |
-| `DEV_STATUS_02` | + | Revoke a registered device | **204**; status Revoked and it no longer signs in (**401**) |
-| `DEV_STATUS_03` | + | Approve a device that is already registered | **204**; nothing changes and it still signs in |
-| `DEV_STATUS_04` | − | Change an unknown device's status | **404** `CLIENT_NOT_FOUND` |
-| `DEV_STATUS_05` | − | Revoke another workspace's device | **404** `CLIENT_NOT_FOUND`; it stays registered and still signs in |
-| `DEV_STATUS_06` | − | Approve a device into a full policy | **400** `POLICY_LIMIT_REACHED`; it stays pending |
-| `DEV_NAME_01` | + | Rename a device (name padded with spaces) | **204**; the detail shows the trimmed name |
-| `DEV_NAME_02` | − | Rename an unknown device, then another workspace's | **404** `CLIENT_NOT_FOUND` both times; the name is unchanged |
-| `DEV_STATE_01` | ± | Read a new device's state, an unknown device's, and another workspace's | **200** with no items; **404** `CLIENT_NOT_FOUND` for both of the others |
-| `DEV_TAG_01` | + | Tag a device `Greenhouse`, ` garage ` and `GARAGE` | **200** with `garage`, `greenhouse`; the detail and the list show the same |
-| `DEV_TAG_02` | + | Tag a device again, then with an empty list | The second set replaces the first; the empty list clears them |
+| `DEV_BULK_04` | − | Approve three pending clients, in the order c, a, b, under a two-client policy | c and a are approved; b is reported as `POLICY_LIMIT_REACHED` and stays pending |
+| `DEV_BULK_05` | − | Approve a pending client twice, an already-registered one, another workspace's and an unknown ref | **200**; the pending and registered clients are each listed once as updated; the foreign and unknown refs are both `CLIENT_NOT_FOUND`; the foreign client stays pending |
+| `DEV_BULK_06` | + | Revoke two registered clients | Both updated; neither signs in (**401**) |
+| `DEV_STATUS_01` | + | Approve a pending client | **204**; status Registered and it signs in |
+| `DEV_STATUS_02` | + | Revoke a registered client | **204**; status Revoked and it no longer signs in (**401**) |
+| `DEV_STATUS_03` | + | Approve a client that is already registered | **204**; nothing changes and it still signs in |
+| `DEV_STATUS_04` | − | Change an unknown client's status | **404** `CLIENT_NOT_FOUND` |
+| `DEV_STATUS_05` | − | Revoke another workspace's client | **404** `CLIENT_NOT_FOUND`; it stays registered and still signs in |
+| `DEV_STATUS_06` | − | Approve a client into a full policy | **400** `POLICY_LIMIT_REACHED`; it stays pending |
+| `DEV_NAME_01` | + | Rename a client (name padded with spaces) | **204**; the detail shows the trimmed name |
+| `DEV_NAME_02` | − | Rename an unknown client, then another workspace's | **404** `CLIENT_NOT_FOUND` both times; the name is unchanged |
+| `DEV_STATE_01` | ± | Read a new client's state, an unknown client's, and another workspace's | **200** with no items; **404** `CLIENT_NOT_FOUND` for both of the others |
+| `DEV_TAG_01` | + | Tag a client `Greenhouse`, ` garage ` and `GARAGE` | **200** with `garage`, `greenhouse`; the detail and the list show the same |
+| `DEV_TAG_02` | + | Tag a client again, then with an empty list | The second set replaces the first; the empty list clears them |
 | `DEV_TAG_03` | − | Tag with `a,b`, an empty tag, `-garage` or 33 characters, or send no list | **400** `CLIENT_TAG_INVALID`; the tags are unchanged |
 | `DEV_TAG_04` | − | Tag with 11 distinct tags, then 10 plus repeats | **400** `CLIENT_TAGS_TOO_MANY` and nothing stored; then **200** with 10 tags |
-| `DEV_TAG_05` | − | Tag an unknown device, then another workspace's | **404** `CLIENT_NOT_FOUND` both times; its tags are unchanged |
-| `DEV_TAG_06` | + | List devices with `?tag=Garage`, `?tag=greenhouse`, `?tag=attic`, and a policy's devices with `?tag=garage` | Only the devices carrying the tag, with a matching `X-Total-Count`; none for an unused tag |
-| `DEV_TAG_07` | − | List devices with `?tag=a,b`, in the workspace and policy lists | **400** `CLIENT_TAG_INVALID` |
-| `DEV_TAG_08` | + | List the workspace's tags, delete a tagged device, list again | Each tag with its device count, this workspace's only; the deleted device's tags drop out |
-| `DEV_HOST_01` | + | Run the SDK with a PIN against the devices host alone | It registers, signs in and connects; the console shows it registered and connected |
-| `DEV_HOST_02` | + | Register on a manual-approval policy through the devices host, approve it in the console, sign in through the devices host | Pending, and refused sign-in, until approved; then **200** with a token |
-| `DEV_HOST_03` | − | Revoke in the console a device that signs in through the devices host | Its next sign-in there is **401** |
-| `DEV_HOST_04` | − | Sign in through the devices host with a wrong secret; register there with an unknown PIN | **401** `CLIENT_UNAUTHORIZED`; the PIN is refused with the same status and code the console host gives |
-| `DEV_HOST_05` | − | Call console endpoints (clients, a policy, workflows, the notification hub) on the devices host with a valid user token | **404** for each; nothing changes |
-| `DEV_HOST_06` | + | Read the devices host's readiness and JWKS | **200**; the same signing keys as the console host, so the socket host accepts tokens from either |
+| `DEV_TAG_05` | − | Tag an unknown client, then another workspace's | **404** `CLIENT_NOT_FOUND` both times; its tags are unchanged |
+| `DEV_TAG_06` | + | List clients with `?tag=Garage`, `?tag=greenhouse`, `?tag=attic`, and a policy's clients with `?tag=garage` | Only the clients carrying the tag, with a matching `X-Total-Count`; none for an unused tag |
+| `DEV_TAG_07` | − | List clients with `?tag=a,b`, in the workspace and policy lists | **400** `CLIENT_TAG_INVALID` |
+| `DEV_TAG_08` | + | List the workspace's tags, delete a tagged client, list again | Each tag with its client count, this workspace's only; the deleted client's tags drop out |
+| `DEV_HOST_01` | + | Run the SDK with a PIN against the client-auth host alone | It registers, signs in and connects; the console shows it registered and connected |
+| `DEV_HOST_02` | + | Register on a manual-approval policy through the client-auth host, approve it in the console, sign in through the client-auth host | Pending, and refused sign-in, until approved; then **200** with a token |
+| `DEV_HOST_03` | − | Revoke in the console a client that signs in through the client-auth host | Its next sign-in there is **401** |
+| `DEV_HOST_04` | − | Sign in through the client-auth host with a wrong secret; register there with an unknown PIN | **401** `CLIENT_UNAUTHORIZED`; the PIN is refused with the same status and code the console host gives |
+| `DEV_HOST_05` | − | Call console endpoints (clients, a policy, workflows, the notification hub) on the client-auth host with a valid user token | **404** for each; nothing changes |
+| `DEV_HOST_06` | + | Read the client-auth host's readiness and JWKS | **200**; the same signing keys as the console host, so the socket host accepts tokens from either |
 
 ---
 
@@ -475,12 +475,12 @@ Covered by `Scenarios/Workflows/WorkflowLifecycleTests.cs`.
 ## 11d. Another workspace's references (management host)
 
 Covered by `Scenarios/Auth/ForeignReferenceTests.cs`. Inside a workspace the caller can use, another
-workspace's policy or device reads exactly like a reference that names nothing, in a path or a list
+workspace's policy or client reads exactly like a reference that names nothing, in a path or a list
 filter (see "The ID Boundary" in `Docs/Coding.Conventions.md`).
 
 | ID | ± | Scenario | Expected |
 |---|---|---|---|
-| `ID_01` | − | Get, update, rotate the PIN of, or disable another workspace's policy; list devices, templates or event logs filtered by it; get, ping or filter event logs by another workspace's device. Each once with the foreign ref and once with a fresh one | **404** `POLICY_NOT_FOUND` or `CLIENT_NOT_FOUND`, the same for both refs; never 403 and never an empty page; the owner's policy is unchanged |
+| `ID_01` | − | Get, update, rotate the PIN of, or disable another workspace's policy; list clients, templates or event logs filtered by it; get, ping or filter event logs by another workspace's client. Each once with the foreign ref and once with a fresh one | **404** `POLICY_NOT_FOUND` or `CLIENT_NOT_FOUND`, the same for both refs; never 403 and never an empty page; the owner's policy is unchanged |
 
 ---
 

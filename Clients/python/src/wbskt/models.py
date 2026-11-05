@@ -43,7 +43,7 @@ class Parameter:
 
 @dataclass
 class Command:
-    """A command the device accepts, so the console can offer it with a form."""
+    """A command the client accepts, so the console can offer it with a form."""
 
     command: str
     description: str = ""

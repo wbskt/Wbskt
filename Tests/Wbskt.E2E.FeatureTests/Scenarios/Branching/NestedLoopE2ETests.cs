@@ -21,8 +21,8 @@ public sealed class NestedLoopE2ETests(ServicesFixture fixture)
         var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
 
-        var deviceName = $"e2e-nested-{Guid.NewGuid():N}";
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, deviceName);
+        var clientName = $"e2e-nested-{Guid.NewGuid():N}";
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, clientName);
 
         var workflowRefId = Guid.NewGuid();
         var definition = BuildNestedLoopDefinition(workflowRefId, clientRefId.ToString());
@@ -35,7 +35,7 @@ public sealed class NestedLoopE2ETests(ServicesFixture fixture)
         var clientConfig = new ClientConfig(
             BaseApiUrl: E2EConfig.ManagementBaseUrl,
             BaseSocketUrl: E2EConfig.SocketWsBaseUrl,
-            DeviceName: deviceName,
+            ClientName: clientName,
             PolicyPin: null);
 
         var commandLock = new object();

@@ -15,7 +15,7 @@ namespace Wbskt.Host.Tests.Architecture;
 /// "Deprecated" means a summary starting with <c>Deprecated:</c> or an <see cref="ObsoleteAttribute"/>.
 /// Summaries come from each host's XML documentation file (<c>GenerateDocumentationFile</c> is on for
 /// every host). Only <c>IgnoreApi</c> on the action counts here: a whole controller hidden from the
-/// description (the internal and device-facing ones) is a different decision, not a deprecation.
+/// description (the internal and client-facing ones) is a different decision, not a deprecation.
 /// </remarks>
 public sealed partial class DeprecatedRouteTests
 {

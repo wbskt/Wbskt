@@ -112,7 +112,7 @@ internal sealed class EventLogService : IEventLogService
             return Result<EventLogSummaryResponse>.Failure(range.Error);
         }
 
-        // The groups never hold device traffic, so a summary that leaves it out has no use for its counts.
+        // The groups never hold client traffic, so a summary that leaves it out has no use for its counts.
         var counts = await _eventProvider.CountAsync(workspaceId, range.Value.FromUtc, range.Value.ToUtc, traffic == EventLogTraffic.Include, cancellationToken);
         return Result<EventLogSummaryResponse>.Success(Summarize(counts, range.Value, traffic));
     }
@@ -157,11 +157,11 @@ internal sealed class EventLogService : IEventLogService
         {
             if (included is null)
             {
-                excluded = DeviceTrafficAttribute.EventNames;
+                excluded = ClientTrafficAttribute.EventNames;
             }
             else
             {
-                included = included.Except(DeviceTrafficAttribute.EventNames, StringComparer.Ordinal).ToList();
+                included = included.Except(ClientTrafficAttribute.EventNames, StringComparer.Ordinal).ToList();
             }
         }
 
@@ -213,7 +213,7 @@ internal sealed class EventLogService : IEventLogService
             FromUtc: range?.FromUtc,
             ToUtc: range?.ToUtc,
             Search: search,
-            IncludeDeviceTraffic: excluded is null && (included is null || included.Any(DeviceTrafficAttribute.EventNames.Contains))));
+            IncludeClientTraffic: excluded is null && (included is null || included.Any(ClientTrafficAttribute.EventNames.Contains))));
     }
 
     /// <summary>The events the query's groups and names keep together, or null when it names neither.</summary>
@@ -278,7 +278,7 @@ internal sealed class EventLogService : IEventLogService
             StringComparer.Ordinal);
 
         var kept = counts
-            .Where(c => traffic == EventLogTraffic.Include || !DeviceTrafficAttribute.EventNames.Contains(c.EventName))
+            .Where(c => traffic == EventLogTraffic.Include || !ClientTrafficAttribute.EventNames.Contains(c.EventName))
             .ToList();
 
         return new EventLogSummaryResponse(

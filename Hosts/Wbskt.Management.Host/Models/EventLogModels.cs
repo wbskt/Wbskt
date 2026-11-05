@@ -7,7 +7,7 @@ namespace Wbskt.Management.Host.Models;
 /// <summary>A row of the event log with the Id its page cursor is made from.</summary>
 public sealed record EventLogRow(long Id, EventLogResponse Entry);
 
-/// <summary>Whether a read of the event log keeps raw device traffic (messages, pings, readings) or drops it.</summary>
+/// <summary>Whether a read of the event log keeps raw client traffic (messages, pings, readings) or drops it.</summary>
 public enum EventLogTraffic
 {
     Include,
@@ -36,7 +36,7 @@ public sealed class EventLogQuery
     /// <summary>Only entries of this criticality or worse: <c>Warning</c> is warnings and errors.</summary>
     public EventCriticality? MinCriticality { get; set; }
 
-    /// <summary>Where entries came from, repeated or comma-separated: Console, Api, Device, Workflow, System.</summary>
+    /// <summary>Where entries came from, repeated or comma-separated: Console, Api, Client, Workflow, System.</summary>
     public string[]? Source { get; set; }
 
     /// <summary>Only entries newer than this id: the newest one a live view already shows.</summary>
@@ -60,7 +60,7 @@ public sealed class EventLogQuery
     /// <summary>Entries before this instant.</summary>
     public DateTimeOffset? To { get; set; }
 
-    /// <summary><c>include</c> (the default) or <c>exclude</c> raw device traffic.</summary>
+    /// <summary><c>include</c> (the default) or <c>exclude</c> raw client traffic.</summary>
     public EventLogTraffic Traffic { get; set; } = EventLogTraffic.Include;
 
     /// <summary>Text to find in the entry's data or event name: a client, policy or workflow name, an email, an id.</summary>
@@ -83,8 +83,8 @@ public sealed record EventLogFilter(
     DateTime? FromUtc = null,
     DateTime? ToUtc = null,
     string? Search = null,
-    // False when the query leaves out every device traffic event, so the read skips dbo.DeviceTraffic.
-    bool IncludeDeviceTraffic = true);
+    // False when the query leaves out every client traffic event, so the read skips dbo.ClientTraffic.
+    bool IncludeClientTraffic = true);
 
 /// <summary>How many entries of one event one user caused from one source, as the database counts them.</summary>
 public sealed record EventLogCount(string EventName, Guid? UserRefId, EventSource? Source, long Count);

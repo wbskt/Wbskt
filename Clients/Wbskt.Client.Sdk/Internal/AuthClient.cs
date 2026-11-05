@@ -20,7 +20,7 @@ internal sealed class AuthClient : IDisposable
 
     public async Task<(Guid ClientRefId, string Secret)> RegisterAsync()
     {
-        var response = await _httpClient.PostAsJsonAsync("api/v1/client-registrations/initiate", new ClientRegistrationRequest(_config.PolicyPin, _config.DeviceName));
+        var response = await _httpClient.PostAsJsonAsync("api/v1/client-registrations/initiate", new ClientRegistrationRequest(_config.PolicyPin, _config.ClientName));
 
         if (!response.IsSuccessStatusCode)
         {
@@ -31,16 +31,16 @@ internal sealed class AuthClient : IDisposable
         return result != null ? (result.ClientRefId, result.Secret) : throw new InvalidOperationException("Invalid registration response.");
     }
 
-    public async Task<DeviceToken> LoginAsync(Guid clientRefId, string secret)
+    public async Task<ClientToken> LoginAsync(Guid clientRefId, string secret)
     {
         var response = await _httpClient.PostAsJsonAsync("api/v1/client-auth/login", new ClientLoginRequest(clientRefId, secret));
 
         if (response.StatusCode == HttpStatusCode.TooManyRequests)
         {
-            throw new DeviceLoginThrottledException(RetryAfter(response));
+            throw new ClientLoginThrottledException(RetryAfter(response));
         }
 
-        if (response.StatusCode == HttpStatusCode.Unauthorized && await ErrorCodeAsync(response) == DeviceErrorCodes.Unauthorized)
+        if (response.StatusCode == HttpStatusCode.Unauthorized && await ErrorCodeAsync(response) == ClientErrorCodes.Unauthorized)
         {
             throw new CredentialsRejectedException();
         }
@@ -52,7 +52,7 @@ internal sealed class AuthClient : IDisposable
 
         var result = await response.Content.ReadFromJsonAsync<ClientLoginResponse>();
         return result is { AccessToken.Length: > 0 }
-            ? new DeviceToken(result.AccessToken, DateTimeOffset.UtcNow.AddSeconds(result.ExpiresIn))
+            ? new ClientToken(result.AccessToken, DateTimeOffset.UtcNow.AddSeconds(result.ExpiresIn))
             : throw new InvalidOperationException("Invalid login response.");
     }
 

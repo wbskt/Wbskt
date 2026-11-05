@@ -4,8 +4,8 @@ using Wbskt.Gateway.Core.Infrastructure;
 namespace Wbskt.Gateway.Core.Telemetry;
 
 /// <summary>
-/// Device connections on this gateway instance, tagged with the transport that carries them. No
-/// client or workspace tag: one series per device is unbounded cardinality, and who disconnected is
+/// Client connections on this gateway instance, tagged with the transport that carries them. No
+/// client or workspace tag: one series per client is unbounded cardinality, and who disconnected is
 /// already in the ClientDisconnectedEvent stream.
 /// </summary>
 /// <remarks>
@@ -44,7 +44,7 @@ public sealed class GatewayMetrics : IDisposable
         _disconnects.Add(1, _transport, new KeyValuePair<string, object?>("reason", reason.Tag()));
     }
 
-    /// <summary>A device message was not passed on: over budget, or not a valid envelope.</summary>
+    /// <summary>A client message was not passed on: over budget, or not a valid envelope.</summary>
     public void Dropped(string reason)
     {
         _dropped.Add(1, _transport, new KeyValuePair<string, object?>("reason", reason));

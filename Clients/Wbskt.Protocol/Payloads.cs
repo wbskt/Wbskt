@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Wbskt.Protocol;
 
 /// <summary>
-/// The payload of <see cref="MessageTypes.Ping"/>. The device echoes <see cref="Id"/> (and the
+/// The payload of <see cref="MessageTypes.Ping"/>. The client echoes <see cref="Id"/> (and the
 /// timestamp, which older servers read) in its <see cref="PongPayload"/>.
 /// </summary>
 public sealed record PingPayload(
@@ -21,7 +21,7 @@ public sealed record PongPayload(
     string? Id = null);
 
 /// <summary>
-/// The payload of <see cref="MessageTypes.Ack"/>. A device that will not act on a command (it
+/// The payload of <see cref="MessageTypes.Ack"/>. A client that will not act on a command (it
 /// arrived past its expiresAt) still answers, with <see cref="Refused"/> set and the command's
 /// <see cref="Type"/>, so the sender sees a failure rather than silence.
 /// </summary>

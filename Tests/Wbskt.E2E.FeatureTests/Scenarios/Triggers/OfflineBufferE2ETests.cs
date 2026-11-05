@@ -10,7 +10,7 @@ using Wbskt.Workflow.Abstraction.Models.Expressions;
 namespace Wbskt.E2E.FeatureTests.Scenarios.Triggers;
 
 /// <summary>
-/// A device that sends while offline keeps the reading and delivers it on connect, with the time it
+/// A client that sends while offline keeps the reading and delivers it on connect, with the time it
 /// was sent, so a workflow can tell a late reading from a live one.
 /// </summary>
 [Collection(EngineCollection.Name)]
@@ -24,23 +24,23 @@ public sealed class OfflineBufferE2ETests(ServicesFixture fixture)
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
         var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
-        var deviceName = $"e2e-offline-{Guid.NewGuid():N}";
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, deviceName);
+        var clientName = $"e2e-offline-{Guid.NewGuid():N}";
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, clientName);
         var workflowRefId = await PublishAsync(token, workspaceRef, clientRefId, late: true);
-        // Its opposite, on the same device and message type: it starts a run for a live reading only.
+        // Its opposite, on the same client and message type: it starts a run for a live reading only.
         // A client message is matched against every trigger watching it in one pass, so once this one
         // has run for the live reading below, the late-only trigger has judged that reading too.
         var liveOnlyRefId = await PublishAsync(token, workspaceRef, clientRefId, late: false);
 
         var storage = new InMemoryClientStorage(clientRefId, secret);
-        await using var client = new WbsktClient(new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, deviceName, null), storage);
+        await using var client = new WbsktClient(new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, clientName, null), storage);
 
         // Not connected yet: the reading waits in the buffer instead of throwing.
         await client.SendAsync("temperature", new { celsius = 12 });
         client.PendingMessageCount.Should().Be(1);
 
         // Past the 30 second late threshold. This wait is the scenario: the reading has to be that old
-        // when it arrives, and nothing can be observed while the device is offline.
+        // when it arrives, and nothing can be observed while the client is offline.
         await Task.Delay(TimeSpan.FromSeconds(32));
         await client.StartAsync();
 

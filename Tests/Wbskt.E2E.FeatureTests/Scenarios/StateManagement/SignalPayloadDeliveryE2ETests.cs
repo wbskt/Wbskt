@@ -16,7 +16,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.StateManagement;
 /// (and observers) can read.
 ///
 /// Topology:
-///   DeviceTrigger ─► AwaitSignal("approve") ─► End
+///   ClientTrigger ─► AwaitSignal("approve") ─► End
 ///
 /// Telemetry parks the branch on the signal bookmark; an operator posts the "approve" signal with
 /// a payload; the branch resumes, promotes the payload to "signalPayload", and completes. We assert
@@ -36,8 +36,8 @@ public sealed class SignalPayloadDeliveryE2ETests(ServicesFixture fixture)
         var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
 
-        var deviceName = $"e2e-sigpayload-{Guid.NewGuid():N}";
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, deviceName);
+        var clientName = $"e2e-sigpayload-{Guid.NewGuid():N}";
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, clientName);
 
         var workflowRefId = Guid.NewGuid();
         var definition = BuildSignalDefinition(workflowRefId, clientRefId.ToString());
@@ -49,7 +49,7 @@ public sealed class SignalPayloadDeliveryE2ETests(ServicesFixture fixture)
             JsonSerializer.SerializeToElement(definition, JsonOpts));
 
         var storage = new InMemoryClientStorage(clientRefId, secret);
-        var clientConfig = new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, deviceName, null);
+        var clientConfig = new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, clientName, null);
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
         await wbsktClient.StartAsync();
 

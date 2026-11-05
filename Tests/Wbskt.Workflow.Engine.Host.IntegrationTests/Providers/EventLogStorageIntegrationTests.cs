@@ -10,7 +10,7 @@ using Wbskt.Models;
 namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 
 /// <summary>
-/// How event log entries reach their tables (dbo.EventLogs, and dbo.DeviceTraffic for device traffic)
+/// How event log entries reach their tables (dbo.EventLogs, and dbo.ClientTraffic for client traffic)
 /// and leave them: the batch insert (whose table-valued parameter is matched to
 /// <c>dbo.EventLogTableType</c> by column position, so a misordered column lands data in the wrong
 /// place or fails every flush), the retention sweeps, and the reads that page over both as one log.
@@ -131,7 +131,7 @@ public sealed class EventLogStorageIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
-    public async Task Device_traffic_and_the_audit_log_share_one_id_sequence_and_read_as_one_log()
+    public async Task Client_traffic_and_the_audit_log_share_one_id_sequence_and_read_as_one_log()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
         int workspaceId = Random.Shared.Next(1_000_000, int.MaxValue);
@@ -141,10 +141,10 @@ public sealed class EventLogStorageIntegrationTests(SqlEdgeFixture fixture)
 
         var provider = Provider();
         await provider.InsertBatchAsync(EventLogTable.Build([Entry(audit)]));
-        await provider.InsertDeviceTrafficBatchAsync(EventLogTable.Build([Entry(traffic)]));
+        await provider.InsertClientTrafficBatchAsync(EventLogTable.Build([Entry(traffic)]));
         await provider.InsertBatchAsync(EventLogTable.Build([Entry(audit)]));
 
-        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.DeviceTraffic WHERE WorkspaceId = @p0", workspaceId));
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.ClientTraffic WHERE WorkspaceId = @p0", workspaceId));
         Assert.Equal(2, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.EventLogs WHERE WorkspaceId = @p0", workspaceId));
 
         var all = await provider.GetLogsAsync(workspaceId, new EventLogFilter(), cursorId: null, take: 10);
@@ -157,7 +157,7 @@ public sealed class EventLogStorageIntegrationTests(SqlEdgeFixture fixture)
         var older = await provider.GetLogsAsync(workspaceId, new EventLogFilter(), cursorId: trafficId, take: 10);
         Assert.Single(older);
 
-        var auditOnly = await provider.GetLogsAsync(workspaceId, new EventLogFilter(IncludeDeviceTraffic: false), cursorId: null, take: 10);
+        var auditOnly = await provider.GetLogsAsync(workspaceId, new EventLogFilter(IncludeClientTraffic: false), cursorId: null, take: 10);
         Assert.Equal(2, auditOnly.Count);
         Assert.All(auditOnly, r => Assert.Equal("ClientConnectedEvent", r.Entry.EventName));
 
@@ -166,8 +166,8 @@ public sealed class EventLogStorageIntegrationTests(SqlEdgeFixture fixture)
         var inbound = await provider.GetClientCommsAsync(workspaceId, clientId: 7, direction: "in", cursorId: null, take: 10);
         Assert.Equal("ClientMessageReceivedEvent", Assert.Single(inbound).Entry.EventName);
 
-        var withTraffic = await provider.CountAsync(workspaceId, DateTime.UtcNow.AddHours(-1), DateTime.UtcNow.AddHours(1), includeDeviceTraffic: true);
-        var withoutTraffic = await provider.CountAsync(workspaceId, DateTime.UtcNow.AddHours(-1), DateTime.UtcNow.AddHours(1), includeDeviceTraffic: false);
+        var withTraffic = await provider.CountAsync(workspaceId, DateTime.UtcNow.AddHours(-1), DateTime.UtcNow.AddHours(1), includeClientTraffic: true);
+        var withoutTraffic = await provider.CountAsync(workspaceId, DateTime.UtcNow.AddHours(-1), DateTime.UtcNow.AddHours(1), includeClientTraffic: false);
         Assert.Equal(3, withTraffic.Sum(c => c.Count));
         Assert.Equal(2, withoutTraffic.Sum(c => c.Count));
     }
@@ -181,10 +181,10 @@ public sealed class EventLogStorageIntegrationTests(SqlEdgeFixture fixture)
         var messageId = Guid.NewGuid();
         EventLogEntry Entry() => new(traffic, "{}", DateTime.UtcNow, workspaceId, MessageId: messageId);
 
-        await Provider().InsertDeviceTrafficBatchAsync(EventLogTable.Build([Entry(), Entry()]));
-        await Provider().InsertDeviceTrafficBatchAsync(EventLogTable.Build([Entry()]));
+        await Provider().InsertClientTrafficBatchAsync(EventLogTable.Build([Entry(), Entry()]));
+        await Provider().InsertClientTrafficBatchAsync(EventLogTable.Build([Entry()]));
 
-        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.DeviceTraffic WHERE WorkspaceId = @p0", workspaceId));
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.ClientTraffic WHERE WorkspaceId = @p0", workspaceId));
     }
 
     /// <summary>
@@ -197,9 +197,9 @@ public sealed class EventLogStorageIntegrationTests(SqlEdgeFixture fixture)
         Skip.IfNot(fixture.IsAvailable, Skipped);
         int workspaceId = Random.Shared.Next(1_000_000, int.MaxValue);
         int traffic = await EventIdAsync("ClientPingEvent");
-        long ahead = await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.DeviceTraffic");
+        long ahead = await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.ClientTraffic");
         await ExecAsync("""
-            INSERT INTO dbo.DeviceTraffic (EventId, WorkspaceId, CreatedAt)
+            INSERT INTO dbo.ClientTraffic (EventId, WorkspaceId, CreatedAt)
             VALUES (@p1, @p0, '2000-01-01'), (@p1, @p0, '2000-01-02'), (@p1, @p0, '2000-01-03'),
                    (@p1, @p0, '2000-01-04'), (@p1, @p0, '2000-01-05'),
                    (@p1, @p0, '2001-01-01'), (@p1, @p0, SYSUTCDATETIME());
@@ -207,11 +207,11 @@ public sealed class EventLogStorageIntegrationTests(SqlEdgeFixture fixture)
 
         var provider = Provider();
         int batch = (int)ahead + 3;
-        Assert.Equal(3, await provider.DeleteDeviceTrafficBeforeAsync(Cutoff, batch));
-        Assert.Equal(2, await provider.DeleteDeviceTrafficBeforeAsync(Cutoff, batch));
-        Assert.Equal(0, await provider.DeleteDeviceTrafficBeforeAsync(Cutoff, batch));
+        Assert.Equal(3, await provider.DeleteClientTrafficBeforeAsync(Cutoff, batch));
+        Assert.Equal(2, await provider.DeleteClientTrafficBeforeAsync(Cutoff, batch));
+        Assert.Equal(0, await provider.DeleteClientTrafficBeforeAsync(Cutoff, batch));
 
-        Assert.Equal(2, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.DeviceTraffic WHERE WorkspaceId = @p0", workspaceId));
+        Assert.Equal(2, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.ClientTraffic WHERE WorkspaceId = @p0", workspaceId));
     }
 
     private Task<int> EventIdAsync(string eventName) =>

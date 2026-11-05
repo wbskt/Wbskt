@@ -13,18 +13,18 @@ namespace Wbskt.Management.Host.Handlers;
 // (telemetry etc.) stay in the workflow-trigger/event-log pipeline and are ignored here.
 public sealed class ClientMetadataIngestionHandler : IConsumer<ClientMessageReceivedEvent>
 {
-    // Devices write straight into NVARCHAR(MAX); cap what a single report may carry.
+    // Clients write straight into NVARCHAR(MAX); cap what a single report may carry.
     private const int MaxCapabilitiesPayloadChars = 32 * 1024;
     private const int MaxStatePayloadChars = 8 * 1024;
     private const int MaxStateVariablesPerReport = 50;
     private const int MaxStateVariableNameLength = 100;
-    // How many variables one client may hold; a device cannot grow the table without bound by varying names.
+    // How many variables one client may hold; a client cannot grow the table without bound by varying names.
     internal const int MaxStateVariablesPerClient = 200;
     private const int MaxSystemEntries = 20;
     private const int MaxSystemEntryLength = 40;
     private const int MaxFirmwareVersionLength = 50;
 
-    // As the workflow engine judges a payload late: it arrived this long after the device sent it.
+    // As the workflow engine judges a payload late: it arrived this long after the client sent it.
     internal static readonly TimeSpan LateThreshold = TimeSpan.FromSeconds(30);
 
     private static readonly JsonSerializerOptions DeserializeOptions = new() { PropertyNameCaseInsensitive = true };
@@ -114,7 +114,7 @@ public sealed class ClientMetadataIngestionHandler : IConsumer<ClientMessageRece
             }
 
             // Numbers also go to the readings history, so they can be charted over time. Only for a
-            // variable that was stored: the cap on variables also caps how many series a device makes.
+            // variable that was stored: the cap on variables also caps how many series a client makes.
             var value = reported[variable.Name].Value;
             if (value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number) && double.IsFinite(number))
             {
@@ -131,11 +131,11 @@ public sealed class ClientMetadataIngestionHandler : IConsumer<ClientMessageRece
 
         if (readings.Count > 0)
         {
-            // A buffered report counts at the time the device took it, not when it was finally sent.
+            // A buffered report counts at the time the client took it, not when it was finally sent.
             var receivedAt = message.CreatedAtUtc;
-            var deviceTime = message.SentAtUtc ?? receivedAt;
-            var isLate = receivedAt - deviceTime > LateThreshold;
-            await _readingProvider.InsertAsync(message.ClientId, deviceTime, receivedAt, isLate, readings, cancellationToken);
+            var sentAt = message.SentAtUtc ?? receivedAt;
+            var isLate = receivedAt - sentAt > LateThreshold;
+            await _readingProvider.InsertAsync(message.ClientId, sentAt, receivedAt, isLate, readings, cancellationToken);
         }
     }
 

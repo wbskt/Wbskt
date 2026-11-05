@@ -31,7 +31,7 @@ public sealed class ActionTemplatesTests
         var templates = TestTemplates.Create(Shared(("site", "\"greenhouse\"")));
         var ctx = Context();
 
-        ToastConfig filled = await templates.FillAsync(ctx, Toast("Frost: {{reading.temp}}°C in the {{ $shared.site }} ({{device}})"), CancellationToken.None);
+        ToastConfig filled = await templates.FillAsync(ctx, Toast("Frost: {{reading.temp}}°C in the {{ $shared.site }} ({{client}})"), CancellationToken.None);
 
         Assert.Equal("Frost: 1.4°C in the greenhouse (probe-7)", filled.Message);
         Assert.Empty(ctx.Warnings);
@@ -48,11 +48,11 @@ public sealed class ActionTemplatesTests
     [Fact]
     public async Task Filling_in_leaves_the_definitions_config_as_written()
     {
-        ToastConfig config = Toast("{{device}}");
+        ToastConfig config = Toast("{{client}}");
 
         await TestTemplates.Create().FillAsync(Context(), config, CancellationToken.None);
 
-        Assert.Equal("{{device}}", config.Message);
+        Assert.Equal("{{client}}", config.Message);
     }
 
     [Fact]
@@ -60,7 +60,7 @@ public sealed class ActionTemplatesTests
     {
         var ctx = Context();
 
-        ToastConfig filled = await TestTemplates.Create(Shared()).FillAsync(ctx, Toast("[{{nope.temp}}][{{$shared.token}}][{{device}}]"), CancellationToken.None);
+        ToastConfig filled = await TestTemplates.Create(Shared()).FillAsync(ctx, Toast("[{{nope.temp}}][{{$shared.token}}][{{client}}]"), CancellationToken.None);
 
         Assert.Equal("[][][probe-7]", filled.Message);
         NodeWarning warning = Assert.Single(ctx.Warnings);
@@ -111,11 +111,11 @@ public sealed class ActionTemplatesTests
         var ctx = Context();
         var discord = new DiscordConfig
         {
-            Message = "{{device}}",
+            Message = "{{client}}",
             Embeds = [new DiscordEmbed { Title = "t", Fields = [new DiscordEmbedField { Name = "temp", Value = "{{reading.temp}} {{gone}}" }] }]
         };
-        var webhook = new WebhookNotificationConfig { Url = "https://x.test/{{device}}", Method = "POST", Headers = new Dictionary<string, string> { ["X-Who"] = "{{gone}}" } };
-        var ntfy = new NtfyConfig { Message = "m", Tags = ["{{device}}", "fixed"] };
+        var webhook = new WebhookNotificationConfig { Url = "https://x.test/{{client}}", Method = "POST", Headers = new Dictionary<string, string> { ["X-Who"] = "{{gone}}" } };
+        var ntfy = new NtfyConfig { Message = "m", Tags = ["{{client}}", "fixed"] };
         var templates = TestTemplates.Create();
 
         DiscordConfig filledDiscord = await templates.FillAsync(ctx, discord, CancellationToken.None);
@@ -141,15 +141,15 @@ public sealed class ActionTemplatesTests
             ["on"] = "{{heaterOn}}",
             ["temp"] = "{{reading.temp}}",
             ["reading"] = "{{reading}}",
-            ["label"] = "{{device}} at {{reading.temp}}",
-            ["{{device}}"] = new object[] { "{{reading.temp}}", 3, true },
+            ["label"] = "{{client}} at {{reading.temp}}",
+            ["{{client}}"] = new object[] { "{{reading.temp}}", 3, true },
             ["fixed"] = "as written"
         });
 
         SendClientMessageConfig filled = await TestTemplates.Create().FillAsync(ctx, Command(payload), CancellationToken.None);
 
         Assert.Equal(
-            """{"on":true,"temp":1.4,"reading":{"temp":1.4},"label":"probe-7 at 1.4","{{device}}":[1.4,3,true],"fixed":"as written"}""",
+            """{"on":true,"temp":1.4,"reading":{"temp":1.4},"label":"probe-7 at 1.4","{{client}}":[1.4,3,true],"fixed":"as written"}""",
             filled.Payload!.Value.GetRawText());
         Assert.Empty(ctx.Warnings);
     }
@@ -233,7 +233,7 @@ public sealed class ActionTemplatesTests
             Ports = [],
             Config = new WebhookNotificationConfig
             {
-                Url = "https://hooks.example.test/{{device}}",
+                Url = "https://hooks.example.test/{{client}}",
                 Method = "POST",
                 Headers = new Dictionary<string, string> { ["X-Note"] = "{{note}}" },
                 Body = JsonSerializer.SerializeToElement(new { on = "{{heaterOn}}" })
@@ -256,20 +256,20 @@ public sealed class ActionTemplatesTests
             NodeId = NodeId,
             Name = "call",
             Ports = [],
-            Config = new WebhookNotificationConfig { Url = "{{device}}", Method = "POST" }
+            Config = new WebhookNotificationConfig { Url = "{{client}}", Method = "POST" }
         };
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(Context(node), CancellationToken.None));
 
         Assert.Equal("WEBHOOK_INVALID_URL", fail.ErrorCode);
-        Assert.Contains("'{{device}}'", fail.Message);
+        Assert.Contains("'{{client}}'", fail.Message);
         Assert.DoesNotContain("probe-7", fail.Message);
     }
 
     [Fact]
-    public async Task Send_to_device_sends_the_filled_in_payload()
+    public async Task Send_to_client_sends_the_filled_in_payload()
     {
-        var publisher = new Mock<IDeviceCommandPublisher>();
+        var publisher = new Mock<IClientCommandPublisher>();
         var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>(), TestTemplates.Create());
         var node = new SendClientMessageNode
         {
@@ -280,7 +280,7 @@ public sealed class ActionTemplatesTests
             {
                 ClientRef = Guid.NewGuid().ToString(),
                 Type = "SetHeater",
-                Payload = JsonSerializer.SerializeToElement(new { on = "{{heaterOn}}", reason = "{{device}} read {{reading.temp}}" })
+                Payload = JsonSerializer.SerializeToElement(new { on = "{{heaterOn}}", reason = "{{client}} read {{reading.temp}}" })
             }
         };
 
@@ -302,7 +302,7 @@ public sealed class ActionTemplatesTests
             NodeId = NodeId,
             Name = "toast",
             Ports = [],
-            Config = new ToastConfig { Title = "{{device}}", Message = "{{reading.temp}}°C" }
+            Config = new ToastConfig { Title = "{{client}}", Message = "{{reading.temp}}°C" }
         };
 
         Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(Context(node), CancellationToken.None));
@@ -326,7 +326,7 @@ public sealed class ActionTemplatesTests
             ["heaterOn"] = JsonSerializer.SerializeToElement(true),
             ["note"] = JsonSerializer.SerializeToElement("one\r\ntwo\n\nthree")
         };
-        var trigger = new Dictionary<string, JsonElement> { ["device"] = JsonSerializer.SerializeToElement("probe-7") };
+        var trigger = new Dictionary<string, JsonElement> { ["client"] = JsonSerializer.SerializeToElement("probe-7") };
 
         return new NodeContext
         {

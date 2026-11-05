@@ -5,7 +5,7 @@ Post-Deployment Script
 */
 
 -- 1. Retire the registration policies this script used to seed.
--- Every deploy created PIN 123456 (auto-approve, 100 devices) and PIN 654321 in workspace 1. The
+-- Every deploy created PIN 123456 (auto-approve, 100 clients) and PIN 654321 in workspace 1. The
 -- registration endpoint is anonymous, so a PIN anyone would guess first was an open door into the
 -- default workspace. The seed is gone; this disables the rows already created. Disabling, not
 -- deleting: clients registered through them reference the policy and keep working. It runs on every
@@ -34,7 +34,7 @@ UPDATE dbo.Clients
 GO
 
 -- 3. Move dbo.EventLogIds past the ids already used.
--- dbo.EventLogs.Id was an IDENTITY until device traffic moved to dbo.DeviceTraffic and the two began
+-- dbo.EventLogs.Id was an IDENTITY until client traffic moved to dbo.ClientTraffic and the two began
 -- sharing this sequence. The schema change keeps the existing ids, and the sequence starts at 1, so
 -- without this the next insert would collide with the oldest row. It moves only when the highest id
 -- is past the last one the sequence handed out, so it runs on the first deploy over existing rows and
@@ -51,7 +51,7 @@ IF EXISTS (
           FROM (
               SELECT ISNULL(MAX(Id), 0) AS Id FROM dbo.EventLogs
               UNION ALL
-              SELECT ISNULL(MAX(Id), 0) FROM dbo.DeviceTraffic
+              SELECT ISNULL(MAX(Id), 0) FROM dbo.ClientTraffic
           ) AS Highest))
 BEGIN
     DECLARE @EventLogIdGap BIGINT = (
@@ -59,7 +59,7 @@ BEGIN
         FROM (
             SELECT ISNULL(MAX(Id), 0) AS Id FROM dbo.EventLogs
             UNION ALL
-            SELECT ISNULL(MAX(Id), 0) FROM dbo.DeviceTraffic
+            SELECT ISNULL(MAX(Id), 0) FROM dbo.ClientTraffic
         ) AS Highest)
         - (SELECT ISNULL(CAST(last_used_value AS BIGINT), 0) FROM sys.sequences WHERE object_id = OBJECT_ID(N'dbo.EventLogIds'));
     PRINT '>>> Advancing dbo.EventLogIds by ' + CAST(@EventLogIdGap AS NVARCHAR(20));

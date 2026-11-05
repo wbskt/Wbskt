@@ -6,7 +6,7 @@ using Wbskt.Protocol;
 namespace Wbskt.Events.Client;
 
 /// <summary>
-/// A device's capabilities, as stored: the whole report, so a listener can patch its copy instead of
+/// A client's capabilities, as stored: the whole report, so a listener can patch its copy instead of
 /// reading the client again. Raised only when the report was newer than the one stored.
 /// </summary>
 /// <param name="System">The platform features it takes (<c>["ota"]</c>); empty when none.</param>

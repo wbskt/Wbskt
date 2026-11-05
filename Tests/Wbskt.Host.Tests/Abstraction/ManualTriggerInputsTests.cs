@@ -21,7 +21,7 @@ public sealed class ManualTriggerInputsTests
     [Fact]
     public void Inputs_with_good_names_publish()
     {
-        var result = Validate(Input("device"), Input("reason", "\"testing\""), Input("_count2"));
+        var result = Validate(Input("client"), Input("reason", "\"testing\""), Input("_count2"));
 
         Assert.DoesNotContain(result.Issues, i => i.Code.StartsWith("MANUAL_INPUT", StringComparison.Ordinal));
     }
@@ -35,7 +35,7 @@ public sealed class ManualTriggerInputsTests
     [InlineData("depth", "MANUAL_INPUT_NAME_RESERVED")]
     public void A_bad_or_reserved_name_is_refused_on_that_input(string name, string code)
     {
-        var issue = Assert.Single(Validate(Input("device"), Input(name)).Issues, i => i.Code == code);
+        var issue = Assert.Single(Validate(Input("client"), Input(name)).Issues, i => i.Code == code);
 
         Assert.Equal(ValidationSeverity.Error, issue.Severity);
         Assert.Equal(ManualId, issue.NodeId);
@@ -45,7 +45,7 @@ public sealed class ManualTriggerInputsTests
     [Fact]
     public void A_repeated_name_is_refused_on_the_second()
     {
-        var issue = Assert.Single(Validate(Input("device"), Input("Device")).Issues, i => i.Code == "MANUAL_INPUT_NAME_DUPLICATE");
+        var issue = Assert.Single(Validate(Input("client"), Input("Client")).Issues, i => i.Code == "MANUAL_INPUT_NAME_DUPLICATE");
 
         Assert.Equal("config.inputs[1].name", issue.Field);
     }
@@ -53,7 +53,7 @@ public sealed class ManualTriggerInputsTests
     [Fact]
     public async Task A_missing_input_takes_its_default_and_a_sent_one_is_kept()
     {
-        var node = Manual(Input("device", "\"porch\""), Input("reason", "\"by hand\""), Input("count", "3"), Input("note"));
+        var node = Manual(Input("client", "\"porch\""), Input("reason", "\"by hand\""), Input("count", "3"), Input("note"));
         var payload = new Dictionary<string, JsonElement>
         {
             ["workflowDefinitionRefId"] = JsonSerializer.SerializeToElement(Guid.NewGuid().ToString()),
@@ -63,7 +63,7 @@ public sealed class ManualTriggerInputsTests
         var trigger = await RunAsync(node, payload);
 
         var body = trigger.GetProperty("body");
-        Assert.Equal("porch", body.GetProperty("device").GetString());
+        Assert.Equal("porch", body.GetProperty("client").GetString());
         Assert.Equal("maintenance", body.GetProperty("reason").GetString());
         Assert.Equal(3, body.GetProperty("count").GetInt32());
         Assert.False(body.TryGetProperty("note", out _), "an input with no default stays absent");
@@ -73,9 +73,9 @@ public sealed class ManualTriggerInputsTests
     [Fact]
     public async Task No_body_at_all_is_just_the_defaults()
     {
-        var trigger = await RunAsync(Manual(Input("device", "\"porch\"")), new Dictionary<string, JsonElement>());
+        var trigger = await RunAsync(Manual(Input("client", "\"porch\"")), new Dictionary<string, JsonElement>());
 
-        Assert.Equal("porch", trigger.GetProperty("body").GetProperty("device").GetString());
+        Assert.Equal("porch", trigger.GetProperty("body").GetProperty("client").GetString());
     }
 
     private static async Task<JsonElement> RunAsync(ManualTriggerNode node, IReadOnlyDictionary<string, JsonElement> payload)

@@ -14,8 +14,8 @@ using Wbskt.Models;
 namespace Wbskt.Management.Host.Handlers.Events;
 
 /// <summary>
-/// Writes every event on the bus to the event log, a batch at a time: device traffic (events marked
-/// <see cref="DeviceTrafficAttribute"/>) to dbo.DeviceTraffic, everything else to dbo.EventLogs. The
+/// Writes every event on the bus to the event log, a batch at a time: client traffic (events marked
+/// <see cref="ClientTrafficAttribute"/>) to dbo.ClientTraffic, everything else to dbo.EventLogs. The
 /// batch is inserted before the consumer returns, so RabbitMQ only drops the messages once they are
 /// saved: a crash, a deploy or a SQL outage leaves them on the queue to be redelivered rather than
 /// lost. A redelivered message is not logged twice, because each insert skips a MessageId its table
@@ -23,7 +23,7 @@ namespace Wbskt.Management.Host.Handlers.Events;
 /// </summary>
 public sealed class EventLoggerHandler : IConsumer<Batch<IEvent>>
 {
-    private static readonly HashSet<string> DeviceTrafficEvents = new(DeviceTrafficAttribute.EventNames, StringComparer.Ordinal);
+    private static readonly HashSet<string> ClientTrafficEvents = new(ClientTrafficAttribute.EventNames, StringComparer.Ordinal);
 
     private readonly IEventRegistry _registry;
     private readonly IEventProvider _eventProvider;
@@ -47,7 +47,7 @@ public sealed class EventLoggerHandler : IConsumer<Batch<IEvent>>
         {
             var eventName = EventName(message);
             var entries = await BuildEntriesAsync(message, eventName);
-            (DeviceTrafficEvents.Contains(eventName) ? trafficEntries : auditEntries).AddRange(entries);
+            (ClientTrafficEvents.Contains(eventName) ? trafficEntries : auditEntries).AddRange(entries);
         }
 
         // Throwing here fails the whole batch, so the retry policy and then the broker keep every
@@ -60,7 +60,7 @@ public sealed class EventLoggerHandler : IConsumer<Batch<IEvent>>
 
         if (trafficEntries.Count > 0)
         {
-            await _eventProvider.InsertDeviceTrafficBatchAsync(EventLogTable.Build(trafficEntries), context.CancellationToken);
+            await _eventProvider.InsertClientTrafficBatchAsync(EventLogTable.Build(trafficEntries), context.CancellationToken);
         }
     }
 

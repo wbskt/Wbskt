@@ -121,7 +121,7 @@ public sealed class SocketHostPresenceIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
-    public async Task A_device_closing_to_update_is_updating_until_its_next_connect()
+    public async Task A_client_closing_to_update_is_updating_until_its_next_connect()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
         var clients = new ClientProvider(ProviderFactory.BuildConfiguration(fixture.ConnectionString));

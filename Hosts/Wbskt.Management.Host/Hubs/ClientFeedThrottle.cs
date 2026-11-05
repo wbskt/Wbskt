@@ -3,8 +3,8 @@ using System.Collections.Concurrent;
 namespace Wbskt.Management.Host.Hubs;
 
 /// <summary>
-/// Caps the client-scoped live feed at <see cref="MaxPerSecond"/> messages per device per second, so a
-/// device page watching a chatty device stays readable and the backplane isn't flooded. Counted per
+/// Caps the client-scoped live feed at <see cref="MaxPerSecond"/> messages per client per second, so a
+/// client page watching a chatty client stays readable and the backplane isn't flooded. Counted per
 /// management instance: the forwarder queues are competing consumers, so with one instance (the
 /// hobbyist VM) the cap is exact and with more it is a per-instance bound.
 /// </summary>

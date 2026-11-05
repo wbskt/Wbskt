@@ -4,7 +4,7 @@ using Wbskt.Infrastructure;
 namespace Wbskt.Management.Host.Models;
 
 /// <summary>
-/// What a device tag may be. Tags are compared as stored, so every way in (setting them, filtering
+/// What a client tag may be. Tags are compared as stored, so every way in (setting them, filtering
 /// by one) goes through <see cref="TryNormalize"/> first: trimmed and lower-cased, so "Garage" and
 /// " garage" are the same tag.
 /// </summary>

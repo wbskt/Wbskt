@@ -15,11 +15,11 @@ public sealed class ContractTimestampTests
         typeof(global::Wbskt.Auth.Models.LoginRequest).Assembly,
         typeof(global::Wbskt.Management.Models.EventLogResponse).Assembly,
         typeof(global::Wbskt.Models.Page<>).Assembly,
-        typeof(global::Wbskt.Protocol.DeviceMessage).Assembly,
+        typeof(global::Wbskt.Protocol.ProtocolMessage).Assembly,
     ];
 
     /// <summary>
-    /// The <see cref="DateTime"/> fields left, as <c>Type.Property</c>: the device protocol's ping,
+    /// The <see cref="DateTime"/> fields left, as <c>Type.Property</c>: the client protocol's ping,
     /// which firmware already in the field parses. Shrink this list, never grow it. An entry that is
     /// no longer a <see cref="DateTime"/> fails the test too, so the fix also removes it here.
     /// </summary>

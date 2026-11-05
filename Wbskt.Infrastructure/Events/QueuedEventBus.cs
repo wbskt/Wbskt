@@ -14,12 +14,12 @@ namespace Wbskt.Infrastructure.Events;
 /// For events published after the work they describe has already been committed. Awaiting the broker
 /// there makes RabbitMQ a dependency of the request: a slow or unreachable broker means a slow or
 /// failed answer for a change that was in fact made. In the auth host that was a refresh that had
-/// rotated the token answering 500; in the management host it was a rotated device secret replaced
-/// by a 500, so the only copy of the new secret was lost, and a registration whose device retried
+/// rotated the token answering 500; in the management host it was a rotated client secret replaced
+/// by a 500, so the only copy of the new secret was lost, and a registration whose client retried
 /// and created another client. The events record what happened; they are not part of deciding it.
 /// </para>
 /// <para>
-/// Not for publishes that are the action itself (a device command, a ping): queuing those would
+/// Not for publishes that are the action itself (a client command, a ping): queuing those would
 /// report success for something that may never happen. They keep the real bus.
 /// </para>
 /// <para>

@@ -23,12 +23,12 @@ public class PayloadManipulationE2ETests(ServicesFixture fixture)
 
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
 
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, "DevicePayload");
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, "ClientPayload");
         var storage = new InMemoryClientStorage(clientRefId, secret);
         var clientConfig = new ClientConfig(
             BaseApiUrl: E2EConfig.ManagementBaseUrl,
             BaseSocketUrl: E2EConfig.SocketWsBaseUrl,
-            DeviceName: "DevicePayload",
+            ClientName: "ClientPayload",
             PolicyPin: null);
 
         var workflowRefId = Guid.NewGuid();

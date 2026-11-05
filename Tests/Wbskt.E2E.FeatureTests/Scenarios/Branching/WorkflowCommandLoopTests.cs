@@ -12,12 +12,12 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Branching;
 /// Task 3 — Full telemetry → workflow → command round-trip.
 ///
 /// Topology:
-///   DeviceTrigger (event="telemetry", AllowParallel)
+///   ClientTrigger (event="telemetry", AllowParallel)
 ///       └─[default]─► action:clientMessage (command="OpenVent")
 ///
 /// The test:
 ///  1. Registers a user + workspace, creates an AutoApproval policy, registers a client client.
-///  2. Builds and publishes a minimal DeviceTrigger → SendCommand workflow definition.
+///  2. Builds and publishes a minimal ClientTrigger → SendCommand workflow definition.
 ///  3. Connects a WbsktClient for the registered client.
 ///  4. Sends a "telemetry" event from the client.
 ///  5. Asserts the client receives an "OpenVent" command within 30 s.
@@ -39,8 +39,8 @@ public sealed class WorkflowCommandLoopTests(ServicesFixture fixture)
         var (userToken, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(userToken, workspaceRef, autoApproval: true);
 
-        var deviceName = $"e2e-vent-{Guid.NewGuid():N}";
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, deviceName);
+        var clientName = $"e2e-vent-{Guid.NewGuid():N}";
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, clientName);
 
         // ── 2. Build the minimal workflow definition ─────────────────────────
         var workflowRefId = Guid.NewGuid();
@@ -68,7 +68,7 @@ public sealed class WorkflowCommandLoopTests(ServicesFixture fixture)
         var clientConfig = new ClientConfig(
             BaseApiUrl: E2EConfig.ManagementBaseUrl,
             BaseSocketUrl: E2EConfig.SocketWsBaseUrl,
-            DeviceName: deviceName,
+            ClientName: clientName,
             PolicyPin: null   // credentials already in storage; no PIN needed
         );
 
@@ -139,7 +139,7 @@ public sealed class WorkflowCommandLoopTests(ServicesFixture fixture)
         status is "Succeeded" or "Failed" or "PartiallyFailed" or "Cancelled";
 
     /// <summary>
-    /// Builds the minimal DeviceTrigger → action:clientMessage workflow definition.
+    /// Builds the minimal ClientTrigger → action:clientMessage workflow definition.
     ///
     /// Port conventions:
     ///   - Trigger output port id = "default"  (matches PassthroughTriggerExecutor.Continue("default", …))

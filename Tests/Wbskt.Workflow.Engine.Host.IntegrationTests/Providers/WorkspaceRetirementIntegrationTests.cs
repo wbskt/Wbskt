@@ -8,7 +8,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 /// <summary>
 /// <c>dbo.Workspace_Retire</c>, which runs when a workspace is deleted in the auth database. Nothing in
 /// the main database can cascade from that, so this is the only thing standing between a deleted
-/// workspace and its PIN still registering devices, its devices still connecting, and its schedules
+/// workspace and its PIN still registering clients, its clients still connecting, and its schedules
 /// and webhooks still starting runs.
 /// </summary>
 [Collection("SqlEdge")]

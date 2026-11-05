@@ -1,19 +1,19 @@
 using MassTransit;
 using Wbskt.Events.Client;
-using Wbskt.Infrastructure.Devices;
+using Wbskt.Infrastructure.Clients;
 
 namespace Wbskt.Management.Host.Handlers;
 
 /// <summary>
-/// Drops the commands waiting for a device that loses its registration: it will not sign in to take
+/// Drops the commands waiting for a client that loses its registration: it will not sign in to take
 /// them. Each ends as a failed command, so the console and a waiting workflow step hear why. A deleted
-/// device's commands go with its row (dbo.Client_Delete).
+/// client's commands go with its row (dbo.Client_Delete).
 /// </summary>
 public sealed class ClientCommandQueueRevocationHandler : IConsumer<ClientStatusChangedEvent>
 {
-    private readonly DeviceCommandQueue _queue;
+    private readonly ClientCommandQueue _queue;
 
-    public ClientCommandQueueRevocationHandler(DeviceCommandQueue queue)
+    public ClientCommandQueueRevocationHandler(ClientCommandQueue queue)
     {
         _queue = queue;
     }

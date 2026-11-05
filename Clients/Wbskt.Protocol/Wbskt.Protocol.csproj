@@ -9,7 +9,7 @@
     <IsPackable>true</IsPackable>
     <PackageId>Wbskt.Protocol</PackageId>
     <Version>$(SdkPackageVersion)</Version>
-    <Description>The Wbskt device protocol's message types, payloads and limits, shared by the Wbskt.Client SDK and the platform. See Docs/Device.Protocol.md.</Description>
+    <Description>The Wbskt client protocol's message types, payloads and limits, shared by the Wbskt.Client SDK and the platform. See Docs/Client.Protocol.md.</Description>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>

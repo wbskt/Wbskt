@@ -421,7 +421,7 @@
         </div>
         <nav id="nav">
             <button class="nav-item active" data-view="overview"><span class="ico">📊</span> Overview</button>
-            <div class="nav-section">Devices</div>
+            <div class="nav-section">Clients</div>
             <button class="nav-item" data-view="policies"><span class="ico">🛡️</span> Policies <span class="count" id="nav-c-policies"></span></button>
             <button class="nav-item" data-view="clients"><span class="ico">📱</span> Clients <span class="count" id="nav-c-clients"></span></button>
             <button class="nav-item" data-view="templates"><span class="ico">🧩</span> Message templates</button>
@@ -464,7 +464,7 @@
                 <div class="view-head">
                     <div><h1>Overview</h1><p id="ov-sub">Workspace health at a glance.</p></div>
                     <div class="row">
-                        <button class="btn" onclick="ui.go('simulator')">🧪 Simulate a device</button>
+                        <button class="btn" onclick="ui.go('simulator')">🧪 Simulate a client</button>
                         <button class="btn primary" onclick="workflowsView.openCreate()">➕ New workflow</button>
                     </div>
                 </div>
@@ -492,7 +492,7 @@
             <!-- Policies -->
             <section class="view" id="view-policies">
                 <div class="view-head">
-                    <div><h1>Registration policies</h1><p>A device joins a workspace by presenting a policy's PIN.</p></div>
+                    <div><h1>Registration policies</h1><p>A client joins a workspace by presenting a policy's PIN.</p></div>
                     <button class="btn primary" onclick="policiesView.openEdit()">➕ New policy</button>
                 </div>
                 <div class="grid" id="policies-list"></div>
@@ -501,7 +501,7 @@
             <!-- Clients -->
             <section class="view" id="view-clients">
                 <div class="view-head">
-                    <div><h1>Clients</h1><p>Registered devices, their presence and latency.</p></div>
+                    <div><h1>Clients</h1><p>Registered clients, their presence and latency.</p></div>
                 </div>
                 <div class="toolbar">
                     <input type="search" id="cl-filter" placeholder="Filter by name or id" oninput="clientsView.render()">
@@ -548,22 +548,22 @@
             <!-- Simulator -->
             <section class="view" id="view-simulator">
                 <div class="view-head">
-                    <div><h1>Device simulator</h1><p>Virtual clients that talk to the socket host exactly like the SDK does: they answer <code>sys.ping</code> and auto-ack commands.</p></div>
+                    <div><h1>Client simulator</h1><p>Virtual clients that talk to the socket host exactly like the SDK does: they answer <code>sys.ping</code> and auto-ack commands.</p></div>
                 </div>
                 <div class="grid two" style="margin-bottom: 18px;">
                     <div class="card">
-                        <h3 style="margin-bottom: 12px;">Register a new device</h3>
+                        <h3 style="margin-bottom: 12px;">Register a new client</h3>
                         <form onsubmit="event.preventDefault(); simulator.register();">
                             <div class="field"><label class="lbl">Policy</label><select id="sim-policy"></select></div>
                             <div class="row">
-                                <div class="field grow"><label class="lbl">Device name</label><input type="text" id="sim-name" placeholder="Device-01"></div>
+                                <div class="field grow"><label class="lbl">Client name</label><input type="text" id="sim-name" placeholder="Client-01"></div>
                                 <div class="field" style="width:90px;"><label class="lbl">Count</label><input type="number" id="sim-count" value="1" min="1" max="20"></div>
                             </div>
                             <button class="btn primary" type="submit">Register &amp; connect</button>
                         </form>
                     </div>
                     <div class="card">
-                        <h3 style="margin-bottom: 12px;">Attach an existing device</h3>
+                        <h3 style="margin-bottom: 12px;">Attach an existing client</h3>
                         <form onsubmit="event.preventDefault(); simulator.attachExisting();">
                             <div class="field"><label class="lbl">Client ref id</label><input type="text" id="sim-ex-ref" class="code"></div>
                             <div class="field"><label class="lbl">Secret</label><input type="text" id="sim-ex-secret" class="code"></div>
@@ -573,7 +573,7 @@
                     </div>
                 </div>
                 <div class="row between" style="margin-bottom: 12px;">
-                    <h2 style="margin:0;">Virtual devices</h2>
+                    <h2 style="margin:0;">Virtual clients</h2>
                     <div class="row">
                         <button class="btn sm" onclick="simulator.connectAll()">Connect all</button>
                         <button class="btn sm" onclick="simulator.disconnectAll()">Disconnect all</button>
@@ -1069,9 +1069,9 @@ const settings = {
                 <div class="seg" id="cfg-seg" style="margin-bottom: 16px;">${presetBtn('live')}${presetBtn('local')}${presetBtn('custom')}</div>
                 <div class="field"><label class="lbl">Auth host</label><input type="url" id="cfg-auth" class="code" value="${esc(c.auth)}" oninput="settings.markCustom()"></div>
                 <div class="field"><label class="lbl">API host (management, SignalR hub)</label><input type="url" id="cfg-api" class="code" value="${esc(c.api)}" oninput="settings.markCustom()"></div>
-                <div class="field"><label class="lbl">Socket host (device WebSocket)</label><input type="url" id="cfg-ws" class="code" value="${esc(c.ws)}" oninput="settings.markCustom()"></div>
+                <div class="field"><label class="lbl">Socket host (client WebSocket)</label><input type="url" id="cfg-ws" class="code" value="${esc(c.ws)}" oninput="settings.markCustom()"></div>
                 <div id="cfg-health" class="stack small" style="margin-top: 6px;"></div>
-                <div class="hint" style="margin-top: 12px;">Each environment keeps its own sign-in and simulated devices. The deployed hosts only answer browsers whose origin is listed in <code>CORS_EXTRA_ORIGINS</code>, so serve this file from <code>http://localhost:4200</code> when testing against them.</div>`,
+                <div class="hint" style="margin-top: 12px;">Each environment keeps its own sign-in and simulated clients. The deployed hosts only answer browsers whose origin is listed in <code>CORS_EXTRA_ORIGINS</code>, so serve this file from <code>http://localhost:4200</code> when testing against them.</div>`,
             actions: [
                 { label: 'Test', onClick: () => settings.test() },
                 { label: 'Cancel', onClick: () => modal.close() },
@@ -1595,7 +1595,7 @@ const overview = {
                     <span class="tiny dim">${c.lastRttMs !== null && c.lastRttMs !== undefined ? c.lastRttMs + ' ms' : ''}</span>
                     <span class="tiny faint">${esc(ago(c.lastActivityAt || c.connectedAt))}</span>
                 </div>`).join('') + (online.length > 8 ? `<div class="tiny faint" style="margin-top:6px;">and ${online.length - 8} more</div>` : '')
-            : '<div class="faint">Nothing connected. Start a device from the simulator.</div>';
+            : '<div class="faint">Nothing connected. Start a client from the simulator.</div>';
 
         live.renderInto($('ov-feed'), live.items.slice(0, 12), true);
     }
@@ -1616,7 +1616,7 @@ const policiesView = {
         if (prevCl) clFilter.value = prevCl;
 
         if (!data.policies.length) {
-            list.innerHTML = '<div class="card empty" style="grid-column: 1/-1;">No policies yet. Create one to let devices register.</div>';
+            list.innerHTML = '<div class="card empty" style="grid-column: 1/-1;">No policies yet. Create one to let clients register.</div>';
             return;
         }
         list.innerHTML = data.policies.map(p => `
@@ -1649,9 +1649,9 @@ const policiesView = {
         modal.open({
             title: p ? `Edit ${p.name}` : 'New registration policy',
             body: `
-                <div class="field"><label class="lbl">Name</label><input type="text" id="pol-name" value="${esc(p?.name || '')}" placeholder="Smart home devices"></div>
+                <div class="field"><label class="lbl">Name</label><input type="text" id="pol-name" value="${esc(p?.name || '')}" placeholder="Smart home clients"></div>
                 <div class="field"><label class="lbl">Max clients</label><input type="number" id="pol-max" value="${esc(p?.maxClients ?? '')}" placeholder="Empty for no limit" min="1"></div>
-                <div class="field"><label class="check"><input type="checkbox" id="pol-auto" ${!p || p.autoApproval ? 'checked' : ''}> Approve new devices automatically</label></div>
+                <div class="field"><label class="check"><input type="checkbox" id="pol-auto" ${!p || p.autoApproval ? 'checked' : ''}> Approve new clients automatically</label></div>
                 ${p ? `<div class="field"><label class="check"><input type="checkbox" id="pol-enabled" ${p.isEnabled ? 'checked' : ''}> Enabled</label></div>` : ''}`,
             actions: [{ label: 'Cancel', onClick: () => modal.close() }, { label: p ? 'Save' : 'Create', kind: 'primary', onClick: () => this.save(refId) }]
         });
@@ -1669,7 +1669,7 @@ const policiesView = {
         data.loadPolicies();
     },
     async rotatePin(refId) {
-        if (!await modal.confirm('Rotate PIN', 'Devices that have not registered yet will need the new PIN. Registered devices are not affected.')) return;
+        if (!await modal.confirm('Rotate PIN', 'Clients that have not registered yet will need the new PIN. Registered clients are not affected.')) return;
         const r = await act(() => http.post('api', `/api/workspaces/{ws}/registration-policies/${refId}/rotate-pin`), r => `New PIN ${r.pin}`);
         if (r) data.loadPolicies();
     },
@@ -1760,7 +1760,7 @@ const clientsView = {
     },
 
     async ping(id) {
-        await act(() => http.post('api', `/api/workspaces/{ws}/clients/${id}/ping`), 'Ping sent. The RTT shows up once the device answers.');
+        await act(() => http.post('api', `/api/workspaces/{ws}/clients/${id}/ping`), 'Ping sent. The RTT shows up once the client answers.');
     },
 
     // ---- detail modal ----
@@ -1833,10 +1833,10 @@ const clientsView = {
                 ${templates.length ? `<div class="row" style="gap:6px; margin-bottom: 12px;"><span class="small dim">Templates:</span>${templates.map(t => `<span class="chip" onclick="clientsView.useTemplate(${attr(t.refId)})">${esc(t.name)}</span>`).join('')}</div>` : ''}
                 <div class="field"><label class="lbl">Type</label><input type="text" id="cmd-type" class="code" placeholder="cmd.actuate" value="${esc(this.lastCmd?.type || '')}"></div>
                 <div class="field"><label class="lbl">Payload</label><textarea id="cmd-payload" rows="7" class="code">${esc(this.lastCmd?.payload || '{\n  \n}')}</textarea>
-                    <div class="hint">Sent as-is; the device receives it with a <code>commandId</code> and acks it with <code>sys.ack</code>.</div></div>
+                    <div class="hint">Sent as-is; the client receives it with a <code>commandId</code> and acks it with <code>sys.ack</code>.</div></div>
                 <div class="row between">
                     <span class="small dim" id="cmd-result"></span>
-                    <div class="row"><button class="btn" onclick="clientsView.saveAsTemplate()">Save as template</button><button class="btn primary" onclick="clientsView.sendCommand()" ${d.isConnected ? '' : 'title="The device is offline; the command will be dropped"'}>Send command</button></div>
+                    <div class="row"><button class="btn" onclick="clientsView.saveAsTemplate()">Save as template</button><button class="btn primary" onclick="clientsView.sendCommand()" ${d.isConnected ? '' : 'title="The client is offline; the command will be dropped"'}>Send command</button></div>
                 </div>`;
         } else if (tab === 'state') {
             pane.innerHTML = '<div class="dim small">Loading…</div>';
@@ -1844,7 +1844,7 @@ const clientsView = {
                 const items = r.items || [];
                 pane.innerHTML = items.length ? `<div class="table-wrap" style="box-shadow:none;"><table><thead><tr><th>Name</th><th>Type</th><th>Value</th><th>Updated</th></tr></thead><tbody>
                     ${items.map(v => `<tr><td class="mono small">${esc(v.name)}</td><td class="small dim">${esc(v.dataType)}</td><td class="mono small">${esc(v.value)}</td><td class="small dim">${esc(ago(v.updatedAt))}</td></tr>`).join('')}
-                    </tbody></table></div>` : '<div class="empty">No state reported. Devices report it with a <code>state.report</code> message.</div>';
+                    </tbody></table></div>` : '<div class="empty">No state reported. Clients report it with a <code>state.report</code> message.</div>';
             }).catch(e => pane.innerHTML = `<div style="color:var(--danger)" class="small">${esc(e.message)}</div>`);
         } else if (tab === 'comms') {
             pane.innerHTML = `
@@ -1918,7 +1918,7 @@ const clientsView = {
     },
     async rotateSecret() {
         const d = this.detail;
-        if (!await modal.confirm('Rotate secret', 'The device has to sign in with the new secret from now on. Its current socket is not closed.')) return this.openDetail(d.clientRefId, this.tab);
+        if (!await modal.confirm('Rotate secret', 'The client has to sign in with the new secret from now on. Its current socket is not closed.')) return this.openDetail(d.clientRefId, this.tab);
         const r = await act(() => http.post('api', `/api/workspaces/{ws}/clients/${d.clientRefId}/rotate-secret`));
         if (!r) return;
         modal.open({
@@ -1990,13 +1990,13 @@ const templatesView = {
 };
 
 // ============================================================================
-// Simulator: virtual devices on the socket host
+// Simulator: virtual clients on the socket host
 // ============================================================================
 const CAPABILITIES_SAMPLE = {
     agent: 'dashboard-sim', version: '1.0.0', os: navigator.platform || 'browser',
     capabilities: [
         { command: 'cmd.actuate', description: 'Move the vent', parameters: [{ name: 'position', dataType: 'number', required: true }] },
-        { command: 'cmd.reboot', description: 'Restart the device', parameters: [] }
+        { command: 'cmd.reboot', description: 'Restart the client', parameters: [] }
     ]
 };
 
@@ -2023,7 +2023,7 @@ const simulator = {
     async register() {
         const pin = $('sim-policy').value;
         if (!pin) return ui.toast('Pick an enabled policy first', 'error');
-        const base = $('sim-name').value.trim() || 'Sim-Device';
+        const base = $('sim-name').value.trim() || 'Sim-Client';
         const count = Math.min(20, Math.max(1, parseInt($('sim-count').value, 10) || 1));
         for (let i = 0; i < count; i++) {
             const name = count > 1 ? `${base}-${String(i + 1).padStart(2, '0')}` : base;
@@ -2229,7 +2229,7 @@ const simulator = {
     renderAll() {
         const list = $('sim-list');
         if (!this.sims.length) {
-            list.innerHTML = '<div class="card empty">No virtual devices. Register one above.</div>';
+            list.innerHTML = '<div class="card empty">No virtual clients. Register one above.</div>';
             return;
         }
         // Keep existing cards (and whatever is typed in them); only add and remove.
@@ -2259,7 +2259,7 @@ const simulator = {
                     <button class="btn sm" data-f="connect" onclick="simulator.connect(${id})">Connect</button>
                     <button class="btn sm" data-f="disconnect" onclick="simulator.disconnect(${id})">Disconnect</button>
                     <button class="btn sm" onclick="clientsView.openDetail(${id})">Details</button>
-                    <button class="btn sm danger" onclick="simulator.remove(${id})" title="Forget this device in the dashboard; the client stays registered">Remove</button>
+                    <button class="btn sm danger" onclick="simulator.remove(${id})" title="Forget this client in the dashboard; the client stays registered">Remove</button>
                 </div>
             </div>
             <div class="sim-grid">
@@ -2891,7 +2891,7 @@ const live = {
 
     renderInto(el, items, compact = false) {
         if (!el) return;
-        el.innerHTML = items.length ? items.map(i => this.itemHtml(i)).join('') : `<div class="empty">${compact ? 'Quiet so far.' : 'No events yet. Connect a simulated device or start a run to see traffic.'}</div>`;
+        el.innerHTML = items.length ? items.map(i => this.itemHtml(i)).join('') : `<div class="empty">${compact ? 'Quiet so far.' : 'No events yet. Connect a simulated client or start a run to see traffic.'}</div>`;
     },
 
     render() {

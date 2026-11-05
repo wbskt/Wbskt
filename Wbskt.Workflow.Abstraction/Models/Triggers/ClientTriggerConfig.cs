@@ -23,7 +23,7 @@ public sealed record ClientTriggerConfig
 
     /// <summary>
     /// Evaluated against the inbound payload before a run is started. A run only starts when this
-    /// evaluates to <c>true</c>; null means every matching message starts one. A chatty device that
+    /// evaluates to <c>true</c>; null means every matching message starts one. A chatty client that
     /// only matters above a threshold is the motivating case.
     /// </summary>
     [JsonPropertyName("filter")]

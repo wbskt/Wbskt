@@ -10,7 +10,7 @@ namespace Wbskt.E2E.FeatureTests.Fixtures;
 //
 // Some scenarios must still run alone, and are opt-in so the parallel pass never runs them:
 // RateLimitingTests (auth) spends the per-IP limiter budget every collection shares, and
-// DeviceRevocationTests.DEV_REV_02 (devices) restarts the socket host, dropping every live device
+// ClientRevocationTests.DEV_REV_02 (clients) restarts the socket host, dropping every live client
 // connection. CI runs each in a pass of its own with --filter; see the README. The RateLimited429 row of
 // ErrorShapeContractTests (engine) spends the same per-IP budget, so it is gated and run the same way,
 // as are the Scenarios/Outage classes (engine), which stop the broker, Redis and the leading engine.
@@ -22,11 +22,11 @@ public sealed class AuthCollection : ICollectionFixture<ServicesFixture>
     public const string Name = "E2E auth";
 }
 
-/// <summary>Device registration, sign-in, commands and revocation: <c>Scenarios/Devices</c>.</summary>
+/// <summary>Client registration, sign-in, commands and revocation: <c>Scenarios/Clients</c>.</summary>
 [CollectionDefinition(Name)]
-public sealed class DevicesCollection : ICollectionFixture<ServicesFixture>
+public sealed class ClientsCollection : ICollectionFixture<ServicesFixture>
 {
-    public const string Name = "E2E devices";
+    public const string Name = "E2E clients";
 }
 
 /// <summary>Workflows, triggers and runs: every other folder under <c>Scenarios</c>.</summary>

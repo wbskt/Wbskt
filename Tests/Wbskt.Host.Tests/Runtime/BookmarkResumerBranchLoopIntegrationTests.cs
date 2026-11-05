@@ -74,7 +74,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
     [Theory]
     [InlineData(CommandChannel.Acked)]
     [InlineData(CommandChannel.Failed)]
-    public async Task A_command_step_waiting_for_the_device_leaves_by_what_became_of_the_command(string outcome)
+    public async Task A_command_step_waiting_for_the_client_leaves_by_what_became_of_the_command(string outcome)
     {
         (BranchLoop loop, InMemoryProviders providers, RecordingCommandPublisher publisher, BookmarkResumer resumer) = CommandStepRun();
 
@@ -85,7 +85,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
         BookmarkRow bookmark = Assert.Single(providers.Bookmarks);
         Assert.Equal(CommandChannel.Key(commandId), bookmark.MatchKey);
 
-        InboundEvent evt = CommandChannel.Event(commandId, outcome, outcome == CommandChannel.Failed ? "The device is not connected." : null);
+        InboundEvent evt = CommandChannel.Event(commandId, outcome, outcome == CommandChannel.Failed ? "The client is not connected." : null);
         BookmarkMatchResult result = await resumer.MatchInboundAsync(evt, hasRegistrations: false, CancellationToken.None);
 
         Assert.True(result.Matched);
@@ -95,7 +95,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
     }
 
     [Fact]
-    public async Task A_command_step_waiting_for_the_device_leaves_by_timeout_when_no_answer_comes()
+    public async Task A_command_step_waiting_for_the_client_leaves_by_timeout_when_no_answer_comes()
     {
         (BranchLoop loop, InMemoryProviders providers, RecordingCommandPublisher publisher, _) = CommandStepRun();
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -279,7 +279,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
     private static string ExitPort(InMemoryProviders providers) =>
         ExitTargets.Single(exit => exit.Value == providers.Branches[1001].NodeId).Key;
 
-    private sealed class RecordingCommandPublisher : IDeviceCommandPublisher
+    private sealed class RecordingCommandPublisher : IClientCommandPublisher
     {
         public List<Guid> Sent { get; } = [];
 

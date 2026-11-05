@@ -11,7 +11,7 @@ namespace Wbskt.Gateway.Core.Handlers;
 public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
 {
     internal const string ExpiredReason = "The command expired before it could be delivered.";
-    internal const string SendFailedReason = "The command could not be sent to the device.";
+    internal const string SendFailedReason = "The command could not be sent to the client.";
 
     private readonly IConnectionManager _connectionManager;
     private readonly ILogger<ClientCommandHandler> _logger;
@@ -35,7 +35,7 @@ public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
         var command = context.Message;
 
         // Every gateway instance receives every command, but only the one the sender saw holding the
-        // device acts on it. A device that moved in between gets one answer, "not connected", rather
+        // client acts on it. A client that moved in between gets one answer, "not connected", rather
         // than a delivery from its new host and a failure from its old one.
         if (command.TargetHostId != null && command.TargetHostId != _hostId.Value)
         {
@@ -77,9 +77,9 @@ public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
             return;
         }
 
-        // The device has the command now. Failing here would retry the message (ConsumerRetry.Default)
-        // and send the command a second time, which a device acting on it (a relay toggle) cannot tell
-        // from a new one. Losing the delivery record is the smaller harm: the device's ack still arrives.
+        // The client has the command now. Failing here would retry the message (ConsumerRetry.Default)
+        // and send the command a second time, which a client acting on it (a relay toggle) cannot tell
+        // from a new one. Losing the delivery record is the smaller harm: the client's ack still arrives.
         try
         {
             await _eventBus.PublishAsync(new ClientCommandDeliveredEvent(command.ClientRefId, command.ClientId, command.WorkspaceId, command.Type, command.CommandId), context.CancellationToken);
@@ -90,8 +90,8 @@ public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
         }
     }
 
-    // The device dropped between the sender seeing it here and the command arriving. It waits in the
-    // device's queue for the next connect, as it would have had the sender seen the device offline.
+    // The client dropped between the sender seeing it here and the command arriving. It waits in the
+    // client's queue for the next connect, as it would have had the sender seen the client offline.
     // A command with no id predates the queue and cannot be told apart once queued, so it fails as before.
     private async Task RequeueAsync(ClientCommandEvent command, CancellationToken ct)
     {
@@ -116,21 +116,21 @@ public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
         return _eventBus.PublishAsync(new ClientCommandFailedEvent(command.ClientRefId, command.ClientId, command.WorkspaceId, command.Type, reason, command.CommandId), ct);
     }
 
-    private async Task HandleCommandAsync(IDeviceConnection connection, ClientCommandEvent command, CancellationToken ct)
+    private async Task HandleCommandAsync(IClientConnection connection, ClientCommandEvent command, CancellationToken ct)
     {
         _logger.LogInformation("Sending command {Type} to client {ClientRefId}.", command.Type, command.ClientRefId);
 
         // The SDK auto-acks frames carrying a commandId with sys.ack, and refuses (still acking, with
         // a reason) one that arrives past expiresAt.
-        var message = new DeviceMessage(command.Type, PayloadFor(command), command.CommandId?.ToString())
+        var message = new ProtocolMessage(command.Type, PayloadFor(command), command.CommandId?.ToString())
         {
             ExpiresAt = command.ExpiresAtUtc is { } expiresAt ? new DateTimeOffset(DateTime.SpecifyKind(expiresAt, DateTimeKind.Utc)) : null
         };
         await connection.SendAsync(message, ct);
     }
 
-    // A platform command's payload is a JSON object the device reads fields from, so it goes out as
-    // that object. A device's own commands keep going out as the text they were sent with.
+    // A platform command's payload is a JSON object the client reads fields from, so it goes out as
+    // that object. A client's own commands keep going out as the text they were sent with.
     private static object PayloadFor(ClientCommandEvent command)
     {
         if (!MessageTypes.IsPlatformCommand(command.Type))

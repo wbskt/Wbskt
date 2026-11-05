@@ -8,7 +8,7 @@ namespace Wbskt.Gateway.Core.HostedServices;
 // Tells the management host this instance is alive, on a fixed interval. Presence is a lease on it:
 // the clients this host holds stay "online" only while the beats keep arriving (see
 // StalePresenceSweeper in the management host). The first beat goes out at once. Every few minutes it
-// also sends the devices it holds, so the management host can clear presence whose disconnect was lost.
+// also sends the clients it holds, so the management host can clear presence whose disconnect was lost.
 internal sealed class HeartbeatPublisher : BackgroundService
 {
     private readonly IPublishEndpoint _publishEndpoint;

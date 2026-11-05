@@ -3,8 +3,8 @@ GO
 SET QUOTED_IDENTIFIER ON;
 GO
 
--- The event log as its readers see it: the audit log and device traffic together, with one id
--- sequence across both. IsDeviceTraffic lets a reader that wants no traffic drop that branch whole
+-- The event log as its readers see it: the audit log and client traffic together, with one id
+-- sequence across both. IsClientTraffic lets a reader that wants no traffic drop that branch whole
 -- (with OPTION (RECOMPILE), or a constant), instead of reading it to filter every row out.
 CREATE VIEW dbo.EventLogEntries
 AS
@@ -26,7 +26,7 @@ SELECT
     el.Source,
     el.ClientAddress,
     el.UserAgent,
-    CAST(0 AS BIT) AS IsDeviceTraffic
+    CAST(0 AS BIT) AS IsClientTraffic
 FROM dbo.EventLogs AS el
 UNION ALL
 SELECT
@@ -47,6 +47,6 @@ SELECT
     dt.Source,
     dt.ClientAddress,
     dt.UserAgent,
-    CAST(1 AS BIT) AS IsDeviceTraffic
-FROM dbo.DeviceTraffic AS dt;
+    CAST(1 AS BIT) AS IsClientTraffic
+FROM dbo.ClientTraffic AS dt;
 GO

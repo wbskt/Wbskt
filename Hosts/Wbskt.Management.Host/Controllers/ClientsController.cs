@@ -185,7 +185,7 @@ public class ClientsController : ApiControllerBase
     }
 
     /// <summary>
-    /// Applies one status to many clients: approving or revoking a batch of pending devices at once.
+    /// Applies one status to many clients: approving or revoking a batch of pending clients at once.
     /// Each client is handled as the single-client endpoint would handle it, so one that fails (the
     /// policy or the workspace is full, or the client is not in this workspace) is reported and the rest still change.
     /// </summary>
@@ -208,7 +208,7 @@ public class ClientsController : ApiControllerBase
 
     /// <summary>
     /// Deletes a client. Its connection is closed, its token refused, and its capabilities and
-    /// state removed; its event-log history stays. The device has to register again to come back.
+    /// state removed; its event-log history stays. The client has to register again to come back.
     /// </summary>
     /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="clientRef">The unique reference ID of the client.</param>
@@ -224,7 +224,7 @@ public class ClientsController : ApiControllerBase
 
     /// <summary>
     /// Replaces a client's secret and returns the new one, once. The old secret stops working at
-    /// once and the live connection is closed; the device reconnects when it is given the new one.
+    /// once and the live connection is closed; the client reconnects when it is given the new one.
     /// </summary>
     /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="clientRef">The unique reference ID of the client.</param>
@@ -354,7 +354,7 @@ public class ClientsController : ApiControllerBase
             return MapResult(Result<Page<QueuedClientCommandResponse>>.Failure(result.Error));
         }
 
-        // A device holds at most CommandQueue:MaxPerClient waiting commands, so they come as one page.
+        // A client holds at most CommandQueue:MaxPerClient waiting commands, so they come as one page.
         return Ok(new Page<QueuedClientCommandResponse> { Items = result.Value, TotalCount = result.Value.Count });
     }
 

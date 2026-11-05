@@ -19,12 +19,12 @@ public sealed class PongHandler : IInboundMessageHandler
 
     public string Type => MessageTypes.Pong;
 
-    public async Task HandleAsync(InboundContext context, DeviceMessage message, CancellationToken cancellationToken)
+    public async Task HandleAsync(InboundContext context, ProtocolMessage message, CancellationToken cancellationToken)
     {
         var connection = context.Connection;
 
         // RTT is measured here, on the connection and on this host's clock, so neither bus hops nor a
-        // device's echoed timestamp can change the number.
+        // client's echoed timestamp can change the number.
         if (!connection.TryCompletePing(TryGetPingId(message.Payload), out var sentAt))
         {
             _logger.LogDebug("Received sys.pong from {ClientRefId} without a matching ping.", context.ClientRefId);

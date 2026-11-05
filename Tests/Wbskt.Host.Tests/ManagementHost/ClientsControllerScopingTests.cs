@@ -6,7 +6,7 @@ using Moq;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure;
-using Wbskt.Infrastructure.Devices;
+using Wbskt.Infrastructure.Clients;
 using Wbskt.Management.Host.Controllers;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Models;
@@ -42,7 +42,7 @@ public sealed class ClientsControllerScopingTests
         var bus = new Mock<IEventBus>();
         var eventLogService = new Mock<IEventLogService>();
 
-        var controller = new ClientsController(clientService.Object, Mock.Of<IClientLifecycleService>(), new ClientCommandService(clientService.Object, TestDeviceCommands.Sender(_targets.Object, bus.Object, _queue), _queue, bus.Object, Microsoft.Extensions.Options.Options.Create(new CommandQueueOptions()), NullLogger<ClientCommandService>.Instance, new Wbskt.Management.Host.Telemetry.ManagementMetrics()), Mock.Of<IRegistrationPolicyService>(), eventLogService.Object);
+        var controller = new ClientsController(clientService.Object, Mock.Of<IClientLifecycleService>(), new ClientCommandService(clientService.Object, TestClientCommands.Sender(_targets.Object, bus.Object, _queue), _queue, bus.Object, Microsoft.Extensions.Options.Options.Create(new CommandQueueOptions()), NullLogger<ClientCommandService>.Instance, new Wbskt.Management.Host.Telemetry.ManagementMetrics()), Mock.Of<IRegistrationPolicyService>(), eventLogService.Object);
 
         controller.ControllerContext = new ControllerContext
         {
@@ -92,7 +92,7 @@ public sealed class ClientsControllerScopingTests
     }
 
     [Fact]
-    public async Task SendCommand_to_an_offline_device_is_a_202_queued_and_sends_nothing_yet()
+    public async Task SendCommand_to_an_offline_client_is_a_202_queued_and_sends_nothing_yet()
     {
         var (controller, clientService, bus, _) = CreateController();
         SetupTarget(new ClientCommandTarget(ClientId, WorkspaceId, false, null));

@@ -12,9 +12,9 @@ namespace Wbskt.Gateway.Core;
 public static class GatewayCoreExtensions
 {
     /// <summary>
-    /// Everything a gateway host needs besides its transport: device sessions, token trust and
+    /// Everything a gateway host needs besides its transport: client sessions, token trust and
     /// revocation, the inbound message handlers, the event bus with the consumers that deliver
-    /// commands, pings and access changes to connected devices, and the presence and latency
+    /// commands, pings and access changes to connected clients, and the presence and latency
     /// background services. The host adds its transport and authentication, and the
     /// <see cref="GatewayMetrics.MeterName"/> meter to its telemetry.
     /// </summary>
@@ -30,15 +30,15 @@ public static class GatewayCoreExtensions
         services.AddClientTokenCutoffs(configuration);
         services.AddSingleton<IClientAccessGate, ClientAccessGate>();
         // Signs nothing; accepts client tokens signed by the management host (Jwt:TrustedJwksUrl).
-        // Every transport takes the same device token.
+        // Every transport takes the same client token.
         services.AddWbsktJwtTrust(JwtIssuers.Management, JwtAudiences.Socket);
         services.AddSingleton<SupersedeMonitor>();
-        services.AddSingleton<DeviceSessions>();
-        // What a device sends: one handler per protocol message type, and the device's own messages.
+        services.AddSingleton<ClientSessions>();
+        // What a client sends: one handler per protocol message type, and the client's own messages.
         services.AddSingleton<IInboundMessageHandler, PongHandler>();
         services.AddSingleton<IInboundMessageHandler, AckHandler>();
         services.AddSingleton<IInboundMessageHandler, OtaStatusHandler>();
-        services.AddSingleton<DeviceMessageHandler>();
+        services.AddSingleton<ClientMessageHandler>();
         services.AddSingleton<InboundMessageDispatcher>();
         services.Configure<MessageBudgetOptions>(configuration.GetSection(MessageBudgetOptions.SectionName));
 

@@ -101,7 +101,7 @@ public sealed class NodeExecutorRegistryTests
         services.AddHttpClient();
         services.AddWorkflowProviders();
         services.AddWorkflowRuntime();
-        services.AddScoped<IDeviceCommandPublisher>(_ => Mock.Of<IDeviceCommandPublisher>());
+        services.AddScoped<IClientCommandPublisher>(_ => Mock.Of<IClientCommandPublisher>());
         services.AddScoped<IToastPublisher>(_ => Mock.Of<IToastPublisher>());
 
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });

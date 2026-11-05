@@ -1,6 +1,6 @@
 # wbskt
 
-Connect a Raspberry Pi, a script or a service to [Wbskt](https://wbskt.com). The device registers
+Connect a Raspberry Pi, a script or a service to [Wbskt](https://wbskt.com). The client registers
 once with a policy PIN, holds a WebSocket open, sends readings and receives commands. It comes back
 on its own after a drop.
 
@@ -8,7 +8,7 @@ on its own after a drop.
 pip install wbskt
 ```
 
-Python 3.9 or later. The only dependency is `websockets`. This is a 0.9 beta: the device protocol
+Python 3.9 or later. The only dependency is `websockets`. This is a 0.9 beta: the client protocol
 it speaks may still change before 1.0.
 
 ## Quick start
@@ -24,8 +24,8 @@ client.send("temperature", {"celsius": 21.5})
 ```
 
 Get the PIN from a registration policy in the console (**Policies**). The first run registers the
-device and stores its credentials in your user data folder (`~/.local/share/wbskt/<name>.json` on
-Linux), so later runs sign in without registering again. If the policy needs approval, the device
+client and stores its credentials in your user data folder (`~/.local/share/wbskt/<name>.json` on
+Linux), so later runs sign in without registering again. If the policy needs approval, the client
 waits and connects once someone approves it in the console.
 
 To keep a script running until Ctrl+C, call `client.run_forever()` instead of `start()`.
@@ -55,7 +55,7 @@ Both clients take the same options.
 
 ## Commands
 
-Tell the console which commands the device takes, and it offers them with a form:
+Tell the console which commands the client takes, and it offers them with a form:
 
 ```python
 from wbskt import Command, DataType, Parameter, WbsktClient
@@ -77,8 +77,8 @@ your own if it matters. Call `set_capabilities(...)` when the set of commands ch
 
 ## Version
 
-Pass `firmware_version="2.4.1"` to say which version of your own code the device runs. The console
-shows it on the device page. It is not the SDK's version, which is sent for you.
+Pass `firmware_version="2.4.1"` to say which version of your own code the client runs. The console
+shows it on the client page. It is not the SDK's version, which is sent for you.
 
 ## State
 
@@ -100,8 +100,8 @@ connection is back. Workflows can tell those late readings from live ones.
 |---|---|---|
 | `api_url` | `https://api.dev.wbskt.com` | A self-hosted install's `https://api.<domain>`. |
 | `socket_url` | `wss://ws.dev.wbskt.com` | `wss://ws.<domain>`. |
-| `storage` | `FileStorage.for_device(name)` | `FileStorage(path)`, `MemoryStorage(ref, secret)`, or your own object with `load`, `save` and `clear`. |
-| `capabilities` | none | The commands the device takes. |
+| `storage` | `FileStorage.for_client(name)` | `FileStorage(path)`, `MemoryStorage(ref, secret)`, or your own object with `load`, `save` and `clear`. |
+| `capabilities` | none | The commands the client takes. |
 | `offline_buffer_size` | 1000 | Messages kept while offline; the oldest go first. |
 
 Handlers can be `on_message(message)`, `on_connected()` and `on_disconnected()`. On `WbsktClient`
@@ -112,7 +112,7 @@ reserved; `send` raises `ValueError` for either.
 
 ## Protocol
 
-The SDK implements [the device protocol](https://github.com/wbskt/Wbskt/blob/master/Docs/Device.Protocol.md)
-and its [WebSocket binding](https://github.com/wbskt/Wbskt/blob/master/Docs/Device.Protocol.WebSocket.md):
+The SDK implements [the client protocol](https://github.com/wbskt/Wbskt/blob/master/Docs/Client.Protocol.md)
+and its [WebSocket binding](https://github.com/wbskt/Wbskt/blob/master/Docs/Client.Protocol.WebSocket.md):
 token reuse, jittered reconnects that honour `Retry-After`, ping answers and command
 acknowledgements. Read it to write a client in another language.

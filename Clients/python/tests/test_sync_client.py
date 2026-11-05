@@ -48,7 +48,7 @@ def test_the_sync_client_round_trip(api):
     socket = ThreadedSocket()
     fake = socket.__enter__()
     client = WbsktClient(
-        "sync-device",
+        "sync-client",
         "483920",
         api_url=api.url,
         socket_url=fake.url,

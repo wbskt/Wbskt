@@ -3,7 +3,7 @@
 -- locks across a large delete. Safe to run from several management hosts at once: READPAST lets
 -- each skip rows another is already deleting.
 --
--- @EventIds (comma-separated dbo.Events ids) limits the sweep to those events. The device traffic
+-- @EventIds (comma-separated dbo.Events ids) limits the sweep to those events. The client traffic
 -- pass uses it to apply its shorter retention; NULL sweeps every event.
 CREATE PROCEDURE dbo.EventLogs_DeleteBefore
     @CutoffUtc DATETIME2(3),

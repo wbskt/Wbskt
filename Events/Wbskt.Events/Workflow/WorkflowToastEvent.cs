@@ -6,7 +6,7 @@ namespace Wbskt.Events.Workflow;
 
 /// <summary>
 /// A toast raised by an <c>action:toast</c> node. Unlike <c>action:clientMessage</c>, a toast has no
-/// device target - it is addressed to the humans watching the workspace, so it fans out to the
+/// client target - it is addressed to the humans watching the workspace, so it fans out to the
 /// workspace's SignalR group rather than to a client connection.
 ///
 /// Carrying <see cref="IWorkflowContext"/> (not just the workspace) lets a dashboard link the toast

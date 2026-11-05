@@ -74,7 +74,7 @@ public sealed class IdentityMiddlewareTests
     }
 
     [Fact]
-    public async Task A_device_token_is_not_a_user()
+    public async Task A_client_token_is_not_a_user()
     {
         var (seen, _) = await RunAsync(Principal(ClientClaims.For(UserRef, "pump", Guid.NewGuid(), 42, 7)));
 

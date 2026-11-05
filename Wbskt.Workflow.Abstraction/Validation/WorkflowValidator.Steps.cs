@@ -34,11 +34,11 @@ public sealed partial class WorkflowValidator
                 case SendClientMessageNode { Config: { } config }:
                     if (string.IsNullOrWhiteSpace(config.ClientRef))
                     {
-                        Error("CLIENT_REF_REQUIRED", "pick a device to send to.", "config.clientRef");
+                        Error("CLIENT_REF_REQUIRED", "pick a client to send to.", "config.clientRef");
                     }
                     else if (!Guid.TryParse(config.ClientRef, out _))
                     {
-                        Error("CLIENT_REF_INVALID", $"'{config.ClientRef}' is not a device id.", "config.clientRef");
+                        Error("CLIENT_REF_INVALID", $"'{config.ClientRef}' is not a client id.", "config.clientRef");
                     }
 
                     if (string.IsNullOrWhiteSpace(config.Type))

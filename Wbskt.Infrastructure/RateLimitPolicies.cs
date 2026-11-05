@@ -29,18 +29,18 @@ public static class RateLimitPolicies
     public const string SignUpChallenge = "signup-challenge";
 
     /// <summary>
-    /// Device enrollment by registration PIN. Anonymous by necessity - the device has no credential
-    /// yet - and the PIN is the only thing standing between the internet and a device in someone's
+    /// Client enrollment by registration PIN. Anonymous by necessity - the client has no credential
+    /// yet - and the PIN is the only thing standing between the internet and a client in someone's
     /// workspace, so guessing at it has to be slow. Partitioned per IP.
     /// </summary>
-    public const string DeviceRegistration = "device-registration";
+    public const string ClientRegistration = "client-registration";
 
     /// <summary>
-    /// Device login with its client secret. Anonymous like enrollment, but a secret is far longer
+    /// Client login with its client secret. Anonymous like enrollment, but a secret is far longer
     /// than a PIN and a whole fleet behind one NAT logs in after every restart, so the budget is
     /// generous: it stops a runaway loop or a flood, not a fleet. Partitioned per IP.
     /// </summary>
-    public const string DeviceLogin = "device-login";
+    public const string ClientLogin = "client-login";
 
     /// <summary>
     /// Testing an integration. Each test reaches out to someone else's service (a bot API, a mail

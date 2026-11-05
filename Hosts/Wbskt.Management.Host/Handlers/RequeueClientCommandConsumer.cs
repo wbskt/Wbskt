@@ -1,20 +1,20 @@
 using MassTransit;
 using Wbskt.Events.Client;
-using Wbskt.Infrastructure.Devices;
+using Wbskt.Infrastructure.Clients;
 
 namespace Wbskt.Management.Host.Handlers;
 
 /// <summary>
-/// Puts back in the queue a command whose device dropped before its socket host could deliver it, so
-/// it waits for the next connect like any command sent to an offline device. A command whose expiry
+/// Puts back in the queue a command whose client dropped before its socket host could deliver it, so
+/// it waits for the next connect like any command sent to an offline client. A command whose expiry
 /// has already passed goes in too, and the expiry sweep reports it, so there is one place that does.
 /// </summary>
 public sealed class RequeueClientCommandConsumer : IConsumer<RequeueClientCommand>
 {
-    private readonly DeviceCommandQueue _queue;
+    private readonly ClientCommandQueue _queue;
     private readonly ILogger<RequeueClientCommandConsumer> _logger;
 
-    public RequeueClientCommandConsumer(DeviceCommandQueue queue, ILogger<RequeueClientCommandConsumer> logger)
+    public RequeueClientCommandConsumer(ClientCommandQueue queue, ILogger<RequeueClientCommandConsumer> logger)
     {
         _queue = queue;
         _logger = logger;
@@ -33,12 +33,12 @@ public sealed class RequeueClientCommandConsumer : IConsumer<RequeueClientComman
             ActorRunRefId = message.ActorRunRefId
         };
         var command = QueuedCommand.From(
-            new DeviceCommand(message.CommandId, message.ClientRefId, message.WorkspaceId, message.Type, message.Payload),
+            new ClientCommand(message.CommandId, message.ClientRefId, message.WorkspaceId, message.Type, message.Payload),
             message.ClientId,
             expiresAt,
             announcement);
 
-        // Past the per-device limit: the command was accepted once already.
+        // Past the per-client limit: the command was accepted once already.
         if (!await _queue.QueueAsync(command, announcement, int.MaxValue, message.ReturnedByHostId, context.CancellationToken))
         {
             _logger.LogInformation("Command '{CommandId}' was not put back in the queue: client '{ClientRefId}' no longer exists.", message.CommandId, message.ClientRefId);

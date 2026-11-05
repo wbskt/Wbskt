@@ -69,7 +69,7 @@ internal sealed class DiscordChannel(IHttpClientFactory httpClientFactory, TimeP
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, SendUri(integration.Secrets.WebhookUrl!, config.ThreadId))
         {
-            // No mentions are parsed: a message built from device data must not be able to ping @everyone.
+            // No mentions are parsed: a message built from client data must not be able to ping @everyone.
             Content = JsonContent.Create(new
             {
                 content = NullIfBlank(config.Message),

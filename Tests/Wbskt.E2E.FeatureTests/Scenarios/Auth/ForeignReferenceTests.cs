@@ -6,7 +6,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 
 /// <summary>
 /// "The ID Boundary" in Docs/Coding.Conventions.md: inside a workspace the caller can use, a
-/// reference to another workspace's policy or device gets the same 404 as one that names nothing,
+/// reference to another workspace's policy or client gets the same 404 as one that names nothing,
 /// whether it is in the path or a list filter. A 403 there would confirm the reference is real, and
 /// an empty page would hide that the filter could never match.
 ///

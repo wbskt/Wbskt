@@ -2,7 +2,7 @@
 
 The workflow engine runs the automations a workspace publishes. A workflow is a graph of nodes:
 **triggers** start a run, **controls** route, wait, fan out and join, and **actions** do something
-in the outside world (message a device, call a webhook, send an email). This folder documents the
+in the outside world (message a client, call a webhook, send an email). This folder documents the
 engine as it is on `master`. The code is the source of truth; when this folder and the code
 disagree, fix this folder.
 
@@ -18,9 +18,9 @@ this folder replaces them.
 ## The engine in one page
 
 ```
-devices ───────────► Socket host ──────┐
+clients ───────────► Socket host ──────┐
                                         ├──► RabbitMQ ──► Workflow Engine host ──┬──► SQL Server (all state, leader lease)
-users, HTTP callers ─► Management host ─┘                  (never public)       └──► devices, webhooks, email, chat
+users, HTTP callers ─► Management host ─┘                  (never public)       └──► clients, webhooks, email, chat
 ```
 
 * **Four hosts.** Auth, Management, Socket and the Workflow Engine. The engine is backend-only:
@@ -33,7 +33,7 @@ users, HTTP callers ─► Management host ─┘                  (never public
   as one or more **branches**; each branch walks the graph one node at a time, carrying its own JSON
   **local state**. Forks and parallel loops create more branches; joins merge them back.
 * **Waiting is durable.** A branch that must wait (a delay, a signal, an HTTP callback, a child
-  workflow, a device ack, a long retry backoff) **parks**: it writes a **bookmark** row and frees its
+  workflow, a client ack, a long retry backoff) **parks**: it writes a **bookmark** row and frees its
   worker. A timer or a matching inbound event claims the bookmark and resumes the branch.
 * **Everything is in SQL.** A crashed or replaced leader recovers by re-dispatching every active
   branch from the database. Nodes that are not safe to run twice are deduplicated with idempotency

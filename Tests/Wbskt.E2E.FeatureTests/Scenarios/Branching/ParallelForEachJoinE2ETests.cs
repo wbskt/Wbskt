@@ -16,7 +16,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Branching;
 /// the downstream action fires once regardless of fan-out width.
 ///
 /// Topology:
-///   DeviceTrigger ─► Variable(Set Local "items"=[a,b,c]) ─► ParallelForEach("items")
+///   ClientTrigger ─► Variable(Set Local "items"=[a,b,c]) ─► ParallelForEach("items")
 ///                                                              └─body─► Join(All) ─► action:clientMessage (OpenVent)
 ///
 /// ParallelForEach forks one "body" branch per item (the parent terminates — continue is null),
@@ -40,8 +40,8 @@ public sealed class ParallelForEachJoinE2ETests(ServicesFixture fixture)
         var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
 
-        var deviceName = $"e2e-pfe-{Guid.NewGuid():N}";
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, deviceName);
+        var clientName = $"e2e-pfe-{Guid.NewGuid():N}";
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, clientName);
 
         // ── 2. Publish trigger → Variable → ParallelForEach → Join → command ─
         var workflowRefId = Guid.NewGuid();
@@ -60,7 +60,7 @@ public sealed class ParallelForEachJoinE2ETests(ServicesFixture fixture)
         var clientConfig = new ClientConfig(
             BaseApiUrl: E2EConfig.ManagementBaseUrl,
             BaseSocketUrl: E2EConfig.SocketWsBaseUrl,
-            DeviceName: deviceName,
+            ClientName: clientName,
             PolicyPin: null);
 
         var commandLock = new object();

@@ -152,7 +152,7 @@ BEGIN
 END
 GO
 
--- Not a default User grant: a firmware image replaces the code a device runs. Admin roles get it
+-- Not a default User grant: a firmware image replaces the code a client runs. Admin roles get it
 -- with every other permission below.
 IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'clients.firmware')
 BEGIN

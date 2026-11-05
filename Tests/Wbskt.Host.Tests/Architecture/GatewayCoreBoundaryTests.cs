@@ -3,8 +3,8 @@ using Wbskt.Gateway.Core;
 namespace Wbskt.Host.Tests.Architecture;
 
 /// <summary>
-/// Gateway.Core is shared by every device gateway, so it must not lean on any one transport. It holds
-/// a device through IDeviceConnection; the WebSocket, the HTTP request and their types stay in the host.
+/// Gateway.Core is shared by every client gateway, so it must not lean on any one transport. It holds
+/// a client through IClientConnection; the WebSocket, the HTTP request and their types stay in the host.
 /// </summary>
 public sealed class GatewayCoreBoundaryTests
 {

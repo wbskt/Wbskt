@@ -1,7 +1,7 @@
 -- Replaces Client_Verify, which matched the presented secret in SQL:
 --     WHERE c.RefId = @RefId AND c.Secret = @Secret
 -- Three problems with that, all fixed by moving the comparison out of the database. The secret was
--- stored in plaintext, so any read of this table - or of a backup - impersonated every device in
+-- stored in plaintext, so any read of this table - or of a backup - impersonated every client in
 -- every fleet. The default collation is case-insensitive, so a secret matched regardless of case
 -- and lost roughly a bit of entropy per alphabetic character. And `=` is not a constant-time
 -- comparison.

@@ -2,7 +2,7 @@
 -- order reported: its previous value (NULL when new) so the caller can emit ClientPropertyUpdatedEvent
 -- for changes only, and Stored = 0 for a new name refused at the cap.
 -- UpdatedAt is always bumped: it drives the console's freshness display ("4s ago").
--- A new name is stored only while the client has fewer than @MaxPerClient variables, so a device
+-- A new name is stored only while the client has fewer than @MaxPerClient variables, so a client
 -- cannot grow the table without bound by varying names; earlier names in the report win the last places.
 CREATE PROCEDURE dbo.ClientStateVariables_Report
     @ClientId INT,

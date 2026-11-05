@@ -5,9 +5,9 @@ using Wbskt.Management.Host.Models;
 namespace Wbskt.Management.Host.Services;
 
 /// <summary>
-/// Generation, hashing and comparison of the secret a device authenticates with. One place, for the
+/// Generation, hashing and comparison of the secret a client authenticates with. One place, for the
 /// same reason <c>SecurityTokens</c> in the auth host is one place: a second copy
-/// of the hash that drifted from this one would reject every device on the platform at once, and by
+/// of the hash that drifted from this one would reject every client on the platform at once, and by
 /// then the plaintext needed to diagnose it is gone.
 /// </summary>
 internal static class ClientSecrets
@@ -16,7 +16,7 @@ internal static class ClientSecrets
     private const int SecretBytes = 32;
 
     /// <summary>
-    /// A new secret, returned to the registering device once and never stored in this form.
+    /// A new secret, returned to the registering client once and never stored in this form.
     /// </summary>
     public static string Generate()
     {
@@ -24,7 +24,7 @@ internal static class ClientSecrets
     }
 
     /// <summary>
-    /// Hashes the secret as the device sends it back — the string, not the bytes behind it.
+    /// Hashes the secret as the client sends it back — the string, not the bytes behind it.
     /// </summary>
     /// <remarks>
     /// SHA-256 rather than a password hasher, deliberately. <see cref="Generate"/> produces 32 bytes

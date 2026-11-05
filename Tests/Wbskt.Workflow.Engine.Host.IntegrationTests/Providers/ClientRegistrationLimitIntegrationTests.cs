@@ -169,7 +169,7 @@ public sealed class ClientRegistrationLimitIntegrationTests(SqlEdgeFixture fixtu
         await using var command = new SqlCommand("dbo.Client_Create", connection) { CommandType = CommandType.StoredProcedure };
         command.Parameters.AddWithValue("@WorkspaceId", workspaceId);
         command.Parameters.AddWithValue("@PolicyId", policyId);
-        command.Parameters.AddWithValue("@Name", "device");
+        command.Parameters.AddWithValue("@Name", "client");
         command.Parameters.Add("@SecretHash", SqlDbType.VarBinary, 32).Value = ClientSecrets.Hash(ClientSecrets.Generate());
         command.Parameters.AddWithValue("@Status", status);
         command.Parameters.AddWithValue("@MaxWorkspaceClients", (object?)maxPerWorkspace ?? DBNull.Value);

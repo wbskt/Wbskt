@@ -24,9 +24,9 @@ public sealed class TriggerActivityE2ETests(ServicesFixture fixture)
     public async Task TRG_ACT_01_A_filtered_message_and_a_started_run_are_both_reported()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
-        var (token, workspaceRef, clientRefId, secret, deviceName) = await RegisterDeviceAsync("filtered");
+        var (token, workspaceRef, clientRefId, secret, clientName) = await RegisterTestClientAsync("filtered");
         var (workflowRefId, nodeId) = await PublishAsync(token, workspaceRef, clientRefId, holdSeconds: 0);
-        await using var client = await ConnectAsync(clientRefId, secret, deviceName);
+        await using var client = await ConnectAsync(clientRefId, secret, clientName);
 
         await client.SendAsync("temperature", new { celsius = 5 });
         await Task.Delay(TimeSpan.FromSeconds(1));
@@ -49,9 +49,9 @@ public sealed class TriggerActivityE2ETests(ServicesFixture fixture)
     public async Task TRG_ACT_02_A_hold_trigger_reports_that_it_is_holding()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
-        var (token, workspaceRef, clientRefId, secret, deviceName) = await RegisterDeviceAsync("holding");
+        var (token, workspaceRef, clientRefId, secret, clientName) = await RegisterTestClientAsync("holding");
         var (workflowRefId, nodeId) = await PublishAsync(token, workspaceRef, clientRefId, holdSeconds: 600);
-        await using var client = await ConnectAsync(clientRefId, secret, deviceName);
+        await using var client = await ConnectAsync(clientRefId, secret, clientName);
 
         await client.SendAsync("temperature", new { celsius = 10 });
 
@@ -67,7 +67,7 @@ public sealed class TriggerActivityE2ETests(ServicesFixture fixture)
     public async Task TRG_ACT_03_Another_workspaces_workflow_is_not_found()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
-        var (token, workspaceRef, clientRefId, _, _) = await RegisterDeviceAsync("scoped");
+        var (token, workspaceRef, clientRefId, _, _) = await RegisterTestClientAsync("scoped");
         var (workflowRefId, nodeId) = await PublishAsync(token, workspaceRef, clientRefId, holdSeconds: 0);
         var (otherToken, otherWorkspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
 
@@ -101,13 +101,13 @@ public sealed class TriggerActivityE2ETests(ServicesFixture fixture)
     private static string Url(Guid workspaceRef, Guid workflowRefId, Guid nodeId) =>
         ServicesFixture.ManagementUrl($"/api/v1/workspaces/{workspaceRef}/workflows/{workflowRefId}/triggers/{nodeId}/recent");
 
-    private async Task<(string Token, Guid WorkspaceRef, Guid ClientRefId, string Secret, string DeviceName)> RegisterDeviceAsync(string label)
+    private async Task<(string Token, Guid WorkspaceRef, Guid ClientRefId, string Secret, string ClientName)> RegisterTestClientAsync(string label)
     {
         var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
-        var deviceName = $"e2e-activity-{label}-{Guid.NewGuid():N}";
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, deviceName);
-        return (token, workspaceRef, clientRefId, secret, deviceName);
+        var clientName = $"e2e-activity-{label}-{Guid.NewGuid():N}";
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, clientName);
+        return (token, workspaceRef, clientRefId, secret, clientName);
     }
 
     // A trigger on payload.celsius > 8.
@@ -125,10 +125,10 @@ public sealed class TriggerActivityE2ETests(ServicesFixture fixture)
         return (workflowRefId, nodeId);
     }
 
-    private static async Task<WbsktClient> ConnectAsync(Guid clientRefId, string secret, string deviceName)
+    private static async Task<WbsktClient> ConnectAsync(Guid clientRefId, string secret, string clientName)
     {
         var storage = new InMemoryClientStorage(clientRefId, secret);
-        var clientConfig = new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, deviceName, null);
+        var clientConfig = new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, clientName, null);
         var client = new WbsktClient(clientConfig, storage);
         await client.StartAsync();
         return client;

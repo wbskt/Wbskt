@@ -3,7 +3,7 @@
 # check to pass before they start, so the policy is in place before anything sends to the queue.
 #
 # workflow-inbound-callback is fed by the anonymous public webhook and wake endpoints. With the engine
-# down it would otherwise grow until RabbitMQ's memory or disk alarm blocks every publisher, device
+# down it would otherwise grow until RabbitMQ's memory or disk alarm blocks every publisher, client
 # traffic included. The policy caps it, and reject-publish makes the broker refuse what is over the cap,
 # so management answers the caller 503 (retry later) instead of 202. Nothing expires: a callback the
 # caller was told was accepted runs once the engine is back.

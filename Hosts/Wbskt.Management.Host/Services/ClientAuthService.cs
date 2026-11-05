@@ -26,7 +26,7 @@ internal sealed class ClientAuthService : IClientAuthService
     public async Task<Result<ClientLoginResponse>> LoginAsync(ClientLoginRequest request, CancellationToken cancellationToken = default)
     {
         var result = await VerifyAsync(request, cancellationToken);
-        _metrics.RecordDeviceLogin(result);
+        _metrics.RecordClientLogin(result);
         return result;
     }
 

@@ -5,7 +5,7 @@ using Wbskt.Workflow.Abstraction.Enums;
 namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 
 /// <summary>
-/// Parks the online presence checks for a device that just connected. A connect is not dispatched
+/// Parks the online presence checks for a client that just connected. A connect is not dispatched
 /// through the inbound hub: no trigger listens on it, and dispatching it only wrote an idempotency
 /// claim per connect. Presence triggers fire from the parked checks instead.
 /// </summary>

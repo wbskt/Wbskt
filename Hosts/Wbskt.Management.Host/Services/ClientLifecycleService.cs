@@ -12,7 +12,7 @@ namespace Wbskt.Management.Host.Services;
 
 /// <summary>
 /// Changes to a client: its status, name and tags, its secret, and deleting it. Each change that
-/// affects a connected device also tells the socket host, through <see cref="ClientAccessRevoker"/>.
+/// affects a connected client also tells the socket host, through <see cref="ClientAccessRevoker"/>.
 /// </summary>
 internal sealed class ClientLifecycleService : IClientLifecycleService
 {

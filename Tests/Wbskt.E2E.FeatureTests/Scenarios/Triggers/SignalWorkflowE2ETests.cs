@@ -15,7 +15,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Triggers;
 /// unification end-to-end (a human-in-the-loop approval gate).
 ///
 /// Topology:
-///   DeviceTrigger (event="telemetry") ─► AwaitSignal("approve") ─► action:clientMessage (OpenVent)
+///   ClientTrigger (event="telemetry") ─► AwaitSignal("approve") ─► action:clientMessage (OpenVent)
 ///
 /// Telemetry starts the run, which reaches AwaitSignal and parks on a bookmark whose match
 /// key is "signal:approve:{runRefId}". The command must NOT fire yet — the branch is blocked.
@@ -37,10 +37,10 @@ public sealed class SignalWorkflowE2ETests(ServicesFixture fixture)
         var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
 
-        var deviceName = $"e2e-signal-{Guid.NewGuid():N}";
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, deviceName);
+        var clientName = $"e2e-signal-{Guid.NewGuid():N}";
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, clientName);
 
-        // ── 2. Publish DeviceTrigger → AwaitSignal("approve") → command ──────
+        // ── 2. Publish ClientTrigger → AwaitSignal("approve") → command ──────
         var workflowRefId = Guid.NewGuid();
         var definition = BuildSignalDefinition(workflowRefId, clientRefId.ToString());
 
@@ -57,7 +57,7 @@ public sealed class SignalWorkflowE2ETests(ServicesFixture fixture)
         var clientConfig = new ClientConfig(
             BaseApiUrl: E2EConfig.ManagementBaseUrl,
             BaseSocketUrl: E2EConfig.SocketWsBaseUrl,
-            DeviceName: deviceName,
+            ClientName: clientName,
             PolicyPin: null);
 
         var commandTcs = new TaskCompletionSource<(string Action, string? Payload)>(

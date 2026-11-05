@@ -211,7 +211,7 @@ public class AuthController : ApiControllerBase
     }
 
     /// <summary>
-    /// Lists the signed-in user's live sessions (one per signed-in device or browser), newest first.
+    /// Lists the signed-in user's live sessions (one per signed-in client or browser), newest first.
     /// </summary>
     [Authorize]
     [HttpGet("sessions")]
@@ -229,7 +229,7 @@ public class AuthController : ApiControllerBase
 
     /// <summary>
     /// Ends one of the signed-in user's sessions: its refresh token stops working, and so does the
-    /// access token that device holds, on every host. The id is a session's, from the list above,
+    /// access token that client holds, on every host. The id is a session's, from the list above,
     /// and stays the same for the life of the session.
     /// </summary>
     [Authorize]
