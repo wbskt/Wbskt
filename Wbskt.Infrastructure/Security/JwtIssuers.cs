@@ -23,7 +23,7 @@ public static class JwtIssuers
     /// <summary>Signs user access tokens. Private key: the auth host's <c>Jwt:SigningKey</c>.</summary>
     public const string Auth = "wbskt-auth";
 
-    /// <summary>Signs client (client) tokens. Private key: the management host's <c>Jwt:SigningKey</c>.</summary>
+    /// <summary>Signs client tokens. Private key: the management host's <c>Jwt:SigningKey</c>.</summary>
     public const string Management = "wbskt-management";
 }
 

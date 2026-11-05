@@ -6,7 +6,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Channels;
 
-/// <summary>A message a client client sent. Keys: <c>client:{clientRef}:{type}</c>, with <c>*</c> as the any-type trigger.</summary>
+/// <summary>A message a client sent. Keys: <c>client:{clientRef}:{type}</c>, with <c>*</c> as the any-type trigger.</summary>
 public sealed class ClientChannel : TriggerChannel
 {
     public const string Name = "client";

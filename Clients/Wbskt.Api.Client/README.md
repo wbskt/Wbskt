@@ -7,7 +7,7 @@ themselves compile against (`Wbskt.Auth.Models`, `Wbskt.Management.Models`, `Wbs
 | Client                  | Host            | Covers                                                                              |
 |-------------------------|-----------------|-------------------------------------------------------------------------------------|
 | `WbsktAuthClient`       | auth host       | accounts, sessions, workspaces, tenants, members, invitations, roles, groups         |
-| `WbsktManagementClient` | management host | policies, clients, clients, readings, commands, templates, event log, integrations, workflows, runs, public callbacks |
+| `WbsktManagementClient` | management host | policies, client registration and login, clients, readings, commands, templates, event log, integrations, workflows, runs, public callbacks |
 
 ## Use
 

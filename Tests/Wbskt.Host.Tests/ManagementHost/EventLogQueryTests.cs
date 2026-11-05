@@ -260,6 +260,16 @@ public sealed class EventLogQueryTests
         _asked.SinceId.Should().Be(884213);
     }
 
+    [Fact]
+    public async Task Device_still_names_the_client_source()
+    {
+        var service = CreateService();
+
+        await service.GetLogsAsync(WorkspaceId, new EventLogQuery { Source = ["device", "Client"] }, null, 50);
+
+        _asked!.Sources.Should().BeEquivalentTo([EventSource.Client]);
+    }
+
     [Theory]
     [InlineData("billing")]
     [InlineData("3")]

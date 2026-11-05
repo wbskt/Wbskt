@@ -351,6 +351,9 @@ deploy_backend() {
         start_services "${rest[@]}"
     else
         start_services "${SERVICES[@]}"
+        if [[ " ${SERVICES[*]} " == *" client-auth "* ]]; then
+            remove_legacy_devices_container
+        fi
     fi
 
     echo "==> deployed $TAG (${SERVICES[*]}) at $(git -C "$REPO_ROOT" rev-parse --short HEAD)"
@@ -431,7 +434,7 @@ remove_legacy_devices_container() {
     if [[ -n "$ids" ]]; then
         echo "==> removing the old devices container, now client-auth"
         # shellcheck disable=SC2086
-        docker rm -f $ids
+        docker rm -f $ids || echo "warning: could not remove it; finish with: docker rm -f $ids"
     fi
 }
 

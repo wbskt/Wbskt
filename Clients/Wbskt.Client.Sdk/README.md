@@ -1,6 +1,6 @@
 # Wbskt.Client
 
-Connect a client, script or service to [Wbskt](https://wbskt.com). It registers with a policy PIN
+Connect a board, script or service to [Wbskt](https://wbskt.com). It registers with a policy PIN
 once, keeps the credentials it gets, holds a WebSocket open, buffers messages while offline and
 reconnects on its own.
 

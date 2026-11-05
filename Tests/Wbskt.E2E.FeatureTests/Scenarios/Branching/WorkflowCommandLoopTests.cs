@@ -16,7 +16,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Branching;
 ///       └─[default]─► action:clientMessage (command="OpenVent")
 ///
 /// The test:
-///  1. Registers a user + workspace, creates an AutoApproval policy, registers a client client.
+///  1. Registers a user + workspace, creates an AutoApproval policy, registers a client.
 ///  2. Builds and publishes a minimal ClientTrigger → SendCommand workflow definition.
 ///  3. Connects a WbsktClient for the registered client.
 ///  4. Sends a "telemetry" event from the client.

@@ -29,10 +29,14 @@ CREATE PROCEDURE dbo.EventLog_GetBy_Workspace
     @Search NVARCHAR(200) = NULL,
     @CursorId BIGINT = NULL,
     @Take INT = 50,
-    @IncludeClientTraffic BIT = 1
+    @IncludeClientTraffic BIT = 1,
+    -- Old name of @IncludeClientTraffic, accepted for one release while a deploy rolls (wbskt/Wbskt#583).
+    @IncludeDeviceTraffic BIT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+
+    SET @IncludeClientTraffic = COALESCE(@IncludeDeviceTraffic, @IncludeClientTraffic);
 
     DECLARE @Include TABLE (EventName NVARCHAR(100) NOT NULL PRIMARY KEY);
     DECLARE @Exclude TABLE (EventName NVARCHAR(100) NOT NULL PRIMARY KEY);

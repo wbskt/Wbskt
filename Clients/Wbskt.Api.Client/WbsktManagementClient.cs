@@ -6,7 +6,7 @@ using Wbskt.Protocol;
 namespace Wbskt.Api.Client;
 
 /// <summary>
-/// The management host's API: registration policies, clients (registration, login, clients, tags,
+/// The management host's API: registration policies, clients (registration, login, the roster, tags,
 /// readings, commands), message templates, the event log, integrations, workflows and their runs, and
 /// the public callbacks. Each method sends the request, throws <see cref="ApiException"/> on a failure
 /// status and returns the contract type from <c>Wbskt.Management.Models</c> (or <c>Wbskt.Protocol</c>

@@ -610,7 +610,7 @@ services:
       - --whitelisted_container_labels=com.docker.compose.service
       - --enable_metrics=cpu,memory
     privileged: true
-    client-auth:
+    devices:
       - /dev/kmsg
     volumes:
       - /:/rootfs:ro
