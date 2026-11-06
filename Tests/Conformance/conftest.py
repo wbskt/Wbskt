@@ -118,9 +118,6 @@ async def client(api, socket_server, tmp_path: Path):
             "WBSKT_API_URL": api.url,
             "WBSKT_SOCKET_URL": socket_server.url,
             "WBSKT_CLIENT_NAME": "conformance-client",
-            # The name the variable had until wbskt/Wbskt#574. wbskt/Wbskt.Arduino runs this suite
-            # from master, so a harness released before the rename still finds its name.
-            "WBSKT_DEVICE_NAME": "conformance-client",
             "WBSKT_POLICY_PIN": pin or "",
             "WBSKT_STORAGE": str(tmp_path / "credentials.json"),
             "WBSKT_COMMANDS": json.dumps(commands if commands is not None else [RELAY]),
@@ -134,9 +131,3 @@ async def client(api, socket_server, tmp_path: Path):
 
     for harness in started:
         await harness.stop()
-
-
-@pytest.fixture
-def device(client):
-    """`client` under its name until wbskt/Wbskt#574, for SDK-own scenarios written before it."""
-    return client
