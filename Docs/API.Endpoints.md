@@ -440,7 +440,7 @@ in-place edit, which is why there is no update verb.
 |---|---|---|
 | `GET runs` | `workflows.read` | Lists every run in the workspace, newest first — the "recent activity" view. Filterable by `status`, cursor-paged. |
 | `GET workflows/{workflowRef}/runs` | `workflows.read` | Lists runs of one workflow, filterable by `status`, cursor-paged. |
-| `GET workflows/{workflowRef}/stats` | `workflows.read` | How a workflow is doing over a window (`from`/`to`, default last 30 days): outcome counts, duration p50/p95/max/avg over completed runs, success rate over *finished* runs (null when nothing has finished), the error codes that actually occur, and the slowest nodes. |
+| `GET workflows/{workflowRef}/stats` | `workflows.read` | How a workflow is doing over a window (`from`/`to`, default last 30 days): outcome counts, duration p50/p95/max/avg over completed runs, success rate over *finished* runs (null when nothing has finished), the error codes that actually occur, and the slowest nodes. `counts.active` (runs in flight) is split into `running` (a branch is executing a step) and `waiting` (every live branch is parked on a delay, signal or call); the workspace `GET stats` and its per-workflow rows carry the same split. |
 | `GET runs/{runRef}` | `workflows.read` | Run detail with its branches. |
 
 Each run in either list also carries what a one-line row needs, read for the whole page in one call
@@ -495,6 +495,14 @@ because lists show them. The client feed is capped at 20 messages per client per
 management instance; when messages are dropped, the next second opens with
 `OnClientFeedSkipped { clientRefId, skipped, createdAtUtc }`, and the comms history still has them all.
 Like workspace groups, client groups don't survive a reconnect: the console joins again.
+
+Because per-client traffic stays off the workspace group, the workspace group gets a rate instead:
+every 5 seconds while it is non-zero, and once more when it drops to zero,
+`OnWorkspaceMessageRateEvent { inboundPerSecond, outboundPerSecond, messagesPerSecond, windowSeconds, createdAtUtc }`.
+Inbound is messages clients sent (including any the 20/s feed cap dropped), outbound is commands
+written to a connection. `GET /api/v1/workspaces/{workspaceRef}/stats/messages` (`clients.read`)
+returns the last window's value, so a status bar has a number before the first event. Like the cap,
+it is counted per management instance: with more than one, each reports its share.
 
 A client whose connections keep replacing each other (5 supersedes within 10 minutes on one gateway)
 raises `ClientCredentialsSharedEvent`, a Warning in the event log and `OnClientCredentialsSharedEvent

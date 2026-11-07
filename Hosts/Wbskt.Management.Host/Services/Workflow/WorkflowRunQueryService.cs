@@ -190,7 +190,9 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
                 stats.CancelledCount,
                 Faulted: 0,
                 stats.OutOfCreditsCount,
-                stats.ActiveCount),
+                stats.ActiveCount,
+                Running: stats.ActiveCount - stats.WaitingCount,
+                Waiting: stats.WaitingCount),
             new RunDurationsDto(stats.P50DurationMs, stats.P95DurationMs, stats.MaxDurationMs, stats.AvgDurationMs),
             successRate,
             failures.Select(f => new FailureBucketDto(f.ErrorCode, f.NodeId, f.Occurrences, f.LastSeenAt.ToUtcOffset())).ToList(),
@@ -225,7 +227,9 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
                 stats.CancelledCount,
                 Faulted: 0,
                 stats.OutOfCreditsCount,
-                stats.ActiveCount),
+                stats.ActiveCount,
+                Running: stats.ActiveCount - stats.WaitingCount,
+                Waiting: stats.WaitingCount),
             new RunDurationsDto(stats.P50DurationMs, stats.P95DurationMs, stats.MaxDurationMs, stats.AvgDurationMs),
             SuccessRate(stats.TotalRuns, stats.ActiveCount, stats.SucceededCount),
             perWorkflow.Select(w => new WorkflowRunSummaryDto(
@@ -235,7 +239,9 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
                 w.FailedCount,
                 w.ActiveCount,
                 w.AvgDurationMs,
-                SuccessRate(w.TotalRuns, w.ActiveCount, w.SucceededCount))).ToList()));
+                SuccessRate(w.TotalRuns, w.ActiveCount, w.SucceededCount),
+                Running: w.ActiveCount - w.WaitingCount,
+                Waiting: w.WaitingCount)).ToList()));
     }
 
     /// <summary>

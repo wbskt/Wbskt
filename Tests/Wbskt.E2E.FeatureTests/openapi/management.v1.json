@@ -2129,6 +2129,14 @@
               "string"
             ]
           },
+          "running": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
           "succeeded": {
             "format": "int32",
             "pattern": "^-?(?:0|[1-9]\\d*)$",
@@ -2138,6 +2146,14 @@
             ]
           },
           "total": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "waiting": {
             "format": "int32",
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
@@ -2154,7 +2170,9 @@
           "cancelled",
           "faulted",
           "outOfCredits",
-          "active"
+          "active",
+          "running",
+          "waiting"
         ],
         "type": "object"
       },
@@ -2911,6 +2929,14 @@
               "string"
             ]
           },
+          "running": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
           "succeeded": {
             "format": "int32",
             "pattern": "^-?(?:0|[1-9]\\d*)$",
@@ -2936,6 +2962,14 @@
               "string"
             ]
           },
+          "waiting": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
           "workflowRefId": {
             "format": "uuid",
             "type": "string"
@@ -2948,7 +2982,9 @@
           "failed",
           "active",
           "avgDurationMs",
-          "successRate"
+          "successRate",
+          "running",
+          "waiting"
         ],
         "type": "object"
       },
@@ -3145,6 +3181,53 @@
           "description",
           "runCount",
           "createdAt"
+        ],
+        "type": "object"
+      },
+      "WorkspaceMessageRate": {
+        "properties": {
+          "createdAtUtc": {
+            "format": "date-time"
+          },
+          "inboundPerSecond": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "messagesPerSecond": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "outboundPerSecond": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "windowSeconds": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "inboundPerSecond",
+          "outboundPerSecond",
+          "messagesPerSecond",
+          "windowSeconds",
+          "createdAtUtc"
         ],
         "type": "object"
       },
@@ -6035,6 +6118,46 @@
         },
         "tags": [
           "WorkflowRuns"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspaceRef}/stats/messages": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspaceRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceMessageRate"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceMessageRate"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceMessageRate"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "WorkspaceMessageStats"
         ]
       }
     },

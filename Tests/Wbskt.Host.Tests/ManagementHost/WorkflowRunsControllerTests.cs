@@ -271,7 +271,7 @@ public sealed class WorkflowRunsControllerTests
         definitionProvider.Setup(x => x.FindCurrentByRefIdAsync(workflowRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId));
         runProvider.Setup(x => x.GetStatsAsync(workflowRefId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(CreateStats(total: 10, succeeded: 6, failed: 2, active: 2));
+            .ReturnsAsync(CreateStats(total: 10, succeeded: 6, failed: 2, active: 2, waiting: 1));
         runProvider.Setup(x => x.GetTopFailuresAsync(workflowRefId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new RunFailureBucketRow { ErrorCode = "WEBHOOK_HTTP_ERROR", NodeId = Guid.NewGuid(), Occurrences = 2, LastSeenAt = DateTime.UtcNow }]);
         runProvider.Setup(x => x.GetNodeTimingsAsync(workflowRefId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
@@ -285,6 +285,8 @@ public sealed class WorkflowRunsControllerTests
         Assert.Equal(0.75, response.Value.SuccessRate);
         Assert.Equal(10, response.Value.Counts.Total);
         Assert.Equal(2, response.Value.Counts.Active);
+        Assert.Equal(1, response.Value.Counts.Running);
+        Assert.Equal(1, response.Value.Counts.Waiting);
         Assert.Equal("WEBHOOK_HTTP_ERROR", Assert.Single(response.Value.TopFailures).ErrorCode);
     }
 
@@ -303,8 +305,8 @@ public sealed class WorkflowRunsControllerTests
         runProvider.Setup(x => x.GetPerWorkflowStatsAsync(WorkspaceId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(
             [
-                new WorkflowRunSummaryRow { WorkflowRefId = busy, TotalRuns = 100, SucceededCount = 100, FailedCount = 0, ActiveCount = 0, AvgDurationMs = 50 },
-                new WorkflowRunSummaryRow { WorkflowRefId = quiet, TotalRuns = 2, SucceededCount = 0, FailedCount = 2, ActiveCount = 0, AvgDurationMs = 10 }
+                new WorkflowRunSummaryRow { WorkflowRefId = busy, TotalRuns = 100, SucceededCount = 100, FailedCount = 0, ActiveCount = 0, WaitingCount = 0, AvgDurationMs = 50 },
+                new WorkflowRunSummaryRow { WorkflowRefId = quiet, TotalRuns = 2, SucceededCount = 0, FailedCount = 2, ActiveCount = 0, WaitingCount = 0, AvgDurationMs = 10 }
             ]);
         var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), Mock.Of<IWorkflowDefinitionProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
@@ -392,7 +394,7 @@ public sealed class WorkflowRunsControllerTests
         Assert.True(response.IsFailure);
     }
 
-    private static RunStatsRow CreateStats(int total, int succeeded, int failed, int active)
+    private static RunStatsRow CreateStats(int total, int succeeded, int failed, int active, int waiting = 0)
     {
         return new RunStatsRow
         {
@@ -403,6 +405,7 @@ public sealed class WorkflowRunsControllerTests
             CancelledCount = 0,
             OutOfCreditsCount = 0,
             ActiveCount = active,
+            WaitingCount = waiting,
             P50DurationMs = 120,
             P95DurationMs = 900,
             MaxDurationMs = 1500,

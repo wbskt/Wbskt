@@ -126,6 +126,11 @@ public static class Program
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddSingleton<WorkspaceAccessCache>();
         builder.Services.AddSingleton<ClientFeedThrottle>();
+        builder.Services.AddSingleton<WorkspaceMessageCounter>();
+        if (role == HostRole.All)
+        {
+            builder.Services.AddHostedService<WorkspaceMessageRateBroadcaster>();
+        }
         builder.Services.AddHostedService(sp => sp.GetRequiredService<WorkspaceAccessCache>());
         builder.Services.AddHttpClient<IAuthServiceClient, AuthServiceClient>(client =>
         {

@@ -2,6 +2,9 @@ namespace Wbskt.Management.Models.Workflow;
 
 /// <summary>How runs of a workflow turned out over a window.</summary>
 /// <param name="Faulted">Always zero: no run ends in this status any more. Kept so the response shape does not change.</param>
+/// <param name="Active">Runs still in flight: <paramref name="Running"/> plus <paramref name="Waiting"/>.</param>
+/// <param name="Running">In-flight runs with at least one branch executing a step.</param>
+/// <param name="Waiting">In-flight runs parked on a delay, signal or call: every live branch is waiting.</param>
 public record RunOutcomeCountsDto(
     int Total,
     int Succeeded,
@@ -10,7 +13,9 @@ public record RunOutcomeCountsDto(
     int Cancelled,
     int Faulted,
     int OutOfCredits,
-    int Active);
+    int Active,
+    int Running,
+    int Waiting);
 
 /// <summary>
 /// Run durations in milliseconds, over <b>completed</b> runs only — including in-flight ones as zero
@@ -41,7 +46,10 @@ public record WorkflowStatsResponse(
 
 /// <summary>One workflow's line in a workspace rollup.</summary>
 /// <param name="Failed">Every way of not succeeding — failed, partially failed, out of credits.</param>
+/// <param name="Active">Runs still in flight: <paramref name="Running"/> plus <paramref name="Waiting"/>.</param>
 /// <param name="SuccessRate">Succeeded ÷ finished for this workflow alone; null when nothing finished.</param>
+/// <param name="Running">In-flight runs with at least one branch executing a step.</param>
+/// <param name="Waiting">In-flight runs parked on a delay, signal or call.</param>
 public record WorkflowRunSummaryDto(
     Guid WorkflowRefId,
     int Total,
@@ -49,7 +57,9 @@ public record WorkflowRunSummaryDto(
     int Failed,
     int Active,
     double AvgDurationMs,
-    double? SuccessRate);
+    double? SuccessRate,
+    int Running,
+    int Waiting);
 
 /// <summary>
 /// The answer to "how is this workspace doing?".
