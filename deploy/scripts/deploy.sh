@@ -118,8 +118,6 @@ validate_backend() {
     local -a named=("${SERVICES[@]}")
     SERVICES=()
     for svc in "${named[@]}"; do
-        # The service's name until the Device wording went (wbskt/Wbskt#574).
-        [[ "$svc" == devices ]] && svc=client-auth
         is_allowed_service "$svc" || die "unknown service '$svc' (allowed: ${ALLOWED_SERVICES[*]})"
         [[ " ${SERVICES[*]} " == *" $svc "* ]] || SERVICES+=("$svc")
     done
@@ -344,16 +342,12 @@ deploy_backend() {
     if [[ " ${SERVICES[*]} " == *" client-auth "* && " ${SERVICES[*]} " == *" management "* ]]; then
         echo "==> starting client-auth before management"
         start_services client-auth
-        remove_legacy_devices_container
         for svc in "${SERVICES[@]}"; do
             [[ "$svc" == client-auth ]] || rest+=("$svc")
         done
         start_services "${rest[@]}"
     else
         start_services "${SERVICES[@]}"
-        if [[ " ${SERVICES[*]} " == *" client-auth "* ]]; then
-            remove_legacy_devices_container
-        fi
     fi
 
     echo "==> deployed $TAG (${SERVICES[*]}) at $(git -C "$REPO_ROOT" rev-parse --short HEAD)"
@@ -421,20 +415,6 @@ report_drift() {
     fi
     if (( ${#lagging[@]} > 0 )); then
         echo "    hosts: deploy.sh --tag $TAG --services $(IFS=,; echo "${lagging[*]}")"
-    fi
-}
-
-# client-auth was called devices (wbskt/Wbskt#574). Compose no longer knows that service, so its
-# old container would keep running beside client-auth with its own Traefik router. Removed only once
-# client-auth is healthy, so client login always has a host.
-remove_legacy_devices_container() {
-    local ids
-    ids=$(docker ps -aq --filter "label=com.docker.compose.project=wbskt" \
-        --filter "label=com.docker.compose.service=devices")
-    if [[ -n "$ids" ]]; then
-        echo "==> removing the old devices container, now client-auth"
-        # shellcheck disable=SC2086
-        docker rm -f $ids || echo "warning: could not remove it; finish with: docker rm -f $ids"
     fi
 }
 

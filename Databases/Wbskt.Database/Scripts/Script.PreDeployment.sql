@@ -101,6 +101,18 @@ DROP PROCEDURE IF EXISTS dbo.RegistrationPolicy_Disable;
 GO
 /*
 --------------------------------------------------------------------------------------
+Pre-Deployment Script: drop DeviceTraffic_InsertBatch and DeviceTraffic_DeleteBefore
+--------------------------------------------------------------------------------------
+The old names of ClientTraffic_InsertBatch and ClientTraffic_DeleteBefore, kept for one release so
+hosts on the previous image kept writing while #585 rolled out (wbskt/Wbskt#586). Nothing calls
+them now, and DropObjectsNotInSource is off, so they are dropped here as Client_Verify is.
+*/
+DROP PROCEDURE IF EXISTS dbo.DeviceTraffic_InsertBatch;
+GO
+DROP PROCEDURE IF EXISTS dbo.DeviceTraffic_DeleteBefore;
+GO
+/*
+--------------------------------------------------------------------------------------
 Pre-Deployment Script: one ScheduledFires row per (WorkflowDefinitionId, TriggerNodeId)
 --------------------------------------------------------------------------------------
 The table gains UQ_ScheduledFires_WorkflowDefinitionId_TriggerNodeId. Registering the same version

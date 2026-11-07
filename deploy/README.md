@@ -277,8 +277,7 @@ signing in. Client URLs and SDK settings do not change.
 Management still serves the same paths. Its router matches every path on `api.<DOMAIN>`, so while no
 client-auth instance is healthy (during its restart, say) Traefik sends client traffic there instead.
 `deploy.sh` relies on that: it restarts client-auth first and waits for it to be healthy before it
-touches management, so client login always has one of the two. Scale it with `CLIENT_AUTH_REPLICAS`. The service was called `devices` until wbskt/Wbskt#574; `deploy.sh` still
-takes that name in `--services`, and removes the old `devices` container once `client-auth` is healthy.
+touches management, so client login always has one of the two. Scale it with `CLIENT_AUTH_REPLICAS`.
 
 ### Running a local console against this backend
 
