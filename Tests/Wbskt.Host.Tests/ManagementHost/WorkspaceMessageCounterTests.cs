@@ -69,6 +69,20 @@ public sealed class WorkspaceMessageCounterTests
     }
 
     [Fact]
+    public void A_backlog_drained_after_a_restart_is_not_counted_as_current_traffic()
+    {
+        var time = new FixedTimeProvider(Now);
+        var counter = new WorkspaceMessageCounter(time);
+
+        counter.Count(Received(WorkspaceId) with { CreatedAtUtc = Now.UtcDateTime - TimeSpan.FromMinutes(3) });
+        counter.Count(Received(WorkspaceId) with { CreatedAtUtc = Now.UtcDateTime - TimeSpan.FromSeconds(2) });
+
+        time.Now = Now.AddSeconds(5);
+
+        counter.Flush().Should().ContainSingle().Which.Rate.InboundPerSecond.Should().Be(0.2);
+    }
+
+    [Fact]
     public void A_workspace_with_no_traffic_reads_as_zero()
     {
         new WorkspaceMessageCounter(new FixedTimeProvider(Now)).Current(WorkspaceId).MessagesPerSecond.Should().Be(0);
@@ -76,12 +90,12 @@ public sealed class WorkspaceMessageCounterTests
 
     private static ClientMessageReceivedEvent Received(int workspaceId)
     {
-        return new ClientMessageReceivedEvent(Guid.NewGuid(), 1, workspaceId, "reading", "{}");
+        return new ClientMessageReceivedEvent(Guid.NewGuid(), 1, workspaceId, "reading", "{}") { CreatedAtUtc = Now.UtcDateTime };
     }
 
     private static ClientCommandDeliveredEvent Delivered(int workspaceId)
     {
-        return new ClientCommandDeliveredEvent(Guid.NewGuid(), 1, workspaceId, "relay.set");
+        return new ClientCommandDeliveredEvent(Guid.NewGuid(), 1, workspaceId, "relay.set") { CreatedAtUtc = Now.UtcDateTime };
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider

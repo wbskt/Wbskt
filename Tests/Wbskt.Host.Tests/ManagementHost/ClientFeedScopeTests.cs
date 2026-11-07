@@ -2,12 +2,15 @@ using System.Reflection;
 using FluentAssertions;
 using MassTransit;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Wbskt.Events;
 using Wbskt.Events.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Management.Host.Handlers;
 using Wbskt.Management.Host.Hubs;
+using Wbskt.Management.Models;
 
 namespace Wbskt.Host.Tests.ManagementHost;
 
@@ -81,6 +84,42 @@ public sealed class ClientFeedScopeTests
         hub.Sent.Skip(ClientFeedThrottle.MaxPerSecond).Select(s => s.Method).Should()
             .Equal(NotificationHub.ClientFeedSkippedMethod, "OnClientMessageReceivedEvent");
         hub.Payloads.OfType<ClientFeedSkipped>().Should().ContainSingle().Which.Skipped.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task Messages_the_cap_drops_still_count_toward_the_workspace_rate()
+    {
+        var hub = new FakeHub();
+        var time = new FixedTimeProvider(Now);
+        var counter = new WorkspaceMessageCounter(time);
+        var handler = new SignalRForwardingHandler<ClientMessageReceivedEvent>(hub.Context, new ClientFeedThrottle(time), counter);
+
+        for (var i = 0; i < ClientFeedThrottle.MaxPerSecond * 2; i++)
+        {
+            await handler.Consume(Context(Message() with { CreatedAtUtc = Now.UtcDateTime }));
+        }
+
+        time.Now = Now.AddSeconds(5);
+
+        hub.Sent.Should().HaveCount(ClientFeedThrottle.MaxPerSecond);
+        counter.Flush().Should().ContainSingle().Which.Rate.InboundPerSecond.Should().Be(ClientFeedThrottle.MaxPerSecond * 2 / 5.0);
+    }
+
+    [Fact]
+    public async Task The_broadcaster_sends_each_busy_workspace_its_rate()
+    {
+        var hub = new FakeHub();
+        var time = new FixedTimeProvider(Now);
+        var counter = new WorkspaceMessageCounter(time);
+        counter.Count(Message() with { CreatedAtUtc = Now.UtcDateTime });
+        await using var services = new ServiceCollection().BuildServiceProvider();
+        var broadcaster = new WorkspaceMessageRateBroadcaster(counter, hub.Context, services.GetRequiredService<IServiceScopeFactory>(), NullLogger<WorkspaceMessageRateBroadcaster>.Instance);
+
+        time.Now = Now.AddSeconds(5);
+        await broadcaster.TickAsync(CancellationToken.None);
+
+        hub.Sent.Should().ContainSingle().Which.Should().Be((NotificationHub.GroupName(WorkspaceId), NotificationHub.WorkspaceMessageRateMethod));
+        hub.Payloads.OfType<WorkspaceMessageRate>().Should().ContainSingle().Which.InboundPerSecond.Should().Be(0.2);
     }
 
     [Fact]
