@@ -31,7 +31,6 @@ public class SignalRForwardingHandler<TEvent> : IConsumer<TEvent>
     public async Task Consume(ConsumeContext<TEvent> context)
     {
         var message = context.Message;
-        _messageCounter.Count(message);
 
         if (_metadata.Scope != NotifyScope.Client || message is not IClientContext client)
         {
@@ -51,5 +50,8 @@ public class SignalRForwardingHandler<TEvent> : IConsumer<TEvent>
         {
             await watchers.SendAsync(_metadata.ClientMethod, message);
         }
+
+        // After the sends: a send that throws is retried by the bus, and counting first would count it twice.
+        _messageCounter.Count(message);
     }
 }

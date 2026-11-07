@@ -72,13 +72,14 @@ public sealed class WorkspaceMessageCounter
                 (int)Math.Round(seconds),
                 now);
 
-            var wasQuiet = tally.Latest.MessagesPerSecond == 0;
-            tally.Latest = rate;
-
-            if (inbound + outbound > 0 || !wasQuiet)
+            var busy = inbound + outbound > 0;
+            if (busy || tally.WasBusy)
             {
                 rates.Add((workspaceId, rate));
             }
+
+            tally.WasBusy = busy;
+            tally.Latest = rate;
         }
 
         return rates;
@@ -111,6 +112,7 @@ public sealed class WorkspaceMessageCounter
     {
         public long Inbound;
         public long Outbound;
+        public bool WasBusy;
         public required WorkspaceMessageRate Latest { get; set; }
     }
 }
