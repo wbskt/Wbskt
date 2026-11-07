@@ -7133,6 +7133,9 @@
       "name": "RegistrationPolicies"
     },
     {
+      "name": "WorkspaceMessageStats"
+    },
+    {
       "name": "PublicCallback"
     },
     {
