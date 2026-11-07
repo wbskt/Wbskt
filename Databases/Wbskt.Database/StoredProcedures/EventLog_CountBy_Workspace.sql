@@ -6,14 +6,10 @@ CREATE PROCEDURE dbo.EventLog_CountBy_Workspace
     @WorkspaceId INT,
     @FromUtc DATETIME2(3),
     @ToUtc DATETIME2(3),
-    @IncludeClientTraffic BIT = 1,
-    -- Old name of @IncludeClientTraffic, accepted for one release while a deploy rolls (wbskt/Wbskt#583).
-    @IncludeDeviceTraffic BIT = NULL
+    @IncludeClientTraffic BIT = 1
 AS
 BEGIN
     SET NOCOUNT ON;
-
-    SET @IncludeClientTraffic = COALESCE(@IncludeDeviceTraffic, @IncludeClientTraffic);
 
     SELECT e.EventName, el.UserRefId, el.Source, COUNT_BIG(*) AS EntryCount
     FROM dbo.EventLogEntries el
