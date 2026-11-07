@@ -83,6 +83,24 @@ public sealed class WorkspaceMessageCounterTests
     }
 
     [Fact]
+    public void A_rate_too_small_to_show_still_gets_its_closing_zero()
+    {
+        var time = new FixedTimeProvider(Now);
+        var counter = new WorkspaceMessageCounter(time);
+        counter.Count(Received(WorkspaceId));
+
+        // One message over a 30 s tick rounds to 0.0/s, but the workspace was busy all the same.
+        time.Now = Now.AddSeconds(30);
+        counter.Flush().Should().ContainSingle().Which.Rate.MessagesPerSecond.Should().Be(0);
+
+        time.Now = Now.AddSeconds(35);
+        counter.Flush().Should().ContainSingle();
+
+        time.Now = Now.AddSeconds(40);
+        counter.Flush().Should().BeEmpty();
+    }
+
+    [Fact]
     public void A_workspace_with_no_traffic_reads_as_zero()
     {
         new WorkspaceMessageCounter(new FixedTimeProvider(Now)).Current(WorkspaceId).MessagesPerSecond.Should().Be(0);
