@@ -500,7 +500,10 @@ Because per-client traffic stays off the workspace group, the workspace group ge
 every 5 seconds while it is non-zero, and once more when it drops to zero,
 `OnWorkspaceMessageRateEvent { inboundPerSecond, outboundPerSecond, messagesPerSecond, windowSeconds, createdAtUtc }`.
 Inbound is messages clients sent (including any the 20/s feed cap dropped), outbound is commands
-written to a connection. `GET /api/v1/workspaces/{workspaceRef}/stats/messages` (`clients.read`)
+written to a connection. Events more than two windows old when the host reads them are not counted, so
+a backlog drained after a restart does not read as a burst. A listener should treat the last value as
+stale once about three windows (`windowSeconds` × 3) pass with no event: the final zero can be missed
+while a connection is re-establishing. `GET /api/v1/workspaces/{workspaceRef}/stats/messages` (`clients.read`)
 returns the last window's value, so a status bar has a number before the first event. Like the cap,
 it is counted per management instance: with more than one, each reports its share.
 

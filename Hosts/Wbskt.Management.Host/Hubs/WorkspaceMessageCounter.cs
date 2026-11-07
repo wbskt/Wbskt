@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Management.Models;
 
@@ -10,10 +11,14 @@ namespace Wbskt.Management.Host.Hubs;
 /// messages <see cref="ClientFeedThrottle"/> drops still count. Like the throttle it counts per
 /// management instance: the forwarder queues are competing consumers, so with one instance (the
 /// hobbyist VM) the rate is the workspace's and with more each instance reports its share.
+/// Events older than <see cref="MaxAge"/> are not counted: after a restart or a slow spell the
+/// forwarder queue drains in seconds, and counting that backlog would read as a burst of traffic
+/// that happened minutes ago.
 /// </summary>
 public sealed class WorkspaceMessageCounter
 {
     internal static readonly TimeSpan Window = TimeSpan.FromSeconds(5);
+    internal static readonly TimeSpan MaxAge = Window * 2;
 
     private readonly ConcurrentDictionary<int, Tally> _tallies = new();
     private readonly TimeProvider _time;
@@ -25,9 +30,14 @@ public sealed class WorkspaceMessageCounter
         _lastFlush = _time.GetUtcNow();
     }
 
-    /// <summary>Counts <paramref name="message"/> if it is client traffic; any other event is ignored.</summary>
+    /// <summary>Counts <paramref name="message"/> if it is recent client traffic; any other event is ignored.</summary>
     public void Count(object message)
     {
+        if (message is IEvent { CreatedAtUtc: var createdAtUtc } && createdAtUtc < _time.GetUtcNow().UtcDateTime - MaxAge)
+        {
+            return;
+        }
+
         switch (message)
         {
             case ClientMessageReceivedEvent received:
