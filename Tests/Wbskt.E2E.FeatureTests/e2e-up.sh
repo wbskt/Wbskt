@@ -88,8 +88,7 @@ case "${1:-up}" in
   up)
     export_dev_cert
     # Returns once the hosts are started; they start only after the migrator has succeeded.
-    # --remove-orphans: a service renamed since the stack last ran (devices, now client-auth) would
-    # otherwise keep its port.
+    # --remove-orphans: a service renamed or removed since the stack last ran would otherwise keep its port.
     compose up -d --build --remove-orphans
     wait_for "${hosts[@]}"
     ;;
