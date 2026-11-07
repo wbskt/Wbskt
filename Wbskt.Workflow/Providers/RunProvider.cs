@@ -239,6 +239,7 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
             SucceededCount = reader.GetInt32(reader.GetOrdinal("SucceededCount")),
             FailedCount = reader.GetInt32(reader.GetOrdinal("FailedCount")),
             ActiveCount = reader.GetInt32(reader.GetOrdinal("ActiveCount")),
+            WaitingCount = reader.GetInt32(reader.GetOrdinal("WaitingCount")),
             AvgDurationMs = Convert.ToDouble(reader.GetValue(reader.GetOrdinal("AvgDurationMs")))
         };
     }
@@ -286,6 +287,7 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
             CancelledCount = ReadInt(reader, "CancelledCount"),
             OutOfCreditsCount = ReadInt(reader, "OutOfCreditsCount"),
             ActiveCount = ReadInt(reader, "ActiveCount"),
+            WaitingCount = ReadInt(reader, "WaitingCount"),
             P50DurationMs = ReadDouble(reader, "P50DurationMs"),
             P95DurationMs = ReadDouble(reader, "P95DurationMs"),
             MaxDurationMs = ReadDouble(reader, "MaxDurationMs"),

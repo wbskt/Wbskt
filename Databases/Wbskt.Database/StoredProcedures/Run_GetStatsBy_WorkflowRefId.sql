@@ -13,6 +13,13 @@ BEGIN
     (
         SELECT
             Status,
+            -- Parked: still Running, with every live branch waiting on a delay, signal or call.
+            CASE
+                WHEN Status = N'Running'
+                 AND EXISTS (SELECT 1 FROM dbo.Branches b WHERE b.RunId = Runs.Id AND b.Status = N'Waiting')
+                 AND NOT EXISTS (SELECT 1 FROM dbo.Branches b WHERE b.RunId = Runs.Id AND b.Status = N'Active')
+                THEN 1 ELSE 0
+            END AS IsWaiting,
             CASE
                 WHEN CompletedAt IS NULL THEN NULL
                 ELSE DATEDIFF_BIG(MILLISECOND, StartedAt, CompletedAt)
@@ -40,6 +47,7 @@ BEGIN
         SUM(CASE WHEN w.Status = N'Cancelled'       THEN 1 ELSE 0 END)                AS CancelledCount,
         SUM(CASE WHEN w.Status = N'OutOfCredits'    THEN 1 ELSE 0 END)                AS OutOfCreditsCount,
         SUM(CASE WHEN w.Status IN (N'Running', N'Failing', N'Cancelling') THEN 1 ELSE 0 END) AS ActiveCount,
+        SUM(w.IsWaiting)                                                              AS WaitingCount,
         ISNULL(MAX(w.DurationMs), 0)                                                  AS MaxDurationMs,
         ISNULL(AVG(w.DurationMs), 0)                                                  AS AvgDurationMs,
         ISNULL((SELECT TOP 1 P50DurationMs FROM Durations), 0)                        AS P50DurationMs,

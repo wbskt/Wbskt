@@ -42,7 +42,7 @@ public sealed class ClientFeedScopeTests
     public async Task A_client_message_goes_to_its_watchers_not_the_workspace()
     {
         var hub = new FakeHub();
-        var handler = new SignalRForwardingHandler<ClientMessageReceivedEvent>(hub.Context, new ClientFeedThrottle(new FixedTimeProvider(Now)));
+        var handler = new SignalRForwardingHandler<ClientMessageReceivedEvent>(hub.Context, new ClientFeedThrottle(new FixedTimeProvider(Now)), new WorkspaceMessageCounter());
 
         await handler.Consume(Context(Message()));
 
@@ -53,7 +53,7 @@ public sealed class ClientFeedScopeTests
     public async Task A_workspace_event_still_goes_to_the_workspace()
     {
         var hub = new FakeHub();
-        var handler = new SignalRForwardingHandler<ClientRenamedEvent>(hub.Context, new ClientFeedThrottle(new FixedTimeProvider(Now)));
+        var handler = new SignalRForwardingHandler<ClientRenamedEvent>(hub.Context, new ClientFeedThrottle(new FixedTimeProvider(Now)), new WorkspaceMessageCounter());
         var renamed = new ClientRenamedEvent(Guid.NewGuid(), ClientId, WorkspaceId, "old", "new");
 
         await handler.Consume(Context(renamed));
@@ -66,7 +66,7 @@ public sealed class ClientFeedScopeTests
     {
         var hub = new FakeHub();
         var time = new FixedTimeProvider(Now);
-        var handler = new SignalRForwardingHandler<ClientMessageReceivedEvent>(hub.Context, new ClientFeedThrottle(time));
+        var handler = new SignalRForwardingHandler<ClientMessageReceivedEvent>(hub.Context, new ClientFeedThrottle(time), new WorkspaceMessageCounter());
 
         for (var i = 0; i < ClientFeedThrottle.MaxPerSecond + 5; i++)
         {

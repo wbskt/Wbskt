@@ -18,6 +18,13 @@ BEGIN
         SELECT
             r.WorkflowRefId,
             r.Status,
+            -- Parked: still Running, with every live branch waiting on a delay, signal or call.
+            CASE
+                WHEN r.Status = N'Running'
+                 AND EXISTS (SELECT 1 FROM dbo.Branches b WHERE b.RunId = r.Id AND b.Status = N'Waiting')
+                 AND NOT EXISTS (SELECT 1 FROM dbo.Branches b WHERE b.RunId = r.Id AND b.Status = N'Active')
+                THEN 1 ELSE 0
+            END AS IsWaiting,
             CASE
                 WHEN r.CompletedAt IS NULL THEN NULL
                 ELSE DATEDIFF_BIG(MILLISECOND, r.StartedAt, r.CompletedAt)
@@ -34,6 +41,7 @@ BEGIN
         SUM(CASE WHEN w.Status = N'Succeeded' THEN 1 ELSE 0 END)                      AS SucceededCount,
         SUM(CASE WHEN w.Status IN (N'Failed', N'PartiallyFailed', N'OutOfCredits') THEN 1 ELSE 0 END) AS FailedCount,
         SUM(CASE WHEN w.Status IN (N'Running', N'Failing', N'Cancelling') THEN 1 ELSE 0 END) AS ActiveCount,
+        SUM(w.IsWaiting)                                                              AS WaitingCount,
         ISNULL(AVG(w.DurationMs), 0)                                                  AS AvgDurationMs
     FROM Windowed w
     GROUP BY w.WorkflowRefId

@@ -13,6 +13,9 @@ public sealed record RunStatsRow
     /// <summary>Runs still in flight — counted, but excluded from the duration figures.</summary>
     public required int ActiveCount { get; init; }
 
+    /// <summary>The part of <see cref="ActiveCount"/> parked on a delay, signal or call: every live branch is waiting.</summary>
+    public required int WaitingCount { get; init; }
+
     public required double P50DurationMs { get; init; }
     public required double P95DurationMs { get; init; }
     public required double MaxDurationMs { get; init; }
@@ -34,6 +37,7 @@ public sealed record WorkflowRunSummaryRow
     public required int FailedCount { get; init; }
 
     public required int ActiveCount { get; init; }
+    public required int WaitingCount { get; init; }
     public required double AvgDurationMs { get; init; }
 }
 

@@ -12,12 +12,14 @@ public class SignalRForwardingHandler<TEvent> : IConsumer<TEvent>
 {
     private readonly IHubContext<NotificationHub> _hubContext;
     private readonly ClientFeedThrottle _throttle;
+    private readonly WorkspaceMessageCounter _messageCounter;
     private readonly SignalRNotifyAttribute _metadata;
 
-    public SignalRForwardingHandler(IHubContext<NotificationHub> hubContext, ClientFeedThrottle throttle)
+    public SignalRForwardingHandler(IHubContext<NotificationHub> hubContext, ClientFeedThrottle throttle, WorkspaceMessageCounter messageCounter)
     {
         _hubContext = hubContext;
         _throttle = throttle;
+        _messageCounter = messageCounter;
         _metadata = typeof(TEvent).GetCustomAttribute<SignalRNotifyAttribute>()!;
 
         if (_metadata.Scope == NotifyScope.Client && !typeof(IClientContext).IsAssignableFrom(typeof(TEvent)))
@@ -29,6 +31,7 @@ public class SignalRForwardingHandler<TEvent> : IConsumer<TEvent>
     public async Task Consume(ConsumeContext<TEvent> context)
     {
         var message = context.Message;
+        _messageCounter.Count(message);
 
         if (_metadata.Scope != NotifyScope.Client || message is not IClientContext client)
         {

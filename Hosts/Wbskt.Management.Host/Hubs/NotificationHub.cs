@@ -24,6 +24,9 @@ public class NotificationHub : Hub
     /// <summary>Client method for <see cref="ClientFeedSkipped"/>.</summary>
     internal const string ClientFeedSkippedMethod = "OnClientFeedSkipped";
 
+    /// <summary>Client method for <see cref="Wbskt.Management.Models.WorkspaceMessageRate"/>, sent to the workspace group.</summary>
+    internal const string WorkspaceMessageRateMethod = "OnWorkspaceMessageRateEvent";
+
     private readonly ILogger<NotificationHub> _logger;
 
     public NotificationHub(ILogger<NotificationHub> logger)
