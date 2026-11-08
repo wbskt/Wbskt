@@ -1,5 +1,6 @@
 using Wbskt.Infrastructure;
 using Wbskt.Management.Models.Workflow;
+using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Models;
 
 namespace Wbskt.Management.Host.Services.Workflow;
@@ -8,6 +9,12 @@ namespace Wbskt.Management.Host.Services.Workflow;
 public interface IWorkflowLifecycleService
 {
     Task<Result<WorkflowPublishResponse>> PublishAsync(int workspaceId, Guid workspaceRef, WorkflowPublishRequest request, CancellationToken ct);
+
+    /// <summary>
+    /// Publishes with the checks of <paramref name="guards"/>, as publishing a draft does: refused with
+    /// 409 <c>WORKFLOW_DRAFT_OUTDATED</c> when the current version is not the one expected.
+    /// </summary>
+    Task<Result<WorkflowPublishResponse>> PublishAsync(int workspaceId, Guid workspaceRef, WorkflowPublishRequest request, WorkflowPublishGuards guards, CancellationToken ct);
 
     Task<Result> DeprecateAsync(int workspaceId, Guid refId, CancellationToken ct);
 

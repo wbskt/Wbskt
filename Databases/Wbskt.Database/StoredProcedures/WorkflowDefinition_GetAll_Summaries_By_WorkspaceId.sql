@@ -45,9 +45,14 @@ BEGIN
                 WHERE JSON_VALUE(N.[value], '$.kind') LIKE 'trigger:%'
                 GROUP BY JSON_VALUE(N.[value], '$.kind')
             ) T
-        ) AS TriggerKinds
+        ) AS TriggerKinds,
+        dr.Revision AS DraftRevision,
+        dr.BaseVersion AS DraftBaseVersion,
+        dr.UpdatedByRefId AS DraftUpdatedByRefId,
+        dr.UpdatedAt AS DraftUpdatedAt
     FROM dbo.WorkflowDefinitions w
     INNER JOIN LatestWorkflows lw ON w.RefId = lw.RefId AND w.Version = lw.LatestVersion
+    LEFT JOIN dbo.WorkflowDrafts dr ON dr.RefId = w.RefId
     ORDER BY w.Name ASC
     OFFSET @Skip ROWS
     FETCH NEXT @Take ROWS ONLY;

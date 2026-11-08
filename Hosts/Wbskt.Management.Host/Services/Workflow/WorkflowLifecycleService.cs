@@ -31,6 +31,7 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
     private const int WorkflowDeletedError = 50022; // THROW in dbo.WorkflowDefinition_Publish
     private const int IntegrationMissingError = 50023; // THROW in dbo.WorkflowDefinition_Publish
     private const int WorkflowLimitReachedError = 50024; // THROW in dbo.WorkflowDefinition_Publish
+    private const int WorkflowVersionMovedError = 50025; // THROW in dbo.WorkflowDefinition_Publish
 
     public const int DefaultMaxPerWorkspace = 100;
     private const string DeletedCancellationReason = "Workflow deleted.";
@@ -75,10 +76,15 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
 
     public Task<Result<WorkflowPublishResponse>> PublishAsync(int workspaceId, Guid workspaceRef, WorkflowPublishRequest request, CancellationToken ct)
     {
-        return PublishCoreAsync(workspaceId, workspaceRef, request, restoredFromVersion: null, ct);
+        return PublishCoreAsync(workspaceId, workspaceRef, request, restoredFromVersion: null, WorkflowPublishGuards.None, ct);
     }
 
-    private async Task<Result<WorkflowPublishResponse>> PublishCoreAsync(int workspaceId, Guid workspaceRef, WorkflowPublishRequest request, int? restoredFromVersion, CancellationToken ct)
+    public Task<Result<WorkflowPublishResponse>> PublishAsync(int workspaceId, Guid workspaceRef, WorkflowPublishRequest request, WorkflowPublishGuards guards, CancellationToken ct)
+    {
+        return PublishCoreAsync(workspaceId, workspaceRef, request, restoredFromVersion: null, guards, ct);
+    }
+
+    private async Task<Result<WorkflowPublishResponse>> PublishCoreAsync(int workspaceId, Guid workspaceRef, WorkflowPublishRequest request, int? restoredFromVersion, WorkflowPublishGuards guards, CancellationToken ct)
     {
         _logger.LogInformation("Publishing workflow '{WorkflowName}' (RefId: '{RefId}') in WorkspaceId: {WorkspaceId}", request.Name, request.RefId, workspaceId);
 
@@ -137,7 +143,12 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
                 DefinitionJson = JsonSerializer.Serialize(request.Definition with { WorkspaceId = workspaceId, IsEnabled = true }, SerializerOptions),
                 PublishedBy = _identityService.GetUserIdentity().UserId,
                 CreatedAt = request.Definition.CreatedAt
-            }, integrationRefs.Refs, MaxPerWorkspace, ct);
+            }, integrationRefs.Refs, MaxPerWorkspace, guards, ct);
+        }
+        catch (SqlException ex) when (ex.Number == WorkflowVersionMovedError)
+        {
+            _logger.LogInformation("Workflow publish refused: Workflow '{RefId}' is no longer at version {Version}", request.RefId, guards.ExpectedCurrentVersion);
+            return Result<WorkflowPublishResponse>.Failure(WorkflowDraftErrors.Outdated);
         }
         catch (SqlException ex) when (ex.Number == WorkflowLimitReachedError)
         {
@@ -302,6 +313,7 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
             workspaceRef,
             new WorkflowPublishRequest(refId, source.Name, source.Description, definition),
             restoredFromVersion: version,
+            WorkflowPublishGuards.None,
             ct);
     }
 

@@ -20,6 +20,13 @@ BEGIN
 
     BEGIN TRANSACTION;
 
+    -- The draft's row first, the order WorkflowDraft_Save takes it in, so a save racing the delete
+    -- waits for it instead of deadlocking on the versions disabled below.
+    DECLARE @LockedDraftRevision INT;
+    SELECT @LockedDraftRevision = Revision
+      FROM dbo.WorkflowDrafts WITH (UPDLOCK, HOLDLOCK)
+     WHERE RefId = @RefId;
+
     -- The same lock WorkflowDefinition_Publish takes, so a publish racing the delete either lands
     -- first (and its version is disabled here) or sees the tombstone and is refused.
     INSERT INTO @Definitions (Id)
@@ -50,6 +57,9 @@ BEGIN
 
     DELETE FROM dbo.TriggerDispatchOutcomes
     WHERE WorkflowRefId = @RefId;
+
+    DELETE FROM dbo.WorkflowDrafts
+    WHERE RefId = @RefId;
 
     UPDATE WD
     SET IsEnabled = 0

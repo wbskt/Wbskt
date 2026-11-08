@@ -22,6 +22,9 @@ internal static class ProviderFactory
     public static WorkflowDefinitionProvider WorkflowDefinition(string connectionString)
         => new(BuildConfiguration(connectionString));
 
+    public static WorkflowDraftProvider WorkflowDraft(string connectionString)
+        => new(BuildConfiguration(connectionString));
+
     public static RunProvider Run(string connectionString)
         => new(BuildConfiguration(connectionString));
 

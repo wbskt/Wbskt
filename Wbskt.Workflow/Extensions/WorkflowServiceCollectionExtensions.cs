@@ -31,11 +31,12 @@ public static class WorkflowServiceCollectionExtensions
 
     public static IServiceCollection AddWorkflowManagementServices(this IServiceCollection services, IConfiguration configuration)
     {
-        // Only what management reads or writes: definitions and their trigger registrations (with the
+        // Only what management reads or writes: definitions, drafts and their trigger registrations (with the
         // schedule rows a registration writes), and the run, branch, history and shared-variable reads
         // behind the console, with each trigger's recent outcomes. Bookmarks, idempotency keys, pending
         // trigger events, joins, leases, counters and retention are the engine's alone.
         services.AddSingleton<IWorkflowDefinitionProvider, WorkflowDefinitionProvider>();
+        services.AddSingleton<IWorkflowDraftProvider, WorkflowDraftProvider>();
         services.AddScoped<ITriggerRegistrationProvider, TriggerRegistrationProvider>();
         services.AddScoped<IScheduledFireProvider, ScheduledFireProvider>();
         services.AddScoped<IRunProvider, RunProvider>();

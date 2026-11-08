@@ -18,4 +18,7 @@ public record WorkflowDefinitionRow
     /// summary list reads it, since it carries no <see cref="DefinitionJson"/>; null elsewhere.
     /// </summary>
     public IReadOnlyList<string>? TriggerNodeKinds { get; init; }
+
+    /// <summary>The workflow's draft, when it has one. Only the summary list reads it; null elsewhere.</summary>
+    public WorkflowDraftSummary? Draft { get; init; }
 }

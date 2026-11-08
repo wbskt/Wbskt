@@ -129,7 +129,8 @@ public sealed class WorkflowQueryService : IWorkflowQueryService
             row.Name,
             row.Description,
             row.CreatedAt.ToUtcOffset(),
-            WorkflowTriggerKinds.FromNodeKinds(row.TriggerNodeKinds)
+            WorkflowTriggerKinds.FromNodeKinds(row.TriggerNodeKinds),
+            row.Draft is null ? null : new WorkflowDraftInfoDto(row.Draft.Revision, row.Draft.BaseVersion, row.Draft.UpdatedByRefId, row.Draft.UpdatedAt.ToUtcOffset())
         )).ToList();
 
         var pagedResult = new Wbskt.Models.PagedList<WorkflowSummaryDto>(dtos, result.TotalCount) as Wbskt.Models.IPagedList<WorkflowSummaryDto>;

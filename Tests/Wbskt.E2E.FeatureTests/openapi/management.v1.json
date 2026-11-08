@@ -1723,6 +1723,35 @@
         ],
         "type": "object"
       },
+      "PageOfWorkflowDraftSummaryDto": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowDraftSummaryDto"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "totalCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "PageOfWorkflowSummaryDto": {
         "properties": {
           "items": {
@@ -2960,6 +2989,243 @@
         ],
         "type": "object"
       },
+      "WorkflowDraftDto": {
+        "properties": {
+          "baseVersion": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "format": "date-time"
+          },
+          "currentVersion": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "definition": {
+            "$ref": "#/components/schemas/WorkflowDefinition"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "outdated": {
+            "type": "boolean"
+          },
+          "refId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "revision": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "updatedAt": {
+            "format": "date-time"
+          },
+          "updatedBy": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "validation": {
+            "$ref": "#/components/schemas/WorkflowValidationResponse"
+          }
+        },
+        "required": [
+          "refId",
+          "revision",
+          "baseVersion",
+          "currentVersion",
+          "outdated",
+          "name",
+          "description",
+          "definition",
+          "updatedBy",
+          "updatedAt",
+          "createdAt",
+          "validation"
+        ],
+        "type": "object"
+      },
+      "WorkflowDraftInfoDto": {
+        "properties": {
+          "baseVersion": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "revision": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "updatedAt": {
+            "format": "date-time"
+          },
+          "updatedBy": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "revision",
+          "baseVersion",
+          "updatedBy",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "WorkflowDraftPublishRequest": {
+        "properties": {
+          "force": {
+            "default": false,
+            "type": "boolean"
+          },
+          "revision": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "revision"
+        ],
+        "type": "object"
+      },
+      "WorkflowDraftSaveRequest": {
+        "properties": {
+          "definition": {
+            "$ref": "#/components/schemas/WorkflowDefinition"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "expectedRevision": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "definition"
+        ],
+        "type": "object"
+      },
+      "WorkflowDraftSummaryDto": {
+        "properties": {
+          "baseVersion": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "currentVersion": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "outdated": {
+            "type": "boolean"
+          },
+          "refId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "revision": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "updatedAt": {
+            "format": "date-time"
+          },
+          "updatedBy": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "refId",
+          "revision",
+          "baseVersion",
+          "currentVersion",
+          "outdated",
+          "name",
+          "description",
+          "updatedBy",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
       "WorkflowPublishRequest": {
         "properties": {
           "definition": {
@@ -3175,6 +3441,16 @@
             "type": [
               "null",
               "string"
+            ]
+          },
+          "draft": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkflowDraftInfoDto"
+              }
             ]
           },
           "name": {
@@ -6411,6 +6687,46 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspaceRef}/workflows/drafts": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspaceRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOfWorkflowDraftSummaryDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOfWorkflowDraftSummaryDto"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOfWorkflowDraftSummaryDto"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "WorkflowDrafts"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspaceRef}/workflows/validate": {
       "post": {
         "parameters": [
@@ -6579,6 +6895,233 @@
         },
         "tags": [
           "Workflows"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/draft": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflowRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "revision",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspaceRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "WorkflowDrafts"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflowRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspaceRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDraftDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDraftDto"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDraftDto"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "WorkflowDrafts"
+        ]
+      },
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflowRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspaceRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowDraftSaveRequest"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowDraftSaveRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowDraftSaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDraftDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDraftDto"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDraftDto"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "WorkflowDrafts"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/draft/publish": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspaceRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workflowRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowDraftPublishRequest"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowDraftPublishRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowDraftPublishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowPublishResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowPublishResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowPublishResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "WorkflowDrafts"
         ]
       }
     },
@@ -7273,6 +7816,9 @@
     },
     {
       "name": "SharedVariables"
+    },
+    {
+      "name": "WorkflowDrafts"
     },
     {
       "name": "WorkflowHistory"
