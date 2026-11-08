@@ -87,6 +87,7 @@ public static class WorkflowServiceCollectionExtensions
         // Pricing is an operator decision that changes without a release, so the cost table is bound
         // from configuration; anything not overridden keeps CreditCostOptions.BuiltIn.
         CreditCostOptions creditCosts = configuration.GetSection("WorkflowEngine:CreditCosts").Get<CreditCostOptions>() ?? new CreditCostOptions();
+        creditCosts.EnsureValid();
         services.AddSingleton(Options.Create(creditCosts));
 
         // The master keys and transport rules for integrations. The credentials themselves are each

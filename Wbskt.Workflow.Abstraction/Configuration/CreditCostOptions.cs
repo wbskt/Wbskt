@@ -51,6 +51,29 @@ public sealed class CreditCostOptions
         .Where(descriptor => descriptor.Category != NodeCategory.Trigger)
         .ToDictionary(descriptor => descriptor.Kind, descriptor => descriptor.DefaultCreditCost, StringComparer.Ordinal);
 
+    /// <summary>
+    /// Throws when any configured price is negative. A negative price would refund credits on every
+    /// execution, so a typo in configuration fails the host at start instead of minting credits.
+    /// </summary>
+    public void EnsureValid()
+    {
+        List<string> negative = PerKind.Where(entry => entry.Value < 0).Select(entry => $"PerKind:{entry.Key}").ToList();
+        if (DefaultCost < 0)
+        {
+            negative.Add(nameof(DefaultCost));
+        }
+
+        if (RunStartCost < 0)
+        {
+            negative.Add(nameof(RunStartCost));
+        }
+
+        if (negative.Count > 0)
+        {
+            throw new InvalidOperationException($"WorkflowEngine:CreditCosts has negative prices: {string.Join(", ", negative)}.");
+        }
+    }
+
     /// <summary>Resolves the cost of a kind: explicit override, then built-in, then the default.</summary>
     public decimal CostFor(string kind)
     {
