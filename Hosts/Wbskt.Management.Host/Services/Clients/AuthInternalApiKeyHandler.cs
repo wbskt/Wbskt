@@ -3,7 +3,7 @@ using Wbskt.Infrastructure;
 namespace Wbskt.Management.Host.Services.Clients;
 
 // Sends the shared key the auth host's [InternalApiKey] routes expect, for calls with no user token
-// to forward (the deleted workspace sweep). Configured as Services:AuthInternalApiKey here and
+// to forward (the deleted workspace sweep, the workspace account sync). Configured as Services:AuthInternalApiKey here and
 // Internal:ApiKey on the auth host.
 public sealed class AuthInternalApiKeyHandler : DelegatingHandler
 {

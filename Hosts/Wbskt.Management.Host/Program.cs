@@ -155,24 +155,11 @@ public static class Program
             client.Timeout = TimeSpan.FromSeconds(builder.Configuration.GetValue("Services:AuthTimeoutSeconds", 5));
         })
         .AddHttpMessageHandler<AuthenticationForwardingHandler>();
-        // The sweep's call to auth has no user token to forward, so it sends the shared internal key.
+        // Background jobs and event handlers call auth with no user token to forward, so they send the
+        // shared internal key: the deleted workspace sweep, and the workspace account sync.
         builder.Services.AddTransient<AuthInternalApiKeyHandler>();
-        builder.Services.AddHttpClient<IDeletedWorkspacesClient, DeletedWorkspacesClient>(client =>
-        {
-            client.BaseAddress = new Uri(builder.Configuration["Services:Auth"]
-                                         ?? throw new ArgumentNullException(nameof(client.BaseAddress), "Services:Auth configuration is missing."));
-
-            // A background job, not a request someone waits on: longer than the resolve's few seconds.
-            client.Timeout = TimeSpan.FromSeconds(30);
-        })
-        .AddHttpMessageHandler<AuthInternalApiKeyHandler>();
-        builder.Services.AddHttpClient<IWorkspaceAccountsClient, WorkspaceAccountsClient>(client =>
-        {
-            client.BaseAddress = new Uri(builder.Configuration["Services:Auth"]
-                                         ?? throw new ArgumentNullException(nameof(client.BaseAddress), "Services:Auth configuration is missing."));
-            client.Timeout = TimeSpan.FromSeconds(30);
-        })
-        .AddHttpMessageHandler<AuthInternalApiKeyHandler>();
+        AddAuthInternalClient<IDeletedWorkspacesClient, DeletedWorkspacesClient>(builder);
+        AddAuthInternalClient<IWorkspaceAccountsClient, WorkspaceAccountsClient>(builder);
         // A user token names its user by RefId; the id this host's records use comes from the auth host.
         builder.Services.AddUserIdLookup(sp => sp.GetRequiredService<IAuthServiceClient>());
         // WorkspacePermissionFilter resolves each workspace route through the auth host.
@@ -339,6 +326,23 @@ public static class Program
         }
 
         await app.RunAsync();
+    }
+
+    /// <summary>
+    /// A client for an auth host route that takes the shared internal key (<c>[InternalApiKey]</c>).
+    /// Background work, not a request someone waits on, so it may take longer than the resolve's few seconds.
+    /// </summary>
+    private static void AddAuthInternalClient<TClient, TImplementation>(WebApplicationBuilder builder)
+        where TClient : class
+        where TImplementation : class, TClient
+    {
+        builder.Services.AddHttpClient<TClient, TImplementation>(client =>
+        {
+            client.BaseAddress = new Uri(builder.Configuration["Services:Auth"]
+                                         ?? throw new ArgumentNullException(nameof(client.BaseAddress), "Services:Auth configuration is missing."));
+            client.Timeout = TimeSpan.FromSeconds(30);
+        })
+        .AddHttpMessageHandler<AuthInternalApiKeyHandler>();
     }
 
     private static void IgnoreSignalRPrivateProperties(JsonTypeInfo typeInfo)
