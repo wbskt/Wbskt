@@ -1,0 +1,965 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Wbskt Backend Roadmap</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* Wbskt console theme, dark only by design, matching deploy/infra-map.html.
+   Layout: console-style top bar with tabs; each tab is one view drawn from the ROADMAP data block below. */
+:root {
+  color-scheme: dark;
+  --canvas: #0e0e0e; --app: #111111; --panel: #151515; --raised: #181818;
+  --line: #2a2a2a; --line-soft: #222222; --line-strong: #333333;
+  --ink: #f4f4f0; --ink-2: #cccccc; --muted: #999999; --dim: #808080; --faint: #666666;
+  --accent: #e85d26; --accent-12: rgba(232,93,38,.12); --accent-20: rgba(232,93,38,.2);
+  --green: #7bb35f; --green-12: rgba(123,179,95,.12);
+  --amber: #d19a66; --amber-12: rgba(209,154,102,.12);
+  --red: #f43f5e; --red-12: rgba(244,63,94,.12);
+  --blue: #60a5fa; --blue-12: rgba(96,165,250,.12);
+  --violet: #a78bfa; --violet-12: rgba(167,139,250,.12);
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, Menlo, monospace;
+  --radius: 6px;
+}
+* { box-sizing: border-box; }
+html { background: var(--app); }
+body { margin: 0; background: var(--app); color: var(--ink); font: 13px/1.5 var(--font-sans); -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--app); }
+::selection { background: var(--accent-20); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+a { color: var(--accent); }
+a:focus-visible, button:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+code, .mono { font-family: var(--font-mono); font-size: 11.5px; }
+
+header.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--app); box-shadow: inset 0 -1px 0 var(--line-strong); }
+.bar-top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; min-height: 48px; padding-block: 6px; }
+.brand { display: flex; align-items: center; gap: 8px; color: var(--ink); }
+.mark { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 5px; background: var(--accent); color: #fff; font: 700 11px/1 var(--font-sans); }
+.wordmark { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.product { font-size: 12px; color: var(--faint); padding-left: 8px; border-left: 1px solid var(--line-strong); }
+nav.tabs { display: flex; gap: 2px; padding: 2px; background: var(--canvas); border: 1px solid var(--line); border-radius: var(--radius); overflow-x: auto; scrollbar-width: none; max-width: 100%; }
+nav.tabs a { flex: none; padding: 5px 11px; color: var(--muted); text-decoration: none; font-size: 12.5px; font-weight: 500; border-radius: 4px; }
+nav.tabs a:hover { color: var(--ink); background: var(--raised); }
+nav.tabs a[aria-current="page"] { color: var(--ink); background: var(--line-soft); box-shadow: inset 0 -2px 0 var(--accent); }
+
+.pagehead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; padding-block: 22px 6px; }
+.page-title { font-size: 22px; font-weight: 600; letter-spacing: -.01em; text-wrap: balance; }
+.meta { font: 11.5px var(--font-mono); color: var(--faint); }
+main { padding-block: 10px 56px; }
+section.view { display: grid; gap: 22px; }
+section.view[hidden] { display: none; }
+.block { display: grid; gap: 10px; min-width: 0; }
+.h2 { font-size: 16px; font-weight: 600; letter-spacing: -.005em; text-wrap: balance; }
+.lede { color: var(--muted); margin: 0; max-width: 80ch; }
+.lead { color: var(--ink-2); font-size: 14px; margin: 0; max-width: 80ch; }
+.eyebrow { font: 600 10px var(--font-sans); text-transform: uppercase; letter-spacing: .08em; color: var(--dim); }
+
+/* stat strip */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 6px; }
+.stat { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 2px; }
+.stat b { font: 600 20px var(--font-mono); font-variant-numeric: tabular-nums; }
+.stat span { color: var(--muted); font-size: 12px; }
+
+/* timeline */
+.timeline-box { background: var(--canvas); border: 1px solid var(--line); border-radius: var(--radius); overflow-x: auto; }
+.timeline { min-width: 720px; display: grid; grid-template-columns: 200px 1fr; row-gap: 12px; padding: 16px; }
+.axis { grid-column: 2; position: relative; height: 18px; font: 11px var(--font-mono); color: var(--faint); }
+.axis span { position: absolute; top: 0; padding-left: 6px; border-left: 1px solid var(--line-strong); height: 18px; }
+.ms-label { display: grid; align-content: center; }
+.ms-name { font-weight: 600; }
+.ms-meta { font: 11px var(--font-mono); color: var(--faint); font-variant-numeric: tabular-nums; }
+.track { position: relative; height: 30px; }
+.grid-line { position: absolute; top: -12px; bottom: -12px; border-left: 1px dashed var(--line); }
+.tbar { position: absolute; top: 3px; height: 24px; border-radius: 4px; background: var(--raised); border: 1px solid var(--line); overflow: hidden; }
+.tbar.open-ended { background: repeating-linear-gradient(90deg, var(--raised) 0 10px, transparent 10px 14px); border-right: 0; }
+.fill { position: absolute; inset: 0 auto 0 0; background: var(--accent-20); border-right: 2px solid var(--accent); }
+.fill.complete { background: var(--green-12); border-right-color: var(--green); }
+.bar-text { position: absolute; inset: 0; display: flex; align-items: center; padding: 0 10px; font: 500 11.5px var(--font-mono); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.today { position: absolute; top: -34px; bottom: -6px; border-left: 2px solid var(--red); z-index: 2; }
+.today span { position: absolute; top: -2px; left: 6px; font: 11px var(--font-mono); color: var(--red); white-space: nowrap; }
+
+/* asks, risks, decisions: stripe cards like the infra map's gaps */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 6px; }
+.gap { display: grid; grid-template-columns: 3px minmax(0,1fr); gap: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px 12px 0; overflow: hidden; }
+.gap .stripe { background: var(--line-strong); }
+.gap.s-high .stripe, .gap.s-you .stripe { background: var(--red); }
+.gap.s-med .stripe, .gap.s-open .stripe { background: var(--amber); }
+.gap.s-decided .stripe { background: var(--green); }
+.gap .t { font-weight: 600; display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
+.gap p { margin: 4px 0 0; color: var(--ink-2); font-size: 12.5px; }
+
+/* work rows */
+.rows { display: grid; gap: 6px; }
+.row { display: grid; grid-template-columns: 44px minmax(0,1fr) auto; gap: 12px; align-items: start; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
+.row.child { margin-left: 28px; background: var(--app); }
+.prio { font: 600 11.5px var(--font-mono); text-align: center; border-radius: 4px; padding: 3px 0; background: var(--raised); color: var(--muted); }
+.prio.P1 { background: var(--red-12); color: var(--red); }
+.prio.P2 { background: var(--amber-12); color: var(--amber); }
+.row .t { font-weight: 600; }
+.row .t a { color: var(--ink); text-decoration: none; }
+.row .t a:hover { color: var(--accent); text-decoration: underline; }
+.num { font: 400 12px var(--font-mono); color: var(--faint); margin-right: 6px; }
+.why { margin: 3px 0 0; color: var(--muted); font-size: 12.5px; max-width: 90ch; }
+.tags { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; max-width: 280px; }
+.pill { font: 500 11px var(--font-mono); padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--muted); white-space: nowrap; }
+.pill.you { background: var(--red-12); color: var(--red); border-color: transparent; }
+.pill.decide { background: var(--amber-12); color: var(--amber); border-color: transparent; }
+.pill.ready { background: var(--blue-12); color: var(--blue); border-color: transparent; }
+.pill.review, .pill.progress { background: var(--violet-12); color: var(--violet); border-color: transparent; }
+.pill.done, .pill.done-open { background: var(--green-12); color: var(--green); border-color: transparent; }
+.group { font: 600 10px var(--font-sans); text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin-top: 6px; }
+
+/* epics */
+.epic { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.epic summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: minmax(0,1fr) 140px auto; gap: 12px; align-items: center; padding: 10px 14px; }
+.epic summary::-webkit-details-marker { display: none; }
+.epic summary:hover { background: var(--raised); }
+.epic[open] summary { border-bottom: 1px solid var(--line-soft); }
+.prog { height: 6px; background: var(--raised); border-radius: 3px; overflow: hidden; }
+.prog i { display: block; height: 100%; background: var(--green); }
+.kids { padding: 6px 14px 10px; display: grid; gap: 2px; }
+.kid { display: grid; grid-template-columns: 16px minmax(0,1fr) auto; gap: 8px; font-size: 12.5px; padding: 3px 0; }
+.kid.c { color: var(--faint); }
+.kid.c .k-t { text-decoration: line-through; text-decoration-color: var(--line-strong); }
+.tick { font-family: var(--font-mono); color: var(--green); }
+.kid.o .tick { color: var(--faint); }
+
+/* filters */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip { font: 500 12px var(--font-sans); color: var(--muted); background: var(--app); border: 1px solid var(--line-strong); border-radius: 4px; padding: 4px 10px; cursor: pointer; }
+.chip:hover { color: var(--ink); border-color: var(--faint); }
+.chip[aria-pressed="true"] { color: var(--accent); background: var(--accent-12); border-color: var(--accent); }
+
+/* bar chart */
+.chart { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; display: grid; gap: 6px; }
+.crow { display: grid; grid-template-columns: 110px 1fr 32px; gap: 10px; align-items: center; }
+.hbar { height: 12px; background: var(--raised); border-radius: 2px; overflow: hidden; }
+.hbar i { display: block; height: 100%; background: var(--accent); opacity: .8; }
+.crow .v { font: 12px var(--font-mono); text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* tables */
+.tbl { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--line-soft); }
+th { font: 600 10px var(--font-sans); text-transform: uppercase; letter-spacing: .08em; color: var(--dim); white-space: nowrap; }
+td { color: var(--ink-2); }
+td.d { font-family: var(--font-mono); white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
+tr:last-child td { border-bottom: 0; }
+
+.week { display: grid; gap: 4px; }
+.week ul { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 4px 20px; }
+.week li { display: flex; gap: 8px; min-width: 0; font-size: 12.5px; color: var(--ink-2); }
+.week li .tick { flex: none; }
+footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line); padding-top: 12px; margin-top: 24px; }
+
+@media (max-width: 640px) {
+  .row { grid-template-columns: 36px minmax(0,1fr); }
+  .row .tags { grid-column: 1 / -1; justify-content: flex-start; max-width: none; }
+  .row.child { margin-left: 12px; }
+  .epic summary { grid-template-columns: minmax(0,1fr) auto; }
+  .epic summary .prog { display: none; }
+  .crow { grid-template-columns: 84px 1fr 28px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="wrap bar-top">
+    <span class="brand"><span class="mark">W</span><span class="wordmark">wbskt</span><span class="product">backend roadmap</span></span>
+    <nav class="tabs" aria-label="Views">
+      <a href="#overview">Overview</a>
+      <a href="#m2">M2</a>
+      <a href="#m3">M3</a>
+      <a href="#epics">Epics</a>
+      <a href="#post-launch">Post-launch</a>
+      <a href="#reviews">Reviews</a>
+      <a href="#shipped">Shipped</a>
+      <a href="#decisions">Decisions &amp; risks</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="pagehead">
+    <div class="page-title" id="page-title">Backend roadmap</div>
+    <span class="meta" id="asof"></span>
+  </div>
+  <main>
+    <section class="view" id="v-overview">
+      <p class="lead" id="headline"></p>
+      <div class="stats" id="stats"></div>
+      <div class="block">
+        <div class="h2">Milestones</div>
+        <p class="lede">Each bar spans its month and fills with the share of issues closed. Counts include epics.</p>
+        <div class="timeline-box"><div class="timeline" id="timeline"></div></div>
+      </div>
+      <div class="block">
+        <div class="h2">Waiting on you</div>
+        <div class="cards" id="asks"></div>
+      </div>
+    </section>
+
+    <section class="view" id="v-m2" hidden>
+      <div class="block">
+        <div class="h2">M2 Hobbyist launch · due 30 Nov</div>
+        <p class="lede">Open work ranked by priority. Epics show their open children beneath them. The console keeps its own M2 list in Wbskt.Console.</p>
+        <div class="rows" id="m2"></div>
+      </div>
+    </section>
+
+    <section class="view" id="v-m3" hidden>
+      <div class="block">
+        <div class="h2">M3 Go public · due 31 Dec</div>
+        <p class="lede">What stands between the backend and going public.</p>
+        <div class="rows" id="m3"></div>
+      </div>
+    </section>
+
+    <section class="view" id="v-epics" hidden>
+      <div class="block">
+        <div class="h2">Epics</div>
+        <p class="lede">Every open epic with its sub-issues. Closed children are listed only when they closed in the last two weeks; the count covers all of them.</p>
+        <div class="chips" id="epic-chips"></div>
+        <div class="rows" id="epics"></div>
+      </div>
+    </section>
+
+    <section class="view" id="v-post-launch" hidden>
+      <div class="block">
+        <div class="h2">Post-launch backlog</div>
+        <p class="lede">Almost all P3. They wait for real users to say which matter.</p>
+        <div class="chart" id="area-chart" role="img"></div>
+      </div>
+      <div class="block">
+        <div class="chips" id="post-chips"></div>
+        <div class="tbl"><table><thead><tr><th>#</th><th>Issue</th><th>Area</th><th>Size</th><th>Epic</th></tr></thead><tbody id="post"></tbody></table></div>
+      </div>
+    </section>
+
+    <section class="view" id="v-reviews" hidden>
+      <div class="block">
+        <div class="h2">Architecture reviews</div>
+        <p class="lede" id="next-review"></p>
+        <div class="tbl"><table><thead><tr><th>Date</th><th>Review</th><th>Scope</th><th>Result</th><th>Follow-ups</th></tr></thead><tbody id="reviews"></tbody></table></div>
+      </div>
+    </section>
+
+    <section class="view" id="v-shipped" hidden>
+      <div class="block">
+        <div class="h2">Shipped</div>
+        <p class="lede">Merged pull requests on wbskt/Wbskt, by week.</p>
+        <div class="rows" id="shipped"></div>
+      </div>
+    </section>
+
+    <section class="view" id="v-decisions" hidden>
+      <div class="block">
+        <div class="h2">Open decisions</div>
+        <div class="cards" id="dec-open"></div>
+      </div>
+      <div class="block">
+        <div class="h2">Launch risks</div>
+        <div class="cards" id="risks"></div>
+      </div>
+      <div class="block">
+        <div class="h2">Decided</div>
+        <div class="cards" id="dec-done"></div>
+      </div>
+    </section>
+
+    <footer id="footer"></footer>
+  </main>
+</div>
+
+<!-- Edit this block to update the page. Issues come from GitHub search on wbskt/Wbskt (open, plus closed in the last two weeks);
+     p = parent issue, s = o|c, a = areas, pr = priority, sz = size. "work" adds a state and a sentence to an issue number. -->
+<script type="application/json" id="roadmap-data">
+{
+ "asOf": "2026-11-08",
+ "headline": "M2 backend has 7 pieces of real work left: two wait on you (the SDK release keys and the deleted-client call), the never-ending-runs epic (#594), test runs in review (PR #617), and this housekeeping (#618). Drafts merged as PR #615 and run numbers as PR #612. Four issues stand between the backend and going public on 31 Dec; everything else is Post-launch.",
+ "milestones": [
+  {
+   "name": "M1 Hardening",
+   "short": "M1",
+   "due": "2026-10-31",
+   "start": "2026-10-01",
+   "open": 0,
+   "closed": 104
+  },
+  {
+   "name": "M2 Hobbyist launch features",
+   "short": "M2",
+   "due": "2026-11-30",
+   "start": "2026-11-01",
+   "open": 20,
+   "closed": 119
+  },
+  {
+   "name": "M3 Go public",
+   "short": "M3",
+   "due": "2026-12-31",
+   "start": "2026-12-01",
+   "open": 8,
+   "closed": 10
+  },
+  {
+   "name": "Post-launch",
+   "short": "Post",
+   "due": null,
+   "start": "2027-01-01",
+   "open": 51,
+   "closed": 10
+  }
+ ],
+ "asks": [
+  {
+   "title": "An API key for the NuGet account that owns Wbskt.Client",
+   "body": "With it, the SDKs go to NuGet, PyPI and the Arduino Library Manager (#528). Start the Arduino registry first: its review takes a few days.",
+   "issue": 528
+  },
+  {
+   "title": "A call on deleted clients",
+   "body": "Should deleting a client stop it enrolling again with the same PIN? Either a final CLIENT_DELETED login code or a warning in the delete dialog (#547).",
+   "issue": 547
+  },
+  {
+   "title": "Review PR #617, workflow test runs",
+   "body": "CI was running when last checked. Drafts (#615) already merged.",
+   "pr": 617
+  },
+  {
+   "title": "Roll out the exporters and loopback ports on the VM",
+   "body": "node-exporter and cAdvisor aren't running, so disk and crash-loop alerts are dark; RabbitMQ has no loopback UI yet (Wbskt.Console#110).",
+   "url": "https://github.com/wbskt/Wbskt.Console/issues/110"
+  },
+  {
+   "title": "Reserve the wbskt name on npm",
+   "body": "A free npm organisation, so @wbskt/client is ours before the TypeScript SDK exists (#567).",
+   "issue": 567
+  }
+ ],
+ "work": {
+  "528": {
+   "state": "you",
+   "why": "Betas, CI lint and the release runbook are merged. Publishing to the three registries is what remains."
+  },
+  "547": {
+   "state": "decide",
+   "why": "Small once decided. Comes from the 2 Nov architecture review."
+  },
+  "594": {
+   "state": "ready",
+   "why": "A loop through a Wait costs almost no credits, so a run can live for years on an old version. Three parts: cancel or list older-version runs on publish (#595), a maximum run lifetime (#596), validator warnings for loops with no wait or exit (#597)."
+  },
+  "599": {
+   "state": "review",
+   "why": "A test run starts from a frozen copy of the draft or live version and runs like any other run. One at a time per workflow, kept out of trigger and stuck-run guards.",
+   "prs": [
+    617
+   ]
+  },
+  "607": {
+   "state": "done-open",
+   "why": "Merged as PR #612 (run numbers, per-day counts, waiting runs). The issue can be closed.",
+   "prs": [
+    612
+   ]
+  },
+  "618": {
+   "state": "progress",
+   "why": "Written guidelines in every repo, the infra map as repo source, this roadmap in the repo, and the 5-day architecture review."
+  },
+  "448": {
+   "state": "ready",
+   "why": "Today it only checks that clients connect. Before launch we need to know how many clients and messages one VM carries."
+  },
+  "460": {
+   "state": "ready",
+   "why": "A way back from a bad deploy, and detection when a partial deploy leaves services on different versions."
+  },
+  "616": {
+   "state": "ready",
+   "why": "Publish and draft save take anything up to the server's 30 MB default. One shared limit of a megabyte or two closes it."
+  },
+  "567": {
+   "state": "you",
+   "why": "Needs your npm account."
+  },
+  "619": {
+   "state": "ready",
+   "why": "Lets the review's database lane read real index usage and deadlock graphs instead of guessing from code."
+  }
+ },
+ "reviews": [
+  {
+   "date": "2026-11-08",
+   "title": "Drafts and test runs (PR #615 and #617)",
+   "scope": "Code and architecture review before pushing",
+   "result": "3 fixed (a delete scan, a save/publish deadlock, orphaned test copies), 1 filed (#616)",
+   "issue": 616
+  },
+  {
+   "date": "2026-11-02",
+   "title": "Full architecture review",
+   "scope": "Everything since 14 Oct: SDKs, gateways, engine, management",
+   "result": "15 follow-ups, 13 closed",
+   "epic": 537,
+   "doc": "full-arch-review/Full.Architecture.Review.2026-11-02.md"
+  },
+  {
+   "date": "2026-10-31",
+   "title": "Deployment pipeline review",
+   "scope": "deploy.sh, CI, image tags, VM drift",
+   "result": "5 follow-ups, 3 closed",
+   "epic": 456
+  },
+  {
+   "date": "2026-10-15",
+   "title": "Workflow engine review (second pass)",
+   "scope": "Engine, nodes, leases",
+   "result": "Filed into #172 and #177",
+   "doc": "workflow-review/Workflow.Engine.Architecture.Review.2026-10-15.md"
+  },
+  {
+   "date": "2026-10-14",
+   "title": "Full architecture review",
+   "scope": "All hosts and the database",
+   "result": "Fixed in M1",
+   "doc": "full-arch-review/Full.Architecture.Review.2026-10-14.md"
+  },
+  {
+   "date": "2026-10-12",
+   "title": "Cross-server review",
+   "scope": "How the hosts talk to each other",
+   "result": "Fixed in M1",
+   "doc": "cross-server-review/Cross.Server.Architecture.Review.2026-10-12.md"
+  },
+  {
+   "date": "2026-10-11",
+   "title": "Socket and workflow engine reviews",
+   "scope": "Socket host, engine",
+   "result": "Fixed in M1",
+   "doc": "socket-review/Socket.Architecture.Review.2026-10-11.md"
+  },
+  {
+   "date": "2026-10-03",
+   "title": "Database and auth reviews",
+   "scope": "Tables, procedures, auth flows",
+   "result": "Fixed in M1 (#94 to #126)",
+   "doc": "db-review/Database.Review.2026-10-03.md"
+  }
+ ],
+ "nextReview": "Every 5th day when anything was committed since the last report. Brief: Docs/Reviews/README.md (#623).",
+ "decisions": [
+  {
+   "status": "open",
+   "title": "Should deleting a client stop it re-enrolling?",
+   "body": "Final CLIENT_DELETED code that the SDKs obey, or keep today's behaviour and warn in the dialog.",
+   "issue": 547
+  },
+  {
+   "status": "open",
+   "title": "Which milestone does engine scale-out belong in?",
+   "body": "The engine runs one active leader with standbys. A plan to let every replica work takes about 2 to 3 weeks with no new infra (#166).",
+   "issue": 166
+  },
+  {
+   "status": "decided",
+   "date": "2026-11-08",
+   "title": "Review cadence",
+   "body": "A full architecture review every 5th day, skipped when nothing was committed; findings filed automatically."
+  },
+  {
+   "status": "decided",
+   "date": "2026-11-08",
+   "title": "Commit format",
+   "body": "type(scope): summary, written in each repo's CONTRIBUTING.md."
+  },
+  {
+   "status": "decided",
+   "date": "2026-11-08",
+   "title": "Drafts and test runs design",
+   "body": "One draft row per workflow with a revision; publish refuses an outdated draft unless you choose publish anyway. Test runs use a frozen copy and real side effects. Sandboxed variables are Post-launch (#614)."
+  },
+  {
+   "status": "decided",
+   "date": "2026-11-08",
+   "title": "Management scale-out after launch",
+   "body": "Every management replica is already a full server. The gaps that keep production at one replica are Post-launch under #600.",
+   "issue": 600
+  },
+  {
+   "status": "decided",
+   "date": "2026-11-02",
+   "title": "Skip the rare crash-window fix before launch (#295)",
+   "body": "The worst case is a step that times out after 30 seconds."
+  }
+ ],
+ "risks": [
+  {
+   "level": "high",
+   "title": "Capacity of one VM is unknown",
+   "body": "The load tester only checks connections (#448). Launch sizing is a guess until it measures messages and runs.",
+   "issue": 448
+  },
+  {
+   "level": "high",
+   "title": "Disk and crash-loop alerts are dark in production",
+   "body": "The exporters were never started on the VM (Wbskt.Console#110).",
+   "url": "https://github.com/wbskt/Wbskt.Console/issues/110"
+  },
+  {
+   "level": "med",
+   "title": "No rollback from a bad deploy",
+   "body": "No image pinning or drift detection yet (#460).",
+   "issue": 460
+  },
+  {
+   "level": "med",
+   "title": "SDK release depends on registry reviews",
+   "body": "The Arduino Library Manager review takes days, so #528 needs to start well before 30 Nov.",
+   "issue": 528
+  },
+  {
+   "level": "low",
+   "title": "Database findings come from code alone",
+   "body": "Index usage and deadlocks are inferred until production numbers are exported (#619).",
+   "issue": 619
+  }
+ ],
+ "issues": [
+  {"n":623,"t":"Recurring architecture review: brief in Docs/Reviews and a 5-day schedule","s":"o","m":"M2","p":618,"a":[]},
+  {"n":622,"t":"Keep the backend roadmap in the repo as a multi-tab page","s":"o","m":"M2","p":618,"a":[]},
+  {"n":621,"t":"Bring deploy/infra-map.html up to date with the project copy and make it the source","s":"o","m":"M2","p":618,"a":[]},
+  {"n":620,"t":"Write the commit and PR rules into CONTRIBUTING.md and CLAUDE.md (Wbskt, Arduino, website)","s":"o","m":"M2","p":618,"a":[]},
+  {"n":619,"t":"Export SQL index usage and deadlock graphs from production for the review","s":"o","m":"M3","p":618,"a":[]},
+  {"n":618,"t":"Project housekeeping: review routine, written guidelines, roadmap in the repo","s":"o","m":"M2","p":null,"a":[],"epic":1,"sub":{"completed":0,"total":6}},
+  {"n":616,"t":"Cap the size of a workflow definition on publish and draft save","s":"o","m":"M3","p":null,"a":[]},
+  {"n":614,"t":"Sandboxed shared variables for test runs","s":"o","m":"Post","p":null,"a":["engine"]},
+  {"n":611,"t":"Workspace setting: when a day starts (time zone)","s":"o","m":"Post","p":null,"a":[]},
+  {"n":607,"t":"Workflow run history: run numbers, per-day counts and waiting runs","s":"o","m":"M2","p":null,"a":[]},
+  {"n":606,"t":"Infra: run the stateless hosts on more than one machine","s":"o","m":"Post","p":600,"a":[]},
+  {"n":605,"t":"Deploy: drain management on stop and run two management replicas in production","s":"o","m":"Post","p":600,"a":[]},
+  {"n":604,"t":"Management: share rate limit budgets across replicas","s":"o","m":"Post","p":600,"a":[]},
+  {"n":603,"t":"Management: require Redis outside Development so no replica runs without the SignalR backplane","s":"o","m":"Post","p":600,"a":[]},
+  {"n":602,"t":"Management: run singleton background jobs on one replica behind a SQL lease","s":"o","m":"Post","p":600,"a":[]},
+  {"n":601,"t":"Management: enforce the per-client live feed cap across replicas","s":"o","m":"Post","p":600,"a":[]},
+  {"n":600,"t":"Management: correct and zero-downtime with more than one replica","s":"o","m":"Post","p":179,"a":[]},
+  {"n":599,"t":"Test run: start a workflow by hand with input, including a draft","s":"o","m":"M2","p":null,"a":["management","engine"],"sz":"L"},
+  {"n":597,"t":"Validator warning: loops with no wait or exit","s":"o","m":"M2","p":594,"a":["engine"],"pr":"P2","sz":"S"},
+  {"n":596,"t":"Workspace setting: maximum run lifetime","s":"o","m":"M2","p":594,"a":["engine"],"pr":"P2","sz":"M"},
+  {"n":595,"t":"Publish: option to cancel or list runs still going on older versions","s":"o","m":"M2","p":594,"a":["management"],"pr":"P2","sz":"M"},
+  {"n":594,"t":"Workflows: runs that never end (old versions and loops)","s":"o","m":"M2","p":null,"a":["engine"],"pr":"P2","epic":1,"sub":{"completed":0,"total":3}},
+  {"n":591,"t":"Workspace message rate is per management instance: wrong with more than one replica","s":"o","m":"Post","p":600,"a":["management"],"pr":"P3","sz":"S"},
+  {"n":588,"t":"Wait for a call: let each run get its own wake URL","s":"o","m":null,"p":172,"a":[]},
+  {"n":571,"t":"Arduino SDK: support the Raspberry Pi Pico W","s":"o","m":"Post","p":568,"a":["sdk"],"pr":"P3","sz":"M"},
+  {"n":570,"t":"Arduino SDK: support the ESP8266","s":"o","m":"Post","p":568,"a":["sdk"],"pr":"P3","sz":"M"},
+  {"n":569,"t":"Arduino SDK: a platform layer for networking, storage, OTA and tasks","s":"o","m":"Post","p":568,"a":["sdk"],"pr":"P3","sz":"M"},
+  {"n":568,"t":"Arduino SDK on more boards than the ESP32","s":"o","m":"Post","p":null,"a":["sdk"],"epic":1,"sub":{"completed":0,"total":3}},
+  {"n":567,"t":"Reserve the wbskt name on npm before the TypeScript SDK","s":"o","m":"M3","p":null,"a":["sdk"],"pr":"P2","sz":"XS"},
+  {"n":547,"t":"Decide: should deleting a client stop it from re-enrolling?","s":"o","m":"M2","p":537,"a":["management","sdk"],"pr":"P2","sz":"S"},
+  {"n":537,"t":"Architecture review (2 Nov): follow-ups","s":"o","m":"M2","p":null,"a":[],"epic":1,"sub":{"completed":13,"total":15}},
+  {"n":528,"t":"Release the client SDKs 1.0: NuGet, PyPI and the Arduino Library Manager","s":"o","m":"M2","p":174,"a":["sdk"],"pr":"P1","sz":"S"},
+  {"n":525,"t":"Split Wbskt.Infrastructure so the gateways take only hosting and security","s":"o","m":"Post","p":179,"a":["socket"],"pr":"P3","sz":"M"},
+  {"n":519,"t":"Add Wbskt.Gateway.MQTT.Host: a client gateway for MQTT over Gateway.Core","s":"o","m":"Post","p":null,"a":["socket"]},
+  {"n":510,"t":"OTA firmware updates for ESP32 boards as a system command","s":"o","m":"M2","p":null,"a":["socket","sdk"],"epic":1,"sub":{"completed":3,"total":4}},
+  {"n":500,"t":"Remove the unversioned /api aliases","s":"o","m":"Post","p":null,"a":[]},
+  {"n":490,"t":"Send a signal by correlation, not only to a run","s":"o","m":"Post","p":172,"a":["management","engine"],"sz":"M"},
+  {"n":460,"t":"deploy: rollback story, partial-deploy drift and image pinning","s":"o","m":"M3","p":456,"a":["ops"],"pr":"P2","sz":"M"},
+  {"n":456,"t":"Deployment pipeline review (31 Oct): findings","s":"o","m":"M3","p":null,"a":["ops"],"epic":1,"sub":{"completed":3,"total":5}},
+  {"n":450,"t":"Consider replacing cAdvisor with a cron script for container restarts","s":"o","m":"Post","p":176,"a":["ops"],"pr":"P3","sz":"XS"},
+  {"n":448,"t":"Rewrite the load tester to measure capacity, not just connect","s":"o","m":"M3","p":440,"a":["ops"],"pr":"P1","sz":"M"},
+  {"n":447,"t":"deploy.sh: restart scaled tiers one replica at a time","s":"o","m":"Post","p":456,"a":["ops"],"pr":"P3","sz":"S"},
+  {"n":446,"t":"Engine: skip the SQL lookup for clients nothing is waiting on","s":"o","m":"Post","p":440,"a":["engine"],"pr":"P3","sz":"S"},
+  {"n":440,"t":"Performance: carry the hobbyist year on one VM","s":"o","m":"M3","p":null,"a":[],"epic":1,"sub":{"completed":6,"total":8}},
+  {"n":422,"t":"Client message trigger: match message types ignoring case","s":"o","m":"Post","p":172,"a":["engine"],"pr":"P3","sz":"S"},
+  {"n":417,"t":"Test a trigger condition against a sample message","s":"o","m":"Post","p":198,"a":["management","engine"],"pr":"P3","sz":"S"},
+  {"n":411,"t":"Say who published each workflow version","s":"o","m":"Post","p":198,"a":["management"],"pr":"P3","sz":"S"},
+  {"n":405,"t":"Name the actor on event-log entries","s":"o","m":"Post","p":176,"a":["management"],"pr":"P3","sz":"S"},
+  {"n":377,"t":"Compensation: finish it after launch (sequential, idempotent, resumable)","s":"o","m":"Post","p":177,"a":["engine"],"pr":"P3","sz":"M"},
+  {"n":333,"t":"Remove the API compatibility shims and the last style residue","s":"o","m":"M3","p":null,"a":["management"],"epic":1,"sub":{"completed":3,"total":3}},
+  {"n":278,"t":"Route client commands and pings to the owning socket host's queue instead of broadcasting them","s":"o","m":"Post","p":179,"a":["management","socket","engine"],"pr":"P3","sz":"S"},
+  {"n":228,"t":"OAuth integrations: Google sign-in, starting with Sheets","s":"o","m":"Post","p":215,"a":["engine"],"pr":"P3","sz":"L"},
+  {"n":227,"t":"MQTT integration: publish to a broker, and later trigger from one","s":"o","m":"Post","p":215,"a":["engine"],"pr":"P3","sz":"L"},
+  {"n":226,"t":"Pushover and Slack steps","s":"o","m":"Post","p":215,"a":["engine"],"pr":"P3","sz":"S"},
+  {"n":225,"t":"Home Assistant step","s":"o","m":"Post","p":215,"a":["engine"],"pr":"P3","sz":"M"},
+  {"n":215,"t":"Integrations: per-workspace accounts for workflow steps","s":"o","m":"Post","p":177,"a":["engine"],"epic":1,"sub":{"completed":9,"total":13}},
+  {"n":209,"t":"Live run view: push step progress and record who cancelled a run","s":"o","m":"Post","p":198,"a":["management","engine"],"pr":"P3","sz":"M"},
+  {"n":208,"t":"Runs list: filter by version, time range and several statuses","s":"o","m":"Post","p":198,"a":["management"],"pr":"P3","sz":"S"},
+  {"n":205,"t":"Workflow trigger: when a client's reported value changes","s":"o","m":"Post","p":198,"a":["engine"],"pr":"P3","sz":"M"},
+  {"n":204,"t":"Command parameter schema: ranges and allowed values","s":"o","m":"Post","p":198,"a":["management","sdk"],"pr":"P3","sz":"S"},
+  {"n":203,"t":"Client comms: search by type or payload, and counts per direction","s":"o","m":"Post","p":198,"a":["management","db"],"pr":"P3","sz":"S"},
+  {"n":198,"t":"API gaps for the console redesign","s":"o","m":"M2","p":null,"a":["management"],"epic":1,"sub":{"completed":15,"total":22}},
+  {"n":196,"t":"Search and status filter on the workspace member list","s":"o","m":"Post","p":179,"a":["auth"],"pr":"P3","sz":"S"},
+  {"n":180,"t":"Product growth","s":"o","m":"Post","p":null,"a":[],"epic":1,"sub":{"completed":1,"total":3}},
+  {"n":179,"t":"Scale and performance","s":"o","m":"Post","p":null,"a":[],"epic":1,"sub":{"completed":3,"total":11}},
+  {"n":178,"t":"Account security and data export","s":"o","m":"Post","p":null,"a":["auth"],"epic":1,"sub":{"completed":0,"total":2}},
+  {"n":177,"t":"Integrations and workflow features","s":"o","m":"Post","p":null,"a":["engine"],"epic":1,"sub":{"completed":2,"total":5}},
+  {"n":176,"t":"Audit trail, dashboards and database tidy-up","s":"o","m":"M2","p":null,"a":["management","ops"],"epic":1,"sub":{"completed":7,"total":9}},
+  {"n":175,"t":"Account features for launch","s":"o","m":"M2","p":null,"a":["auth"],"epic":1,"sub":{"completed":6,"total":6}},
+  {"n":174,"t":"Client SDKs","s":"o","m":"M2","p":null,"a":["sdk"],"epic":1,"sub":{"completed":9,"total":10}},
+  {"n":172,"t":"Workflow engine and test fixes","s":"o","m":"M2","p":null,"a":["engine"],"epic":1,"sub":{"completed":11,"total":14}},
+  {"n":168,"t":"CI: drop the gha build cache if image builds stay slow","s":"o","m":"Post","p":179,"a":["ops"],"pr":"P3","sz":"XS"},
+  {"n":167,"t":"Metering and billing","s":"o","m":"Post","p":180,"a":["management"],"pr":"P3","sz":"L"},
+  {"n":166,"t":"Engine: more than one active replica, WF-10 and WF-29 leftovers","s":"o","m":"Post","p":179,"a":["engine"],"pr":"P3","sz":"L"},
+  {"n":165,"t":"Redis-backed rate limiter before running a second auth replica","s":"o","m":"Post","p":179,"a":["auth"],"pr":"P3","sz":"S"},
+  {"n":164,"t":"Register a user in one procedure so no half-created accounts are left","s":"o","m":"Post","p":179,"a":["auth","db"],"pr":"P3","sz":"S"},
+  {"n":160,"t":"Transform (mapping) workflow node","s":"o","m":"Post","p":177,"a":["engine"],"pr":"P3","sz":"M"},
+  {"n":159,"t":"TypeScript SDK","s":"o","m":"Post","p":180,"a":["sdk"],"pr":"P3","sz":"M"},
+  {"n":158,"t":"Export my data","s":"o","m":"Post","p":178,"a":["management","auth"],"pr":"P3","sz":"M"},
+  {"n":157,"t":"TOTP two-factor sign-in","s":"o","m":"Post","p":178,"a":["auth"],"pr":"P3","sz":"M"},
+  {"n":613,"t":"Make dbo.Runs.Number NOT NULL once every run is numbered","s":"c","m":"M2","p":607,"a":[],"x":"2026-11-08"},
+  {"n":610,"t":"Show what a waiting run is waiting on","s":"c","m":"M2","p":607,"a":[],"x":"2026-11-08"},
+  {"n":609,"t":"Per-day run counts on the stats endpoints (30-day strip)","s":"c","m":"M2","p":607,"a":[],"x":"2026-11-08"},
+  {"n":608,"t":"Number each workflow's runs (#1, #2, …)","s":"c","m":"M2","p":607,"a":[],"x":"2026-11-08"},
+  {"n":598,"t":"Workflow drafts saved on the server","s":"c","m":"M2","p":null,"a":["management"],"sz":"M","x":"2026-11-08"},
+  {"n":589,"t":"Console status bar: workspace message rate and live run counts","s":"c","m":"M2","p":null,"a":[],"x":"2026-11-07"},
+  {"n":586,"t":"Remove the Device-name compatibility shims after the client rename ships","s":"c","m":"M2","p":577,"a":[],"x":"2026-11-07"},
+  {"n":584,"t":"Infra and telemetry: rename the devices service, role, metrics and config key","s":"c","m":"M2","p":577,"a":[],"x":"2026-11-06"},
+  {"n":583,"t":"Database: rename DeviceTraffic and ClientReadings.DeviceTime without losing data","s":"c","m":"M2","p":577,"a":[],"x":"2026-11-06"},
+  {"n":582,"t":"Rename the backend's Device* types to Client*","s":"c","m":"M2","p":577,"a":[],"x":"2026-11-06"},
+  {"n":581,"t":"SDKs and Wbskt.Protocol: rename Device types and arguments before 1.0","s":"c","m":"M2","p":576,"a":[],"x":"2026-11-06"},
+  {"n":580,"t":"API: rename the Device event source, deviceTime and DEVICE_INACTIVE","s":"c","m":"M2","p":576,"a":[],"x":"2026-11-06"},
+  {"n":579,"t":"Rename the device protocol doc and reword SDK docs","s":"c","m":"M2","p":575,"a":[],"x":"2026-11-06"},
+  {"n":578,"t":"Say client, not device, in server messages and dashboards","s":"c","m":"M2","p":575,"a":[],"x":"2026-11-06"},
+  {"n":577,"t":"Client wording, track C: internal code, database and infra renames","s":"c","m":"M2","p":574,"a":[],"x":"2026-11-06"},
+  {"n":576,"t":"Client wording, track B: public contract renames before SDK 1.0","s":"c","m":"M2","p":574,"a":[],"x":"2026-11-06"},
+  {"n":575,"t":"Client wording, track A: user-facing copy","s":"c","m":"M2","p":574,"a":[],"x":"2026-11-06"},
+  {"n":574,"t":"Drop \"Device\" wording: say Client across the platform","s":"c","m":"M2","p":null,"a":[],"x":"2026-11-06"},
+  {"n":552,"t":"Pre-launch compatibility sweep: remove code kept for data no customer has","s":"c","m":"M3","p":333,"a":[],"pr":"P3","sz":"S","x":"2026-11-03"},
+  {"n":551,"t":"Small gateway, OTA and SDK inconsistencies from the 2 Nov review","s":"c","m":"M2","p":537,"a":["socket","sdk"],"pr":"P3","sz":"S","x":"2026-11-03"},
+  {"n":550,"t":"Write a state report in one SQL call, not one per variable","s":"c","m":"Post","p":537,"a":["management","db"],"pr":"P3","sz":"S","x":"2026-11-03"},
+  {"n":549,"t":"Gateway: a broker blip shouldn't end device sessions","s":"c","m":"M1","p":537,"a":["socket"],"pr":"P2","sz":"S","x":"2026-11-03"},
+  {"n":548,"t":"Conformance: teach the fake what the real gateway does, and run the suite against the real hosts nightly","s":"c","m":"M2","p":537,"a":["sdk"],"pr":"P2","sz":"M","x":"2026-11-03"},
+  {"n":546,"t":"Close codes per reason, and spot two devices sharing one set of credentials","s":"c","m":"M2","p":537,"a":["socket","sdk"],"pr":"P2","sz":"S","x":"2026-11-03"},
+  {"n":545,"t":"Enforce the 24-hour command lifetime in the sender, with one constant","s":"c","m":"M2","p":537,"a":["management"],"pr":"P2","sz":"XS","x":"2026-11-03"},
+  {"n":544,"t":"Capabilities: keep the newest report, and carry the whole report on its event","s":"c","m":"M2","p":537,"a":["management"],"pr":"P3","sz":"XS","x":"2026-11-03"},
+  {"n":543,"t":"OTA: an \"updating\" state, so a firmware update doesn't count as the device going offline","s":"c","m":"M2","p":537,"a":["management","sdk"],"pr":"P2","sz":"S","x":"2026-11-03"},
+  {"n":542,"t":"Engine: take trigger-outcome recording off the per-message path","s":"c","m":"M2","p":537,"a":["engine"],"pr":"P2","sz":"S","x":"2026-11-03"},
+  {"n":541,"t":"Rename the protocol's Socket* types before Wbskt.Protocol 1.0, and retire the old Wbskt.Client.SDK","s":"c","m":"M2","p":537,"a":["sdk"],"pr":"P1","sz":"S","x":"2026-11-03"},
+  {"n":540,"t":".NET SDK: an exception in the app's message handler drops the connection","s":"c","m":"M2","p":537,"a":["sdk"],"pr":"P1","sz":"XS","x":"2026-11-03"},
+  {"n":539,"t":"Stop a handed-back command looping to the same gateway, and repair presence a live gateway lost","s":"c","m":"M2","p":537,"a":["management","socket"],"pr":"P1","sz":"M","x":"2026-11-03"},
+  {"n":538,"t":"SDKs: send the offline backlog no faster than the gateway's message budget","s":"c","m":"M2","p":537,"a":["sdk"],"pr":"P1","sz":"S","x":"2026-11-03"},
+  {"n":534,"t":"Report the firmware version on the capabilities message, not in device state","s":"c","m":null,"p":510,"a":["management","socket"],"sz":"S","x":"2026-11-02"},
+  {"n":527,"t":"OTA, server side: sys.ota message types, the send endpoint, the status handler and conformance cases","s":"c","m":"M2","p":510,"a":["management","socket"],"pr":"P1","sz":"M","x":"2026-11-02"},
+  {"n":524,"t":"CI: cache NuGet packages in the .NET jobs","s":"c","m":"M2","p":520,"a":["ops"],"pr":"P3","sz":"XS","x":"2026-11-02"},
+  {"n":523,"t":"CI: skip the host suites for docs-only and Python-SDK-only changes","s":"c","m":"M2","p":520,"a":["ops"],"pr":"P3","sz":"S","x":"2026-11-02"},
+  {"n":522,"t":"CI: shard the E2E main pass across two jobs","s":"c","m":"M2","p":520,"a":["ops"],"pr":"P3","sz":"S","x":"2026-11-02"},
+  {"n":521,"t":"CI: run the E2E passes as parallel jobs","s":"c","m":"M2","p":520,"a":["ops"],"pr":"P2","sz":"M","x":"2026-11-02"},
+  {"n":520,"t":"CI: cut the PR pipeline from ~13 to ~7 minutes without splitting the repo","s":"c","m":"M2","p":332,"a":["ops"],"epic":1,"x":"2026-11-02","sub":{"completed":4,"total":4}},
+  {"n":514,"t":"Split the device protocol doc into a message model and a WebSocket binding","s":"c","m":"M2","p":511,"a":[],"x":"2026-11-01"},
+  {"n":513,"t":"Rename Wbskt.Socket.Host to Wbskt.Gateway.WebSocket.Host","s":"c","m":"M2","p":511,"a":[],"x":"2026-11-01"},
+  {"n":512,"t":"Extract the device-session logic from Wbskt.Socket.Host into Wbskt.Gateway.Core","s":"c","m":"M2","p":511,"a":[],"x":"2026-11-01"},
+  {"n":511,"t":"Device gateways: extract Wbskt.Gateway.Core and rename the socket host to Wbskt.Gateway.WebSocket.Host","s":"c","m":"M2","p":null,"a":["socket"],"epic":1,"x":"2026-11-02","sub":{"completed":3,"total":3}},
+  {"n":509,"t":"ESP32 SDK: byte-sized offline buffer, dead-link heartbeat, late sentAt, send pacing, background sign-in","s":"c","m":"M2","p":174,"a":[],"x":"2026-11-01"},
+  {"n":507,"t":"ESP32 SDK: run it against the conformance suite and fix what fails","s":"c","m":"M2","p":174,"a":[],"x":"2026-11-01"},
+  {"n":495,"t":"SDK conformance suite the E2E project runs against each SDK","s":"c","m":"M2","p":174,"a":["sdk"],"pr":"P2","sz":"M","x":"2026-10-31"},
+  {"n":480,"t":"Warn when a branch's state nears its size limit","s":"c","m":null,"p":172,"a":["engine"],"pr":"P2","sz":"S","x":"2026-10-31"},
+  {"n":479,"t":"Warn when a run passes 80% of its credit budget","s":"c","m":null,"p":172,"a":["engine"],"pr":"P2","sz":"S","x":"2026-10-31"},
+  {"n":478,"t":"Call a URL: warn when a JSON response doesn't parse","s":"c","m":null,"p":172,"a":["engine"],"pr":"P2","sz":"S","x":"2026-10-31"},
+  {"n":477,"t":"Warn when a counter step rounds its step or resets a non-numeric variable","s":"c","m":null,"p":172,"a":["engine"],"pr":"P2","sz":"S","x":"2026-10-31"},
+  {"n":476,"t":"Warn when an expression reads a branch-state path that isn't there","s":"c","m":null,"p":172,"a":["engine"],"pr":"P1","sz":"M","x":"2026-10-31"},
+  {"n":475,"t":"Keep device readings for 30 days instead of a year","s":"c","m":"M2","p":440,"a":["management","db"],"pr":"P1","sz":"XS","x":"2026-10-31"},
+  {"n":470,"t":"Queue policy can strand an event when the active run finishes during the check","s":"c","m":null,"p":null,"a":["engine"],"x":"2026-10-31"},
+  {"n":468,"t":"compose: healthchecks for prometheus, loki, tempo, grafana and otel-collector","s":"c","m":null,"p":null,"a":["ops"],"sz":"XS","x":"2026-10-31"},
+  {"n":467,"t":"DropIfRunning can start two runs for simultaneous events","s":"c","m":null,"p":null,"a":["engine"],"x":"2026-10-31"},
+  {"n":459,"t":"compose: fail fast on missing required secrets instead of passing empty strings","s":"c","m":"M1","p":456,"a":["ops"],"pr":"P1","sz":"XS","x":"2026-10-31"},
+  {"n":458,"t":"deploy.sh: warn when backing or observability services drift from the compose file","s":"c","m":"M1","p":456,"a":["ops"],"pr":"P0","sz":"S","x":"2026-10-31"},
+  {"n":457,"t":"deploy.sh: multi-service dispatch always fails, and .env can trigger a fresh migrate","s":"c","m":"M1","p":456,"a":[],"x":"2026-10-31"},
+  {"n":454,"t":"Telegram step: chat lookup, formatting, topic, silent send and message id","s":"c","m":null,"p":null,"a":[],"x":"2026-10-31"},
+  {"n":453,"t":"Action steps send {{placeholders}} literally: config strings are never templated","s":"c","m":"M2","p":172,"a":["engine"],"pr":"P0","sz":"M","x":"2026-10-31"},
+  {"n":451,"t":"Discord step: embeds, thread and message id","s":"c","m":"M2","p":null,"a":[],"x":"2026-10-30"},
+  {"n":449,"t":"Pushgateway: persist pushed metrics across restarts","s":"c","m":"M1","p":176,"a":["ops"],"pr":"P1","sz":"XS","x":"2026-10-31"},
+  {"n":445,"t":"SDK: reconnect with jitter so a socket restart doesn't stampede","s":"c","m":"M2","p":440,"a":["sdk"],"pr":"P1","sz":"XS","x":"2026-10-31"},
+  {"n":444,"t":"Send the live device feed only to consoles watching that device","s":"c","m":"M2","p":440,"a":["management"],"pr":"P1","sz":"S","x":"2026-10-31"},
+  {"n":443,"t":"Engine: drop per-message logs to Debug","s":"c","m":"M1","p":440,"a":["engine"],"pr":"P0","sz":"XS","x":"2026-10-31"},
+  {"n":442,"t":"Move device traffic out of the event log into a short-lived table","s":"c","m":"M1","p":440,"a":["management","db"],"pr":"P0","sz":"L","x":"2026-10-31"},
+  {"n":441,"t":"Run SQL Server as Express in production and cap its memory","s":"c","m":"M1","p":440,"a":["db","ops"],"pr":"P0","sz":"S","x":"2026-10-31"},
+  {"n":436,"t":"Publish SQL Server and the RabbitMQ UI on the VM loopback for SSH tunnels","s":"c","m":"M1","p":null,"a":[],"x":"2026-10-29"},
+  {"n":434,"t":"Alert when a production container is crash-looping","s":"c","m":"M1","p":424,"a":[],"x":"2026-10-29"},
+  {"n":432,"t":"Warn the user when the workspace run ceiling refuses triggers","s":"c","m":"M2","p":172,"a":["management","engine"],"pr":"P1","sz":"M","x":"2026-10-31"},
+  {"n":430,"t":"Nightly stress fails every night: the workspace run ceiling refuses most of the thousand runs","s":"c","m":"M2","p":null,"a":[],"x":"2026-10-29"},
+  {"n":428,"t":"Integrations always answer INTEGRATIONS_UNAVAILABLE in production","s":"c","m":"M1","p":null,"a":[],"x":"2026-10-26"},
+  {"n":426,"t":"Alert on low disk space on the production VM","s":"c","m":"M1","p":424,"a":[],"x":"2026-10-29"},
+  {"n":425,"t":"Prune unused images in deploy.sh before pulling","s":"c","m":"M1","p":424,"a":[],"x":"2026-10-26"},
+  {"n":424,"t":"Keep the production VM's disk from filling up","s":"c","m":"M1","p":null,"a":["ops"],"epic":1,"x":"2026-10-31","sub":{"completed":3,"total":3}},
+  {"n":421,"t":"Validator: drop the false \"behaves as AllowParallel\" warning on device triggers","s":"c","m":"M1","p":102,"a":[],"x":"2026-10-26"},
+  {"n":420,"t":"Device trigger: \"Any message\" shouldn't fire on state.report and capabilities","s":"c","m":"M1","p":102,"a":[],"x":"2026-10-26"},
+  {"n":418,"t":"E2E: device trigger hold rules (any type, no filter) and other message types","s":"c","m":"M1","p":102,"a":[],"x":"2026-10-26"},
+  {"n":416,"t":"Show why a trigger didn't start a run (filtered, dropped, held)","s":"c","m":"M2","p":102,"a":["management","engine"],"pr":"P1","sz":"M","x":"2026-10-31"},
+  {"n":415,"t":"Management API: list a workflow's shared variables","s":"c","m":"M2","p":198,"a":["management"],"pr":"P1","sz":"XS","x":"2026-11-02"},
+  {"n":412,"t":"Wait for signal: fill in `{{…}}` in the correlation","s":"c","m":"M2","p":172,"a":["engine"],"pr":"P1","sz":"S","x":"2026-10-31"},
+  {"n":410,"t":"Test-run a workflow before publishing, whatever its trigger","s":"c","m":"Post","p":198,"a":["management","engine"],"pr":"P3","sz":"L","x":"2026-11-08"},
+  {"n":409,"t":"Save workflow drafts on the server","s":"c","m":"Post","p":198,"a":["management"],"pr":"P3","sz":"M","x":"2026-11-08"},
+  {"n":408,"t":"Device trigger: \"Any type\" + condition + hold is reset by every other message type","s":"c","m":"M1","p":102,"a":[],"x":"2026-10-26"},
+  {"n":407,"t":"Trigger correlation key: `{{trigger.x}}` is used as a literal constant","s":"c","m":"M1","p":102,"a":[],"x":"2026-10-26"},
+  {"n":406,"t":"Name the account that owns each workspace, so the add-member box can search it","s":"c","m":"M2","p":198,"a":["auth"],"x":"2026-10-25"},
+  {"n":404,"t":"Return the caller's permissions with each workspace","s":"c","m":"M2","p":198,"a":["auth"],"x":"2026-10-25"},
+  {"n":403,"t":"Client counts per status (workspace and policy) and a filter for several statuses","s":"c","m":"M2","p":198,"a":["management"],"x":"2026-10-25"},
+  {"n":402,"t":"Send a hub event when a registration policy is enabled","s":"c","m":"M2","p":198,"a":["management"],"x":"2026-10-25"},
+  {"n":367,"t":"CI: rehearse a migrator upgrade from the previous release before deploying","s":"c","m":"M2","p":332,"a":["ops"],"pr":"P1","sz":"S","x":"2026-10-31"},
+  {"n":352,"t":"Last route-style residue in auth and management, and DateTimeOffset in contracts","s":"c","m":"M3","p":333,"a":["management","auth"],"pr":"P2","sz":"S","x":"2026-11-05"},
+  {"n":351,"t":"Remove the \"kept for one release\" route and field shims","s":"c","m":"M3","p":333,"a":["management"],"pr":"P2","sz":"S","x":"2026-11-05"},
+  {"n":332,"t":"E2E suite: isolation, speed, outage coverage","s":"c","m":"M2","p":null,"a":["ops"],"epic":1,"x":"2026-11-02","sub":{"completed":9,"total":9}},
+  {"n":312,"t":"Version the public API routes (/v1) before the first breaking change","s":"c","m":"M2","p":174,"a":["management","sdk"],"pr":"P1","sz":"S","x":"2026-10-31"},
+  {"n":295,"t":"Engine: small follow-ups from the #292 review","s":"c","m":"M2","p":172,"a":["engine"],"pr":"P2","sz":"XS","x":"2026-11-02"},
+  {"n":265,"t":".NET SDK: a WbsktClient(name, pin) constructor with sensible defaults","s":"c","m":"M2","p":174,"a":["sdk"],"pr":"P1","sz":"XS","x":"2026-10-31"},
+  {"n":210,"t":"Workflow validation: check each step's settings, not just the graph","s":"c","m":"M2","p":198,"a":["engine"],"pr":"P1","sz":"M","x":"2026-10-31"},
+  {"n":207,"t":"List the message types a client has sent","s":"c","m":"M2","p":198,"a":["management"],"pr":"P1","sz":"S","x":"2026-11-02"},
+  {"n":206,"t":"Queue commands for offline devices and deliver them on reconnect","s":"c","m":"M2","p":198,"a":["management","socket"],"pr":"P1","sz":"M","x":"2026-10-31"},
+  {"n":202,"t":"Run list: say what started each run, credits used and where it failed","s":"c","m":"M2","p":198,"a":["management"],"pr":"P1","sz":"M","x":"2026-11-03"},
+  {"n":201,"t":"Webhook trigger Method is required but never used","s":"c","m":"M2","p":198,"a":["management"],"pr":"P2","sz":"XS","x":"2026-11-02"},
+  {"n":200,"t":"Let the manual trigger declare its inputs","s":"c","m":"M2","p":198,"a":["management"],"pr":"P2","sz":"S","x":"2026-11-03"},
+  {"n":199,"t":"Return trigger kinds in the workflow list","s":"c","m":"M2","p":198,"a":["management"],"pr":"P2","sz":"S","x":"2026-11-03"},
+  {"n":197,"t":"Delete a registration policy","s":"c","m":"M2","p":198,"a":["management"],"pr":"P1","sz":"S","x":"2026-10-31"},
+  {"n":195,"t":"Say who the owner is in the workspace member list","s":"c","m":"M2","p":175,"a":["auth"],"pr":"P2","sz":"XS","x":"2026-11-03"},
+  {"n":154,"t":"Database tidy-up: remaining review improvements","s":"c","m":"M2","p":176,"a":["db"],"pr":"P2","sz":"S","x":"2026-11-03"},
+  {"n":153,"t":"Starter Grafana dashboard checked into the repo","s":"c","m":"M2","p":176,"a":["ops"],"pr":"P2","sz":"S","x":"2026-11-03"},
+  {"n":152,"t":"Proof-of-work or CAPTCHA on sign-up","s":"c","m":"M2","p":175,"a":["auth"],"pr":"P1","sz":"S","x":"2026-10-31"},
+  {"n":151,"t":"Change email (with re-verification) and username","s":"c","m":"M2","p":175,"a":["auth"],"pr":"P1","sz":"S","x":"2026-11-04"},
+  {"n":150,"t":"Leave a tenant","s":"c","m":"M2","p":175,"a":["auth"],"pr":"P2","sz":"S","x":"2026-11-03"},
+  {"n":149,"t":"Delete my account","s":"c","m":"M2","p":175,"a":["auth"],"pr":"P1","sz":"M","x":"2026-10-31"},
+  {"n":145,"t":"ESP32 / Arduino SDK","s":"c","m":"M2","p":174,"a":["sdk"],"pr":"P1","sz":"M","x":"2026-10-31"},
+  {"n":144,"t":"Python SDK for Raspberry Pi and scripts","s":"c","m":"M2","p":174,"a":["sdk"],"pr":"P1","sz":"M","x":"2026-10-31"},
+  {"n":143,"t":"Write the device protocol document and package the .NET SDK for NuGet","s":"c","m":"M2","p":174,"a":["sdk"],"pr":"P1","sz":"S","x":"2026-10-31"},
+  {"n":127,"t":"Reject breached passwords using the Have I Been Pwned range API","s":"c","m":"M2","p":175,"a":["auth"],"pr":"P2","sz":"S","x":"2026-11-03"}
+ ],
+ "merged": [
+  {"n":615,"t":"Keep workflow drafts on the server","d":"2026-11-08"},
+  {"n":612,"t":"Number each workflow's runs, count runs per day, and show what a waiting run waits on","d":"2026-11-08"},
+  {"n":593,"t":"Drop the legacy device_logins term from the overview dashboard","d":"2026-11-07"},
+  {"n":592,"t":"Remove the Device-name compatibility shims now the rename has shipped","d":"2026-11-07"},
+  {"n":590,"t":"Console status bar: workspace message rate and running/waiting run counts","d":"2026-11-07"},
+  {"n":587,"t":"Drop the old conformance harness names","d":"2026-11-06"},
+  {"n":585,"t":"Say Client, not Device, across the platform","d":"2026-11-06"},
+  {"n":573,"t":"chore(db): drop the unused RegistrationPolicy_Disable procedure","d":"2026-11-05"},
+  {"n":572,"t":"Remove the pre-launch API shims and route residue (#351, #352)","d":"2026-11-05"},
+  {"n":558,"t":"Auth: change your username and email address","d":"2026-11-04"},
+  {"n":566,"t":"Version the SDKs as 0.9 betas, and add the release runbook","d":"2026-11-03"},
+  {"n":565,"t":"Add a provisioned Grafana overview dashboard","d":"2026-11-03"},
+  {"n":564,"t":"Database tidy-up: BIGINT branch/bookmark ids, stats indexes, status checks","d":"2026-11-03"},
+  {"n":563,"t":"Workflows: let the manual trigger declare its inputs","d":"2026-11-03"},
+  {"n":562,"t":"Workflows: say what starts each workflow in the list","d":"2026-11-03"},
+  {"n":561,"t":"Auth: refuse breached passwords","d":"2026-11-03"},
+  {"n":560,"t":"Auth: say who owns a workspace in its member list","d":"2026-11-03"},
+  {"n":559,"t":"Auth: leave a tenant","d":"2026-11-03"},
+  {"n":557,"t":"(feat): say what started each run, credits used and where it stopped, on the run lists","d":"2026-11-03"},
+  {"n":556,"t":"(feat): close codes per reason, and warn when two devices share credentials","d":"2026-11-03"},
+  {"n":555,"t":"Deploy: drop the SOCKET_REPLICAS and socket-service fallbacks","d":"2026-11-03"},
+  {"n":554,"t":"Nightly conformance: restore the service containers the workflow lost","d":"2026-11-03"},
+  {"n":553,"t":"Architecture review follow-ups: SDK pacing, gateway resilience, OTA updating state, batched state reports","d":"2026-11-03"},
+  {"n":536,"t":"(feat): report the firmware version on the capabilities message","d":"2026-11-02"},
+  {"n":535,"t":"Cap the shared-variable list, warn on a webhook method, and stop a flaky queue test","d":"2026-11-02"},
+  {"n":533,"t":"Don't read trigger registrations for a command's outcome","d":"2026-11-02"},
+  {"n":532,"t":"Make the webhook trigger's method optional, and ignore it","d":"2026-11-02"},
+  {"n":531,"t":"List a workflow's shared variables","d":"2026-11-02"},
+  {"n":530,"t":"List the message types a client has sent","d":"2026-11-02"},
+  {"n":529,"t":"Send firmware updates to devices that take them, and record their status","d":"2026-11-02"},
+  {"n":526,"t":"(ci): run E2E as parallel legs, skip host suites for doc-only PRs, cache NuGet","d":"2026-11-02"},
+  {"n":518,"t":"(refactor): move admission and the session lifecycle into Gateway.Core","d":"2026-11-01"},
+  {"n":517,"t":"(docs): split the device protocol into a message model and a WebSocket binding","d":"2026-11-01"},
+  {"n":516,"t":"(refactor): rename the socket host to Wbskt.Gateway.WebSocket.Host","d":"2026-11-01"},
+  {"n":515,"t":"(refactor): extract the device-session logic into Wbskt.Gateway.Core","d":"2026-11-01"},
+  {"n":508,"t":"(test): keep the token while the socket host is down, and run the suite for the ESP32 SDK","d":"2026-11-01"},
+  {"n":506,"t":"Let a policy with no clients be deleted","d":"2026-10-31"},
+  {"n":505,"t":"Warn the user when the run ceiling refuses triggers","d":"2026-10-31"},
+  {"n":504,"t":"Show why a trigger didn't start a run","d":"2026-10-31"},
+  {"n":503,"t":"(sdk): device SDK conformance suite, and the .NET SDK fixes it needed","d":"2026-10-31"},
+  {"n":502,"t":"(docs): show the upgrade rehearsal in the infra map's pipeline","d":"2026-10-31"},
+  {"n":501,"t":"(feat): check each workflow step's settings, with the field to fix","d":"2026-10-31"},
+  {"n":499,"t":"(feat): let people delete their own account","d":"2026-10-31"},
+  {"n":498,"t":"(feat): queue commands for offline devices until they connect","d":"2026-10-31"},
+  {"n":497,"t":"(sdk): Python device SDK","d":"2026-10-31"},
+  {"n":496,"t":"(sdk): device protocol document and NuGet packaging for the .NET SDK","d":"2026-10-31"},
+  {"n":494,"t":"CI: rehearse the migrator upgrade from the last release","d":"2026-10-31"},
+  {"n":493,"t":"(sdk): reconnect with full jitter and reuse the device token","d":"2026-10-31"},
+  {"n":492,"t":"(sdk): WbsktClient(name, pin) with the hosted URLs and file storage","d":"2026-10-31"},
+  {"n":491,"t":"(api): version the public API under /api/v1","d":"2026-10-31"},
+  {"n":489,"t":"Wait for signal: fill in {{…}} in the correlation","d":"2026-10-31"},
+  {"n":488,"t":"Proof of work on sign-up","d":"2026-10-31"},
+  {"n":487,"t":"(perf): send per-device traffic only to consoles watching that device","d":"2026-10-31"},
+  {"n":486,"t":"(chore): keep device readings for 30 days instead of a year","d":"2026-10-31"},
+  {"n":485,"t":"(feat): warn when a step's expression reads a branch-state path that isn't there","d":"2026-10-31"},
+  {"n":484,"t":"(feat): warn when a step takes the run past 80% of its credit budget","d":"2026-10-31"},
+  {"n":483,"t":"(feat): warn on the step that takes a branch's state past 80% of its size limit","d":"2026-10-31"},
+  {"n":482,"t":"(feat): Call a URL warns when a response labelled JSON does not parse","d":"2026-10-31"},
+  {"n":481,"t":"(feat): counter steps warn when they drop a fraction or count over a non-number","d":"2026-10-31"},
+  {"n":474,"t":"(fix): action steps fill in {{ }} placeholders instead of sending them literally","d":"2026-10-31"},
+  {"n":473,"t":"(deploy) healthchecks for prometheus, loki, tempo and grafana; collector watched by alert","d":"2026-10-31"},
+  {"n":472,"t":"(fix): a Queue event can't strand behind a run that finished meanwhile","d":"2026-10-31"},
+  {"n":471,"t":"(fix): one run per correlation key when simultaneous events hit DropIfRunning","d":"2026-10-31"},
+  {"n":469,"t":"(deploy) deploy warns when other services drift from the compose file","d":"2026-10-31"},
+  {"n":466,"t":"(deploy) Pushgateway keeps pushed metrics across restarts","d":"2026-10-31"},
+  {"n":465,"t":"(deploy) compose fails fast on missing required variables","d":"2026-10-31"},
+  {"n":464,"t":"(fix): engine per-message logs drop to Debug, with an outcome counter","d":"2026-10-31"},
+  {"n":463,"t":"(deploy) run SQL Server as Express, with backups it accepts","d":"2026-10-31"},
+  {"n":462,"t":"(feat): device traffic moves out of the event log into its own table","d":"2026-10-31"},
+  {"n":461,"t":"(deploy) deploy.sh: multi-service deploys over SSH, never a fresh migrate","d":"2026-10-31"},
+  {"n":455,"t":"Telegram step: chat lookup, formatting, topics, silent send and message id","d":"2026-10-31"},
+  {"n":452,"t":"Discord step: embeds, thread, avatar and message id","d":"2026-10-30"},
+  {"n":439,"t":"(deploy) backup-check.sh: a read-only check of everything backups depend on","d":"2026-10-29"},
+  {"n":438,"t":"(deploy) infra map: dev.env copy refreshed, show what is still to fill","d":"2026-10-29"},
+  {"n":437,"t":"(deploy) publish SQL Server and the RabbitMQ UI on the VM loopback","d":"2026-10-29"},
+  {"n":435,"t":"(deploy) alert on low disk space and crash-looping containers","d":"2026-10-29"},
+  {"n":433,"t":"(deploy) add the interactive infra map","d":"2026-10-29"},
+  {"n":431,"t":"(ci) stress: raise the workspace run ceiling for the thousand-run scenario","d":"2026-10-29"},
+  {"n":429,"t":"compose: route the engine's integration endpoints through Traefik","d":"2026-10-26"},
+  {"n":427,"t":"deploy.sh: prune unused images before pulling, fail early on a full disk","d":"2026-10-26"},
+  {"n":423,"t":"Device trigger: any message type skips platform messages; drop the false policy warning","d":"2026-10-26"},
+  {"n":419,"t":"E2E: device trigger hold rules and other message types","d":"2026-10-26"},
+  {"n":414,"t":"Device trigger: resolve {{trigger.x}} correlation keys, reject any-type holds","d":"2026-10-26"},
+  {"n":413,"t":"Console backend asks: policy-enabled hub event, client counts and multi-status list, workspace permissions and tenant ref","d":"2026-10-25"}
+ ]
+}
+</script>
+
+<script>
+const D = JSON.parse(document.getElementById('roadmap-data').textContent);
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const GH = 'https://github.com/wbskt/Wbskt';
+const iss = n => `${GH}/issues/${n}`;
+const prl = n => `${GH}/pull/${n}`;
+const byN = new Map(D.issues.map(i => [i.n, i]));
+const kids = new Map();
+D.issues.forEach(i => { if (i.p) { if (!kids.has(i.p)) kids.set(i.p, []); kids.get(i.p).push(i); } });
+const fmt = d => new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+const STATE = { you: 'Blocked on you', decide: 'Needs a decision', ready: 'Ready to start', review: 'In review', progress: 'In progress', 'done-open': 'Merged, close the issue' };
+const prioRank = p => ({ P1: 1, P2: 2, P3: 3 })[p] || 4;
+const linkify = s => esc(s).replace(/(^|[\s(])#(\d{2,4})\b/g, (m, a, n) => `${a}<a href="${iss(n)}" target="_blank" rel="noopener">#${n}</a>`);
+
+$('#asof').textContent = `wbskt/Wbskt · as of ${fmt(D.asOf)}`;
+$('#headline').innerHTML = linkify(D.headline);
+$('#footer').textContent = `Issue data from GitHub milestones and labels on wbskt/Wbskt, read ${fmt(D.asOf)}. Source: Docs/Roadmap/wbskt-backend-roadmap.html.`;
+
+// overview
+(function overview() {
+  const open = D.issues.filter(i => i.s === 'o');
+  const m2 = D.milestones.find(m => m.short === 'M2'), m3 = D.milestones.find(m => m.short === 'M3');
+  const days = Math.round((new Date(m2.due) - new Date(D.asOf)) / 864e5);
+  const stats = [
+    [`${m2.open}`, 'open in M2, including epics'],
+    [`${m3.open}`, 'open in M3 Go public'],
+    [`${days}`, 'days to the M2 due date'],
+    [`${D.asks.length}`, 'things waiting on you'],
+  ];
+  $('#stats').innerHTML = stats.map(([b, s]) => `<div class="stat"><b>${b}</b><span>${s}</span></div>`).join('');
+  const t0 = new Date('2026-10-01'), t1 = new Date('2027-02-01'), span = t1 - t0;
+  const pct = d => ((new Date(d) - t0) / span * 100).toFixed(1);
+  const ticks = [['Oct', '2026-10-01'], ['Nov', '2026-11-01'], ['Dec', '2026-12-01'], ['Jan and later', '2027-01-01']];
+  const grid = ticks.slice(1).map(([, d]) => `<div class="grid-line" style="left:${pct(d)}%"></div>`).join('');
+  let html = `<div></div><div class="axis">${ticks.map(([l, d]) => `<span style="left:${pct(d)}%">${l}</span>`).join('')}</div>`;
+  D.milestones.forEach((m, idx) => {
+    const total = m.open + m.closed, share = total ? Math.round(m.closed / total * 100) : 0;
+    const end = m.due ? new Date(new Date(m.due).getTime() + 864e5).toISOString().slice(0, 10) : '2027-02-01';
+    const left = pct(m.start), width = (pct(end) - left).toFixed(1);
+    const label = m.open === 0 ? 'Done' : m.due ? `${m.open} open` : `${m.open} open`;
+    html += `<div class="ms-label"><span class="ms-name">${esc(m.name)}</span><span class="ms-meta">${m.due ? 'due ' + fmt(m.due) : 'no date'} · ${m.closed}/${total} closed</span></div>
+      <div class="track">${grid}${idx === 0 ? `<div class="today" style="left:${pct(D.asOf)}%"><span>Today, ${fmt(D.asOf)}</span></div>` : ''}
+      <div class="tbar${m.due ? '' : ' open-ended'}" style="left:${left}%;width:${width}%"><div class="fill${share === 100 ? ' complete' : ''}" style="width:${share}%"></div><div class="bar-text">${label}</div></div></div>`;
+  });
+  $('#timeline').innerHTML = html;
+  $('#asks').innerHTML = D.asks.map(a => {
+    const href = a.url || (a.pr ? prl(a.pr) : iss(a.issue));
+    return `<div class="gap s-you"><div class="stripe"></div><div><div class="t"><a href="${href}" target="_blank" rel="noopener">${esc(a.title)}</a></div><p>${linkify(a.body)}</p></div></div>`;
+  }).join('');
+})();
+
+// milestone work lists
+function rowHtml(i, child) {
+  const w = D.work[i.n] || {};
+  const st = w.state ? `<span class="pill ${w.state}">${STATE[w.state]}</span>` : '';
+  const prs = (w.prs || []).map(n => `<a class="pill" href="${prl(n)}" target="_blank" rel="noopener">PR #${n}</a>`).join('');
+  const tags = [st, prs, ...i.a.map(a => `<span class="pill">${esc(a)}</span>`), i.sz ? `<span class="pill">${esc(i.sz)}</span>` : ''].join('');
+  const done = i.epic && i.sub ? ` · ${i.sub.completed} of ${i.sub.total} sub-issues closed` : '';
+  return `<div class="row${child ? ' child' : ''}"><div class="prio ${i.pr || ''}">${i.epic ? 'EPIC' : i.pr || '—'}</div>
+    <div style="min-width:0"><div class="t"><a href="${iss(i.n)}" target="_blank" rel="noopener"><span class="num">#${i.n}</span>${esc(i.t)}</a></div>
+    ${w.why ? `<p class="why">${linkify(w.why)}</p>` : done ? `<p class="why">Epic${done}</p>` : ''}</div>
+    <div class="tags">${tags}</div></div>`;
+}
+function milestoneList(short, el) {
+  const open = D.issues.filter(i => i.s === 'o' && i.m === short);
+  const nested = new Set(open.filter(i => i.epic && D.work[i.n]).map(i => i.n));
+  const work = open.filter(i => (!i.epic || D.work[i.n]) && !nested.has(i.p));
+  work.sort((a, b) => prioRank(a.pr) - prioRank(b.pr) || (D.work[b.n] ? 1 : 0) - (D.work[a.n] ? 1 : 0) || b.n - a.n);
+  const epics = open.filter(i => i.epic && !D.work[i.n]).sort((a, b) => a.n - b.n);
+  $(el).innerHTML = work.map(i => rowHtml(i) + (nested.has(i.n) ? open.filter(c => c.p === i.n).sort((a, b) => prioRank(a.pr) - prioRank(b.pr) || a.n - b.n).map(c => rowHtml(c, true)).join('') : '')).join('')
+    + (epics.length ? `<div class="group">Epics in ${short}, tracked on the Epics tab</div>` + epics.map(i => rowHtml(i)).join('') : '');
+}
+milestoneList('M2', '#m2');
+milestoneList('M3', '#m3');
+
+// epics
+const epicFilter = { m: 'all' };
+function buildEpics() {
+  const eps = D.issues.filter(i => i.epic && i.s === 'o' && (epicFilter.m === 'all' || i.m === epicFilter.m));
+  eps.sort((a, b) => ['M2', 'M3', 'Post', null].indexOf(a.m) - ['M2', 'M3', 'Post', null].indexOf(b.m) || a.n - b.n);
+  $('#epics').innerHTML = eps.map(e => {
+    const s = e.sub || {}; const total = s.total || 0, comp = s.completed || 0;
+    const ks = (kids.get(e.n) || []).sort((a, b) => (a.s === 'c') - (b.s === 'c') || a.n - b.n);
+    return `<details class="epic"><summary><span><span class="num">#${e.n}</span><b>${esc(e.t)}</b> <span class="pill">${esc(e.m || 'no milestone')}</span></span>
+      <span class="prog" aria-hidden="true"><i style="width:${total ? comp / total * 100 : 0}%"></i></span><span class="meta">${comp}/${total} closed</span></summary>
+      <div class="kids">${ks.length ? ks.map(k => `<div class="kid ${k.s}"><span class="tick">${k.s === 'c' ? '✓' : '○'}</span><a class="k-t" href="${iss(k.n)}" target="_blank" rel="noopener" style="color:inherit"><span class="num">#${k.n}</span>${esc(k.t)}</a><span class="meta">${esc(k.m || '')}</span></div>`).join('') : '<span class="meta">No open or recently closed children.</span>'}
+      <a class="meta" href="${iss(e.n)}" target="_blank" rel="noopener">Open on GitHub</a></div></details>`;
+  }).join('');
+}
+$('#epic-chips').innerHTML = '<span class="eyebrow">Milestone</span>' + [['all', 'All'], ['M2', 'M2'], ['M3', 'M3'], ['Post', 'Post-launch']].map(([k, l]) => `<button class="chip" data-m="${k}" aria-pressed="${k === 'all'}">${l}</button>`).join('');
+$('#epic-chips').addEventListener('click', e => { const b = e.target.closest('.chip'); if (!b) return; epicFilter.m = b.dataset.m; document.querySelectorAll('#epic-chips .chip').forEach(c => c.setAttribute('aria-pressed', c === b)); buildEpics(); });
+buildEpics();
+
+// post-launch
+const post = D.issues.filter(i => i.s === 'o' && i.m === 'Post' && !i.epic);
+const areaOf = i => i.a[0] || 'other';
+const areas = {}; post.forEach(i => { areas[areaOf(i)] = (areas[areaOf(i)] || 0) + 1; });
+const areaList = Object.entries(areas).sort((a, b) => b[1] - a[1]);
+const maxA = areaList[0] ? areaList[0][1] : 1;
+$('#area-chart').setAttribute('aria-label', 'Post-launch issues by area: ' + areaList.map(([a, n]) => `${a} ${n}`).join(', '));
+$('#area-chart').innerHTML = areaList.map(([a, n]) => `<div class="crow"><span>${esc(a)}</span><span class="hbar"><i style="width:${n / maxA * 100}%"></i></span><span class="v">${n}</span></div>`).join('') + `<span class="meta">${post.length} issues, not counting epics. An issue with several areas counts under its first.</span>`;
+const postFilter = { a: 'all' };
+function buildPost() {
+  const rows = post.filter(i => postFilter.a === 'all' || areaOf(i) === postFilter.a).sort((a, b) => b.n - a.n);
+  $('#post').innerHTML = rows.map(i => `<tr><td class="d"><a href="${iss(i.n)}" target="_blank" rel="noopener">#${i.n}</a></td><td>${esc(i.t)}</td><td>${esc(i.a.join(', ') || '—')}</td><td class="d">${esc(i.sz || '—')}</td><td class="d">${i.p ? `<a href="${iss(i.p)}" target="_blank" rel="noopener">#${i.p}</a>` : '—'}</td></tr>`).join('');
+}
+$('#post-chips').innerHTML = '<span class="eyebrow">Area</span>' + [['all', 'All'], ...areaList.map(([a]) => [a, a])].map(([k, l]) => `<button class="chip" data-a="${esc(k)}" aria-pressed="${k === 'all'}">${esc(l)}</button>`).join('');
+$('#post-chips').addEventListener('click', e => { const b = e.target.closest('.chip'); if (!b) return; postFilter.a = b.dataset.a; document.querySelectorAll('#post-chips .chip').forEach(c => c.setAttribute('aria-pressed', c === b)); buildPost(); });
+buildPost();
+
+// reviews
+$('#next-review').innerHTML = linkify(D.nextReview);
+$('#reviews').innerHTML = D.reviews.map(r => {
+  const e = r.epic ? byN.get(r.epic) : null;
+  const fu = r.epic ? `<a href="${iss(r.epic)}" target="_blank" rel="noopener">#${r.epic}</a>${e && e.sub ? ` · ${e.sub.completed}/${e.sub.total} closed` : ''}` : r.issue ? `<a href="${iss(r.issue)}" target="_blank" rel="noopener">#${r.issue}</a>` : '—';
+  return `<tr><td class="d">${fmt(r.date)}</td><td><b>${esc(r.title)}</b>${r.doc ? `<div class="meta">${esc(r.doc)}</div>` : ''}</td><td>${esc(r.scope)}</td><td>${linkify(r.result)}</td><td class="d">${fu}</td></tr>`;
+}).join('');
+
+// shipped, grouped by ISO week (Monday start)
+(function shipped() {
+  const weeks = new Map();
+  D.merged.forEach(m => { const d = new Date(m.d + 'T00:00:00Z'); const mon = new Date(d - ((d.getUTCDay() + 6) % 7) * 864e5).toISOString().slice(0, 10); if (!weeks.has(mon)) weeks.set(mon, []); weeks.get(mon).push(m); });
+  $('#shipped').innerHTML = [...weeks].map(([mon, ms]) => `<div class="week"><div class="group">Week of ${fmt(mon)} · ${ms.length} merged</div><ul>${ms.map(m => `<li><span class="tick">✓</span><span><a class="num" href="${prl(m.n)}" target="_blank" rel="noopener">#${m.n}</a>${esc(m.t)}</span></li>`).join('')}</ul></div>`).join('');
+})();
+
+// decisions and risks
+const card = (cls, title, body, extra, href) => `<div class="gap ${cls}"><div class="stripe"></div><div><div class="t">${href ? `<a href="${href}" target="_blank" rel="noopener">${esc(title)}</a>` : esc(title)}${extra || ''}</div><p>${linkify(body)}</p></div></div>`;
+$('#dec-open').innerHTML = D.decisions.filter(d => d.status === 'open').map(d => card('s-open', d.title, d.body, '', d.issue ? iss(d.issue) : '')).join('');
+$('#dec-done').innerHTML = D.decisions.filter(d => d.status === 'decided').map(d => card('s-decided', d.title, d.body, ` <span class="pill">${fmt(d.date)}</span>`, d.issue ? iss(d.issue) : '')).join('');
+$('#risks').innerHTML = D.risks.map(r => card('s-' + r.level, r.title, r.body, ` <span class="pill">${r.level === 'med' ? 'medium' : r.level}</span>`, r.url || (r.issue ? iss(r.issue) : ''))).join('');
+
+// routing between views
+const VIEWS = ['overview', 'm2', 'm3', 'epics', 'post-launch', 'reviews', 'shipped', 'decisions'];
+function route() {
+  const h = (location.hash || '#overview').slice(1); const v = VIEWS.includes(h) ? h : 'overview';
+  VIEWS.forEach(x => { $('#v-' + x).hidden = x !== v; });
+  document.querySelectorAll('nav.tabs a').forEach(a => { if (a.getAttribute('href') === '#' + v) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+}
+window.addEventListener('hashchange', route);
+route();
+</script>
+</body>
+</html>
