@@ -57,7 +57,7 @@ public record WorkflowStatsResponse(
 /// <param name="SuccessRate">Succeeded ÷ finished for this workflow alone; null when nothing finished.</param>
 /// <param name="Running">In-flight runs with at least one branch executing a step.</param>
 /// <param name="Waiting">In-flight runs parked on a delay, signal or call.</param>
-/// <param name="Days">This workflow's runs per UTC day, as on <see cref="WorkspaceStatsResponse.Days"/>.</param>
+/// <param name="Days">This workflow's runs per UTC day, as on <see cref="WorkspaceStatsResponse.Days"/>. Null when the window is longer than 92 days.</param>
 public record WorkflowRunSummaryDto(
     Guid WorkflowRefId,
     int Total,
@@ -68,7 +68,7 @@ public record WorkflowRunSummaryDto(
     double? SuccessRate,
     int Running,
     int Waiting,
-    IReadOnlyCollection<RunDayDto> Days);
+    IReadOnlyCollection<RunDayDto>? Days);
 
 /// <summary>
 /// The answer to "how is this workspace doing?".

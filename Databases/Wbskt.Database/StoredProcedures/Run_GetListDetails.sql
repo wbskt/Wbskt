@@ -59,8 +59,7 @@ BEGIN
     OUTER APPLY (
         SELECT r.Id AS RunId
         WHERE r.Status = N'Running'
-          AND EXISTS (SELECT 1 FROM dbo.Branches b WHERE b.RunId = r.Id AND b.Status = N'Waiting')
-          AND NOT EXISTS (SELECT 1 FROM dbo.Branches b WHERE b.RunId = r.Id AND b.Status = N'Active')
+          AND EXISTS (SELECT 1 FROM dbo.RunParked(r.Id))
     ) parked
     -- A run waiting on several things names one: a signal first, as the one a person can answer,
     -- then the oldest wait.
