@@ -155,6 +155,14 @@ internal sealed class RunStarter : IRunStarter
             }
 
             _workflowMetrics?.RecordRunStarted(definition.RefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId, createdRun.IsTest);
+
+            // The start charge went into the counters with the run, so it is counted here and not again
+            // on a recovered start above, which charged nothing new.
+            if (_runStartCost > 0)
+            {
+                _workflowMetrics?.RecordCreditsConsumed(definition.RefId.ToString(), (double)_runStartCost, definition.WorkspaceId);
+            }
+
             await _journal.AppendAsync(
                 new RunJournalEntry(createdRun.Id, HistoryEventKind.RunStarted)
                 {

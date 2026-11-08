@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
@@ -10,6 +11,7 @@ using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Runtime;
 using Wbskt.Workflow.Channels;
+using Wbskt.Workflow.Telemetry;
 
 namespace Wbskt.Host.Tests.Runtime;
 
@@ -273,7 +275,34 @@ public sealed class RunStarterTests
         Assert.True(runProvider.CreatedRun.IsTest);
     }
 
-    private static RunStarter Starter(RecordingRunProvider runProvider, List<string> operations, WorkflowEngineOptions options, RecordingHistoryEventProvider? historyProvider = null, IWorkflowDefinitionCache? definitionCache = null, CreditCostOptions? creditCosts = null) => new(
+    [Theory]
+    [InlineData(false, 1.0)]
+    [InlineData(true, 0.0)]
+    public async Task Start_counts_the_run_start_charge_as_consumed_credits_only_when_it_creates_the_run(bool alreadyStarted, double expected)
+    {
+        using var metrics = new WorkflowMetrics();
+        double consumed = 0;
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, currentListener) =>
+        {
+            if (ReferenceEquals(instrument, metrics.CreditsConsumed))
+            {
+                currentListener.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<double>((_, measurement, _, _) => consumed += measurement);
+        listener.Start();
+
+        List<string> operations = [];
+        var runProvider = new RecordingRunProvider(operations) { AlreadyStarted = alreadyStarted };
+        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions(), workflowMetrics: metrics);
+
+        await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), AnEvent(), "key-1", CancellationToken.None);
+
+        Assert.Equal(expected, consumed);
+    }
+
+    private static RunStarter Starter(RecordingRunProvider runProvider, List<string> operations, WorkflowEngineOptions options, RecordingHistoryEventProvider? historyProvider = null, IWorkflowDefinitionCache? definitionCache = null, CreditCostOptions? creditCosts = null, WorkflowMetrics? workflowMetrics = null) => new(
         runProvider,
         new RunJournal(historyProvider ?? new RecordingHistoryEventProvider(operations), new FixedClock()),
         new RecordingWorkflowDefinitionProvider(),
@@ -283,6 +312,7 @@ public sealed class RunStarterTests
         new FixedClock(),
         new SequenceIdGenerator(),
         Options.Create(options),
+        workflowMetrics,
         creditCosts: creditCosts is null ? null : Options.Create(creditCosts));
 
     private static WorkflowDefinitionCache CacheOver(IWorkflowDefinitionProvider provider) =>
