@@ -351,8 +351,27 @@ public sealed class WorkflowRunsControllerTests
         Assert.Equal(
             [new RunDayDto(new DateOnly(2026, 11, 1), 5, 4, 1, 0), new RunDayDto(new DateOnly(2026, 11, 2), 0, 0, 0, 0), new RunDayDto(new DateOnly(2026, 11, 3), 1, 0, 1, 0)],
             response.Value.Days);
-        Assert.Equal([4, 0, 0], response.Value.Workflows.Single(w => w.WorkflowRefId == one).Days.Select(d => d.Total));
-        Assert.Equal([1, 0, 1], response.Value.Workflows.Single(w => w.WorkflowRefId == other).Days.Select(d => d.Total));
+        Assert.Equal([4, 0, 0], response.Value.Workflows.Single(w => w.WorkflowRefId == one).Days!.Select(d => d.Total));
+        Assert.Equal([1, 0, 1], response.Value.Workflows.Single(w => w.WorkflowRefId == other).Days!.Select(d => d.Total));
+    }
+
+    [Fact]
+    public async Task GetWorkspaceStatsAsync_leaves_out_per_workflow_days_for_a_long_window()
+    {
+        var runProvider = new Mock<IRunProvider>();
+        runProvider.Setup(x => x.GetWorkspaceStatsAsync(WorkspaceId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateStats(total: 1, succeeded: 1, failed: 0, active: 0));
+        runProvider.Setup(x => x.GetPerWorkflowStatsAsync(WorkspaceId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new WorkflowRunSummaryRow { WorkflowRefId = Guid.NewGuid(), TotalRuns = 1, SucceededCount = 1, FailedCount = 0, ActiveCount = 0, WaitingCount = 0, AvgDurationMs = 5 }]);
+        runProvider.Setup(x => x.GetWorkspaceDailyStatsAsync(WorkspaceId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), Mock.Of<IWorkflowDefinitionProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
+
+        var response = await service.GetWorkspaceStatsAsync(WorkspaceId, DateTime.UtcNow.AddDays(-200), DateTime.UtcNow, CancellationToken.None);
+
+        Assert.True(response.IsSuccess);
+        Assert.Null(Assert.Single(response.Value.Workflows).Days);
+        Assert.Equal(201, response.Value.Days.Count);
     }
 
     [Fact]

@@ -35,8 +35,7 @@ BEGIN
           AND r.Status IN (N'Running', N'Failing', N'Cancelling')
           AND r.Status = N'Running'
           AND (@CursorId IS NULL OR r.Id < @CursorId)
-          AND EXISTS (SELECT 1 FROM dbo.Branches b WHERE b.RunId = r.Id AND b.Status = N'Waiting')
-          AND NOT EXISTS (SELECT 1 FROM dbo.Branches b WHERE b.RunId = r.Id AND b.Status = N'Active')
+          AND EXISTS (SELECT 1 FROM dbo.RunParked(r.Id))
         ORDER BY r.Id DESC;
         RETURN;
     END

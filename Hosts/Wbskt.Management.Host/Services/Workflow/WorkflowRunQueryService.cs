@@ -25,6 +25,12 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
     private static readonly TimeSpan MaxStatsRange = TimeSpan.FromDays(400);
 
     /// <summary>
+    /// The longest window whose workspace rollup also gives each workflow its own days: a card strip is
+    /// 30 days, and 400 days across 50 workflows would be 20,000 entries in one response.
+    /// </summary>
+    private static readonly TimeSpan MaxPerWorkflowDaysRange = TimeSpan.FromDays(92);
+
+    /// <summary>
     /// The statuses the engine's cancellation acts on (<c>RunCancellationService</c>). A 'Failing' run
     /// is still going on its other branches; a 'Cancelling' one is accepted again, as the engine repeats
     /// its cleanup. Every other status is terminal.
@@ -227,6 +233,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
         IReadOnlyCollection<WorkflowRunSummaryRow> perWorkflow = await _runProvider.GetPerWorkflowStatsAsync(workspaceId, fromUtc, toUtc, TopWorkflows, ct);
         IReadOnlyCollection<RunDailyStatsRow> daily = await _runProvider.GetWorkspaceDailyStatsAsync(workspaceId, fromUtc, toUtc, ct) ?? [];
         ILookup<Guid, RunDailyStatsRow> dailyByWorkflow = daily.ToLookup(d => d.WorkflowRefId);
+        bool perWorkflowDays = toUtc - fromUtc <= MaxPerWorkflowDaysRange;
 
         return Result<WorkspaceStatsResponse>.Success(new WorkspaceStatsResponse(
             fromUtc.ToUtcOffset(),
@@ -254,7 +261,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
                 SuccessRate(w.TotalRuns, w.ActiveCount, w.SucceededCount),
                 Running: w.ActiveCount - w.WaitingCount,
                 Waiting: w.WaitingCount,
-                FillDays(fromUtc, toUtc, dailyByWorkflow[w.WorkflowRefId]))).ToList(),
+                perWorkflowDays ? FillDays(fromUtc, toUtc, dailyByWorkflow[w.WorkflowRefId]) : null)).ToList(),
             FillDays(fromUtc, toUtc, daily)));
     }
 

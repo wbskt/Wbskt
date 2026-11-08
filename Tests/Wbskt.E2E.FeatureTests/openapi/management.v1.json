@@ -3034,7 +3034,10 @@
             "items": {
               "$ref": "#/components/schemas/RunDayDto"
             },
-            "type": "array"
+            "type": [
+              "null",
+              "array"
+            ]
           },
           "failed": {
             "format": "int32",

@@ -16,8 +16,7 @@ BEGIN
             -- Parked: still Running, with every live branch waiting on a delay, signal or call.
             CASE
                 WHEN Status = N'Running'
-                 AND EXISTS (SELECT 1 FROM dbo.Branches b WHERE b.RunId = Runs.Id AND b.Status = N'Waiting')
-                 AND NOT EXISTS (SELECT 1 FROM dbo.Branches b WHERE b.RunId = Runs.Id AND b.Status = N'Active')
+                 AND EXISTS (SELECT 1 FROM dbo.RunParked(Runs.Id))
                 THEN 1 ELSE 0
             END AS IsWaiting,
             CASE
