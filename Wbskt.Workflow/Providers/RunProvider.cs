@@ -521,7 +521,7 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
             ParentRunRefId = TryGetOrdinal(reader, "ParentRunRefId") is { } parentOrdinal && !reader.IsDBNull(parentOrdinal) ? reader.GetGuid(parentOrdinal) : null,
             OutputJson = TryGetOrdinal(reader, "OutputJson") is { } outputOrdinal && !reader.IsDBNull(outputOrdinal) ? reader.GetString(outputOrdinal) : null,
-            Number = TryGetOrdinal(reader, "Number") is { } numberOrdinal && !reader.IsDBNull(numberOrdinal) ? reader.GetInt32(numberOrdinal) : null
+            Number = TryGetOrdinal(reader, "Number") is { } numberOrdinal ? reader.GetInt32(numberOrdinal) : 0
         };
     }
 

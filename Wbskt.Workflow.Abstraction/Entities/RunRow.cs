@@ -32,8 +32,8 @@ public record RunRow
 
     /// <summary>
     /// The run's number within its workflow (#1, #2, ...). Read only where the result set carries it:
-    /// the procs that start a run, list runs or read one by RefId. Null for a run made before numbering
-    /// that the post-deployment script has not reached yet.
+    /// the procs that start a run, list runs or read one by RefId; 0 elsewhere, and for a run made
+    /// before numbering.
     /// </summary>
-    public int? Number { get; init; }
+    public int Number { get; init; }
 }

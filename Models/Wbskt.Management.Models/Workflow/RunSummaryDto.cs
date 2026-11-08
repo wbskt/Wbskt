@@ -6,7 +6,7 @@ namespace Wbskt.Management.Models.Workflow;
 /// <param name="EndedAt">For a Succeeded run, the last step it completed: its End step, or the last of its last branch.</param>
 /// <param name="CurrentStep">For a live run, the step it is on, with the attempt when that step is being retried.</param>
 /// <param name="WorkflowName">The workflow's name at the run's version. On the list endpoints only.</param>
-/// <param name="Number">The run's number within its workflow (#1, #2, ...), counted across every version. Null only for a run made before numbering that has not been backfilled yet.</param>
+/// <param name="Number">The run's number within its workflow (#1, #2, ...), counted across every version.</param>
 /// <param name="Waiting">For a Running run whose every live branch is waiting on a delay, signal or call: what it waits on. Null otherwise.</param>
 public record RunSummaryDto(
     Guid RefId,
@@ -22,7 +22,7 @@ public record RunSummaryDto(
     RunStepDto? EndedAt = null,
     RunStepDto? CurrentStep = null,
     string? WorkflowName = null,
-    int? Number = null,
+    int Number = 0,
     RunWaitingDto? Waiting = null);
 
 /// <param name="Kind">The bookmark's kind: <c>signal</c>, <c>timer</c>, <c>http</c>, <c>childRunCompleted</c> or <c>commandOutcome</c>. Null when a branch waits without one, such as on a join.</param>
