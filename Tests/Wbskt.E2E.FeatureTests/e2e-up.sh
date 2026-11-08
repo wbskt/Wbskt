@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Brings up everything the E2E suite runs against with one command: SQL Server, RabbitMQ, Redis and
-# Mailpit, the migrator (both databases, incrementally), and the five hosts built from source as
+# Mailpit, the migrator (both databases, incrementally), and the six hosts built from source as
 # Development, from deploy/compose/docker-compose.e2e.yml. Returns once every host answers /healthz.
 #
 #   Tests/Wbskt.E2E.FeatureTests/e2e-up.sh                  # build and start it all, then wait
@@ -26,7 +26,7 @@ state="${E2E_HOST_LOGS:-$root/e2e-hosts}/compose"
 compose_file="$root/deploy/compose/docker-compose.e2e.yml"
 mkdir -p "$state"
 
-hosts=(auth management client-auth gateway-ws engine)
+hosts=(auth management client-auth gateway-ws gateway-mqtt engine)
 
 # The plain-HTTP dev port of each host, for the liveness probe. A function rather than an
 # associative array, which the bash macOS ships does not have.
@@ -36,6 +36,7 @@ port_of() {
     management) echo 5010 ;;
     client-auth) echo 5015 ;;
     gateway-ws) echo 5020 ;;
+    gateway-mqtt) echo 5021 ;;
     engine) echo 5030 ;;
     *) echo "unknown host: $1 (one of: ${hosts[*]})" >&2; exit 2 ;;
   esac

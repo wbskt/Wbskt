@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -77,6 +78,12 @@ public sealed class ServicesFixture : IDisposable
     /// </summary>
     public bool ClientAuthHostAvailable { get; }
 
+    /// <summary>
+    /// The MQTT gateway accepts TCP connections at <see cref="E2EConfig.MqttUrl"/>. The MQTT
+    /// scenarios skip without it.
+    /// </summary>
+    public bool MqttGatewayAvailable { get; }
+
     public ServicesFixture()
     {
         var handler = new HttpClientHandler
@@ -97,6 +104,7 @@ public sealed class ServicesFixture : IDisposable
         HostsAvailable = Task.Run(() => ProbePublicHostsAsync()).GetAwaiter().GetResult();
         EngineAvailable = Task.Run(() => ProbeHostAsync(E2EConfig.WorkflowBaseUrl)).GetAwaiter().GetResult();
         ClientAuthHostAvailable = Task.Run(() => ProbeHostAsync(E2EConfig.ClientAuthBaseUrl)).GetAwaiter().GetResult();
+        MqttGatewayAvailable = Task.Run(ProbeMqttAsync).GetAwaiter().GetResult();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -121,6 +129,21 @@ public sealed class ServicesFixture : IDisposable
         }
 
         return true;
+    }
+
+    private static async Task<bool> ProbeMqttAsync()
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            using var tcp = new TcpClient();
+            await tcp.ConnectAsync(E2EConfig.MqttUrl.Host, E2EConfig.MqttUrl.Port, cts.Token);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private async Task<bool> ProbeHostAsync(string url)

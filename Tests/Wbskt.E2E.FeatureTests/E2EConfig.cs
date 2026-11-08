@@ -25,6 +25,13 @@ internal static class E2EConfig
     public static string SocketWsBaseUrl =>
         Environment.GetEnvironmentVariable("E2E_SOCKET_WS_URL") ?? "ws://localhost:5020";
 
+    /// <summary>
+    /// The MQTT gateway's listener, plain MQTT as it is behind Traefik's TLS. start-hosts.sh and
+    /// e2e-up.sh start one on 1883; its HTTP side (health only) is on 5021.
+    /// </summary>
+    public static Uri MqttUrl =>
+        new(Environment.GetEnvironmentVariable("E2E_MQTT_URL") ?? "mqtt://localhost:1883");
+
     public static string WorkflowBaseUrl =>
         Environment.GetEnvironmentVariable("E2E_WORKFLOW_URL") ?? "https://localhost:7030";
 

@@ -5,8 +5,9 @@ Tests exercise the **public HTTP APIs** and the real `WbsktClient` SDK end-to-en
 
 ## Prerequisites
 
-The five dev hosts (auth, management, clients, gateway-ws, engine), SQL Server with both databases
-deployed, RabbitMQ and Redis must be running **before** executing these tests.
+The six dev hosts (auth, management, client-auth, gateway-ws, gateway-mqtt, engine), SQL Server with both databases
+deployed, RabbitMQ and Redis must be running **before** executing these tests. The MQTT
+scenarios (`Scenarios/Clients/MqttGatewayTests`) skip when nothing listens on `E2E_MQTT_URL`.
 
 ### One command
 
@@ -20,8 +21,8 @@ Tests/Wbskt.E2E.FeatureTests/e2e-up.sh down  # stop it all and drop the database
 
 `e2e-up.sh` runs `deploy/compose/docker-compose.e2e.yml`: SQL Server, RabbitMQ, Redis and
 [Mailpit](https://mailpit.axllent.org/), the migrator, which publishes both databases incrementally
-on every start (so a local database always matches the checkout), and the five hosts built from
-source with `deploy/docker/Dockerfile` and run as Development. The first start builds six images and
+on every start (so a local database always matches the checkout), and the six hosts built from
+source with `deploy/docker/Dockerfile` and run as Development. The first start builds seven images and
 takes a few minutes; later ones reuse the cache. It replaces steps 1 to 3 below.
 
 - **Host networking.** The hosts run with `network_mode: host`, so they bind the same localhost
@@ -74,10 +75,11 @@ Use the Rider compound run configuration **RunAll** (`.run/RunAll.run.xml`), or 
 dotnet run --project Hosts/Wbskt.Auth.Host           # https://localhost:7000
 dotnet run --project Hosts/Wbskt.Management.Host     # https://localhost:7010
 dotnet run --project Hosts/Wbskt.Gateway.WebSocket.Host  # https://localhost:7020 / ws://localhost:5020
+dotnet run --project Hosts/Wbskt.Gateway.MQTT.Host   # mqtt://localhost:1883, health on http://localhost:5021
 dotnet run --project Hosts/Wbskt.Workflow.Engine.Host # https://localhost:7030
 ```
 
-Or, from the repo root, build and start all five in the background as Development and wait until they answer (this is what CI does; logs land in `e2e-hosts/`):
+Or, from the repo root, build and start all six in the background as Development and wait until they answer (this is what CI does; logs land in `e2e-hosts/`):
 
 ```bash
 Tests/Wbskt.E2E.FeatureTests/start-hosts.sh
@@ -205,7 +207,7 @@ use its pid files in `e2e-hosts/`), not those `e2e-up.sh` runs in containers.
 
 ### CI
 
-The `e2e` job in `.github/workflows/build-images.yml` runs on every pull request that can affect the hosts and on every push to master, as five matrix legs. Each leg is its own runner with its own SQL Server, RabbitMQ and Redis service containers and its own five hosts started with `start-hosts.sh`, so the passes that used to wait for each other run side by side:
+The `e2e` job in `.github/workflows/build-images.yml` runs on every pull request that can affect the hosts and on every push to master, as five matrix legs. Each leg is its own runner with its own SQL Server, RabbitMQ and Redis service containers and its own six hosts started with `start-hosts.sh`, so the passes that used to wait for each other run side by side:
 
 | Leg | Runs |
 |---|---|
@@ -217,7 +219,7 @@ The `e2e` job in `.github/workflows/build-images.yml` runs on every pull request
 
 The engine collection runs its classes one after another, so it is what sets the main pass's length; the shards split it by folder. If one shard grows much longer than the others, move a folder between the first two filters. The `e2e-shards` job then checks that each shard ran tests and that no test ran in two shards. Image publishing waits for every leg and for that check.
 
-The job does not use `e2e-up.sh` yet. Moving it over would build the five host images in the job, which costs build time and wants a cache of its own, so it is a separate decision; until then CI and the compose file are two ways of standing up the same thing, and a host setting one needs has to go in both.
+The job does not use `e2e-up.sh` yet. Moving it over would build the six host images in the job, which costs build time and wants a cache of its own, so it is a separate decision; until then CI and the compose file are two ways of standing up the same thing, and a host setting one needs has to go in both.
 
 ---
 
@@ -294,6 +296,7 @@ All base URLs can be overridden so the tests can target non-default environments
 | `E2E_CLIENT_AUTH_URL`     | `https://localhost:7015`   |
 | `E2E_SOCKET_URL`      | `https://localhost:7020`   |
 | `E2E_SOCKET_WS_URL`   | `ws://localhost:5020`      |
+| `E2E_MQTT_URL`        | `mqtt://localhost:1883`    |
 | `E2E_WORKFLOW_URL`    | `https://localhost:7030`   |
 | `E2E_ENGINE2_URL`     | `http://localhost:5031`    |
 | `E2E_ADMIN_EMAIL`     | `admin@wbskt.com`          |
