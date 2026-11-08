@@ -1,21 +1,22 @@
 -- Sets one status on a list of clients in one call: the single-client status endpoint and bulk
 -- approve both come here. Returns a row per input, in input order, saying what happened to it:
 --   0 updated, 1 already had the status, 2 no such client, 3 another workspace's client,
---   4 not approved because its policy is full, 5 not approved because the workspace is full.
+--   4 not approved because its policy is full, 5 not approved because the plan is full.
 --
 -- Approving (Status 1) is checked against each policy's MaxClients under an update lock on the
 -- policy row, the same lock Client_Create takes, so racing approvals cannot overfill a policy.
 -- When a batch asks for more places than a policy has left, the earliest in the list get them.
 --
--- It is then checked against @MaxWorkspaceClients, the workspace's ceiling on registered clients
--- across all its policies (NULL is no ceiling), under the application lock Client_Create takes for
--- it. Both procedures take the policy lock first and the workspace lock second. The earliest in the
--- list that are still approvable get the workspace's remaining places.
+-- It is then checked against @ClientLimit, the plan's limit on registered clients pooled across the
+-- tenant's workspaces (@TenantId; NULL is no limit), under the application lock Client_Create takes
+-- for it. Both procedures take the policy lock first and the plan lock second. The earliest in the
+-- list that are still approvable get the plan's remaining places.
 CREATE PROCEDURE dbo.Client_UpdateStatuses
     @WorkspaceId INT,
     @Status TINYINT,
     @Clients dbo.OrderedRefIdTableType READONLY,
-    @MaxWorkspaceClients INT = NULL
+    @ClientLimit INT = NULL,
+    @TenantId INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -70,15 +71,18 @@ BEGIN
         INNER JOIN @Policies pol ON pol.PolicyId = q.PolicyId
         WHERE pol.Remaining IS NOT NULL AND q.Place > pol.Remaining;
 
-        IF @MaxWorkspaceClients IS NOT NULL AND EXISTS (SELECT 1 FROM @Work WHERE Outcome = 0)
+        IF @ClientLimit IS NOT NULL AND EXISTS (SELECT 1 FROM @Work WHERE Outcome = 0)
         BEGIN
-            DECLARE @Resource NVARCHAR(255) = CONCAT(N'client-ceiling:', @WorkspaceId);
+            DECLARE @Resource NVARCHAR(255) = dbo.PlanLimitLockResource(N'clients', @WorkspaceId, @TenantId);
             EXEC sp_getapplock @Resource = @Resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction';
 
             -- Every row still at outcome 0 is in this workspace and not yet registered, so none of
             -- them is in this count.
-            DECLARE @WorkspaceRemaining INT = @MaxWorkspaceClients
-                - (SELECT COUNT(*) FROM dbo.Clients WHERE WorkspaceId = @WorkspaceId AND Status = 1);
+            DECLARE @PlanRemaining INT = @ClientLimit
+                - (SELECT COUNT(*)
+                   FROM dbo.Clients c
+                   JOIN dbo.TenantWorkspaces(@WorkspaceId, @TenantId) w ON w.WorkspaceId = c.WorkspaceId
+                   WHERE c.Status = 1);
 
             WITH Queue AS
             (
@@ -88,7 +92,7 @@ BEGIN
             )
             UPDATE Queue
             SET Outcome = 5
-            WHERE Place > @WorkspaceRemaining;
+            WHERE Place > @PlanRemaining;
         END
     END
 

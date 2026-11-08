@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
+using Wbskt.Infrastructure.Billing;
+using Wbskt.Models.Billing;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
@@ -15,7 +17,7 @@ namespace Wbskt.Workflow.Runtime;
 
 internal sealed class RunStarter : IRunStarter
 {
-    private const int WorkspaceRunCeilingError = 50026; // THROW in dbo.Run_Start
+    private const int PlanRunLimitError = 50026; // THROW in dbo.Run_Start
     private const int ActiveRunConflictError = 50028; // THROW in dbo.Run_Start
     private const int TestRunActiveError = 50029; // THROW in dbo.Run_Start
 
@@ -29,7 +31,7 @@ internal sealed class RunStarter : IRunStarter
     private readonly IIdGenerator _idGenerator;
     private readonly decimal _defaultCreditBudgetPerRun;
     private readonly decimal _runStartCost;
-    private readonly int? _maxActiveRunsPerWorkspace;
+    private readonly IWorkspacePlans _plans;
     private readonly WorkflowMetrics? _workflowMetrics;
     private readonly ILogger<RunStarter>? _logger;
 
@@ -42,6 +44,7 @@ internal sealed class RunStarter : IRunStarter
         IRunStartedPublisher runStartedPublisher,
         TimeProvider clock,
         IIdGenerator idGenerator,
+        IWorkspacePlans plans,
         IOptions<WorkflowEngineOptions> options,
         WorkflowMetrics? workflowMetrics = null,
         ILogger<RunStarter>? logger = null,
@@ -57,7 +60,7 @@ internal sealed class RunStarter : IRunStarter
         _idGenerator = idGenerator;
         _defaultCreditBudgetPerRun = options.Value.DefaultCreditBudgetPerRun;
         _runStartCost = (creditCosts?.Value ?? new CreditCostOptions()).RunStartCost;
-        _maxActiveRunsPerWorkspace = options.Value.MaxActiveRunsPerWorkspace > 0 ? options.Value.MaxActiveRunsPerWorkspace : null;
+        _plans = plans;
         _workflowMetrics = workflowMetrics;
         _logger = logger;
     }
@@ -75,6 +78,7 @@ internal sealed class RunStarter : IRunStarter
             WorkflowDefinitionRow definition = await _workflowDefinitionProvider.GetByIdAsync(workflowDefinitionId, ct);
             decimal creditBudget = ResolveCreditBudget(await _workflowDefinitionCache.GetAsync(workflowDefinitionId, ct));
             DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
+            PlanCeiling? ceiling = exemptFromCeiling ? null : (await _plans.GetAsync(definition.WorkspaceId, ct)).ActiveRunCeiling;
 
             // In practice the dispatcher has always set this by now - it normalizes the event per
             // registration before starting a run. The fallback is kept because this is a public entry point
@@ -124,7 +128,7 @@ internal sealed class RunStarter : IRunStarter
                     BranchRow.New(rootBranchRefId, 0, Guid.Parse(triggerNodeId), localJson, nowUtc),
                     triggerStartKey,
                     definition.WorkspaceId,
-                    exemptFromCeiling ? null : _maxActiveRunsPerWorkspace,
+                    ceiling,
                     activeRunGuard,
                     ct);
             }
@@ -136,12 +140,12 @@ internal sealed class RunStarter : IRunStarter
             {
                 throw new TestRunActiveException(definition.RefId);
             }
-            catch (SqlException ex) when (ex.Number == WorkspaceRunCeilingError)
+            catch (SqlException ex) when (ex.Number == PlanRunLimitError)
             {
                 _workflowMetrics?.RecordRunRefused(definition.RefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId);
-                _logger?.LogWarning("Workspace {WorkspaceId} is at its limit of {Limit} active runs; workflow {WorkflowRefId} was not started for {Channel}",
-                    definition.WorkspaceId, _maxActiveRunsPerWorkspace, definition.RefId, triggerEvent.ChannelKind);
-                throw new WorkspaceRunCeilingException(definition.WorkspaceId, _maxActiveRunsPerWorkspace!.Value);
+                _logger?.LogWarning("Workspace {WorkspaceId} is at its plan's limit of {Limit} active runs; workflow {WorkflowRefId} was not started for {Channel}",
+                    definition.WorkspaceId, ceiling!.Limit, definition.RefId, triggerEvent.ChannelKind);
+                throw new PlanRunLimitException(definition.WorkspaceId, ceiling.Limit);
             }
 
             RunRow createdRun = started.Run;
@@ -194,7 +198,7 @@ internal sealed class RunStarter : IRunStarter
 
             return new RunStartResult(createdRun.Id, createdRun.RefId, started.RootBranchId, true);
         }
-        catch (Exception ex) when (ex is not WorkspaceRunCeilingException and not ActiveRunConflictException and not TestRunActiveException)
+        catch (Exception ex) when (ex is not PlanRunLimitException and not ActiveRunConflictException and not TestRunActiveException)
         {
             _logger?.LogError(ex, "Failed to start run for workflow definition {WorkflowDefinitionId} and trigger {TriggerNodeId}", workflowDefinitionId, triggerNodeId);
             throw;

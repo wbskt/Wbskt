@@ -1165,7 +1165,7 @@ public sealed class TriggerDispatcherTests
                 if ((AtCeiling || RefuseFirst) && !exemptFromCeiling)
                 {
                     RefuseFirst = false;
-                    throw new WorkspaceRunCeilingException(1, 3);
+                    throw new PlanRunLimitException(1, 3);
                 }
 
                 if (triggerStartKey != null && _byKey.TryGetValue(triggerStartKey, out RunStartResult? existing))

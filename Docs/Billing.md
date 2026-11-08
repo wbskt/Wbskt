@@ -59,3 +59,23 @@ dbo.Tenants.PlanCode ──(copy)──────────►  dbo.Workspac
 - Retiring a deleted workspace (`dbo.Workspace_Retire`) removes its copy. A sync page read just before
   the delete can write the copy back; it is harmless, since the workspace holds no live clients or
   runs to count, and costs one row.
+
+## Enforcing the limits
+
+| Limit | Checked in | Refused with |
+|---|---|---|
+| Clients | `dbo.Client_Create` (registration) and `dbo.Client_UpdateStatuses` (approval) | 50025, **409** `PLAN_CLIENT_LIMIT_REACHED` |
+| Runs going at once | `dbo.Run_Start` | 50026; a trigger's dispatch reads `Refused`, a test run is **409** `PLAN_RUN_LIMIT_REACHED` |
+
+A caller reads the workspace's plan through `IWorkspacePlans` and passes the limit to the procedure as a
+`PlanCeiling` (the limit and the tenant). The procedure counts across `dbo.TenantWorkspaces`, the
+workspace itself plus every workspace whose copy names the same tenant, under an application lock from
+`dbo.PlanLimitLockResource`: one lock per limit and tenant, so concurrent starts or approvals one short
+of the limit in two of a tenant's workspaces cannot both pass. A workspace whose copy has not arrived
+has no tenant yet, so it is counted, and locked, on its own against Free's limit until the copy lands.
+
+A limit only refuses what would go past it. After a downgrade, clients and runs already over the new
+limit stay as they are; registrations, approvals and starts are refused until the tenant is back under it.
+
+Lock order, where a procedure takes more than one: the trigger key lock, then the test-run lock, then the
+plan lock (`dbo.Run_Start`); the clients' and policies' rows, then the plan lock (client procedures).

@@ -3,6 +3,8 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Billing;
+using Wbskt.Models.Billing;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Models;
@@ -20,30 +22,29 @@ internal sealed class ClientLifecycleService : IClientLifecycleService
     private readonly IEventBus _eventBus;
     private readonly ClientAccessRevoker _access;
     private readonly ILogger<ClientLifecycleService> _logger;
-    private readonly IConfiguration? _configuration;
+    private readonly IWorkspacePlans _plans;
 
     public ClientLifecycleService(
         IClientProvider clientProvider,
         IEventBus eventBus,
         IClientTokenCutoffs cutoffs,
         ILogger<ClientLifecycleService> logger,
-        IConfiguration? configuration = null)
+        IWorkspacePlans plans)
     {
-        _configuration = configuration;
+        _plans = plans;
         _clientProvider = clientProvider;
         _eventBus = eventBus;
         _access = new ClientAccessRevoker(eventBus, cutoffs);
         _logger = logger;
     }
 
-    // The same ceiling registration enforces: approving a pending or revoked client makes it count.
-    private int MaxPerWorkspace => ClientRegistrationService.ReadMaxPerWorkspace(_configuration);
-
     public async Task<Result> UpdateStatusAsync(int workspaceId, Guid clientRefId, ClientStatus status, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Updating client RefId {ClientRefId} status to '{ClientStatus}' in WorkspaceId: {WorkspaceId}", clientRefId, status, workspaceId);
 
-        var change = (await _clientProvider.UpdateStatusesAsync(workspaceId, [clientRefId], status, MaxPerWorkspace, cancellationToken)).Single();
+        // The same limit registration enforces: approving a pending or revoked client makes it count.
+        PlanCeiling ceiling = (await _plans.GetAsync(workspaceId, cancellationToken)).ClientCeiling;
+        var change = (await _clientProvider.UpdateStatusesAsync(workspaceId, [clientRefId], status, ceiling, cancellationToken)).Single();
         switch (change.Outcome)
         {
             case ClientStatusOutcome.NotFound or ClientStatusOutcome.OtherWorkspace:
@@ -52,9 +53,9 @@ internal sealed class ClientLifecycleService : IClientLifecycleService
             case ClientStatusOutcome.PolicyLimitReached:
                 _logger.LogWarning("Client approval failed: Policy registration limit reached for Policy ID {PolicyId}", change.PolicyId);
                 return Result.Failure(PolicyFull);
-            case ClientStatusOutcome.WorkspaceLimitReached:
-                _logger.LogWarning("Client approval failed: WorkspaceId {WorkspaceId} is at its limit of {MaxClients} clients", workspaceId, MaxPerWorkspace);
-                return Result.Failure(ClientRegistrationService.WorkspaceLimitReached(MaxPerWorkspace));
+            case ClientStatusOutcome.PlanLimitReached:
+                _logger.LogWarning("Client approval failed: WorkspaceId {WorkspaceId} is at its plan's limit of {MaxClients} clients", workspaceId, ceiling.Limit);
+                return Result.Failure(ClientRegistrationService.PlanLimitReached(ceiling.Limit));
             case ClientStatusOutcome.Updated:
                 await AnnounceStatusChangeAsync(workspaceId, change, status, cancellationToken);
                 break;
@@ -70,9 +71,8 @@ internal sealed class ClientLifecycleService : IClientLifecycleService
 
         // One database call for the whole list, in the order given: approvals compete for the
         // policy's and the workspace's remaining places, and a predictable order decides which ones get them.
-        var maxPerWorkspace = MaxPerWorkspace;
-        IReadOnlyList<ClientStatusChange> changes;
-        changes = await _clientProvider.UpdateStatusesAsync(workspaceId, clientRefIds.Distinct().ToList(), status, maxPerWorkspace, cancellationToken);
+        PlanCeiling ceiling = (await _plans.GetAsync(workspaceId, cancellationToken)).ClientCeiling;
+        IReadOnlyList<ClientStatusChange> changes = await _clientProvider.UpdateStatusesAsync(workspaceId, clientRefIds.Distinct().ToList(), status, ceiling, cancellationToken);
 
         var updated = new List<Guid>();
         var failed = new List<BulkClientStatusFailure>();
@@ -83,7 +83,7 @@ internal sealed class ClientLifecycleService : IClientLifecycleService
                 // A missing client and another workspace's read the same; see WorkspaceOwnership.
                 ClientStatusOutcome.NotFound or ClientStatusOutcome.OtherWorkspace => WorkspaceOwnership.ClientNotFound,
                 ClientStatusOutcome.PolicyLimitReached => PolicyFull,
-                ClientStatusOutcome.WorkspaceLimitReached => ClientRegistrationService.WorkspaceLimitReached(maxPerWorkspace),
+                ClientStatusOutcome.PlanLimitReached => ClientRegistrationService.PlanLimitReached(ceiling.Limit),
                 _ => null
             };
 

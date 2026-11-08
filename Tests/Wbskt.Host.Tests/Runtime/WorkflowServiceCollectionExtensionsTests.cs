@@ -1,3 +1,4 @@
+using Wbskt.Infrastructure.Billing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -55,6 +56,7 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         services.AddLogging();
         services.AddHttpClient();
         services.AddWorkflowProviders();
+        services.AddWorkspacePlans(configuration);
         services.AddWorkflowRuntime();
         services.AddScoped<IClientCommandPublisher>(_ => Mock.Of<IClientCommandPublisher>());
         services.AddScoped<IToastPublisher>(_ => Mock.Of<IToastPublisher>());

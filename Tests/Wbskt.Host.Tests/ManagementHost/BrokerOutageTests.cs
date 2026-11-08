@@ -11,6 +11,7 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Events.Management;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Billing;
 using Wbskt.Infrastructure.Events;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Controllers;
@@ -19,6 +20,7 @@ using Wbskt.Management.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
+using Wbskt.Models.Billing;
 using Wbskt.Primitives;
 using Wbskt.Primitives.Constants;
 using Wbskt.Primitives.Exceptions;
@@ -63,7 +65,7 @@ public sealed class BrokerOutageTests
         var policy = new RegistrationPolicy { Id = 5, RefId = Guid.NewGuid(), WorkspaceId = WorkspaceId, Name = "lab", IsEnabled = true, AutoApproval = true };
         harness.Policies.Setup(p => p.FindByPinAsync("PIN", It.IsAny<CancellationToken>())).ReturnsAsync(policy);
         harness.Clients
-            .Setup(p => p.InsertClientAsync(WorkspaceId, policy.Id, "sensor", It.IsAny<byte[]>(), ClientStatus.Registered, It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .Setup(p => p.InsertClientAsync(WorkspaceId, policy.Id, "sensor", It.IsAny<byte[]>(), ClientStatus.Registered, It.IsAny<PlanCeiling?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Wbskt.Management.Host.Models.Client { Id = 50, RefId = Guid.NewGuid(), WorkspaceId = WorkspaceId, PolicyId = policy.Id, Name = "sensor", Status = ClientStatus.Registered });
         var announced = harness.Expect<ClientAutoApprovedEvent>();
 
@@ -71,7 +73,7 @@ public sealed class BrokerOutageTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Secret.Should().NotBeNullOrEmpty();
-        harness.Clients.Verify(p => p.InsertClientAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<ClientStatus>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Once);
+        harness.Clients.Verify(p => p.InsertClientAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<ClientStatus>(), It.IsAny<PlanCeiling?>(), It.IsAny<CancellationToken>()), Times.Once);
 
         harness.BrokerComesBack();
         (await announced.WaitAsync(TimeSpan.FromSeconds(5))).PolicyId.Should().Be(policy.Id);
@@ -125,6 +127,7 @@ public sealed class BrokerOutageTests
             services.AddSingleton(Policies.Object);
             services.AddSingleton(_bus.Object);
             services.AddSingleton(Mock.Of<IClientTokenCutoffs>());
+            services.AddSingleton<IWorkspacePlans>(new FixedWorkspacePlans());
             services.AddSingleton<Wbskt.Management.Host.Telemetry.ManagementMetrics>();
             services.AddQueuedEventBus();
             services.AddScopedWithQueuedEvents<IClientLifecycleService, ClientLifecycleService>();

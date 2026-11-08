@@ -1,6 +1,5 @@
 using Wbskt.Protocol;
 using FluentAssertions;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Wbskt.EventBus.Abstractions;
@@ -10,6 +9,8 @@ using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Billing;
+using Wbskt.Models.Billing;
 using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Host.Tests.ManagementHost;
@@ -141,18 +142,18 @@ public sealed class ClientLifecycleTests
     }
 
     [Fact]
-    public async Task Approving_one_client_past_the_workspace_ceiling_is_a_conflict_naming_the_configured_number()
+    public async Task Approving_one_client_past_the_plan_ceiling_is_a_conflict_naming_the_plans_number()
     {
-        var harness = new Harness(maxPerWorkspace: 25);
+        var harness = new Harness(new FixedWorkspacePlans(PlanCode.Maker, tenantId: 3, adjust: l => l with { Clients = 25 }));
         var client = harness.AddClient(status: ClientStatus.Revoked);
         harness.WorkspaceFull.Add(client.RefId);
 
         var result = await harness.Service.UpdateStatusAsync(WorkspaceId, client.RefId, ClientStatus.Registered);
 
-        result.Error.Code.Should().Be("WORKSPACE_CLIENT_LIMIT_REACHED");
+        result.Error.Code.Should().Be("PLAN_CLIENT_LIMIT_REACHED");
         result.Error.Type.Should().Be(ErrorType.Conflict);
         result.Error.Message.Should().Contain("25");
-        harness.Provider.Verify(p => p.UpdateStatusesAsync(WorkspaceId, It.IsAny<IReadOnlyList<Guid>>(), ClientStatus.Registered, 25, It.IsAny<CancellationToken>()), Times.Once);
+        harness.Provider.Verify(p => p.UpdateStatusesAsync(WorkspaceId, It.IsAny<IReadOnlyList<Guid>>(), ClientStatus.Registered, new PlanCeiling(25, 3), It.IsAny<CancellationToken>()), Times.Once);
         harness.Cutoffs.VerifyNoOtherCalls();
         harness.Bus.Verify(b => b.PublishAsync(It.IsAny<ClientStatusChangedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -168,10 +169,10 @@ public sealed class ClientLifecycleTests
         var result = await harness.Service.UpdateStatusesAsync(WorkspaceId, [first.RefId, refused.RefId], ClientStatus.Registered);
 
         result.Value.Updated.Should().Equal(first.RefId);
-        result.Value.Failed.Select(f => (f.ClientRefId, f.Code)).Should().Equal((refused.RefId, "WORKSPACE_CLIENT_LIMIT_REACHED"));
-        // No configuration: the default ceiling still applies.
+        result.Value.Failed.Select(f => (f.ClientRefId, f.Code)).Should().Equal((refused.RefId, "PLAN_CLIENT_LIMIT_REACHED"));
+        // A workspace whose account has not been copied yet is held to Free, counted on its own.
         harness.Provider.Verify(p => p.UpdateStatusesAsync(WorkspaceId, It.IsAny<IReadOnlyList<Guid>>(), ClientStatus.Registered,
-            ClientRegistrationService.DefaultMaxPerWorkspace, It.IsAny<CancellationToken>()), Times.Once);
+            new PlanCeiling(PlanCatalog.BuiltIn[PlanCode.Free].Clients, null), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -187,7 +188,7 @@ public sealed class ClientLifecycleTests
             WorkspaceId,
             It.Is<IReadOnlyList<Guid>>(ids => ids.SequenceEqual(new[] { b.RefId, a.RefId })),
             ClientStatus.Registered,
-            It.IsAny<int?>(),
+            It.IsAny<PlanCeiling?>(),
             It.IsAny<CancellationToken>()), Times.Once);
         harness.Provider.Verify(p => p.FindDetailByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -223,20 +224,17 @@ public sealed class ClientLifecycleTests
     {
         private int _nextId = 40;
 
-        public Harness(int? maxPerWorkspace = null)
+        public Harness(IWorkspacePlans? plans = null)
         {
             Provider
                 .Setup(p => p.FindDetailByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((ClientDetail?)null);
             // A stand-in for dbo.Client_UpdateStatuses, answering from the clients added below.
             Provider
-                .Setup(p => p.UpdateStatusesAsync(It.IsAny<int>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<ClientStatus>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync((int workspaceId, IReadOnlyList<Guid> refIds, ClientStatus status, int? _, CancellationToken _) =>
+                .Setup(p => p.UpdateStatusesAsync(It.IsAny<int>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<ClientStatus>(), It.IsAny<PlanCeiling?>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((int workspaceId, IReadOnlyList<Guid> refIds, ClientStatus status, PlanCeiling? _, CancellationToken _) =>
                     refIds.Select(refId => Change(workspaceId, refId, status)).ToList());
-            var configuration = maxPerWorkspace is null ? null : new ConfigurationBuilder()
-                .AddInMemoryCollection(new Dictionary<string, string?> { ["Clients:MaxPerWorkspace"] = maxPerWorkspace.ToString() })
-                .Build();
-            Service = new ClientLifecycleService(Provider.Object, Bus.Object, Cutoffs.Object, NullLogger<ClientLifecycleService>.Instance, configuration);
+            Service = new ClientLifecycleService(Provider.Object, Bus.Object, Cutoffs.Object, NullLogger<ClientLifecycleService>.Instance, plans ?? new FixedWorkspacePlans());
         }
 
         public Mock<IClientProvider> Provider { get; } = new();
@@ -282,7 +280,7 @@ public sealed class ClientLifecycleTests
             var outcome = client.WorkspaceId != workspaceId ? ClientStatusOutcome.OtherWorkspace
                 : client.Status == status ? ClientStatusOutcome.AlreadyAtStatus
                 : status == ClientStatus.Registered && Full.Contains(refId) ? ClientStatusOutcome.PolicyLimitReached
-                : status == ClientStatus.Registered && WorkspaceFull.Contains(refId) ? ClientStatusOutcome.WorkspaceLimitReached
+                : status == ClientStatus.Registered && WorkspaceFull.Contains(refId) ? ClientStatusOutcome.PlanLimitReached
                 : ClientStatusOutcome.Updated;
             return new ClientStatusChange(refId, client.Id, client.PolicyId, client.PolicyRefId, client.Status, outcome);
         }

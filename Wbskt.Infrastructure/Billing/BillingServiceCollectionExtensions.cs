@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Wbskt.Models.Billing;
 
@@ -20,9 +21,9 @@ public static class BillingServiceCollectionExtensions
         {
             Plans = configuration.GetSection(PlanCatalogOptions.SectionName).Get<Dictionary<PlanCode, PlanLimitOverrides>>() ?? []
         };
-        services.AddSingleton(new PlanCatalog(Options.Create(options)));
-        services.AddSingleton<IWorkspaceAccountProvider, WorkspaceAccountProvider>();
-        services.AddSingleton<IWorkspacePlans, WorkspacePlans>();
+        services.TryAddSingleton(new PlanCatalog(Options.Create(options)));
+        services.TryAddSingleton<IWorkspaceAccountProvider, WorkspaceAccountProvider>();
+        services.TryAddSingleton<IWorkspacePlans, WorkspacePlans>();
         return services;
     }
 }

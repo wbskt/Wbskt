@@ -68,7 +68,7 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
         // Start the child run via its manual trigger.
         Guid childRefId = config.WorkflowRefId;
 
-        // A child is started past the workspace run ceiling, so nothing else stops a workflow that
+        // A child is started past the plan's active-run ceiling, so nothing else stops a workflow that
         // reaches itself (directly, or through another) from starting children forever. Refused before
         // anything is evaluated or started, and not retryable: the same parent would reach the same depth.
         int childDepth = ReadDepth(ctx.Branch.TriggerPayload) + 1;
@@ -98,7 +98,7 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
                 null);
         }
 
-        // The parent already holds a place under the workspace's active-run ceiling, so its child is
+        // The parent already holds a place under the plan's active-run ceiling, so its child is
         // started past it (InboundEvent.StartsChildRun).
         InboundEvent evt = ManualChannel.Event(childRefId, body, null, Clock.GetUtcNow().UtcDateTime) with { StartsChildRun = true };
 

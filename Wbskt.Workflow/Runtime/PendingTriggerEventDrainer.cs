@@ -38,7 +38,7 @@ internal sealed class PendingTriggerEventDrainer : IPendingTriggerEventDrainer
         // BookmarkResumer.MatchInboundAsync treat this dispatch as a duplicate and drop it.
         // ReplayFor keeps the replay on the trigger that queued it: the original arrival already started
         // or queued every other registration on its match keys, and those must not see it twice. It also
-        // starts the replay past the workspace's active-run ceiling: the row is gone by now, so a refusal
+        // starts the replay past the plan's active-run ceiling: the row is gone by now, so a refusal
         // would lose the event, and the run that just finished freed the place it takes.
         evt = evt with
         {

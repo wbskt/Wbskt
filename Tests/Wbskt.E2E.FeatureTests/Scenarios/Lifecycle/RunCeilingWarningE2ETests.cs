@@ -9,7 +9,7 @@ using Wbskt.Workflow.Abstraction.Models;
 namespace Wbskt.E2E.FeatureTests.Scenarios.Lifecycle;
 
 /// <summary>
-/// A trigger the workspace's active-run ceiling refuses is thrown away, so the user is told (#432):
+/// A trigger the plan's active-run ceiling refuses is thrown away, so the user is told (#432):
 /// one Warning in the Events Log per workflow per window, carrying how many were refused.
 /// </summary>
 [Collection(EngineCollection.Name)]
@@ -17,8 +17,8 @@ public sealed class RunCeilingWarningE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
-    // WorkflowEngine:MaxActiveRunsPerWorkspace as the hosts run it (the engine's default).
-    private const int Ceiling = 200;
+    // The Free plan's active runs: an isolated workspace is a new tenant's, and every tenant starts on Free.
+    private const int Ceiling = 20;
     private const int Refused = 5;
 
     [SkippableFact]

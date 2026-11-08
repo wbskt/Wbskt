@@ -1,3 +1,4 @@
+using Wbskt.Infrastructure.Billing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
@@ -100,6 +101,7 @@ public sealed class NodeExecutorRegistryTests
         services.AddLogging();
         services.AddHttpClient();
         services.AddWorkflowProviders();
+        services.AddWorkspacePlans(configuration);
         services.AddWorkflowRuntime();
         services.AddScoped<IClientCommandPublisher>(_ => Mock.Of<IClientCommandPublisher>());
         services.AddScoped<IToastPublisher>(_ => Mock.Of<IToastPublisher>());

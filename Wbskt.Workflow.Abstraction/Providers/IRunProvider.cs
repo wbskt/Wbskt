@@ -1,3 +1,4 @@
+using Wbskt.Models.Billing;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
 
@@ -16,18 +17,19 @@ public interface IRunProvider
         => throw new NotSupportedException();
 
     /// <summary>
-    /// As above, and refused with <c>SqlException</c> 50026 when <paramref name="workspaceId"/> already
-    /// has <paramref name="maxActiveRuns"/> runs going. A null ceiling is none.
+    /// As above, and refused with <c>SqlException</c> 50026 when the plan of <paramref name="workspaceId"/>
+    /// already has <paramref name="ceiling"/>'s limit of runs going across its tenant's workspaces. A
+    /// null ceiling is none.
     /// </summary>
-    Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, int? maxActiveRuns, CancellationToken ct)
+    Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, PlanCeiling? ceiling, CancellationToken ct)
         => StartAsync(run, rootBranch, triggerStartKey, ct);
 
     /// <summary>
     /// As above, and refused with <c>SqlException</c> 50028 when <paramref name="activeRunGuard"/> finds
     /// a run active for the run's workflow, trigger node and correlation key.
     /// </summary>
-    Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, int? maxActiveRuns, ActiveRunGuard activeRunGuard, CancellationToken ct)
-        => StartAsync(run, rootBranch, triggerStartKey, workspaceId, maxActiveRuns, ct);
+    Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, PlanCeiling? ceiling, ActiveRunGuard activeRunGuard, CancellationToken ct)
+        => StartAsync(run, rootBranch, triggerStartKey, workspaceId, ceiling, ct);
 
     /// <summary>The run <see cref="StartAsync"/> created under this key, if there is one.</summary>
     Task<RunStartRow?> FindByTriggerStartKeyAsync(string triggerStartKey, CancellationToken ct)

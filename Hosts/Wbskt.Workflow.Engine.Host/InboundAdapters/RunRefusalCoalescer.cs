@@ -4,7 +4,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 
 /// <summary>
-/// Gathers the triggers the workspace's active-run ceiling refuses into one
+/// Gathers the triggers the plan's active-run ceiling refuses into one
 /// <see cref="WorkflowTriggerRefusedEvent"/> per workflow per <see cref="Window"/>, from the first
 /// refusal on. <see cref="HostedServices.RunRefusalPublisher"/> publishes each once its window is over.
 /// </summary>

@@ -3,10 +3,12 @@
 -- short of its limit all pass it and all insert. The lock serialises registrations per policy, so
 -- the count below sees every client committed before this one.
 --
--- @MaxWorkspaceClients is the workspace's ceiling across all its policies: only registered clients
--- count, so it is checked only when the new client is created registered (auto-approval). A pending
--- client counts once it is approved, which Client_UpdateStatuses checks under the same lock. NULL is
--- no ceiling. Counted under an application lock per workspace, for the same reason as the policy lock.
+-- @ClientLimit is the plan's limit on registered clients, pooled across the tenant's workspaces
+-- (@TenantId; NULL while the workspace's plan copy has not arrived, when only this workspace counts).
+-- Only registered clients count, so it is checked only when the new client is created registered
+-- (auto-approval). A pending client counts once it is approved, which Client_UpdateStatuses checks
+-- under the same lock. NULL is no limit. Counted under an application lock per tenant
+-- (dbo.PlanLimitLockResource), for the same reason as the policy lock.
 CREATE PROCEDURE dbo.Client_Create
     @WorkspaceId INT,
     @PolicyId INT,
@@ -15,7 +17,8 @@ CREATE PROCEDURE dbo.Client_Create
     @Status TINYINT,
     @Id INT OUTPUT,
     @RefId UNIQUEIDENTIFIER OUTPUT,
-    @MaxWorkspaceClients INT = NULL
+    @ClientLimit INT = NULL,
+    @TenantId INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -37,15 +40,18 @@ BEGIN
         THROW 50020, 'Policy registration limit reached.', 1;
     END
 
-    IF @MaxWorkspaceClients IS NOT NULL AND @Status = 1
+    IF @ClientLimit IS NOT NULL AND @Status = 1
     BEGIN
-        DECLARE @Resource NVARCHAR(255) = CONCAT(N'client-ceiling:', @WorkspaceId);
+        DECLARE @Resource NVARCHAR(255) = dbo.PlanLimitLockResource(N'clients', @WorkspaceId, @TenantId);
         EXEC sp_getapplock @Resource = @Resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction';
 
-        IF (SELECT COUNT(*) FROM dbo.Clients WHERE WorkspaceId = @WorkspaceId AND Status = 1) >= @MaxWorkspaceClients
+        IF (SELECT COUNT(*)
+            FROM dbo.Clients c
+            JOIN dbo.TenantWorkspaces(@WorkspaceId, @TenantId) w ON w.WorkspaceId = c.WorkspaceId
+            WHERE c.Status = 1) >= @ClientLimit
         BEGIN
             ROLLBACK TRANSACTION;
-            THROW 50025, 'The workspace has reached its client limit.', 1;
+            THROW 50025, 'The plan has reached its client limit.', 1;
         END
     END
 

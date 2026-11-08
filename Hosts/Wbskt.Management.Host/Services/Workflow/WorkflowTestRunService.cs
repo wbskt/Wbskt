@@ -130,8 +130,8 @@ public sealed class WorkflowTestRunService : IWorkflowTestRunService
 
             case EngineTestRunOutcome.WorkspaceFull:
                 return Result<StartTestRunResponse>.Failure(Error.Conflict(
-                    "WORKSPACE_RUN_LIMIT_REACHED",
-                    "The workspace is at its limit of runs going at once. Try again when one finishes."));
+                    "PLAN_RUN_LIMIT_REACHED",
+                    "The plan is at its limit of runs going at once. Try again when one finishes."));
 
             default:
                 throw new InvalidOperationException($"Unrecognised engine outcome '{response.Outcome}' for a test run of workflow '{workflowRefId}'.");

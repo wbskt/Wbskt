@@ -61,8 +61,8 @@ public enum TriggerDispatchOutcome
     Filtered,
 
     /// <summary>
-    /// No run started: the workflow's workspace already has as many runs going as it may
-    /// (<c>WorkflowEngineOptions.MaxActiveRunsPerWorkspace</c>).
+    /// No run started: the workflow's plan already has as many runs going, across its tenant's
+    /// workspaces, as it allows (<c>PlanLimits.ActiveRuns</c>).
     /// </summary>
     Refused,
 

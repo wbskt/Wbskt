@@ -52,7 +52,7 @@ internal sealed class TestRunStarter : ITestRunStarter
         {
             return new TestRunStart(TestRunStartOutcome.TestRunActive, ActiveRunRefId: await _runProvider.FindActiveTestRunAsync(ex.WorkflowRefId, ct));
         }
-        catch (WorkspaceRunCeilingException)
+        catch (PlanRunLimitException)
         {
             return new TestRunStart(TestRunStartOutcome.WorkspaceFull);
         }

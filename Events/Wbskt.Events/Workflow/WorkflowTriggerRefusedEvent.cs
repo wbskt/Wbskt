@@ -5,7 +5,7 @@ using Wbskt.Models;
 namespace Wbskt.Events.Workflow;
 
 /// <summary>
-/// The workspace's active-run ceiling refused triggers of this workflow: the events were thrown away
+/// The plan's active-run ceiling refused triggers of this workflow: the events were thrown away
 /// and no run started. One per workflow per window, however many were refused in it, so a burst at
 /// the ceiling is one warning rather than hundreds.
 /// </summary>

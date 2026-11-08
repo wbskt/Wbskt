@@ -52,7 +52,7 @@ public sealed class TestRunStarterTests
     public async Task A_full_workspace_starts_nothing()
     {
         _runStarter.Setup(x => x.StartTestAsync(5, Trigger.ToString(), It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new WorkspaceRunCeilingException(3, 10));
+            .ThrowsAsync(new PlanRunLimitException(3, 10));
 
         TestRunStart started = await Starter().StartAsync(5, Trigger, Payload, CancellationToken.None);
 
