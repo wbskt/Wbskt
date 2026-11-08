@@ -3,6 +3,7 @@
     <toRun name="Wbskt.Auth.Host: dev" type="LaunchSettings" />
     <toRun name="Wbskt.Management.Host: dev" type="LaunchSettings" />
     <toRun name="Wbskt.Gateway.WebSocket.Host: dev" type="LaunchSettings" />
+    <toRun name="Wbskt.Gateway.MQTT.Host: dev" type="LaunchSettings" />
     <toRun name="Wbskt.Workflow.Engine.Host: dev" type="LaunchSettings" />
     <method v="2" />
   </configuration>

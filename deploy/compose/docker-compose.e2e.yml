@@ -1,4 +1,4 @@
-# The E2E environment: SQL Server, RabbitMQ, Redis and Mailpit, the database migrator, and the five
+# The E2E environment: SQL Server, RabbitMQ, Redis and Mailpit, the database migrator, and the six
 # hosts built from source, as Development, on the ports Tests/Wbskt.E2E.FeatureTests expects.
 # Self-contained, deliberately: it shares no file with docker-compose.yml, so nothing here can leak
 # into production (Traefik, the observability stack, real secrets), and production's required
@@ -10,9 +10,9 @@
 #   Tests/Wbskt.E2E.FeatureTests/e2e-up.sh down     # stop everything and drop the database volume
 #
 # The hosts use the host's network (network_mode: host), so they behave exactly as start-hosts.sh
-# runs them: they bind localhost:5000-5030 and 7000-7030 from appsettings.Development.json, reach
-# SQL, RabbitMQ, Redis and Mailpit on localhost, and reach the fakes the suite starts on 127.0.0.1
-# (Scenarios/Integrations, NodeRetryE2ETests). On Docker Desktop (macOS, Windows) host networking
+# runs them: they bind localhost:5000-5030, 7000-7030 and 1883 (MQTT) from appsettings.Development.json,
+# reach SQL, RabbitMQ, Redis and Mailpit on localhost, and reach the fakes the suite starts on
+# 127.0.0.1 (Scenarios/Integrations, NodeRetryE2ETests). On Docker Desktop (macOS, Windows) host networking
 # has to be turned on in its settings first. The infrastructure publishes on 127.0.0.1 only.
 name: wbskt-e2e
 
@@ -233,6 +233,26 @@ services:
     healthcheck:
       <<: *host-healthcheck
       test: ["CMD", "curl", "-fs", "http://localhost:5020/healthz/ready"]
+    depends_on:
+      <<: *host-depends
+
+  gateway-mqtt:
+    profiles: ["hosts"]
+    image: wbskt-e2e-gateway-mqtt:local
+    build:
+      <<: *host-build
+      args:
+        HOST_PROJECT: Hosts/Wbskt.Gateway.MQTT.Host/Wbskt.Gateway.MQTT.Host.csproj
+        HOST_DLL: Wbskt.Gateway.MQTT.Host.dll
+    network_mode: host
+    environment:
+      <<: *host-env
+    volumes:
+      - ../config/serilog.json:/Config/serilog.json:ro
+      - ${E2E_DEV_CERT_DIR:?run Tests/Wbskt.E2E.FeatureTests/e2e-up.sh, which sets it}:/https:ro
+    healthcheck:
+      <<: *host-healthcheck
+      test: ["CMD", "curl", "-fs", "http://localhost:5021/healthz/ready"]
     depends_on:
       <<: *host-depends
 

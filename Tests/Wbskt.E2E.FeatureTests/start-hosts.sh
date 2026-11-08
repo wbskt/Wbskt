@@ -11,7 +11,8 @@
 #   RateLimiting__Authentication__PermitLimit=10 Tests/Wbskt.E2E.FeatureTests/start-hosts.sh auth
 #
 # "client-auth" is a second management host serving only client registration and login (Host:Role
-# ClientAuth), on its own ports, as the client-auth container does in deploy/compose.
+# ClientAuth), on its own ports, as the client-auth container does in deploy/compose. "gateway-mqtt"
+# listens for plain MQTT on 1883 (TLS is Traefik's in production) and answers health on 5021.
 #
 # Logs and pid files go to $E2E_HOST_LOGS (default: e2e-hosts/ at the repo root).
 
@@ -26,10 +27,11 @@ declare -A projects=(
   [management]=Hosts/Wbskt.Management.Host
   [client-auth]=Hosts/Wbskt.Management.Host
   [gateway-ws]=Hosts/Wbskt.Gateway.WebSocket.Host
+  [gateway-mqtt]=Hosts/Wbskt.Gateway.MQTT.Host
   [engine]=Hosts/Wbskt.Workflow.Engine.Host
 )
 # The plain-HTTP dev port of each host, for the liveness probe.
-declare -A ports=([auth]=5000 [management]=5010 [client-auth]=5015 [gateway-ws]=5020 [engine]=5030)
+declare -A ports=([auth]=5000 [management]=5010 [client-auth]=5015 [gateway-ws]=5020 [gateway-mqtt]=5021 [engine]=5030)
 # Per-service settings on top of appsettings.Development.json, as space-separated KEY=VALUE pairs.
 # Auth: every scenario's user signs up on Free (one workspace, one member) and then makes a workspace of
 # its own (CreateIsolatedWorkspaceAsync) or invites others, so the suite raises those two Free limits.
@@ -40,7 +42,7 @@ declare -A settings=(
 )
 
 # Management and client-auth sign client tokens with one key, as both read MANAGEMENT_JWT_SIGNING_KEY in
-# deploy/compose. Left unset, each would generate its own, and the WebSocket gateway, which trusts only
+# deploy/compose. Left unset, each would generate its own, and the gateways, which trust only
 # management's JWKS, would refuse every token client-auth issues. Kept in a file so restarting one of
 # them alone keeps the key the other is using.
 if [[ -z "${Jwt__SigningKey:-}" ]]; then
@@ -56,7 +58,7 @@ fi
 if [[ $# -gt 0 ]]; then
   services=("$@")
 else
-  services=(auth management client-auth gateway-ws engine)
+  services=(auth management client-auth gateway-ws gateway-mqtt engine)
   for project in $(printf '%s\n' "${projects[@]}" | sort -u); do
     dotnet build "$root/$project" --nologo -v q
   done

@@ -16,6 +16,7 @@
     </PackageReference>
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Xunit.SkippableFact" />
+    <PackageReference Include="MQTTnet" />
   </ItemGroup>
 
   <ItemGroup>
