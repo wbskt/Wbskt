@@ -69,7 +69,7 @@ jobs:
           if [[ ! "$TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
             echo "::error::invalid tag '$TAG'" && exit 1
           fi
-          # Hyphens for gateway-ws.
+          # Hyphens for gateway-ws and gateway-mqtt.
           if [[ -n "$SERVICES" && ! "$SERVICES" =~ ^[a-z][a-z\ -]*$ ]]; then
             echo "::error::invalid services '$SERVICES'" && exit 1
           fi

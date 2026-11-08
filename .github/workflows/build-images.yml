@@ -665,6 +665,9 @@ jobs:
           - service: gateway-ws
             project: Hosts/Wbskt.Gateway.WebSocket.Host/Wbskt.Gateway.WebSocket.Host.csproj
             dll: Wbskt.Gateway.WebSocket.Host.dll
+          - service: gateway-mqtt
+            project: Hosts/Wbskt.Gateway.MQTT.Host/Wbskt.Gateway.MQTT.Host.csproj
+            dll: Wbskt.Gateway.MQTT.Host.dll
           - service: engine
             project: Hosts/Wbskt.Workflow.Engine.Host/Wbskt.Workflow.Engine.Host.csproj
             dll: Wbskt.Workflow.Engine.Host.dll
@@ -694,7 +697,7 @@ jobs:
           tags: |
             ${{ needs.meta.outputs.prefix }}-${{ matrix.service }}:${{ needs.meta.outputs.tag }}
             ${{ needs.meta.outputs.prefix }}-${{ matrix.service }}:latest
-          # Scoped per service so the four parallel jobs don't evict each other's cache.
+          # Scoped per service so the parallel jobs don't evict each other's cache.
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 

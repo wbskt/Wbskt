@@ -73,6 +73,11 @@ services:
       # Internal-only entrypoint for the engine's api/inbound/* and internal/integrations/*; never published to the host,
       # only reachable by other containers as http://traefik:8081.
       - --entrypoints.engine.address=:8081
+      # MQTT over TLS for the MQTT gateway: TLS ends here and plain MQTT goes on to gateway-mqtt.
+      # No timeouts: MQTT connections idle between keep-alives for as long as the client chose.
+      - --entrypoints.mqtts.address=:8883
+      - --entrypoints.mqtts.transport.respondingTimeouts.readTimeout=0
+      - --entrypoints.mqtts.transport.respondingTimeouts.writeTimeout=0
       - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
       - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
       - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:?ACME_EMAIL is required - see .env.example}
@@ -84,6 +89,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "8883:8883"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - traefik-acme:/letsencrypt
@@ -372,6 +378,53 @@ services:
       - traefik.http.services.gateway-ws.loadbalancer.server.port=8080
       # No stickiness needed: per-instance fan-out (WP2) means every instance can route commands
       # to any client it doesn't hold, and WebSocket upgrade pins the TCP connection natively.
+
+  # The MQTT client gateway (Hosts/Wbskt.Gateway.MQTT.Host): an embedded MQTT server over the same
+  # Gateway.Core as gateway-ws. Clients reach it as mqtts://mqtt.${DOMAIN}:8883; Traefik ends TLS on
+  # its mqtts entrypoint and passes plain MQTT on 1883. Port 8080 is health checks and metrics only.
+  gateway-mqtt:
+    image: ${REGISTRY:-ghcr.io/wbskt}/wbskt-gateway-mqtt:${IMAGE_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        HOST_PROJECT: Hosts/Wbskt.Gateway.MQTT.Host/Wbskt.Gateway.MQTT.Host.csproj
+        HOST_DLL: Wbskt.Gateway.MQTT.Host.dll
+    environment:
+      <<: *host-env
+      OTEL_SERVICE_NAME: wbskt-gateway-mqtt
+      # Signs nothing; validates client tokens against management's public keys, fetched on first use.
+      Jwt__TrustedJwksUrl: http://management:8080/.well-known/jwks.json
+      # Client revocations the management host records, checked when a client connects.
+      ConnectionStrings__Redis: redis:6379
+    volumes:
+      - ../config:/Config:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [edge, backend]
+    restart: unless-stopped
+    logging: *default-logging
+    deploy:
+      replicas: ${GATEWAY_MQTT_REPLICAS:-1}
+    labels:
+      - traefik.enable=true
+      # A TCP router: Traefik matches the TLS server name, ends TLS with the same Let's Encrypt
+      # resolver as the HTTP routers, and forwards the bytes. Each client's TCP connection stays on
+      # one replica; every replica can serve every client, as with gateway-ws.
+      - traefik.tcp.routers.gateway-mqtt.rule=HostSNI(`mqtt.${DOMAIN}`)
+      - traefik.tcp.routers.gateway-mqtt.entrypoints=mqtts
+      - traefik.tcp.routers.gateway-mqtt.tls=true
+      - traefik.tcp.routers.gateway-mqtt.tls.certresolver=letsencrypt
+      - traefik.tcp.services.gateway-mqtt.loadbalancer.server.port=1883
 
   engine:
     image: ${REGISTRY:-ghcr.io/wbskt}/wbskt-engine:${IMAGE_TAG:-latest}

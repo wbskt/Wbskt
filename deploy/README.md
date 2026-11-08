@@ -71,14 +71,14 @@ Dashboard  push to master ─> build-and-deploy.yml ─> ghcr.io/wbskt/wbskt-con
                docker compose pull console && up -d --no-build --no-deps console
 ```
 
-Five images per backend commit — `wbskt-auth`, `wbskt-management`, `wbskt-gateway-ws`, `wbskt-engine`,
-`wbskt-migrator` — each tagged `sha-<short-commit>` and `latest`. The console is a sixth,
+Six images per backend commit — `wbskt-auth`, `wbskt-management`, `wbskt-gateway-ws`,
+`wbskt-gateway-mqtt`, `wbskt-engine`, `wbskt-migrator` — each tagged `sha-<short-commit>` and `latest`. The console is a sixth,
 published on the Dashboard repo's own cadence and tracked by its own `CONSOLE_IMAGE_TAG`.
 
 Every push to master deploys itself: once the tests, E2E, the upgrade rehearsal (below, under
-Database migrations) and all five images succeed, **Build
+Database migrations) and all six images succeed, **Build
 images** calls the **Deploy** workflow with that run's tag, deploying every host (auth,
-management, client-auth, gateway-ws, engine) with migrations. If the `production` GitHub Environment has required reviewers, that deploy waits for
+management, client-auth, gateway-ws, gateway-mqtt, engine) with migrations. If the `production` GitHub Environment has required reviewers, that deploy waits for
 an approval. To redeploy or pick services, dispatch **Deploy** by hand:
 
 | Input | Meaning |
@@ -137,8 +137,8 @@ that one otherwise deploys automatically on every push.
 ## Fresh install (brand-new VM)
 
 Prerequisites you handle outside this repo: provision the VM, point DNS (`auth.<domain>`,
-`api.<domain>`, `ws.<domain>`, `console.<domain>`, or one wildcard `*.<domain>`) at its IP, and
-open inbound 22/80/443 in the cloud firewall. If the VM has under ~4GB RAM, add swap first
+`api.<domain>`, `ws.<domain>`, `mqtt.<domain>`, `console.<domain>`, or one wildcard `*.<domain>`) at its
+IP, and open inbound 22/80/443/8883 in the cloud firewall. If the VM has under ~4GB RAM, add swap first
 (`fallocate` a few GB, `mkswap`, `swapon`, persist in `/etc/fstab`) — SQL Server + RabbitMQ +
 Redis + 4 hosts + Traefik is not a light stack.
 
@@ -159,10 +159,10 @@ docker compose up -d sql                                    # wait for it to rep
 docker compose --profile migrate pull migrator
 MIGRATE_FRESH=true docker compose --profile migrate run --rm migrator   # first run only - creates the DBs
 
-docker compose pull auth management client-auth gateway-ws engine
+docker compose pull auth management client-auth gateway-ws gateway-mqtt engine
 docker compose up -d rabbitmq redis
 docker compose up -d otel-collector prometheus alertmanager pushgateway loki tempo grafana node-exporter cadvisor
-docker compose up -d --no-build auth management client-auth gateway-ws engine traefik
+docker compose up -d --no-build auth management client-auth gateway-ws gateway-mqtt engine traefik
 docker compose ps                                           # everything should report healthy
 ```
 
@@ -278,6 +278,22 @@ Management still serves the same paths. Its router matches every path on `api.<D
 client-auth instance is healthy (during its restart, say) Traefik sends client traffic there instead.
 `deploy.sh` relies on that: it restarts client-auth first and waits for it to be healthy before it
 touches management, so client login always has one of the two. Scale it with `CLIENT_AUTH_REPLICAS`.
+
+### The MQTT gateway (`gateway-mqtt`)
+
+`gateway-mqtt` serves devices that speak MQTT 3.1.1 or 5, at `mqtts://mqtt.<DOMAIN>:8883`
+([Docs/Client.Protocol.MQTT.md](../Docs/Client.Protocol.MQTT.md)). Traefik ends TLS on its `mqtts`
+entrypoint with the same Let's Encrypt resolver as the HTTP routers (the certificate for
+`mqtt.<DOMAIN>` is fetched through the HTTP challenge on port 80) and forwards plain MQTT to the
+gateway's port 1883, which is never published. There is no plain-text MQTT port. Scale it with
+`GATEWAY_MQTT_REPLICAS`; like gateway-ws, every replica can serve every client.
+
+On a VM that predates it, before the first deploy that includes it:
+
+1. Point `mqtt.<DOMAIN>` at the VM (a wildcard record already covers it).
+2. Open inbound TCP 8883 in the cloud firewall.
+3. Recreate Traefik once so it picks up the new entrypoint and port, in a quiet minute: every HTTP
+   and WebSocket connection drops while it restarts. `docker compose up -d --no-build --no-deps traefik`
 
 ### Running a local console against this backend
 
