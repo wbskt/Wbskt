@@ -297,7 +297,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "short": "M2",
    "due": "2026-11-30",
    "start": "2026-11-01",
-   "open": 15,
+   "open": 20,
    "closed": 140
   },
   {
@@ -313,7 +313,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "short": "Post",
    "due": null,
    "start": "2027-01-01",
-   "open": 51,
+   "open": 50,
    "closed": 10
   }
  ],
@@ -340,6 +340,13 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   }
  ],
  "work": {
+  "519": {
+   "state": "progress",
+   "why": "Started 8 Nov in four PRs: Gateway.Core ready for a second transport (#638, PR #642), the MQTT host (#639), its deploy on mqtt.DOMAIN:8883 (#640) and E2E scenarios (#641). Moved from Post-launch to M2 on 8 Nov. The host and its tests are written and the E2E scenarios pass locally; they go up as #642 merges.",
+   "prs": [
+    642
+   ]
+  },
   "167": {
    "state": "decide",
    "why": "Split on 8 Nov into plans (#626), an account credit ledger (#627), a run-start charge (#628), a message meter (#629), a usage API (#630), optional monthly credit caps per workspace (#634), payments through Dodo Payments (#631) and the console usage page (Console#151). Charging starts as soon as these merge."
@@ -547,6 +554,10 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   }
  ],
  "issues": [
+  {"n":641,"t":"E2E scenarios for the MQTT gateway","s":"o","m":"M2","p":519,"a":["socket"]},
+  {"n":640,"t":"Deploy the MQTT gateway: gateway-mqtt service and a Traefik TCP router on 8883","s":"o","m":"M2","p":519,"a":["socket","ops"]},
+  {"n":639,"t":"Wbskt.Gateway.MQTT.Host: embedded MQTTnet server over Gateway.Core","s":"o","m":"M2","p":519,"a":["socket"]},
+  {"n":638,"t":"Gateway.Core: make the transport close a method of the connection, and add GatewayTransport.Mqtt","s":"o","m":"M2","p":519,"a":["socket"]},
   {"n":634,"t":"Credits: optional monthly cap per workspace","s":"o","m":"M3","p":167,"a":["management","engine"]},
   {"n":632,"t":"Readings: compress, average old readings and keep them per plan","s":"o","m":"M3","p":440,"a":["management","db"]},
   {"n":631,"t":"Payments: subscriptions and credit top-ups through Dodo Payments","s":"o","m":"M3","p":167,"a":["management"]},
@@ -588,7 +599,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":537,"t":"Architecture review (2 Nov): follow-ups","s":"o","m":"M2","p":null,"a":[],"epic":1,"sub":{"completed":13,"total":15}},
   {"n":528,"t":"Release the client SDKs 1.0: NuGet, PyPI and the Arduino Library Manager","s":"o","m":"M2","p":174,"a":["sdk"],"pr":"P1","sz":"S"},
   {"n":525,"t":"Split Wbskt.Infrastructure so the gateways take only hosting and security","s":"o","m":"Post","p":179,"a":["socket"],"pr":"P3","sz":"M"},
-  {"n":519,"t":"Add Wbskt.Gateway.MQTT.Host: a client gateway for MQTT over Gateway.Core","s":"o","m":"Post","p":null,"a":["socket"]},
+  {"n":519,"t":"Add Wbskt.Gateway.MQTT.Host: a client gateway for MQTT over Gateway.Core","s":"o","m":"M2","p":null,"a":["socket"],"epic":1,"sub":{"completed":0,"total":4}},
   {"n":510,"t":"OTA firmware updates for ESP32 boards as a system command","s":"o","m":"M2","p":null,"a":["socket","sdk"],"epic":1,"sub":{"completed":3,"total":4}},
   {"n":500,"t":"Remove the unversioned /api aliases","s":"o","m":"Post","p":null,"a":[]},
   {"n":490,"t":"Send a signal by correlation, not only to a run","s":"o","m":"Post","p":172,"a":["management","engine"],"sz":"M"},
