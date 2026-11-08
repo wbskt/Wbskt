@@ -62,6 +62,8 @@ public static class Program
         builder.Services.AddScoped<IWorkspaceService, WorkspaceService>();
         builder.Services.AddScoped<IWorkspaceAccessResolver, WorkspaceServiceAccessResolver>();
         builder.Services.AddScoped<IAuditWorkspaces, AuditWorkspaces>();
+        builder.Services.AddScoped<ITenantPlanProvider, TenantPlanProvider>();
+        builder.Services.AddScoped<ITenantPlanService, TenantPlanService>();
         builder.Services.AddScoped<ICredentialRetentionProvider, CredentialRetentionProvider>();
         builder.Services.AddHostedService<CredentialRetentionService>();
         builder.Services.AddHttpContextAccessor();

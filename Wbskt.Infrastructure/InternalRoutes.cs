@@ -24,6 +24,19 @@ public static class InternalRoutes
     public const string DeletedWorkspaces = Prefix + "/workspaces/deleted";
 
     /// <summary>
+    /// Auth host: each workspace with its tenant's plan, a page at a time (<c>?cursor=&amp;limit=</c>,
+    /// narrowed by <c>tenantId</c> or <c>workspaceId</c>), for the management host's copies in the main
+    /// database. Called by a background job and by event handlers, so it takes <see cref="ApiKeyHeader"/>.
+    /// </summary>
+    public const string WorkspaceAccounts = Prefix + "/workspaces/accounts";
+
+    /// <summary>
+    /// Auth host: <c>GET</c> or <c>PUT</c> a tenant's plan (<c>{tenantRef}</c>). For operators and the
+    /// payment provider's webhook, never a user, so it takes <see cref="ApiKeyHeader"/>.
+    /// </summary>
+    public const string TenantPlan = Prefix + "/tenants/{tenantRef:guid}/plan";
+
+    /// <summary>
     /// The shared key an internal route called by a background job (no user token to forward) checks:
     /// the auth host's <c>Internal:ApiKey</c>, sent by the management host from
     /// <c>Services:AuthInternalApiKey</c>.

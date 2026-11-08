@@ -74,6 +74,9 @@ BEGIN
 
     DELETE FROM dbo.WorkflowDrafts WHERE WorkspaceId = @WorkspaceId;
 
+    -- Its copy of the tenant's plan: the workspace no longer counts towards the tenant's limits.
+    DELETE FROM dbo.WorkspaceAccounts WHERE WorkspaceId = @WorkspaceId;
+
     COMMIT TRANSACTION;
 
     SELECT N'client' AS Kind, CAST(R.ClientId AS BIGINT) AS Id, R.ClientRefId AS RefId, R.PolicyId, P.RefId AS PolicyRefId

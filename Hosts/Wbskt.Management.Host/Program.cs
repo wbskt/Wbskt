@@ -8,6 +8,7 @@ using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Events;
 using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Billing;
 using Wbskt.Infrastructure.Clients;
 using Wbskt.Infrastructure.Hosting;
 using Wbskt.Infrastructure.Configuration;
@@ -25,6 +26,7 @@ using Wbskt.Management.Host.Hubs;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services;
+using Wbskt.Management.Host.Services.Billing;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Host.Services.Integrations;
 using Wbskt.Management.Host.Services.Readings;
@@ -99,6 +101,14 @@ public static class Program
         {
             builder.Services.AddHostedService<DeletedWorkspaceSweeper>();
         }
+        // Each workspace's copy of its tenant's plan, kept from the auth host; see WorkspaceAccountSync.
+        builder.Services.AddWorkspacePlans(builder.Configuration);
+        builder.Services.Configure<BillingOptions>(builder.Configuration.GetSection(BillingOptions.SectionName));
+        builder.Services.AddScoped<WorkspaceAccountSync>();
+        if (role == HostRole.All)
+        {
+            builder.Services.AddHostedService<WorkspaceAccountSyncWorker>();
+        }
         builder.Services.AddScoped<IMessageTemplateProvider, MessageTemplateProvider>();
         builder.Services.AddScoped<IMessageTemplateService, MessageTemplateService>();
         builder.Services.AddScoped<IIntegrationProvider, IntegrationProvider>();
@@ -153,6 +163,13 @@ public static class Program
                                          ?? throw new ArgumentNullException(nameof(client.BaseAddress), "Services:Auth configuration is missing."));
 
             // A background job, not a request someone waits on: longer than the resolve's few seconds.
+            client.Timeout = TimeSpan.FromSeconds(30);
+        })
+        .AddHttpMessageHandler<AuthInternalApiKeyHandler>();
+        builder.Services.AddHttpClient<IWorkspaceAccountsClient, WorkspaceAccountsClient>(client =>
+        {
+            client.BaseAddress = new Uri(builder.Configuration["Services:Auth"]
+                                         ?? throw new ArgumentNullException(nameof(client.BaseAddress), "Services:Auth configuration is missing."));
             client.Timeout = TimeSpan.FromSeconds(30);
         })
         .AddHttpMessageHandler<AuthInternalApiKeyHandler>();
