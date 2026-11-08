@@ -44,7 +44,10 @@ public static class GatewayCoreExtensions
 
         // Event Bus — per-instance fan-out so every gateway instance sees every client event
         // (ClientCommandEvent, ClientPingEvent, ClientStatusChangedEvent); see EventBusExtensions.
-        services.AddRabbitMqEventBus(configuration, perInstanceEndpoints: true, consumerAssemblies: [typeof(GatewayCoreExtensions).Assembly]);
+        // The instance id names this host's queues and its clients' presence rows, so it carries the
+        // transport: two gateways on one machine (start-hosts.sh, the E2E compose) must not share it.
+        services.AddRabbitMqEventBus(configuration, perInstanceEndpoints: true, consumerAssemblies: [typeof(GatewayCoreExtensions).Assembly],
+            defaultInstanceId: DefaultInstanceId(transport));
 
         // Background services (registered after the bus so it starts first)
         services.AddHostedService<StartupPresenceResetPublisher>();
@@ -54,4 +57,7 @@ public static class GatewayCoreExtensions
 
         return services;
     }
+
+    /// <summary>The bus instance id of a gateway when <c>EventBus:InstanceId</c> is not set: the machine name and the transport.</summary>
+    public static string DefaultInstanceId(GatewayTransport transport) => $"{Environment.MachineName}-{transport.Name}";
 }
