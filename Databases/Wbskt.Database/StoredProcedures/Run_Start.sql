@@ -85,10 +85,15 @@ BEGIN
                     THROW 50026, 'The workspace has reached its limit of active runs.', 1;
             END
 
+            -- Last, after every check that can refuse the start, so the lock it takes on the workflow's
+            -- counter row is held only for the inserts below and a refused start uses no number.
+            DECLARE @Number INT;
+            EXEC dbo.WorkflowRunSequence_Next @WorkflowRefId = @WorkflowRefId, @Number = @Number OUTPUT;
+
             INSERT INTO dbo.Runs
-                (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, CorrelationKey, Status, StartedAt, CreditBudget, TriggerStartKey, ParentRunRefId)
+                (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, CorrelationKey, Status, StartedAt, CreditBudget, TriggerStartKey, ParentRunRefId, Number)
             VALUES
-                (@RefId, @WorkflowDefinitionId, @WorkflowRefId, @WorkflowVersion, @TriggerNodeId, @CorrelationKey, N'Running', @StartedAt, @CreditBudget, @TriggerStartKey, @ParentRunRefId);
+                (@RefId, @WorkflowDefinitionId, @WorkflowRefId, @WorkflowVersion, @TriggerNodeId, @CorrelationKey, N'Running', @StartedAt, @CreditBudget, @TriggerStartKey, @ParentRunRefId, @Number);
 
             SET @RunId = SCOPE_IDENTITY();
 
@@ -134,6 +139,7 @@ BEGIN
         r.CreatedAt,
         r.ParentRunRefId,
         r.OutputJson,
+        r.Number,
         rb.Id AS RootBranchId,
         @Created AS Created
     FROM dbo.Runs r

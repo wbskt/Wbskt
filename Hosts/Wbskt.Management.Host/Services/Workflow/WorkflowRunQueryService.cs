@@ -144,8 +144,16 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
             FailedAt = Step(detail?.FailedNodeId, detail?.FailedErrorCode),
             EndedAt = Step(detail?.EndedNodeId),
             CurrentStep = Step(detail?.CurrentNodeId, attempt: detail?.CurrentAttempt, maxAttempts: detail?.CurrentMaxAttempts),
-            WorkflowName = version?.Name
+            WorkflowName = version?.Name,
+            Waiting = MapWaiting(detail)
         };
+    }
+
+    private static RunWaitingDto? MapWaiting(RunListDetailRow? detail)
+    {
+        return detail is { IsWaiting: true }
+            ? new RunWaitingDto(detail.WaitingKind, detail.WaitingNodeId, detail.WaitingExpiresAt.ToUtcOffset(), detail.WaitingSignalName)
+            : null;
     }
 
     private sealed record ListedVersion(string Name, IReadOnlyDictionary<Guid, BaseNode> Nodes);
@@ -171,6 +179,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
         RunStatsRow stats = await _runProvider.GetStatsAsync(workflowRefId, fromUtc, toUtc, ct);
         IReadOnlyCollection<RunFailureBucketRow> failures = await _runProvider.GetTopFailuresAsync(workflowRefId, fromUtc, toUtc, TopFailures, ct);
         IReadOnlyCollection<NodeTimingRow> timings = await _runProvider.GetNodeTimingsAsync(workflowRefId, fromUtc, toUtc, TopSlowNodes, ct);
+        IReadOnlyCollection<RunDailyStatsRow> daily = await _runProvider.GetDailyStatsAsync(workflowRefId, fromUtc, toUtc, ct) ?? [];
 
         // Success rate is over FINISHED runs. Counting in-flight ones as failures would make an
         // active workflow look broken, and dividing by zero when nothing has finished would report
@@ -196,7 +205,8 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
             new RunDurationsDto(stats.P50DurationMs, stats.P95DurationMs, stats.MaxDurationMs, stats.AvgDurationMs),
             successRate,
             failures.Select(f => new FailureBucketDto(f.ErrorCode, f.NodeId, f.Occurrences, f.LastSeenAt.ToUtcOffset())).ToList(),
-            timings.Select(t => new NodeTimingDto(t.NodeId, t.Executions, t.FailureCount, t.AvgDurationMs, t.MaxDurationMs)).ToList()));
+            timings.Select(t => new NodeTimingDto(t.NodeId, t.Executions, t.FailureCount, t.AvgDurationMs, t.MaxDurationMs)).ToList(),
+            FillDays(fromUtc, toUtc, daily)));
     }
 
     public async Task<Result<WorkspaceStatsResponse>> GetWorkspaceStatsAsync(int workspaceId, DateTimeOffset? from, DateTimeOffset? to, CancellationToken ct)
@@ -215,6 +225,8 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
         // so a workflow from another workspace cannot appear in the result at all.
         RunStatsRow stats = await _runProvider.GetWorkspaceStatsAsync(workspaceId, fromUtc, toUtc, ct);
         IReadOnlyCollection<WorkflowRunSummaryRow> perWorkflow = await _runProvider.GetPerWorkflowStatsAsync(workspaceId, fromUtc, toUtc, TopWorkflows, ct);
+        IReadOnlyCollection<RunDailyStatsRow> daily = await _runProvider.GetWorkspaceDailyStatsAsync(workspaceId, fromUtc, toUtc, ct) ?? [];
+        ILookup<Guid, RunDailyStatsRow> dailyByWorkflow = daily.ToLookup(d => d.WorkflowRefId);
 
         return Result<WorkspaceStatsResponse>.Success(new WorkspaceStatsResponse(
             fromUtc.ToUtcOffset(),
@@ -241,7 +253,36 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
                 w.AvgDurationMs,
                 SuccessRate(w.TotalRuns, w.ActiveCount, w.SucceededCount),
                 Running: w.ActiveCount - w.WaitingCount,
-                Waiting: w.WaitingCount)).ToList()));
+                Waiting: w.WaitingCount,
+                FillDays(fromUtc, toUtc, dailyByWorkflow[w.WorkflowRefId]))).ToList(),
+            FillDays(fromUtc, toUtc, daily)));
+    }
+
+    /// <summary>
+    /// Every UTC day the window touches, oldest first, with zeros on days without runs so a chart need
+    /// not fill gaps. Rows for the same day (several workflows) are summed; a median cannot be summed,
+    /// so a summed day has none.
+    /// </summary>
+    private static List<RunDayDto> FillDays(DateTime fromUtc, DateTime toUtc, IEnumerable<RunDailyStatsRow> rows)
+    {
+        Dictionary<DateOnly, RunDayDto> byDay = rows
+            .GroupBy(r => r.Day)
+            .ToDictionary(g => g.Key, g => new RunDayDto(
+                g.Key,
+                g.Sum(r => r.TotalRuns),
+                g.Sum(r => r.SucceededCount),
+                g.Sum(r => r.FailedCount),
+                g.Sum(r => r.CancelledCount),
+                g.Count() == 1 ? g.First().P50DurationMs : null));
+
+        var days = new List<RunDayDto>();
+        DateOnly last = DateOnly.FromDateTime(toUtc.AddTicks(-1));
+        for (DateOnly day = DateOnly.FromDateTime(fromUtc); day <= last; day = day.AddDays(1))
+        {
+            days.Add(byDay.GetValueOrDefault(day) ?? new RunDayDto(day, 0, 0, 0, 0));
+        }
+
+        return days;
     }
 
     /// <summary>
@@ -267,7 +308,14 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
 
         RunRow run = runResult.Value;
         IReadOnlyCollection<BranchRow> branches = await _branchProvider.GetAllByRunIdAsync(run.Id, ct);
-        return Result<RunDetailDto>.Success(new RunDetailDto(MapRun(run), branches.Select(MapBranch).ToList()));
+
+        // Only a Running run can be waiting, so a finished run's page skips the extra read.
+        RunListDetailRow? detail = run.Status == RunStatus.Running
+            ? (await _runProvider.GetListDetailsAsync([run.Id], ct) ?? []).FirstOrDefault()
+            : null;
+
+        RunSummaryDto summary = MapRun(run) with { Waiting = MapWaiting(detail) };
+        return Result<RunDetailDto>.Success(new RunDetailDto(summary, branches.Select(MapBranch).ToList()));
     }
 
     public async Task<Result<int>> ResolveCancellableRunAsync(int workspaceId, Guid runRefId, CancellationToken ct)
@@ -331,7 +379,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
 
     private static RunSummaryDto MapRun(RunRow row)
     {
-        return new RunSummaryDto(row.RefId, row.WorkflowRefId, row.WorkflowVersion, row.Status, row.CorrelationKey, row.StartedAt.ToUtcOffset(), row.CompletedAt.ToUtcOffset());
+        return new RunSummaryDto(row.RefId, row.WorkflowRefId, row.WorkflowVersion, row.Status, row.CorrelationKey, row.StartedAt.ToUtcOffset(), row.CompletedAt.ToUtcOffset(), Number: row.Number);
     }
 
     private static BranchSummaryDto MapBranch(BranchRow row)

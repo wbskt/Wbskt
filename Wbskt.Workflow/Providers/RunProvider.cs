@@ -176,7 +176,12 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
                 EndedNodeId = r.IsDBNull(r.GetOrdinal("EndedNodeId")) ? null : r.GetGuid(r.GetOrdinal("EndedNodeId")),
                 CurrentNodeId = r.IsDBNull(r.GetOrdinal("CurrentNodeId")) ? null : r.GetGuid(r.GetOrdinal("CurrentNodeId")),
                 CurrentAttempt = r.IsDBNull(r.GetOrdinal("CurrentAttempt")) ? null : r.GetInt32(r.GetOrdinal("CurrentAttempt")),
-                CurrentMaxAttempts = r.IsDBNull(r.GetOrdinal("CurrentMaxAttempts")) ? null : r.GetInt32(r.GetOrdinal("CurrentMaxAttempts"))
+                CurrentMaxAttempts = r.IsDBNull(r.GetOrdinal("CurrentMaxAttempts")) ? null : r.GetInt32(r.GetOrdinal("CurrentMaxAttempts")),
+                IsWaiting = r.GetBoolean(r.GetOrdinal("IsWaiting")),
+                WaitingKind = r.IsDBNull(r.GetOrdinal("WaitingKind")) ? null : r.GetString(r.GetOrdinal("WaitingKind")),
+                WaitingNodeId = r.IsDBNull(r.GetOrdinal("WaitingNodeId")) ? null : r.GetGuid(r.GetOrdinal("WaitingNodeId")),
+                WaitingExpiresAt = r.IsDBNull(r.GetOrdinal("WaitingExpiresAt")) ? null : r.GetDateTime(r.GetOrdinal("WaitingExpiresAt")),
+                WaitingSignalName = r.IsDBNull(r.GetOrdinal("WaitingSignalName")) ? null : r.GetString(r.GetOrdinal("WaitingSignalName"))
             },
             ct
         );
@@ -228,6 +233,50 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
             MapWorkflowSummary,
             ct
         );
+    }
+
+    public async Task<IReadOnlyCollection<RunDailyStatsRow>> GetDailyStatsAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, CancellationToken ct)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.Run_GetDailyStatsBy_WorkflowRefId",
+            p =>
+            {
+                p.AddWithValue("@WorkflowRefId", workflowRefId);
+                p.AddWithValue("@FromUtc", fromUtc);
+                p.AddWithValue("@ToUtc", toUtc);
+            },
+            MapDailyStats,
+            ct
+        );
+    }
+
+    public async Task<IReadOnlyCollection<RunDailyStatsRow>> GetWorkspaceDailyStatsAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, CancellationToken ct)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.Run_GetDailyStatsBy_WorkspaceId",
+            p =>
+            {
+                p.AddWithValue("@WorkspaceId", workspaceId);
+                p.AddWithValue("@FromUtc", fromUtc);
+                p.AddWithValue("@ToUtc", toUtc);
+            },
+            MapDailyStats,
+            ct
+        );
+    }
+
+    internal static RunDailyStatsRow MapDailyStats(DbDataReader reader)
+    {
+        return new RunDailyStatsRow
+        {
+            WorkflowRefId = reader.GetGuid(reader.GetOrdinal("WorkflowRefId")),
+            Day = DateOnly.FromDateTime(reader.GetDateTime(reader.GetOrdinal("Day"))),
+            TotalRuns = reader.GetInt32(reader.GetOrdinal("TotalRuns")),
+            SucceededCount = reader.GetInt32(reader.GetOrdinal("SucceededCount")),
+            FailedCount = reader.GetInt32(reader.GetOrdinal("FailedCount")),
+            CancelledCount = reader.GetInt32(reader.GetOrdinal("CancelledCount")),
+            P50DurationMs = TryGetOrdinal(reader, "P50DurationMs") is { } p50Ordinal && !reader.IsDBNull(p50Ordinal) ? Convert.ToDouble(reader.GetValue(p50Ordinal)) : null
+        };
     }
 
     internal static WorkflowRunSummaryRow MapWorkflowSummary(DbDataReader reader)
@@ -471,12 +520,14 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
             CreditBudget = reader.GetDecimal(reader.GetOrdinal("CreditBudget")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
             ParentRunRefId = TryGetOrdinal(reader, "ParentRunRefId") is { } parentOrdinal && !reader.IsDBNull(parentOrdinal) ? reader.GetGuid(parentOrdinal) : null,
-            OutputJson = TryGetOrdinal(reader, "OutputJson") is { } outputOrdinal && !reader.IsDBNull(outputOrdinal) ? reader.GetString(outputOrdinal) : null
+            OutputJson = TryGetOrdinal(reader, "OutputJson") is { } outputOrdinal && !reader.IsDBNull(outputOrdinal) ? reader.GetString(outputOrdinal) : null,
+            Number = TryGetOrdinal(reader, "Number") is { } numberOrdinal && !reader.IsDBNull(numberOrdinal) ? reader.GetInt32(numberOrdinal) : null
         };
     }
 
-    // The run-list procs leave OutputJson out (it is unbounded and no page shows it), so these two are
-    // read only where the result set carries them rather than making every proc return them.
+    // The run-list procs leave OutputJson out (it is unbounded and no page shows it), and only the procs
+    // behind the run pages return Number, so these are read only where the result set carries them
+    // rather than making every proc return them.
     private static int? TryGetOrdinal(DbDataReader reader, string column)
     {
         for (int i = 0; i < reader.FieldCount; i++)

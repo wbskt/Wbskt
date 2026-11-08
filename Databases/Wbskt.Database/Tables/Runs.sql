@@ -24,6 +24,9 @@ CREATE TABLE dbo.Runs
     -- What the run's control:end node handed back (Run_SetOutput), delivered to a parent's
     -- sub-workflow step as childResult.output. Null when no End node set one.
     OutputJson               NVARCHAR(MAX)    NULL,
+    -- The run's number within its workflow (#1, #2, ...), from WorkflowRunSequence_Next. Nullable only so
+    -- the column could be added to a table with rows; the post-deployment script numbers those.
+    Number                   INT              NULL,
     CONSTRAINT UQ_Runs_RefId UNIQUE (RefId),
     -- The words RunStatus (Wbskt.Workflow.Abstraction) defines; a change there is a change here.
     -- Written out with OR, not IN: SQL Server stores IN expanded, and the DACPAC would never match it.
@@ -56,6 +59,13 @@ GO
 CREATE UNIQUE INDEX UX_Runs_TriggerStartKey
     ON dbo.Runs (TriggerStartKey)
     WHERE TriggerStartKey IS NOT NULL;
+GO
+
+-- A workflow's run numbers are unique; filtered so the rows not yet numbered by the post-deployment
+-- script do not collide on NULL.
+CREATE UNIQUE INDEX UX_Runs_WorkflowRefId_Number
+    ON dbo.Runs (WorkflowRefId, Number)
+    WHERE Number IS NOT NULL;
 GO
 
 -- Workspace-wide run listing joins Runs to WorkflowDefinitions on this column. SQL Server does not

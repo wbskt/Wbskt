@@ -438,10 +438,18 @@ in-place edit, which is why there is no update verb.
 
 | Endpoint | Permission | What it does |
 |---|---|---|
-| `GET runs` | `workflows.read` | Lists every run in the workspace, newest first — the "recent activity" view. Filterable by `status`, cursor-paged. |
-| `GET workflows/{workflowRef}/runs` | `workflows.read` | Lists runs of one workflow, filterable by `status`, cursor-paged. |
-| `GET workflows/{workflowRef}/stats` | `workflows.read` | How a workflow is doing over a window (`from`/`to`, default last 30 days): outcome counts, duration p50/p95/max/avg over completed runs, success rate over *finished* runs (null when nothing has finished), the error codes that actually occur, and the slowest nodes. `counts.active` (runs in flight) is split into `running` (a branch is executing a step) and `waiting` (every live branch is parked on a delay, signal or call); the workspace `GET stats` and its per-workflow rows carry the same split. |
+| `GET runs` | `workflows.read` | Lists every run in the workspace, newest first — the "recent activity" view. Filterable by `status`, cursor-paged. `status=Waiting` lists the Running runs whose every live branch is waiting. |
+| `GET workflows/{workflowRef}/runs` | `workflows.read` | Lists runs of one workflow, filterable by `status` (including `Waiting`, as above), cursor-paged. |
+| `GET workflows/{workflowRef}/stats` | `workflows.read` | How a workflow is doing over a window (`from`/`to`, default last 30 days): outcome counts, duration p50/p95/max/avg over completed runs, success rate over *finished* runs (null when nothing has finished), the error codes that actually occur, and the slowest nodes. `counts.active` (runs in flight) is split into `running` (a branch is executing a step) and `waiting` (every live branch is parked on a delay, signal or call); the workspace `GET stats` and its per-workflow rows carry the same split. `days` lists every UTC day the window touches, oldest first and zeros included: `{ date, total, succeeded, failed, cancelled, p50Ms }`, where `failed` is failed + partially failed + out of credits and `p50Ms` is the day's median over completed runs (null when none completed). A run counts on the day it started. The workspace `GET stats` has the same `days`, and each of its `workflows[]` rows has its own; those leave `p50Ms` null. |
 | `GET runs/{runRef}` | `workflows.read` | Run detail with its branches. |
+
+Every run, in the lists and on its detail, carries `number`: its place in its workflow's runs (#1, #2,
+…), counted across every version and never reused. `OnWorkflowRunStartedEvent` carries it as `runNumber`.
+A waiting run (still Running, every live branch waiting) also carries `waiting: { kind, nodeId,
+expiresAt, signalName }`: the bookmark kind (`signal`, `timer`, `http`, `childRunCompleted`,
+`commandOutcome`, or null for a wait without one, such as a join), when it ends on its own, and for a
+signal the name to send to `POST runs/{runRef}/signals/{signalName}`. A run waiting on several things
+names one: a signal first, then the oldest wait.
 
 Each run in either list also carries what a one-line row needs, read for the whole page in one call
 (`Run_GetListDetails`), so the console never fetches history per run:

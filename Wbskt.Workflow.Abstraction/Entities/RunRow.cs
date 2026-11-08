@@ -29,4 +29,11 @@ public record RunRow
     /// single run; the list procs leave it out.
     /// </summary>
     public string? OutputJson { get; init; }
+
+    /// <summary>
+    /// The run's number within its workflow (#1, #2, ...). Read only where the result set carries it:
+    /// the procs that start a run, list runs or read one by RefId. Null for a run made before numbering
+    /// that the post-deployment script has not reached yet.
+    /// </summary>
+    public int? Number { get; init; }
 }

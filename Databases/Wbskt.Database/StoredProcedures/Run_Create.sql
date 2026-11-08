@@ -15,12 +15,16 @@ BEGIN
 
     DECLARE @RunId INT;
 
+    DECLARE @Number INT;
+
     BEGIN TRANSACTION;
 
+    EXEC dbo.WorkflowRunSequence_Next @WorkflowRefId = @WorkflowRefId, @Number = @Number OUTPUT;
+
     INSERT INTO dbo.Runs
-        (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, CorrelationKey, Status, StartedAt, CreditBudget, ParentRunRefId)
+        (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, CorrelationKey, Status, StartedAt, CreditBudget, ParentRunRefId, Number)
     VALUES
-        (@RefId, @WorkflowDefinitionId, @WorkflowRefId, @WorkflowVersion, @TriggerNodeId, @CorrelationKey, N'Running', @StartedAt, @CreditBudget, @ParentRunRefId);
+        (@RefId, @WorkflowDefinitionId, @WorkflowRefId, @WorkflowVersion, @TriggerNodeId, @CorrelationKey, N'Running', @StartedAt, @CreditBudget, @ParentRunRefId, @Number);
 
     SET @RunId = SCOPE_IDENTITY();
 
@@ -45,7 +49,8 @@ BEGIN
         CreditBudget,
         CreatedAt,
         ParentRunRefId,
-        OutputJson
+        OutputJson,
+        Number
     FROM dbo.Runs
     WHERE Id = @RunId;
 END;

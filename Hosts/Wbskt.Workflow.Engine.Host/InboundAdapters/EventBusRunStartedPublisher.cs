@@ -17,7 +17,7 @@ public sealed class EventBusRunStartedPublisher(IWorkflowDefinitionCache definit
     {
         WorkflowDefinition definition = await definitionCache.GetAsync(run.WorkflowDefinitionId, ct);
         await eventBus.PublishAsync(
-            new WorkflowRunStartedEvent(run.WorkflowRefId, run.WorkflowDefinitionId, run.RefId, definition.WorkspaceId),
+            new WorkflowRunStartedEvent(run.WorkflowRefId, run.WorkflowDefinitionId, run.RefId, definition.WorkspaceId, run.Number),
             ct);
     }
 }
