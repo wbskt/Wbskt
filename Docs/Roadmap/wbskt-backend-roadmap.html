@@ -342,7 +342,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
  "work": {
   "167": {
    "state": "decide",
-   "why": "Split on 8 Nov into plans (#626), an account credit ledger (#627), a run-start charge (#628), a message meter (#629), a usage API (#630), payments (#631) and the console usage page (Console#151). Prices and whether to charge at launch are open."
+   "why": "Split on 8 Nov into plans (#626), an account credit ledger (#627), a run-start charge (#628), a message meter (#629), a usage API (#630), payments through Dodo Payments (#631) and the console usage page (Console#151). Prices and whether to charge at launch are open."
   },
   "528": {
    "state": "you",
@@ -452,7 +452,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {
    "status": "open",
    "title": "Charge from the December launch, or launch free and charge later?",
-   "body": "Plans, the credit ledger and the message meter are filed for M3 so Free limits hold at launch either way (#626-#630, #632). Payments (#631) are Post-launch unless charging starts at launch. Prices and the provider are still open.",
+   "body": "Plans, the credit ledger and the message meter are filed for M3 so Free limits hold at launch either way (#626-#630, #632). Payments (#631) are Post-launch unless charging starts at launch. Prices are still open.",
    "issue": 167
   },
   {
@@ -466,6 +466,13 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "title": "Which milestone does engine scale-out belong in?",
    "body": "The engine runs one active leader with standbys. A plan to let every replica work takes about 2 to 3 weeks with no new infra (#166).",
    "issue": 166
+  },
+  {
+   "status": "decided",
+   "date": "2026-11-08",
+   "title": "Payment provider: Dodo Payments",
+   "body": "Dodo Payments as merchant of record, so it files VAT, GST and sales tax worldwide; Paddle is the fallback. Business customers on invoice.",
+   "issue": 631
   },
   {
    "status": "decided",
@@ -533,7 +540,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
  ],
  "issues": [
   {"n":632,"t":"Readings: compress, average old readings and keep them per plan","s":"o","m":"M3","p":440,"a":["management","db"]},
-  {"n":631,"t":"Payments: subscriptions and credit top-ups through a payment provider","s":"o","m":"Post","p":167,"a":["management"]},
+  {"n":631,"t":"Payments: subscriptions and credit top-ups through Dodo Payments","s":"o","m":"Post","p":167,"a":["management"]},
   {"n":630,"t":"Usage API: credits, messages and clients against the plan","s":"o","m":"M3","p":167,"a":["management"]},
   {"n":629,"t":"Meter client messages per account per month","s":"o","m":"M3","p":167,"a":["management","socket"]},
   {"n":628,"t":"Credits: charge for a run start and reprice email","s":"o","m":"M3","p":167,"a":["engine"]},
