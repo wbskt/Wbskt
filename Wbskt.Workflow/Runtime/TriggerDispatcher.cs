@@ -320,7 +320,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
                     break;
             }
 
-            // Some starts take a place under the workspace's active-run ceiling that is already held, so
+            // Some starts take a place under the plan's active-run ceiling that is already held, so
             // refusing them would lose work rather than shed it: a sub-workflow child (its parent is running),
             // a queued event's replay (the run that finished made the room, and the event has left the queue),
             // and a start replacing the runs it has just cancelled (refusing it would leave nothing running).
@@ -333,7 +333,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
                 started = await _runStarter.StartAsync(registration.WorkflowDefinitionId, registration.TriggerNodeId.ToString(), normalizedEvent, startKey, ct, exemptFromCeiling, activeRunGuard);
                 break;
             }
-            catch (WorkspaceRunCeilingException ex)
+            catch (PlanRunLimitException ex)
             {
                 // Thrown away for good, so the user is told: the event itself cannot say so to anyone.
                 _refusalReporter?.Report(new RunRefusal(ex.WorkspaceId, registration.WorkflowDefinitionId, registration.WorkflowRefId, normalizedEvent.ChannelKind, ex.Limit, normalizedEvent.ReceivedAt));

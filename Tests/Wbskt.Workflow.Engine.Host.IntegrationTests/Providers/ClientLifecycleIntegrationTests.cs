@@ -6,6 +6,7 @@ using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Models;
 using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 using Wbskt.Models;
+using Wbskt.Models.Billing;
 
 namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 
@@ -93,7 +94,7 @@ public sealed class ClientLifecycleIntegrationTests(SqlEdgeFixture fixture)
         Guid[] refs = await Task.WhenAll(pending.Select(RefIdOfAsync));
 
         var outcomes = await Task.WhenAll(refs.Select(async refId =>
-            (await Clients().UpdateStatusesAsync(workspaceId, [refId], ClientStatus.Registered, maxPerWorkspace: null)).Single().Outcome));
+            (await Clients().UpdateStatusesAsync(workspaceId, [refId], ClientStatus.Registered, ceiling: null)).Single().Outcome));
 
         Assert.Equal(1, outcomes.Count(o => o == ClientStatusOutcome.Updated));
         Assert.All(outcomes.Where(o => o != ClientStatusOutcome.Updated), o => Assert.Equal(ClientStatusOutcome.PolicyLimitReached, o));
@@ -102,12 +103,12 @@ public sealed class ClientLifecycleIntegrationTests(SqlEdgeFixture fixture)
         // Revoking is never limited, and an already-registered client can be re-saved as registered.
         // refs[0] may be the one that won the race, so its old status is whatever the table says now.
         var before = (ClientStatus)await ScalarAsync<byte>("SELECT Status FROM dbo.Clients WHERE RefId = @p0", refs[0]);
-        var revoked = (await Clients().UpdateStatusesAsync(workspaceId, [refs[0]], ClientStatus.Revoked, maxPerWorkspace: null)).Single();
+        var revoked = (await Clients().UpdateStatusesAsync(workspaceId, [refs[0]], ClientStatus.Revoked, ceiling: null)).Single();
         Assert.Equal(ClientStatusOutcome.Updated, revoked.Outcome);
         Assert.Equal(before, revoked.OldStatus);
         Guid registered = await ScalarAsync<Guid>("SELECT TOP 1 RefId FROM dbo.Clients WHERE PolicyId = @p0 AND Status = 1", policyId);
         Assert.Equal(ClientStatusOutcome.AlreadyAtStatus,
-            (await Clients().UpdateStatusesAsync(workspaceId, [registered], ClientStatus.Registered, maxPerWorkspace: null)).Single().Outcome);
+            (await Clients().UpdateStatusesAsync(workspaceId, [registered], ClientStatus.Registered, ceiling: null)).Single().Outcome);
     }
 
     [SkippableFact]
@@ -125,7 +126,7 @@ public sealed class ClientLifecycleIntegrationTests(SqlEdgeFixture fixture)
         Guid missing = Guid.NewGuid();
 
         var changes = await Clients().UpdateStatusesAsync(workspaceId,
-            [limited[2], unlimited, foreign, limited[0], missing, alreadyRegistered, limited[1]], ClientStatus.Registered, maxPerWorkspace: null);
+            [limited[2], unlimited, foreign, limited[0], missing, alreadyRegistered, limited[1]], ClientStatus.Registered, ceiling: null);
 
         Assert.Equal(
             new[]
@@ -160,7 +161,7 @@ public sealed class ClientLifecycleIntegrationTests(SqlEdgeFixture fixture)
 
         // Three places are left. pending[3] is refused by its policy before the workspace counts, so
         // it does not take one of them; pending[0..2] fill them.
-        var changes = await Clients().UpdateStatusesAsync(workspaceId, [pending[1], pending[3], pending[0], pending[2]], ClientStatus.Registered, maxPerWorkspace: 3);
+        var changes = await Clients().UpdateStatusesAsync(workspaceId, [pending[1], pending[3], pending[0], pending[2]], ClientStatus.Registered, ceiling: new PlanCeiling(3, null));
 
         Assert.Equal(
             new[]
@@ -168,7 +169,7 @@ public sealed class ClientLifecycleIntegrationTests(SqlEdgeFixture fixture)
                 (pending[1], ClientStatusOutcome.Updated),
                 (pending[3], ClientStatusOutcome.PolicyLimitReached),
                 (pending[0], ClientStatusOutcome.Updated),
-                (pending[2], ClientStatusOutcome.WorkspaceLimitReached)
+                (pending[2], ClientStatusOutcome.PlanLimitReached)
             },
             changes.Select(c => (c.RefId, c.Outcome)));
         Assert.Equal(3, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Clients WHERE WorkspaceId = @p0 AND Status = 1", workspaceId));
@@ -185,17 +186,17 @@ public sealed class ClientLifecycleIntegrationTests(SqlEdgeFixture fixture)
         await CreateClientAsync(workspaceId, policyId, status: 1);
         await CreateClientAsync(workspaceId, policyId, status: 1);
 
-        var changes = await Clients().UpdateStatusesAsync(workspaceId, revoked, ClientStatus.Registered, maxPerWorkspace: 3);
+        var changes = await Clients().UpdateStatusesAsync(workspaceId, revoked, ClientStatus.Registered, ceiling: new PlanCeiling(3, null));
 
-        Assert.Equal([ClientStatusOutcome.Updated, ClientStatusOutcome.WorkspaceLimitReached], changes.Select(c => c.Outcome));
+        Assert.Equal([ClientStatusOutcome.Updated, ClientStatusOutcome.PlanLimitReached], changes.Select(c => c.Outcome));
         Assert.Equal(3, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Clients WHERE WorkspaceId = @p0 AND Status = 1", workspaceId));
         Assert.Equal(2, await ScalarAsync<byte>("SELECT Status FROM dbo.Clients WHERE RefId = @p0", revoked[1]));
 
         // Revoking is never limited, and frees a place for the one refused.
         Assert.Equal(ClientStatusOutcome.Updated,
-            (await Clients().UpdateStatusesAsync(workspaceId, [revoked[0]], ClientStatus.Revoked, maxPerWorkspace: 3)).Single().Outcome);
+            (await Clients().UpdateStatusesAsync(workspaceId, [revoked[0]], ClientStatus.Revoked, ceiling: new PlanCeiling(3, null))).Single().Outcome);
         Assert.Equal(ClientStatusOutcome.Updated,
-            (await Clients().UpdateStatusesAsync(workspaceId, [revoked[1]], ClientStatus.Registered, maxPerWorkspace: 3)).Single().Outcome);
+            (await Clients().UpdateStatusesAsync(workspaceId, [revoked[1]], ClientStatus.Registered, ceiling: new PlanCeiling(3, null))).Single().Outcome);
     }
 
     [SkippableFact]
@@ -210,12 +211,12 @@ public sealed class ClientLifecycleIntegrationTests(SqlEdgeFixture fixture)
         // Approvals one at a time and in pairs, with auto-approved registrations through
         // Client_Create mixed in, all against the same four places.
         Guid[][] batches = [[pending[0]], [pending[1]], [pending[2], pending[3]], [pending[4]], [pending[5]], [pending[6], pending[7]], [pending[8], pending[9]]];
-        var approvals = batches.Select(batch => Task.Run(() => Clients().UpdateStatusesAsync(workspaceId, batch, ClientStatus.Registered, maxPerWorkspace: 4))).ToArray();
+        var approvals = batches.Select(batch => Task.Run(() => Clients().UpdateStatusesAsync(workspaceId, batch, ClientStatus.Registered, ceiling: new PlanCeiling(4, null)))).ToArray();
         var registrations = Enumerable.Range(0, 4).Select(i => Task.Run(async () =>
         {
             try
             {
-                await Clients().InsertClientAsync(workspaceId, policies[i % 2], "racer", new byte[ClientCredential.SecretHashBytes], ClientStatus.Registered, maxPerWorkspace: 4);
+                await Clients().InsertClientAsync(workspaceId, policies[i % 2], "racer", new byte[ClientCredential.SecretHashBytes], ClientStatus.Registered, ceiling: new PlanCeiling(4, null));
                 return true;
             }
             catch (SqlException ex) when (ex.Number == 50025)
@@ -227,12 +228,41 @@ public sealed class ClientLifecycleIntegrationTests(SqlEdgeFixture fixture)
         var approved = (await Task.WhenAll(approvals)).SelectMany(c => c).ToList();
         var registered = await Task.WhenAll(registrations);
 
-        Assert.All(approved, c => Assert.Contains(c.Outcome, new[] { ClientStatusOutcome.Updated, ClientStatusOutcome.WorkspaceLimitReached }));
+        Assert.All(approved, c => Assert.Contains(c.Outcome, new[] { ClientStatusOutcome.Updated, ClientStatusOutcome.PlanLimitReached }));
         Assert.Equal(4, approved.Count(c => c.Outcome == ClientStatusOutcome.Updated) + registered.Count(r => r));
         Assert.Equal(4, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Clients WHERE WorkspaceId = @p0 AND Status = 1", workspaceId));
     }
 
+    [SkippableFact]
+    public async Task The_client_limit_is_pooled_across_a_tenants_workspaces_and_no_further()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int tenantId = NewWorkspaceId();
+        int first = NewWorkspaceId();
+        int second = NewWorkspaceId();
+        int stranger = NewWorkspaceId();
+        await AddAccountAsync(first, tenantId);
+        await AddAccountAsync(second, tenantId);
+        await AddAccountAsync(stranger, tenantId + 1);
+        await CreateClientAsync(first, await CreatePolicyAsync(first), status: 1);
+        await CreateClientAsync(first, await CreatePolicyAsync(first), status: 1);
+        await CreateClientAsync(stranger, await CreatePolicyAsync(stranger), status: 1);
+        int secondPolicy = await CreatePolicyAsync(second);
+        Guid pending = await RefIdOfAsync(await CreateClientAsync(second, secondPolicy, status: 0));
+        var ceiling = new PlanCeiling(3, tenantId);
+
+        await Clients().InsertClientAsync(second, secondPolicy, "third", new byte[ClientCredential.SecretHashBytes], ClientStatus.Registered, ceiling);
+        Func<Task> fourth = () => Clients().InsertClientAsync(second, secondPolicy, "fourth", new byte[ClientCredential.SecretHashBytes], ClientStatus.Registered, ceiling);
+        var approval = (await Clients().UpdateStatusesAsync(second, [pending], ClientStatus.Registered, ceiling)).Single();
+
+        Assert.Equal(50025, (await Assert.ThrowsAsync<SqlException>(fourth)).Number);
+        Assert.Equal(ClientStatusOutcome.PlanLimitReached, approval.Outcome);
+    }
+
     // ---------------------------------------------------------------- helpers
+
+    private Task AddAccountAsync(int workspaceId, int tenantId) =>
+        ExecAsync("INSERT INTO dbo.WorkspaceAccounts (WorkspaceId, TenantId, TenantRefId, PlanCode, PlanRevision) VALUES (@p0, @p1, NEWID(), N'Free', 0)", workspaceId, tenantId);
 
     [SkippableFact]
     public async Task The_list_takes_several_statuses_and_the_counts_match_it()

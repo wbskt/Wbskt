@@ -1,4 +1,5 @@
 using Microsoft.Data.SqlClient;
+using Wbskt.Models.Billing;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -13,7 +14,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 [Collection("SqlEdge")]
 public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
 {
-    private const int WorkspaceRunCeilingError = 50026;
+    private const int PlanRunLimitError = 50026;
     private const int ActiveRunConflictError = 50028;
     private const string SkipReason = "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.";
 
@@ -143,14 +144,14 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
         (RunRow firstRun, BranchRow firstBranch) = NewRun(wd);
         (RunRow retryRun, BranchRow retryBranch) = NewRun(wd);
 
-        RunStartRow first = await runProvider.StartAsync(firstRun, firstBranch, key, workspaceId, 1, CancellationToken.None);
-        RunStartRow retry = await runProvider.StartAsync(retryRun, retryBranch, key, workspaceId, 1, CancellationToken.None);
+        RunStartRow first = await runProvider.StartAsync(firstRun, firstBranch, key, workspaceId, new PlanCeiling(1, null), CancellationToken.None);
+        RunStartRow retry = await runProvider.StartAsync(retryRun, retryBranch, key, workspaceId, new PlanCeiling(1, null), CancellationToken.None);
         (RunRow refused, BranchRow refusedBranch) = NewRun(wd);
-        Func<Task> act = () => runProvider.StartAsync(refused, refusedBranch, null, workspaceId, 1, CancellationToken.None);
+        Func<Task> act = () => runProvider.StartAsync(refused, refusedBranch, null, workspaceId, new PlanCeiling(1, null), CancellationToken.None);
         await act.Should().ThrowAsync<SqlException>();
         await runProvider.SetTerminalAsync(first.Run.Id, RunStatus.Succeeded, DateTime.UtcNow, CancellationToken.None);
         (RunRow next, BranchRow nextBranch) = NewRun(wd);
-        RunStartRow afterRefusal = await runProvider.StartAsync(next, nextBranch, null, workspaceId, 1, CancellationToken.None);
+        RunStartRow afterRefusal = await runProvider.StartAsync(next, nextBranch, null, workspaceId, new PlanCeiling(1, null), CancellationToken.None);
 
         first.Run.Number.Should().Be(1);
         retry.Run.Number.Should().Be(1);
@@ -191,13 +192,13 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
         for (int i = 0; i < 2; i++)
         {
             (RunRow run, BranchRow branch) = NewRun(wd);
-            await runProvider.StartAsync(run, branch, null, workspaceId, 2, CancellationToken.None);
+            await runProvider.StartAsync(run, branch, null, workspaceId, new PlanCeiling(2, null), CancellationToken.None);
         }
 
         (RunRow extra, BranchRow extraBranch) = NewRun(wd);
-        Func<Task> act = () => runProvider.StartAsync(extra, extraBranch, null, workspaceId, 2, CancellationToken.None);
+        Func<Task> act = () => runProvider.StartAsync(extra, extraBranch, null, workspaceId, new PlanCeiling(2, null), CancellationToken.None);
 
-        (await act.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(WorkspaceRunCeilingError);
+        (await act.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(PlanRunLimitError);
         (await runProvider.FindRowByRefIdAsync(extra.RefId, CancellationToken.None)).Should().BeNull();
     }
 
@@ -213,8 +214,8 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
         (RunRow first, BranchRow firstBranch) = NewRun(wd);
         (RunRow retry, BranchRow retryBranch) = NewRun(wd);
 
-        RunStartRow started = await runProvider.StartAsync(first, firstBranch, key, workspaceId, 1, CancellationToken.None);
-        RunStartRow again = await runProvider.StartAsync(retry, retryBranch, key, workspaceId, 1, CancellationToken.None);
+        RunStartRow started = await runProvider.StartAsync(first, firstBranch, key, workspaceId, new PlanCeiling(1, null), CancellationToken.None);
+        RunStartRow again = await runProvider.StartAsync(retry, retryBranch, key, workspaceId, new PlanCeiling(1, null), CancellationToken.None);
 
         again.Created.Should().BeFalse();
         again.Run.Id.Should().Be(started.Run.Id);
@@ -229,11 +230,11 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
         WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
         var runProvider = ProviderFactory.Run(fixture.ConnectionString);
         (RunRow first, BranchRow firstBranch) = NewRun(wd);
-        await runProvider.StartAsync(first, firstBranch, null, workspaceId, 1, CancellationToken.None);
+        await runProvider.StartAsync(first, firstBranch, null, workspaceId, new PlanCeiling(1, null), CancellationToken.None);
         await runProvider.UpdateStatusAsync(first.RefId, RunStatus.Succeeded, DateTime.UtcNow, null, null, CancellationToken.None);
 
         (RunRow next, BranchRow nextBranch) = NewRun(wd);
-        RunStartRow started = await runProvider.StartAsync(next, nextBranch, null, workspaceId, 1, CancellationToken.None);
+        RunStartRow started = await runProvider.StartAsync(next, nextBranch, null, workspaceId, new PlanCeiling(1, null), CancellationToken.None);
 
         started.Created.Should().BeTrue();
     }
@@ -251,9 +252,9 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
             (RunRow run, BranchRow branch) = NewRun(wd);
             try
             {
-                return await ProviderFactory.Run(fixture.ConnectionString).StartAsync(run, branch, null, workspaceId, 3, CancellationToken.None);
+                return await ProviderFactory.Run(fixture.ConnectionString).StartAsync(run, branch, null, workspaceId, new PlanCeiling(3, null), CancellationToken.None);
             }
-            catch (SqlException ex) when (ex.Number == WorkspaceRunCeilingError)
+            catch (SqlException ex) when (ex.Number == PlanRunLimitError)
             {
                 return null;
             }
@@ -261,6 +262,37 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
         RunStartRow?[] results = await Task.WhenAll(attempts);
 
         results.Count(r => r is not null).Should().Be(3);
+    }
+
+    [SkippableFact]
+    public async Task The_ceiling_is_pooled_across_a_tenants_workspaces_and_no_further()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int tenantId = NewWorkspaceId();
+        int first = NewWorkspaceId();
+        int second = NewWorkspaceId();
+        int stranger = NewWorkspaceId();
+        await AddAccountAsync(first, tenantId);
+        await AddAccountAsync(second, tenantId);
+        await AddAccountAsync(stranger, tenantId + 1);
+        WorkflowDefinitionRow firstWd = await CreateDefinitionAsync(first);
+        WorkflowDefinitionRow secondWd = await CreateDefinitionAsync(second);
+        WorkflowDefinitionRow strangerWd = await CreateDefinitionAsync(stranger);
+        var runProvider = ProviderFactory.Run(fixture.ConnectionString);
+        var ceiling = new PlanCeiling(2, tenantId);
+        (RunRow a, BranchRow aBranch) = NewRun(firstWd);
+        await runProvider.StartAsync(a, aBranch, null, first, ceiling, CancellationToken.None);
+        (RunRow s, BranchRow sBranch) = NewRun(strangerWd);
+        await runProvider.StartAsync(s, sBranch, null, stranger, new PlanCeiling(2, tenantId + 1), CancellationToken.None);
+
+        (RunRow b, BranchRow bBranch) = NewRun(secondWd);
+        RunStartRow started = await runProvider.StartAsync(b, bBranch, null, second, ceiling, CancellationToken.None);
+        (RunRow c, BranchRow cBranch) = NewRun(secondWd);
+        Func<Task> act = () => runProvider.StartAsync(c, cBranch, null, second, ceiling, CancellationToken.None);
+
+        started.Created.Should().BeTrue();
+        (await act.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(PlanRunLimitError);
     }
 
     [SkippableFact]
@@ -274,10 +306,10 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
         WorkflowDefinitionRow otherWd = await CreateDefinitionAsync(other);
         var runProvider = ProviderFactory.Run(fixture.ConnectionString);
         (RunRow a, BranchRow aBranch) = NewRun(busyWd);
-        await runProvider.StartAsync(a, aBranch, null, busy, 1, CancellationToken.None);
+        await runProvider.StartAsync(a, aBranch, null, busy, new PlanCeiling(1, null), CancellationToken.None);
 
         (RunRow b, BranchRow bBranch) = NewRun(otherWd);
-        RunStartRow started = await runProvider.StartAsync(b, bBranch, null, other, 1, CancellationToken.None);
+        RunStartRow started = await runProvider.StartAsync(b, bBranch, null, other, new PlanCeiling(1, null), CancellationToken.None);
 
         started.Created.Should().BeTrue();
     }
@@ -293,7 +325,7 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
         WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
         var runProvider = ProviderFactory.Run(fixture.ConnectionString);
         (RunRow first, BranchRow firstBranch) = NewRun(wd);
-        await runProvider.StartAsync(first, firstBranch, null, workspaceId, 1, CancellationToken.None);
+        await runProvider.StartAsync(first, firstBranch, null, workspaceId, new PlanCeiling(1, null), CancellationToken.None);
 
         (RunRow exempt, BranchRow exemptBranch) = NewRun(wd);
         RunStartRow started = await runProvider.StartAsync(exempt, exemptBranch, null, workspaceId, null, CancellationToken.None);
@@ -302,27 +334,33 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
-    public async Task A_start_that_cannot_get_the_workspace_lock_in_time_is_refused()
+    public async Task A_start_that_cannot_get_the_plan_lock_in_time_is_refused()
     {
         Skip.IfNot(fixture.IsAvailable, SkipReason);
 
+        int tenantId = NewWorkspaceId();
         int workspaceId = NewWorkspaceId();
+        await AddAccountAsync(workspaceId, tenantId);
         WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
 
-        // Another session holds the workspace's ceiling lock for longer than Run_Start will wait.
+        // A start in another of the tenant's workspaces holds the plan's lock for longer than Run_Start will wait.
         await using var holder = new SqlConnection(fixture.ConnectionString);
         await holder.OpenAsync();
         await using SqlTransaction tx = (SqlTransaction)await holder.BeginTransactionAsync();
-        await using (var hold = new SqlCommand("EXEC sp_getapplock @Resource = @Resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction';", holder, tx))
+        await using (var hold = new SqlCommand(
+            "DECLARE @Resource NVARCHAR(255) = dbo.PlanLimitLockResource(N'runs', @OtherWorkspaceId, @TenantId); EXEC sp_getapplock @Resource = @Resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction';",
+            holder,
+            tx))
         {
-            hold.Parameters.AddWithValue("@Resource", $"run-ceiling:{workspaceId}");
+            hold.Parameters.AddWithValue("@OtherWorkspaceId", workspaceId - 1);
+            hold.Parameters.AddWithValue("@TenantId", tenantId);
             await hold.ExecuteNonQueryAsync();
         }
 
         (RunRow run, BranchRow branch) = NewRun(wd);
-        Func<Task> act = () => ProviderFactory.Run(fixture.ConnectionString).StartAsync(run, branch, null, workspaceId, 10, CancellationToken.None);
+        Func<Task> act = () => ProviderFactory.Run(fixture.ConnectionString).StartAsync(run, branch, null, workspaceId, new PlanCeiling(10, tenantId), CancellationToken.None);
 
-        (await act.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(WorkspaceRunCeilingError);
+        (await act.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(PlanRunLimitError);
         await tx.RollbackAsync();
         (await ProviderFactory.Run(fixture.ConnectionString).FindRowByRefIdAsync(run.RefId, CancellationToken.None)).Should().BeNull();
     }
@@ -433,6 +471,18 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
     }
 
     private static int NewWorkspaceId() => Random.Shared.Next(1_000_000, int.MaxValue);
+
+    private async Task AddAccountAsync(int workspaceId, int tenantId)
+    {
+        await using var connection = new SqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new SqlCommand(
+            "INSERT INTO dbo.WorkspaceAccounts (WorkspaceId, TenantId, TenantRefId, PlanCode, PlanRevision) VALUES (@WorkspaceId, @TenantId, NEWID(), N'Free', 0)",
+            connection);
+        command.Parameters.AddWithValue("@WorkspaceId", workspaceId);
+        command.Parameters.AddWithValue("@TenantId", tenantId);
+        await command.ExecuteNonQueryAsync();
+    }
 
     private async Task<WorkflowDefinitionRow> CreateDefinitionAsync(int workspaceId = 1)
     {

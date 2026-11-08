@@ -1,7 +1,7 @@
 namespace Wbskt.Workflow.Abstraction.Runtime;
 
 /// <summary>
-/// Told of every trigger the workspace's active-run ceiling refuses, so the user hears about it
+/// Told of every trigger the plan's active-run ceiling refuses, so the user hears about it
 /// (#432). The engine host coalesces them into one warning per workflow per window; elsewhere it is a
 /// no-op.
 /// </summary>

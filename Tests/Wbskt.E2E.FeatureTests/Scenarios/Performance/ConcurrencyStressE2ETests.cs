@@ -8,7 +8,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Performance;
 /// <summary>
 /// A thousand webhook-started runs, each forking five ways and joining, all at once: the engine must
 /// neither deadlock nor lose a run. Opt-in (<c>E2E_STRESS_TESTS=1</c>): it takes minutes and needs the
-/// public callback rate limits and the engine's workspace run ceiling raised, so it runs nightly
+/// public callback rate limits and the Free plan's active-run limit raised, so it runs nightly
 /// (.github/workflows/nightly-stress.yml), not on the pull-request gate.
 /// </summary>
 [Collection(EngineCollection.Name)]

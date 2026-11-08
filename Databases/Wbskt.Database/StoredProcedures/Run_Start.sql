@@ -11,7 +11,9 @@ CREATE PROCEDURE dbo.Run_Start
     @BranchRefId          UNIQUEIDENTIFIER,
     @BranchLocalJson      NVARCHAR(MAX),
     @WorkspaceId          INT = NULL,
+    -- The plan's limit on runs going at once, pooled across @TenantId's workspaces (50026).
     @MaxActiveRuns        INT = NULL,
+    @TenantId             INT = NULL,
     @ParentRunRefId       UNIQUEIDENTIFIER = NULL,
     @ActiveRunGuard       TINYINT = 0,
     -- A test run (see dbo.WorkflowDefinitions.Kind): at most one goes at a time per workflow (50029).
@@ -45,7 +47,7 @@ BEGIN
             -- same key may have started one since (#467). Checked again under a lock per workflow,
             -- trigger and key so concurrent starts take turns. ActiveRunGuard: 1 refuses while any run
             -- is active (DropIfRunning, Queue), 2 ignores Cancelling, which is where CancelExisting has
-            -- just put the runs it found. Taken before the workspace lock below, always in that order.
+            -- just put the runs it found. Taken before the plan lock below, always in that order.
             IF @ActiveRunGuard > 0 AND @CorrelationKey IS NOT NULL
             BEGIN
                 DECLARE @KeyResource NVARCHAR(255) = dbo.TriggerStartLockResource(@WorkflowRefId, @TriggerNodeId, @CorrelationKey);
@@ -96,27 +98,28 @@ BEGIN
                     THROW 50022, 'The workflow was deleted.', 1;
             END
 
-            -- The workspace's ceiling on runs going at once (Running, Failing or Cancelling, as in
-            -- IX_Runs_WorkflowRefId_CorrelationKey_Active). Counted under an application lock per
-            -- workspace, so concurrent starts one short of the ceiling cannot all pass the count.
-            -- NULL is no ceiling. The wait for the lock is bounded: a start that cannot get it in a
-            -- few seconds is refused as though the workspace were full, rather than holding an inbound
-            -- request (and a pooled connection) for as long as the workspace stays contended.
+            -- The plan's limit on runs going at once (Running, Failing or Cancelling, as in
+            -- IX_Runs_WorkflowRefId_CorrelationKey_Active), pooled across the tenant's workspaces
+            -- (dbo.TenantWorkspaces). Counted under an application lock per tenant, so concurrent
+            -- starts one short of the limit cannot all pass the count. NULL is no limit. The wait for
+            -- the lock is bounded: a start that cannot get it in a few seconds is refused as though the
+            -- plan were full, rather than holding an inbound request (and a pooled connection) for as
+            -- long as the tenant stays contended.
             IF @MaxActiveRuns IS NOT NULL AND @WorkspaceId IS NOT NULL
             BEGIN
-                DECLARE @Resource NVARCHAR(255) = CONCAT(N'run-ceiling:', @WorkspaceId);
+                DECLARE @Resource NVARCHAR(255) = dbo.PlanLimitLockResource(N'runs', @WorkspaceId, @TenantId);
                 DECLARE @LockResult INT;
                 EXEC @LockResult = sp_getapplock @Resource = @Resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
                 IF @LockResult < 0
-                    THROW 50026, 'The workspace is too busy to start another run.', 1;
+                    THROW 50026, 'The account is too busy to start another run.', 1;
 
                 -- IX_Runs_WorkflowDefinitionId_Active keeps this to the runs still going.
                 IF (SELECT COUNT(*)
                     FROM dbo.Runs r
                     JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
-                    WHERE d.WorkspaceId = @WorkspaceId
-                      AND r.Status IN (N'Running', N'Failing', N'Cancelling')) >= @MaxActiveRuns
-                    THROW 50026, 'The workspace has reached its limit of active runs.', 1;
+                    JOIN dbo.TenantWorkspaces(@WorkspaceId, @TenantId) w ON w.WorkspaceId = d.WorkspaceId
+                    WHERE r.Status IN (N'Running', N'Failing', N'Cancelling')) >= @MaxActiveRuns
+                    THROW 50026, 'The plan has reached its limit of active runs.', 1;
             END
 
             -- Last, after every check that can refuse the start, so the lock it takes on the workflow's

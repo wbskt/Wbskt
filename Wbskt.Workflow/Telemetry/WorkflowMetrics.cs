@@ -54,7 +54,7 @@ public sealed class WorkflowMetrics : IWorkerTickMetrics, IDisposable
     public Counter<long> RunsStarted { get; }
     public Counter<long> RunsCompleted { get; }
 
-    /// <summary>Triggers that started no run because their workspace was at its active-run ceiling.</summary>
+    /// <summary>Triggers that started no run because their plan was at its active-run ceiling.</summary>
     public Counter<long> RunsRefused { get; }
     public ObservableGauge<long> BranchesActive { get; }
     public ObservableGauge<long> BookmarksOutstanding { get; }

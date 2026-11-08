@@ -45,8 +45,9 @@ groups:
           summary: "{{ $value }} branches are queued for execution in the engine"
 
       - alert: WorkspaceRunCeilingReached
-        # A workspace with as many active runs as WorkflowEngine:MaxActiveRunsPerWorkspace allows has
-        # its triggers refused (sub-workflow children fail retryably) until runs finish.
+        # A workspace whose plan already has as many active runs as it allows (PlanLimits.ActiveRuns,
+        # pooled across the tenant's workspaces) has its triggers refused (sub-workflow children fail
+        # retryably) until runs finish.
         expr: sum by (workspace_id) (increase(wbskt_workflow_runs_refused_total[10m])) > 0
         for: 5m
         labels:
@@ -55,7 +56,8 @@ groups:
           summary: "Workspace {{ $labels.workspace_id }} is refusing triggers at its active-run ceiling"
           description: >-
             Look for runs piling up in that workspace (a stuck wait, a trigger firing far faster
-            than its runs finish). Raise the ceiling only if the load is legitimate.
+            than its runs finish). If the load is legitimate, the tenant needs a bigger plan or a
+            limit override.
 
       - alert: DeadLetteredMessages
         # MassTransit moves a message that exhausted its retries to <queue>_error, and one with no

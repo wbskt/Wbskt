@@ -128,7 +128,9 @@ branch's local state is `{ "trigger": <payload> }` and it starts on the trigger 
 executor stamps `trigger` and `triggeredAt` and continues.
 
 * **Credit budget**: the definition's `creditBudget`, else `DefaultCreditBudgetPerRun` (10 000).
-* **Workspace ceiling**: a workspace may have at most `MaxActiveRunsPerWorkspace` (200) active runs;
+* **Plan ceiling**: a tenant's workspaces may have at most their plan's `ActiveRuns` (Free 20, Maker
+  100, Pro and Business 200) active runs between them, counted under a lock per tenant (see
+  [Billing](../Billing.md));
   `Run_Start` raises error 50026 and the outcome is `Refused`. Child runs, queue replays and
   `CancelExisting` replacements are exempt, because refusing them would strand work already accepted.
   A refused event is thrown away for good, so the dispatcher tells `IRunRefusalReporter`. In the
@@ -401,7 +403,6 @@ message rates a line each would fill Loki, so "how many messages matched nothing
 | `CancellationCheckInterval` | 10 | Steps between run-row stop checks. |
 | `MaxFanOut` | 1 000 | Parallel-for-each items. |
 | `MaxBranchLocalStateBytes` | 256 KB | Local state size limit. |
-| `MaxActiveRunsPerWorkspace` | 200 | Workspace run ceiling. |
 | `MaxSubWorkflowDepth` | 8 | Nesting limit. |
 | `TriggerRegistrationCacheLifetime` | 1 min | 0 turns the cache off. |
 | Leader election renew / TTL | 10 s / 30 s | Leader lease. |

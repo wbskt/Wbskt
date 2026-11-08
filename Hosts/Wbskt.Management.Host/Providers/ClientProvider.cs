@@ -2,6 +2,8 @@ using Wbskt.Protocol;
 using System.Data;
 using Microsoft.Data.SqlClient;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Billing;
+using Wbskt.Models.Billing;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Models;
 using Wbskt.Models;
@@ -101,7 +103,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         statuses is null || statuses.Count == 0 ? null : statuses.Aggregate(0, (mask, status) => mask | 1 << (int)status);
 
     public async Task<Client> InsertClientAsync(int workspaceId, int policyId, string name, byte[] secretHash,
-        ClientStatus status, int? maxPerWorkspace, CancellationToken cancellationToken = default)
+        ClientStatus status, PlanCeiling? ceiling, CancellationToken cancellationToken = default)
     {
         var parameters = await ExecuteNonQueryAsync("dbo.Client_Create", p =>
         {
@@ -110,8 +112,8 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             p.AddWithValue("@Name", name);
             p.Add("@SecretHash", SqlDbType.VarBinary, ClientCredential.SecretHashBytes).Value = secretHash;
             p.AddWithValue("@Status", (byte)status);
-            p.AddWithValue("@MaxWorkspaceClients", (object?)maxPerWorkspace ?? DBNull.Value);
-            
+            AddCeiling(p, ceiling);
+
             p.Add("@Id", SqlDbType.Int).Direction = ParameterDirection.Output;
             p.Add("@RefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
         }, cancellationToken);
@@ -132,7 +134,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
     }
 
     public async Task<IReadOnlyList<ClientStatusChange>> UpdateStatusesAsync(int workspaceId, IReadOnlyList<Guid> clientRefIds,
-        ClientStatus status, int? maxPerWorkspace, CancellationToken cancellationToken = default)
+        ClientStatus status, PlanCeiling? ceiling, CancellationToken cancellationToken = default)
     {
         using var table = new DataTable();
         table.Columns.Add("Ordinal", typeof(int));
@@ -149,7 +151,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
                 var parameter = p.AddWithValue("@Clients", table);
                 parameter.SqlDbType = SqlDbType.Structured;
                 parameter.TypeName = "dbo.OrderedRefIdTableType";
-                p.AddWithValue("@MaxWorkspaceClients", (object?)maxPerWorkspace ?? DBNull.Value);
+                AddCeiling(p, ceiling);
             },
             reader => new ClientStatusChange(
                 reader.GetGuid(reader.GetOrdinal("RefId")),
@@ -474,5 +476,11 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             CapabilitiesUpdatedAt = reader.IsDBNull(reader.GetOrdinal("CapabilitiesUpdatedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("CapabilitiesUpdatedAt")),
             Tags = ReadTags(reader)
         };
+    }
+
+    private static void AddCeiling(SqlParameterCollection p, PlanCeiling? ceiling)
+    {
+        p.AddWithValue("@ClientLimit", (object?)ceiling?.Limit ?? DBNull.Value);
+        p.AddWithValue("@TenantId", (object?)ceiling?.TenantId ?? DBNull.Value);
     }
 }

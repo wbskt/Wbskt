@@ -528,7 +528,7 @@ public sealed class WorkflowValidatorRuleTests
     [Fact]
     public void Validate_rejects_a_SubWorkflow_that_starts_its_own_workflow()
     {
-        // A child is exempt from the workspace run ceiling, so a workflow that starts itself would start
+        // A child is exempt from the plan's active-run ceiling, so a workflow that starts itself would start
         // children without end.
         var def = ValidWorkflowBuilder.Build();
         SubWorkflowNode sub = SubWorkflowTo(def.WorkflowRefId);

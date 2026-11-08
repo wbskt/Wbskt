@@ -306,7 +306,7 @@ public sealed class SubWorkflowNodeExecutorTests
     [Fact]
     public async Task First_visit_refuses_a_child_past_the_configured_depth_ceiling()
     {
-        // A child is exempt from the workspace run ceiling, so a workflow that reaches itself would
+        // A child is exempt from the plan's active-run ceiling, so a workflow that reaches itself would
         // otherwise start children forever.
         var hub = new Mock<IInboundHub>();
         var options = Options.Create(new WorkflowEngineOptions { MaxSubWorkflowDepth = 2 });

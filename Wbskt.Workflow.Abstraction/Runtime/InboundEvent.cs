@@ -29,7 +29,7 @@ public sealed record InboundEvent(
 
     /// <summary>
     /// Set only by a parent's sub-workflow node starting its child. The parent already holds a place
-    /// under the workspace's active-run ceiling, so the child is started past it. Never read from
+    /// under the plan's active-run ceiling, so the child is started past it. Never read from
     /// JSON, so no inbound adapter (or a queued event's stored copy) can claim it.
     /// </summary>
     [JsonIgnore]

@@ -2,6 +2,8 @@ using System.Diagnostics.Metrics;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
+using Wbskt.Infrastructure.Billing;
+using Wbskt.Models.Billing;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Models;
@@ -34,6 +36,7 @@ public sealed class RunStarterTests
             new NullRunStartedPublisher(),
             new FixedClock(),
             new SequenceIdGenerator(),
+            new FixedWorkspacePlans(),
             Options.Create(new WorkflowEngineOptions()));
         InboundEvent triggerEvent = new(
             "client",
@@ -92,6 +95,7 @@ public sealed class RunStarterTests
             new NullRunStartedPublisher(),
             new FixedClock(),
             new SequenceIdGenerator(),
+            new FixedWorkspacePlans(),
             Options.Create(new WorkflowEngineOptions { DefaultCreditBudgetPerRun = 250m }));
         InboundEvent triggerEvent = new(
             "client",
@@ -128,6 +132,7 @@ public sealed class RunStarterTests
             new NullRunStartedPublisher(),
             new FixedClock(),
             new SequenceIdGenerator(),
+            new FixedWorkspacePlans(),
             Options.Create(new WorkflowEngineOptions()));
         InboundEvent triggerEvent = new("client", [], "evt-1", new Dictionary<string, JsonElement>(), new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc))
         {
@@ -144,16 +149,29 @@ public sealed class RunStarterTests
     }
 
     [Fact]
-    public async Task Start_passes_the_workspace_and_its_active_run_ceiling_to_the_store()
+    public async Task Start_passes_the_workspace_and_its_plans_active_run_ceiling_to_the_store()
     {
         List<string> operations = [];
         var runProvider = new RecordingRunProvider(operations);
-        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions { MaxActiveRunsPerWorkspace = 7 });
+        var plans = new FixedWorkspacePlans(PlanCode.Maker, tenantId: 9, adjust: l => l with { ActiveRuns = 7 });
+        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions(), plans: plans);
 
         await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), AnEvent(), null, CancellationToken.None);
 
         Assert.Equal((await new RecordingWorkflowDefinitionProvider().GetByIdAsync(42, CancellationToken.None)).WorkspaceId, runProvider.WorkspaceId);
-        Assert.Equal(7, runProvider.MaxActiveRuns);
+        Assert.Equal(new PlanCeiling(7, 9), runProvider.Ceiling);
+    }
+
+    [Fact]
+    public async Task A_workspace_whose_account_has_not_arrived_is_held_to_free_on_its_own()
+    {
+        List<string> operations = [];
+        var runProvider = new RecordingRunProvider(operations);
+        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions());
+
+        await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), AnEvent(), null, CancellationToken.None);
+
+        Assert.Equal(new PlanCeiling(PlanCatalog.BuiltIn[PlanCode.Free].ActiveRuns, null), runProvider.Ceiling);
     }
 
     [Fact]
@@ -161,24 +179,12 @@ public sealed class RunStarterTests
     {
         List<string> operations = [];
         var runProvider = new RecordingRunProvider(operations) { AtCeiling = true };
-        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions { MaxActiveRunsPerWorkspace = 3 });
+        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions());
 
         RunStartResult result = await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), AnEvent(), null, CancellationToken.None, exemptFromCeiling: true);
 
         Assert.True(result.Created);
-        Assert.Null(runProvider.MaxActiveRuns);
-    }
-
-    [Fact]
-    public async Task Start_sends_no_ceiling_when_it_is_switched_off()
-    {
-        List<string> operations = [];
-        var runProvider = new RecordingRunProvider(operations);
-        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions { MaxActiveRunsPerWorkspace = 0 });
-
-        await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), AnEvent(), null, CancellationToken.None);
-
-        Assert.Null(runProvider.MaxActiveRuns);
+        Assert.Null(runProvider.Ceiling);
     }
 
     [Fact]
@@ -187,9 +193,10 @@ public sealed class RunStarterTests
         List<string> operations = [];
         var runProvider = new RecordingRunProvider(operations) { AtCeiling = true };
         var historyProvider = new RecordingHistoryEventProvider(operations);
-        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions { MaxActiveRunsPerWorkspace = 3 }, historyProvider);
+        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions(), historyProvider,
+            plans: new FixedWorkspacePlans(adjust: l => l with { ActiveRuns = 3 }));
 
-        var refused = await Assert.ThrowsAsync<WorkspaceRunCeilingException>(() =>
+        var refused = await Assert.ThrowsAsync<PlanRunLimitException>(() =>
             starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), AnEvent(), "trigger-start:5:abc", CancellationToken.None));
 
         Assert.Equal(3, refused.Limit);
@@ -302,7 +309,7 @@ public sealed class RunStarterTests
         Assert.Equal(expected, consumed);
     }
 
-    private static RunStarter Starter(RecordingRunProvider runProvider, List<string> operations, WorkflowEngineOptions options, RecordingHistoryEventProvider? historyProvider = null, IWorkflowDefinitionCache? definitionCache = null, CreditCostOptions? creditCosts = null, WorkflowMetrics? workflowMetrics = null) => new(
+    private static RunStarter Starter(RecordingRunProvider runProvider, List<string> operations, WorkflowEngineOptions options, RecordingHistoryEventProvider? historyProvider = null, IWorkflowDefinitionCache? definitionCache = null, CreditCostOptions? creditCosts = null, WorkflowMetrics? workflowMetrics = null, IWorkspacePlans? plans = null) => new(
         runProvider,
         new RunJournal(historyProvider ?? new RecordingHistoryEventProvider(operations), new FixedClock()),
         new RecordingWorkflowDefinitionProvider(),
@@ -311,6 +318,7 @@ public sealed class RunStarterTests
         new NullRunStartedPublisher(),
         new FixedClock(),
         new SequenceIdGenerator(),
+        plans ?? new FixedWorkspacePlans(),
         Options.Create(options),
         workflowMetrics,
         creditCosts: creditCosts is null ? null : Options.Create(creditCosts));
@@ -338,16 +346,16 @@ public sealed class RunStarterTests
         public bool AlreadyStarted { get; init; }
         public bool AtCeiling { get; init; }
         public int WorkspaceId { get; private set; }
-        public int? MaxActiveRuns { get; private set; }
+        public PlanCeiling? Ceiling { get; private set; }
 
-        public Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, int? maxActiveRuns, CancellationToken ct)
+        public Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, PlanCeiling? ceiling, CancellationToken ct)
         {
             WorkspaceId = workspaceId;
-            MaxActiveRuns = maxActiveRuns;
-            if (AtCeiling && maxActiveRuns is not null)
+            Ceiling = ceiling;
+            if (AtCeiling && ceiling is not null)
             {
                 operations.Add("run");
-                throw AuthHost.SqlExceptions.WithNumber(50026, "The workspace has reached its limit of active runs.");
+                throw AuthHost.SqlExceptions.WithNumber(50026, "The plan has reached its limit of active runs.");
             }
 
             return StartAsync(run, rootBranch, triggerStartKey, ct);

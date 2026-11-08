@@ -244,7 +244,7 @@ public sealed partial class WorkflowValidator
 
     /// <summary>
     /// A sub-workflow step that starts its own workflow starts a child that reaches the same step and
-    /// starts another, and a child is exempt from the workspace run ceiling. The engine's depth ceiling
+    /// starts another, and a child is exempt from the plan's active-run ceiling. The engine's depth ceiling
     /// stops it eventually; this stops the direct case before it is ever published. A cycle through
     /// another workflow cannot be seen from one definition and is left to the depth ceiling.
     /// </summary>

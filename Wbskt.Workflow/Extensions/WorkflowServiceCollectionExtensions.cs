@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using Wbskt.Infrastructure.Billing;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
@@ -93,6 +94,9 @@ public static class WorkflowServiceCollectionExtensions
         // The master keys and transport rules for integrations. The credentials themselves are each
         // workspace's own, sealed in dbo.Integrations - never host configuration, never on a node.
         services.AddSingleton(Options.Create(configuration.GetSection(IntegrationOptions.SectionName).Get<IntegrationOptions>() ?? new IntegrationOptions()));
+
+        // Each workspace's plan, for the active-run ceiling a start is held to.
+        services.AddWorkspacePlans(configuration);
 
         return AddWorkflowRuntime(services);
     }

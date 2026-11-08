@@ -73,16 +73,9 @@ public sealed class WorkflowEngineOptions
     public int MaxBranchLocalStateBytes { get; init; } = 256 * 1024;
 
     /// <summary>
-    /// The most runs one workspace may have going at once (running, failing or cancelling). A trigger
-    /// past it is refused, not queued: no run starts and the dispatch reads Refused. Zero or less is no
-    /// ceiling.
-    /// </summary>
-    public int MaxActiveRunsPerWorkspace { get; init; } = 200;
-
-    /// <summary>
     /// How deeply sub-workflows may nest: a run started by a trigger is depth 0, its child depth 1, and
     /// a sub-workflow step whose child would be deeper than this fails instead of starting it. A child
-    /// is started past the workspace run ceiling, so without this a workflow that reaches itself, or
+    /// is started past the plan's active-run ceiling, so without this a workflow that reaches itself, or
     /// two that reach each other, would start children until something else gave way. Zero allows no
     /// sub-workflows at all.
     /// </summary>

@@ -1,3 +1,4 @@
+using Wbskt.Models.Billing;
 using System.Data;
 using System.Data.Common;
 using Microsoft.Data.SqlClient;
@@ -38,10 +39,10 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
     public Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, CancellationToken ct)
         => StartAsync(run, rootBranch, triggerStartKey, 0, null, ct);
 
-    public Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, int? maxActiveRuns, CancellationToken ct)
-        => StartAsync(run, rootBranch, triggerStartKey, workspaceId, maxActiveRuns, ActiveRunGuard.None, ct);
+    public Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, PlanCeiling? ceiling, CancellationToken ct)
+        => StartAsync(run, rootBranch, triggerStartKey, workspaceId, ceiling, ActiveRunGuard.None, ct);
 
-    public async Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, int? maxActiveRuns, ActiveRunGuard activeRunGuard, CancellationToken ct)
+    public async Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, PlanCeiling? ceiling, ActiveRunGuard activeRunGuard, CancellationToken ct)
     {
         return await ExecuteSingleAsync(
             "dbo.Run_Start",
@@ -62,10 +63,11 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
                 p.AddWithValue("@ActiveRunGuard", (byte)activeRunGuard);
                 p.AddWithValue("@IsTest", run.IsTest);
                 p.AddWithValue("@StartCost", run.StartCost);
-                if (maxActiveRuns is not null)
+                if (ceiling is not null)
                 {
                     p.AddWithValue("@WorkspaceId", workspaceId);
-                    p.AddWithValue("@MaxActiveRuns", maxActiveRuns.Value);
+                    p.AddWithValue("@MaxActiveRuns", ceiling.Limit);
+                    p.AddWithValue("@TenantId", (object?)ceiling.TenantId ?? DBNull.Value);
                 }
             },
             MapStart,

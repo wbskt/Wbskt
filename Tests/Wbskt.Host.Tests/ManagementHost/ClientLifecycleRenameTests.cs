@@ -22,7 +22,7 @@ public sealed class ClientLifecycleRenameTests
         var provider = new Mock<IClientProvider>();
         provider.Setup(x => x.FindDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>())).ReturnsAsync(client);
         var bus = new Mock<IEventBus>();
-        var service = new ClientLifecycleService(provider.Object, bus.Object, NoCutoffs, NullLogger<ClientLifecycleService>.Instance);
+        var service = new ClientLifecycleService(provider.Object, bus.Object, NoCutoffs, NullLogger<ClientLifecycleService>.Instance, new FixedWorkspacePlans());
         return (service, provider, bus);
     }
 
@@ -64,7 +64,7 @@ public sealed class ClientLifecycleRenameTests
         var provider = new Mock<IClientProvider>();
         provider.Setup(x => x.FindDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((ClientDetail?)null);
-        var service = new ClientLifecycleService(provider.Object, Mock.Of<IEventBus>(), NoCutoffs, NullLogger<ClientLifecycleService>.Instance);
+        var service = new ClientLifecycleService(provider.Object, Mock.Of<IEventBus>(), NoCutoffs, NullLogger<ClientLifecycleService>.Instance, new FixedWorkspacePlans());
 
         var result = await service.RenameAsync(WorkspaceId, ClientRefId, "new-name");
 
