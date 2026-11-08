@@ -12,7 +12,7 @@ one page per transport:
 | Binding | Page | Endpoint |
 |---|---|---|
 | WebSocket | [Client.Protocol.WebSocket.md](Client.Protocol.WebSocket.md) | `wss://ws.<domain>/ws` |
-| MQTT 3.1.1 and 5 | [Client.Protocol.MQTT.md](Client.Protocol.MQTT.md) | `mqtts://mqtt.<domain>:8883` |
+| MQTT 3.1.1 and 5 | [Client.Protocol.MQTT.md](Client.Protocol.MQTT.md) | `mqtts://mqtt.<domain>:8883` (plain `:1883` for boards without TLS) |
 
 A client makes two HTTPS calls, then holds one connection open through a binding:
 

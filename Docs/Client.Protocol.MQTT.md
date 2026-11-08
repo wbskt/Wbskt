@@ -5,8 +5,14 @@ themselves, commands and the reconnect schedule are all on that page; this one c
 particular to MQTT: CONNECT and how it is refused, the topics, and the reason codes. The
 `Wbskt.Gateway.MQTT.Host` serves it.
 
-The endpoint is `mqtts://mqtt.<DOMAIN>:8883`, MQTT over TLS. There is no plain-text port: the access
-token is the password, so it never travels unencrypted. The gateway is not a general broker. A client
+The endpoint is `mqtts://mqtt.<DOMAIN>:8883`, MQTT over TLS. Use it whenever the board can do TLS.
+
+`mqtt://mqtt.<DOMAIN>:1883`, plain MQTT, is open too, for boards too small for TLS. Everything on it
+travels in clear text, the access token included, so anyone on the network path can read the token and
+connect as the client until it expires. It behaves exactly like 8883 otherwise. An SDK that can do TLS
+uses 8883 and offers 1883 only as an explicit opt-in.
+
+The gateway is not a general broker. A client
 talks only to the gateway, on its own two topics, and never to another client.
 
 MQTT 3.1.1 and MQTT 5 are both accepted. MQTT 3.1.1 carries no reason code on DISCONNECT, so when the
@@ -87,7 +93,7 @@ update reads as an ordinary close.
 
 An SDK conforms to the MQTT binding when it:
 
-- [ ] connects over TLS with its `clientRefId` as client id and user name, and the access token as password;
+- [ ] connects over TLS by default (plain 1883 only when the user opts in), with its `clientRefId` as client id and user name, and the access token as password;
 - [ ] renews the token after CONNACK 0x86, and keeps it after any other refusal;
 - [ ] publishes only to its up topic, and reads its messages from its down topic;
 - [ ] on MQTT 5: drops the token after DISCONNECT 0x87, waits 30–60 s after 0x96, and logs 0x8E;
