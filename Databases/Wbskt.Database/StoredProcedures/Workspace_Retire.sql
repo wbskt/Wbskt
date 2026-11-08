@@ -72,6 +72,8 @@ BEGIN
 
     DELETE FROM dbo.Integrations WHERE WorkspaceId = @WorkspaceId;
 
+    DELETE FROM dbo.WorkflowDrafts WHERE WorkspaceId = @WorkspaceId;
+
     COMMIT TRANSACTION;
 
     SELECT N'client' AS Kind, CAST(R.ClientId AS BIGINT) AS Id, R.ClientRefId AS RefId, R.PolicyId, P.RefId AS PolicyRefId

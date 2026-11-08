@@ -68,7 +68,10 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
     public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, IReadOnlyCollection<WorkflowIntegrationRef> integrationRefs, CancellationToken ct) =>
         InsertAsync(row, integrationRefs, maxWorkflows: null, ct);
 
-    public async Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, IReadOnlyCollection<WorkflowIntegrationRef> integrationRefs, int? maxWorkflows, CancellationToken ct)
+    public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, IReadOnlyCollection<WorkflowIntegrationRef> integrationRefs, int? maxWorkflows, CancellationToken ct) =>
+        InsertAsync(row, integrationRefs, maxWorkflows, WorkflowPublishGuards.None, ct);
+
+    public async Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, IReadOnlyCollection<WorkflowIntegrationRef> integrationRefs, int? maxWorkflows, WorkflowPublishGuards guards, CancellationToken ct)
     {
         var refs = new DataTable();
         refs.Columns.Add("NodeId", typeof(Guid));
@@ -95,6 +98,8 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
                 refsParameter.SqlDbType = SqlDbType.Structured;
                 refsParameter.TypeName = "dbo.IntegrationRefTableType";
                 p.AddWithValue("@MaxWorkflows", (object?)maxWorkflows ?? DBNull.Value);
+                p.AddWithValue("@ExpectedCurrentVersion", (object?)guards.ExpectedCurrentVersion ?? DBNull.Value);
+                p.AddWithValue("@DraftRevision", (object?)guards.DraftRevision ?? DBNull.Value);
             },
             Map,
             new InvalidOperationException("WorkflowDefinition_Publish did not return a row."),
@@ -117,7 +122,8 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
             {
                 TriggerNodeKinds = reader.IsDBNull(reader.GetOrdinal("TriggerKinds"))
                     ? []
-                    : reader.GetString(reader.GetOrdinal("TriggerKinds")).Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    : reader.GetString(reader.GetOrdinal("TriggerKinds")).Split(',', StringSplitOptions.RemoveEmptyEntries),
+                Draft = MapDraftSummary(reader)
             },
             ct
         );
@@ -198,6 +204,23 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
         return new WorkflowDeletion(
             rows.Where(r => r.Kind == "run").Select(r => r.Id).ToList(),
             rows.Where(r => r.Kind == "definition").Select(r => (int)r.Id).ToList());
+    }
+
+    private static WorkflowDraftSummary? MapDraftSummary(DbDataReader reader)
+    {
+        int revision = reader.GetOrdinal("DraftRevision");
+        if (reader.IsDBNull(revision))
+        {
+            return null;
+        }
+
+        int baseVersion = reader.GetOrdinal("DraftBaseVersion");
+        int updatedBy = reader.GetOrdinal("DraftUpdatedByRefId");
+        return new WorkflowDraftSummary(
+            reader.GetInt32(revision),
+            reader.IsDBNull(baseVersion) ? null : reader.GetInt32(baseVersion),
+            reader.IsDBNull(updatedBy) ? null : reader.GetGuid(updatedBy),
+            reader.GetDateTime(reader.GetOrdinal("DraftUpdatedAt")));
     }
 
     internal static WorkflowDefinitionRow Map(DbDataReader reader)

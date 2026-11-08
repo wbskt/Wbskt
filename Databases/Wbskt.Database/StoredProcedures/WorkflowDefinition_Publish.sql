@@ -10,13 +10,27 @@ CREATE PROCEDURE dbo.WorkflowDefinition_Publish
     @IntegrationRefs dbo.IntegrationRefTableType READONLY,
     -- How many workflows the workspace may have. Only a first version counts against it: a new
     -- version of an existing workflow is never refused. NULL is no ceiling.
-    @MaxWorkflows   INT = NULL
+    @MaxWorkflows   INT = NULL,
+    -- The version the caller expects to be current (0 for none yet). When another version was published
+    -- since, the publish is refused (50025). NULL skips the check.
+    @ExpectedCurrentVersion INT = NULL,
+    -- Publishing a draft: the draft is deleted with the publish, but only at this revision, so an edit
+    -- saved while publishing is kept as the next draft. NULL leaves any draft alone.
+    @DraftRevision  INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
 
     BEGIN TRAN;
+
+    -- A draft's row is taken before the versions, the order WorkflowDraft_Save takes them in, so a save
+    -- racing this publish waits for it instead of deadlocking on the version row inserted below.
+    DECLARE @LockedDraftRevision INT;
+    IF @DraftRevision IS NOT NULL
+        SELECT @LockedDraftRevision = Revision
+          FROM dbo.WorkflowDrafts WITH (UPDLOCK, HOLDLOCK)
+         WHERE RefId = @RefId;
 
     DECLARE @NextVersion INT =
         ISNULL((SELECT MAX(Version)
@@ -36,6 +50,12 @@ BEGIN
     BEGIN
         ROLLBACK TRAN;
         THROW 50022, 'The workflow was deleted.', 1;
+    END
+
+    IF @ExpectedCurrentVersion IS NOT NULL AND @NextVersion - 1 <> @ExpectedCurrentVersion
+    BEGIN
+        ROLLBACK TRAN;
+        THROW 50025, 'Another version was published since the draft was started.', 1;
     END
 
     -- The workspace's workflow ceiling, for a new workflow only. Counted under an application lock per
@@ -88,6 +108,12 @@ BEGIN
     INSERT INTO dbo.WorkflowIntegrationRefs (WorkflowDefinitionId, NodeId, NodeName, IntegrationId)
     SELECT SCOPE_IDENTITY(), NodeId, NodeName, IntegrationId
     FROM @Refs;
+
+    IF @DraftRevision IS NOT NULL
+        DELETE FROM dbo.WorkflowDrafts
+         WHERE RefId = @RefId
+           AND WorkspaceId = @WorkspaceId
+           AND Revision = @DraftRevision;
 
     COMMIT TRAN;
 

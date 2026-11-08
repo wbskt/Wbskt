@@ -24,6 +24,13 @@ public interface IWorkflowDefinitionProvider
     /// </summary>
     Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, IReadOnlyCollection<WorkflowIntegrationRef> integrationRefs, int? maxWorkflows, CancellationToken ct) =>
         InsertAsync(row, integrationRefs, ct);
+
+    /// <summary>
+    /// As above, with the checks of <paramref name="guards"/>: <c>SqlException</c> 50025 when the current
+    /// version is not the one expected, and the draft deleted with the publish when one is named.
+    /// </summary>
+    Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, IReadOnlyCollection<WorkflowIntegrationRef> integrationRefs, int? maxWorkflows, WorkflowPublishGuards guards, CancellationToken ct) =>
+        InsertAsync(row, integrationRefs, maxWorkflows, ct);
     Task<IPagedList<WorkflowDefinitionRow>> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct);
     Task DeprecateAsync(int id, CancellationToken ct);
 
