@@ -37,8 +37,9 @@ anonymously and the anonymous surface is an explicit, auditable choice:
 - **Auth host** — every controller was already correctly attributed when the fallback was added, so
   it changed no behaviour. It exists for the next endpoint added to the host that owns tenants,
   roles and permissions. `AuthController`'s credential endpoints carry `[AllowAnonymous]`
-  individually, and so does the one internal route a background job calls with no user token
-  (`GET /api/internal/workspaces/deleted`), which `[InternalApiKey]` guards with a shared key instead.
+  individually, and so do the internal routes called with no user token (`GET /api/internal/workspaces/deleted`,
+  `GET /api/internal/workspaces/accounts`, `GET`/`PUT /api/internal/tenants/{tenantRef}/plan`), which
+  `[InternalApiKey]` guards with a shared key instead.
 - **WebSocket gateway** — has no controllers at all. `/ws` requires the `ClientOnly` policy (a client
   token: `type=client`), validated by the same bearer handler as the other hosts. Browsers cannot set
   headers on a WebSocket, so on `/ws` the handler also reads `?access_token=` (`AcceptQueryToken`,
@@ -305,6 +306,9 @@ member's roles, groups and permissions) are unchanged until the console reads pa
 |---|---|---|
 | `POST /api/internal/workspaces/resolve` | membership only | **Backend network only.** **The gate every other host depends on.** Resolves a workspace reference to its internal ID plus the caller's effective permission slugs there. The management host calls this before every workspace-scoped request. Answers 403 for both "not a member" and "no such workspace" and 401 only when the caller cannot be identified at all — the management host relies on that distinction, and treats any other status as a server fault. |
 | `GET /api/internal/workspaces/deleted?since=&until=` | shared internal key | **Backend network only.** The ids of the workspaces deleted in the window, for the management host's deleted workspace sweep. No user is behind that call, so the action is `[AllowAnonymous]` and `[InternalApiKey]` instead: `X-Wbskt-Internal-Key` must match the auth host's `Internal:ApiKey` (`AUTH_INTERNAL_API_KEY`; management sends it from `Services:AuthInternalApiKey`). Without a configured key Production answers 503, as the engine does. |
+| `GET /api/internal/workspaces/accounts?cursor=&limit=&tenantId=&workspaceId=` | shared internal key | **Backend network only.** Each workspace with its tenant's plan (`workspaceId`, `tenantId`, `tenantRefId`, `planCode`, `limitOverrides`, `planRevision`), a page at a time by workspace id, for the management host's copies in `dbo.WorkspaceAccounts`: all of them for its periodic sync, one tenant's after `TenantPlanChangedEvent`, one workspace after `WorkspaceCreatedEvent`. Guarded like `deleted` above. |
+| `GET /api/internal/tenants/{tenantRef}/plan` | shared internal key | **Backend network only.** The tenant's plan, negotiated limits and plan revision. `TENANT_NOT_FOUND` (404) for an unknown tenant. |
+| `PUT /api/internal/tenants/{tenantRef}/plan` | shared internal key | **Backend network only.** For operators and, once billing lands, the payment webhook: puts the tenant on `planCode` with optional `limitOverrides` (replaced whole). An optional `expectedRevision` refuses the change with `TENANT_PLAN_CHANGED` (409) if the plan moved since it was read; a change that loses a race gets the same. Asking for the plan already held changes nothing and sends nothing. A change raises `planRevision` and writes `TenantPlanChangedEvent` to the outbox in the same transaction. `PLAN_CODE_INVALID` / `PLAN_LIMIT_INVALID` (400) for an unknown plan or a negative limit. |
 | `GET /` | none | Lists workspaces the caller belongs to. Each carries `tenantRefId`, the account that owns it, for the `api/v1/tenants/{tenantRef}` routes (the member search a workspace's add box uses, for one). |
 | `POST /` | none | Creates a workspace in the caller's tenant and makes them its owner. The owner automatically receives the tenant's `Admin` role scoped to it. |
 | `PUT {workspaceRef}` | `users.manage` **in that workspace** | Renames a workspace or changes its description. |
