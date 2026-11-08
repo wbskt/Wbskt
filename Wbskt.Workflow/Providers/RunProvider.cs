@@ -61,6 +61,7 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
                 p.AddWithValue("@ParentRunRefId", (object?)run.ParentRunRefId ?? DBNull.Value);
                 p.AddWithValue("@ActiveRunGuard", (byte)activeRunGuard);
                 p.AddWithValue("@IsTest", run.IsTest);
+                p.AddWithValue("@StartCost", run.StartCost);
                 if (maxActiveRuns is not null)
                 {
                     p.AddWithValue("@WorkspaceId", workspaceId);

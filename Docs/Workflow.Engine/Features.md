@@ -63,7 +63,7 @@ Action nodes accept `retry` and `onFailure` ([§6](#6-retries), [§7](#7-failure
 | `action:clientMessage` | 1.0 | `default`; or `acked`, `failed`, `timeout` with `awaitAck` | `clientRef` (the client's RefId), `type`, `payload` (JSON), `awaitAck`, `ackTimeout` (default 30 s, max 24 h). With `awaitAck` the step parks, then sends the command, and leaves by what became of it; the outcome lands in `command`. A command to an offline, registered client waits in its queue until it connects or the ack timeout passes, so the step leaves by `timeout` if the client stays away; a full queue or an inactive client counts as `failed` at once. |
 | `action:toast` | 0.5 | `default` | `title`, `message`. A notification to everyone watching the workspace in the console. |
 | `action:webhook` | 5.0 | `default`, `error` | `url`, `method`, `headers` (max 20), `body`, `timeoutSeconds` (default 30, max 60), optional `integrationRef` (an HTTP-auth integration). Writes `status`, `body` and, for a JSON reply, `json`. Responses over 256 KB fail. Redirects are not followed, private and reserved addresses are refused, and an integration's credential is only sent to its own origin. 5xx, timeouts and network errors are retryable; 4xx is not. |
-| `action:email` | 5.0 | `default` | `integrationRef` (SMTP), `to`, `subject`, `body`. |
+| `action:email` | 10.0 | `default` | `integrationRef` (SMTP), `to`, `subject`, `body`. |
 | `action:telegram` | 5.0 | `default` | `integrationRef`, `chatId` (a numeric id or `@channelusername`), `message` (1-4096 characters), `parseMode` (`MarkdownV2` or `HTML`; left out, plain text), `silent`, `messageThreadId` (a forum topic), `disableLinkPreview`. Writes `telegram` = `{ messageId, chatId }`, as Telegram's numbers. A 403 is `TELEGRAM_CHAT_FORBIDDEN` (the bot was blocked or removed), not retryable; 429 is retryable. The integration's `GET .../integrations/{ref}/chats` lists the chats the bot heard from in the last 24 hours. |
 | `action:discord` | 5.0 | `default` | `integrationRef`, `message`, `username`, `avatarUrl`, `threadId`, `embeds` (up to 10: `title`, `url`, `description`, `color` as `#RRGGBB`, `fields` of `name`/`value`/`inline`, `footer`, `imageUrl`, `thumbnailUrl`, `timestamp` to show the send time). `message` may be left out when there is an embed. Mentions are never parsed. Waits for Discord to save the message and writes `discord` = `{ messageId, channelId }`. 429 is retryable. |
 | `action:ntfy` | 5.0 | `default` | `integrationRef`, `message`, `title`, `priority`, `tags`. |
@@ -263,7 +263,9 @@ from the console. A declaration's `resetPolicy` is accepted in the schema but no
 
 ## 11. Credits
 
-Every run has a budget (definition `creditBudget`, else 10 000). Each node attempt is charged its
+Every run has a budget (definition `creditBudget`, else 10 000). Creating a run costs 1 credit
+(`WorkflowEngine:CreditCosts:RunStartCost`), test runs and sub-workflow children included, and that
+charge counts against the budget. Each node attempt is charged its
 kind's price before it runs; triggers are free and resuming a parked node is free. Prices are in the
 tables above and can be overridden per kind in configuration (`WorkflowEngine:CreditCosts`). When the
 budget runs out the node fails with `OUT_OF_CREDITS`, the run is cancelled and ends `OutOfCredits`.

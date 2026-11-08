@@ -25,6 +25,16 @@ public sealed class CreditCostCalculatorTests
     }
 
     [Fact]
+    public void Email_costs_twice_a_webhook()
+    {
+        // Email has a real cost per message once the SMTP free tier runs out, and spam risk on top.
+        var calculator = new DefaultCreditCostCalculator();
+
+        Assert.Equal(10m, new CreditCostOptions().CostFor(NodeKind.ActionEmail));
+        Assert.Equal(5m, calculator.Calculate(Webhook()));
+    }
+
+    [Fact]
     public void Configuration_overrides_the_built_in_price()
     {
         // Pricing changes without a release, so it must not be compiled in.

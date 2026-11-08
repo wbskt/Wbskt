@@ -39,6 +39,20 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
+    public async Task Start_seeds_the_counters_with_the_run_start_charge()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync();
+        (RunRow run, BranchRow branch) = NewRun(wd);
+
+        RunStartRow started = await ProviderFactory.Run(fixture.ConnectionString).StartAsync(run with { StartCost = 1m }, branch, null, CancellationToken.None);
+
+        RunCountersRow counters = await ProviderFactory.RunCounters(fixture.ConnectionString).GetByRunIdAsync(started.Run.Id, CancellationToken.None);
+        counters.CreditsConsumed.Should().Be(1m);
+    }
+
+    [SkippableFact]
     public async Task Start_returns_the_existing_run_for_a_key_that_already_started_one()
     {
         Skip.IfNot(fixture.IsAvailable, SkipReason);

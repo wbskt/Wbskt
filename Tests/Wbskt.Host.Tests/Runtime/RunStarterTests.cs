@@ -247,7 +247,33 @@ public sealed class RunStarterTests
         Assert.Null(runProvider.CreatedRun!.ParentRunRefId);
     }
 
-    private static RunStarter Starter(RecordingRunProvider runProvider, List<string> operations, WorkflowEngineOptions options, RecordingHistoryEventProvider? historyProvider = null, IWorkflowDefinitionCache? definitionCache = null) => new(
+    [Fact]
+    public async Task Start_charges_the_run_start_cost_with_the_run()
+    {
+        List<string> operations = [];
+        var runProvider = new RecordingRunProvider(operations);
+        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions());
+
+        await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), AnEvent(), null, CancellationToken.None);
+
+        Assert.Equal(new CreditCostOptions().RunStartCost, runProvider.CreatedRun!.StartCost);
+        Assert.Equal(1m, runProvider.CreatedRun.StartCost);
+    }
+
+    [Fact]
+    public async Task Start_charges_the_configured_run_start_cost()
+    {
+        List<string> operations = [];
+        var runProvider = new RecordingRunProvider(operations);
+        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions(), creditCosts: new CreditCostOptions { RunStartCost = 2.5m });
+
+        await starter.StartTestAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), AnEvent(), CancellationToken.None);
+
+        Assert.Equal(2.5m, runProvider.CreatedRun!.StartCost);
+        Assert.True(runProvider.CreatedRun.IsTest);
+    }
+
+    private static RunStarter Starter(RecordingRunProvider runProvider, List<string> operations, WorkflowEngineOptions options, RecordingHistoryEventProvider? historyProvider = null, IWorkflowDefinitionCache? definitionCache = null, CreditCostOptions? creditCosts = null) => new(
         runProvider,
         new RunJournal(historyProvider ?? new RecordingHistoryEventProvider(operations), new FixedClock()),
         new RecordingWorkflowDefinitionProvider(),
@@ -256,7 +282,8 @@ public sealed class RunStarterTests
         new NullRunStartedPublisher(),
         new FixedClock(),
         new SequenceIdGenerator(),
-        Options.Create(options));
+        Options.Create(options),
+        creditCosts: creditCosts is null ? null : Options.Create(creditCosts));
 
     private static WorkflowDefinitionCache CacheOver(IWorkflowDefinitionProvider provider) =>
         new(new MemoryCache(new MemoryCacheOptions()), provider);
