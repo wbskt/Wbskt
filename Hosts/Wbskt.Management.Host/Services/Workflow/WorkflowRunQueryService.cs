@@ -43,25 +43,30 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
     private readonly IBranchProvider _branchProvider;
     private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
     private readonly ILogger<WorkflowRunQueryService> _logger;
+    private readonly IWorkflowDraftProvider? _draftProvider;
 
     public WorkflowRunQueryService(
         IRunProvider runProvider,
         IBranchProvider branchProvider,
         IWorkflowDefinitionProvider workflowDefinitionProvider,
-        ILogger<WorkflowRunQueryService> logger)
+        ILogger<WorkflowRunQueryService> logger,
+        IWorkflowDraftProvider? draftProvider = null)
     {
+        _draftProvider = draftProvider;
         _runProvider = runProvider;
         _branchProvider = branchProvider;
         _workflowDefinitionProvider = workflowDefinitionProvider;
         _logger = logger;
     }
 
-    public async Task<Result<RunListResponse>> ListByWorkflowAsync(int workspaceId, Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct)
+    public async Task<Result<RunListResponse>> ListByWorkflowAsync(int workspaceId, Guid workflowRefId, string? statusFilter, bool? isTest, int top, long? cursorId, CancellationToken ct)
     {
         _logger.LogDebug("Querying run list for workflow RefId: '{WorkflowRefId}' in WorkspaceId: {WorkspaceId}", workflowRefId, workspaceId);
 
         var ensureWorkflowResult = await WorkflowOwnershipCheck.EnsureCurrentAsync(_workflowDefinitionProvider, _logger, workspaceId, workflowRefId, ct);
-        if (ensureWorkflowResult.IsFailure)
+        // A workflow never published has no version, only a draft, but its test runs are listed.
+        if (ensureWorkflowResult.IsFailure
+            && (_draftProvider is null || await _draftProvider.FindAsync(workflowRefId, workspaceId, ct) is null))
         {
             return Result<RunListResponse>.Failure(ensureWorkflowResult.Error);
         }
@@ -69,18 +74,18 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
         // Fetch one more than asked for: its presence is what proves another page exists. Using
         // "a full page means there's more" hands back a cursor even when the page landed exactly
         // on the end, so clients always fetched one empty page.
-        IReadOnlyCollection<RunRow> rows = await _runProvider.ListByWorkflowAsync(workflowRefId, statusFilter, top + 1, cursorId, ct);
+        IReadOnlyCollection<RunRow> rows = await _runProvider.ListByWorkflowAsync(workflowRefId, statusFilter, isTest, top + 1, cursorId, ct);
 
         return Result<RunListResponse>.Success(await BuildPageAsync(rows, top, ct));
     }
 
-    public async Task<Result<RunListResponse>> ListByWorkspaceAsync(int workspaceId, string? statusFilter, int top, long? cursorId, CancellationToken ct)
+    public async Task<Result<RunListResponse>> ListByWorkspaceAsync(int workspaceId, string? statusFilter, bool? isTest, int top, long? cursorId, CancellationToken ct)
     {
         _logger.LogDebug("Querying run list for WorkspaceId: {WorkspaceId}", workspaceId);
 
         // The procedure filters by workspace itself, so there is no per-workflow membership check
         // to do here - a run cannot appear unless its definition belongs to this workspace.
-        IReadOnlyCollection<RunRow> rows = await _runProvider.ListByWorkspaceAsync(workspaceId, statusFilter, top + 1, cursorId, ct);
+        IReadOnlyCollection<RunRow> rows = await _runProvider.ListByWorkspaceAsync(workspaceId, statusFilter, isTest, top + 1, cursorId, ct);
 
         return Result<RunListResponse>.Success(await BuildPageAsync(rows, top, ct));
     }
@@ -363,8 +368,8 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
 
     /// <summary>
     /// The run, when <paramref name="workspaceId"/> owns it. A run carries no workspace of its own; it
-    /// belongs to the workspace of the definition version it ran, so a run whose definition is missing
-    /// or elsewhere reads as not found.
+    /// belongs to the workspace of the definition it ran, read by Id rather than by version so a test
+    /// run (whose copy is no version) resolves too.
     /// </summary>
     private async Task<Result<RunRow>> LoadRunAsync(int workspaceId, Guid runRefId, CancellationToken ct)
     {
@@ -374,8 +379,8 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
             return Result<RunRow>.Failure(WorkspaceOwnership.RunNotFound);
         }
 
-        WorkflowDefinitionRow? definition = await _workflowDefinitionProvider.FindRowByRefIdVersionAsync(run.WorkflowRefId, run.WorkflowVersion, ct);
-        if (definition is null || definition.WorkspaceId != workspaceId)
+        WorkflowDefinitionRow definition = await _workflowDefinitionProvider.GetByIdAsync(run.WorkflowDefinitionId, ct);
+        if (definition.WorkspaceId != workspaceId)
         {
             _logger.LogWarning("Run '{RunRefId}' is not in WorkspaceId: {WorkspaceId}", runRefId, workspaceId);
             return Result<RunRow>.Failure(WorkspaceOwnership.RunNotFound);
@@ -386,7 +391,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
 
     private static RunSummaryDto MapRun(RunRow row)
     {
-        return new RunSummaryDto(row.RefId, row.WorkflowRefId, row.WorkflowVersion, row.Status, row.CorrelationKey, row.StartedAt.ToUtcOffset(), row.CompletedAt.ToUtcOffset(), Number: row.Number);
+        return new RunSummaryDto(row.RefId, row.WorkflowRefId, row.WorkflowVersion, row.Status, row.CorrelationKey, row.StartedAt.ToUtcOffset(), row.CompletedAt.ToUtcOffset(), Number: row.Number, IsTest: row.IsTest);
     }
 
     private static BranchSummaryDto MapBranch(BranchRow row)

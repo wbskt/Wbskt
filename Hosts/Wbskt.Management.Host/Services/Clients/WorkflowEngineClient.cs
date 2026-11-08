@@ -41,6 +41,15 @@ internal sealed class WorkflowEngineClient : IWorkflowEngineClient
         return new StartRunResponse(engineResponse?.RunRefId ?? Guid.Empty, outcome);
     }
 
+    public async Task<EngineTestRunResponse> StartTestRunAsync(EngineTestRunRequest request, CancellationToken ct)
+    {
+        var response = await _httpClient.PostAsJsonAsync(EngineTestRunApi.Route, request, SerializerOptions, ct);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<EngineTestRunResponse>(SerializerOptions, ct)
+            ?? throw new InvalidOperationException("The engine answered a test run with no body.");
+    }
+
     public async Task<SignalResponse> SignalAsync(Guid runRefId, string signalName, SignalRequest request, CancellationToken ct)
     {
         var response = await _httpClient.PostAsJsonAsync(EngineInboundApi.Signal(runRefId, signalName), request.Payload, SerializerOptions, ct);

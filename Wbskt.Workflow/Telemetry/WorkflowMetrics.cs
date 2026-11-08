@@ -94,13 +94,14 @@ public sealed class WorkflowMetrics : IWorkerTickMetrics, IDisposable
     // node_id is deliberately NOT a tag on NodeDuration - one series per node per workflow is
     // unbounded cardinality. Per-node timings come from the history stream instead, aggregated by
     // Run_GetNodeTimingsBy_WorkflowRefId, which is scoped to one workflow and one window.
-    public void RecordRunStarted(string workflowRef, string triggerKind, int workspaceId)
+    public void RecordRunStarted(string workflowRef, string triggerKind, int workspaceId, bool isTest = false)
     {
         RunsStarted.Add(
             1,
             new KeyValuePair<string, object?>("workflow_ref", workflowRef),
             new KeyValuePair<string, object?>("trigger_kind", triggerKind),
-            new KeyValuePair<string, object?>("workspace_id", workspaceId));
+            new KeyValuePair<string, object?>("workspace_id", workspaceId),
+            new KeyValuePair<string, object?>("is_test", isTest));
     }
 
     public void RecordRunRefused(string workflowRef, string triggerKind, int workspaceId)

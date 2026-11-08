@@ -3,6 +3,7 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Workflow;
 using Wbskt.Infrastructure.Events;
 using Wbskt.Management.Models.Workflow;
+using Wbskt.Workflow.Engine.Contracts;
 using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Management.Host.Services.Clients;
@@ -29,6 +30,11 @@ internal sealed class WorkflowEngineGateway : IWorkflowEngineGateway
     public Task<StartRunResponse> StartManualRunAsync(Guid workflowRefId, StartRunRequest request, CancellationToken ct)
     {
         return _engineClient.StartManualRunAsync(workflowRefId, request, ct);
+    }
+
+    public Task<EngineTestRunResponse> StartTestRunAsync(EngineTestRunRequest request, CancellationToken ct)
+    {
+        return _engineClient.StartTestRunAsync(request, ct);
     }
 
     public Task<SignalResponse> SignalAsync(Guid runRefId, string signalName, SignalRequest request, CancellationToken ct)

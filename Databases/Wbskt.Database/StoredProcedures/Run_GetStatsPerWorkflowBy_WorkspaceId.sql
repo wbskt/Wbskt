@@ -33,6 +33,7 @@ BEGIN
         WHERE d.WorkspaceId = @WorkspaceId
           AND r.CreatedAt >= @FromUtc
           AND r.CreatedAt < @ToUtc
+          AND r.IsTest = 0
     )
     SELECT TOP (@Top)
         w.WorkflowRefId,

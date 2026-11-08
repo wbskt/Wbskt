@@ -17,6 +17,7 @@ internal sealed class RunStarter : IRunStarter
 {
     private const int WorkspaceRunCeilingError = 50026; // THROW in dbo.Run_Start
     private const int ActiveRunConflictError = 50028; // THROW in dbo.Run_Start
+    private const int TestRunActiveError = 50029; // THROW in dbo.Run_Start
 
     private readonly IRunProvider _runProvider;
     private readonly IRunJournal _journal;
@@ -58,7 +59,13 @@ internal sealed class RunStarter : IRunStarter
         _logger = logger;
     }
 
-    public async Task<RunStartResult> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, CancellationToken ct, bool exemptFromCeiling = false, ActiveRunGuard activeRunGuard = ActiveRunGuard.None)
+    public Task<RunStartResult> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, CancellationToken ct, bool exemptFromCeiling = false, ActiveRunGuard activeRunGuard = ActiveRunGuard.None) =>
+        StartCoreAsync(workflowDefinitionId, triggerNodeId, triggerEvent, triggerStartKey, exemptFromCeiling, activeRunGuard, isTest: false, ct);
+
+    public Task<RunStartResult> StartTestAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, CancellationToken ct) =>
+        StartCoreAsync(workflowDefinitionId, triggerNodeId, triggerEvent, triggerStartKey: null, exemptFromCeiling: false, ActiveRunGuard.None, isTest: true, ct);
+
+    private async Task<RunStartResult> StartCoreAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, bool exemptFromCeiling, ActiveRunGuard activeRunGuard, bool isTest, CancellationToken ct)
     {
         try
         {
@@ -106,7 +113,8 @@ internal sealed class RunStarter : IRunStarter
                         CancellationReason = null,
                         CreditBudget = creditBudget,
                         CreatedAt = nowUtc,
-                        ParentRunRefId = ReadParentRunRefId(triggerEvent)
+                        ParentRunRefId = ReadParentRunRefId(triggerEvent),
+                        IsTest = isTest
                     },
                     // RunId 0: Run_Start inserts the root branch under the run it has just created.
                     BranchRow.New(rootBranchRefId, 0, Guid.Parse(triggerNodeId), localJson, nowUtc),
@@ -119,6 +127,10 @@ internal sealed class RunStarter : IRunStarter
             catch (SqlException ex) when (ex.Number == ActiveRunConflictError)
             {
                 throw new ActiveRunConflictException(correlationKey);
+            }
+            catch (SqlException ex) when (ex.Number == TestRunActiveError)
+            {
+                throw new TestRunActiveException(definition.RefId);
             }
             catch (SqlException ex) when (ex.Number == WorkspaceRunCeilingError)
             {
@@ -138,7 +150,7 @@ internal sealed class RunStarter : IRunStarter
                 return new RunStartResult(createdRun.Id, createdRun.RefId, started.RootBranchId, false);
             }
 
-            _workflowMetrics?.RecordRunStarted(definition.RefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId);
+            _workflowMetrics?.RecordRunStarted(definition.RefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId, isTest);
             await _journal.AppendAsync(
                 new RunJournalEntry(createdRun.Id, HistoryEventKind.RunStarted)
                 {
@@ -170,7 +182,7 @@ internal sealed class RunStarter : IRunStarter
 
             return new RunStartResult(createdRun.Id, createdRun.RefId, started.RootBranchId, true);
         }
-        catch (Exception ex) when (ex is not WorkspaceRunCeilingException and not ActiveRunConflictException)
+        catch (Exception ex) when (ex is not WorkspaceRunCeilingException and not ActiveRunConflictException and not TestRunActiveException)
         {
             _logger?.LogError(ex, "Failed to start run for workflow definition {WorkflowDefinitionId} and trigger {TriggerNodeId}", workflowDefinitionId, triggerNodeId);
             throw;

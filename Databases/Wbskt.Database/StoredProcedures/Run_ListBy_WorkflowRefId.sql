@@ -2,7 +2,9 @@ CREATE PROCEDURE dbo.Run_ListBy_WorkflowRefId
     @WorkflowRefId UNIQUEIDENTIFIER,
     @StatusFilter NVARCHAR(40) = NULL,
     @Top INT = 50,
-    @CursorId BIGINT = NULL
+    @CursorId BIGINT = NULL,
+    -- 1 for test runs only, 0 for none of them; NULL lists both.
+    @IsTest BIT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -27,7 +29,8 @@ BEGIN
             r.CreditBudget,
             r.CreatedAt,
             r.ParentRunRefId,
-            r.Number
+            r.Number,
+            r.IsTest
         FROM dbo.Runs r
         WHERE r.WorkflowRefId = @WorkflowRefId
           -- The IN list is IX_Runs_WorkflowRefId_CorrelationKey_Active's filter word for word, so this reads only the
@@ -35,6 +38,7 @@ BEGIN
           AND r.Status IN (N'Running', N'Failing', N'Cancelling')
           AND r.Status = N'Running'
           AND (@CursorId IS NULL OR r.Id < @CursorId)
+          AND (@IsTest IS NULL OR r.IsTest = @IsTest)
           AND EXISTS (SELECT 1 FROM dbo.RunParked(r.Id))
         ORDER BY r.Id DESC;
         RETURN;
@@ -56,11 +60,13 @@ BEGIN
         CreditBudget,
         CreatedAt,
         ParentRunRefId,
-        Number
+        Number,
+        IsTest
     FROM dbo.Runs
     WHERE WorkflowRefId = @WorkflowRefId
       AND (@StatusFilter IS NULL OR Status = @StatusFilter)
       AND (@CursorId IS NULL OR Id < @CursorId)
+      AND (@IsTest IS NULL OR IsTest = @IsTest)
     ORDER BY Id DESC;
 END;
 GO

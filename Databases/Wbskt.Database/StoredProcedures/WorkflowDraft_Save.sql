@@ -62,7 +62,7 @@ BEGIN
     END
     ELSE
     BEGIN
-        DECLARE @BaseVersion INT = (SELECT MAX(Version) FROM dbo.WorkflowDefinitions WHERE RefId = @RefId);
+        DECLARE @BaseVersion INT = (SELECT MAX(Version) FROM dbo.WorkflowDefinitions WHERE RefId = @RefId AND Kind = N'Version');
 
         -- Counted under an application lock per workspace, so two new drafts cannot both take the last place.
         IF @BaseVersion IS NULL AND @MaxDrafts IS NOT NULL
@@ -73,7 +73,7 @@ BEGIN
             IF (SELECT COUNT(*)
                   FROM dbo.WorkflowDrafts D
                  WHERE D.WorkspaceId = @WorkspaceId
-                   AND NOT EXISTS (SELECT 1 FROM dbo.WorkflowDefinitions WD WHERE WD.RefId = D.RefId)) >= @MaxDrafts
+                   AND NOT EXISTS (SELECT 1 FROM dbo.WorkflowDefinitions WD WHERE WD.RefId = D.RefId AND WD.Kind = N'Version')) >= @MaxDrafts
             BEGIN
                 ROLLBACK TRAN;
                 THROW 50032, 'The workspace has reached its limit of new workflow drafts.', 1;

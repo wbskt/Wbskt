@@ -11,6 +11,7 @@ BEGIN
     SELECT @TotalCount = COUNT(DISTINCT RefId)
     FROM dbo.WorkflowDefinitions WD
     WHERE WorkspaceId = @WorkspaceId
+      AND Kind = N'Version'
       AND NOT EXISTS (SELECT 1 FROM dbo.WorkflowDeletions WDel WHERE WDel.RefId = WD.RefId);
 
     -- Return latest versions of workflows in the workspace
@@ -21,6 +22,7 @@ BEGIN
             MAX(Version) AS LatestVersion
         FROM dbo.WorkflowDefinitions WD
         WHERE WorkspaceId = @WorkspaceId
+          AND Kind = N'Version'
           AND NOT EXISTS (SELECT 1 FROM dbo.WorkflowDeletions WDel WHERE WDel.RefId = WD.RefId)
         GROUP BY RefId
     )
@@ -51,7 +53,7 @@ BEGIN
         dr.UpdatedByRefId AS DraftUpdatedByRefId,
         dr.UpdatedAt AS DraftUpdatedAt
     FROM dbo.WorkflowDefinitions w
-    INNER JOIN LatestWorkflows lw ON w.RefId = lw.RefId AND w.Version = lw.LatestVersion
+    INNER JOIN LatestWorkflows lw ON w.RefId = lw.RefId AND w.Version = lw.LatestVersion AND w.Kind = N'Version'
     LEFT JOIN dbo.WorkflowDrafts dr ON dr.RefId = w.RefId
     ORDER BY w.Name ASC
     OFFSET @Skip ROWS

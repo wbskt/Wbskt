@@ -28,6 +28,9 @@ CREATE TABLE dbo.Runs
     -- exists only so the column could be added to a table with rows: runs made before numbering read 0
     -- and are not renumbered (the product had not been released).
     Number                   INT              NOT NULL CONSTRAINT DF_Runs_Number DEFAULT 0,
+    -- Started by hand from the workflow page's Test run, against a test copy of a draft or the live
+    -- version. Shares the workflow's numbering; left out of stats.
+    IsTest                   BIT              NOT NULL CONSTRAINT DF_Runs_IsTest DEFAULT 0,
     CONSTRAINT UQ_Runs_RefId UNIQUE (RefId),
     -- The words RunStatus (Wbskt.Workflow.Abstraction) defines; a change there is a change here.
     -- Written out with OR, not IN: SQL Server stores IN expanded, and the DACPAC would never match it.
@@ -51,7 +54,7 @@ GO
 -- what the page shows, and without this the query scans a table that grows with every run ever made.
 CREATE INDEX IX_Runs_WorkflowRefId_Id
     ON dbo.Runs (WorkflowRefId, Id DESC)
-    INCLUDE (Status);
+    INCLUDE (Status, IsTest);
 GO
 
 -- One run per inbound event per trigger registration. The dispatcher's idempotency claims stop a
@@ -72,7 +75,7 @@ GO
 -- index foreign keys automatically, so without this the join scans.
 CREATE INDEX IX_Runs_WorkflowDefinitionId_Id
     ON dbo.Runs (WorkflowDefinitionId, Id DESC)
-    INCLUDE (Status);
+    INCLUDE (Status, IsTest);
 GO
 
 -- Run_Start's per-workspace ceiling counts the active runs while it holds the workspace's applock;
@@ -100,10 +103,16 @@ GO
 -- scan every run a workflow or workspace ever made.
 CREATE INDEX IX_Runs_WorkflowRefId_CreatedAt
     ON dbo.Runs (WorkflowRefId, CreatedAt)
-    INCLUDE (Status, StartedAt, CompletedAt);
+    INCLUDE (Status, StartedAt, CompletedAt, IsTest);
 GO
 
 CREATE INDEX IX_Runs_WorkflowDefinitionId_CreatedAt
     ON dbo.Runs (WorkflowDefinitionId, CreatedAt)
-    INCLUDE (Status, StartedAt, CompletedAt);
+    INCLUDE (Status, StartedAt, CompletedAt, IsTest);
+GO
+
+-- Run_Start's one-test-run-at-a-time check, and finding the test run that is going.
+CREATE INDEX IX_Runs_WorkflowRefId_Test_Active
+    ON dbo.Runs (WorkflowRefId)
+    WHERE IsTest = 1 AND Status IN (N'Running', N'Failing', N'Cancelling');
 GO

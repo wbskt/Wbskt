@@ -27,6 +27,7 @@ BEGIN
         WHERE WorkflowRefId = @WorkflowRefId
           AND CreatedAt >= @FromUtc
           AND CreatedAt < @ToUtc
+          AND IsTest = 0
     ),
     Durations AS
     (

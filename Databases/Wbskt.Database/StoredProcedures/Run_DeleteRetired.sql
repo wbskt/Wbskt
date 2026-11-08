@@ -1,7 +1,8 @@
 -- Deletes up to @BatchSize runs that completed before @CutoffUtc, with everything that hangs off
--- them, and returns how many runs went. HistoryRetentionGc calls it with the elevated window - the
--- point at which even a run's Warn/Error history has been deleted - so a run is only removed once
--- there is nothing left to inspect but its summary row.
+-- them, and the test copies of workflows that no run points at any more. Returns how many runs went.
+-- HistoryRetentionGc calls it with the elevated window - the point at which even a run's Warn/Error
+-- history has been deleted - so a run is only removed once there is nothing left to inspect but its
+-- summary row.
 CREATE PROCEDURE dbo.Run_DeleteRetired
     @CutoffUtc DATETIME2(3),
     @BatchSize INT
@@ -32,6 +33,14 @@ BEGIN
     DELETE FROM dbo.RunCounters    WHERE RunId IN (SELECT Id FROM @Runs);
     DELETE FROM dbo.Branches       WHERE RunId IN (SELECT Id FROM @Runs);
     DELETE FROM dbo.Runs           WHERE Id IN (SELECT Id FROM @Runs);
+
+    -- A test copy is kept only for the runs started from it. Past the cutoff, so a copy whose run is
+    -- still being started is never taken.
+    DELETE WD
+    FROM dbo.WorkflowDefinitions WD
+    WHERE WD.Kind = N'Test'
+      AND WD.CreatedAt < @CutoffUtc
+      AND NOT EXISTS (SELECT 1 FROM dbo.Runs R WHERE R.WorkflowDefinitionId = WD.Id);
 
     COMMIT TRANSACTION;
 

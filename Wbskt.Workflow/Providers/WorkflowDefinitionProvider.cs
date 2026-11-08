@@ -107,6 +107,26 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
         );
     }
 
+    public async Task<WorkflowDefinitionRow> InsertTestCopyAsync(WorkflowDefinitionRow row, CancellationToken ct)
+    {
+        return await ExecuteSingleAsync(
+            "dbo.WorkflowDefinition_InsertTestCopy",
+            p =>
+            {
+                p.AddWithValue("@RefId", row.RefId);
+                p.AddWithValue("@WorkspaceId", row.WorkspaceId);
+                p.AddWithValue("@BaseVersion", row.Version);
+                p.AddWithValue("@Name", row.Name);
+                p.AddWithValue("@Description", (object?)row.Description ?? DBNull.Value);
+                p.AddWithValue("@DefinitionJson", row.DefinitionJson);
+                p.AddWithValue("@PublishedBy", row.PublishedBy);
+            },
+            Map,
+            new InvalidOperationException("WorkflowDefinition_InsertTestCopy did not return a row."),
+            ct
+        );
+    }
+
     public async Task<IPagedList<WorkflowDefinitionRow>> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct)
     {
         return await ExecutePagedCollectionAsync(

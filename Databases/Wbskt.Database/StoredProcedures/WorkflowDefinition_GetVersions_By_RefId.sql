@@ -18,6 +18,7 @@ BEGIN
     FROM dbo.WorkflowDefinitions WD
     WHERE WD.RefId = @RefId
       AND WD.WorkspaceId = @WorkspaceId
+      AND WD.Kind = N'Version'
       AND NOT EXISTS (SELECT 1 FROM dbo.WorkflowDeletions WDel WHERE WDel.RefId = WD.RefId)
     ORDER BY WD.Version DESC;
 END

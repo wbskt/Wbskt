@@ -25,7 +25,7 @@ public sealed class WorkflowRunsController : ApiControllerBase
 
     [HttpGet("workflows/{workflowRef:guid}/runs")]
     [RequiresPermission(PermissionNames.WorkflowsRead)]
-    public async Task<ActionResult<RunListResponse>> List([FromWorkspace] int workspaceId, Guid workflowRef, [FromQuery] string? status, [FromQuery] PageRequest page, CancellationToken ct = default)
+    public async Task<ActionResult<RunListResponse>> List([FromWorkspace] int workspaceId, Guid workflowRef, [FromQuery] string? status, [FromQuery] PageRequest page, [FromQuery] bool? isTest = null, CancellationToken ct = default)
     {
         var cursor = page.AfterKey();
         if (cursor.IsFailure)
@@ -33,7 +33,7 @@ public sealed class WorkflowRunsController : ApiControllerBase
             return MapError(cursor.Error);
         }
 
-        var result = await _runQueryService.ListByWorkflowAsync(workspaceId, workflowRef, status, page.LimitOr(50), cursor.Value, ct);
+        var result = await _runQueryService.ListByWorkflowAsync(workspaceId, workflowRef, status, isTest, page.LimitOr(50), cursor.Value, ct);
         return MapResult(result);
     }
 
@@ -43,7 +43,7 @@ public sealed class WorkflowRunsController : ApiControllerBase
     /// </summary>
     [HttpGet("runs")]
     [RequiresPermission(PermissionNames.WorkflowsRead)]
-    public async Task<ActionResult<RunListResponse>> ListForWorkspace([FromWorkspace] int workspaceId, [FromQuery] string? status, [FromQuery] PageRequest page, CancellationToken ct = default)
+    public async Task<ActionResult<RunListResponse>> ListForWorkspace([FromWorkspace] int workspaceId, [FromQuery] string? status, [FromQuery] PageRequest page, [FromQuery] bool? isTest = null, CancellationToken ct = default)
     {
         var cursor = page.AfterKey();
         if (cursor.IsFailure)
@@ -51,7 +51,7 @@ public sealed class WorkflowRunsController : ApiControllerBase
             return MapError(cursor.Error);
         }
 
-        var result = await _runQueryService.ListByWorkspaceAsync(workspaceId, status, page.LimitOr(50), cursor.Value, ct);
+        var result = await _runQueryService.ListByWorkspaceAsync(workspaceId, status, isTest, page.LimitOr(50), cursor.Value, ct);
         return MapResult(result);
     }
 

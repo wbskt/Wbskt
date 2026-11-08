@@ -21,6 +21,7 @@ BEGIN
     WHERE r.WorkflowRefId = @WorkflowRefId
       AND r.CreatedAt >= @FromUtc
       AND r.CreatedAt < @ToUtc
+      AND r.IsTest = 0
       AND h.EventKind IN (N'NodeCompleted', N'NodeFailed')
       AND h.NodeId IS NOT NULL
       AND TRY_CAST(JSON_VALUE(h.PayloadJson, '$.durationMs') AS FLOAT) IS NOT NULL

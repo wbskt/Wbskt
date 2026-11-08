@@ -50,7 +50,8 @@ BEGIN
         CreatedAt,
         ParentRunRefId,
         OutputJson,
-        Number
+        Number,
+        IsTest
     FROM dbo.Runs
     WHERE Id = @RunId;
 END;

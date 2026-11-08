@@ -31,6 +31,14 @@ public interface IWorkflowDefinitionProvider
     /// </summary>
     Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, IReadOnlyCollection<WorkflowIntegrationRef> integrationRefs, int? maxWorkflows, WorkflowPublishGuards guards, CancellationToken ct) =>
         InsertAsync(row, integrationRefs, maxWorkflows, ct);
+    /// <summary>
+    /// Writes the frozen copy a test run starts from (<c>WorkflowDefinition_InsertTestCopy</c>): loaded by
+    /// Id like a version, invisible to every version lookup. <c>Version</c> is the version it is based on.
+    /// Throws <c>SqlException</c> 50021 for another workspace's workflow and 50022 for a deleted one.
+    /// </summary>
+    Task<WorkflowDefinitionRow> InsertTestCopyAsync(WorkflowDefinitionRow row, CancellationToken ct) =>
+        throw new NotSupportedException("This provider does not write test copies.");
+
     Task<IPagedList<WorkflowDefinitionRow>> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct);
     Task DeprecateAsync(int id, CancellationToken ct);
 

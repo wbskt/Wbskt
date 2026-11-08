@@ -196,6 +196,7 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<IRunStartedPublisher, NullRunStartedPublisher>();
         services.AddScoped<IRunStarter, RunStarter>();
         services.AddScoped<ITriggerDispatcher, TriggerDispatcher>();
+        services.AddScoped<ITestRunStarter, TestRunStarter>();
         services.AddSingleton<TriggerOutcomeBuffer>();
         services.AddScoped<TriggerOutcomeLog>();
         services.AddScoped<ITriggerFilterEvaluator, TriggerFilterEvaluator>();
