@@ -305,7 +305,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "short": "M3",
    "due": "2026-12-31",
    "start": "2026-12-01",
-   "open": 14,
+   "open": 15,
    "closed": 10
   },
   {
@@ -342,7 +342,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
  "work": {
   "167": {
    "state": "decide",
-   "why": "Split on 8 Nov into plans (#626), an account credit ledger (#627), a run-start charge (#628), a message meter (#629), a usage API (#630), payments through Dodo Payments (#631) and the console usage page (Console#151). Prices and whether to charge at launch are open."
+   "why": "Split on 8 Nov into plans (#626), an account credit ledger (#627), a run-start charge (#628), a message meter (#629), a usage API (#630), optional monthly credit caps per workspace (#634), payments through Dodo Payments (#631) and the console usage page (Console#151). Whether to charge at launch is open."
   },
   "528": {
    "state": "you",
@@ -477,6 +477,13 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {
    "status": "decided",
    "date": "2026-11-08",
+   "title": "Credits per workspace: optional caps",
+   "body": "One credit pool per account; an owner can cap any workspace per month. Fixed per-workspace allocations were rejected because they strand credits in quiet workspaces. Prices set: Maker $5 a month or $50 a year, Pro $24 a month or $240 a year.",
+   "issue": 634
+  },
+  {
+   "status": "decided",
+   "date": "2026-11-08",
    "title": "Review cadence",
    "body": "A full architecture review every 5th day, skipped when nothing was committed; findings filed automatically."
   },
@@ -539,6 +546,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   }
  ],
  "issues": [
+  {"n":634,"t":"Credits: optional monthly cap per workspace","s":"o","m":"M3","p":167,"a":["management","engine"]},
   {"n":632,"t":"Readings: compress, average old readings and keep them per plan","s":"o","m":"M3","p":440,"a":["management","db"]},
   {"n":631,"t":"Payments: subscriptions and credit top-ups through Dodo Payments","s":"o","m":"Post","p":167,"a":["management"]},
   {"n":630,"t":"Usage API: credits, messages and clients against the plan","s":"o","m":"M3","p":167,"a":["management"]},
@@ -618,7 +626,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":174,"t":"Client SDKs","s":"o","m":"M2","p":null,"a":["sdk"],"epic":1,"sub":{"completed":9,"total":10}},
   {"n":172,"t":"Workflow engine and test fixes","s":"o","m":"M2","p":null,"a":["engine"],"epic":1,"sub":{"completed":11,"total":14}},
   {"n":168,"t":"CI: drop the gha build cache if image builds stay slow","s":"o","m":"Post","p":179,"a":["ops"],"pr":"P3","sz":"XS"},
-  {"n":167,"t":"Metering and billing","s":"o","m":"Post","p":180,"a":["management"],"pr":"P3","sz":"L","epic":1,"sub":{"completed":0,"total":7}},
+  {"n":167,"t":"Metering and billing","s":"o","m":"Post","p":180,"a":["management"],"pr":"P3","sz":"L","epic":1,"sub":{"completed":0,"total":8}},
   {"n":166,"t":"Engine: more than one active replica, WF-10 and WF-29 leftovers","s":"o","m":"Post","p":179,"a":["engine"],"pr":"P3","sz":"L"},
   {"n":165,"t":"Redis-backed rate limiter before running a second auth replica","s":"o","m":"Post","p":179,"a":["auth"],"pr":"P3","sz":"S"},
   {"n":164,"t":"Register a user in one procedure so no half-created accounts are left","s":"o","m":"Post","p":179,"a":["auth","db"],"pr":"P3","sz":"S"},
