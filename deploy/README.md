@@ -138,7 +138,7 @@ that one otherwise deploys automatically on every push.
 
 Prerequisites you handle outside this repo: provision the VM, point DNS (`auth.<domain>`,
 `api.<domain>`, `ws.<domain>`, `mqtt.<domain>`, `console.<domain>`, or one wildcard `*.<domain>`) at its
-IP, and open inbound 22/80/443/8883 in the cloud firewall. If the VM has under ~4GB RAM, add swap first
+IP, and open inbound 22/80/443/8883/1883 in the cloud firewall. If the VM has under ~4GB RAM, add swap first
 (`fallocate` a few GB, `mkswap`, `swapon`, persist in `/etc/fstab`) — SQL Server + RabbitMQ +
 Redis + 4 hosts + Traefik is not a light stack.
 
@@ -285,14 +285,16 @@ touches management, so client login always has one of the two. Scale it with `CL
 ([Docs/Client.Protocol.MQTT.md](../Docs/Client.Protocol.MQTT.md)). Traefik ends TLS on its `mqtts`
 entrypoint with the same Let's Encrypt resolver as the HTTP routers (the certificate for
 `mqtt.<DOMAIN>` is fetched through the HTTP challenge on port 80) and forwards plain MQTT to the
-gateway's port 1883, which is never published. There is no plain-text MQTT port. Scale it with
+gateway's port 1883, which is never published itself. Traefik's `mqtt` entrypoint also accepts plain
+MQTT on host port 1883 for boards that cannot do TLS; their access tokens cross the network in clear
+text, which is why the protocol doc points every other client at 8883. Scale it with
 `GATEWAY_MQTT_REPLICAS`; like gateway-ws, every replica can serve every client.
 
 On a VM that predates it, before the first deploy that includes it:
 
 1. Point `mqtt.<DOMAIN>` at the VM (a wildcard record already covers it).
-2. Open inbound TCP 8883 in the cloud firewall.
-3. Recreate Traefik once so it picks up the new entrypoint and port, in a quiet minute: every HTTP
+2. Open inbound TCP 8883 and 1883 in the cloud firewall.
+3. Recreate Traefik once so it picks up the new entrypoints and ports, in a quiet minute: every HTTP
    and WebSocket connection drops while it restarts. `docker compose up -d --no-build --no-deps traefik`
 
 ### Running a local console against this backend

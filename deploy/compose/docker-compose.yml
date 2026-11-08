@@ -78,6 +78,11 @@ services:
       - --entrypoints.mqtts.address=:8883
       - --entrypoints.mqtts.transport.respondingTimeouts.readTimeout=0
       - --entrypoints.mqtts.transport.respondingTimeouts.writeTimeout=0
+      # Plain MQTT for boards that cannot do TLS. The access token travels in clear text here, so
+      # the docs steer every client that can to 8883.
+      - --entrypoints.mqtt.address=:1883
+      - --entrypoints.mqtt.transport.respondingTimeouts.readTimeout=0
+      - --entrypoints.mqtt.transport.respondingTimeouts.writeTimeout=0
       - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
       - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
       - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:?ACME_EMAIL is required - see .env.example}
@@ -90,6 +95,7 @@ services:
       - "80:80"
       - "443:443"
       - "8883:8883"
+      - "1883:1883"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - traefik-acme:/letsencrypt
@@ -380,8 +386,9 @@ services:
       # to any client it doesn't hold, and WebSocket upgrade pins the TCP connection natively.
 
   # The MQTT client gateway (Hosts/Wbskt.Gateway.MQTT.Host): an embedded MQTT server over the same
-  # Gateway.Core as gateway-ws. Clients reach it as mqtts://mqtt.${DOMAIN}:8883; Traefik ends TLS on
-  # its mqtts entrypoint and passes plain MQTT on 1883. Port 8080 is health checks and metrics only.
+  # Gateway.Core as gateway-ws. Clients reach it as mqtts://mqtt.${DOMAIN}:8883, where Traefik ends TLS
+  # on its mqtts entrypoint, or as plain mqtt://mqtt.${DOMAIN}:1883 for boards without TLS. Both reach
+  # the gateway as plain MQTT on 1883. Port 8080 is health checks and metrics only.
   gateway-mqtt:
     image: ${REGISTRY:-ghcr.io/wbskt}/wbskt-gateway-mqtt:${IMAGE_TAG:-latest}
     build:
@@ -424,6 +431,11 @@ services:
       - traefik.tcp.routers.gateway-mqtt.entrypoints=mqtts
       - traefik.tcp.routers.gateway-mqtt.tls=true
       - traefik.tcp.routers.gateway-mqtt.tls.certresolver=letsencrypt
+      - traefik.tcp.routers.gateway-mqtt.service=gateway-mqtt
+      # Plain MQTT carries no server name, so this router takes every connection on the mqtt entrypoint.
+      - traefik.tcp.routers.gateway-mqtt-plain.rule=HostSNI(`*`)
+      - traefik.tcp.routers.gateway-mqtt-plain.entrypoints=mqtt
+      - traefik.tcp.routers.gateway-mqtt-plain.service=gateway-mqtt
       - traefik.tcp.services.gateway-mqtt.loadbalancer.server.port=1883
 
   engine:
