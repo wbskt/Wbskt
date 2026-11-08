@@ -12,13 +12,14 @@ one page per transport:
 | Binding | Page | Endpoint |
 |---|---|---|
 | WebSocket | [Client.Protocol.WebSocket.md](Client.Protocol.WebSocket.md) | `wss://ws.<domain>/ws` |
+| MQTT 3.1.1 and 5 | [Client.Protocol.MQTT.md](Client.Protocol.MQTT.md) | `mqtts://mqtt.<domain>:8883` |
 
 A client makes two HTTPS calls, then holds one connection open through a binding:
 
 ```
 POST https://api.<domain>/api/v1/client-registrations/initiate   once, with the policy PIN
 POST https://api.<domain>/api/v1/client-auth/login               whenever it needs a token
-<the binding's connection>                                       e.g. GET wss://ws.<domain>/ws
+<the binding's connection>                                       e.g. GET wss://ws.<domain>/ws, or MQTT CONNECT
 ```
 
 The hosted service is `api.dev.wbskt.com` (`WbsktDefaults` in the .NET SDK). A self-hosted install
@@ -226,7 +227,7 @@ The first connection at startup needs no delay. Reset the failure count once con
 token (§2), so most reconnects are a handshake and not a login.
 
 Why the server ends a connection. Each binding says how it signals these (the WebSocket binding
-uses close codes):
+uses close codes, the MQTT binding DISCONNECT reason codes):
 
 | Reason | When | Do |
 |---|---|---|
