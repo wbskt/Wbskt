@@ -76,6 +76,7 @@ public sealed class ManagementEndpointPermissionTests
         ["WorkflowDraftsController.Save"] = PermissionNames.WorkflowsCreate,
         ["WorkflowDraftsController.Discard"] = PermissionNames.WorkflowsCreate,
         ["WorkflowDraftsController.Publish"] = PermissionNames.WorkflowsCreate,
+        ["WorkflowDraftsController.StartTestRun"] = $"All({PermissionNames.WorkflowsExecute}, {PermissionNames.WorkflowsCreate})",
         ["WorkflowsController.Publish"] = PermissionNames.WorkflowsCreate,
         ["WorkflowsController.ValidateDefinition"] = PermissionNames.WorkflowsCreate,
         ["WorkflowsController.GetAll"] = PermissionNames.WorkflowsRead,

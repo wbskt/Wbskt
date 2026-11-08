@@ -16,6 +16,14 @@ public interface IRunStarter
     /// </summary>
     Task<RunStartResult> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, CancellationToken ct, bool exemptFromCeiling = false, ActiveRunGuard activeRunGuard = ActiveRunGuard.None);
 
+    /// <summary>
+    /// Starts a test run: a run like any other, marked as a test, from a test copy of the definition.
+    /// It skips the trigger's concurrency policy but not the workspace's ceiling, and refuses with
+    /// <see cref="TestRunActiveException"/> while another test run of the workflow is going.
+    /// </summary>
+    Task<RunStartResult> StartTestAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, CancellationToken ct) =>
+        throw new NotSupportedException("This run starter does not start test runs.");
+
     /// <summary>The run an earlier attempt started under <paramref name="triggerStartKey"/>, if any.</summary>
     Task<RunStartResult?> FindStartedAsync(string triggerStartKey, CancellationToken ct);
 }
@@ -32,6 +40,13 @@ public sealed class WorkspaceRunCeilingException(int workspaceId, int limit)
     public int WorkspaceId { get; } = workspaceId;
 
     public int Limit { get; } = limit;
+}
+
+/// <summary>Thrown by <see cref="IRunStarter.StartTestAsync"/> while another test run of the workflow is going. Nothing was created.</summary>
+public sealed class TestRunActiveException(Guid workflowRefId)
+    : InvalidOperationException($"A test run of workflow '{workflowRefId}' is already going.")
+{
+    public Guid WorkflowRefId { get; } = workflowRefId;
 }
 
 /// <summary>

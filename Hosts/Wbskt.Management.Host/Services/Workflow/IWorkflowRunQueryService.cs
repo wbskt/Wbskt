@@ -5,10 +5,11 @@ namespace Wbskt.Management.Host.Services.Workflow;
 
 public interface IWorkflowRunQueryService
 {
-    Task<Result<RunListResponse>> ListByWorkflowAsync(int workspaceId, Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct);
+    /// <summary>A workflow's runs, newest first. <paramref name="isTest"/> keeps only test runs (true) or none of them (false).</summary>
+    Task<Result<RunListResponse>> ListByWorkflowAsync(int workspaceId, Guid workflowRefId, string? statusFilter, bool? isTest, int top, long? cursorId, CancellationToken ct);
 
     /// <summary>Every run in the workspace, newest first — the "recent activity" view.</summary>
-    Task<Result<RunListResponse>> ListByWorkspaceAsync(int workspaceId, string? statusFilter, int top, long? cursorId, CancellationToken ct);
+    Task<Result<RunListResponse>> ListByWorkspaceAsync(int workspaceId, string? statusFilter, bool? isTest, int top, long? cursorId, CancellationToken ct);
 
     /// <summary>
     /// How a workflow is doing over a window: outcome counts, duration percentiles, success rate, the

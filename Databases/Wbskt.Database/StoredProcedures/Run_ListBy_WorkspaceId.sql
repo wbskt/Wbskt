@@ -2,7 +2,9 @@ CREATE PROCEDURE dbo.Run_ListBy_WorkspaceId
     @WorkspaceId  INT,
     @StatusFilter NVARCHAR(40) = NULL,
     @Top          INT = 50,
-    @CursorId     BIGINT = NULL
+    @CursorId     BIGINT = NULL,
+    -- 1 for test runs only, 0 for none of them; NULL lists both.
+    @IsTest       BIT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -26,7 +28,8 @@ BEGIN
             r.CreditBudget,
             r.CreatedAt,
             r.ParentRunRefId,
-            r.Number
+            r.Number,
+            r.IsTest
         FROM dbo.Runs r
         INNER JOIN dbo.WorkflowDefinitions w ON w.Id = r.WorkflowDefinitionId
         WHERE w.WorkspaceId = @WorkspaceId
@@ -35,6 +38,7 @@ BEGIN
           AND r.Status IN (N'Running', N'Failing', N'Cancelling')
           AND r.Status = N'Running'
           AND (@CursorId IS NULL OR r.Id < @CursorId)
+          AND (@IsTest IS NULL OR r.IsTest = @IsTest)
           AND EXISTS (SELECT 1 FROM dbo.RunParked(r.Id))
         ORDER BY r.Id DESC;
         RETURN;
@@ -58,12 +62,14 @@ BEGIN
         r.CreditBudget,
         r.CreatedAt,
         r.ParentRunRefId,
-        r.Number
+        r.Number,
+        r.IsTest
     FROM dbo.Runs r
     INNER JOIN dbo.WorkflowDefinitions w ON w.Id = r.WorkflowDefinitionId
     WHERE w.WorkspaceId = @WorkspaceId
       AND (@StatusFilter IS NULL OR r.Status = @StatusFilter)
       AND (@CursorId IS NULL OR r.Id < @CursorId)
+      AND (@IsTest IS NULL OR r.IsTest = @IsTest)
     ORDER BY r.Id DESC;
 END;
 GO

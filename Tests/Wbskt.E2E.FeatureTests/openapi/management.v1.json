@@ -2361,6 +2361,10 @@
               }
             ]
           },
+          "isTest": {
+            "default": false,
+            "type": "boolean"
+          },
           "number": {
             "default": 0,
             "format": "int32",
@@ -2669,6 +2673,42 @@
         ],
         "type": "object"
       },
+      "StartTestRunRequest": {
+        "properties": {
+          "payload": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/TestRunSource"
+          },
+          "triggerNodeId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "type": "object"
+      },
+      "StartTestRunResponse": {
+        "properties": {
+          "runRefId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runRefId"
+        ],
+        "type": "object"
+      },
       "TelegramChatResponse": {
         "properties": {
           "id": {
@@ -2729,6 +2769,12 @@
           "chats"
         ],
         "type": "object"
+      },
+      "TestRunSource": {
+        "enum": [
+          "draft",
+          "live"
+        ]
       },
       "TriggerActivityResponse": {
         "properties": {
@@ -6194,6 +6240,13 @@
             }
           },
           {
+            "in": "query",
+            "name": "isTest",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "in": "path",
             "name": "workspaceRef",
             "required": true,
@@ -7255,6 +7308,13 @@
             }
           },
           {
+            "in": "query",
+            "name": "isTest",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "in": "path",
             "name": "workspaceRef",
             "required": true,
@@ -7418,6 +7478,75 @@
         },
         "tags": [
           "WorkflowRuns"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/test-runs": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflowRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspaceRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartTestRunRequest"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartTestRunRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartTestRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartTestRunResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartTestRunResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartTestRunResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "WorkflowDrafts"
         ]
       }
     },

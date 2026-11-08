@@ -36,4 +36,7 @@ public record RunRow
     /// before numbering.
     /// </summary>
     public int Number { get; init; }
+
+    /// <summary>Started from the workflow page's Test run, against a test copy of the definition.</summary>
+    public bool IsTest { get; init; }
 }

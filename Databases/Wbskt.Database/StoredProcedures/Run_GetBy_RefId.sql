@@ -21,7 +21,8 @@ BEGIN
         CreatedAt,
         ParentRunRefId,
         OutputJson,
-        Number
+        Number,
+        IsTest
     FROM dbo.Runs
     WHERE RefId = @RefId;
 END;

@@ -34,14 +34,14 @@ public sealed class WorkflowRunsControllerTests
         var engineClient = new Mock<IWorkflowEngineGateway>();
         var workflowRefId = Guid.NewGuid();
         var expected = new RunListResponse { Items = [] };
-        service.Setup(x => x.ListByWorkflowAsync(WorkspaceId, workflowRefId, "Running", 25, 12, It.IsAny<CancellationToken>())).ReturnsAsync(Result<RunListResponse>.Success(expected));
+        service.Setup(x => x.ListByWorkflowAsync(WorkspaceId, workflowRefId, "Running", null, 25, 12, It.IsAny<CancellationToken>())).ReturnsAsync(Result<RunListResponse>.Success(expected));
         var controller = new WorkflowRunsController(service.Object, new WorkflowRunService(Mock.Of<IWorkflowQueryService>(), service.Object, engineClient.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunService>>()));
 
-        var actual = await controller.List(WorkspaceId, workflowRefId, "Running", new PageRequest { Cursor = "12", Limit = 25 }, CancellationToken.None);
+        var actual = await controller.List(WorkspaceId, workflowRefId, "Running", new PageRequest { Cursor = "12", Limit = 25 }, ct: CancellationToken.None);
 
         var okResult = Assert.IsType<OkObjectResult>(actual.Result);
         Assert.Equal(expected, okResult.Value);
-        service.Verify(x => x.ListByWorkflowAsync(WorkspaceId, workflowRefId, "Running", 25, 12, It.IsAny<CancellationToken>()), Times.Once);
+        service.Verify(x => x.ListByWorkflowAsync(WorkspaceId, workflowRefId, "Running", null, 25, 12, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -187,14 +187,14 @@ public sealed class WorkflowRunsControllerTests
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId));
         // The service asks for one more than the page size to detect a further page; three rows come
         // back, so the page is trimmed to two and a cursor is returned.
-        runProvider.Setup(x => x.ListByWorkflowAsync(workflowRefId, "Running", 3, null, It.IsAny<CancellationToken>())).ReturnsAsync([
+        runProvider.Setup(x => x.ListByWorkflowAsync(workflowRefId, "Running", null, 3, null, It.IsAny<CancellationToken>())).ReturnsAsync([
             CreateRunRow(41, Guid.NewGuid(), workflowRefId, 5, "Running"),
             CreateRunRow(42, Guid.NewGuid(), workflowRefId, 5, "Completed"),
             CreateRunRow(43, Guid.NewGuid(), workflowRefId, 5, "Completed")
         ]);
         var service = new WorkflowRunQueryService(runProvider.Object, branchProvider.Object, definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
 
-        var response = await service.ListByWorkflowAsync(WorkspaceId, workflowRefId, "Running", 2, null, CancellationToken.None);
+        var response = await service.ListByWorkflowAsync(WorkspaceId, workflowRefId, "Running", null, 2, null, CancellationToken.None);
 
         Assert.True(response.IsSuccess);
         Assert.Equal(2, response.Value.Items.Count());
@@ -215,7 +215,7 @@ public sealed class WorkflowRunsControllerTests
             DefinitionJson = JsonSerializer.Serialize(definition, new JsonSerializerOptions(JsonSerializerDefaults.Web))
         });
         RunRow Run(int id, string status) => CreateRunRow(id, Guid.NewGuid(), workflowRefId, 1, status) with { TriggerNodeId = ValidWorkflowBuilder.Trigger1Id };
-        runProvider.Setup(x => x.ListByWorkspaceAsync(WorkspaceId, null, 4, null, It.IsAny<CancellationToken>()))
+        runProvider.Setup(x => x.ListByWorkspaceAsync(WorkspaceId, null, null, 4, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync([Run(1, "Failed"), Run(2, "Succeeded"), Run(3, "Running")]);
         runProvider.Setup(x => x.GetListDetailsAsync(It.Is<IReadOnlyCollection<int>>(ids => ids.SequenceEqual(new[] { 1, 2, 3 })), It.IsAny<CancellationToken>()))
             .ReturnsAsync([
@@ -225,7 +225,7 @@ public sealed class WorkflowRunsControllerTests
             ]);
         var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
 
-        var response = await service.ListByWorkspaceAsync(WorkspaceId, null, 3, null, CancellationToken.None);
+        var response = await service.ListByWorkspaceAsync(WorkspaceId, null, null, 3, null, CancellationToken.None);
 
         var runs = response.Value.Items.ToList();
         Assert.All(runs, r => Assert.Equal("Greenhouse", r.WorkflowName));
@@ -248,13 +248,13 @@ public sealed class WorkflowRunsControllerTests
         var workflowRefId = Guid.NewGuid();
         definitionProvider.Setup(x => x.FindCurrentByRefIdAsync(workflowRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId));
-        runProvider.Setup(x => x.ListByWorkflowAsync(workflowRefId, null, 3, null, It.IsAny<CancellationToken>())).ReturnsAsync([
+        runProvider.Setup(x => x.ListByWorkflowAsync(workflowRefId, null, null, 3, null, It.IsAny<CancellationToken>())).ReturnsAsync([
             CreateRunRow(41, Guid.NewGuid(), workflowRefId, 5, "Running"),
             CreateRunRow(42, Guid.NewGuid(), workflowRefId, 5, "Completed")
         ]);
         var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
 
-        var response = await service.ListByWorkflowAsync(WorkspaceId, workflowRefId, null, 2, null, CancellationToken.None);
+        var response = await service.ListByWorkflowAsync(WorkspaceId, workflowRefId, null, null, 2, null, CancellationToken.None);
 
         Assert.True(response.IsSuccess);
         Assert.Equal(2, response.Value.Items.Count());
@@ -392,7 +392,7 @@ public sealed class WorkflowRunsControllerTests
         runProvider.Setup(x => x.GetListDetailsAsync(It.Is<IReadOnlyCollection<int>>(ids => ids.Single() == 7), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new RunListDetailRow { RunId = 7, IsWaiting = true, WaitingKind = "signal", WaitingNodeId = nodeId, WaitingSignalName = "approve" }]);
         var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
-        definitionProvider.Setup(x => x.FindRowByRefIdVersionAsync(workflowRefId, 1, It.IsAny<CancellationToken>()))
+        definitionProvider.Setup(x => x.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId));
         var branchProvider = new Mock<IBranchProvider>();
         branchProvider.Setup(x => x.GetAllByRunIdAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync([]);
@@ -507,13 +507,13 @@ public sealed class WorkflowRunsControllerTests
         var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
         var workflowA = Guid.NewGuid();
         var workflowB = Guid.NewGuid();
-        runProvider.Setup(x => x.ListByWorkspaceAsync(WorkspaceId, null, 11, null, It.IsAny<CancellationToken>())).ReturnsAsync([
+        runProvider.Setup(x => x.ListByWorkspaceAsync(WorkspaceId, null, null, 11, null, It.IsAny<CancellationToken>())).ReturnsAsync([
             CreateRunRow(41, Guid.NewGuid(), workflowA, 5, "Running"),
             CreateRunRow(42, Guid.NewGuid(), workflowB, 5, "Succeeded")
         ]);
         var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
 
-        var response = await service.ListByWorkspaceAsync(WorkspaceId, null, 10, null, CancellationToken.None);
+        var response = await service.ListByWorkspaceAsync(WorkspaceId, null, null, 10, null, CancellationToken.None);
 
         Assert.True(response.IsSuccess);
         Assert.Equal(2, response.Value.Items.Count());
@@ -534,7 +534,7 @@ public sealed class WorkflowRunsControllerTests
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId + 1));
         var service = new WorkflowRunQueryService(runProvider.Object, branchProvider.Object, definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
 
-        var response = await service.ListByWorkflowAsync(WorkspaceId, workflowRefId, null, 10, null, CancellationToken.None);
+        var response = await service.ListByWorkflowAsync(WorkspaceId, workflowRefId, null, null, 10, null, CancellationToken.None);
         
         Assert.True(response.IsFailure);
         Assert.Equal("WORKFLOW_NOT_FOUND", response.Error.Code);
@@ -550,7 +550,7 @@ public sealed class WorkflowRunsControllerTests
         var workflowRefId = Guid.NewGuid();
         var run = CreateRunRow(51, runRefId, workflowRefId, 6, "Running");
         runProvider.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(run);
-        definitionProvider.Setup(x => x.FindRowByRefIdVersionAsync(workflowRefId, 6, It.IsAny<CancellationToken>()))
+        definitionProvider.Setup(x => x.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId));
         branchProvider.Setup(x => x.GetAllByRunIdAsync(51, It.IsAny<CancellationToken>())).ReturnsAsync([
             new BranchRow { Id = 100, RefId = Guid.NewGuid(), RunId = 51, ParentBranchId = null, ForkCohortId = null, NodeId = Guid.NewGuid(), Status = "Running", PendingTakePort = null, LocalJson = "{}", LastOutputJson = null, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow, RowVersion = [1] }
@@ -572,7 +572,7 @@ public sealed class WorkflowRunsControllerTests
         var runRefId = Guid.NewGuid();
         var workflowRefId = Guid.NewGuid();
         runProvider.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(63, runRefId, workflowRefId, 2, "Running"));
-        definitionProvider.Setup(x => x.FindRowByRefIdVersionAsync(workflowRefId, 2, It.IsAny<CancellationToken>()))
+        definitionProvider.Setup(x => x.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId));
         var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
 
@@ -593,7 +593,7 @@ public sealed class WorkflowRunsControllerTests
         var runRefId = Guid.NewGuid();
         var workflowRefId = Guid.NewGuid();
         runProvider.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(64, runRefId, workflowRefId, 2, "Succeeded"));
-        definitionProvider.Setup(x => x.FindRowByRefIdVersionAsync(workflowRefId, 2, It.IsAny<CancellationToken>()))
+        definitionProvider.Setup(x => x.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId));
         var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
 
@@ -613,7 +613,7 @@ public sealed class WorkflowRunsControllerTests
         var runRefId = Guid.NewGuid();
         var workflowRefId = Guid.NewGuid();
         runProvider.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(70, runRefId, workflowRefId, 1, "Running"));
-        definitionProvider.Setup(x => x.FindRowByRefIdVersionAsync(workflowRefId, 1, It.IsAny<CancellationToken>()))
+        definitionProvider.Setup(x => x.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId + 99));
         var service = new WorkflowRunQueryService(runProvider.Object, branchProvider.Object, definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
 
@@ -658,7 +658,7 @@ public sealed class WorkflowRunsControllerTests
             var runRefId = Guid.NewGuid();
             var workflowRefId = Guid.NewGuid();
             Runs.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(id, runRefId, workflowRefId, 2, status));
-            Definitions.Setup(x => x.FindRowByRefIdVersionAsync(workflowRefId, 2, It.IsAny<CancellationToken>()))
+            Definitions.Setup(x => x.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(CreateDefinitionRow(workflowRefId, workspaceId));
             return runRefId;
         }

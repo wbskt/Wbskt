@@ -8,6 +8,7 @@ BEGIN
         Id
     FROM dbo.WorkflowDefinitions
     WHERE RefId = @RefId
+      AND Kind = N'Version'
     ORDER BY Version DESC;
 END;
 GO

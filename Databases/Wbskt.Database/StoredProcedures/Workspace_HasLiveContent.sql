@@ -15,7 +15,7 @@ BEGIN
     SELECT CAST(CASE WHEN
            EXISTS (SELECT 1 FROM dbo.RegistrationPolicies WHERE WorkspaceId = @WorkspaceId AND IsEnabled = 1)
         OR EXISTS (SELECT 1 FROM dbo.Clients WHERE WorkspaceId = @WorkspaceId AND Status IN (0, 1)) -- Pending, Registered
-        OR EXISTS (SELECT 1 FROM dbo.WorkflowDefinitions WHERE WorkspaceId = @WorkspaceId AND IsEnabled = 1)
+        OR EXISTS (SELECT 1 FROM dbo.WorkflowDefinitions WHERE WorkspaceId = @WorkspaceId AND IsEnabled = 1 AND Kind = N'Version')
         OR EXISTS (SELECT 1 FROM dbo.Integrations WHERE WorkspaceId = @WorkspaceId)
         OR EXISTS (
             SELECT 1

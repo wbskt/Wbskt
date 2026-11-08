@@ -60,6 +60,7 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
                 p.AddWithValue("@BranchLocalJson", rootBranch.LocalJson);
                 p.AddWithValue("@ParentRunRefId", (object?)run.ParentRunRefId ?? DBNull.Value);
                 p.AddWithValue("@ActiveRunGuard", (byte)activeRunGuard);
+                p.AddWithValue("@IsTest", run.IsTest);
                 if (maxActiveRuns is not null)
                 {
                     p.AddWithValue("@WorkspaceId", workspaceId);
@@ -70,6 +71,16 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
             new InvalidOperationException("Run_Start did not return a row."),
             ct
         );
+    }
+
+    public async Task<Guid?> FindActiveTestRunAsync(Guid workflowRefId, CancellationToken ct)
+    {
+        var refId = await ExecuteScalarAsync<object>(
+            "dbo.Run_GetActiveTestBy_WorkflowRefId",
+            p => p.AddWithValue("@WorkflowRefId", workflowRefId),
+            ct
+        );
+        return refId is Guid guid ? guid : null;
     }
 
     public async Task<RunStartRow?> FindByTriggerStartKeyAsync(string triggerStartKey, CancellationToken ct)
@@ -113,7 +124,10 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
         );
     }
 
-    public async Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct)
+    public Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct) =>
+        ListByWorkflowAsync(workflowRefId, statusFilter, isTest: null, top, cursorId, ct);
+
+    public async Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, bool? isTest, int top, long? cursorId, CancellationToken ct)
     {
         return await ExecuteCollectionAsync(
             "dbo.Run_ListBy_WorkflowRefId",
@@ -123,13 +137,17 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
                 p.AddWithValue("@StatusFilter", (object?)statusFilter ?? DBNull.Value);
                 p.AddWithValue("@Top", top);
                 p.AddWithValue("@CursorId", (object?)cursorId ?? DBNull.Value);
+                p.AddWithValue("@IsTest", (object?)isTest ?? DBNull.Value);
             },
             Map,
             ct
         );
     }
 
-    public async Task<IReadOnlyCollection<RunRow>> ListByWorkspaceAsync(int workspaceId, string? statusFilter, int top, long? cursorId, CancellationToken ct)
+    public Task<IReadOnlyCollection<RunRow>> ListByWorkspaceAsync(int workspaceId, string? statusFilter, int top, long? cursorId, CancellationToken ct) =>
+        ListByWorkspaceAsync(workspaceId, statusFilter, isTest: null, top, cursorId, ct);
+
+    public async Task<IReadOnlyCollection<RunRow>> ListByWorkspaceAsync(int workspaceId, string? statusFilter, bool? isTest, int top, long? cursorId, CancellationToken ct)
     {
         return await ExecuteCollectionAsync(
             "dbo.Run_ListBy_WorkspaceId",
@@ -139,6 +157,7 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
                 p.AddWithValue("@StatusFilter", (object?)statusFilter ?? DBNull.Value);
                 p.AddWithValue("@Top", top);
                 p.AddWithValue("@CursorId", (object?)cursorId ?? DBNull.Value);
+                p.AddWithValue("@IsTest", (object?)isTest ?? DBNull.Value);
             },
             Map,
             ct
@@ -521,12 +540,13 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
             ParentRunRefId = TryGetOrdinal(reader, "ParentRunRefId") is { } parentOrdinal && !reader.IsDBNull(parentOrdinal) ? reader.GetGuid(parentOrdinal) : null,
             OutputJson = TryGetOrdinal(reader, "OutputJson") is { } outputOrdinal && !reader.IsDBNull(outputOrdinal) ? reader.GetString(outputOrdinal) : null,
-            Number = TryGetOrdinal(reader, "Number") is { } numberOrdinal ? reader.GetInt32(numberOrdinal) : 0
+            Number = TryGetOrdinal(reader, "Number") is { } numberOrdinal ? reader.GetInt32(numberOrdinal) : 0,
+            IsTest = TryGetOrdinal(reader, "IsTest") is { } isTestOrdinal && reader.GetBoolean(isTestOrdinal)
         };
     }
 
     // The run-list procs leave OutputJson out (it is unbounded and no page shows it), and only the procs
-    // behind the run pages return Number, so these are read only where the result set carries them
+    // behind the run pages return Number and IsTest, so these are read only where the result set carries them
     // rather than making every proc return them.
     private static int? TryGetOrdinal(DbDataReader reader, string column)
     {

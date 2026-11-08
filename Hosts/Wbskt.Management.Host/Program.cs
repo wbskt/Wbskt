@@ -108,6 +108,7 @@ public static class Program
         builder.Services.AddScoped<IWorkflowQueryService, WorkflowQueryService>();
         builder.Services.AddScopedWithQueuedEvents<IWorkflowLifecycleService, WorkflowLifecycleService>();
         builder.Services.AddScoped<IWorkflowDraftService, WorkflowDraftService>();
+        builder.Services.AddScopedWithQueuedEvents<IWorkflowTestRunService, WorkflowTestRunService>();
         builder.Services.AddScoped<IWorkflowRunQueryService, WorkflowRunQueryService>();
         builder.Services.AddScoped<ITriggerActivityService, TriggerActivityService>();
         builder.Services.AddScopedWithQueuedEvents<IWorkflowRunService, WorkflowRunService>();

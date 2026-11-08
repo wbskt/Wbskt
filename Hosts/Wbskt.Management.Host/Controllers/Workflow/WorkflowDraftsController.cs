@@ -20,10 +20,12 @@ namespace Wbskt.Management.Host.Controllers.Workflow;
 public sealed class WorkflowDraftsController : ApiControllerBase
 {
     private readonly IWorkflowDraftService _draftService;
+    private readonly IWorkflowTestRunService _testRunService;
 
-    public WorkflowDraftsController(IWorkflowDraftService draftService)
+    public WorkflowDraftsController(IWorkflowDraftService draftService, IWorkflowTestRunService testRunService)
     {
         _draftService = draftService;
+        _testRunService = testRunService;
     }
 
     [HttpGet("drafts")]
@@ -60,5 +62,17 @@ public sealed class WorkflowDraftsController : ApiControllerBase
     public async Task<ActionResult<WorkflowPublishResponse>> Publish(Guid workspaceRef, [FromWorkspace] int workspaceId, Guid workflowRef, [FromBody] WorkflowDraftPublishRequest request, CancellationToken ct)
     {
         return MapResult(await _draftService.PublishAsync(workspaceId, workspaceRef, workflowRef, request, ct));
+    }
+
+    /// <summary>
+    /// Runs the draft or the live version by hand, whatever its trigger, with the trigger data given.
+    /// Its steps' side effects are real. One test run at a time per workflow.
+    /// </summary>
+    // A test run is authoring as well as running: it can run a workflow nobody has published.
+    [HttpPost("{workflowRef:guid}/test-runs")]
+    [RequiresPermission(PermissionNames.WorkflowsExecute, PermissionNames.WorkflowsCreate)]
+    public async Task<ActionResult<StartTestRunResponse>> StartTestRun([FromWorkspace] int workspaceId, Guid workflowRef, [FromBody] StartTestRunRequest request, CancellationToken ct)
+    {
+        return MapResult(await _testRunService.StartAsync(workspaceId, workflowRef, request, ct));
     }
 }

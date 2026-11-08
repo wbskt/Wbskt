@@ -9,6 +9,7 @@ BEGIN
         Id
     FROM dbo.WorkflowDefinitions
     WHERE RefId = @RefId
-      AND Version = @Version;
+      AND Version = @Version
+      AND Kind = N'Version';
 END;
 GO

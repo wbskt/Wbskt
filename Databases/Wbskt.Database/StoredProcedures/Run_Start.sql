@@ -13,7 +13,9 @@ CREATE PROCEDURE dbo.Run_Start
     @WorkspaceId          INT = NULL,
     @MaxActiveRuns        INT = NULL,
     @ParentRunRefId       UNIQUEIDENTIFIER = NULL,
-    @ActiveRunGuard       TINYINT = 0
+    @ActiveRunGuard       TINYINT = 0,
+    -- A test run (see dbo.WorkflowDefinitions.Kind): at most one goes at a time per workflow (50029).
+    @IsTest               BIT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -62,6 +64,25 @@ BEGIN
                     THROW 50028, 'A run is already active for this trigger and correlation key.', 1;
             END
 
+            -- One test run at a time per workflow, so a test that waits or loops cannot pile up behind the
+            -- author's next click. Counted under a lock per workflow, taken in the same order as the others.
+            IF @IsTest = 1
+            BEGIN
+                DECLARE @TestResource NVARCHAR(255) = CONCAT(N'test-run:', @WorkflowRefId);
+                DECLARE @TestLockResult INT;
+                EXEC @TestLockResult = sp_getapplock @Resource = @TestResource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
+                IF @TestLockResult < 0
+                    THROW 50029, 'Another test run of this workflow is starting.', 1;
+
+                -- IX_Runs_WorkflowRefId_Test_Active's filter word for word.
+                IF EXISTS (SELECT 1
+                           FROM dbo.Runs
+                           WHERE WorkflowRefId = @WorkflowRefId
+                             AND IsTest = 1
+                             AND Status IN (N'Running', N'Failing', N'Cancelling'))
+                    THROW 50029, 'A test run of this workflow is already going.', 1;
+            END
+
             -- The workspace's ceiling on runs going at once (Running, Failing or Cancelling, as in
             -- IX_Runs_WorkflowRefId_CorrelationKey_Active). Counted under an application lock per
             -- workspace, so concurrent starts one short of the ceiling cannot all pass the count.
@@ -91,9 +112,9 @@ BEGIN
             EXEC dbo.WorkflowRunSequence_Next @WorkflowRefId = @WorkflowRefId, @Number = @Number OUTPUT;
 
             INSERT INTO dbo.Runs
-                (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, CorrelationKey, Status, StartedAt, CreditBudget, TriggerStartKey, ParentRunRefId, Number)
+                (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, CorrelationKey, Status, StartedAt, CreditBudget, TriggerStartKey, ParentRunRefId, Number, IsTest)
             VALUES
-                (@RefId, @WorkflowDefinitionId, @WorkflowRefId, @WorkflowVersion, @TriggerNodeId, @CorrelationKey, N'Running', @StartedAt, @CreditBudget, @TriggerStartKey, @ParentRunRefId, @Number);
+                (@RefId, @WorkflowDefinitionId, @WorkflowRefId, @WorkflowVersion, @TriggerNodeId, @CorrelationKey, N'Running', @StartedAt, @CreditBudget, @TriggerStartKey, @ParentRunRefId, @Number, @IsTest);
 
             SET @RunId = SCOPE_IDENTITY();
 
@@ -140,6 +161,7 @@ BEGIN
         r.ParentRunRefId,
         r.OutputJson,
         r.Number,
+        r.IsTest,
         rb.Id AS RootBranchId,
         @Created AS Created
     FROM dbo.Runs r

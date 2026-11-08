@@ -37,11 +37,22 @@ public interface IRunProvider
     Task<RunRow?> FindRowByRefIdAsync(Guid refId, CancellationToken ct);
     Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct);
 
+    /// <summary>As above; <paramref name="isTest"/> keeps only test runs (true) or none of them (false).</summary>
+    Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, bool? isTest, int top, long? cursorId, CancellationToken ct)
+        => ListByWorkflowAsync(workflowRefId, statusFilter, top, cursorId, ct);
+
     /// <summary>
     /// Every run in a workspace, newest first. Runs carry no workspace of their own - it lives on the
     /// definition - so this joins through WorkflowDefinitionId.
     /// </summary>
     Task<IReadOnlyCollection<RunRow>> ListByWorkspaceAsync(int workspaceId, string? statusFilter, int top, long? cursorId, CancellationToken ct);
+
+    /// <summary>As above; <paramref name="isTest"/> keeps only test runs (true) or none of them (false).</summary>
+    Task<IReadOnlyCollection<RunRow>> ListByWorkspaceAsync(int workspaceId, string? statusFilter, bool? isTest, int top, long? cursorId, CancellationToken ct)
+        => ListByWorkspaceAsync(workspaceId, statusFilter, top, cursorId, ct);
+
+    /// <summary>The RefId of the workflow's test run that is going, if any. Defaulted so test doubles need no stub.</summary>
+    Task<Guid?> FindActiveTestRunAsync(Guid workflowRefId, CancellationToken ct) => Task.FromResult<Guid?>(null);
 
     /// <summary>Credits, failure point, end point and current step for a page of runs. Defaulted so the engine's test doubles need no stub.</summary>
     Task<IReadOnlyCollection<RunListDetailRow>> GetListDetailsAsync(IReadOnlyCollection<int> runIds, CancellationToken ct)

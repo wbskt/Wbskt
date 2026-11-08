@@ -35,7 +35,8 @@ BEGIN
     DECLARE @NextVersion INT =
         ISNULL((SELECT MAX(Version)
                   FROM dbo.WorkflowDefinitions WITH (HOLDLOCK, UPDLOCK)
-                 WHERE RefId = @RefId), 0) + 1;
+                 WHERE RefId = @RefId
+                   AND Kind = N'Version'), 0) + 1;
 
     -- The service checks ownership too, but from an unlocked read: two first publishes of one RefId
     -- from different workspaces could both pass it. Under the lock above only one can.
@@ -68,6 +69,7 @@ BEGIN
         IF (SELECT COUNT(DISTINCT WD.RefId)
               FROM dbo.WorkflowDefinitions WD
              WHERE WD.WorkspaceId = @WorkspaceId
+               AND WD.Kind = N'Version'
                AND NOT EXISTS (SELECT 1 FROM dbo.WorkflowDeletions D WHERE D.RefId = WD.RefId)) >= @MaxWorkflows
         BEGIN
             ROLLBACK TRAN;
@@ -129,6 +131,6 @@ BEGIN
         PublishedBy,
         CreatedAt
       FROM dbo.WorkflowDefinitions
-     WHERE RefId = @RefId AND Version = @NextVersion;
+     WHERE RefId = @RefId AND Version = @NextVersion AND Kind = N'Version';
 END;
 GO

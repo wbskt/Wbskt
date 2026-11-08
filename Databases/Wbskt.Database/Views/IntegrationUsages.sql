@@ -14,6 +14,7 @@ SELECT
     WD.IsEnabled
 FROM dbo.WorkflowIntegrationRefs R
 INNER JOIN dbo.WorkflowDefinitions WD ON WD.Id = R.WorkflowDefinitionId
-WHERE WD.Version = (SELECT MAX(V.Version) FROM dbo.WorkflowDefinitions V WHERE V.RefId = WD.RefId)
+WHERE WD.Kind = N'Version'
+  AND WD.Version = (SELECT MAX(V.Version) FROM dbo.WorkflowDefinitions V WHERE V.RefId = WD.RefId AND V.Kind = N'Version')
   AND NOT EXISTS (SELECT 1 FROM dbo.WorkflowDeletions D WHERE D.RefId = WD.RefId);
 GO

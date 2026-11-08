@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Wbskt.Management.Models.Workflow;
+using Wbskt.Workflow.Engine.Contracts;
 
 namespace Wbskt.Management.Host.Services.Clients;
 
@@ -20,6 +21,9 @@ namespace Wbskt.Management.Host.Services.Clients;
 public interface IWorkflowEngineGateway
 {
     Task<StartRunResponse> StartManualRunAsync(Guid workflowRefId, StartRunRequest request, CancellationToken ct);
+
+    /// <summary>Starts a test run from a test copy this host has written.</summary>
+    Task<EngineTestRunResponse> StartTestRunAsync(EngineTestRunRequest request, CancellationToken ct);
 
     Task<SignalResponse> SignalAsync(Guid runRefId, string signalName, SignalRequest request, CancellationToken ct);
 

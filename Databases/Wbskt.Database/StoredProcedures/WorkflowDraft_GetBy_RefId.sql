@@ -20,7 +20,7 @@ BEGIN
         D.UpdatedBy,
         D.UpdatedByRefId,
         D.UpdatedAt,
-        (SELECT MAX(WD.Version) FROM dbo.WorkflowDefinitions WD WHERE WD.RefId = D.RefId) AS CurrentVersion
+        (SELECT MAX(WD.Version) FROM dbo.WorkflowDefinitions WD WHERE WD.RefId = D.RefId AND WD.Kind = N'Version') AS CurrentVersion
       FROM dbo.WorkflowDrafts D
      WHERE D.RefId = @RefId
        AND D.WorkspaceId = @WorkspaceId;

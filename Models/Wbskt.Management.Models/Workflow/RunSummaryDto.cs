@@ -8,6 +8,7 @@ namespace Wbskt.Management.Models.Workflow;
 /// <param name="WorkflowName">The workflow's name at the run's version. On the list endpoints only.</param>
 /// <param name="Number">The run's number within its workflow (#1, #2, ...), counted across every version.</param>
 /// <param name="Waiting">For a Running run whose every live branch is waiting on a delay, signal or call: what it waits on. Null otherwise.</param>
+/// <param name="IsTest">Started from the workflow page's Test run. Left out of stats.</param>
 public record RunSummaryDto(
     Guid RefId,
     Guid WorkflowDefinitionRefId,
@@ -23,7 +24,8 @@ public record RunSummaryDto(
     RunStepDto? CurrentStep = null,
     string? WorkflowName = null,
     int Number = 0,
-    RunWaitingDto? Waiting = null);
+    RunWaitingDto? Waiting = null,
+    bool IsTest = false);
 
 /// <param name="Kind">The bookmark's kind: <c>signal</c>, <c>timer</c>, <c>http</c>, <c>childRunCompleted</c> or <c>commandOutcome</c>. Null when a branch waits without one, such as on a join.</param>
 /// <param name="NodeId">The step that is waiting.</param>

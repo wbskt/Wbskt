@@ -20,6 +20,7 @@ BEGIN
     WHERE r.WorkflowRefId = @WorkflowRefId
       AND r.CreatedAt >= @FromUtc
       AND r.CreatedAt < @ToUtc
+      AND r.IsTest = 0
       AND h.EventKind = N'NodeFailed'
       AND JSON_VALUE(h.PayloadJson, '$.errorCode') IS NOT NULL
     GROUP BY JSON_VALUE(h.PayloadJson, '$.errorCode'), h.NodeId

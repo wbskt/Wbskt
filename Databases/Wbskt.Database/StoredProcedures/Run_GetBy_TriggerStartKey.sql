@@ -24,6 +24,7 @@ BEGIN
         r.ParentRunRefId,
         r.OutputJson,
         r.Number,
+        r.IsTest,
         rb.Id AS RootBranchId,
         CAST(0 AS BIT) AS Created
     FROM dbo.Runs r

@@ -22,6 +22,7 @@ BEGIN
     WHERE d.WorkspaceId = @WorkspaceId
       AND r.CreatedAt >= @FromUtc
       AND r.CreatedAt < @ToUtc
+      AND r.IsTest = 0
     GROUP BY d.RefId, CAST(r.CreatedAt AS DATE);
 END;
 GO
