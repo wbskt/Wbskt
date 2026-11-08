@@ -23,6 +23,7 @@ BEGIN
         r.CreatedAt,
         r.ParentRunRefId,
         r.OutputJson,
+        r.Number,
         rb.Id AS RootBranchId,
         CAST(0 AS BIT) AS Created
     FROM dbo.Runs r

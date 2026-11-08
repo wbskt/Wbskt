@@ -20,7 +20,8 @@ BEGIN
         CreditBudget,
         CreatedAt,
         ParentRunRefId,
-        OutputJson
+        OutputJson,
+        Number
     FROM dbo.Runs
     WHERE RefId = @RefId;
 END;

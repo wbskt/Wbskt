@@ -62,6 +62,14 @@ public interface IRunProvider
     Task<IReadOnlyCollection<WorkflowRunSummaryRow>> GetPerWorkflowStatsAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, int top, CancellationToken ct)
         => Task.FromResult<IReadOnlyCollection<WorkflowRunSummaryRow>>(Array.Empty<WorkflowRunSummaryRow>());
 
+    /// <summary>Outcomes and median duration per UTC day for runs of one workflow started in the window; days without runs are left out. Defaulted so the test doubles need no stub.</summary>
+    Task<IReadOnlyCollection<RunDailyStatsRow>> GetDailyStatsAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, CancellationToken ct)
+        => Task.FromResult<IReadOnlyCollection<RunDailyStatsRow>>(Array.Empty<RunDailyStatsRow>());
+
+    /// <summary>Outcomes per workflow per UTC day across a workspace; days without runs are left out.</summary>
+    Task<IReadOnlyCollection<RunDailyStatsRow>> GetWorkspaceDailyStatsAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, CancellationToken ct)
+        => Task.FromResult<IReadOnlyCollection<RunDailyStatsRow>>(Array.Empty<RunDailyStatsRow>());
+
     /// <summary>The error codes that actually occur, most frequent first.</summary>
     Task<IReadOnlyCollection<RunFailureBucketRow>> GetTopFailuresAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, int top, CancellationToken ct);
 

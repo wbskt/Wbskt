@@ -71,6 +71,49 @@ BEGIN
 END
 GO
 
+-- 4. Number the runs made before dbo.Runs.Number existed (#608).
+-- Each workflow's runs are numbered 1, 2, ... in the order they were created (Id), and the workflow's
+-- counter is moved to its highest number so the next run carries on from there. A workflow that has
+-- any unnumbered run is renumbered whole: a run started between the schema change and this script
+-- already took a number from a fresh counter, and numbering the older runs after it would put them out
+-- of order. One UPDATE for all of them, so the unique index sees only the final numbers. The
+-- exclusive lock on the counters makes a run starting meanwhile wait here instead of taking a number
+-- that is about to move. A no-op once every run has a number, and on a fresh database.
+IF EXISTS (SELECT 1 FROM dbo.Runs WHERE Number IS NULL)
+    -- Through EXEC: the SDK cannot model a transaction in this script and fails the whole build on one.
+    EXEC (N'
+        SET XACT_ABORT ON;
+        BEGIN TRANSACTION;
+
+        DECLARE @LockSequences INT = (SELECT COUNT(*) FROM dbo.WorkflowRunSequences WITH (TABLOCKX, HOLDLOCK));
+
+        DECLARE @Renumber TABLE (WorkflowRefId UNIQUEIDENTIFIER NOT NULL PRIMARY KEY);
+        INSERT INTO @Renumber (WorkflowRefId)
+        SELECT DISTINCT WorkflowRefId FROM dbo.Runs WHERE Number IS NULL;
+
+        WITH Numbered AS
+        (
+            SELECT r.Number, ROW_NUMBER() OVER (PARTITION BY r.WorkflowRefId ORDER BY r.Id) AS NewNumber
+            FROM dbo.Runs r
+            WHERE r.WorkflowRefId IN (SELECT WorkflowRefId FROM @Renumber)
+        )
+        UPDATE Numbered SET Number = NewNumber;
+
+        MERGE dbo.WorkflowRunSequences AS target
+        USING (
+            SELECT r.WorkflowRefId, MAX(r.Number) AS LastNumber
+            FROM dbo.Runs r
+            WHERE r.WorkflowRefId IN (SELECT WorkflowRefId FROM @Renumber)
+            GROUP BY r.WorkflowRefId
+        ) AS source
+        ON target.WorkflowRefId = source.WorkflowRefId
+        WHEN MATCHED THEN UPDATE SET LastNumber = source.LastNumber
+        WHEN NOT MATCHED THEN INSERT (WorkflowRefId, LastNumber) VALUES (source.WorkflowRefId, source.LastNumber);
+
+        COMMIT TRANSACTION;
+    ');
+GO
+
 -- Login for the management host: [wbskt_management], which may execute this database's procedures and nothing else.
 -- Created here, not in the model, because a login is a server object and its password is a secret
 -- that varies per environment. The password arrives as the $(ManagementHostPassword) SQLCMD variable; empty (the

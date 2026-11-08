@@ -102,6 +102,71 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
+    public async Task Concurrent_starts_of_one_workflow_get_consecutive_numbers()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync();
+
+        RunStartRow[] results = await Task.WhenAll(Enumerable.Range(0, 12).Select(_ =>
+        {
+            (RunRow run, BranchRow branch) = NewRun(wd);
+            return ProviderFactory.Run(fixture.ConnectionString).StartAsync(run, branch, null, CancellationToken.None);
+        }));
+
+        results.Select(r => r.Run.Number).Should().BeEquivalentTo(Enumerable.Range(1, 12).Select(n => (int?)n));
+    }
+
+    [SkippableFact]
+    public async Task A_retried_start_keeps_its_number_and_a_refused_start_uses_none()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewWorkspaceId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        var runProvider = ProviderFactory.Run(fixture.ConnectionString);
+        string key = $"trigger-start:{Guid.NewGuid():N}";
+        (RunRow firstRun, BranchRow firstBranch) = NewRun(wd);
+        (RunRow retryRun, BranchRow retryBranch) = NewRun(wd);
+
+        RunStartRow first = await runProvider.StartAsync(firstRun, firstBranch, key, workspaceId, 1, CancellationToken.None);
+        RunStartRow retry = await runProvider.StartAsync(retryRun, retryBranch, key, workspaceId, 1, CancellationToken.None);
+        (RunRow refused, BranchRow refusedBranch) = NewRun(wd);
+        Func<Task> act = () => runProvider.StartAsync(refused, refusedBranch, null, workspaceId, 1, CancellationToken.None);
+        await act.Should().ThrowAsync<SqlException>();
+        await runProvider.SetTerminalAsync(first.Run.Id, RunStatus.Succeeded, DateTime.UtcNow, CancellationToken.None);
+        (RunRow next, BranchRow nextBranch) = NewRun(wd);
+        RunStartRow afterRefusal = await runProvider.StartAsync(next, nextBranch, null, workspaceId, 1, CancellationToken.None);
+
+        first.Run.Number.Should().Be(1);
+        retry.Run.Number.Should().Be(1);
+        afterRefusal.Run.Number.Should().Be(2);
+        (await runProvider.FindRowByRefIdAsync(next.RefId, CancellationToken.None))!.Number.Should().Be(2);
+    }
+
+    [SkippableFact]
+    public async Task Each_workflow_counts_its_own_runs()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        WorkflowDefinitionRow one = await CreateDefinitionAsync();
+        WorkflowDefinitionRow other = await CreateDefinitionAsync();
+        var runProvider = ProviderFactory.Run(fixture.ConnectionString);
+
+        (RunRow a1, BranchRow b1) = NewRun(one);
+        (RunRow a2, BranchRow b2) = NewRun(one);
+        (RunRow c1, BranchRow b3) = NewRun(other);
+        await runProvider.StartAsync(a1, b1, null, CancellationToken.None);
+        RunStartRow second = await runProvider.StartAsync(a2, b2, null, CancellationToken.None);
+        RunStartRow otherFirst = await runProvider.StartAsync(c1, b3, null, CancellationToken.None);
+
+        second.Run.Number.Should().Be(2);
+        otherFirst.Run.Number.Should().Be(1);
+        (await runProvider.ListByWorkflowAsync(one.RefId, null, 10, null, CancellationToken.None))
+            .Select(r => r.Number).Should().Equal(2, 1);
+    }
+
+    [SkippableFact]
     public async Task Start_past_the_workspace_ceiling_is_refused()
     {
         Skip.IfNot(fixture.IsAvailable, SkipReason);

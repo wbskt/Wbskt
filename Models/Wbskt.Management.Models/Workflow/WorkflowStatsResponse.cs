@@ -23,6 +23,11 @@ public record RunOutcomeCountsDto(
 /// </summary>
 public record RunDurationsDto(double P50Ms, double P95Ms, double MaxMs, double AvgMs);
 
+/// <summary>The runs started on one UTC day.</summary>
+/// <param name="Failed">Every way of not succeeding: failed, partially failed, out of credits.</param>
+/// <param name="P50Ms">Median duration of the day's completed runs. On a workflow's stats only; null when none completed.</param>
+public record RunDayDto(DateOnly Date, int Total, int Succeeded, int Failed, int Cancelled, double? P50Ms = null);
+
 public record FailureBucketDto(string ErrorCode, Guid? NodeId, int Occurrences, DateTimeOffset LastSeenAt);
 
 public record NodeTimingDto(Guid NodeId, int Executions, int FailureCount, double AvgDurationMs, double MaxDurationMs);
@@ -34,6 +39,7 @@ public record NodeTimingDto(Guid NodeId, int Executions, int FailureCount, doubl
 /// Succeeded ÷ finished, where finished excludes still-running runs. Null when nothing has finished
 /// in the window — a rate of 0 would read as "everything failed" rather than "nothing to report".
 /// </param>
+/// <param name="Days">Every UTC day the window touches, oldest first, zeros included. A run counts on the day it started.</param>
 public record WorkflowStatsResponse(
     Guid WorkflowRefId,
     DateTimeOffset FromUtc,
@@ -42,7 +48,8 @@ public record WorkflowStatsResponse(
     RunDurationsDto Durations,
     double? SuccessRate,
     IReadOnlyCollection<FailureBucketDto> TopFailures,
-    IReadOnlyCollection<NodeTimingDto> SlowestNodes);
+    IReadOnlyCollection<NodeTimingDto> SlowestNodes,
+    IReadOnlyCollection<RunDayDto> Days);
 
 /// <summary>One workflow's line in a workspace rollup.</summary>
 /// <param name="Failed">Every way of not succeeding — failed, partially failed, out of credits.</param>
@@ -50,6 +57,7 @@ public record WorkflowStatsResponse(
 /// <param name="SuccessRate">Succeeded ÷ finished for this workflow alone; null when nothing finished.</param>
 /// <param name="Running">In-flight runs with at least one branch executing a step.</param>
 /// <param name="Waiting">In-flight runs parked on a delay, signal or call.</param>
+/// <param name="Days">This workflow's runs per UTC day, as on <see cref="WorkspaceStatsResponse.Days"/>.</param>
 public record WorkflowRunSummaryDto(
     Guid WorkflowRefId,
     int Total,
@@ -59,7 +67,8 @@ public record WorkflowRunSummaryDto(
     double AvgDurationMs,
     double? SuccessRate,
     int Running,
-    int Waiting);
+    int Waiting,
+    IReadOnlyCollection<RunDayDto> Days);
 
 /// <summary>
 /// The answer to "how is this workspace doing?".
@@ -74,10 +83,12 @@ public record WorkflowRunSummaryDto(
 /// per-workflow figure.
 /// </param>
 /// <param name="Workflows">Per-workflow breakdown, highest volume first.</param>
+/// <param name="Days">Every UTC day the window touches, oldest first, zeros included. A run counts on the day it started.</param>
 public record WorkspaceStatsResponse(
     DateTimeOffset FromUtc,
     DateTimeOffset ToUtc,
     RunOutcomeCountsDto Counts,
     RunDurationsDto Durations,
     double? SuccessRate,
-    IReadOnlyCollection<WorkflowRunSummaryDto> Workflows);
+    IReadOnlyCollection<WorkflowRunSummaryDto> Workflows,
+    IReadOnlyCollection<RunDayDto> Days);

@@ -321,6 +321,72 @@ public sealed class WorkflowRunsControllerTests
     }
 
     [Fact]
+    public async Task GetWorkspaceStatsAsync_lists_every_day_of_the_window_for_the_workspace_and_each_workflow()
+    {
+        var one = Guid.NewGuid();
+        var other = Guid.NewGuid();
+        var from = new DateTime(2026, 11, 1, 12, 0, 0, DateTimeKind.Utc);
+        var to = new DateTime(2026, 11, 4, 0, 0, 0, DateTimeKind.Utc);
+        var runProvider = new Mock<IRunProvider>();
+        runProvider.Setup(x => x.GetWorkspaceStatsAsync(WorkspaceId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateStats(total: 6, succeeded: 4, failed: 2, active: 0));
+        runProvider.Setup(x => x.GetPerWorkflowStatsAsync(WorkspaceId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new WorkflowRunSummaryRow { WorkflowRefId = one, TotalRuns = 4, SucceededCount = 3, FailedCount = 1, ActiveCount = 0, WaitingCount = 0, AvgDurationMs = 5 },
+                new WorkflowRunSummaryRow { WorkflowRefId = other, TotalRuns = 2, SucceededCount = 1, FailedCount = 1, ActiveCount = 0, WaitingCount = 0, AvgDurationMs = 5 }
+            ]);
+        runProvider.Setup(x => x.GetWorkspaceDailyStatsAsync(WorkspaceId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new RunDailyStatsRow { WorkflowRefId = one, Day = new DateOnly(2026, 11, 1), TotalRuns = 4, SucceededCount = 3, FailedCount = 1, CancelledCount = 0 },
+                new RunDailyStatsRow { WorkflowRefId = other, Day = new DateOnly(2026, 11, 1), TotalRuns = 1, SucceededCount = 1, FailedCount = 0, CancelledCount = 0 },
+                new RunDailyStatsRow { WorkflowRefId = other, Day = new DateOnly(2026, 11, 3), TotalRuns = 1, SucceededCount = 0, FailedCount = 1, CancelledCount = 0 }
+            ]);
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), Mock.Of<IWorkflowDefinitionProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
+
+        var response = await service.GetWorkspaceStatsAsync(WorkspaceId, from, to, CancellationToken.None);
+
+        Assert.True(response.IsSuccess);
+        Assert.Equal(
+            [new RunDayDto(new DateOnly(2026, 11, 1), 5, 4, 1, 0), new RunDayDto(new DateOnly(2026, 11, 2), 0, 0, 0, 0), new RunDayDto(new DateOnly(2026, 11, 3), 1, 0, 1, 0)],
+            response.Value.Days);
+        Assert.Equal([4, 0, 0], response.Value.Workflows.Single(w => w.WorkflowRefId == one).Days.Select(d => d.Total));
+        Assert.Equal([1, 0, 1], response.Value.Workflows.Single(w => w.WorkflowRefId == other).Days.Select(d => d.Total));
+    }
+
+    [Fact]
+    public async Task GetDetailAsync_says_what_a_waiting_run_waits_on()
+    {
+        var runRefId = Guid.NewGuid();
+        var workflowRefId = Guid.NewGuid();
+        var nodeId = Guid.NewGuid();
+        var runProvider = new Mock<IRunProvider>();
+        runProvider.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RunRow
+            {
+                Id = 7, RefId = runRefId, WorkflowDefinitionId = 1, WorkflowRefId = workflowRefId, WorkflowVersion = 1,
+                TriggerNodeId = Guid.NewGuid(), CorrelationKey = null, Status = "Running", StartedAt = DateTime.UtcNow,
+                CompletedAt = null, CancellationRequestedAt = null, CancellationReason = null, CreditBudget = 10m,
+                CreatedAt = DateTime.UtcNow, Number = 42
+            });
+        runProvider.Setup(x => x.GetListDetailsAsync(It.Is<IReadOnlyCollection<int>>(ids => ids.Single() == 7), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new RunListDetailRow { RunId = 7, IsWaiting = true, WaitingKind = "signal", WaitingNodeId = nodeId, WaitingSignalName = "approve" }]);
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        definitionProvider.Setup(x => x.FindRowByRefIdVersionAsync(workflowRefId, 1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId));
+        var branchProvider = new Mock<IBranchProvider>();
+        branchProvider.Setup(x => x.GetAllByRunIdAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        var service = new WorkflowRunQueryService(runProvider.Object, branchProvider.Object, definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
+
+        var response = await service.GetDetailAsync(WorkspaceId, runRefId, CancellationToken.None);
+
+        Assert.True(response.IsSuccess);
+        Assert.Equal(42, response.Value.Summary.Number);
+        Assert.Equal(new RunWaitingDto("signal", nodeId, null, "approve"), response.Value.Summary.Waiting);
+    }
+
+    [Fact]
     public async Task GetWorkspaceStatsAsync_reports_no_rate_when_nothing_has_finished()
     {
         var runProvider = new Mock<IRunProvider>();
