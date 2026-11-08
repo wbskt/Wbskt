@@ -28,6 +28,7 @@ internal sealed class RunStarter : IRunStarter
     private readonly TimeProvider _clock;
     private readonly IIdGenerator _idGenerator;
     private readonly decimal _defaultCreditBudgetPerRun;
+    private readonly decimal _runStartCost;
     private readonly int? _maxActiveRunsPerWorkspace;
     private readonly WorkflowMetrics? _workflowMetrics;
     private readonly ILogger<RunStarter>? _logger;
@@ -43,7 +44,8 @@ internal sealed class RunStarter : IRunStarter
         IIdGenerator idGenerator,
         IOptions<WorkflowEngineOptions> options,
         WorkflowMetrics? workflowMetrics = null,
-        ILogger<RunStarter>? logger = null)
+        ILogger<RunStarter>? logger = null,
+        IOptions<CreditCostOptions>? creditCosts = null)
     {
         _runProvider = runProvider;
         _journal = journal;
@@ -54,6 +56,7 @@ internal sealed class RunStarter : IRunStarter
         _clock = clock;
         _idGenerator = idGenerator;
         _defaultCreditBudgetPerRun = options.Value.DefaultCreditBudgetPerRun;
+        _runStartCost = (creditCosts?.Value ?? new CreditCostOptions()).RunStartCost;
         _maxActiveRunsPerWorkspace = options.Value.MaxActiveRunsPerWorkspace > 0 ? options.Value.MaxActiveRunsPerWorkspace : null;
         _workflowMetrics = workflowMetrics;
         _logger = logger;
@@ -114,7 +117,8 @@ internal sealed class RunStarter : IRunStarter
                         CreditBudget = creditBudget,
                         CreatedAt = nowUtc,
                         ParentRunRefId = ReadParentRunRefId(triggerEvent),
-                        IsTest = isTest
+                        IsTest = isTest,
+                        StartCost = _runStartCost
                     },
                     // RunId 0: Run_Start inserts the root branch under the run it has just created.
                     BranchRow.New(rootBranchRefId, 0, Guid.Parse(triggerNodeId), localJson, nowUtc),

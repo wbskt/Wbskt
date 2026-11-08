@@ -15,7 +15,9 @@ CREATE PROCEDURE dbo.Run_Start
     @ParentRunRefId       UNIQUEIDENTIFIER = NULL,
     @ActiveRunGuard       TINYINT = 0,
     -- A test run (see dbo.WorkflowDefinitions.Kind): at most one goes at a time per workflow (50029).
-    @IsTest               BIT = 0
+    @IsTest               BIT = 0,
+    -- Credits charged for creating the run; seeded into its counters so the charge commits with it.
+    @StartCost            DECIMAL(18,4) = 0
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -129,8 +131,8 @@ BEGIN
 
             SET @RunId = SCOPE_IDENTITY();
 
-            INSERT INTO dbo.RunCounters (RunId, ActiveBranchCount)
-            VALUES (@RunId, 1);
+            INSERT INTO dbo.RunCounters (RunId, ActiveBranchCount, CreditsConsumed)
+            VALUES (@RunId, 1, @StartCost);
 
             INSERT INTO dbo.Branches (RefId, RunId, NodeId, Status, LocalJson)
             VALUES (@BranchRefId, @RunId, @TriggerNodeId, N'Active', @BranchLocalJson);

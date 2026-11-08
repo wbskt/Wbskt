@@ -72,7 +72,7 @@ public static class NodeKinds
 
         // Leaves the process, over somebody else's network, and can be retried.
         ActionKind(NodeKind.ActionWebhook, typeof(WebhookNotificationNode), typeof(WebhookNotificationConfig), 5.0m, Fixed([In, Default, Error])),
-        ActionKind(NodeKind.ActionEmail, typeof(EmailNotificationNode), typeof(EmailConfig), 5.0m, Fixed(PassThroughPorts)),
+        ActionKind(NodeKind.ActionEmail, typeof(EmailNotificationNode), typeof(EmailConfig), 10.0m, Fixed(PassThroughPorts)),
         ActionKind(NodeKind.ActionTelegram, typeof(TelegramNotificationNode), typeof(TelegramConfig), 5.0m, Fixed(PassThroughPorts)),
         ActionKind(NodeKind.ActionDiscord, typeof(DiscordNotificationNode), typeof(DiscordConfig), 5.0m, Fixed(PassThroughPorts)),
         ActionKind(NodeKind.ActionNtfy, typeof(NtfyNotificationNode), typeof(NtfyConfig), 5.0m, Fixed(PassThroughPorts))

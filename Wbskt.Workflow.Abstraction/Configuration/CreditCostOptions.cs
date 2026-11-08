@@ -25,6 +25,16 @@ public sealed class CreditCostOptions
     /// <summary>Charged for any kind with no explicit entry - including kinds added after this table.</summary>
     public decimal DefaultCost { get; init; } = 1.0m;
 
+    /// <summary>
+    /// Charged once when a run is created, test runs and sub-workflow children included.
+    /// </summary>
+    /// <remarks>
+    /// Every run writes a run row, its counters and its history whatever its nodes cost, so a run of a
+    /// trigger and a few control nodes is not free to host. Charging the start steers a trigger that
+    /// fires on every reading towards a filter or a hold trigger instead of one run per reading.
+    /// </remarks>
+    public decimal RunStartCost { get; init; } = 1.0m;
+
     /// <summary>Per-kind overrides, keyed by <see cref="NodeKind"/> string. Merged over <see cref="BuiltIn"/>.</summary>
     public IReadOnlyDictionary<string, decimal> PerKind { get; init; } = new Dictionary<string, decimal>(StringComparer.Ordinal);
 

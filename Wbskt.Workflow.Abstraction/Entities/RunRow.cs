@@ -39,4 +39,10 @@ public record RunRow
 
     /// <summary>Started from the workflow page's Test run, against a test copy of the definition.</summary>
     public bool IsTest { get; init; }
+
+    /// <summary>
+    /// Credits charged for creating the run, written into its counters by <c>dbo.Run_Start</c> in the
+    /// same transaction as the run. Only read on that path; 0 on rows read back from the database.
+    /// </summary>
+    public decimal StartCost { get; init; }
 }
