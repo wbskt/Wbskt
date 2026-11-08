@@ -114,7 +114,7 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
             return ProviderFactory.Run(fixture.ConnectionString).StartAsync(run, branch, null, CancellationToken.None);
         }));
 
-        results.Select(r => r.Run.Number).Should().BeEquivalentTo(Enumerable.Range(1, 12).Select(n => (int?)n));
+        results.Select(r => r.Run.Number).Should().BeEquivalentTo(Enumerable.Range(1, 12));
     }
 
     [SkippableFact]
