@@ -76,6 +76,51 @@ public sealed class TestRunIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
+    public async Task A_test_runs_sub_workflows_are_test_runs_and_not_held_to_one_at_a_time()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var definitions = ProviderFactory.WorkflowDefinition(fixture.ConnectionString);
+        var runs = ProviderFactory.Run(fixture.ConnectionString);
+        int workspaceId = NewWorkspace();
+        var parentCopy = await definitions.InsertTestCopyAsync(Row(Guid.NewGuid(), workspaceId), CancellationToken.None);
+        var child = await definitions.InsertAsync(Row(Guid.NewGuid(), workspaceId), CancellationToken.None);
+        var parent = await StartAsync(runs, parentCopy, isTest: true);
+
+        var first = await StartAsync(runs, child, isTest: false, parentRunRefId: parent.Run.RefId);
+        var second = await StartAsync(runs, child, isTest: false, parentRunRefId: parent.Run.RefId);
+        var live = await StartAsync(runs, child, isTest: false);
+
+        Assert.True(first.Run.IsTest);
+        Assert.True(second.Run.IsTest);
+        Assert.False(live.Run.IsTest);
+        Assert.True((await definitions.GetByIdAsync(parentCopy.Id, CancellationToken.None)).IsTestCopy);
+        Assert.False((await definitions.GetByIdAsync(child.Id, CancellationToken.None)).IsTestCopy);
+    }
+
+    [SkippableFact]
+    public async Task A_deleted_workflow_starts_no_test_run()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var definitions = ProviderFactory.WorkflowDefinition(fixture.ConnectionString);
+        var runs = ProviderFactory.Run(fixture.ConnectionString);
+        int workspaceId = NewWorkspace();
+        Guid refId = Guid.NewGuid();
+        var copy = await definitions.InsertTestCopyAsync(Row(refId, workspaceId), CancellationToken.None);
+
+        await using (var conn = new SqlConnection(fixture.ConnectionString))
+        {
+            await conn.OpenAsync();
+            await using var cmd = new SqlCommand("INSERT INTO dbo.WorkflowDeletions (RefId, WorkspaceId, DeletedBy) VALUES (@RefId, @WorkspaceId, 1)", conn);
+            cmd.Parameters.AddWithValue("@RefId", refId);
+            cmd.Parameters.AddWithValue("@WorkspaceId", workspaceId);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        var refused = await Assert.ThrowsAsync<SqlException>(() => StartAsync(runs, copy, isTest: true));
+        Assert.Equal(50022, refused.Number);
+    }
+
+    [SkippableFact]
     public async Task Test_runs_stay_out_of_stats()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
@@ -135,7 +180,7 @@ public sealed class TestRunIntegrationTests(SqlEdgeFixture fixture)
         await cmd.ExecuteNonQueryAsync();
     }
 
-    private static Task<RunStartRow> StartAsync(Wbskt.Workflow.Providers.RunProvider runs, WorkflowDefinitionRow definition, bool isTest)
+    private static Task<RunStartRow> StartAsync(Wbskt.Workflow.Providers.RunProvider runs, WorkflowDefinitionRow definition, bool isTest, Guid? parentRunRefId = null)
     {
         DateTime now = DateTime.UtcNow;
         Guid triggerNodeId = Guid.NewGuid();
@@ -154,6 +199,7 @@ public sealed class TestRunIntegrationTests(SqlEdgeFixture fixture)
             CancellationReason = null,
             CreditBudget = 10m,
             CreatedAt = now,
+            ParentRunRefId = parentRunRefId,
             IsTest = isTest
         };
         var branch = new BranchRow

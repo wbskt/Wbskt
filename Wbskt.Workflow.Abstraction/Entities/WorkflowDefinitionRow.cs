@@ -14,6 +14,12 @@ public record WorkflowDefinitionRow
     public required DateTime CreatedAt { get; init; }
 
     /// <summary>
+    /// The frozen copy a test run was started from rather than a published version. Read by Id only
+    /// (<c>WorkflowDefinition_GetBy_Id</c>); version lookups never return one.
+    /// </summary>
+    public bool IsTestCopy { get; init; }
+
+    /// <summary>
     /// The definition's trigger node kinds (<c>trigger:client</c>, ...), distinct and in node order. Only the
     /// summary list reads it, since it carries no <see cref="DefinitionJson"/>; null elsewhere.
     /// </summary>

@@ -14,7 +14,8 @@ BEGIN
         IsEnabled,
         DefinitionJson,
         PublishedBy,
-        CreatedAt
+        CreatedAt,
+        Kind
     FROM dbo.WorkflowDefinitions
     WHERE Id = @Id;
 END;

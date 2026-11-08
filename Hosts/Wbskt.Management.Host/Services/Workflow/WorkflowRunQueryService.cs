@@ -330,6 +330,31 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
         return Result<RunDetailDto>.Success(new RunDetailDto(summary, branches.Select(MapBranch).ToList()));
     }
 
+    public async Task<Result<WorkflowDefinitionDto>> GetDefinitionAsync(int workspaceId, Guid runRefId, CancellationToken ct)
+    {
+        var loaded = await LoadRunAndDefinitionAsync(workspaceId, runRefId, ct);
+        if (loaded.IsFailure)
+        {
+            return Result<WorkflowDefinitionDto>.Failure(loaded.Error);
+        }
+
+        WorkflowDefinitionRow row = loaded.Value.Definition;
+        WorkflowDefinition definition = JsonSerializer.Deserialize<WorkflowDefinition>(row.DefinitionJson, DefinitionJson)
+            ?? throw new InvalidOperationException($"Could not deserialize the definition run '{runRefId}' ran.");
+
+        // A test copy is no published version, whatever its IsEnabled says.
+        string status = row.IsTestCopy ? "Test" : row.IsEnabled ? "Published" : "Deprecated";
+
+        return Result<WorkflowDefinitionDto>.Success(new WorkflowDefinitionDto(
+            row.RefId,
+            row.Version,
+            status,
+            row.Name,
+            row.Description,
+            definition with { WorkspaceId = row.WorkspaceId, PublishedBy = row.PublishedBy },
+            row.CreatedAt.ToUtcOffset()));
+    }
+
     public async Task<Result<int>> ResolveCancellableRunAsync(int workspaceId, Guid runRefId, CancellationToken ct)
     {
         _logger.LogDebug("Checking run '{RunRefId}' in WorkspaceId: {WorkspaceId} can be cancelled", runRefId, workspaceId);
@@ -373,20 +398,26 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
     /// </summary>
     private async Task<Result<RunRow>> LoadRunAsync(int workspaceId, Guid runRefId, CancellationToken ct)
     {
+        var loaded = await LoadRunAndDefinitionAsync(workspaceId, runRefId, ct);
+        return loaded.IsFailure ? Result<RunRow>.Failure(loaded.Error) : Result<RunRow>.Success(loaded.Value.Run);
+    }
+
+    private async Task<Result<(RunRow Run, WorkflowDefinitionRow Definition)>> LoadRunAndDefinitionAsync(int workspaceId, Guid runRefId, CancellationToken ct)
+    {
         RunRow? run = await _runProvider.FindRowByRefIdAsync(runRefId, ct);
         if (run is null)
         {
-            return Result<RunRow>.Failure(WorkspaceOwnership.RunNotFound);
+            return Result<(RunRow, WorkflowDefinitionRow)>.Failure(WorkspaceOwnership.RunNotFound);
         }
 
         WorkflowDefinitionRow definition = await _workflowDefinitionProvider.GetByIdAsync(run.WorkflowDefinitionId, ct);
         if (definition.WorkspaceId != workspaceId)
         {
             _logger.LogWarning("Run '{RunRefId}' is not in WorkspaceId: {WorkspaceId}", runRefId, workspaceId);
-            return Result<RunRow>.Failure(WorkspaceOwnership.RunNotFound);
+            return Result<(RunRow, WorkflowDefinitionRow)>.Failure(WorkspaceOwnership.RunNotFound);
         }
 
-        return Result<RunRow>.Success(run);
+        return Result<(RunRow, WorkflowDefinitionRow)>.Success((run, definition));
     }
 
     private static RunSummaryDto MapRun(RunRow row)
