@@ -23,6 +23,12 @@ public interface IWorkflowRunQueryService
     Task<Result<RunDetailDto>> GetDetailAsync(int workspaceId, Guid runRefId, CancellationToken ct);
 
     /// <summary>
+    /// The definition the run ran: its version, or for a test run the frozen copy of the draft or live
+    /// version it was started from (status <c>Test</c>), which no version lookup returns.
+    /// </summary>
+    Task<Result<WorkflowDefinitionDto>> GetDefinitionAsync(int workspaceId, Guid runRefId, CancellationToken ct);
+
+    /// <summary>
     /// The internal id of a run this workspace may cancel. Reads only: the cancel itself is a command
     /// to the engine. <c>RUN_NOT_FOUND</c> (404) for a run that is unknown or another workspace's,
     /// <c>RUN_NOT_CANCELLABLE</c> (409) for one that has already reached a terminal status.

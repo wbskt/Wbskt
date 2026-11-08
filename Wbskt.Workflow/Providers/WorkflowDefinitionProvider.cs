@@ -256,7 +256,23 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
             IsEnabled = reader.GetBoolean(reader.GetOrdinal("IsEnabled")),
             DefinitionJson = reader.GetString(reader.GetOrdinal("DefinitionJson")),
             PublishedBy = reader.GetInt32(reader.GetOrdinal("PublishedBy")),
-            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
+            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+            IsTestCopy = HasColumn(reader, "Kind") && reader.GetString(reader.GetOrdinal("Kind")) == TestCopyKind
         };
+    }
+
+    private const string TestCopyKind = "Test";
+
+    private static bool HasColumn(DbDataReader reader, string column)
+    {
+        for (int i = 0; i < reader.FieldCount; i++)
+        {
+            if (string.Equals(reader.GetName(i), column, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

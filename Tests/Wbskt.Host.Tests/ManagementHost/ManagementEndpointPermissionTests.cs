@@ -69,6 +69,7 @@ public sealed class ManagementEndpointPermissionTests
         ["WorkflowRunsController.GetWorkspaceStats"] = PermissionNames.WorkflowsRead,
         ["WorkflowRunsController.GetStats"] = PermissionNames.WorkflowsRead,
         ["WorkflowRunsController.Get"] = PermissionNames.WorkflowsRead,
+        ["WorkflowRunsController.GetDefinition"] = PermissionNames.WorkflowsRead,
         ["WorkflowRunsController.Cancel"] = PermissionNames.WorkflowsExecute,
         ["WorkflowRunsController.Signal"] = PermissionNames.WorkflowsExecute,
         ["WorkflowDraftsController.GetAll"] = PermissionNames.WorkflowsRead,

@@ -97,6 +97,14 @@ public sealed class WorkflowRunsController : ApiControllerBase
         return MapResult(result);
     }
 
+    /// <summary>The definition the run ran, so a test run of a draft can be drawn as it was when it started.</summary>
+    [HttpGet("runs/{runRef:guid}/definition")]
+    [RequiresPermission(PermissionNames.WorkflowsRead)]
+    public async Task<ActionResult<WorkflowDefinitionDto>> GetDefinition([FromWorkspace] int workspaceId, Guid runRef, CancellationToken ct)
+    {
+        return MapResult(await _runQueryService.GetDefinitionAsync(workspaceId, runRef, ct));
+    }
+
     /// <summary>
     /// Asks the engine to cancel a run. Cancellation is the engine's to carry out, so this sends it a
     /// command and answers 202 once the broker has it; the run moves to 'Cancelling' and then

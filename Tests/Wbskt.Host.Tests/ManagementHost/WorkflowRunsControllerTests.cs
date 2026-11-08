@@ -565,6 +565,41 @@ public sealed class WorkflowRunsControllerTests
     }
 
     [Fact]
+    public async Task GetDefinitionAsync_returns_the_test_copy_a_test_run_ran()
+    {
+        var runProvider = new Mock<IRunProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        var runRefId = Guid.NewGuid();
+        var workflowRefId = Guid.NewGuid();
+        runProvider.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(52, runRefId, workflowRefId, 0, "Running") with { IsTest = true });
+        definitionProvider.Setup(x => x.GetByIdAsync(9, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId) with { Version = 0, IsTestCopy = true });
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
+
+        var result = await service.GetDefinitionAsync(WorkspaceId, runRefId, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Test", result.Value.Status);
+        Assert.Equal(0, result.Value.Version);
+    }
+
+    [Fact]
+    public async Task GetDefinitionAsync_of_another_workspaces_run_is_not_found()
+    {
+        var runProvider = new Mock<IRunProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        var runRefId = Guid.NewGuid();
+        var workflowRefId = Guid.NewGuid();
+        runProvider.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(53, runRefId, workflowRefId, 1, "Running"));
+        definitionProvider.Setup(x => x.GetByIdAsync(9, It.IsAny<CancellationToken>())).ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId + 1));
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
+
+        var result = await service.GetDefinitionAsync(WorkspaceId, runRefId, CancellationToken.None);
+
+        Assert.Equal("RUN_NOT_FOUND", result.Error.Code);
+    }
+
+    [Fact]
     public async Task ResolveCancellableRunAsync_returns_the_run_id_and_changes_nothing()
     {
         var runProvider = new Mock<IRunProvider>();

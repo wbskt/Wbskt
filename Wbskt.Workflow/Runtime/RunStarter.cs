@@ -150,7 +150,7 @@ internal sealed class RunStarter : IRunStarter
                 return new RunStartResult(createdRun.Id, createdRun.RefId, started.RootBranchId, false);
             }
 
-            _workflowMetrics?.RecordRunStarted(definition.RefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId, isTest);
+            _workflowMetrics?.RecordRunStarted(definition.RefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId, createdRun.IsTest);
             await _journal.AppendAsync(
                 new RunJournalEntry(createdRun.Id, HistoryEventKind.RunStarted)
                 {
