@@ -1989,6 +1989,63 @@
           }
         }
       },
+      "RunDayDto": {
+        "properties": {
+          "cancelled": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "date": {
+            "format": "date",
+            "type": "string"
+          },
+          "failed": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "p50Ms": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ]
+          },
+          "succeeded": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "total": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "date",
+          "total",
+          "succeeded",
+          "failed",
+          "cancelled"
+        ],
+        "type": "object"
+      },
       "RunDetailDto": {
         "properties": {
           "branches": {
@@ -2275,6 +2332,15 @@
               }
             ]
           },
+          "number": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
           "refId": {
             "format": "uuid",
             "type": "string"
@@ -2301,6 +2367,16 @@
             "type": [
               "integer",
               "string"
+            ]
+          },
+          "waiting": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RunWaitingDto"
+              }
             ]
           },
           "workflowDefinitionRefId": {
@@ -2355,6 +2431,39 @@
           "kind",
           "name",
           "summary"
+        ],
+        "type": "object"
+      },
+      "RunWaitingDto": {
+        "properties": {
+          "expiresAt": {
+            "format": "date-time"
+          },
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nodeId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "signalName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "nodeId",
+          "expiresAt",
+          "signalName"
         ],
         "type": "object"
       },
@@ -2921,6 +3030,12 @@
               "string"
             ]
           },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/RunDayDto"
+            },
+            "type": "array"
+          },
           "failed": {
             "format": "int32",
             "pattern": "^-?(?:0|[1-9]\\d*)$",
@@ -2984,7 +3099,8 @@
           "avgDurationMs",
           "successRate",
           "running",
-          "waiting"
+          "waiting",
+          "days"
         ],
         "type": "object"
       },
@@ -2992,6 +3108,12 @@
         "properties": {
           "counts": {
             "$ref": "#/components/schemas/RunOutcomeCountsDto"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/RunDayDto"
+            },
+            "type": "array"
           },
           "durations": {
             "$ref": "#/components/schemas/RunDurationsDto"
@@ -3036,7 +3158,8 @@
           "durations",
           "successRate",
           "topFailures",
-          "slowestNodes"
+          "slowestNodes",
+          "days"
         ],
         "type": "object"
       },
@@ -3236,6 +3359,12 @@
           "counts": {
             "$ref": "#/components/schemas/RunOutcomeCountsDto"
           },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/RunDayDto"
+            },
+            "type": "array"
+          },
           "durations": {
             "$ref": "#/components/schemas/RunDurationsDto"
           },
@@ -3267,7 +3396,8 @@
           "counts",
           "durations",
           "successRate",
-          "workflows"
+          "workflows",
+          "days"
         ],
         "type": "object"
       }
