@@ -25,8 +25,8 @@ set -euo pipefail
 # Backing services (sql/rabbitmq/redis/traefik) are deliberately absent - they are not rebuilt per
 # release and restarting them is a separate, more disruptive decision. Console is absent too; it
 # has its own mode above.
-readonly ALLOWED_SERVICES=(auth management client-auth gateway-ws engine)
-readonly DEFAULT_SERVICES=(auth management client-auth gateway-ws engine)
+readonly ALLOWED_SERVICES=(auth management client-auth gateway-ws gateway-mqtt engine)
+readonly DEFAULT_SERVICES=(auth management client-auth gateway-ws gateway-mqtt engine)
 readonly HEALTH_TIMEOUT_SECONDS=240
 # Free space required on the image store after pruning, before anything is pulled. A full disk
 # fails layer extraction halfway through a pull; failing here instead says why, and still happens
@@ -53,7 +53,7 @@ usage: deploy.sh --tag <image-tag> [--services <a,b,c>] [--ref <git-ref>] [--ski
 
   --tag              Backend image tag, e.g. sha-abc1234. Also selects the commit this
                      checkout is reset to.
-  --services         Comma- or space-separated subset of: auth management client-auth gateway-ws
+  --services         Comma- or space-separated subset of: auth management client-auth gateway-ws gateway-mqtt
                      engine. Defaults to all of them. Use commas over SSH: the remote side word-splits
                      the command line, so a quoted space-separated list arrives as separate
                      arguments.
