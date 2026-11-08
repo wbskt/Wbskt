@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>$(NoWarn);1591</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+            <_Parameter1>Wbskt.Host.Tests</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="MQTTnet" />
+        <PackageReference Include="MQTTnet.Server" />
+        <PackageReference Include="Serilog.AspNetCore" />
+        <PackageReference Include="Serilog.Enrichers.Thread" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\Clients\Wbskt.Protocol\Wbskt.Protocol.csproj" />
+      <ProjectReference Include="..\..\Wbskt.Gateway.Core\Wbskt.Gateway.Core.csproj" />
+      <ProjectReference Include="..\..\Wbskt.Infrastructure\Wbskt.Infrastructure.csproj" />
+      <ProjectReference Include="..\..\Wbskt.Primitives\Wbskt.Primitives.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="..\..\Config\serilog.json">
+            <Link>serilog.json</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="..\..\Config\rabbitmq.json">
+            <Link>rabbitmq.json</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+
+</Project>

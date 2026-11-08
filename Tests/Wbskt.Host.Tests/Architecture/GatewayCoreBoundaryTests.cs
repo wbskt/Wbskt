@@ -39,4 +39,12 @@ public sealed class GatewayCoreBoundaryTests
 
         Assert.Contains(host.GetReferencedAssemblies(), a => a.Name == typeof(GatewayCoreExtensions).Assembly.GetName().Name);
     }
+
+    [Fact]
+    public void Gateway_core_is_referenced_by_the_mqtt_gateway()
+    {
+        var host = typeof(global::Wbskt.Gateway.MQTT.Host.Program).Assembly;
+
+        Assert.Contains(host.GetReferencedAssemblies(), a => a.Name == typeof(GatewayCoreExtensions).Assembly.GetName().Name);
+    }
 }
