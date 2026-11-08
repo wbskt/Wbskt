@@ -15,7 +15,7 @@ namespace Wbskt.EventBus.RabbitMQ;
 // a workflow-engine lease holder never appears to "continue" as the same identity across a crash
 // - restarting must fence out the old instance, not reclaim it. BusInstanceId is the opposite: it
 // must stay STABLE across a socket-host's restart (defaults to Environment.MachineName, i.e. the
-// container's hostname), so a restarted instance comes back on its own per-instance queue and
+// container's hostname, which a gateway suffixes with its transport), so a restarted instance comes back on its own per-instance queue and
 // StartupPresenceResetPublisher republishes the id its previous run used, letting
 // Client_ResetPresenceBy_HostId clear exactly the presence rows that run left dangling. Giving
 // either identity the other's lifetime would break its own use case. (A container that is
@@ -33,6 +33,10 @@ public static class EventBusExtensions
     /// (<c>typeof(Program).Assembly</c>). Left out, only the entry assembly is scanned. Nothing else is:
     /// a consumer added to a shared library runs only in the hosts that name that library here.
     /// </param>
+    /// <param name="defaultInstanceId">
+    /// With <paramref name="perInstanceEndpoints"/>: the instance id when <c>EventBus:InstanceId</c> is
+    /// not configured. Left out, it is the machine name.
+    /// </param>
     public static void AddRabbitMqEventBus(
         this IServiceCollection services,
         IConfiguration configuration,
@@ -41,7 +45,8 @@ public static class EventBusExtensions
         Action<IBusRegistrationContext, IRabbitMqBusFactoryConfigurator>? configureEndpoints = null,
         bool perInstanceEndpoints = false,
         IReadOnlyCollection<string>? endpointsWithOwnRetry = null,
-        IReadOnlyCollection<Assembly>? consumerAssemblies = null)
+        IReadOnlyCollection<Assembly>? consumerAssemblies = null,
+        string? defaultInstanceId = null)
         {
 
         var options = new RabbitMQOptions();
@@ -51,7 +56,7 @@ public static class EventBusExtensions
         string? instanceId = null;
         if (perInstanceEndpoints)
         {
-            instanceId = configuration["EventBus:InstanceId"] ?? Environment.MachineName;
+            instanceId = configuration["EventBus:InstanceId"] ?? defaultInstanceId ?? Environment.MachineName;
             services.AddSingleton(new BusInstanceId(instanceId));
         }
 
