@@ -246,7 +246,7 @@ was failed → `Failed`; cancelled → `Cancelled`.
   workflows with a manual trigger, `END_OUTPUT_WITHOUT_MANUAL_TRIGGER`) comes back to the parent as
   `childResult` = `{ childRunRefId, status, output }`.
 * Cancelling or failing the parent cancels the child.
-* The child spends its own credit budget; the parent pays 1.0 to start it.
+* The child spends its own credit budget, which includes its own run-start charge; the parent pays 1.0 for the sub-workflow step.
 
 ## 10. Variables
 
