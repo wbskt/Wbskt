@@ -305,7 +305,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "short": "M3",
    "due": "2026-12-31",
    "start": "2026-12-01",
-   "open": 8,
+   "open": 14,
    "closed": 10
   },
   {
@@ -313,7 +313,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "short": "Post",
    "due": null,
    "start": "2027-01-01",
-   "open": 51,
+   "open": 52,
    "closed": 10
   }
  ],
@@ -340,6 +340,10 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   }
  ],
  "work": {
+  "167": {
+   "state": "decide",
+   "why": "Split on 8 Nov into plans (#626), an account credit ledger (#627), a run-start charge (#628), a message meter (#629), a usage API (#630), payments (#631) and the console usage page (Console#151). Prices and whether to charge at launch are open."
+  },
   "528": {
    "state": "you",
    "why": "Betas, CI lint and the release runbook are merged. Publishing to the three registries is what remains."
@@ -447,6 +451,12 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
  "decisions": [
   {
    "status": "open",
+   "title": "Charge from the December launch, or launch free and charge later?",
+   "body": "Plans, the credit ledger and the message meter are filed for M3 so Free limits hold at launch either way (#626-#630, #632). Payments (#631) are Post-launch unless charging starts at launch. Prices and the provider are still open.",
+   "issue": 167
+  },
+  {
+   "status": "open",
    "title": "Should deleting a client stop it re-enrolling?",
    "body": "Final CLIENT_DELETED code that the SDKs obey, or keep today's behaviour and warn in the dialog.",
    "issue": 547
@@ -522,6 +532,13 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   }
  ],
  "issues": [
+  {"n":632,"t":"Readings: compress, average old readings and keep them per plan","s":"o","m":"M3","p":440,"a":["management","db"]},
+  {"n":631,"t":"Payments: subscriptions and credit top-ups through a payment provider","s":"o","m":"Post","p":167,"a":["management"]},
+  {"n":630,"t":"Usage API: credits, messages and clients against the plan","s":"o","m":"M3","p":167,"a":["management"]},
+  {"n":629,"t":"Meter client messages per account per month","s":"o","m":"M3","p":167,"a":["management","socket"]},
+  {"n":628,"t":"Credits: charge for a run start and reprice email","s":"o","m":"M3","p":167,"a":["engine"]},
+  {"n":627,"t":"Credits: monthly allowance and balance per account","s":"o","m":"M3","p":167,"a":["engine","db"]},
+  {"n":626,"t":"Plans: per-account limits for clients, messages, credits and retention","s":"o","m":"M3","p":167,"a":["management"]},
   {"n":623,"t":"Recurring architecture review: brief in Docs/Reviews and a 5-day schedule","s":"c","m":"M2","p":618,"a":[],"x":"2026-11-08"},
   {"n":622,"t":"Keep the backend roadmap in the repo as a multi-tab page","s":"c","m":"M2","p":618,"a":[],"x":"2026-11-08"},
   {"n":621,"t":"Bring deploy/infra-map.html up to date with the project copy and make it the source","s":"c","m":"M2","p":618,"a":[],"x":"2026-11-08"},
@@ -565,7 +582,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":448,"t":"Rewrite the load tester to measure capacity, not just connect","s":"o","m":"M3","p":440,"a":["ops"],"pr":"P1","sz":"M"},
   {"n":447,"t":"deploy.sh: restart scaled tiers one replica at a time","s":"o","m":"Post","p":456,"a":["ops"],"pr":"P3","sz":"S"},
   {"n":446,"t":"Engine: skip the SQL lookup for clients nothing is waiting on","s":"o","m":"Post","p":440,"a":["engine"],"pr":"P3","sz":"S"},
-  {"n":440,"t":"Performance: carry the hobbyist year on one VM","s":"o","m":"M3","p":null,"a":[],"epic":1,"sub":{"completed":6,"total":8}},
+  {"n":440,"t":"Performance: carry the hobbyist year on one VM","s":"o","m":"M3","p":null,"a":[],"epic":1,"sub":{"completed":6,"total":9}},
   {"n":422,"t":"Client message trigger: match message types ignoring case","s":"o","m":"Post","p":172,"a":["engine"],"pr":"P3","sz":"S"},
   {"n":417,"t":"Test a trigger condition against a sample message","s":"o","m":"Post","p":198,"a":["management","engine"],"pr":"P3","sz":"S"},
   {"n":411,"t":"Say who published each workflow version","s":"o","m":"Post","p":198,"a":["management"],"pr":"P3","sz":"S"},
@@ -594,7 +611,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":174,"t":"Client SDKs","s":"o","m":"M2","p":null,"a":["sdk"],"epic":1,"sub":{"completed":9,"total":10}},
   {"n":172,"t":"Workflow engine and test fixes","s":"o","m":"M2","p":null,"a":["engine"],"epic":1,"sub":{"completed":11,"total":14}},
   {"n":168,"t":"CI: drop the gha build cache if image builds stay slow","s":"o","m":"Post","p":179,"a":["ops"],"pr":"P3","sz":"XS"},
-  {"n":167,"t":"Metering and billing","s":"o","m":"Post","p":180,"a":["management"],"pr":"P3","sz":"L"},
+  {"n":167,"t":"Metering and billing","s":"o","m":"Post","p":180,"a":["management"],"pr":"P3","sz":"L","epic":1,"sub":{"completed":0,"total":7}},
   {"n":166,"t":"Engine: more than one active replica, WF-10 and WF-29 leftovers","s":"o","m":"Post","p":179,"a":["engine"],"pr":"P3","sz":"L"},
   {"n":165,"t":"Redis-backed rate limiter before running a second auth replica","s":"o","m":"Post","p":179,"a":["auth"],"pr":"P3","sz":"S"},
   {"n":164,"t":"Register a user in one procedure so no half-created accounts are left","s":"o","m":"Post","p":179,"a":["auth","db"],"pr":"P3","sz":"S"},
