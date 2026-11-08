@@ -95,6 +95,23 @@ public sealed class ClientConnection : ClientConnectionBase, IDisposable
         }
     }
 
+    /// <summary>
+    /// The session's last word: a Close frame with the code for its final reason, unless one was
+    /// already sent. Given up after <see cref="CloseGrace"/>; the connection is going away regardless.
+    /// </summary>
+    public override async Task CloseTransportAsync(DisconnectReason reason)
+    {
+        try
+        {
+            using var timeout = new CancellationTokenSource(CloseGrace);
+            await CloseOutputAsync(WebSocketCloseStatuses.For(reason), reason.Describe(), timeout.Token);
+        }
+        catch
+        {
+            // The connection is going away regardless.
+        }
+    }
+
     private void TryCancel()
     {
         try

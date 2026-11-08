@@ -52,4 +52,11 @@ public interface IClientConnection
     /// later ones.
     /// </summary>
     Task<bool> RequestCloseAsync(DisconnectReason reason, string description);
+
+    /// <summary>
+    /// Closes the transport for the session's final <paramref name="reason"/>, if it is still open.
+    /// Called once by the session, after the client is released and before its end is announced; it
+    /// should not throw, and must not wait long on a client that does not answer.
+    /// </summary>
+    Task CloseTransportAsync(DisconnectReason reason);
 }

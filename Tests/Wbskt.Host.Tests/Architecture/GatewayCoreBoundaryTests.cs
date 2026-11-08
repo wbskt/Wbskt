@@ -4,7 +4,8 @@ namespace Wbskt.Host.Tests.Architecture;
 
 /// <summary>
 /// Gateway.Core is shared by every client gateway, so it must not lean on any one transport. It holds
-/// a client through IClientConnection; the WebSocket, the HTTP request and their types stay in the host.
+/// a client through IClientConnection; the WebSocket, the HTTP request, MQTTnet and their types stay in
+/// the hosts.
 /// </summary>
 public sealed class GatewayCoreBoundaryTests
 {
@@ -17,6 +18,7 @@ public sealed class GatewayCoreBoundaryTests
         "Microsoft.AspNetCore.Http",
         "Microsoft.AspNetCore.WebSockets",
         "Microsoft.AspNetCore.Server",
+        "MQTTnet",
     ];
 
     [Fact]

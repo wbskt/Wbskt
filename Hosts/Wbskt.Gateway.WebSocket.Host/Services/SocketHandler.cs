@@ -85,8 +85,7 @@ internal sealed class SocketHandler : ISocketHandler
         await _sessions.RunAsync(
             admission,
             connection,
-            inbox => ReceiveLoopAsync(identity.ClientRefId, connection, inbox, cts.Token),
-            reason => CloseQuietlyAsync(connection, reason));
+            inbox => ReceiveLoopAsync(identity.ClientRefId, connection, inbox, cts.Token));
     }
 
     private static Task RefuseAsync(HttpContext context, AdmissionRefusal refusal) => refusal switch
@@ -94,19 +93,6 @@ internal sealed class SocketHandler : ISocketHandler
         AdmissionRefusal.Revoked => Problems.WriteAsync(context, StatusCodes.Status403Forbidden, "CLIENT_REVOKED", "This client's access has been revoked."),
         _ => Problems.WriteAsync(context, StatusCodes.Status401Unauthorized, "CLIENT_TOKEN_INVALID", "The client token is missing a claim this host needs.")
     };
-
-    private static async Task CloseQuietlyAsync(ClientConnection connection, DisconnectReason reason)
-    {
-        try
-        {
-            using var timeout = new CancellationTokenSource(ClientConnection.CloseGrace);
-            await connection.CloseOutputAsync(WebSocketCloseStatuses.For(reason), reason.Describe(), timeout.Token);
-        }
-        catch
-        {
-            // The connection is going away regardless.
-        }
-    }
 
     private static async Task AcknowledgeCloseAsync(ClientConnection connection, CancellationToken cancellationToken)
     {

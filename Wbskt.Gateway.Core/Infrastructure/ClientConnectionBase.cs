@@ -6,7 +6,7 @@ namespace Wbskt.Gateway.Core.Infrastructure;
 /// <summary>
 /// What every transport's connection does the same way: the envelope's JSON, the pending ping, and
 /// honouring only the first close asked for. A transport supplies the sending of a text message and
-/// the close itself.
+/// the close asked for while the session runs, and the transport's final close when it ends.
 /// </summary>
 public abstract class ClientConnectionBase : IClientConnection
 {
@@ -80,4 +80,6 @@ public abstract class ClientConnectionBase : IClientConnection
     /// it must not throw, and must end the receive loop even when the client does not answer.
     /// </summary>
     protected abstract Task CloseAsync(DisconnectReason reason, string description);
+
+    public abstract Task CloseTransportAsync(DisconnectReason reason);
 }

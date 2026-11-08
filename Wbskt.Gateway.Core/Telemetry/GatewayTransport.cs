@@ -4,4 +4,6 @@ namespace Wbskt.Gateway.Core.Telemetry;
 public sealed record GatewayTransport(string Name)
 {
     public static readonly GatewayTransport WebSocket = new("websocket");
+
+    public static readonly GatewayTransport Mqtt = new("mqtt");
 }
