@@ -30,6 +30,26 @@ public sealed class ClientConnectionTests
         Assert.True(connection.Closing.IsCancellationRequested);
     }
 
+    [Fact]
+    public async Task The_sessions_final_close_is_sent_with_its_reasons_close_code()
+    {
+        var (connection, socket) = Connection();
+
+        await connection.CloseTransportAsync(DisconnectReason.ServerStopping);
+
+        socket.Verify(x => x.CloseOutputAsync(WebSocketCloseStatus.EndpointUnavailable, DisconnectReason.ServerStopping.Describe(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_final_close_the_socket_refuses_does_not_throw()
+    {
+        var (connection, socket) = Connection();
+        socket.Setup(x => x.CloseOutputAsync(It.IsAny<WebSocketCloseStatus>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new WebSocketException("gone"));
+
+        await connection.CloseTransportAsync(DisconnectReason.ClientClosed);
+    }
+
     private static (ClientConnection Connection, Mock<System.Net.WebSockets.WebSocket> Socket) Connection()
     {
         var socket = new Mock<System.Net.WebSockets.WebSocket>();

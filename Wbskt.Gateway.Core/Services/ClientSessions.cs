@@ -13,7 +13,8 @@ namespace Wbskt.Gateway.Core.Services;
 /// <summary>
 /// A client session from admission to its end, the same over every transport. A gateway host asks
 /// <see cref="AdmitAsync"/> before it accepts a connection, then hands the accepted connection to
-/// <see cref="RunAsync"/> with two callbacks: its receive loop, and its own close. Everything between
+/// <see cref="RunAsync"/> with its receive loop; the connection closes its own transport at the end
+/// (<see cref="IClientConnection.CloseTransportAsync"/>). Everything between
 /// (registering the client, announcing it, budgeting and routing its messages, and the end's reason,
 /// metric and event) happens here, in one order, whatever the transport.
 /// </summary>
@@ -91,15 +92,10 @@ public sealed class ClientSessions
     /// inbox, and returns why it stopped (or the reason the inbox returned). It handles its own
     /// transport's errors; a cancellation or any other exception that escapes is classified here.
     /// </param>
-    /// <param name="closeTransport">
-    /// Closes the transport for the session's final reason, if it is still open. Called once, after the
-    /// client is released and before its end is announced. It should not throw.
-    /// </param>
     public async Task RunAsync(
         ClientAdmission admission,
         IClientConnection connection,
-        Func<ClientInbox, Task<DisconnectReason>> receive,
-        Func<DisconnectReason, Task> closeTransport)
+        Func<ClientInbox, Task<DisconnectReason>> receive)
     {
         if (!admission.IsAdmitted)
         {
@@ -152,7 +148,7 @@ public sealed class ClientSessions
             await stopAnnouncing.CancelAsync();
             await announcing;
             _connections.Unregister(clientRefId, connection);
-            await CloseTransportAsync(clientRefId, closeTransport, reason);
+            await CloseTransportAsync(clientRefId, connection, reason);
             await AnnounceEndedAsync(clientRefId, connection, reason);
         }
     }
@@ -203,11 +199,11 @@ public sealed class ClientSessions
         }
     }
 
-    private async Task CloseTransportAsync(Guid clientRefId, Func<DisconnectReason, Task> closeTransport, DisconnectReason reason)
+    private async Task CloseTransportAsync(Guid clientRefId, IClientConnection connection, DisconnectReason reason)
     {
         try
         {
-            await closeTransport(reason);
+            await connection.CloseTransportAsync(reason);
         }
         catch (Exception ex)
         {

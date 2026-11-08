@@ -89,24 +89,18 @@ public sealed class ClientSessionTests
         var connection = Connection();
         var registeredDuringLoop = false;
         var registeredAtClose = true;
-        DisconnectReason? closedWith = null;
+        connection.OnTransportClose = _ => registeredAtClose = _connections.GetConnection(ClientRefId) != null;
 
         await Sessions().RunAsync(Admitted, connection,
             _ =>
             {
                 registeredDuringLoop = ReferenceEquals(connection, _connections.GetConnection(ClientRefId));
                 return Task.FromResult(DisconnectReason.Aborted);
-            },
-            reason =>
-            {
-                registeredAtClose = _connections.GetConnection(ClientRefId) != null;
-                closedWith = reason;
-                return Task.CompletedTask;
             });
 
         Assert.True(registeredDuringLoop);
         Assert.False(registeredAtClose);
-        Assert.Equal(DisconnectReason.Aborted, closedWith);
+        Assert.Equal(DisconnectReason.Aborted, Assert.Single(connection.TransportCloses));
         _bus.Verify(x => x.PublishAsync(It.Is<ClientConnectedEvent>(e => e.ClientRefId == ClientRefId && e.ClientId == 42 && e.WorkspaceId == 7 && e.HostId == ThisHost), It.IsAny<CancellationToken>()), Times.Once);
         VerifyDisconnected(DisconnectReason.Aborted.Describe());
     }
@@ -130,8 +124,7 @@ public sealed class ClientSessionTests
                 // The connect announcement is retried a second later, while the session lasts.
                 await Task.Delay(TimeSpan.FromSeconds(1.5));
                 return DisconnectReason.ClientClosed;
-            },
-            _ => Task.CompletedTask);
+            });
 
         Assert.Null(result);
         Assert.Equal(2, connectAttempts);
@@ -142,21 +135,15 @@ public sealed class ClientSessionTests
     public async Task A_requested_close_is_the_reason_whatever_the_loop_saw()
     {
         var connection = Connection();
-        DisconnectReason? closedWith = null;
 
         await Sessions().RunAsync(Admitted, connection,
             async _ =>
             {
                 await connection.RequestCloseAsync(DisconnectReason.Revoked, "Client deleted.");
                 return DisconnectReason.ClientClosed;
-            },
-            reason =>
-            {
-                closedWith = reason;
-                return Task.CompletedTask;
             });
 
-        Assert.Equal(DisconnectReason.Revoked, closedWith);
+        Assert.Equal(DisconnectReason.Revoked, Assert.Single(connection.TransportCloses));
         VerifyDisconnected("Client deleted.");
     }
 
@@ -171,8 +158,7 @@ public sealed class ClientSessionTests
             {
                 _connections.Register(ClientRefId, fresh);
                 return Task.FromResult(DisconnectReason.ClientClosed);
-            },
-            _ => Task.CompletedTask);
+            });
 
         Assert.Equal(new CloseRequest(DisconnectReason.Superseded, ConnectionManager.SupersededDescription), Assert.Single(old.Closes));
         Assert.Same(fresh, _connections.GetConnection(ClientRefId));
@@ -190,8 +176,7 @@ public sealed class ClientSessionTests
                 {
                     _connections.Register(ClientRefId, Connection());
                     return Task.FromResult(DisconnectReason.ClientClosed);
-                },
-                _ => Task.CompletedTask);
+                });
         }
 
         _bus.Verify(x => x.PublishAsync(
@@ -203,18 +188,11 @@ public sealed class ClientSessionTests
     public async Task A_loop_cancelled_by_shutdown_ends_as_server_stopping()
     {
         var connection = Connection();
-        DisconnectReason? closedWith = null;
         await _stopping.CancelAsync();
 
-        await Sessions().RunAsync(Admitted, connection,
-            _ => throw new OperationCanceledException(),
-            reason =>
-            {
-                closedWith = reason;
-                return Task.CompletedTask;
-            });
+        await Sessions().RunAsync(Admitted, connection, _ => throw new OperationCanceledException());
 
-        Assert.Equal(DisconnectReason.ServerStopping, closedWith);
+        Assert.Equal(DisconnectReason.ServerStopping, Assert.Single(connection.TransportCloses));
         VerifyDisconnected(DisconnectReason.ServerStopping.Describe());
     }
 
@@ -223,7 +201,7 @@ public sealed class ClientSessionTests
     {
         var connection = Connection();
 
-        await Sessions().RunAsync(Admitted, connection, _ => throw new OperationCanceledException(), _ => Task.CompletedTask);
+        await Sessions().RunAsync(Admitted, connection, _ => throw new OperationCanceledException());
 
         VerifyDisconnected(DisconnectReason.Aborted.Describe());
     }
@@ -233,7 +211,7 @@ public sealed class ClientSessionTests
     {
         var connection = Connection();
 
-        await Sessions().RunAsync(Admitted, connection, _ => throw new InvalidOperationException("boom"), _ => Task.CompletedTask);
+        await Sessions().RunAsync(Admitted, connection, _ => throw new InvalidOperationException("boom"));
 
         Assert.Null(_connections.GetConnection(ClientRefId));
         VerifyDisconnected(DisconnectReason.Error.Describe());
@@ -246,7 +224,7 @@ public sealed class ClientSessionTests
     {
         var connection = Connection();
 
-        await Sessions().RunAsync(Admitted, connection, _ => Task.FromResult(reason), _ => Task.CompletedTask);
+        await Sessions().RunAsync(Admitted, connection, _ => Task.FromResult(reason));
 
         _bus.Verify(x => x.PublishAsync(It.Is<ClientDisconnectedEvent>(e => e.IsUpdating == updating), CancellationToken.None), Times.Once);
     }
@@ -255,10 +233,9 @@ public sealed class ClientSessionTests
     public async Task A_transport_close_that_throws_does_not_stop_the_end_being_announced()
     {
         var connection = Connection();
+        connection.OnTransportClose = _ => throw new InvalidOperationException("boom");
 
-        await Sessions().RunAsync(Admitted, connection,
-            _ => Task.FromResult(DisconnectReason.ClientClosed),
-            _ => throw new InvalidOperationException("boom"));
+        await Sessions().RunAsync(Admitted, connection, _ => Task.FromResult(DisconnectReason.ClientClosed));
 
         VerifyDisconnected(DisconnectReason.ClientClosed.Describe());
     }
@@ -275,8 +252,7 @@ public sealed class ClientSessionTests
             {
                 seenByLoop = connection.CloseRequest;
                 return Task.FromResult(DisconnectReason.ClientClosed);
-            },
-            _ => Task.CompletedTask);
+            });
 
         Assert.Equal(DisconnectReason.Revoked, seenByLoop?.Reason);
         VerifyDisconnected(DisconnectReason.Revoked.Describe());
@@ -288,7 +264,7 @@ public sealed class ClientSessionTests
         var connection = Connection();
         _bus.Setup(x => x.PublishAsync(It.IsAny<ClientDisconnectedEvent>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("broker down"));
 
-        await Sessions().RunAsync(Admitted, connection, _ => Task.FromResult(DisconnectReason.ClientClosed), _ => Task.CompletedTask);
+        await Sessions().RunAsync(Admitted, connection, _ => Task.FromResult(DisconnectReason.ClientClosed));
 
         Assert.Null(_connections.GetConnection(ClientRefId));
     }
@@ -299,7 +275,7 @@ public sealed class ClientSessionTests
         var connection = Connection();
         var refused = ClientAdmission.Refuse(AdmissionRefusal.Revoked);
 
-        await Assert.ThrowsAsync<ArgumentException>(() => Sessions().RunAsync(refused, connection, _ => Task.FromResult(DisconnectReason.ClientClosed), _ => Task.CompletedTask));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sessions().RunAsync(refused, connection, _ => Task.FromResult(DisconnectReason.ClientClosed)));
 
         Assert.Null(_connections.GetConnection(ClientRefId));
     }
@@ -319,8 +295,7 @@ public sealed class ClientSessionTests
                 }
 
                 return DisconnectReason.ClientClosed;
-            },
-            _ => Task.CompletedTask);
+            });
 
         Assert.Equal([null, null, DisconnectReason.Throttled], results);
         Assert.Equal(new CloseRequest(DisconnectReason.Throttled, "Too many messages."), Assert.Single(connection.Closes));
@@ -340,8 +315,7 @@ public sealed class ClientSessionTests
             {
                 result = await inbox.ReceiveAsync(tooBig, CancellationToken.None);
                 return DisconnectReason.ClientClosed;
-            },
-            _ => Task.CompletedTask);
+            });
 
         Assert.Equal(DisconnectReason.MessageTooBig, result);
         Assert.Equal(new CloseRequest(DisconnectReason.MessageTooBig, ClientInbox.TooBigDescription), Assert.Single(connection.Closes));
@@ -360,8 +334,7 @@ public sealed class ClientSessionTests
                 await connection.RequestCloseAsync(DisconnectReason.Revoked, "x");
                 result = await inbox.ReceiveAsync(Message, CancellationToken.None);
                 return DisconnectReason.ClientClosed;
-            },
-            _ => Task.CompletedTask);
+            });
 
         Assert.Null(result);
         _bus.Verify(x => x.PublishAsync(It.IsAny<ClientMessageReceivedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
