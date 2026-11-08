@@ -282,7 +282,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
 <script type="application/json" id="roadmap-data">
 {
  "asOf": "2026-11-08",
- "headline": "M2 backend has 7 pieces of real work left: two wait on you (the SDK release keys and the deleted-client call), the never-ending-runs epic (#594), test runs in review (PR #617), and this housekeeping (#618). Drafts merged as PR #615 and run numbers as PR #612. Four issues stand between the backend and going public on 31 Dec; everything else is Post-launch.",
+ "headline": "M2 backend has 6 pieces of real work left: two wait on you (the SDK release keys and the deleted-client call), the never-ending-runs epic (#594), and the housekeeping epic (#618), now down to one M3 item. Drafts and test runs merged as PR #615 and PR #617, and run numbers as PR #612. Four issues stand between the backend and going public on 31 Dec; everything else is Post-launch.",
  "milestones": [
   {
    "name": "M1 Hardening",
@@ -297,8 +297,8 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "short": "M2",
    "due": "2026-11-30",
    "start": "2026-11-01",
-   "open": 20,
-   "closed": 119
+   "open": 15,
+   "closed": 140
   },
   {
    "name": "M3 Go public",
@@ -329,11 +329,6 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "issue": 547
   },
   {
-   "title": "Review PR #617, workflow test runs",
-   "body": "CI was running when last checked. Drafts (#615) already merged.",
-   "pr": 617
-  },
-  {
    "title": "Roll out the exporters and loopback ports on the VM",
    "body": "node-exporter and cAdvisor aren't running, so disk and crash-loop alerts are dark; RabbitMQ has no loopback UI yet (Wbskt.Console#110).",
    "url": "https://github.com/wbskt/Wbskt.Console/issues/110"
@@ -357,13 +352,6 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "state": "ready",
    "why": "A loop through a Wait costs almost no credits, so a run can live for years on an old version. Three parts: cancel or list older-version runs on publish (#595), a maximum run lifetime (#596), validator warnings for loops with no wait or exit (#597)."
   },
-  "599": {
-   "state": "review",
-   "why": "A test run starts from a frozen copy of the draft or live version and runs like any other run. One at a time per workflow, kept out of trigger and stuck-run guards.",
-   "prs": [
-    617
-   ]
-  },
   "607": {
    "state": "done-open",
    "why": "Merged as PR #612 (run numbers, per-day counts, waiting runs). The issue can be closed.",
@@ -373,7 +361,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   },
   "618": {
    "state": "progress",
-   "why": "Written guidelines in every repo, the infra map as repo source, this roadmap in the repo, and the 5-day architecture review."
+   "why": "Done on 8 Nov: guidelines in every repo (#620, Console#149), the infra map as repo source (#621), this roadmap (#622) and the 5-day review (#623), all merged in PR #624. Left: exporting production index and deadlock numbers (#619, M3).","prs": [624]
   },
   "448": {
    "state": "ready",
@@ -385,7 +373,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   },
   "616": {
    "state": "ready",
-   "why": "Publish and draft save take anything up to the server's 30 MB default. One shared limit of a megabyte or two closes it."
+   "why": "Publish, draft save and test-run payloads take anything up to the server's 30 MB default. One shared limit of a megabyte or two closes it."
   },
   "567": {
    "state": "you",
@@ -400,8 +388,8 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {
    "date": "2026-11-08",
    "title": "Drafts and test runs (PR #615 and #617)",
-   "scope": "Code and architecture review before pushing",
-   "result": "3 fixed (a delete scan, a save/publish deadlock, orphaned test copies), 1 filed (#616)",
+   "scope": "Two code and architecture reviews before merging",
+   "result": "6 fixed (a delete scan, a save/publish deadlock, orphaned test copies, sub-workflows of tests counted as live, a test run on a just-deleted workflow, no definition for a draft's test run), 1 filed (#616)",
    "issue": 616
   },
   {
@@ -534,12 +522,12 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   }
  ],
  "issues": [
-  {"n":623,"t":"Recurring architecture review: brief in Docs/Reviews and a 5-day schedule","s":"o","m":"M2","p":618,"a":[]},
-  {"n":622,"t":"Keep the backend roadmap in the repo as a multi-tab page","s":"o","m":"M2","p":618,"a":[]},
-  {"n":621,"t":"Bring deploy/infra-map.html up to date with the project copy and make it the source","s":"o","m":"M2","p":618,"a":[]},
-  {"n":620,"t":"Write the commit and PR rules into CONTRIBUTING.md and CLAUDE.md (Wbskt, Arduino, website)","s":"o","m":"M2","p":618,"a":[]},
+  {"n":623,"t":"Recurring architecture review: brief in Docs/Reviews and a 5-day schedule","s":"c","m":"M2","p":618,"a":[],"x":"2026-11-08"},
+  {"n":622,"t":"Keep the backend roadmap in the repo as a multi-tab page","s":"c","m":"M2","p":618,"a":[],"x":"2026-11-08"},
+  {"n":621,"t":"Bring deploy/infra-map.html up to date with the project copy and make it the source","s":"c","m":"M2","p":618,"a":[],"x":"2026-11-08"},
+  {"n":620,"t":"Write the commit and PR rules into CONTRIBUTING.md and CLAUDE.md (Wbskt, Arduino, website)","s":"c","m":"M2","p":618,"a":[],"x":"2026-11-08"},
   {"n":619,"t":"Export SQL index usage and deadlock graphs from production for the review","s":"o","m":"M3","p":618,"a":[]},
-  {"n":618,"t":"Project housekeeping: review routine, written guidelines, roadmap in the repo","s":"o","m":"M2","p":null,"a":[],"epic":1,"sub":{"completed":0,"total":6}},
+  {"n":618,"t":"Project housekeeping: review routine, written guidelines, roadmap in the repo","s":"o","m":"M2","p":null,"a":[],"epic":1,"sub":{"completed":5,"total":6}},
   {"n":616,"t":"Cap the size of a workflow definition on publish and draft save","s":"o","m":"M3","p":null,"a":[]},
   {"n":614,"t":"Sandboxed shared variables for test runs","s":"o","m":"Post","p":null,"a":["engine"]},
   {"n":611,"t":"Workspace setting: when a day starts (time zone)","s":"o","m":"Post","p":null,"a":[]},
@@ -551,7 +539,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":602,"t":"Management: run singleton background jobs on one replica behind a SQL lease","s":"o","m":"Post","p":600,"a":[]},
   {"n":601,"t":"Management: enforce the per-client live feed cap across replicas","s":"o","m":"Post","p":600,"a":[]},
   {"n":600,"t":"Management: correct and zero-downtime with more than one replica","s":"o","m":"Post","p":179,"a":[]},
-  {"n":599,"t":"Test run: start a workflow by hand with input, including a draft","s":"o","m":"M2","p":null,"a":["management","engine"],"sz":"L"},
+  {"n":599,"t":"Test run: start a workflow by hand with input, including a draft","s":"c","m":"M2","p":null,"a":["management","engine"],"sz":"L","x":"2026-11-08"},
   {"n":597,"t":"Validator warning: loops with no wait or exit","s":"o","m":"M2","p":594,"a":["engine"],"pr":"P2","sz":"S"},
   {"n":596,"t":"Workspace setting: maximum run lifetime","s":"o","m":"M2","p":594,"a":["engine"],"pr":"P2","sz":"M"},
   {"n":595,"t":"Publish: option to cancel or list runs still going on older versions","s":"o","m":"M2","p":594,"a":["management"],"pr":"P2","sz":"M"},
@@ -731,6 +719,8 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":127,"t":"Reject breached passwords using the Have I Been Pwned range API","s":"c","m":"M2","p":175,"a":["auth"],"pr":"P2","sz":"S","x":"2026-11-03"}
  ],
  "merged": [
+  {"n":624,"t":"docs: write down the contribution rules, and keep the infra map, roadmap and review brief in the repo","d":"2026-11-08"},
+  {"n":617,"t":"Test-run a workflow's draft or live version, whatever its trigger","d":"2026-11-08"},
   {"n":615,"t":"Keep workflow drafts on the server","d":"2026-11-08"},
   {"n":612,"t":"Number each workflow's runs, count runs per day, and show what a waiting run waits on","d":"2026-11-08"},
   {"n":593,"t":"Drop the legacy device_logins term from the overview dashboard","d":"2026-11-07"},
