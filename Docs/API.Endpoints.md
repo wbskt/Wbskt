@@ -17,7 +17,7 @@ and a snapshot disagree, the snapshot is right and this page is behind.
 | **Auth** (`Wbskt.Auth.Host`) | yes | console, other hosts | JWT bearer; the credential endpoints are anonymous and rate limited |
 | **Management** (`Wbskt.Management.Host`) | yes | console, client SDK | JWT bearer, plus three deliberately anonymous edges (below) |
 | **WebSocket gateway** (`Wbskt.Gateway.WebSocket.Host`, over `Wbskt.Gateway.Core`) | yes | client SDK | JWT bearer on the WebSocket upgrade, header or `access_token` query |
-| **MQTT gateway** (`Wbskt.Gateway.MQTT.Host`, over `Wbskt.Gateway.Core`) | yes, MQTT only (TCP 8883, routed by #640); its HTTP side serves health checks only | MQTT clients | The client token as the CONNECT password ([Client.Protocol.MQTT.md](Client.Protocol.MQTT.md)) |
+| **MQTT gateway** (`Wbskt.Gateway.MQTT.Host`, over `Wbskt.Gateway.Core`) | yes, MQTT only (TCP 8883 with TLS, 1883 plain; routed by #640); its HTTP side serves health checks only | MQTT clients | The client token as the CONNECT password ([Client.Protocol.MQTT.md](Client.Protocol.MQTT.md)) |
 | **Workflow Engine** (`Wbskt.Workflow.Engine.Host`) | **no** — backend network only | management host | shared API key header on `/api/inbound/*` |
 
 **Where a public URL lands.** `api.${DOMAIN}` is the one public API host: tenant administration
