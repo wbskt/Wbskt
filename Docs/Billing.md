@@ -67,6 +67,7 @@ dbo.Tenants.PlanCode ──(copy)──────────►  dbo.Workspac
 | Clients | `dbo.Client_Create` (registration) and `dbo.Client_UpdateStatuses` (approval) | 50025, **409** `PLAN_CLIENT_LIMIT_REACHED` |
 | Runs going at once | `dbo.Run_Start` | 50026; a trigger's dispatch reads `Refused`, a test run is **409** `PLAN_RUN_LIMIT_REACHED` |
 | Workflow credits a month | `dbo.Run_Start` | 50033; a trigger's dispatch reads `Refused`, a test run is **409** `PLAN_CREDIT_LIMIT_REACHED` |
+| A workspace's credit cap | `dbo.Run_Start` | 50034; a trigger's dispatch reads `Refused`, a test run is **409** `WORKSPACE_CREDIT_CAP_REACHED` |
 | Workspaces | `dbo.Workspace_Create` (auth database) | 50030, **409** `PLAN_WORKSPACE_LIMIT_REACHED` |
 | Members | `dbo.TenantInvitation_Accept`, and `dbo.TenantInvitation_Create` up front | 50031, **409** `PLAN_MEMBER_LIMIT_REACHED` |
 
@@ -102,11 +103,22 @@ runs going at once. A run already going is never stopped for the month's credits
 own budget (`OutOfCredits`). Starts that take a place already held (a sub-workflow child, a queued event's
 replay, a run replacing those it cancels) skip the check, as they skip the active-run limit.
 
-A refused trigger is reported once per workflow and limit per minute as `WorkflowTriggerRefusedEvent`,
-whose `reason` is `ActiveRunLimit` or `CreditLimit`.
+**Workspace caps.** An owner can hold one workspace to a monthly credit cap
+(`PUT …/workspaces/{workspaceRef}/credit-cap`, `billing.manage`; `dbo.WorkspaceCreditCaps`). Every
+workspace still draws on the one shared pool, and a cap is a ceiling rather than a reservation, so the
+caps may add up to more than the allowance. `dbo.Run_Start` checks the cap after the tenant's allowance,
+counting the workspace's ledger for the month plus its running runs' unposted credits
+(`dbo.WorkspaceCreditsSpent`). It refuses with 50034 (**409** `WORKSPACE_CREDIT_CAP_REACHED` on a test
+run) and otherwise cuts the run's budget to the smaller of the two remainders. Lowering a cap below what
+was already spent refuses new runs at once, and the response says so (`capReached`). As it posts,
+`CreditUsagePoster` raises `WorkspaceCreditCapReachedEvent` when a post carries a workspace across 80% and
+then 100% of its cap.
 
-Not built yet: top-up grants (#627, with payments in #631), per-workspace caps (#634) and the usage API
-(#630), which reads the same ledger.
+A refused trigger is reported once per workflow and limit per minute as `WorkflowTriggerRefusedEvent`,
+whose `reason` is `ActiveRunLimit`, `CreditLimit` or `WorkspaceCreditCap`.
+
+Not built yet: top-up grants (#627, with payments in #631) and the usage API (#630), which reads the
+same ledger.
 
 Lock order, where a procedure takes more than one: the trigger key lock, then the test-run lock, then the
 plan lock (`dbo.Run_Start`); the clients' and policies' rows, then the plan lock (client procedures).

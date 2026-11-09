@@ -352,6 +352,14 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
                 });
                 return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Refused, null, correlationValue), null);
             }
+            catch (WorkspaceCreditCapException ex)
+            {
+                _refusalReporter?.Report(new RunRefusal(ex.WorkspaceId, registration.WorkflowDefinitionId, registration.WorkflowRefId, normalizedEvent.ChannelKind, 0, normalizedEvent.ReceivedAt)
+                {
+                    Reason = RunRefusalReason.WorkspaceCreditCap
+                });
+                return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Refused, null, correlationValue), null);
+            }
             catch (ActiveRunConflictException) when (attempt < MaxStartAttempts)
             {
                 // Another event with this key started a run after the policy read the active runs (#467).

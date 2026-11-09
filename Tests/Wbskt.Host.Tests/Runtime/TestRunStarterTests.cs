@@ -72,6 +72,18 @@ public sealed class TestRunStarterTests
         _dispatcher.VerifyNoOtherCalls();
     }
 
+    [Fact]
+    public async Task A_spent_workspace_cap_starts_nothing()
+    {
+        _runStarter.Setup(x => x.StartTestAsync(5, Trigger.ToString(), It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new WorkspaceCreditCapException(3));
+
+        TestRunStart started = await Starter().StartAsync(5, Trigger, Payload, CancellationToken.None);
+
+        Assert.Equal(TestRunStartOutcome.WorkspaceCreditCapReached, started.Outcome);
+        _dispatcher.VerifyNoOtherCalls();
+    }
+
     private TestRunStarter Starter() =>
         new(_runStarter.Object, _dispatcher.Object, _runs.Object, TimeProvider.System);
 }

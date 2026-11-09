@@ -44,6 +44,9 @@ public static class Permissions
     public static readonly PermissionSlug IntegrationsRead = PermissionSlug.CreateInternal(PermissionNames.IntegrationsRead);
     public static readonly PermissionSlug IntegrationsManage = PermissionSlug.CreateInternal(PermissionNames.IntegrationsManage);
 
+    // What the account spends: a workspace's monthly credit cap. Not a default grant; Admin roles get it.
+    public static readonly PermissionSlug BillingManage = PermissionSlug.CreateInternal(PermissionNames.BillingManage);
+
     // Authoring the definition — never a running instance of it.
     public static readonly PermissionSlug WorkflowsRead = PermissionSlug.CreateInternal(PermissionNames.WorkflowsRead);
     public static readonly PermissionSlug WorkflowsCreate = PermissionSlug.CreateInternal(PermissionNames.WorkflowsCreate);

@@ -219,6 +219,20 @@ public sealed class RunStarterTests
     }
 
     [Fact]
+    public async Task Start_once_the_workspaces_cap_is_spent_is_refused_as_such()
+    {
+        List<string> operations = [];
+        var runProvider = new RecordingRunProvider(operations) { CapSpent = true };
+        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions());
+
+        var refused = await Assert.ThrowsAsync<WorkspaceCreditCapException>(() =>
+            starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), AnEvent(), null, CancellationToken.None));
+
+        Assert.Equal((await new RecordingWorkflowDefinitionProvider().GetByIdAsync(42, CancellationToken.None)).WorkspaceId, refused.WorkspaceId);
+        Assert.Equal(["run"], operations);
+    }
+
+    [Fact]
     public async Task An_exempt_start_sends_no_credit_allowance()
     {
         List<string> operations = [];
@@ -392,6 +406,7 @@ public sealed class RunStarterTests
         public int WorkspaceId { get; private set; }
         public PlanCeiling? Ceiling { get; private set; }
         public bool CreditsSpent { get; init; }
+        public bool CapSpent { get; init; }
         public PlanCredits? Credits { get; private set; }
 
         public Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, PlanCeiling? ceiling, ActiveRunGuard activeRunGuard, PlanCredits? creditAllowance, CancellationToken ct)
@@ -401,6 +416,12 @@ public sealed class RunStarterTests
             {
                 operations.Add("run");
                 throw AuthHost.SqlExceptions.WithNumber(50033, "The plan has used its workflow credits for this month.");
+            }
+
+            if (CapSpent && creditAllowance is not null)
+            {
+                operations.Add("run");
+                throw AuthHost.SqlExceptions.WithNumber(50034, "The workspace has used its monthly credit cap.");
             }
 
             return StartAsync(run, rootBranch, triggerStartKey, workspaceId, ceiling, ct);

@@ -105,6 +105,8 @@ public static class Program
         builder.Services.AddWorkspacePlans(builder.Configuration);
         builder.Services.Configure<BillingOptions>(builder.Configuration.GetSection(BillingOptions.SectionName));
         builder.Services.AddScoped<WorkspaceAccountSync>();
+        builder.Services.AddScoped<IWorkspaceCreditCapProvider, WorkspaceCreditCapProvider>();
+        builder.Services.AddScoped<IWorkspaceCreditCapService, WorkspaceCreditCapService>();
         if (role == HostRole.All)
         {
             builder.Services.AddHostedService<WorkspaceAccountSyncWorker>();

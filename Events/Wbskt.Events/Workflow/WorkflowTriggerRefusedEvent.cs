@@ -12,7 +12,7 @@ namespace Wbskt.Events.Workflow;
 /// <param name="RefusedCount">How many triggers were refused between the first and last time.</param>
 /// <param name="TriggerKinds">The channels they came in on, comma-separated: client, webhook, schedule…</param>
 /// <param name="Ceiling">The limit that refused them: the plan's active runs, all going at each refusal, or
-/// its credits for the month (whole credits), all spent.</param>
+/// its credits for the month (whole credits), all spent; 0 for a workspace's own credit cap.</param>
 /// <param name="Reason">Which limit it was.</param>
 [EventCriticality(EventCriticality.Warning)]
 [SignalRNotify("OnWorkflowTriggerRefusedEvent")]

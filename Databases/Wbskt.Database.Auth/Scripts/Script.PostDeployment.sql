@@ -238,6 +238,13 @@ BEGIN
 END
 GO
 
+-- Billing. Not a default User grant: it decides what the account spends. Admin roles get it below.
+IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'billing.manage')
+BEGIN
+    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('billing.manage', 'Set a workspace''s monthly credit cap');
+END
+GO
+
 -- RolePermissions (every tenant's Admin gets ALL).
 --
 -- Set-based across all Admin roles on purpose. Roles are tenant-scoped, so once a second tenant

@@ -3632,6 +3632,53 @@
         ],
         "type": "object"
       },
+      "WorkspaceCreditCapRequest": {
+        "properties": {
+          "monthlyCreditCap": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "monthlyCreditCap"
+        ],
+        "type": "object"
+      },
+      "WorkspaceCreditCapResponse": {
+        "properties": {
+          "capReached": {
+            "type": "boolean"
+          },
+          "creditsSpentThisMonth": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "monthlyCreditCap": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "monthlyCreditCap",
+          "creditsSpentThisMonth",
+          "capReached"
+        ],
+        "type": "object"
+      },
       "WorkspaceMessageRate": {
         "properties": {
           "createdAtUtc": {
@@ -4889,6 +4936,66 @@
         },
         "tags": [
           "Clients"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspaceRef}/credit-cap": {
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspaceRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceCreditCapRequest"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceCreditCapRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceCreditCapRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceCreditCapResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceCreditCapResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceCreditCapResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "WorkspaceCreditCap"
         ]
       }
     },
@@ -7985,6 +8092,9 @@
     },
     {
       "name": "RegistrationPolicies"
+    },
+    {
+      "name": "WorkspaceCreditCap"
     },
     {
       "name": "WorkspaceMessageStats"
