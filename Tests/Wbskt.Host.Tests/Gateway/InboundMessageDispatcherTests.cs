@@ -53,7 +53,7 @@ public sealed class InboundMessageDispatcherTests
     {
         var throttle = new MessageThrottle(TimeProvider.System);
         throttle.Replace([2], DateTime.UtcNow);
-        var context = new InboundContext(ClientRefId, _connection) { Allowance = new ClientAllowance(throttle, 2, TimeProvider.System) };
+        var context = new InboundContext(ClientRefId, _connection) { Allowance = new ClientAllowance(throttle, 2, ClientRefId) };
 
         await _dispatcher.DispatchAsync(context, """{"type":"temp.reading","payload":{}}""", CancellationToken.None);
         await _dispatcher.DispatchAsync(context, """{"type":"temp.reading","payload":{}}""", CancellationToken.None);

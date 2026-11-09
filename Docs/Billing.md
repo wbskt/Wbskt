@@ -199,7 +199,8 @@ included.
 - **Free over its allowance is throttled**, not cut off: each of its clients may send one of its own
   messages a minute until the 1st. The monitor sends every socket host the whole list of throttled
   workspaces each time (`MessageThrottleSnapshot`, not an `IEvent`); the gateway's `MessageThrottle`
-  holds it and each session's `ClientAllowance` lets one message a minute through. `sys.*` messages
+  holds it and lets each client one message a minute through, kept by client id so reconnecting
+  does not earn a fresh one. `sys.*` messages
   (pongs, acks, OTA status) pass, so a throttled client stays connected and keeps answering. A list
   older than 5 minutes is ignored, so a management outage lets messages through rather than throttling
   an account that has since upgraded. The list is empty again on the 1st.

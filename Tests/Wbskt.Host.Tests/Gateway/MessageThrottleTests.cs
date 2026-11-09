@@ -5,6 +5,7 @@ namespace Wbskt.Host.Tests.Gateway;
 public sealed class MessageThrottleTests
 {
     private static readonly DateTime Start = new(2026, 11, 9, 12, 0, 0, DateTimeKind.Utc);
+    private static readonly Guid Client = Guid.NewGuid();
     private readonly MovableClock _clock = new(Start);
 
     [Fact]
@@ -45,7 +46,7 @@ public sealed class MessageThrottleTests
     {
         var throttle = new MessageThrottle(_clock);
         throttle.Replace([7], Start);
-        var allowance = new ClientAllowance(throttle, 7, _clock);
+        var allowance = new ClientAllowance(throttle, 7, Client);
 
         Assert.True(allowance.TryTake());
         Assert.False(allowance.TryTake());
@@ -64,9 +65,20 @@ public sealed class MessageThrottleTests
     {
         var throttle = new MessageThrottle(_clock);
         throttle.Replace([8], Start);
-        var allowance = new ClientAllowance(throttle, 7, _clock);
+        var allowance = new ClientAllowance(throttle, 7, Client);
 
         Assert.All(Enumerable.Range(0, 10), _ => Assert.True(allowance.TryTake()));
+    }
+
+    [Fact]
+    public void A_client_that_reconnects_does_not_get_a_fresh_message_but_another_client_does()
+    {
+        var throttle = new MessageThrottle(_clock);
+        throttle.Replace([7], Start);
+
+        Assert.True(new ClientAllowance(throttle, 7, Client).TryTake());
+        Assert.False(new ClientAllowance(throttle, 7, Client).TryTake());
+        Assert.True(new ClientAllowance(throttle, 7, Guid.NewGuid()).TryTake());
     }
 
     private sealed class MovableClock(DateTime now) : TimeProvider
