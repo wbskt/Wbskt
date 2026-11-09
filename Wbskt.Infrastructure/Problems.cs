@@ -23,6 +23,9 @@ public static class Problems
 
     public const string CodeKey = "code";
     public const string TraceIdKey = "traceId";
+    public const string PlanKey = "plan";
+    public const string LimitKey = "limit";
+    public const string CurrentKey = "current";
 
     public static ProblemDetails Create(int status, string code, string? detail)
     {
@@ -36,7 +39,18 @@ public static class Problems
         return problem;
     }
 
-    public static ProblemDetails From(Error error, int status) => Create(status, error.Code, error.Message);
+    public static ProblemDetails From(Error error, int status)
+    {
+        ProblemDetails problem = Create(status, error.Code, error.Message);
+        if (error.PlanLimit is { } limit)
+        {
+            problem.Extensions[PlanKey] = limit.Plan;
+            problem.Extensions[LimitKey] = limit.Limit;
+            problem.Extensions[CurrentKey] = limit.Current;
+        }
+
+        return problem;
+    }
 
     /// <summary>The application code a problem carries, or null.</summary>
     public static string? CodeOf(ProblemDetails problem) =>

@@ -51,6 +51,25 @@ public sealed class PlanSeatLimitTests
     }
 
     [Fact]
+    public async Task A_seat_refusal_carries_the_plan_its_limit_and_the_seats_held_now()
+    {
+        var plans = new Mock<ITenantPlanProvider>();
+        plans.Setup(p => p.FindByRefIdAsync(TenantRef, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantPlan(TenantId, TenantRef, PlanCode.Maker, null, 3, null));
+        plans.Setup(p => p.GetSeatsAsync(TenantId, It.IsAny<CancellationToken>())).ReturnsAsync((7, 12));
+        var limits = new TenantLimits(plans.Object, new PlanCatalog(Microsoft.Extensions.Options.Options.Create(new PlanCatalogOptions())));
+
+        Error workspaces = await limits.WithSeatsAsync(SqlGuardErrors.PlanWorkspaceLimitReached, TenantRef, CancellationToken.None);
+        Error members = await limits.WithSeatsAsync(SqlGuardErrors.PlanMemberLimitReached, TenantRef, CancellationToken.None);
+        Error other = await limits.WithSeatsAsync(SqlGuardErrors.InvalidInvitation, TenantRef, CancellationToken.None);
+
+        PlanLimits maker = PlanCatalog.BuiltIn[PlanCode.Maker];
+        Assert.Equal(new PlanLimitDetail("Maker", maker.Workspaces, 7), workspaces.PlanLimit);
+        Assert.Equal(new PlanLimitDetail("Maker", maker.Members, 12), members.PlanLimit);
+        Assert.Same(SqlGuardErrors.InvalidInvitation, other);
+    }
+
+    [Fact]
     public async Task A_workspace_is_created_under_the_plans_workspace_limit()
     {
         _tenants.Setup(p => p.GetTenantsForUserAsync(CallerId, It.IsAny<CancellationToken>()))

@@ -29,7 +29,10 @@ internal sealed class WorkspaceUsageProvider : BaseSqlProvider, IWorkspaceUsageP
                 r.GetInt32(r.GetOrdinal("TenantActiveRuns")),
                 r.GetInt32(r.GetOrdinal("WorkspaceActiveRuns")),
                 r.IsDBNull(r.GetOrdinal("MonthlyCreditCap")) ? null : r.GetDecimal(r.GetOrdinal("MonthlyCreditCap")),
-                r.GetDecimal(r.GetOrdinal("CreditGrantBalance"))),
+                r.GetDecimal(r.GetOrdinal("CreditGrantBalance")),
+                r.GetDecimal(r.GetOrdinal("WorkspaceCreditsReserved")),
+                r.IsDBNull(r.GetOrdinal("CreditGrantNextExpiresAt")) ? null : DateTime.SpecifyKind(r.GetDateTime(r.GetOrdinal("CreditGrantNextExpiresAt")), DateTimeKind.Utc),
+                r.GetDecimal(r.GetOrdinal("CreditGrantNextExpiring"))),
             new InvalidOperationException("WorkspaceUsage_GetSummary did not return a row."),
             ct);
     }

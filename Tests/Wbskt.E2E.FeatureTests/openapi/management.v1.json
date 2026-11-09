@@ -675,6 +675,17 @@
               "string"
             ]
           },
+          "topUpExpiresAt": {
+            "format": "date-time"
+          },
+          "topUpExpiring": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
           "used": {
             "format": "double",
             "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
@@ -687,7 +698,9 @@
         "required": [
           "used",
           "limit",
-          "topUp"
+          "topUp",
+          "topUpExpiresAt",
+          "topUpExpiring"
         ],
         "type": "object"
       },
@@ -3973,6 +3986,14 @@
               "string"
             ]
           },
+          "creditsReserved": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
           "messages": {
             "format": "int64",
             "pattern": "^-?(?:0|[1-9]\\d*)$",
@@ -3996,7 +4017,8 @@
           "monthlyCreditCap",
           "messages",
           "clients",
-          "activeRuns"
+          "activeRuns",
+          "creditsReserved"
         ],
         "type": "object"
       }

@@ -11,4 +11,7 @@ public sealed record WorkspaceUsageSummary(
     int TenantActiveRuns,
     int WorkspaceActiveRuns,
     decimal? MonthlyCreditCap,
-    decimal CreditGrantBalance);
+    decimal CreditGrantBalance,
+    decimal WorkspaceCreditsReserved = 0,
+    DateTime? CreditGrantNextExpiresAt = null,
+    decimal CreditGrantNextExpiring = 0);

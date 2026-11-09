@@ -1,4 +1,5 @@
 using Wbskt.Auth.Host.Services;
+using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Billing;
 using Wbskt.Models.Billing;
 
@@ -12,4 +13,8 @@ internal sealed class FixedTenantLimits(PlanLimits? limits = null) : ITenantLimi
     public Task<PlanLimits> ForTenantAsync(int tenantId, CancellationToken cancellationToken) => Task.FromResult(Limits);
 
     public Task<PlanLimits> ForTenantAsync(Guid tenantRef, CancellationToken cancellationToken) => Task.FromResult(Limits);
+
+    public Task<Error> WithSeatsAsync(Error refusal, Guid tenantRef, CancellationToken cancellationToken) => Task.FromResult(refusal);
+
+    public Task<Error> WithSeatsAsync(Error refusal, int tenantId, CancellationToken cancellationToken) => Task.FromResult(refusal);
 }

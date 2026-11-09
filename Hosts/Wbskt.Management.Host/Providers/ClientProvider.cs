@@ -35,6 +35,15 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         return result;
     }
 
+    public async Task<int> GetRegisteredCountByAccountAsync(int workspaceId, int? tenantId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteScalarAsync<int>("dbo.Client_GetCountBy_Account", p =>
+        {
+            p.AddWithValue("@WorkspaceId", workspaceId);
+            p.AddWithValue("@TenantId", (object?)tenantId ?? DBNull.Value);
+        }, cancellationToken);
+    }
+
     public async Task<IPagedList<Client>> GetAllAsync(int workspaceId, IReadOnlyCollection<ClientStatus>? statuses, string? name, string? tag,
         int skip, int take, CancellationToken cancellationToken = default)
     {

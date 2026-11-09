@@ -268,7 +268,16 @@ Two reads show a plan against what has been used, both behind `billing.read` (ev
   this month's use pooled across the tenant's workspaces (`dbo.TenantWorkspaces`, as the limits are
   checked), this workspace's share and cap, and its credits per day from the ledger
   (`dbo.WorkspaceUsage_GetSummary`, `dbo.WorkspaceCreditUsage_GetDaily`). Credits are counted as
-  `dbo.Run_Start` counts them, so a run is refused exactly when `used` reaches `limit`.
+  `dbo.Run_Start` counts them, so a run is refused exactly when `used` reaches `limit` plus `topUp`.
+  `topUpExpiresAt` and `topUpExpiring` say when the soonest-expiring credits bought run out and how many,
+  and the workspace's `creditsReserved` is what its runs going still hold of their budgets, which
+  `dbo.Run_Start` counts against the workspace's cap with what it has spent.
+
+A refusal at a plan's limit (`PLAN_CLIENT_LIMIT_REACHED`, `PLAN_WORKSPACE_LIMIT_REACHED`,
+`PLAN_MEMBER_LIMIT_REACHED`) carries the numbers behind it as Problem Details extensions: `plan`, `limit`
+and `current`, read when the refusal is made. After a downgrade `current` can be past `limit`: clients
+already registered keep working, and only new ones are refused, so "You have 140 clients; Maker allows
+100" is the whole explanation.
 
 The split follows where the data lives: seats are counted in the auth database, everything else in the
 main one, and neither host calls the other to answer. Messages are on the management read, from the

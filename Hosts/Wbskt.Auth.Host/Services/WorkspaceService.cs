@@ -69,7 +69,7 @@ internal sealed class WorkspaceService : IWorkspaceService
         catch (SqlException ex) when (ex.Number == 50030)
         {
             _logger.LogWarning("Workspace creation refused: tenant {TenantId} is at its plan's limit of {Limit} workspaces", tenant.Id, limits.Workspaces);
-            return Result<WorkspaceResponse>.Failure(SqlGuardErrors.PlanWorkspaceLimitReached);
+            return Result<WorkspaceResponse>.Failure(await _limits.WithSeatsAsync(SqlGuardErrors.PlanWorkspaceLimitReached, tenant.Id, cancellationToken));
         }
 
         _logger.LogInformation("Workspace '{WorkspaceName}' created successfully with RefId: {RefId}", request.Name, refId);

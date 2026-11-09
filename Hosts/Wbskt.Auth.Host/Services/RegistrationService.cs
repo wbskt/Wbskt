@@ -179,7 +179,9 @@ internal sealed class RegistrationService : IRegistrationService
             {
                 _logger.LogWarning("Registration for {Username} completed but the inviting tenant is at its plan's member limit", username);
                 _metrics.RecordRegistration("member_limit");
-                return Result.Failure(SqlGuardErrors.PlanMemberLimitReached);
+                return Result.Failure(invitation is null
+                    ? SqlGuardErrors.PlanMemberLimitReached
+                    : await _limits.WithSeatsAsync(SqlGuardErrors.PlanMemberLimitReached, invitation.TenantRef, cancellationToken));
             }
 
             // Another account's live email-change undo holds the address. Answered like an address in

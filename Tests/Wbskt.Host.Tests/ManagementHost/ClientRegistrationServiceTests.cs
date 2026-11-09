@@ -26,7 +26,7 @@ public sealed class ClientRegistrationServiceTests
     private const int WorkspaceId = 7;
 
     [Fact]
-    public async Task A_registration_the_plan_has_no_room_for_is_a_409_naming_the_plans_number()
+    public async Task A_registration_the_plan_has_no_room_for_is_a_409_naming_the_plan_its_limit_and_the_clients_held()
     {
         var clients = new Mock<IClientProvider>();
         var policies = new Mock<IRegistrationPolicyProvider>();
@@ -36,6 +36,7 @@ public sealed class ClientRegistrationServiceTests
         clients
             .Setup(p => p.InsertClientAsync(WorkspaceId, policy.Id, "sensor", It.IsAny<byte[]>(), ClientStatus.Registered, new PlanCeiling(25, 3), It.IsAny<CancellationToken>()))
             .ThrowsAsync(SqlExceptions.WithNumber(50025, "The plan has reached its client limit."));
+        clients.Setup(p => p.GetRegisteredCountByAccountAsync(WorkspaceId, 3, It.IsAny<CancellationToken>())).ReturnsAsync(140);
         var plans = new FixedWorkspacePlans(PlanCode.Maker, tenantId: 3, adjust: l => l with { Clients = 25 });
         using var metrics = new ManagementMetrics();
         var service = new ClientRegistrationService(clients.Object, policies.Object, bus.Object, NullLogger<ClientRegistrationService>.Instance, metrics, plans);
@@ -47,7 +48,11 @@ public sealed class ClientRegistrationServiceTests
         var result = (await controller.Initiate(new ClientRegistrationRequest("PIN", "sensor"), CancellationToken.None)).Result;
 
         ProblemAssert.Is(result, StatusCodes.Status409Conflict).Should().Be("PLAN_CLIENT_LIMIT_REACHED");
-        ProblemAssert.Detail(result).Should().Contain("25");
+        ProblemAssert.Detail(result).Should().Contain("You have 140 clients; Maker allows 25");
+        var problem = (ProblemDetails)((ObjectResult)result!).Value!;
+        problem.Extensions["plan"].Should().Be("Maker");
+        problem.Extensions["limit"].Should().Be(25L);
+        problem.Extensions["current"].Should().Be(140L);
         bus.Verify(b => b.PublishAsync(It.IsAny<ClientRegistrationInitiatedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }
