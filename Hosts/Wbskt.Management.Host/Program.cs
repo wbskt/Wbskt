@@ -103,7 +103,12 @@ public static class Program
         }
         // Each workspace's copy of its tenant's plan, kept from the auth host; see WorkspaceAccountSync.
         builder.Services.AddWorkspacePlans(builder.Configuration);
-        builder.Services.Configure<BillingOptions>(builder.Configuration.GetSection(BillingOptions.SectionName));
+        // A paid throttle at or under the allowance would throttle Maker and Pro as Free is, and share the
+        // 100% notice, so its own announcement would never go out.
+        builder.Services.AddOptions<BillingOptions>()
+            .Bind(builder.Configuration.GetSection(BillingOptions.SectionName))
+            .Validate(o => o.PaidMessageThrottleMultiple > 1, "Billing:PaidMessageThrottleMultiple must be more than 1.")
+            .ValidateOnStart();
         builder.Services.AddScoped<WorkspaceAccountSync>();
         builder.Services.AddScoped<IWorkspaceCreditCapProvider, WorkspaceCreditCapProvider>();
         builder.Services.AddScoped<IWorkspaceCreditCapService, WorkspaceCreditCapService>();
