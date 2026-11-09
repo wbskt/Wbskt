@@ -986,7 +986,7 @@ function buildPipeline() {
   $('#pipeline').innerHTML = `
   <div class="lane"><div class="lane-head"><h3>Backend · wbskt/Wbskt</h3><span class="meta">build-images.yml → deploy.yml · GitHub-hosted ubuntu-latest (public repo) · environment <code>production</code></span></div>
     <div class="stages">
-      <div class="stage"><b>Push to master</b><span>PRs run the gate only; no images. PRs touching only Docs/, Markdown or the Python SDK skip it</span></div>
+      <div class="stage"><b>Push to master</b><span>PRs run the gate only; no images. PRs touching only Docs/ or Markdown skip it</span></div>
       <div class="stage"><b>Gate</b><span>unit, integration, package scan, upgrade rehearsal, and E2E as 5 parallel legs (3 main-pass shards, rate-limit, outage); about 5 min</span></div>
       <div class="stage"><b>Publish 6 images</b><span>auth, management, gateway-ws, gateway-mqtt, engine, migrator → GHCR as sha-&lt;short&gt; + latest</span></div>
       <div class="stage"><b>Deploy workflow</b><span>queued on deploy-production; approval if production has reviewers</span></div>
