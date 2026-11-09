@@ -48,6 +48,35 @@ x-host-env: &host-env
   # Traces, metrics and logs, all to the collector below. Each service sets its own OTEL_SERVICE_NAME.
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
 
+# What both client gateways share: they validate client tokens and check revocations the same way,
+# and run the same Gateway.Core. stop_grace_period outlasts a gateway's own 10 s wait for its sessions
+# to announce their end; Docker's default 10 s would kill it part way through.
+x-gateway-env: &gateway-env
+  <<: *host-env
+  # Signs nothing; validates client tokens against management's public keys, fetched on first use.
+  Jwt__TrustedJwksUrl: http://management:8080/.well-known/jwks.json
+  # Client revocations the management host records, checked when a client connects.
+  ConnectionStrings__Redis: redis:6379
+
+x-gateway: &gateway
+  volumes:
+    - ../config:/Config:ro
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:8080/healthz/ready"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+    start_period: 20s
+  depends_on:
+    rabbitmq:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  networks: [edge, backend]
+  restart: unless-stopped
+  logging: *default-logging
+  stop_grace_period: 30s
+
 services:
   traefik:
     # v3.1/v3.5 fail against recent Docker Engine releases (their vendored Docker client
@@ -338,6 +367,7 @@ services:
   # "socket". Clients still reach it as wss://ws.${DOMAIN}/ws; only names on this side changed. See
   # "The socket service became gateway-ws" in deploy/README.md for the deploy that renamed it.
   gateway-ws:
+    <<: *gateway
     image: ${REGISTRY:-ghcr.io/wbskt}/wbskt-gateway-ws:${IMAGE_TAG:-latest}
     build:
       context: ../..
@@ -346,28 +376,8 @@ services:
         HOST_PROJECT: Hosts/Wbskt.Gateway.WebSocket.Host/Wbskt.Gateway.WebSocket.Host.csproj
         HOST_DLL: Wbskt.Gateway.WebSocket.Host.dll
     environment:
-      <<: *host-env
+      <<: *gateway-env
       OTEL_SERVICE_NAME: wbskt-gateway-ws
-      # Signs nothing; validates client tokens against management's public keys, fetched on first use.
-      Jwt__TrustedJwksUrl: http://management:8080/.well-known/jwks.json
-      # Client revocations the management host records, checked when a client connects.
-      ConnectionStrings__Redis: redis:6379
-    volumes:
-      - ../config:/Config:ro
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz/ready"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks: [edge, backend]
-    restart: unless-stopped
-    logging: *default-logging
     # Declared rather than left to `--scale`, because `docker compose up -d gateway-ws` converges to
     # whatever is declared here - a deploy that omitted --scale would silently drop a 3-replica
     # tier back to 1.
@@ -390,6 +400,7 @@ services:
   # on its mqtts entrypoint, or as plain mqtt://mqtt.${DOMAIN}:1883 for boards without TLS. Both reach
   # the gateway as plain MQTT on 1883. Port 8080 is health checks and metrics only.
   gateway-mqtt:
+    <<: *gateway
     image: ${REGISTRY:-ghcr.io/wbskt}/wbskt-gateway-mqtt:${IMAGE_TAG:-latest}
     build:
       context: ../..
@@ -398,28 +409,8 @@ services:
         HOST_PROJECT: Hosts/Wbskt.Gateway.MQTT.Host/Wbskt.Gateway.MQTT.Host.csproj
         HOST_DLL: Wbskt.Gateway.MQTT.Host.dll
     environment:
-      <<: *host-env
+      <<: *gateway-env
       OTEL_SERVICE_NAME: wbskt-gateway-mqtt
-      # Signs nothing; validates client tokens against management's public keys, fetched on first use.
-      Jwt__TrustedJwksUrl: http://management:8080/.well-known/jwks.json
-      # Client revocations the management host records, checked when a client connects.
-      ConnectionStrings__Redis: redis:6379
-    volumes:
-      - ../config:/Config:ro
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz/ready"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks: [edge, backend]
-    restart: unless-stopped
-    logging: *default-logging
     deploy:
       replicas: ${GATEWAY_MQTT_REPLICAS:-1}
     labels:
