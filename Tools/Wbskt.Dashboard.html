@@ -133,10 +133,11 @@
         }
         .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.1rem; padding: 4px 10px 18px; }
         .brand-mark {
-            width: 30px; height: 30px; border-radius: 9px;
-            background: linear-gradient(135deg, var(--primary), var(--accent));
-            display: grid; place-items: center; color: #fff; font-size: 0.8rem; font-weight: 800;
+            width: 30px; height: 30px; border-radius: 7px;
+            background: #e85d26;
+            color: #fff;
         }
+        .brand-mark svg { display: block; width: 100%; height: 100%; fill: currentColor; }
         .brand small { display: block; font-weight: 500; font-size: 0.72rem; color: var(--text-faint); }
         .nav-section { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-faint); padding: 14px 12px 6px; font-weight: 600; }
         .nav-item {
@@ -340,7 +341,7 @@
 <div id="auth-screen">
     <div class="auth-wrap">
         <div class="brand" style="justify-content:center; padding-bottom: 20px;">
-            <div class="brand-mark">WB</div>
+            <div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><path d="M17.58 44.62 14.4 19.38H22.64L23.04 28.03Q23.13 30.62 23.27 33.6Q23.36 35.52 23.36 37.71Q24.1 35.57 24.87 33.62Q26.04 30.65 27.06 28.03L30.51 19.38H37.51L38.01 28.03Q38.16 30.62 38.37 33.6Q38.5 35.54 38.53 37.71Q39.22 35.57 39.92 33.65Q40.99 30.67 41.96 28.03L45.23 19.38H53.6L42 44.62H33.97L32.86 35.57Q32.7 34.28 32.62 32.52Q32.54 30.76 32.48 28.91Q32.48 28.73 32.45 28.52Q32.39 28.7 32.32 28.91Q31.64 30.74 30.98 32.5Q30.31 34.26 29.72 35.57L25.62 44.62Z"/></svg></div>
             <div>Wbskt <small>Test dashboard</small></div>
         </div>
 
@@ -416,7 +417,7 @@
 <div class="app">
     <aside id="sidebar">
         <div class="brand">
-            <div class="brand-mark">WB</div>
+            <div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><path d="M17.58 44.62 14.4 19.38H22.64L23.04 28.03Q23.13 30.62 23.27 33.6Q23.36 35.52 23.36 37.71Q24.1 35.57 24.87 33.62Q26.04 30.65 27.06 28.03L30.51 19.38H37.51L38.01 28.03Q38.16 30.62 38.37 33.6Q38.5 35.54 38.53 37.71Q39.22 35.57 39.92 33.65Q40.99 30.67 41.96 28.03L45.23 19.38H53.6L42 44.62H33.97L32.86 35.57Q32.7 34.28 32.62 32.52Q32.54 30.76 32.48 28.91Q32.48 28.73 32.45 28.52Q32.39 28.7 32.32 28.91Q31.64 30.74 30.98 32.5Q30.31 34.26 29.72 35.57L25.62 44.62Z"/></svg></div>
             <div>Wbskt <small>Test dashboard</small></div>
         </div>
         <nav id="nav">

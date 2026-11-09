@@ -39,7 +39,8 @@ code, .mono { font-family: var(--font-mono); font-size: 11.5px; }
 header.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--app); box-shadow: inset 0 -1px 0 var(--line-strong); }
 .bar-top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; min-height: 48px; padding-block: 6px; }
 .brand { display: flex; align-items: center; gap: 8px; color: var(--ink); }
-.mark { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 5px; background: var(--accent); color: #fff; font: 700 11px/1 var(--font-sans); }
+.mark { display: block; flex: none; width: 20px; height: 20px; border-radius: 5px; background: var(--accent); color: #fff; }
+.mark svg { display: block; width: 100%; height: 100%; fill: currentColor; }
 .wordmark { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
 .product { font-size: 12px; color: var(--faint); padding-left: 8px; border-left: 1px solid var(--line-strong); }
 nav.tabs { display: flex; gap: 2px; padding: 2px; background: var(--canvas); border: 1px solid var(--line); border-radius: var(--radius); overflow-x: auto; scrollbar-width: none; max-width: 100%; }
@@ -171,7 +172,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
 <body>
 <header class="bar">
   <div class="wrap bar-top">
-    <span class="brand"><span class="mark">W</span><span class="wordmark">wbskt</span><span class="product">backend roadmap</span></span>
+    <span class="brand"><span class="mark" aria-hidden="true"><svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><path d="M17.58 44.62 14.4 19.38H22.64L23.04 28.03Q23.13 30.62 23.27 33.6Q23.36 35.52 23.36 37.71Q24.1 35.57 24.87 33.62Q26.04 30.65 27.06 28.03L30.51 19.38H37.51L38.01 28.03Q38.16 30.62 38.37 33.6Q38.5 35.54 38.53 37.71Q39.22 35.57 39.92 33.65Q40.99 30.67 41.96 28.03L45.23 19.38H53.6L42 44.62H33.97L32.86 35.57Q32.7 34.28 32.62 32.52Q32.54 30.76 32.48 28.91Q32.48 28.73 32.45 28.52Q32.39 28.7 32.32 28.91Q31.64 30.74 30.98 32.5Q30.31 34.26 29.72 35.57L25.62 44.62Z"/></svg></span><span class="wordmark">wbskt</span><span class="product">backend roadmap</span></span>
     <nav class="tabs" aria-label="Views">
       <a href="#overview">Overview</a>
       <a href="#m2">M2</a>

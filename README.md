@@ -1,3 +1,5 @@
+<img src="Docs/Brand/wbskt-logo.svg" alt="" width="64" height="64">
+
 # Wbskt
 
 Wbskt is a real-time platform for connecting boards, scripts and apps. A client (an ESP32, a
