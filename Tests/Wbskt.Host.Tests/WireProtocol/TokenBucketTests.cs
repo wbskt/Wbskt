@@ -1,6 +1,6 @@
 using Wbskt.Protocol;
 
-namespace Wbskt.Host.Tests.ClientSdk;
+namespace Wbskt.Host.Tests.WireProtocol;
 
 public sealed class TokenBucketTests
 {

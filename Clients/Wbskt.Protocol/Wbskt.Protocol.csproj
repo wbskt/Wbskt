@@ -6,10 +6,9 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
 
-    <IsPackable>true</IsPackable>
-    <PackageId>Wbskt.Protocol</PackageId>
-    <Version>$(SdkPackageVersion)</Version>
-    <Description>The Wbskt client protocol's message types, payloads and limits, shared by the Wbskt.Client SDK and the platform. See Docs/Client.Protocol.md.</Description>
+    <!-- The platform's own copy of the client protocol's types (Docs/Client.Protocol.md). Not
+         published: each SDK carries its own, and Tests/Conformance keeps them in step. -->
+    <IsPackable>false</IsPackable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>

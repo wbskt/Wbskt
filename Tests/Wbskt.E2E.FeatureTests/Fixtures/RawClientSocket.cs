@@ -8,7 +8,7 @@ namespace Wbskt.E2E.FeatureTests.Fixtures;
 
 /// <summary>
 /// A client on the socket host without the SDK: a bare <see cref="ClientWebSocket"/> that opens the
-/// connection the way <c>Wbskt.Client.Sdk</c> does (<c>{SocketWsBaseUrl}/ws</c>, the client token as a
+/// connection the way the Wbskt client SDK does (<c>{SocketWsBaseUrl}/ws</c>, the client token as a
 /// bearer <c>Authorization</c> header, the <see cref="WebSocketBinding.Subprotocol"/> subprotocol) and then sends
 /// whatever it is given. The SDK and the host share <c>Wbskt.Protocol</c>, so a scenario driven only
 /// through the SDK cannot see a protocol regression the two make together; this can send what the SDK

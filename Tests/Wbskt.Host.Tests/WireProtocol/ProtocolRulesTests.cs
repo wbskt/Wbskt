@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Wbskt.Protocol;
 
-namespace Wbskt.Host.Tests.ClientSdk;
+namespace Wbskt.Host.Tests.WireProtocol;
 
 /// <summary>
 /// The client contract is decided in one place. These pin the decisions every host now shares: a

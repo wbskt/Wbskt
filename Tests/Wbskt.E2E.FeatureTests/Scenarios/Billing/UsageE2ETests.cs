@@ -1,7 +1,6 @@
 using System.Net;
 using FluentAssertions;
-using Wbskt.Client.Sdk;
-using Wbskt.Client.Sdk.Models;
+using Wbskt;
 using Wbskt.E2E.FeatureTests.Fixtures;
 using Wbskt.Auth.Models;
 using Wbskt.Management.Models;

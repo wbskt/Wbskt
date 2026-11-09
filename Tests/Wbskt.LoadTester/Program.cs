@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using Wbskt.Client.Sdk;
-using Wbskt.Client.Sdk.Models;
+using Wbskt;
 using Wbskt.LoadTester;
 
 Console.WriteLine("WBSKT Load Tester");

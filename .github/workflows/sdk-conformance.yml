@@ -1,13 +1,13 @@
 name: SDK conformance
 
-# Runs the client protocol checklist (Tests/Conformance) against the .NET SDK in this repository and
-# the Python SDK from wbskt/Wbskt.Python master, so a change to the suite is checked against both.
+# Runs the client protocol checklist (Tests/Conformance) against the .NET SDK from wbskt/Wbskt.DotNet
+# and the Python SDK from wbskt/Wbskt.Python, so a change to the suite is checked against both.
 # The suite fakes the API and socket hosts, so no database, broker or Wbskt host is started.
 
 on:
   pull_request:
     paths:
-      - 'Clients/**'
+      - 'Clients/Wbskt.Protocol/**'
       - 'Tests/Conformance/**'
       - 'Docs/Client.Protocol.md'
       - 'Docs/Client.Protocol.WebSocket.md'
@@ -15,7 +15,7 @@ on:
   push:
     branches: [master]
     paths:
-      - 'Clients/**'
+      - 'Clients/Wbskt.Protocol/**'
       - 'Tests/Conformance/**'
       - '.github/workflows/sdk-conformance.yml'
 
@@ -41,40 +41,41 @@ jobs:
           python-version: '3.13'
       - run: pip install -r requirements.txt
 
-      # A protocol change merges here first, so its Python half can't be on Wbskt.Python master yet.
-      # A branch of the same name there is used instead, when one exists.
-      - name: Pick the Wbskt.Python branch
-        id: python-ref
-        if: matrix.sdk == 'python'
+      # A protocol change merges here first, so its SDK half can't be on the SDK's master yet. A
+      # branch of the same name there is used instead, when one exists.
+      - name: Pick the SDK branch
+        id: sdk-ref
         env:
           BRANCH: ${{ github.head_ref }}
+          REPO: ${{ matrix.sdk == 'python' && 'wbskt/Wbskt.Python' || 'wbskt/Wbskt.DotNet' }}
         run: |
           ref=master
-          if [[ -n "$BRANCH" ]] && git ls-remote --exit-code --heads https://github.com/wbskt/Wbskt.Python.git "$BRANCH" > /dev/null; then
+          if [[ -n "$BRANCH" ]] && git ls-remote --exit-code --heads "https://github.com/$REPO.git" "$BRANCH" > /dev/null; then
             ref="$BRANCH"
           fi
-          echo "Using wbskt/Wbskt.Python@$ref"
+          echo "Using $REPO@$ref"
+          echo "repo=$REPO" >> "$GITHUB_OUTPUT"
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
-        if: matrix.sdk == 'python'
         with:
-          repository: wbskt/Wbskt.Python
-          ref: ${{ steps.python-ref.outputs.ref }}
-          path: wbskt-python
+          repository: ${{ steps.sdk-ref.outputs.repo }}
+          ref: ${{ steps.sdk-ref.outputs.ref }}
+          path: sdk
+
       - name: Python harness
         if: matrix.sdk == 'python'
         run: |
-          pip install -e "$GITHUB_WORKSPACE/wbskt-python"
-          echo "WBSKT_HARNESS=python $GITHUB_WORKSPACE/wbskt-python/conformance/harness.py" >> "$GITHUB_ENV"
+          pip install -e "$GITHUB_WORKSPACE/sdk"
+          echo "WBSKT_HARNESS=python $GITHUB_WORKSPACE/sdk/conformance/harness.py" >> "$GITHUB_ENV"
 
       - uses: actions/setup-dotnet@v4
         if: matrix.sdk == 'dotnet'
         with:
-          global-json-file: global.json
+          global-json-file: sdk/global.json
       - name: .NET harness
         if: matrix.sdk == 'dotnet'
         run: |
-          dotnet build harnesses/dotnet/Wbskt.Conformance.Harness.csproj -c Release -o "$RUNNER_TEMP/harness" --nologo -v q
+          dotnet build "$GITHUB_WORKSPACE/sdk/conformance/Wbskt.Conformance.Harness" -c Release -o "$RUNNER_TEMP/harness" --nologo -v q
           echo "WBSKT_HARNESS=dotnet $RUNNER_TEMP/harness/Wbskt.Conformance.Harness.dll" >> "$GITHUB_ENV"
 
       - run: python -m pytest -v

@@ -1,6 +1,6 @@
 name: Nightly conformance
 
-# Runs Tests/Conformance/test_live.py with the .NET harness against the real hosts, started from
+# Runs Tests/Conformance/test_live.py with the .NET harness (wbskt/Wbskt.DotNet master) against the real hosts, started from
 # source as in nightly-stress.yml (the setup is copied from there; keep them in step). The pull-request
 # suite (sdk-conformance.yml) checks the SDKs against fake_wbskt.py; this checks that what the fake does
 # is still what the gateway does. Nothing here gates a merge or an image.
@@ -117,12 +117,17 @@ jobs:
         with:
           python-version: '3.13'
 
+      - uses: actions/checkout@v4
+        with:
+          repository: wbskt/Wbskt.DotNet
+          path: wbskt-dotnet
+
       - name: Live scenarios with the .NET harness
         working-directory: Tests/Conformance
         run: |
           set -o pipefail
           pip install -r requirements.txt
-          dotnet build harnesses/dotnet/Wbskt.Conformance.Harness.csproj -c Release -o "$RUNNER_TEMP/harness" --nologo -v q
+          dotnet build "$GITHUB_WORKSPACE/wbskt-dotnet/conformance/Wbskt.Conformance.Harness" -c Release -o "$RUNNER_TEMP/harness" --nologo -v q
           WBSKT_HARNESS="dotnet $RUNNER_TEMP/harness/Wbskt.Conformance.Harness.dll" \
             python -m pytest -v test_live.py 2>&1 | tee "$GITHUB_WORKSPACE/live-output.txt"
 

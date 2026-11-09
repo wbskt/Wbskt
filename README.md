@@ -31,8 +31,8 @@ architecture, what workflows can do, and the design patterns it is built from.
 
 ```
 Hosts/          the four ASP.NET Core hosts
-Clients/        Wbskt.Client.Sdk (the .NET client SDK), Wbskt.Api.Client (typed clients for the
-                auth and management APIs), Wbskt.Simulator, a test dashboard page
+Clients/        Wbskt.Protocol (the platform's copy of the client protocol types), Wbskt.Api.Client
+                (typed clients for the auth and management APIs), Wbskt.Simulator, a test dashboard page
 Databases/      Wbskt.Database and Wbskt.Database.Auth (SQL projects) and migrations
 Wbskt.Workflow* the workflow model, builder and abstractions the engine runs
 Wbskt.Infrastructure, Wbskt.Primitives, Models, Events

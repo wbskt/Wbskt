@@ -264,4 +264,4 @@ And, if it takes firmware updates (§4.4), when it:
 It also conforms to each binding it speaks; see that binding's checklist
 ([WebSocket](Client.Protocol.WebSocket.md#5-conformance-checklist)).
 
-The .NET SDK (`Clients/Wbskt.Client.Sdk`) is the reference implementation.
+The .NET SDK ([wbskt/Wbskt.DotNet](https://github.com/wbskt/Wbskt.DotNet)) is the reference implementation.

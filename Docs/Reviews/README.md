@@ -28,7 +28,7 @@ breaks from [Coding.Conventions.md](../Coding.Conventions.md) (console:
 | Lane | Area | Also checks |
 |---|---|---|
 | Auth and management | `Hosts/Wbskt.Auth.Host`, `Hosts/Wbskt.Management.Host`, `Wbskt.Infrastructure`, `Models`, `Events` | `Result` vs fault handling, caching and invalidation, SignalR events and their console listeners, background jobs that run on every replica, rate limits |
-| Gateways and SDKs | `Wbskt.Gateway.Core`, gateway hosts, `Clients/` (.NET), wbskt/Wbskt.Python, wbskt/Wbskt.Arduino | protocol and close codes match the docs in `Docs/`, conformance drift, reconnect and offline buffer behaviour, token handling |
+| Gateways and SDKs | `Wbskt.Gateway.Core`, gateway hosts, wbskt/Wbskt.DotNet, wbskt/Wbskt.Python, wbskt/Wbskt.Arduino | protocol and close codes match the docs in `Docs/`, conformance drift, reconnect and offline buffer behaviour, token handling |
 | Workflow engine | `Wbskt.Workflow*`, the engine host | run lifecycle, leases and leader election, retries and idempotency, waits and long-running runs, node contracts vs the console designer |
 | Database | `Databases/` | see "Database checks" below |
 | Console | wbskt/Wbskt.Console | feature-service structure, calls to endpoints that changed or no longer exist, unversioned API calls, dead components, style budgets, live-update handlers |
