@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Threading.Channels;
 using MQTTnet;
@@ -30,6 +31,7 @@ public sealed class MqttConnection : ClientConnectionBase
     private readonly object _endGate = new();
     private DisconnectReason? _ended;
 
+    [SetsRequiredMembers]
     public MqttConnection(MqttServer server, ClientAdmission admission, int inboxCapacity)
     {
         if (!admission.IsAdmitted)
@@ -39,6 +41,8 @@ public sealed class MqttConnection : ClientConnectionBase
 
         _server = server;
         Admission = admission;
+        ClientId = admission.Identity.ClientId;
+        WorkspaceId = admission.Identity.WorkspaceId;
         MqttClientId = admission.Identity.ClientRefId.ToString("D");
         UpTopic = MqttBinding.UpTopic(admission.Identity.ClientRefId);
         DownTopic = MqttBinding.DownTopic(admission.Identity.ClientRefId);
@@ -120,17 +124,7 @@ public sealed class MqttConnection : ClientConnectionBase
         _inbound.Writer.TryComplete();
     }
 
-    public override async Task CloseTransportAsync(DisconnectReason reason)
-    {
-        try
-        {
-            await DisconnectAsync(reason, reason.Describe());
-        }
-        catch
-        {
-            // The connection is going away regardless.
-        }
-    }
+    public override Task CloseTransportAsync(DisconnectReason reason) => TryDisconnectAsync(reason, reason.Describe());
 
     protected override Task SendTextAsync(string text, CancellationToken cancellationToken)
     {
@@ -153,17 +147,20 @@ public sealed class MqttConnection : ClientConnectionBase
 
     protected override async Task CloseAsync(DisconnectReason reason, string description)
     {
+        await TryDisconnectAsync(reason, description);
+        Ended(reason);
+    }
+
+    // Never throws: the connection is going away whether or not the DISCONNECT could be sent.
+    private async Task TryDisconnectAsync(DisconnectReason reason, string description)
+    {
         try
         {
             await DisconnectAsync(reason, description);
         }
         catch
         {
-            // The DISCONNECT could not be sent; the connection still ends below.
-        }
-        finally
-        {
-            Ended(reason);
+            // Nothing to do: the client is gone or the server is stopping.
         }
     }
 

@@ -1,23 +1,20 @@
+using System.Collections;
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Options;
-using Microsoft.IdentityModel.Tokens;
 using MQTTnet;
-using MQTTnet.Formatter;
-using MQTTnet.Packets;
 using MQTTnet.Protocol;
 using MQTTnet.Server;
-using Wbskt.Gateway.Core.Infrastructure;
 using Wbskt.Gateway.Core.Services;
 using Wbskt.Gateway.MQTT.Host.Infrastructure;
-using Wbskt.Infrastructure.Security;
-using Wbskt.Protocol;
+using Wbskt.Gateway.MQTT.Host.Models;
 
 namespace Wbskt.Gateway.MQTT.Host.Services;
 
 /// <summary>
-/// The MQTT transport: an embedded MQTTnet server that is not a broker. It authenticates CONNECT with
-/// the client token, holds each client to its own two topics, and hands every PUBLISH to the client's
-/// session instead of routing it. Who may connect and what a session means (registering the client,
+/// The MQTT transport: an embedded MQTTnet server that is not a broker. It wires the server's events:
+/// CONNECT goes to <see cref="MqttConnectAuthenticator"/>, each client is held to its own two topics,
+/// every PUBLISH goes to the client's session instead of being routed, and a disconnect is classified
+/// by <see cref="MqttDisconnectClassifier"/>. Who may connect and what a session means (registering the client,
 /// announcing it, budgeting and routing its messages, recording its end) is Gateway.Core's
 /// <see cref="ClientSessions"/>, the same as for the WebSocket gateway.
 /// </summary>
@@ -27,22 +24,23 @@ public sealed class MqttGateway : IHostedService
     private static readonly TimeSpan StopGrace = TimeSpan.FromSeconds(10);
 
     private readonly ClientSessions _sessions;
-    private readonly JwtTrust _trust;
+    private readonly MqttConnectAuthenticator _authenticator;
     private readonly MqttGatewayOptions _options;
     private readonly IHostApplicationLifetime _lifetime;
     private readonly ILogger<MqttGateway> _logger;
+    private readonly MqttServer _server;
     private readonly ConcurrentDictionary<MqttConnection, Task> _running = new();
 
     public MqttGateway(
         ClientSessions sessions,
-        JwtTrust trust,
+        MqttConnectAuthenticator authenticator,
         IOptions<MqttGatewayOptions> options,
         IHostApplicationLifetime lifetime,
         MqttNetLoggerBridge mqttLogger,
         ILogger<MqttGateway> logger)
     {
         _sessions = sessions;
-        _trust = trust;
+        _authenticator = authenticator;
         _options = options.Value;
         _lifetime = lifetime;
         _logger = logger;
@@ -51,21 +49,19 @@ public sealed class MqttGateway : IHostedService
         var serverOptions = new MqttServerOptionsBuilder()
             .WithPersistentSessions(false)
             .Build();
-        Server = new MqttServerFactory().CreateMqttServer(serverOptions, [Listener], mqttLogger);
-        Server.ValidatingConnectionAsync += ValidateConnectionAsync;
-        Server.ClientConnectedAsync += StartSessionAsync;
-        Server.ClientDisconnectedAsync += EndConnectionAsync;
-        Server.InterceptingPublishAsync += ReceivePublishAsync;
-        Server.InterceptingSubscriptionAsync += CheckSubscriptionAsync;
+        _server = new MqttServerFactory().CreateMqttServer(serverOptions, [Listener], mqttLogger);
+        _server.ValidatingConnectionAsync += ValidateConnectionAsync;
+        _server.ClientConnectedAsync += StartSessionAsync;
+        _server.ClientDisconnectedAsync += EndConnectionAsync;
+        _server.InterceptingPublishAsync += ReceivePublishAsync;
+        _server.InterceptingSubscriptionAsync += CheckSubscriptionAsync;
     }
 
-    public MqttServer Server { get; }
-
-    public GuardedTcpServerAdapter Listener { get; }
+    internal GuardedTcpServerAdapter Listener { get; }
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        await Server.StartAsync();
+        await _server.StartAsync();
         _logger.LogInformation("MQTT gateway listening on port {Port}.", Listener.Port);
     }
 
@@ -73,7 +69,7 @@ public sealed class MqttGateway : IHostedService
     {
         // Stopping cancels every receive loop (the sessions' token is ApplicationStopping), and each
         // session then sends its client DISCONNECT 0x8B and announces its end while the bus is still up.
-        Server.AcceptNewConnections = false;
+        _server.AcceptNewConnections = false;
         try
         {
             await Task.WhenAll(_running.Values).WaitAsync(StopGrace, cancellationToken);
@@ -83,7 +79,7 @@ public sealed class MqttGateway : IHostedService
             _logger.LogWarning("{Count} MQTT sessions had not ended when the gateway stopped.", _running.Count);
         }
 
-        await Server.StopAsync(new MqttServerStopOptions
+        await _server.StopAsync(new MqttServerStopOptions
         {
             DefaultClientDisconnectOptions = new MqttServerClientDisconnectOptions { ReasonCode = MqttDisconnectReasonCode.ServerShuttingDown }
         });
@@ -91,64 +87,16 @@ public sealed class MqttGateway : IHostedService
 
     private async Task ValidateConnectionAsync(ValidatingConnectionEventArgs args)
     {
-        if (args.ProtocolVersion is not (MqttProtocolVersion.V311 or MqttProtocolVersion.V500))
+        var login = await _authenticator.AuthenticateAsync(
+            new MqttConnectRequest(args.ProtocolVersion, args.ClientId, args.UserName, args.Password), args.CancellationToken);
+        if (!login.IsAccepted)
         {
-            args.ReasonCode = MqttConnectReasonCode.UnsupportedProtocolVersion;
+            args.ReasonCode = login.ReasonCode;
             return;
         }
 
-        if (string.IsNullOrEmpty(args.Password))
+        args.SessionItems[MqttConnection.SessionItemKey] = new MqttConnection(_server, login.Admission, _options.InboxCapacity)
         {
-            args.ReasonCode = MqttConnectReasonCode.BadUserNameOrPassword;
-            return;
-        }
-
-        System.Security.Claims.ClaimsPrincipal user;
-        try
-        {
-            user = await _trust.ValidateAsync(args.Password);
-        }
-        catch (SecurityTokenException)
-        {
-            args.ReasonCode = MqttConnectReasonCode.BadUserNameOrPassword;
-            return;
-        }
-        catch (Exception ex)
-        {
-            // The issuer's keys could not be fetched: not the client's fault, so it should retry.
-            _logger.LogWarning(ex, "Could not validate an MQTT client's token.");
-            args.ReasonCode = MqttConnectReasonCode.ServerUnavailable;
-            return;
-        }
-
-        var admission = await _sessions.AdmitAsync(user, args.CancellationToken);
-        if (!admission.IsAdmitted)
-        {
-            args.ReasonCode = MqttReasonCodes.For(admission.Refusal.Value);
-            return;
-        }
-
-        var clientRefId = admission.Identity.ClientRefId;
-
-        // The client id is the client's RefId, so MQTT's own rule (one connection per client id) agrees
-        // with ConnectionManager's, and a client cannot take over another's session.
-        if (!Guid.TryParse(args.ClientId, out var claimedId) || claimedId != clientRefId)
-        {
-            _logger.LogWarning("Refusing an MQTT connection for client {ClientRefId}: its client id is {MqttClientId}.", clientRefId, args.ClientId);
-            args.ReasonCode = MqttConnectReasonCode.ClientIdentifierNotValid;
-            return;
-        }
-
-        if (!Guid.TryParse(args.UserName, out var userName) || userName != clientRefId)
-        {
-            args.ReasonCode = MqttConnectReasonCode.BadUserNameOrPassword;
-            return;
-        }
-
-        args.SessionItems[MqttConnection.SessionItemKey] = new MqttConnection(Server, admission, _options.InboxCapacity)
-        {
-            ClientId = admission.Identity.ClientId,
-            WorkspaceId = admission.Identity.WorkspaceId,
             Guard = Listener.GuardOf(args.ChannelAdapter)
         };
     }
@@ -161,7 +109,7 @@ public sealed class MqttGateway : IHostedService
         }
 
         // Subscribed before the session registers the client, so nothing sent to it is lost.
-        await Server.SubscribeAsync(args.ClientId, [new MqttTopicFilterBuilder().WithTopic(connection.DownTopic).WithAtMostOnceQoS().Build()]);
+        await _server.SubscribeAsync(args.ClientId, [new MqttTopicFilterBuilder().WithTopic(connection.DownTopic).WithAtMostOnceQoS().Build()]);
         _running[connection] = Task.Run(() => RunSessionAsync(connection));
     }
 
@@ -184,24 +132,13 @@ public sealed class MqttGateway : IHostedService
             return Task.CompletedTask;
         }
 
-        DisconnectReason reason;
-        if (connection.Guard?.Exceeded == true)
+        var packetTooBig = connection.Guard?.Exceeded == true;
+        if (packetTooBig)
         {
             _logger.LogWarning("Client {ClientRefId} sent an MQTT packet over the {MaxPacketBytes}-byte limit; closed.", args.ClientId, _options.MaxPacketBytes);
-            reason = DisconnectReason.MessageTooBig;
-        }
-        else
-        {
-            reason = args.DisconnectType switch
-            {
-                MqttClientDisconnectType.Takeover => DisconnectReason.Superseded,
-                MqttClientDisconnectType.Clean when IsUpdating(args) => DisconnectReason.Updating,
-                MqttClientDisconnectType.Clean => DisconnectReason.ClientClosed,
-                _ when _lifetime.ApplicationStopping.IsCancellationRequested => DisconnectReason.ServerStopping,
-                _ => DisconnectReason.Aborted
-            };
         }
 
+        var reason = MqttDisconnectClassifier.Classify(args.DisconnectType, args.UserProperties, packetTooBig, _lifetime.ApplicationStopping.IsCancellationRequested);
         connection.Ended(reason);
         return Task.CompletedTask;
     }
@@ -239,10 +176,6 @@ public sealed class MqttGateway : IHostedService
         return Task.CompletedTask;
     }
 
-    // A user property rather than the reason string, which MQTTnet does not pass on to the server.
-    private static bool IsUpdating(ClientDisconnectedEventArgs args) =>
-        args.UserProperties?.Any(p => p.Name == MqttBinding.CloseReasonProperty && p.ReadValueAsString() == MqttBinding.UpdatingReason) == true;
-
-    private static MqttConnection? ConnectionOf(System.Collections.IDictionary? items) =>
+    private static MqttConnection? ConnectionOf(IDictionary? items) =>
         items?[MqttConnection.SessionItemKey] as MqttConnection;
 }

@@ -50,7 +50,8 @@ public sealed class MqttGatewayTests : IAsyncLifetime
             Options.Create(new MessageBudgetOptions()), lifetime.Object, NullLogger<ClientSessions>.Instance, NullLogger<ClientInbox>.Instance);
         var trust = JwtTrust.Local(JwtIssuers.Management, JwtAudiences.Socket, _keys.PublishedKeys);
 
-        _gateway = new MqttGateway(sessions, trust, Options.Create(new MqttGatewayOptions { Port = 0 }), lifetime.Object,
+        var authenticator = new MqttConnectAuthenticator(sessions, trust, NullLogger<MqttConnectAuthenticator>.Instance);
+        _gateway = new MqttGateway(sessions, authenticator, Options.Create(new MqttGatewayOptions { Port = 0 }), lifetime.Object,
             new MqttNetLoggerBridge(NullLogger<MqttNetLoggerBridge>.Instance), NullLogger<MqttGateway>.Instance);
         await _gateway.StartAsync(CancellationToken.None);
     }
