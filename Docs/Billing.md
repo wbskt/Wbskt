@@ -156,8 +156,9 @@ grants still hold (`dbo.TenantCreditGrantBalance`) to the plan's monthly credits
 plan until the grants are spent too. The plan's credits are spent first, and the grants are drawn as the
 credits are posted: `dbo.RunCredits_Post` (and `dbo.Run_DeleteRetired`, which posts a deleted run's last
 credits) calls `dbo.TenantCreditGrants_Draw` with what each tenant posted. It draws only the part of the
-post that falls past the plan's allowance (`WorkspaceAccounts.CreditsPerMonth`, from the catalogue) in
-force at that moment, from the grants live then (not revoked, held or expired), soonest to expire first,
+post that takes what the plan has covered this month (posted less drawn, as `dbo.Run_Start` counts it)
+past the plan's allowance (`WorkspaceAccounts.CreditsPerMonth`, from the catalogue) in force at that
+moment, so after an upgrade the larger plan covers what it now allows before any grant is drawn again, from the grants live then (not revoked, held or expired), soonest to expire first,
 and records the month's posted and drawn totals in `dbo.TenantCreditMonths`. A month's posted total is
 seeded from the ledger on the tenant's first post in it, so it is right after a deploy mid-month. A
 downgrade draws only from what is posted after it, and a grant that expired is never drawn from, so the
@@ -297,7 +298,9 @@ never from a file in the repository.
   interval or a credit pack, and answers the provider's checkout page. The checkout carries the tenant's
   reference in the provider's metadata (`tenant_ref`) and is paid by the signed-in user's email. A tenant
   whose subscription is still billing changes its plan (below) or cancels it in the provider's portal
-  (`POST …/billing/portal`) rather than starting a second one (409 `BILLING_SUBSCRIPTION_ACTIVE`).
+  (`POST …/billing/portal`) rather than starting a second one (409 `BILLING_SUBSCRIPTION_ACTIVE`). So does
+  a subscription cancelled at the end of a period still paid for: a second one would bill for the same
+  days, so the customer revokes the cancellation in the portal and changes plan, or checks out once it ends.
   A plan checkout stays open for `Billing:Payments:CheckoutReuseWindow` (30 minutes,
   `dbo.TenantCheckouts`): asking again for the same product in that time, from another tab or another
   admin, answers the same page rather than a second checkout that could be paid as well.
@@ -321,7 +324,8 @@ never from a file in the repository.
   paid for (`next_billing_date`), so the customer keeps what they paid for; until then the billing read
   shows it as the subscription's `scheduledPlan`, `scheduledInterval` and `scheduledAt` (stored from the
   provider's `scheduled_change`). An upgrade first drops a scheduled downgrade, which would otherwise
-  undo it at the period's end, and asking for the plan already held drops it too. The subscription is
+  undo it at the period's end, and asking for the plan already held drops it too. If the upgrade is then
+  refused, the downgrade is scheduled again, so the customer does not renew on the plan they asked to leave. The subscription is
   read back at once, so the answer shows the change without waiting for the webhook. A subscription that
   is cancelled or behind on payment is changed in the portal instead (409
   `BILLING_SUBSCRIPTION_NOT_CHANGEABLE`); a tenant with none checks out (409 `BILLING_SUBSCRIPTION_REQUIRED`).
@@ -388,7 +392,9 @@ links to `Billing:Payments:ReturnUrl` (the console's billing page). Each is sent
 `dbo.BillingNotice_Record` claims the notice in `dbo.BillingNotices` (tenant, kind, period) and queues its
 emails in `dbo.BillingNoticeMails` in the same transaction, and only the first claim queues anything.
 Nothing is claimed while no relay is configured or no one can be written to, so the notice goes out once
-someone can receive it. Not the in-memory mail queue sign-in mail uses: a billing notice is never asked
+someone can receive it. The hosts that raise the events keep them too: the management host gives back a
+message notice whose event the broker refused, so the next minute's check raises it again, and the
+engine tries a credit crossing's event three more times, since the crossing cannot be found again later. Not the in-memory mail queue sign-in mail uses: a billing notice is never asked
 for again, so one lost there would never be sent. `BillingNoticeMailSender` (every minute) leases due
 emails to one auth instance at a time and hands them to the relay; one refused is tried again after 1
 minute, 5, 30, 2 hours and 12 hours, then given up and logged as an error. Sent ones are removed after 30
