@@ -7,7 +7,6 @@
   </Configurations>
   <Folder Name="/Clients/">
     <Project Path="Clients/Wbskt.Api.Client/Wbskt.Api.Client.csproj" />
-    <Project Path="Clients/Wbskt.Client.Sdk/Wbskt.Client.Sdk.csproj" />
     <Project Path="Clients/Wbskt.Protocol/Wbskt.Protocol.csproj" />
     <Project Path="Clients/Wbskt.Simulator/Wbskt.Simulator.csproj" />
   </Folder>
@@ -66,7 +65,6 @@
     <Project Path="Tests/Wbskt.Host.Tests/Wbskt.Host.Tests.csproj" />
     <Project Path="Tests/Wbskt.Workflow.Engine.Host.IntegrationTests/Wbskt.Workflow.Engine.Host.IntegrationTests.csproj" />
     <Project Path="Tests/Wbskt.LoadTester/Wbskt.LoadTester.csproj" />
-    <Project Path="Tests/Conformance/harnesses/dotnet/Wbskt.Conformance.Harness.csproj" />
   </Folder>
   <Folder Name="/Tools/">
     <Project Path="Tools/Wbskt.Workflow.Exporter/Wbskt.Workflow.Exporter.csproj" />

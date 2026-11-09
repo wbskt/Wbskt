@@ -1,4 +1,4 @@
-using Wbskt.Client.Sdk;
+using Wbskt;
 
 namespace Wbskt.E2E.FeatureTests.Fixtures;
 

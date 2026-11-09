@@ -25,7 +25,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Clients\Wbskt.Client.Sdk\Wbskt.Client.Sdk.csproj" />
     <ProjectReference Include="..\..\Hosts\Wbskt.Auth.Host\Wbskt.Auth.Host.csproj" />
     <ProjectReference Include="..\..\Hosts\Wbskt.Management.Host\Wbskt.Management.Host.csproj" />
     <ProjectReference Include="..\..\Hosts\Wbskt.Gateway.MQTT.Host\Wbskt.Gateway.MQTT.Host.csproj" />

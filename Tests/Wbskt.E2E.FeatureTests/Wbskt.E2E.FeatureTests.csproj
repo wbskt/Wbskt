@@ -21,7 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Clients\Wbskt.Api.Client\Wbskt.Api.Client.csproj" />
-    <ProjectReference Include="..\..\Clients\Wbskt.Client.Sdk\Wbskt.Client.Sdk.csproj" />
+    <PackageReference Include="Wbskt" />
     <ProjectReference Include="..\..\Models\Wbskt.Auth.Models\Wbskt.Auth.Models.csproj" />
     <ProjectReference Include="..\..\Models\Wbskt.Management.Models\Wbskt.Management.Models.csproj" />
     <ProjectReference Include="..\..\Models\Wbskt.Workflow.Engine.Contracts\Wbskt.Workflow.Engine.Contracts.csproj" />

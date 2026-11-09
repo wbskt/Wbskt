@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\Wbskt.Client.Sdk\Wbskt.Client.Sdk.csproj" />
+    <PackageReference Include="Wbskt" />
   </ItemGroup>
 
   <PropertyGroup>

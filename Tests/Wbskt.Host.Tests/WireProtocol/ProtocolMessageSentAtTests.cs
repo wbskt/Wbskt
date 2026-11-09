@@ -3,7 +3,7 @@ using System.Text.Json;
 using Wbskt.Gateway.Core.Services;
 using Wbskt.Gateway.Core.Services.Inbound;
 
-namespace Wbskt.Host.Tests.ClientSdk;
+namespace Wbskt.Host.Tests.WireProtocol;
 
 public sealed class ProtocolMessageSentAtTests
 {

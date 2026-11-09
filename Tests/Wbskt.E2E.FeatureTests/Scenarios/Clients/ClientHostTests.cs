@@ -2,8 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
-using Wbskt.Client.Sdk;
-using Wbskt.Client.Sdk.Models;
+using Wbskt;
 using Wbskt.E2E.FeatureTests.Fixtures;
 using Wbskt.Protocol;
 

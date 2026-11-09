@@ -1,5 +1,4 @@
-using Wbskt.Client.Sdk;
-using Wbskt.Client.Sdk.Models;
+using Wbskt;
 
 Console.WriteLine("======================================");
 Console.WriteLine("   WBSKT CLIENT SIMULATOR STARTING    ");
