@@ -93,7 +93,36 @@ public sealed class DodoPaymentGateway(HttpClient http, IOptions<DodoOptions> op
             string.IsNullOrEmpty(p.SubscriptionId) ? null : p.SubscriptionId,
             (p.ProductCart ?? []).Select(i => new PaymentLine(i.ProductId, i.Quantity)).ToList(),
             p.RefundStatus == "full",
-            p.CreatedAt ?? clock.GetUtcNow());
+            p.CreatedAt ?? clock.GetUtcNow(),
+            ReadDispute(p.Disputes));
+    }
+
+    public async Task<bool> AcceptsCredentialsAsync(CancellationToken ct)
+    {
+        using HttpResponseMessage response = await http.GetAsync("customers?page_size=1", ct);
+        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            return false;
+        }
+
+        EnsureSucceeded(response, "list customers");
+        return true;
+    }
+
+    public async Task CancelSubscriptionAsync(string subscriptionId, CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"subscriptions/{Uri.EscapeDataString(subscriptionId)}")
+        {
+            Content = JsonContent.Create(new DodoSubscriptionUpdate("cancelled"), options: Json)
+        };
+        using HttpResponseMessage response = await http.SendAsync(request, ct);
+        EnsureSucceeded(response, "cancel a subscription");
+    }
+
+    public async Task RefundPaymentAsync(string paymentId, string reason, CancellationToken ct)
+    {
+        using HttpResponseMessage response = await http.PostAsJsonAsync("refunds", new DodoRefundRequest(paymentId, reason), Json, ct);
+        EnsureSucceeded(response, "refund a payment");
     }
 
     public ProviderWebhook? ReadWebhook(IReadOnlyDictionary<string, string> headers, string body)
@@ -127,6 +156,15 @@ public sealed class DodoPaymentGateway(HttpClient http, IOptions<DodoOptions> op
             ? s
             : null;
 
+    /// <summary>Where the payment's latest dispute stands, by Dodo's <c>dispute_status</c>.</summary>
+    private static PaymentDispute ReadDispute(IReadOnlyList<DodoDispute>? disputes) =>
+        disputes?.OrderBy(d => d.CreatedAt).LastOrDefault()?.DisputeStatus switch
+        {
+            "dispute_opened" or "dispute_challenged" => PaymentDispute.Open,
+            "dispute_lost" or "dispute_accepted" or "dispute_expired" => PaymentDispute.Lost,
+            _ => PaymentDispute.None
+        };
+
     private static Guid? ReadTenantRef(Dictionary<string, JsonElement>? metadata) =>
         metadata is not null && metadata.TryGetValue(TenantRefKey, out JsonElement value) && value.ValueKind == JsonValueKind.String && Guid.TryParse(value.GetString(), out Guid tenantRef)
             ? tenantRef
@@ -134,12 +172,16 @@ public sealed class DodoPaymentGateway(HttpClient http, IOptions<DodoOptions> op
 
     private static async Task<T?> ReadAsync<T>(HttpResponseMessage response, string what, CancellationToken ct)
     {
+        EnsureSucceeded(response, what);
+        return await response.Content.ReadFromJsonAsync<T>(Json, ct);
+    }
+
+    private static void EnsureSucceeded(HttpResponseMessage response, string what)
+    {
         if (!response.IsSuccessStatusCode)
         {
             // The body is Dodo's, and may name the customer; the status is enough to act on.
             throw new HttpRequestException($"Dodo refused to {what}: {(int)response.StatusCode} {response.ReasonPhrase}.", null, response.StatusCode);
         }
-
-        return await response.Content.ReadFromJsonAsync<T>(Json, ct);
     }
 }

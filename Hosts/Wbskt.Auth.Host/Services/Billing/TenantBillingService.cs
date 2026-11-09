@@ -14,6 +14,7 @@ internal sealed class TenantBillingService(
     ITenantPlanProvider plans,
     IAccountProvider accounts,
     IOptions<BillingOptions> options,
+    TimeProvider clock,
     ILogger<TenantBillingService> logger) : ITenantBillingService
 {
     private static readonly Error TenantNotFound = Error.Forbidden("TENANT_NOT_FOUND", "Tenant not found.");
@@ -27,7 +28,7 @@ internal sealed class TenantBillingService(
             return TenantNotFound;
         }
 
-        TenantSubscription? subscription = await billing.FindSubscriptionAsync(tenantId, ct);
+        TenantSubscription? subscription = SubscriptionPlan.Deciding(await billing.GetSubscriptionsAsync(tenantId, ct));
         BillingOptions offers = options.Value;
         return new TenantBillingResponse(
             tenant.PlanCode,
@@ -64,10 +65,23 @@ internal sealed class TenantBillingService(
             return TenantNotFound;
         }
 
+        // A plan checkout still open is handed out again, so two tabs or two admins pay for one subscription.
+        DateTime now = clock.GetUtcNow().UtcDateTime;
+        bool plan = request.Plan is not null;
+        if (plan && await billing.FindOpenCheckoutAsync(tenantId, gateway.Name, product.Value, now, ct) is { } open)
+        {
+            return new BillingCheckoutResponse(open);
+        }
+
         User buyer = await accounts.GetByIdAsync(userId, ct);
         try
         {
             string url = await gateway.CreateCheckoutAsync(new BillingCheckout(product.Value, tenant.TenantRefId, buyer.Email, buyer.Username, options.Value.ReturnUrl), ct);
+            if (plan)
+            {
+                await billing.RecordCheckoutAsync(tenantId, gateway.Name, product.Value, url, now, now + options.Value.CheckoutReuseWindow, ct);
+            }
+
             logger.LogInformation("User {UserId} started a {Provider} checkout for product {ProductId} for tenant {TenantId}.", userId, gateway.Name, product.Value, tenantId);
             return new BillingCheckoutResponse(url);
         }
@@ -127,7 +141,7 @@ internal sealed class TenantBillingService(
             return Error.Validation("BILLING_OFFER_INVALID", $"{request.Plan} billed {interval} is not offered.");
         }
 
-        if (await billing.FindSubscriptionAsync(tenantId, ct) is { } current && SubscriptionPlan.IsBilling(current))
+        if (SubscriptionPlan.Deciding(await billing.GetSubscriptionsAsync(tenantId, ct)) is { } current && SubscriptionPlan.IsBilling(current))
         {
             return Error.Conflict("BILLING_SUBSCRIPTION_ACTIVE", "The tenant already has a subscription. Change or cancel it in the billing portal.");
         }

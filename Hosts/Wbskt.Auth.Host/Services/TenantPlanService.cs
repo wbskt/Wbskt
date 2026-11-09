@@ -20,7 +20,7 @@ internal sealed class TenantPlanService(ITenantPlanProvider plans, IAuditWorkspa
         return plan is null ? NotFound : ToResponse(plan);
     }
 
-    public async Task<Result<TenantPlanResponse>> SetAsync(Guid tenantRef, SetTenantPlanRequest request, CancellationToken cancellationToken)
+    public async Task<Result<TenantPlanResponse>> SetAsync(Guid tenantRef, SetTenantPlanRequest request, PlanSource source, CancellationToken cancellationToken)
     {
         if (!Enum.IsDefined(request.PlanCode))
         {
@@ -46,7 +46,8 @@ internal sealed class TenantPlanService(ITenantPlanProvider plans, IAuditWorkspa
 
         // An empty set of overrides is stored as none, so it compares equal to none here too.
         PlanLimitOverrides? overrides = request.LimitOverrides == new PlanLimitOverrides() ? null : request.LimitOverrides;
-        if (current.PlanCode == request.PlanCode && current.LimitOverrides == overrides)
+        DateTime? endsAt = source == PlanSource.Operator ? request.EndsAt?.UtcDateTime : null;
+        if (current.PlanCode == request.PlanCode && current.LimitOverrides == overrides && current.Source == source && current.EndsAt == endsAt)
         {
             return ToResponse(current);
         }
@@ -56,15 +57,15 @@ internal sealed class TenantPlanService(ITenantPlanProvider plans, IAuditWorkspa
             WorkspaceIds = await audit.OfTenantAsync(current.TenantId, cancellationToken)
         };
 
-        TenantPlan? updated = await plans.SetAsync(current.TenantId, request.PlanCode, overrides, current.PlanRevision, OutboxMessage.Create(changedEvent), cancellationToken);
+        TenantPlan? updated = await plans.SetAsync(current.TenantId, request.PlanCode, overrides, current.PlanRevision, source, endsAt, OutboxMessage.Create(changedEvent), cancellationToken);
         if (updated is null)
         {
             return Changed;
         }
 
         logger.LogInformation(
-            "Tenant {TenantId} moved from {PreviousPlan} to {Plan} at revision {Revision}",
-            updated.TenantId, current.PlanCode, updated.PlanCode, updated.PlanRevision);
+            "Tenant {TenantId} moved from {PreviousPlan} to {Plan} ({Source}) at revision {Revision}",
+            updated.TenantId, current.PlanCode, updated.PlanCode, updated.Source, updated.PlanRevision);
         return ToResponse(updated);
     }
 
@@ -91,5 +92,5 @@ internal sealed class TenantPlanService(ITenantPlanProvider plans, IAuditWorkspa
     }
 
     private static TenantPlanResponse ToResponse(TenantPlan plan) =>
-        new(plan.TenantRefId, plan.PlanCode, plan.LimitOverrides, plan.PlanRevision, plan.PlanChangedAt?.ToUtcOffset());
+        new(plan.TenantRefId, plan.PlanCode, plan.LimitOverrides, plan.PlanRevision, plan.PlanChangedAt?.ToUtcOffset(), plan.Source, plan.EndsAt?.ToUtcOffset());
 }

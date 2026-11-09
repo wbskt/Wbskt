@@ -14,14 +14,30 @@ public sealed class DodoOptions
     public string? WebhookSecret { get; set; }
 
     /// <summary><c>test_mode</c> or <c>live_mode</c>; picks the API's base address.</summary>
-    public string Environment { get; set; } = "test_mode";
+    public string Environment { get; set; } = TestMode;
 
     /// <summary>Overrides the base address <see cref="Environment"/> picks, for a local stand-in.</summary>
     public string? BaseUrl { get; set; }
 
+    public const string TestMode = "test_mode";
+
+    public const string LiveMode = "live_mode";
+
+    /// <summary>
+    /// Refuses to start on an <see cref="Environment"/> that is neither mode: a typo would otherwise send
+    /// a live key to the test API, and payments would fail only when a customer first pays.
+    /// </summary>
+    public void EnsureValid()
+    {
+        if (Environment is not (TestMode or LiveMode))
+        {
+            throw new InvalidOperationException($"{SectionName}:Environment must be '{TestMode}' or '{LiveMode}', not '{Environment}'.");
+        }
+    }
+
     public Uri ResolveBaseAddress() => new(
         !string.IsNullOrWhiteSpace(BaseUrl) ? BaseUrl.TrimEnd('/') + "/"
-        : Environment == "live_mode" ? "https://live.dodopayments.com/"
+        : Environment == LiveMode ? "https://live.dodopayments.com/"
         : "https://test.dodopayments.com/");
 
     /// <summary>Binds the section and falls back to the variable names Dodo's own tooling uses.</summary>

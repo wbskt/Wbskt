@@ -36,9 +36,34 @@ public static class SubscriptionPlan
     public static bool IsBilling(TenantSubscription subscription) =>
         subscription.Status is SubscriptionStatus.Active or SubscriptionStatus.PastDue or SubscriptionStatus.OnHold && !subscription.CancelAtPeriodEnd;
 
-    /// <summary>A subscription that has not ended, so an event about another of the tenant's, older one, must not replace it.</summary>
+    /// <summary>A subscription that has not ended.</summary>
     public static bool IsLive(SubscriptionStatus status) =>
         status is SubscriptionStatus.Pending or SubscriptionStatus.Active or SubscriptionStatus.PastDue or SubscriptionStatus.OnHold;
+
+    /// <summary>
+    /// The subscription that decides the tenant's plan, of all it has had: the oldest still billing that
+    /// was not cancelled as a duplicate; else the newest still live (one cancelled at the end of its
+    /// period, or still pending); else the newest of the rest. Null when it has none.
+    /// </summary>
+    public static TenantSubscription? Deciding(IReadOnlyCollection<TenantSubscription> subscriptions)
+    {
+        var kept = subscriptions.Where(s => s.DuplicateAt is null).ToList();
+        return kept.Where(IsBilling).OrderBy(s => s.CreatedAt).ThenBy(s => s.SubscriptionId, StringComparer.Ordinal).FirstOrDefault()
+            ?? kept.Where(s => IsLive(s.Status)).OrderByDescending(s => s.CreatedAt).ThenByDescending(s => s.SubscriptionId, StringComparer.Ordinal).FirstOrDefault()
+            ?? kept.OrderByDescending(s => s.CreatedAt).ThenByDescending(s => s.SubscriptionId, StringComparer.Ordinal).FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Subscriptions billing beside the deciding one: paid for twice, by two checkouts opened at once.
+    /// Each is cancelled and its payment refunded, so the tenant is never charged twice.
+    /// </summary>
+    public static IReadOnlyList<TenantSubscription> Duplicates(IReadOnlyCollection<TenantSubscription> subscriptions)
+    {
+        TenantSubscription? deciding = Deciding(subscriptions);
+        return deciding is null || !IsBilling(deciding)
+            ? []
+            : subscriptions.Where(s => s.DuplicateAt is null && IsBilling(s) && s.SubscriptionId != deciding.SubscriptionId).ToList();
+    }
 
     /// <summary>
     /// The end of the period a refunded subscription payment made at <paramref name="paidAt"/> paid for,

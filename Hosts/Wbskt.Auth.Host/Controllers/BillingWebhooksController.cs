@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Wbskt.Auth.Host.Services.Billing;
 using Wbskt.Infrastructure;
 
@@ -20,6 +21,7 @@ public class BillingWebhooksController(IBillingWebhookService webhooks) : ApiCon
 
     [HttpPost("api/callbacks/billing/{provider}")]
     [RequestSizeLimit(MaxBodyBytes)]
+    [EnableRateLimiting(RateLimitPolicies.BillingWebhooks)]
     public async Task<IActionResult> Receive(string provider, CancellationToken cancellationToken)
     {
         using var reader = new StreamReader(Request.Body);

@@ -1,4 +1,5 @@
--- Puts a tenant on a plan, with optional negotiated limits, if its plan is still at
+-- Puts a tenant on a plan, with optional negotiated limits, recording who set it (@PlanSource) and, for
+-- an operator's plan, when it ends (@PlanEndsAt), if its plan is still at
 -- @ExpectedRevision: a change worked out from a stale read is refused (no row returned) rather than
 -- silently replacing a newer one. On success the revision goes up by one and TenantPlanChangedEvent is
 -- written to dbo.OutboxMessages in the same transaction, so a plan change that commits is always
@@ -11,6 +12,8 @@ CREATE PROCEDURE dbo.TenantPlan_Set
     @PlanCode           NVARCHAR(20),
     @PlanLimitOverrides NVARCHAR(MAX),
     @ExpectedRevision   INT,
+    @PlanSource         NVARCHAR(20) = N'Operator',
+    @PlanEndsAt         DATETIME2(3) = NULL,
     @OutboxMessageType  NVARCHAR(256),
     @OutboxPayload      NVARCHAR(MAX)
 AS
@@ -25,7 +28,9 @@ BEGIN
         PlanCode           NVARCHAR(20)     NOT NULL,
         PlanLimitOverrides NVARCHAR(MAX)    NULL,
         PlanRevision       INT              NOT NULL,
-        PlanChangedAt      DATETIME2(3)     NULL
+        PlanChangedAt      DATETIME2(3)     NULL,
+        PlanSource         NVARCHAR(20)     NOT NULL,
+        PlanEndsAt         DATETIME2(3)     NULL
     );
 
     BEGIN TRANSACTION;
@@ -34,8 +39,10 @@ BEGIN
     SET PlanCode = @PlanCode,
         PlanLimitOverrides = @PlanLimitOverrides,
         PlanRevision = PlanRevision + 1,
-        PlanChangedAt = SYSUTCDATETIME()
-    OUTPUT inserted.Id, inserted.RefId, inserted.PlanCode, inserted.PlanLimitOverrides, inserted.PlanRevision, inserted.PlanChangedAt
+        PlanChangedAt = SYSUTCDATETIME(),
+        PlanSource = @PlanSource,
+        PlanEndsAt = @PlanEndsAt
+    OUTPUT inserted.Id, inserted.RefId, inserted.PlanCode, inserted.PlanLimitOverrides, inserted.PlanRevision, inserted.PlanChangedAt, inserted.PlanSource, inserted.PlanEndsAt
     INTO @Updated
     WHERE Id = @TenantId
       AND PlanRevision = @ExpectedRevision;
@@ -54,7 +61,9 @@ BEGIN
         PlanCode,
         PlanLimitOverrides,
         PlanRevision,
-        PlanChangedAt
+        PlanChangedAt,
+        PlanSource,
+        PlanEndsAt
     FROM @Updated;
 END
 GO

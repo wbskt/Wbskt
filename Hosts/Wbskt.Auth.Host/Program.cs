@@ -73,6 +73,7 @@ public static class Program
         // provider's API key and webhook secret are set; the products sold come from Billing:Payments.
         builder.Services.Configure<BillingOptions>(builder.Configuration.GetSection(BillingOptions.SectionName));
         var dodoOptions = DodoOptions.From(builder.Configuration);
+        dodoOptions.EnsureValid();
         builder.Services.AddSingleton(Options.Create(dodoOptions));
         builder.Services.AddHttpClient<IPaymentGateway, DodoPaymentGateway>(client =>
         {
@@ -88,6 +89,7 @@ public static class Program
         builder.Services.AddScoped<ITenantBillingService, TenantBillingService>();
         builder.Services.AddScoped<IBillingWebhookService, BillingWebhookService>();
         builder.Services.AddHostedService<SubscriptionReviewWorker>();
+        builder.Services.AddHostedService<PaymentGatewayCheck>();
         builder.Services.AddScoped<ICredentialRetentionProvider, CredentialRetentionProvider>();
         builder.Services.AddHostedService<CredentialRetentionService>();
         builder.Services.AddHttpContextAccessor();
@@ -204,6 +206,10 @@ public static class Program
             // Fetching a sign-up challenge. Costs one HMAC, but a person needs one per attempt, so a
             // caller asking for more than this is not signing up by hand.
             options.AddPerIpPolicy(builder.Configuration, RateLimitPolicies.SignUpChallenge, "SignUpChallenge", defaultPermitLimit: 30);
+
+            // A payment provider's webhooks: anonymous and signed. Generous for its retry bursts after an
+            // outage; only a flood reaches the limit, and the provider delivers a refused event again.
+            options.AddPerIpPolicy(builder.Configuration, RateLimitPolicies.BillingWebhooks, "BillingWebhooks", defaultPermitLimit: 600);
         });
 
         // Signed-in callers (tenant and workspace administration, changing a password): a budget per

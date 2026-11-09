@@ -35,3 +35,21 @@ public sealed class TenantCreditGrantRevokedHandler(ICreditGrantProvider grants,
         }
     }
 }
+
+/// <summary>
+/// Holds a tenant's credit grant while a chargeback on its payment is open, or releases it. Applied only
+/// when newer than the hold the grant has, so a late delivery never undoes a newer change.
+/// </summary>
+public sealed class TenantCreditGrantHoldChangedHandler(ICreditGrantProvider grants, ILogger<TenantCreditGrantHoldChangedHandler> logger)
+    : IConsumer<TenantCreditGrantHoldChangedEvent>
+{
+    public async Task Consume(ConsumeContext<TenantCreditGrantHoldChangedEvent> context)
+    {
+        TenantCreditGrantHoldChangedEvent changed = context.Message;
+        if (await grants.SetHoldAsync(changed.Source, changed.SourceRef, changed.Held, changed.Revision, changed.CreatedAtUtc, context.CancellationToken))
+        {
+            logger.LogInformation("{Action} the credit grant {Source} {SourceRef} of tenant {TenantId}.",
+                changed.Held ? "Held" : "Released", changed.Source, changed.SourceRef, changed.TenantId);
+        }
+    }
+}

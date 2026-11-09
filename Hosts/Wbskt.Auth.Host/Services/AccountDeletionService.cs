@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
+using Wbskt.Auth.Host.Services.Billing;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Auth;
 using Wbskt.Infrastructure;
@@ -13,6 +14,8 @@ namespace Wbskt.Auth.Host.Services;
 internal sealed class AccountDeletionService : IAccountDeletionService
 {
     private readonly IAccountProvider _accounts;
+    private readonly ITenantBillingProvider _billing;
+    private readonly IPaymentGateway _gateway;
     private readonly IEventBus _eventBus;
     private readonly IAccessTokenRevocation _accessTokens;
     private readonly IAuditWorkspaces _audit;
@@ -20,14 +23,22 @@ internal sealed class AccountDeletionService : IAccountDeletionService
     private readonly TenantAnnouncer _tenantAnnouncer;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
+    private static readonly Error SubscriptionNotCancelled = Error.Unavailable(
+        "BILLING_SUBSCRIPTION_NOT_CANCELLED",
+        "Your subscription could not be cancelled with the payment provider, so nothing was deleted. Try again shortly.");
+
     public AccountDeletionService(
         IAccountProvider accounts,
+        ITenantBillingProvider billing,
+        IPaymentGateway gateway,
         IEventBus eventBus,
         IAccessTokenRevocation accessTokens,
         ILogger<AccountDeletionService> logger,
         IAuditWorkspaces? audit = null)
     {
         _accounts = accounts;
+        _billing = billing;
+        _gateway = gateway;
         _eventBus = eventBus;
         _accessTokens = accessTokens;
         _audit = audit ?? AuditWorkspaces.None;
@@ -69,6 +80,12 @@ internal sealed class AccountDeletionService : IAccountDeletionService
             return Result.Failure(Error.Validation("AUTH_CURRENT_PASSWORD_INVALID", "The password is not correct."));
         }
 
+        var cancelled = await CancelSubscriptionsAsync(userId, cancellationToken);
+        if (cancelled.IsFailure)
+        {
+            return cancelled;
+        }
+
         var workspaceIds = await _accounts.GetSoleTenantWorkspaceIdsAsync(userId, cancellationToken);
         var deletedWorkspaces = workspaceIds.ToDictionary(id => id, id => OutboxMessage.Create(new WorkspaceDeletedEvent(id, userId)));
 
@@ -88,6 +105,38 @@ internal sealed class AccountDeletionService : IAccountDeletionService
         await AnnounceAsync(user, deleted.Value, auditWorkspaces.Except(workspaceIds).ToList(), ipAddress, cancellationToken);
 
         _logger.LogInformation("Account {UserId} deleted by its owner, with {WorkspaceCount} workspaces. IP: {IpAddress}", userId, workspaceIds.Count, ipAddress);
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// Cancels, with the payment provider, every subscription of the tenants this deletion deletes, so a
+    /// deleted account is never charged again. When the provider cannot be reached nothing is deleted:
+    /// the caller tries again.
+    /// </summary>
+    private async Task<Result> CancelSubscriptionsAsync(int userId, CancellationToken cancellationToken)
+    {
+        var live = await _billing.GetLiveSubscriptionsOfSoleTenantsAsync(userId, cancellationToken);
+        foreach (var subscription in live)
+        {
+            if (!_gateway.IsConfigured || !string.Equals(subscription.Provider, _gateway.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogError("Account deletion refused: user {UserId}'s tenant {TenantId} has subscription {SubscriptionId} with {Provider}, which cannot be cancelled here.",
+                    userId, subscription.TenantId, subscription.SubscriptionId, subscription.Provider);
+                return Result.Failure(SubscriptionNotCancelled);
+            }
+
+            try
+            {
+                await _gateway.CancelSubscriptionAsync(subscription.SubscriptionId, cancellationToken);
+                _logger.LogInformation("Cancelled subscription {SubscriptionId} of tenant {TenantId} before deleting account {UserId}.", subscription.SubscriptionId, subscription.TenantId, userId);
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogWarning(ex, "Account deletion refused: could not cancel subscription {SubscriptionId} of tenant {TenantId} for user {UserId}.", subscription.SubscriptionId, subscription.TenantId, userId);
+                return Result.Failure(SubscriptionNotCancelled);
+            }
+        }
+
         return Result.Success();
     }
 

@@ -4,17 +4,20 @@ using Moq;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services;
+using Wbskt.Auth.Host.Services.Billing;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Abstractions;
 using Wbskt.Events.Auth;
 using Wbskt.Infrastructure.Events.Outbox;
 using Wbskt.Infrastructure.Security;
+using Wbskt.Models.Billing;
 
 namespace Wbskt.Host.Tests.AuthHost;
 
 /// <summary>
-/// Deleting your own account: the password is asked again, the workspaces of tenants only you belong
-/// to go with the account, and the access tokens already issued stop working.
+/// Deleting your own account: the password is asked again, the subscriptions of tenants only you belong
+/// to are cancelled first, the workspaces of those tenants go with the account, and the access tokens
+/// already issued stop working.
 /// </summary>
 public sealed class AccountDeletionServiceTests
 {
@@ -25,10 +28,49 @@ public sealed class AccountDeletionServiceTests
     private readonly Mock<IAccountProvider> _accounts = new();
     private readonly Mock<IEventBus> _bus = new();
     private readonly Mock<IAccessTokenRevocation> _accessTokens = new();
+    private readonly Mock<ITenantBillingProvider> _billing = new();
+    private readonly Mock<IPaymentGateway> _gateway = new();
 
     public AccountDeletionServiceTests()
     {
         _accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
+        _billing.Setup(b => b.GetLiveSubscriptionsOfSoleTenantsAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        _gateway.SetupGet(g => g.Name).Returns("dodo");
+        _gateway.SetupGet(g => g.IsConfigured).Returns(true);
+    }
+
+    [Fact]
+    public async Task A_sole_tenants_subscription_is_cancelled_before_the_account_is_deleted()
+    {
+        _billing.Setup(b => b.GetLiveSubscriptionsOfSoleTenantsAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync([Subscription("sub_1")]);
+        _accounts.Setup(p => p.GetSoleTenantWorkspaceIdsAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(new List<int> { 7 });
+        var order = new List<string>();
+        _gateway.Setup(g => g.CancelSubscriptionAsync("sub_1", It.IsAny<CancellationToken>())).Callback(() => order.Add("cancel")).Returns(Task.CompletedTask);
+        _accounts.Setup(p => p.DeleteUserAsync(42, It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), It.IsAny<CancellationToken>()))
+            .Callback(() => order.Add("delete"))
+            .ReturnsAsync(new List<int>());
+
+        var result = await Service().DeleteAccountAsync(42, Password, Ip);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(["cancel", "delete"], order);
+    }
+
+    [Fact]
+    public async Task When_the_provider_cannot_cancel_nothing_is_deleted_and_the_caller_retries()
+    {
+        _billing.Setup(b => b.GetLiveSubscriptionsOfSoleTenantsAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync([Subscription("sub_1")]);
+        _gateway.Setup(g => g.CancelSubscriptionAsync("sub_1", It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("down"));
+
+        var down = await Service().DeleteAccountAsync(42, Password, Ip);
+        _gateway.SetupGet(g => g.IsConfigured).Returns(false);
+        var unconfigured = await Service().DeleteAccountAsync(42, Password, Ip);
+
+        Assert.Equal("BILLING_SUBSCRIPTION_NOT_CANCELLED", down.Error.Code);
+        Assert.Equal(Wbskt.Infrastructure.ErrorType.Unavailable, down.Error.Type);
+        Assert.Equal("BILLING_SUBSCRIPTION_NOT_CANCELLED", unconfigured.Error.Code);
+        _accounts.Verify(p => p.DeleteUserAsync(It.IsAny<int>(), It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), It.IsAny<CancellationToken>()), Times.Never);
+        _accessTokens.Verify(a => a.RevokeUserAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -106,7 +148,10 @@ public sealed class AccountDeletionServiceTests
     }
 
     private AccountDeletionService Service() =>
-        new(_accounts.Object, _bus.Object, _accessTokens.Object, NullLogger<AccountDeletionService>.Instance);
+        new(_accounts.Object, _billing.Object, _gateway.Object, _bus.Object, _accessTokens.Object, NullLogger<AccountDeletionService>.Instance);
+
+    private static TenantSubscription Subscription(string id) =>
+        new(5, "dodo", id, "cus_1", "prod_maker_m", PlanCode.Maker, BillingInterval.Monthly, SubscriptionStatus.Active, DateTime.UtcNow.AddDays(20), false, null, null);
 
     private static User AUser() => new()
     {

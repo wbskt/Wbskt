@@ -5,6 +5,7 @@ using Wbskt.Auth.Host.Services;
 using Wbskt.Auth.Models;
 using Wbskt.Infrastructure;
 using Wbskt.Models;
+using Wbskt.Models.Billing;
 
 namespace Wbskt.Auth.Host.Controllers;
 
@@ -32,11 +33,14 @@ public class InternalPlansController : ApiControllerBase
         return MapResult(await _tenantPlanService.GetAsync(tenantRef, cancellationToken));
     }
 
-    /// <summary>Puts the tenant on a plan; the plan and its overrides are replaced whole.</summary>
+    /// <summary>
+    /// Puts the tenant on a plan as an operator; the plan and its overrides are replaced whole, and the
+    /// payment provider's sync leaves the plan alone until its end date.
+    /// </summary>
     [HttpPut(InternalRoutes.TenantPlan)]
     public async Task<ActionResult<TenantPlanResponse>> SetTenantPlan(Guid tenantRef, [FromBody] SetTenantPlanRequest request, CancellationToken cancellationToken)
     {
-        return MapResult(await _tenantPlanService.SetAsync(tenantRef, request, cancellationToken));
+        return MapResult(await _tenantPlanService.SetAsync(tenantRef, request, PlanSource.Operator, cancellationToken));
     }
 
     /// <summary>
