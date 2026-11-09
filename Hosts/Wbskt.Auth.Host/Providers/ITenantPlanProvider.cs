@@ -10,6 +10,8 @@ internal interface ITenantPlanProvider
 {
     Task<TenantPlan?> FindByRefIdAsync(Guid tenantRef, CancellationToken cancellationToken);
 
+    Task<TenantPlan?> FindByIdAsync(int tenantId, CancellationToken cancellationToken);
+
     /// <summary>
     /// Puts the tenant on <paramref name="planCode"/> and queues <paramref name="changedEvent"/> in the
     /// same transaction, if its plan is still at <paramref name="expectedRevision"/>. Null when it was

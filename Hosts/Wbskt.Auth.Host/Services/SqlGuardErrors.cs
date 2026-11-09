@@ -17,6 +17,14 @@ internal static class SqlGuardErrors
     /// Translates a guard. <paramref name="conflictError"/> is what a unique-key violation means for
     /// this operation ("that name is taken"); without one, a duplicate is a fault.
     /// </summary>
+    public static readonly Error PlanWorkspaceLimitReached = Error.Conflict(
+        "PLAN_WORKSPACE_LIMIT_REACHED",
+        "Your plan allows no more workspaces. Delete one you no longer use, or upgrade.");
+
+    public static readonly Error PlanMemberLimitReached = Error.Conflict(
+        "PLAN_MEMBER_LIMIT_REACHED",
+        "Your plan allows no more members. Remove one, or upgrade.");
+
     public static bool TryTranslate(Exception ex, Error? conflictError, out Error error)
     {
         error = ex switch
@@ -36,6 +44,10 @@ internal static class SqlGuardErrors
             SqlException { Number: 50017 } => Error.Forbidden("WORKSPACE_NOT_FOUND", "Workspace not found."),
 
             SqlException { Number: 50012 } => Error.Conflict("AUTH_ALREADY_MEMBER", "That user is already a member of this tenant."),
+
+            // The tenant's plan has no room for another workspace or member.
+            SqlException { Number: 50030 } => PlanWorkspaceLimitReached,
+            SqlException { Number: 50031 } => PlanMemberLimitReached,
 
             // Deleting an account: its owner is a tenant's only administrator (the message names the
             // tenants), or its tenants changed between reading and deleting.

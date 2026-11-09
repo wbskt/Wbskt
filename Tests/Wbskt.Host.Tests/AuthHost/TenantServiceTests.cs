@@ -38,7 +38,7 @@ public sealed class TenantServiceTests
 
         _service = new TenantService(
             _tenants.Object, _accessControl.Object, _accounts.Object, _workspaces.Object, _bus, Mock.Of<IAuthMailer>(),
-            NullLogger<TenantService>.Instance);
+            NullLogger<TenantService>.Instance, new FixedTenantLimits());
     }
 
     [Fact]
@@ -185,7 +185,7 @@ public sealed class TenantServiceTests
         var result = await _service.AcceptInvitationAsync(MemberId, "invitation-token");
 
         Assert.Equal("INVITATION_INVALID", result.Error.Code);
-        _tenants.Verify(p => p.AcceptInvitationAsync(It.IsAny<byte[]>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        _tenants.Verify(p => p.AcceptInvitationAsync(It.IsAny<byte[]>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -195,7 +195,7 @@ public sealed class TenantServiceTests
         var acme = Guid.NewGuid();
         _tenants.Setup(p => p.GetInvitationByTokenHashAsync(It.Is<byte[]>(h => h.SequenceEqual(SecurityTokens.Hash("invitation-token"))), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new InvitationLookup(invitationRef, acme, "Acme", "amal@example.test", DateTime.UtcNow.AddDays(1), IsLive: true));
-        _tenants.Setup(p => p.AcceptInvitationAsync(It.Is<byte[]>(h => h.SequenceEqual(SecurityTokens.Hash("invitation-token"))), MemberId, It.IsAny<CancellationToken>())).ReturnsAsync(TenantId);
+        _tenants.Setup(p => p.AcceptInvitationAsync(It.Is<byte[]>(h => h.SequenceEqual(SecurityTokens.Hash("invitation-token"))), MemberId, It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(TenantId);
 
         var result = await _service.AcceptInvitationAsync(MemberId, "invitation-token");
 
@@ -209,7 +209,7 @@ public sealed class TenantServiceTests
     {
         _tenants.Verify(p => p.CreateInvitationAsync(
             It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<int>(),
-            It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
         Assert.Empty(_bus.Published);
     }
 

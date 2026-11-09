@@ -27,7 +27,8 @@ internal class AccountServices
         IJwtService? jwt = null,
         IAuditWorkspaces? audit = null,
         ILogger<SignInService>? signInLogger = null,
-        IBreachedPasswords? breachedPasswords = null)
+        IBreachedPasswords? breachedPasswords = null,
+        ITenantLimits? limits = null)
     {
         if (jwt is null)
         {
@@ -88,6 +89,7 @@ internal class AccountServices
             NullLogger<RegistrationService>.Instance,
             metrics,
             cooldown,
+            limits ?? new FixedTenantLimits(),
             audit,
             breachedPasswords);
     }

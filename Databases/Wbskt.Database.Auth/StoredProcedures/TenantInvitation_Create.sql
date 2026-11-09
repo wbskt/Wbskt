@@ -14,7 +14,10 @@ CREATE PROCEDURE dbo.TenantInvitation_Create
     @TenantName NVARCHAR(100) OUTPUT,
     -- Comma-separated Workspaces.Id values the invitee joins on acceptance. NULL or empty for none.
     -- Every one must belong to @TenantId.
-    @WorkspaceIds NVARCHAR(MAX) = NULL
+    @WorkspaceIds NVARCHAR(MAX) = NULL,
+    -- The tenant's plan's limit on members (NULL is none). An invitation to a tenant already at it is
+    -- refused (50031), since it could never be accepted; TenantInvitation_Accept holds the limit.
+    @MemberLimit INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -32,6 +35,12 @@ BEGIN
         WHERE TM.TenantId = @TenantId AND U.Email = @Email)
     BEGIN
         THROW 50012, 'That user is already a member of this tenant.', 1;
+    END
+
+    IF @MemberLimit IS NOT NULL
+       AND (SELECT COUNT(*) FROM dbo.TenantMembers WHERE TenantId = @TenantId) >= @MemberLimit
+    BEGIN
+        THROW 50031, 'The plan has reached its member limit.', 1;
     END
 
     DECLARE @Workspaces TABLE (WorkspaceId INT NOT NULL PRIMARY KEY);

@@ -44,7 +44,7 @@ public sealed class PeopleAuditEventTests
 
         _tenantService = new TenantService(
             _tenants.Object, _accessControl.Object, Mock.Of<IAccountProvider>(), Mock.Of<IWorkspaceProvider>(), bus.Object, Mock.Of<IAuthMailer>(),
-            NullLogger<TenantService>.Instance, _audit.Object);
+            NullLogger<TenantService>.Instance, new FixedTenantLimits(), _audit.Object);
         _accessControlService = new AccessControlService(
             _accessControl.Object, _tenants.Object, Mock.Of<IAccountProvider>(), Mock.Of<IWorkspaceProvider>(), bus.Object,
             NullLogger<AccessControlService>.Instance, _audit.Object);
@@ -54,7 +54,7 @@ public sealed class PeopleAuditEventTests
     public async Task An_invitation_is_logged_in_every_workspace_of_the_tenant()
     {
         var invitationRef = Guid.NewGuid();
-        _tenants.Setup(p => p.CreateInvitationAsync(TenantId, "amal@example.test", null, It.IsAny<byte[]>(), It.IsAny<DateTime>(), CallerId, It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+        _tenants.Setup(p => p.CreateInvitationAsync(TenantId, "amal@example.test", null, It.IsAny<byte[]>(), It.IsAny<DateTime>(), CallerId, It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CreatedInvitation(invitationRef, "Acme"));
 
         await _tenantService.CreateInvitationAsync(CallerId, TenantId, new CreateInvitationRequest("amal@example.test", null), CancellationToken.None);

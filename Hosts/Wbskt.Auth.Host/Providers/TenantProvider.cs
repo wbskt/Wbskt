@@ -121,7 +121,7 @@ internal sealed class TenantProvider : BaseSqlProvider, ITenantProvider
         }, cancellationToken);
     }
 
-    public async Task<CreatedInvitation> CreateInvitationAsync(int tenantId, string email, int? roleId, byte[] tokenHash, DateTime expiresAt, int invitedByUserId, IReadOnlyCollection<int> workspaceIds, CancellationToken cancellationToken = default)
+    public async Task<CreatedInvitation> CreateInvitationAsync(int tenantId, string email, int? roleId, byte[] tokenHash, DateTime expiresAt, int invitedByUserId, IReadOnlyCollection<int> workspaceIds, int? memberLimit, CancellationToken cancellationToken = default)
     {
         var parameters = await ExecuteNonQueryAsync("dbo.TenantInvitation_Create", p =>
         {
@@ -134,6 +134,7 @@ internal sealed class TenantProvider : BaseSqlProvider, ITenantProvider
             p.Add("@RefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
             p.Add("@TenantName", SqlDbType.NVarChar, 100).Direction = ParameterDirection.Output;
             p.AddWithValue("@WorkspaceIds", workspaceIds.Count == 0 ? DBNull.Value : string.Join(',', workspaceIds));
+            p.AddWithValue("@MemberLimit", (object?)memberLimit ?? DBNull.Value);
         }, cancellationToken);
 
         return new CreatedInvitation((Guid)parameters["@RefId"].Value, (string)parameters["@TenantName"].Value);
@@ -156,13 +157,14 @@ internal sealed class TenantProvider : BaseSqlProvider, ITenantProvider
         );
     }
 
-    public async Task<int> AcceptInvitationAsync(byte[] tokenHash, int userId, CancellationToken cancellationToken = default)
+    public async Task<int> AcceptInvitationAsync(byte[] tokenHash, int userId, int? memberLimit, CancellationToken cancellationToken = default)
     {
         var parameters = await ExecuteNonQueryAsync("dbo.TenantInvitation_Accept", p =>
         {
             p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = tokenHash;
             p.AddWithValue("@UserId", userId);
             p.Add("@TenantId", SqlDbType.Int).Direction = ParameterDirection.Output;
+            p.AddWithValue("@MemberLimit", (object?)memberLimit ?? DBNull.Value);
         }, cancellationToken);
 
         return (int)parameters["@TenantId"].Value;

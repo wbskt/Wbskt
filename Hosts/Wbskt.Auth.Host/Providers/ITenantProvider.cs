@@ -44,11 +44,19 @@ internal interface ITenantProvider
 
     // Invitations. The token is never stored or accepted in raw form here — the service hashes it,
     // so a provider that logged its parameters could not leak a usable one.
-    /// <summary>Throws 50017 when one of <paramref name="workspaceIds"/> is not in the tenant.</summary>
-    Task<CreatedInvitation> CreateInvitationAsync(int tenantId, string email, int? roleId, byte[] tokenHash, DateTime expiresAt, int invitedByUserId, IReadOnlyCollection<int> workspaceIds, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Throws 50017 when one of <paramref name="workspaceIds"/> is not in the tenant, and 50031 when the
+    /// tenant already has <paramref name="memberLimit"/> members (null is no limit).
+    /// </summary>
+    Task<CreatedInvitation> CreateInvitationAsync(int tenantId, string email, int? roleId, byte[] tokenHash, DateTime expiresAt, int invitedByUserId, IReadOnlyCollection<int> workspaceIds, int? memberLimit, CancellationToken cancellationToken = default);
     /// <summary>Throws <see cref="Wbskt.Primitives.Exceptions.SecurityException"/> when no invitation carries that hash.</summary>
     Task<InvitationLookup> GetInvitationByTokenHashAsync(byte[] tokenHash, CancellationToken cancellationToken = default);
-    Task<int> AcceptInvitationAsync(byte[] tokenHash, int userId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Joins the user to the invitation's tenant and returns its id. Throws 50011 for an invitation that
+    /// cannot be redeemed, and 50031 when joining would take the tenant past <paramref name="memberLimit"/>
+    /// members (null is no limit).
+    /// </summary>
+    Task<int> AcceptInvitationAsync(byte[] tokenHash, int userId, int? memberLimit, CancellationToken cancellationToken = default);
     /// <summary>The invitation's address, or null when it was not outstanding (already used, revoked or unknown).</summary>
     Task<string?> RevokeInvitationAsync(Guid invitationRef, int tenantId, CancellationToken cancellationToken = default);
     Task<IPagedList<InvitationResponse>> GetInvitationsAsync(int tenantId, int skip, int take, CancellationToken cancellationToken = default);

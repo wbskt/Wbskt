@@ -31,7 +31,11 @@ declare -A projects=(
 # The plain-HTTP dev port of each host, for the liveness probe.
 declare -A ports=([auth]=5000 [management]=5010 [client-auth]=5015 [gateway-ws]=5020 [engine]=5030)
 # Per-service settings on top of appsettings.Development.json, as space-separated KEY=VALUE pairs.
+# Auth: every scenario's user signs up on Free (one workspace, one member) and then makes a workspace of
+# its own (CreateIsolatedWorkspaceAsync) or invites others, so the suite raises those two Free limits.
+# Pooled limits the scenarios count against (clients, active runs) stay at Free's real values.
 declare -A settings=(
+  [auth]="Billing__Plans__Free__Workspaces=1000 Billing__Plans__Free__Members=1000"
   [client-auth]="Host__Role=ClientAuth Kestrel__Endpoints__Http__Url=http://localhost:5015 Kestrel__Endpoints__Https__Url=https://localhost:7015"
 )
 

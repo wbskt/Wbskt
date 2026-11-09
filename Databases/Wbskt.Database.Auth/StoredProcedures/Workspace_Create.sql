@@ -1,9 +1,12 @@
+-- @WorkspaceLimit is the tenant's plan's limit on workspaces (NULL is none). The tenant's row is
+-- locked before the count, so concurrent creations one short of the limit take turns.
 CREATE PROCEDURE dbo.Workspace_Create
     @Name NVARCHAR(100),
     @Description NVARCHAR(500),
     @OwnerUserId INT,
     @TenantId INT,
-    @RefId UNIQUEIDENTIFIER OUTPUT
+    @RefId UNIQUEIDENTIFIER OUTPUT,
+    @WorkspaceLimit INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -12,6 +15,17 @@ BEGIN
     SET @RefId = NEWID();
 
     BEGIN TRANSACTION;
+
+    IF @WorkspaceLimit IS NOT NULL
+    BEGIN
+        SELECT @TenantId = Id FROM dbo.Tenants WITH (UPDLOCK, ROWLOCK) WHERE Id = @TenantId;
+
+        IF (SELECT COUNT(*) FROM dbo.Workspaces WHERE TenantId = @TenantId) >= @WorkspaceLimit
+        BEGIN
+            ROLLBACK TRANSACTION;
+            THROW 50030, 'The plan has reached its workspace limit.', 1;
+        END
+    END
 
     INSERT INTO dbo.Workspaces (RefId, TenantId, Name, Description, OwnerUserId)
     VALUES (@RefId, @TenantId, @Name, @Description, @OwnerUserId);

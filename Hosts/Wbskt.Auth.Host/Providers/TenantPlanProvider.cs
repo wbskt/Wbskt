@@ -15,6 +15,11 @@ internal sealed class TenantPlanProvider(IConfiguration configuration) : BaseSql
         return ExecuteFindAsync("dbo.TenantPlan_GetBy_RefId", p => p.AddWithValue("@RefId", tenantRef), MapPlan, cancellationToken);
     }
 
+    public Task<TenantPlan?> FindByIdAsync(int tenantId, CancellationToken cancellationToken)
+    {
+        return ExecuteFindAsync("dbo.TenantPlan_GetBy_Id", p => p.AddWithValue("@Id", tenantId), MapPlan, cancellationToken);
+    }
+
     public Task<TenantPlan?> SetAsync(int tenantId, PlanCode planCode, PlanLimitOverrides? limitOverrides, int expectedRevision, OutboxMessage changedEvent, CancellationToken cancellationToken)
     {
         return ExecuteFindAsync("dbo.TenantPlan_Set", p =>

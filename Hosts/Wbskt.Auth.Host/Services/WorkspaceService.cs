@@ -25,6 +25,7 @@ internal sealed class WorkspaceService : IWorkspaceService
     private readonly IEventBus _eventBus;
     private readonly ILogger<WorkspaceService> _logger;
     private readonly AuthMetrics _metrics;
+    private readonly ITenantLimits _limits;
 
     public WorkspaceService(
         IWorkspaceProvider workspaceProvider,
@@ -33,8 +34,10 @@ internal sealed class WorkspaceService : IWorkspaceService
         IAccessControlProvider accessControl,
         IEventBus eventBus,
         ILogger<WorkspaceService> logger,
-        AuthMetrics metrics)
+        AuthMetrics metrics,
+        ITenantLimits limits)
     {
+        _limits = limits;
         _workspaceProvider = workspaceProvider;
         _accounts = accounts;
         _tenants = tenants;
@@ -57,7 +60,18 @@ internal sealed class WorkspaceService : IWorkspaceService
             return Result<WorkspaceResponse>.Failure(Error.Validation("TENANT_REQUIRED", "User does not belong to any tenant."));
         }
 
-        var refId = await _workspaceProvider.CreateWorkspaceAsync(request.Name, request.Description ?? string.Empty, ownerId, tenant.Id, cancellationToken);
+        var limits = await _limits.ForTenantAsync(tenant.Id, cancellationToken);
+        Guid refId;
+        try
+        {
+            refId = await _workspaceProvider.CreateWorkspaceAsync(request.Name, request.Description ?? string.Empty, ownerId, tenant.Id, limits.Workspaces, cancellationToken);
+        }
+        catch (SqlException ex) when (ex.Number == 50030)
+        {
+            _logger.LogWarning("Workspace creation refused: tenant {TenantId} is at its plan's limit of {Limit} workspaces", tenant.Id, limits.Workspaces);
+            return Result<WorkspaceResponse>.Failure(SqlGuardErrors.PlanWorkspaceLimitReached);
+        }
+
         _logger.LogInformation("Workspace '{WorkspaceName}' created successfully with RefId: {RefId}", request.Name, refId);
 
         var workspaceId = await _workspaceProvider.FindIdByRefIdAsync(refId, cancellationToken);

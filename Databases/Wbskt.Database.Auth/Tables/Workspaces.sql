@@ -12,3 +12,9 @@ CREATE TABLE dbo.Workspaces (
     CONSTRAINT FK_Workspaces_Users FOREIGN KEY (OwnerUserId) REFERENCES dbo.Users(Id)
 );
 GO
+
+-- A tenant's workspaces: counted against its plan (Workspace_Create) and listed with its plan
+-- (WorkspaceAccount_GetPage).
+CREATE NONCLUSTERED INDEX IX_Workspaces_TenantId
+    ON dbo.Workspaces (TenantId);
+GO
