@@ -1,5 +1,4 @@
 using System.Net.WebSockets;
-using System.Text.Json;
 using FluentAssertions;
 using MQTTnet;
 using Wbskt.E2E.FeatureTests.Fixtures;
@@ -61,13 +60,11 @@ public sealed class MqttGatewayTests(ServicesFixture fixture)
         await WaitForConnectedAsync(token, workspace, clientRef);
 
         // Sent or queued, it reaches the down topic: a queued command is delivered as the client connects.
-        var response = await fixture.SendAsync(HttpMethod.Post, ServicesFixture.ManagementUrl($"/api/v1/workspaces/{workspace}/clients/{clientRef}/commands"), token,
-            new { type = "e2e.blink", payload = "{\"times\":2}" });
-        response.EnsureSuccessStatusCode();
-        string commandId = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("commandId").GetString()!;
+        var sent = await fixture.Management.As(token).SendClientCommandAsync(workspace, clientRef, new ClientCommandRequest("e2e.blink", "{\"times\":2}"));
+        string commandId = sent.CommandId.ToString();
 
         var command = await client.NextOfAsync("e2e.blink", Patience);
-        command.GetProperty("commandId").GetString().Should().Be(commandId);
+        Guid.Parse(command.GetProperty("commandId").GetString()!).Should().Be(sent.CommandId);
 
         await client.PublishAsync(new ProtocolMessage(MessageTypes.Ack, new AckPayload(commandId)));
 

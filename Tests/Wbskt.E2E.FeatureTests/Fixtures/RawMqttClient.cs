@@ -27,7 +27,7 @@ public sealed class RawMqttClient : IAsyncDisposable
         {
             if (args.ApplicationMessage.Topic == MqttBinding.DownTopic(clientRefId))
             {
-                _received.Writer.TryWrite(JsonDocument.Parse(args.ApplicationMessage.ConvertPayloadToString()).RootElement.Clone());
+                _received.Writer.TryWrite(JsonSerializer.Deserialize<JsonElement>(args.ApplicationMessage.ConvertPayloadToString()));
             }
 
             return Task.CompletedTask;
@@ -70,14 +70,23 @@ public sealed class RawMqttClient : IAsyncDisposable
             .WithTimeout(TimeSpan.FromSeconds(15))
             .Build();
 
-        var result = await mqtt.ConnectAsync(options);
-        if (result.ResultCode != MqttClientConnectResultCode.Success)
+        try
         {
+            var result = await mqtt.ConnectAsync(options);
+            if (result.ResultCode == MqttClientConnectResultCode.Success)
+            {
+                return (result.ResultCode, client);
+            }
+
             mqtt.Dispose();
             return (result.ResultCode, null);
         }
-
-        return (result.ResultCode, client);
+        catch
+        {
+            // Unreachable or timed out: nothing to hand back, so nothing left open.
+            mqtt.Dispose();
+            throw;
+        }
     }
 
     /// <summary>Publishes <paramref name="text"/> on the client's up topic, verbatim.</summary>
