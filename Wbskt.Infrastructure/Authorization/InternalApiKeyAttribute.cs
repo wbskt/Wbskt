@@ -1,15 +1,18 @@
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
-using Wbskt.Infrastructure;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
-namespace Wbskt.Auth.Host.Authorization;
+namespace Wbskt.Infrastructure.Authorization;
 
 /// <summary>
 /// Requires the shared internal key (<see cref="InternalRoutes.ApiKeyHeader"/>, configured as
 /// <see cref="ConfigKey"/>) on an internal route that a background job calls, where there is no user
-/// token to forward. The action also carries <c>[AllowAnonymous]</c>, because no bearer token comes
+/// token to forward, or that an operator calls from inside the backend network. The action also carries <c>[AllowAnonymous]</c>, because no bearer token comes
 /// with the call; this filter is what stands in for it.
 /// </summary>
 /// <remarks>
