@@ -203,6 +203,19 @@ groups:
             the file once (DBCC SHRINKFILE); if it is real data, plan the move off Express before the
             database reaches 10 GB. See "SQL Server edition" in deploy/README.md.
 
+      - alert: DatabaseAtExpressLimit
+        # Past the warning and still growing: at 10 GB every insert needing a new page fails, which
+        # stops readings, runs and audit for every customer at once, so this one wakes someone.
+        expr: max by (database) (wbskt_sql_data_file_bytes) > 9 * 1024 * 1024 * 1024
+        for: 15m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $labels.database }} has {{ $value | humanize1024 }}B of data files; Express stops writes at 10 GiB"
+          description: >-
+            Same steps as DatabaseNearExpressLimit, now urgent: shrink the file if it is free space, or
+            trim readings retention and move off Express. See "SQL Server edition" in deploy/README.md.
+
       - alert: EngineNotReporting
         expr: absent(wbskt_workflow_dispatcher_queue_depth)
         for: 5m
