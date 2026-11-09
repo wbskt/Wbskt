@@ -62,6 +62,29 @@ public sealed class CreditUsagePosterTests
     }
 
     [Fact]
+    public async Task A_post_that_carries_a_tenant_across_its_monthly_credits_warns_once_for_each_line_crossed()
+    {
+        // Tenant 1's two workspaces post 300 together, taking it from 700 to 1000 of 1000: 80% and 100%,
+        // named for the workspace that posted most. Tenant 2 stays under 80%; tenant 3 was past 80% already.
+        var provider = new RecordingCreditUsageProvider([
+            [
+                new WorkspaceCreditPost(11, 1, 100m, 100m, null, TenantId: 1, CreditsPerMonth: 1000m, TenantSpentThisMonth: 1000m),
+                new WorkspaceCreditPost(12, 1, 200m, 900m, null, TenantId: 1, CreditsPerMonth: 1000m, TenantSpentThisMonth: 1000m),
+                new WorkspaceCreditPost(21, 1, 10m, 10m, null, TenantId: 2, CreditsPerMonth: 1000m, TenantSpentThisMonth: 790m),
+                new WorkspaceCreditPost(31, 1, 10m, 10m, null, TenantId: 3, CreditsPerMonth: 1000m, TenantSpentThisMonth: 850m),
+                new WorkspaceCreditPost(41, 1, 10m, 10m, null)
+            ]
+        ]);
+        var bus = new RecordingEventBus();
+
+        await Poster(provider, bus, isLeader: true).TickAsync(CancellationToken.None);
+
+        Assert.Equal(
+            [(1, 12, 80, 1000m), (1, 12, 100, 1000m)],
+            bus.Published.OfType<TenantCreditAllowanceReachedEvent>().Select(e => (e.TenantId, e.WorkspaceId, e.Percent, e.CreditsSpent)).Order());
+    }
+
+    [Fact]
     public async Task A_standby_posts_nothing()
     {
         var provider = new RecordingCreditUsageProvider([]);
