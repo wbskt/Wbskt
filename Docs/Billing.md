@@ -300,6 +300,10 @@ never from a file in the repository.
   without acting again, and one that failed is acted on again when the provider redelivers it. An event
   only says which subscription or payment to read: `TenantBillingSync` reads it from the provider, so a
   late, repeated or reordered delivery cannot move a tenant to a plan it no longer pays for.
+  That read happens while the provider waits for the answer, on purpose: the provider retries a
+  delivery that fails or times out, and acting on it is idempotent, so a slow or failed read only
+  costs a redelivery. Queuing the work instead would add a second store and a worker for no gain in
+  what the tenant ends up on.
 - **Subscriptions.** Every subscription as read is stored (`dbo.TenantSubscriptions`, keyed by provider
   and subscription id). The one that decides the plan (`SubscriptionPlan.Deciding`) is the oldest still
   billing that is not a duplicate, else the newest. Its status decides the plan (`SubscriptionPlan.Decide`): active, past due or on hold for under 7 days
@@ -322,6 +326,11 @@ never from a file in the repository.
   (`dbo.TenantCreditPurchases`), and the same transaction writes `TenantCreditsGrantedEvent` to the
   outbox; the grant is spendable for `Billing:Payments:CreditPackValidity` (365 days). A full refund
   writes `TenantCreditGrantRevokedEvent` once (see Top-ups under Credits).
+- **Credit pack refunds** are a policy, not code (`Docs/Billing.Policies.md`): a pack is refundable in
+  full within 14 days of purchase while none of its credits have been drawn (`Drawn` on its row in
+  `dbo.TenantCreditGrants` is 0). An operator issues the refund in the provider's dashboard, and the full
+  refund revokes the grant. Partial refunds are not offered: one would change nothing here, and the
+  tenant would keep every credit of the pack.
 - **Refunds of a subscription payment** withhold the paid plan until the subscription has been paid past
   the refunded period. A partial refund changes nothing.
 - **Reading.** `GET /api/v1/tenants/{tenantRef}/billing` (`billing.read`) answers the plan, the
