@@ -217,6 +217,50 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
         }, cancellationToken);
     }
 
+    public async Task<bool> ClaimBillingNoticeAsync(int tenantId, BillingNoticeKind kind, string periodKey, CancellationToken cancellationToken)
+    {
+        return await ExecuteScalarAsync<int>("dbo.BillingNotice_Claim", p =>
+        {
+            p.AddWithValue("@TenantId", tenantId);
+            p.AddWithValue("@Kind", kind.ToString());
+            p.AddWithValue("@PeriodKey", periodKey);
+        }, cancellationToken) == 1;
+    }
+
+    public Task<IReadOnlyCollection<BillingContact>> GetBillingContactsAsync(int tenantId, CancellationToken cancellationToken)
+    {
+        return ExecuteCollectionAsync("dbo.TenantMember_GetContacts", p => p.AddWithValue("@TenantId", tenantId), r => new BillingContact(
+            r.GetInt32(r.GetOrdinal("Id")),
+            r.GetString(r.GetOrdinal("Username")),
+            r.GetString(r.GetOrdinal("Email"))), cancellationToken);
+    }
+
+    public Task<IReadOnlyCollection<PastDueSubscription>> GetPastDueBetweenAsync(DateTime from, DateTime to, CancellationToken cancellationToken)
+    {
+        return ExecuteCollectionAsync("dbo.TenantSubscriptions_GetPastDueBetween", p =>
+        {
+            p.AddWithValue("@From", from);
+            p.AddWithValue("@To", to);
+        }, r => new PastDueSubscription(
+            r.GetInt32(r.GetOrdinal("TenantId")),
+            r.GetString(r.GetOrdinal("SubscriptionId")),
+            Enum.Parse<PlanCode>(r.GetString(r.GetOrdinal("PlanCode"))),
+            r.GetDateTime(r.GetOrdinal("PastDueSince"))), cancellationToken);
+    }
+
+    public Task<IReadOnlyCollection<ExpiringCreditPurchase>> GetCreditPurchasesExpiringAsync(DateTime from, DateTime to, CancellationToken cancellationToken)
+    {
+        return ExecuteCollectionAsync("dbo.TenantCreditPurchases_GetExpiring", p =>
+        {
+            p.AddWithValue("@From", from);
+            p.AddWithValue("@To", to);
+        }, r => new ExpiringCreditPurchase(
+            r.GetInt32(r.GetOrdinal("TenantId")),
+            r.GetString(r.GetOrdinal("PaymentId")),
+            r.GetDecimal(r.GetOrdinal("Credits")),
+            r.GetDateTime(r.GetOrdinal("ExpiresAt"))), cancellationToken);
+    }
+
     private static TenantSubscription MapSubscription(SqlDataReader r)
     {
         int pastDueSince = r.GetOrdinal("PastDueSince");

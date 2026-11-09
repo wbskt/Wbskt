@@ -335,5 +335,7 @@ public sealed class AccountProfileServiceTests
             Sent.Add($"changed:{to}->{newEmail}");
             return ValueTask.CompletedTask;
         }
+
+        public ValueTask QueueBillingNoticeAsync(string to, string username, Wbskt.Auth.Host.Models.BillingNotice notice, string billingUrl, CancellationToken ct) => ValueTask.CompletedTask;
     }
 }

@@ -34,6 +34,7 @@ public sealed class BillingPaymentsTests
     private readonly Mock<ITenantPlanService> _planService = new();
     private readonly Mock<IAuditWorkspaces> _audit = new();
     private readonly Mock<IAccountProvider> _accounts = new();
+    private readonly Mock<IBillingNotifier> _notifier = new();
     private readonly List<TenantSubscription> _stored = [];
 
     private readonly BillingOptions _options = new()
@@ -157,6 +158,35 @@ public sealed class BillingPaymentsTests
         _planService.Verify(p => p.SetAsync(TenantRef,
             It.Is<SetTenantPlanRequest>(r => r.PlanCode == PlanCode.Maker && r.LimitOverrides!.Clients == 40 && r.ExpectedRevision == 1),
             It.IsAny<PlanSource>(), It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task A_failed_renewal_tells_the_billing_admins_until_when_the_plan_holds_and_a_paid_one_tells_nobody()
+    {
+        ProviderSays(new ProviderSubscription("sub_1", SubscriptionStatus.PastDue, "prod_pro_m", "cus_1", TenantRef, Now.AddDays(3), false));
+
+        await Sync().SyncSubscriptionAsync("sub_1", refundedThrough: null, CancellationToken.None);
+
+        _notifier.Verify(n => n.NotifyAsync(9, It.Is<BillingNotice>(notice =>
+            notice.Kind == BillingNoticeKind.PaymentFailed
+            && notice.PeriodKey == "sub_1:" + Now.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fff")
+            && notice.Paragraphs.Any(p => p.Contains("keeps Pro until " + Now.UtcDateTime.AddDays(7).ToString("d MMMM yyyy")))), It.IsAny<CancellationToken>()), Times.Once);
+
+        ProviderSays(new ProviderSubscription("sub_1", SubscriptionStatus.Active, "prod_pro_m", "cus_1", TenantRef, Now.AddMonths(1), false));
+        await Sync().SyncSubscriptionAsync("sub_1", refundedThrough: null, CancellationToken.None);
+
+        _notifier.Verify(n => n.NotifyAsync(It.IsAny<int>(), It.IsAny<BillingNotice>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_notice_that_cannot_be_sent_does_not_fail_the_sync()
+    {
+        _notifier.Setup(n => n.NotifyAsync(It.IsAny<int>(), It.IsAny<BillingNotice>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("relay"));
+        ProviderSays(new ProviderSubscription("sub_1", SubscriptionStatus.PastDue, "prod_pro_m", "cus_1", TenantRef, Now.AddDays(3), false));
+
+        var result = await Sync().SyncSubscriptionAsync("sub_1", refundedThrough: null, CancellationToken.None);
+
+        Assert.Null(result.Reason);
     }
 
     [Fact]
@@ -796,7 +826,7 @@ public sealed class BillingPaymentsTests
     // ----- Helpers -----------------------------------------------------------------------------------
 
     private TenantBillingSync Sync() => new(
-        _gateway.Object, _billing.Object, _plans.Object, _planService.Object, _audit.Object,
+        _gateway.Object, _billing.Object, _plans.Object, _planService.Object, _audit.Object, _notifier.Object,
         Options.Create(_options), new FixedClock(Now), NullLogger<TenantBillingSync>.Instance);
 
     private BillingWebhookService Webhooks() => new(_gateway.Object, _billing.Object, Sync(), new AuthMetrics(), NullLogger<BillingWebhookService>.Instance);
