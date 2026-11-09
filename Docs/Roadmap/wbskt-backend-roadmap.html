@@ -298,7 +298,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "due": "2026-11-30",
    "start": "2026-11-01",
    "open": 30,
-   "closed": 173
+   "closed": 177
   },
   {
    "name": "M3 Go public",
@@ -350,8 +350,8 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   },
   "167": {
    "state": "progress",
-   "why": "Billing is built (8–9 Nov) and the whole of its review is merged. The review's high-severity fixes (#678, #682, #685–#687, PR #704); the credit fixes (#679, #680, #688, #692, PR #706); the retention grace, grant reconcile, paid-plan throttle and small hardening with written policies (#689–#691, #693, PR #708); plan changes with proration, limit numbers on refusals and audited operator plans (#695–#697, PR #710); and billing emails (#694, PR #711), with the review's two findings on them (#712, #713, PR #714). Next: the pricing changes (#698–#703, separate thread). Left before charging: the Dodo keys and product IDs on the VM and the console screens (Console#151, Amal).",
-   "prs": [653, 657, 658, 659, 662, 663, 704, 706, 708, 710, 711, 714]
+   "why": "Billing is built (8–9 Nov) and the whole of its review is merged. The review's high-severity fixes (#678, #682, #685–#687, PR #704); the credit fixes (#679, #680, #688, #692, PR #706); the retention grace, grant reconcile, paid-plan throttle and small hardening with written policies (#689–#691, #693, PR #708); plan changes with proration, limit numbers on refusals and audited operator plans (#695–#697, PR #710); and billing emails (#694, PR #711), with the review's two findings on them (#712, #713, PR #714); and the final product and architecture review's four (#715–#718, PR #719). Next: the pricing changes (#698–#703, separate thread). Left before charging: the Dodo keys and product IDs on the VM and the console screens (Console#151, Amal).",
+   "prs": [653, 657, 658, 659, 662, 663, 704, 706, 708, 710, 711, 714, 719]
   },
   "528": {
    "state": "you",
@@ -557,6 +557,10 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   }
  ],
  "issues": [
+  {"n":718,"t":"Credits: after an upgrade mid-month, packs are drawn before the plan's credits run out","s":"c","m":"M2","p":167,"a":["db"],"x":"2026-11-09"},
+  {"n":717,"t":"Billing: a failed upgrade drops the downgrade the customer had scheduled","s":"c","m":"M2","p":167,"a":["auth"],"x":"2026-11-09"},
+  {"n":716,"t":"Billing: a subscriber who cancelled can check out again and pay twice for the period","s":"c","m":"M2","p":167,"a":["auth"],"x":"2026-11-09"},
+  {"n":715,"t":"Billing emails: notices can be lost before they reach the auth host","s":"c","m":"M2","p":167,"a":["management","engine","db"],"x":"2026-11-09"},
   {"n":713,"t":"Billing emails: say how much of an expiring credit pack is left, and skip spent packs","s":"c","m":"M2","p":167,"a":["management","auth"],"x":"2026-11-09"},
   {"n":712,"t":"Billing emails: a notice claimed but lost from the in-memory mail queue is never sent","s":"c","m":"M2","p":167,"a":["auth","db"],"x":"2026-11-09"},
   {"n":703,"t":"Capacity: warn before the database nears the SQL Express limit","s":"o","m":"M2","p":167,"a":["ops","db"]},
