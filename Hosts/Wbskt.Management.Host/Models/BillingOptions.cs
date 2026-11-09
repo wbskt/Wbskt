@@ -28,8 +28,8 @@ public sealed class BillingOptions
     /// <summary>
     /// How many times its monthly message allowance a Maker or Pro account may carry before its clients
     /// are held to Free's one message a minute until the 1st. Paid plans are never charged for overage, so
-    /// this only stops one account from loading the hosts without end. Free is throttled at 1x; Business
-    /// never is.
+    /// this only stops one account from loading the hosts without end. Must be more than 1 (checked at
+    /// start). Free is throttled at 1x; Business never is.
     /// </summary>
     public decimal PaidMessageThrottleMultiple { get; set; } = Wbskt.Infrastructure.Billing.MessageAllowance.DefaultPaidThrottleMultiple;
 }
