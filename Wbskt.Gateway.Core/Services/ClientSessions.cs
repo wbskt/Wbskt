@@ -135,7 +135,7 @@ public sealed class ClientSessions
             announcing = AnnounceConnectedAsync(
                 new ClientConnectedEvent(clientRefId, connection.ClientId, connection.WorkspaceId, _hostId), stopAnnouncing.Token);
 
-            var context = new InboundContext(clientRefId, connection) { Allowance = new ClientAllowance(_throttle, connection.WorkspaceId, _time) };
+            var context = new InboundContext(clientRefId, connection) { Allowance = new ClientAllowance(_throttle, connection.WorkspaceId, clientRefId) };
             var inbox = new ClientInbox(context, new MessageBudget(_budgetOptions), _dispatcher, _metrics, _inboxLogger);
             reason = await receive(inbox);
         }
