@@ -180,6 +180,33 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
             .Which.Should().Be(new WorkspaceCreditPost(workspaceId, 1, 8m, 8m, 10m));
     }
 
+    [SkippableFact]
+    public async Task Usage_counts_the_accounts_workspaces_and_splits_out_this_ones_share()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int tenantId = NewId();
+        int mine = NewId();
+        int sibling = NewId();
+        await AddAccountAsync(mine, tenantId);
+        await AddAccountAsync(sibling, tenantId);
+        WorkflowDefinitionRow mineWd = await CreateDefinitionAsync(mine);
+        WorkflowDefinitionRow siblingWd = await CreateDefinitionAsync(sibling);
+        long posted = await StartAsync(mineWd, startCost: 1m);
+        await ChargeAsync(posted, 2m);
+        await PostAsync();
+        await StartAsync(siblingWd, startCost: 4m);
+        await SetCapAsync(mine, 50m);
+        var usage = new Wbskt.Management.Host.Providers.WorkspaceUsageProvider(ProviderFactory.BuildConfiguration(fixture.ConnectionString));
+        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var summary = await usage.GetSummaryAsync(mine, tenantId, new DateOnly(today.Year, today.Month, 1), CancellationToken.None);
+        var days = await usage.GetDailyCreditsAsync(mine, today.AddDays(-1), today, CancellationToken.None);
+
+        summary.Should().Be(new Wbskt.Management.Host.Models.WorkspaceUsageSummary(7m, 3m, 0, 0, 2, 1, 50m));
+        days.Should().Equal(new Wbskt.Management.Models.DailyCreditUsage(today, 3m));
+    }
+
     private async Task<decimal> SetCapAsync(int workspaceId, decimal? cap)
     {
         await using var connection = new SqlConnection(fixture.ConnectionString);

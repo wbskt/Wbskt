@@ -107,6 +107,8 @@ public static class Program
         builder.Services.AddScoped<WorkspaceAccountSync>();
         builder.Services.AddScoped<IWorkspaceCreditCapProvider, WorkspaceCreditCapProvider>();
         builder.Services.AddScoped<IWorkspaceCreditCapService, WorkspaceCreditCapService>();
+        builder.Services.AddScoped<IWorkspaceUsageProvider, WorkspaceUsageProvider>();
+        builder.Services.AddScoped<IWorkspaceUsageService, WorkspaceUsageService>();
         if (role == HostRole.All)
         {
             builder.Services.AddHostedService<WorkspaceAccountSyncWorker>();

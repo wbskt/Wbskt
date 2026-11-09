@@ -117,8 +117,24 @@ then 100% of its cap.
 A refused trigger is reported once per workflow and limit per minute as `WorkflowTriggerRefusedEvent`,
 whose `reason` is `ActiveRunLimit`, `CreditLimit` or `WorkspaceCreditCap`.
 
-Not built yet: top-up grants (#627, with payments in #631) and the usage API (#630), which reads the
-same ledger.
+Not built yet: top-up grants (#627, with payments in #631).
+
+## Usage
+
+Two reads show a plan against what has been used, both behind `billing.read` (every member's default):
+
+- **The tenant's seats** on the auth host, `GET /api/v1/tenants/{tenantRef}/usage`: the plan, its limits
+  and how many workspaces and members the tenant has, counted as `dbo.Workspace_Create` and the
+  invitation procedures count them (`dbo.TenantSeats_GetBy_TenantId`).
+- **Credits, clients and runs** on the management host, `GET /api/v1/workspaces/{workspaceRef}/usage`:
+  this month's use pooled across the tenant's workspaces (`dbo.TenantWorkspaces`, as the limits are
+  checked), this workspace's share and cap, and its credits per day from the ledger
+  (`dbo.WorkspaceUsage_GetSummary`, `dbo.WorkspaceCreditUsage_GetDaily`). Credits are counted as
+  `dbo.Run_Start` counts them, so a run is refused exactly when `used` reaches `limit`.
+
+The split follows where the data lives: seats are counted in the auth database, everything else in the
+main one, and neither host calls the other to answer. Message usage joins the management read with the
+message meter (#629).
 
 Lock order, where a procedure takes more than one: the trigger key lock, then the test-run lock, then the
 plan lock (`dbo.Run_Start`); the clients' and policies' rows, then the plan lock (client procedures).

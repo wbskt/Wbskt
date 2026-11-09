@@ -563,6 +563,102 @@
         ],
         "type": "object"
       },
+      "PlanCode": {
+        "enum": [
+          "Free",
+          "Maker",
+          "Pro",
+          "Business"
+        ]
+      },
+      "PlanLimits": {
+        "properties": {
+          "activeRuns": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "clients": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "creditsPerMonth": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "hourlyReadingsDays": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "members": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "messagesPerMonth": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "rawReadingsDays": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "runHistoryDays": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "workspaces": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "clients",
+          "messagesPerMonth",
+          "creditsPerMonth",
+          "activeRuns",
+          "workspaces",
+          "members",
+          "rawReadingsDays",
+          "hourlyReadingsDays",
+          "runHistoryDays"
+        ],
+        "type": "object"
+      },
       "RefreshTokenRequest": {
         "properties": {
           "refreshToken": {
@@ -811,6 +907,29 @@
         ],
         "type": "object"
       },
+      "TenantUsageResponse": {
+        "properties": {
+          "limits": {
+            "$ref": "#/components/schemas/PlanLimits"
+          },
+          "members": {
+            "$ref": "#/components/schemas/UsageCount"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PlanCode"
+          },
+          "workspaces": {
+            "$ref": "#/components/schemas/UsageCount"
+          }
+        },
+        "required": [
+          "plan",
+          "limits",
+          "workspaces",
+          "members"
+        ],
+        "type": "object"
+      },
       "TransferOwnershipRequest": {
         "properties": {
           "userRef": {
@@ -892,6 +1011,31 @@
         "required": [
           "name",
           "description"
+        ],
+        "type": "object"
+      },
+      "UsageCount": {
+        "properties": {
+          "limit": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "used": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "used",
+          "limit"
         ],
         "type": "object"
       },
@@ -3386,6 +3530,46 @@
         ],
         "responses": {
           "200": {
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "Management"
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantRef}/usage": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenantRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantUsageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantUsageResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantUsageResponse"
+                }
+              }
+            },
             "description": "OK"
           }
         },

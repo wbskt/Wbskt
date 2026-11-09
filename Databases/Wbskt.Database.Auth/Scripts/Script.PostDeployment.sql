@@ -238,7 +238,22 @@ BEGIN
 END
 GO
 
--- Billing. Not a default User grant: it decides what the account spends. Admin roles get it below.
+-- Billing. billing.read (what the plan allows and what has been used) joins the User role's default
+-- reads (Tenant_Create), granted once to the User roles that already exist, as integrations.read was.
+IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'billing.read')
+BEGIN
+    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('billing.read', 'Read the plan, its limits and what has been used');
+
+    INSERT INTO dbo.RolePermissions (RoleId, PermissionId, IsDeny)
+    SELECT r.Id, p.Id, 0
+    FROM dbo.Roles r
+    INNER JOIN dbo.Permissions p ON p.Slug = 'billing.read'
+    WHERE r.Kind = 'User'
+      AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = r.Id AND rp.PermissionId = p.Id);
+END
+GO
+
+-- billing.manage is not a default User grant: it decides what the account spends. Admin roles get it below.
 IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'billing.manage')
 BEGIN
     INSERT INTO dbo.Permissions (Slug, Description) VALUES ('billing.manage', 'Set a workspace''s monthly credit cap');
@@ -268,7 +283,7 @@ BEGIN
     EXEC('INSERT INTO dbo.RolePermissions (RoleId, PermissionId, IsDeny)
           SELECT b.Id, p.Id, 0
           FROM dbo.__UserRoleDefaultsBackfill b
-          INNER JOIN dbo.Permissions p ON p.Slug IN (''clients.read'', ''policies.read'', ''templates.read'', ''workflows.read'', ''logs.read'', ''integrations.read'')
+          INNER JOIN dbo.Permissions p ON p.Slug IN (''clients.read'', ''policies.read'', ''templates.read'', ''workflows.read'', ''logs.read'', ''integrations.read'', ''billing.read'')
           WHERE NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = b.Id AND rp.PermissionId = p.Id);');
     EXEC('DROP TABLE dbo.__UserRoleDefaultsBackfill;');
 END

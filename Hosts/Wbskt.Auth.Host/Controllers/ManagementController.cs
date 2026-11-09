@@ -21,7 +21,7 @@ namespace Wbskt.Auth.Host.Controllers;
 [AnnouncesWorkspaceAccessChange]
 [ApiController]
 [Authorize]
-public class ManagementController(ITenantService tenantService, IAccessControlService accessControlService) : ApiControllerBase
+public class ManagementController(ITenantService tenantService, IAccessControlService accessControlService, ITenantUsageService usageService) : ApiControllerBase
 {
     private const int DefaultPageSize = 100;
 
@@ -57,6 +57,17 @@ public class ManagementController(ITenantService tenantService, IAccessControlSe
     public async Task<IActionResult> UpdateTenant([FromTenant] int tenantId, [FromBody] UpdateTenantRequest request, CancellationToken cancellationToken)
     {
         return MapResult(await tenantService.UpdateTenantAsync(tenantId, request, cancellationToken));
+    }
+
+    /// <summary>
+    /// The tenant's plan, everything it allows, and its workspaces and members against those limits.
+    /// Credits, clients and runs are on the management host's <c>GET …/workspaces/{workspaceRef}/usage</c>.
+    /// </summary>
+    [HttpGet("{tenantRef:guid}/usage")]
+    [RequiresTenantPermission(PermissionNames.BillingRead)]
+    public async Task<ActionResult<TenantUsageResponse>> GetUsage([FromTenant] int tenantId, CancellationToken cancellationToken)
+    {
+        return MapResult(await usageService.GetAsync(tenantId, cancellationToken));
     }
 
     // ----- Invitations -------------------------------------------------------------------------

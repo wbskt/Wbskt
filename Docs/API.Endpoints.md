@@ -240,6 +240,7 @@ role or user belonging to another tenant reads as nonexistent.
 | `GET /` | none | Lists the caller's tenants. The entry point for everything below. |
 | `POST /` | none | Creates a tenant the caller administers. Self-serve, hence ungated. |
 | `PUT {tenantRef}` | `users.manage` | Renames a tenant or changes its description. |
+| `GET {tenantRef}/usage` | `billing.read` | The tenant's plan, its limits (with any negotiated overrides applied) and its seats: `{ plan, limits, workspaces: { used, limit }, members: { used, limit } }`. A member counts suspended or not; a pending invitation does not. Credits, clients and runs are pooled on the management host and read from a workspace's `…/usage`. |
 
 **Invitations**
 
@@ -583,10 +584,11 @@ Hardened for an anonymous edge, on three axes:
 These relay inward to the engine over the backend network with the shared API key attached, so the
 engine is never exposed publicly and the manual/signal channels never get a public route at all.
 
-### 2.11 Credits — `…/credit-cap`
+### 2.11 Credits and usage — `…/credit-cap`, `…/usage`
 
 | Endpoint | Permission | What it does |
 |---|---|---|
+| `GET /api/v1/workspaces/{workspaceRef}/usage` | `billing.read` | What the plan allows against what has been used this calendar month (UTC): `{ plan, periodStart, periodEnd, account, workspace, days }`. `account` is pooled across the account's workspaces, as the limits are: `credits: { used, limit }`, `clients` and `activeRuns: { used, limit }`. `workspace` is this workspace's share: `credits`, `monthlyCreditCap` (null when uncapped), `clients`, `activeRuns`. Credits count the ledger plus what running runs have not posted yet, as a run start does; clients are approved ones. `days` is this workspace's credits per UTC day from `from` to `to` (default the last 31 days, at most 366), leaving out days with none. Messages are not reported yet (#629). |
 | `PUT /api/v1/workspaces/{workspaceRef}/credit-cap` | `billing.manage` | Sets the workspace's monthly credit cap, `{ monthlyCreditCap }`, or removes it with null. A ceiling on what it may spend of the account's shared credits in a calendar month (UTC), not a reservation: the caps of an account's workspaces may add up to more than it has. **200** `{ monthlyCreditCap, creditsSpentThisMonth, capReached }`; `capReached` true means the workspace already spent that much, so its new runs are refused from now on. Below 0 or above 10^12 is **400** `WORKSPACE_CREDIT_CAP_INVALID`. Raises `WorkspaceCreditCapSetEvent`. |
 
 A workspace whose spend reaches 80% and then 100% of its cap raises `WorkspaceCreditCapReachedEvent`

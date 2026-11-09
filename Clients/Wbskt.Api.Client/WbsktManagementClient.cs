@@ -525,4 +525,22 @@ public sealed class WbsktManagementClient : WbsktApiClient
     /// <summary><see cref="SendWebhookAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> SendWebhookRawAsync(Guid workspaceRef, string path, object? payload = null, CancellationToken cancellationToken = default) =>
         SendRawAsync(HttpMethod.Post, $"/api/callbacks/webhook/{workspaceRef}/{E(path)}", payload ?? EmptyBody, cancellationToken);
+
+    // ── Billing ───────────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>The workspace's plan, this month's use across its account and its own share, and its credits per day. <c>GET /api/v1/workspaces/{workspaceRef}/usage</c>.</summary>
+    public Task<WorkspaceUsageResponse> GetUsageAsync(Guid workspaceRef, DateTimeOffset? from = null, DateTimeOffset? to = null, CancellationToken cancellationToken = default) =>
+        ReceiveAsync<WorkspaceUsageResponse>(GetUsageRawAsync(workspaceRef, from, to, cancellationToken), cancellationToken);
+
+    /// <summary><see cref="GetUsageAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
+    public Task<HttpResponseMessage> GetUsageRawAsync(Guid workspaceRef, DateTimeOffset? from = null, DateTimeOffset? to = null, CancellationToken cancellationToken = default) =>
+        SendRawAsync(HttpMethod.Get, $"/api/v1/workspaces/{workspaceRef}/usage{Query(("from", from), ("to", to))}", null, cancellationToken);
+
+    /// <summary>Sets the workspace's monthly credit cap, or removes it with null. <c>PUT /api/v1/workspaces/{workspaceRef}/credit-cap</c>.</summary>
+    public Task<WorkspaceCreditCapResponse> SetCreditCapAsync(Guid workspaceRef, WorkspaceCreditCapRequest request, CancellationToken cancellationToken = default) =>
+        ReceiveAsync<WorkspaceCreditCapResponse>(SetCreditCapRawAsync(workspaceRef, request, cancellationToken), cancellationToken);
+
+    /// <summary><see cref="SetCreditCapAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
+    public Task<HttpResponseMessage> SetCreditCapRawAsync(Guid workspaceRef, WorkspaceCreditCapRequest request, CancellationToken cancellationToken = default) =>
+        SendRawAsync(HttpMethod.Put, $"/api/v1/workspaces/{workspaceRef}/credit-cap", request, cancellationToken);
 }

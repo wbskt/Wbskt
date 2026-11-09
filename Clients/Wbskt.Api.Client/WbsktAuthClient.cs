@@ -508,4 +508,12 @@ public sealed class WbsktAuthClient : WbsktApiClient
     /// <summary><see cref="UpdateMemberAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> UpdateMemberRawAsync(Guid tenantRef, Guid userRef, UpdateMemberRequest request, CancellationToken cancellationToken = default) =>
         SendRawAsync(HttpMethod.Patch, $"/api/v1/tenants/{tenantRef}/members/{userRef}", request, cancellationToken);
+
+    /// <summary>The tenant's plan, its limits, and its workspaces and members against them. <c>GET /api/v1/tenants/{tenantRef}/usage</c>.</summary>
+    public Task<TenantUsageResponse> GetTenantUsageAsync(Guid tenantRef, CancellationToken cancellationToken = default) =>
+        ReceiveAsync<TenantUsageResponse>(GetTenantUsageRawAsync(tenantRef, cancellationToken), cancellationToken);
+
+    /// <summary><see cref="GetTenantUsageAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
+    public Task<HttpResponseMessage> GetTenantUsageRawAsync(Guid tenantRef, CancellationToken cancellationToken = default) =>
+        SendRawAsync(HttpMethod.Get, $"/api/v1/tenants/{tenantRef}/usage", null, cancellationToken);
 }
