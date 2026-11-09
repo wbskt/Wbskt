@@ -84,6 +84,18 @@ public sealed class TestRunStarterTests
         _dispatcher.VerifyNoOtherCalls();
     }
 
+    [Fact]
+    public async Task A_workspace_too_busy_to_start_a_run_starts_nothing()
+    {
+        _runStarter.Setup(x => x.StartTestAsync(5, Trigger.ToString(), It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new RunStartBusyException(3));
+
+        TestRunStart started = await Starter().StartAsync(5, Trigger, Payload, CancellationToken.None);
+
+        Assert.Equal(TestRunStartOutcome.Busy, started.Outcome);
+        _dispatcher.VerifyNoOtherCalls();
+    }
+
     private TestRunStarter Starter() =>
         new(_runStarter.Object, _dispatcher.Object, _runs.Object, TimeProvider.System);
 }

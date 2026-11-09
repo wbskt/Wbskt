@@ -73,6 +73,7 @@ dbo.Tenants.PlanCode ──(copy)──────────►  dbo.Workspac
 | Messages a month | `MessageAllowanceMonitor`, then each socket host | Free only: each client held to one message a minute until the 1st (see Messages) |
 | Workflow credits a month | `dbo.Run_Start` | 50033; a trigger's dispatch reads `Refused`, a test run is **409** `PLAN_CREDIT_LIMIT_REACHED` |
 | A workspace's credit cap | `dbo.Run_Start` | 50034; a trigger's dispatch reads `Refused`, a test run is **409** `WORKSPACE_CREDIT_CAP_REACHED` |
+| (a start that waits too long for a lock) | `dbo.Run_Start` | 50035; retried, then a trigger's event is redelivered and a test run is **503** `WORKSPACE_BUSY` |
 | Workspaces | `dbo.Workspace_Create` (auth database) | 50030, **409** `PLAN_WORKSPACE_LIMIT_REACHED` |
 | Members | `dbo.TenantInvitation_Accept`, and `dbo.TenantInvitation_Create` up front | 50031, **409** `PLAN_MEMBER_LIMIT_REACHED` |
 
@@ -100,24 +101,42 @@ reads its delta, so a repeated or retried post adds nothing, and the ledger adds
 runs consumed. `dbo.Run_DeleteRetired` posts anything a run had left before deleting it, so the ledger
 outlives the runs.
 
-`dbo.Run_Start` adds up the tenant's ledger for the calendar month (UTC) plus what its running runs have
-not posted yet, and refuses the start (50033) once that reaches the plan's `CreditsPerMonth`. Otherwise
-the new run's budget is cut to what is left. The check takes no lock: starts racing for the last credits
-can overrun by at most the budgets they were given, which together are bounded by what was left times the
-runs going at once. A run already going is never stopped for the month's credits; it stops only at its
-own budget (`OutOfCredits`). Starts that take a place already held (a sub-workflow child, a queued event's
-replay, a run replacing those it cancels) skip the check, as they skip the active-run limit.
+`dbo.Run_Start` works out what the tenant has left of its credits for the calendar month (UTC): the plan's
+`CreditsPerMonth` less what the plan itself has covered (the ledger less what was drawn from grants as it
+was posted, `dbo.TenantCreditMonths`), never below zero, plus what the tenant's grants still hold, less
+what its running runs consumed and have not posted yet. It refuses the start (50033) when nothing is
+left, and otherwise cuts the new run's budget to what is. The check takes no lock: starts racing for the
+last credits can overrun by at most the budgets they were given, which together are bounded by what was
+left times the runs going at once. A run already going is never stopped for the month's credits; it stops
+only at its own budget (`OutOfCredits`).
+
+Starts that take a place already held (a queued event's replay, a run replacing those it cancels) skip
+the limit on runs going at once, but not the month's credits: a replay after the credits ran out is
+refused like any other start. A sub-workflow child is not checked at all. It spends from its root run's
+budget (`dbo.RunCounters.BudgetRunId`): its charges add to its own `CreditsConsumed`, which is what is
+posted, and to the root's `ChildCreditsConsumed`, and `dbo.RunCounters_TryCharge` holds the root's own
+and its children's charges together to the root's budget. A parent is never failed halfway because the
+month ran out under its child.
 
 **Workspace caps.** An owner can hold one workspace to a monthly credit cap
 (`PUT …/workspaces/{workspaceRef}/credit-cap`, `billing.manage`; `dbo.WorkspaceCreditCaps`). Every
-workspace still draws on the one shared pool, and a cap is a ceiling rather than a reservation, so the
-caps may add up to more than the allowance. `dbo.Run_Start` checks the cap after the tenant's allowance,
-counting the workspace's ledger for the month plus its running runs' unposted credits
-(`dbo.WorkspaceCreditsSpent`). It refuses with 50034 (**409** `WORKSPACE_CREDIT_CAP_REACHED` on a test
-run) and otherwise cuts the run's budget to the smaller of the two remainders. Lowering a cap below what
-was already spent refuses new runs at once, and the response says so (`capReached`). As it posts,
-`CreditUsagePoster` raises `WorkspaceCreditCapReachedEvent` when a post carries a workspace across 80% and
-then 100% of its cap.
+workspace still draws on the one shared pool, and the caps may add up to more than the allowance.
+`dbo.Run_Start` checks the cap after the tenant's allowance and holds it exactly: under an application
+lock per workspace (`credit-cap:{workspaceId}`), it counts what the workspace spent this month, posted or
+not (`dbo.WorkspaceCreditsSpent`), plus the unspent budget of each of its running root runs
+(`dbo.WorkspaceCreditsReserved`), and refuses with 50034 (**409** `WORKSPACE_CREDIT_CAP_REACHED` on a test
+run) when what is left would not cover the start's own cost. Otherwise it cuts the run's budget to the
+smaller of the two remainders. A run cannot charge past its budget, so the workspace cannot pass its cap,
+however many runs it starts at once. Lowering a cap below what was already spent refuses new runs at
+once, and the response says so (`capReached`). As it posts, `CreditUsagePoster` raises
+`WorkspaceCreditCapReachedEvent` when a post carries a workspace across 80% and then 100% of its cap.
+
+**Busy.** Both locks a start can wait on (the tenant's run limit and a workspace's cap) give up after five
+seconds with 50035 rather than hold an inbound request and a pooled connection. `RunStarter` tries again
+twice (after 50 ms, then 200 ms), then throws `RunStartBusyException`: a trigger's event goes back to the
+queue to be redelivered, and a test run answers **503** `WORKSPACE_BUSY` with `Retry-After`. A busy start
+is never read as a full plan. Each one counts on `wbskt_workflow_run_starts_busy_total`
+(`outcome` is `retried` or `gave_up`).
 
 A refused trigger is reported once per workflow and limit per minute as `WorkflowTriggerRefusedEvent`,
 whose `reason` is `ActiveRunLimit`, `CreditLimit` or `WorkspaceCreditCap`.
@@ -127,13 +146,16 @@ for a tenant, spendable until it expires (12 months for a credit pack), recorded
 reference (`TenantCreditsGrantedEvent`, from the auth host's outbox, so a replayed payment adds nothing)
 and revoked by a refund (`TenantCreditGrantRevokedEvent`). `dbo.Run_Start` adds what the tenant's live
 grants still hold (`dbo.TenantCreditGrantBalance`) to the plan's monthly credits, so a tenant runs past the
-plan until the grants are spent too. The plan's credits are spent first: an hour into each month the
-management host settles the month before (`CreditGrantSettlement`, `dbo.TenantCreditGrants_Settle`),
-drawing what it spent past the plan from the grants that were live in it, soonest to expire first. A month
-is settled once (`dbo.TenantCreditGrantSettlements`). Until it is, that month's draw has not left the
-balance, so for the first hour of a month a tenant can spend up to its last month's overage twice; the
-run budgets bound it as they bound any race for the last credits. A revoked grant's drawn credits stay
-drawn; only what it still held stops counting.
+plan until the grants are spent too. The plan's credits are spent first, and the grants are drawn as the
+credits are posted: `dbo.RunCredits_Post` (and `dbo.Run_DeleteRetired`, which posts a deleted run's last
+credits) calls `dbo.TenantCreditGrants_Draw` with what each tenant posted. It draws only the part of the
+post that falls past the plan's allowance (`WorkspaceAccounts.CreditsPerMonth`, from the catalogue) in
+force at that moment, from the grants live then (not revoked, held or expired), soonest to expire first,
+and records the month's posted and drawn totals in `dbo.TenantCreditMonths`. A month's posted total is
+seeded from the ledger on the tenant's first post in it, so it is right after a deploy mid-month. A
+downgrade draws only from what is posted after it, and a grant that expired is never drawn from, so the
+balance a start reads is always current. A revoked grant's drawn credits stay drawn; only what it still
+held stops counting.
 
 A grant whose payment has an open chargeback is **held** (`TenantCreditGrantHoldChangedEvent`,
 `dbo.TenantCreditGrant_SetHold`): it stops counting towards the balance and is not drawn from while held,
@@ -295,4 +317,6 @@ exists, nothing is deleted: 503 `BILLING_SUBSCRIPTION_NOT_CANCELLED`, and the ca
   provider's retry burst; a refused delivery is redelivered.
 
 Lock order, where a procedure takes more than one: the trigger key lock, then the test-run lock, then the
-plan lock (`dbo.Run_Start`); the clients' and policies' rows, then the plan lock (client procedures).
+plan lock, then the workspace's cap lock, then the root run's counter row (`dbo.Run_Start`); the run
+counters, then `dbo.WorkspaceCreditUsage`, then the tenant's grants and `dbo.TenantCreditMonths`
+(`dbo.RunCredits_Post`, `dbo.Run_DeleteRetired`); the clients' and policies' rows, then the plan lock (client procedures).

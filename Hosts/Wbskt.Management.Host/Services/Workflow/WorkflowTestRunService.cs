@@ -143,6 +143,11 @@ public sealed class WorkflowTestRunService : IWorkflowTestRunService
                     "WORKSPACE_CREDIT_CAP_REACHED",
                     "This workspace has used its monthly credit cap. Runs start again on the 1st, or when the cap is raised."));
 
+            case EngineTestRunOutcome.Busy:
+                return Result<StartTestRunResponse>.Failure(Error.Unavailable(
+                    "WORKSPACE_BUSY",
+                    "Too many runs are starting in this workspace at once. Try again in a moment."));
+
             default:
                 throw new InvalidOperationException($"Unrecognised engine outcome '{response.Outcome}' for a test run of workflow '{workflowRefId}'.");
         }

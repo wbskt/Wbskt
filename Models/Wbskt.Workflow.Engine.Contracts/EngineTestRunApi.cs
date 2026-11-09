@@ -28,7 +28,10 @@ public enum EngineTestRunOutcome
     CreditsSpent,
 
     /// <summary>The workspace has spent its own monthly credit cap.</summary>
-    WorkspaceCreditCapReached
+    WorkspaceCreditCapReached,
+
+    /// <summary>Other starts held the workspace's lock for too long; nothing about the plan refused it, so try again.</summary>
+    Busy
 }
 
 public sealed record EngineTestRunResponse(EngineTestRunOutcome Outcome, Guid? RunRefId = null, Guid? ActiveRunRefId = null);

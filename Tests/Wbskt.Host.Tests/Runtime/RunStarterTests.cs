@@ -233,16 +233,57 @@ public sealed class RunStarterTests
     }
 
     [Fact]
-    public async Task An_exempt_start_sends_no_credit_allowance()
+    public async Task An_exempt_replay_skips_the_ceiling_but_not_the_months_credits()
     {
         List<string> operations = [];
         var runProvider = new RecordingRunProvider(operations) { CreditsSpent = true };
         RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions());
 
-        RunStartResult result = await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), AnEvent(), null, CancellationToken.None, exemptFromCeiling: true);
+        await Assert.ThrowsAsync<PlanCreditLimitException>(() =>
+            starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), AnEvent(), null, CancellationToken.None, exemptFromCeiling: true));
+
+        Assert.Null(runProvider.Ceiling);
+        Assert.NotNull(runProvider.Credits);
+    }
+
+    [Fact]
+    public async Task A_sub_workflow_child_sends_no_credit_allowance_and_spends_from_its_parent()
+    {
+        Guid parent = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
+        List<string> operations = [];
+        var runProvider = new RecordingRunProvider(operations) { CreditsSpent = true };
+        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions());
+        InboundEvent child = new InboundEvent(
+            "manual",
+            [],
+            "evt-child",
+            new Dictionary<string, JsonElement> { ["body"] = JsonSerializer.SerializeToElement(new { parentRunRefId = parent, depth = 1 }) },
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc)) { CorrelationKey = "c", StartsChildRun = true };
+
+        RunStartResult result = await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), child, null, CancellationToken.None, exemptFromCeiling: true);
 
         Assert.True(result.Created);
         Assert.Null(runProvider.Credits);
+        Assert.Equal(parent, runProvider.CreatedRun!.ParentRunRefId);
+    }
+
+    [Fact]
+    public async Task A_start_that_waits_too_long_for_its_lock_is_tried_again_and_never_read_as_a_full_plan()
+    {
+        List<string> operations = [];
+        var metrics = new WorkflowMetrics();
+        var once = new RecordingRunProvider(operations) { BusyTimes = 2 };
+        var always = new RecordingRunProvider(operations) { BusyTimes = int.MaxValue };
+
+        RunStartResult started = await Starter(once, operations, new WorkflowEngineOptions(), workflowMetrics: metrics)
+            .StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), AnEvent(), null, CancellationToken.None);
+        var busy = await Assert.ThrowsAsync<RunStartBusyException>(() => Starter(always, operations, new WorkflowEngineOptions(), workflowMetrics: metrics)
+            .StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), AnEvent(), null, CancellationToken.None));
+
+        Assert.True(started.Created);
+        Assert.Equal(3, once.Attempts);
+        Assert.Equal(RunStarter.BusyBackoff.Length + 1, always.Attempts);
+        Assert.Equal(9, busy.WorkspaceId);
     }
 
     [Fact]
@@ -408,10 +449,18 @@ public sealed class RunStarterTests
         public bool CreditsSpent { get; init; }
         public bool CapSpent { get; init; }
         public PlanCredits? Credits { get; private set; }
+        public int BusyTimes { get; init; }
+        public int Attempts { get; private set; }
 
         public Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, PlanCeiling? ceiling, ActiveRunGuard activeRunGuard, PlanCredits? creditAllowance, CancellationToken ct)
         {
             Credits = creditAllowance;
+            Ceiling = ceiling;
+            if (++Attempts <= BusyTimes)
+            {
+                throw AuthHost.SqlExceptions.WithNumber(50035, "The account is too busy to start another run; try again.");
+            }
+
             if (CreditsSpent && creditAllowance is not null)
             {
                 operations.Add("run");

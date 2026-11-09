@@ -1,6 +1,7 @@
 -- A workspace's optional limit on the workflow credits it may spend in a calendar month (UTC), out of
 -- its tenant's shared allowance. A ceiling, not a reservation: the caps of a tenant's workspaces may add
--- up to more than its allowance. No row is no cap. Set by WorkspaceCreditCap_Set; checked in Run_Start.
+-- up to more than its allowance. No row is no cap. Set by WorkspaceCreditCap_Set; Run_Start holds it
+-- exactly by counting what is spent and the unspent budgets of the workspace's running runs.
 CREATE TABLE dbo.WorkspaceCreditCaps
 (
     WorkspaceId      INT           NOT NULL,

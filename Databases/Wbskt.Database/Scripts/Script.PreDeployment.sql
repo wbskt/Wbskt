@@ -182,3 +182,19 @@ BEGIN
         PRINT ''>>> IdempotencyKeys: marked '' + CAST(@@ROWCOUNT AS NVARCHAR(20)) + '' key(s) with an unknown status Failed'';';
 END
 GO
+/*
+--------------------------------------------------------------------------------------
+Pre-Deployment Script: drop the month-end credit grant settlement
+--------------------------------------------------------------------------------------
+Credits past a plan's allowance are drawn from a tenant's grants as they are posted
+(dbo.TenantCreditGrants_Draw, #680) instead of an hour into the next month, which used the plan held
+at settle time and could draw a whole month from packs after a lapse on the 1st. Nothing calls the
+settlement procedures and nothing reads their table, and DropObjectsNotInSource is off, so they are
+dropped here as Client_Verify is. What earlier settlements drew stays drawn on the grants.
+*/
+DROP PROCEDURE IF EXISTS dbo.TenantCreditGrants_Settle;
+GO
+DROP PROCEDURE IF EXISTS dbo.TenantCreditGrants_GetUnsettled;
+GO
+DROP TABLE IF EXISTS dbo.TenantCreditGrantSettlements;
+GO

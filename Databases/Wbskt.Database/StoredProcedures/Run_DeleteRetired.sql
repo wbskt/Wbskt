@@ -57,17 +57,37 @@ BEGIN
     WHERE rc.RunId IN (SELECT Id FROM @Runs)
       AND rc.CreditsConsumed <> rc.PostedCredits;
 
+    DECLARE @ByWorkspace TABLE (WorkspaceId INT NOT NULL PRIMARY KEY, Credits DECIMAL(18,4) NOT NULL);
+    INSERT INTO @ByWorkspace (WorkspaceId, Credits)
+    SELECT d.WorkspaceId, SUM(m.Credits)
+    FROM @Moved m
+    JOIN dbo.Runs r ON r.Id = m.RunId
+    JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
+    GROUP BY d.WorkspaceId;
+
     MERGE dbo.WorkspaceCreditUsage WITH (HOLDLOCK) AS t
-    USING (SELECT d.WorkspaceId, SUM(m.Credits) AS Credits
-           FROM @Moved m
-           JOIN dbo.Runs r ON r.Id = m.RunId
-           JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
-           GROUP BY d.WorkspaceId) AS s
+    USING @ByWorkspace AS s
     ON t.WorkspaceId = s.WorkspaceId AND t.Day = @Today
     WHEN MATCHED THEN
         UPDATE SET Credits = t.Credits + s.Credits, UpdatedAt = SYSUTCDATETIME()
     WHEN NOT MATCHED THEN
         INSERT (WorkspaceId, Day, Credits) VALUES (s.WorkspaceId, @Today, s.Credits);
+
+    -- Drawn from the tenants' grants past their allowance, as RunCredits_Post does.
+    DECLARE @Posts dbo.TenantCreditPostTableType;
+    INSERT INTO @Posts (TenantId, Credits, Allowance)
+    SELECT a.TenantId, SUM(w.Credits), MAX(a.CreditsPerMonth)
+    FROM @ByWorkspace w
+    JOIN dbo.WorkspaceAccounts a ON a.WorkspaceId = w.WorkspaceId
+    WHERE a.CreditsPerMonth IS NOT NULL
+    GROUP BY a.TenantId;
+
+    IF EXISTS (SELECT 1 FROM @Posts)
+    BEGIN
+        DECLARE @TodayMonth DATE = DATEFROMPARTS(YEAR(@Today), MONTH(@Today), 1);
+        DECLARE @Now DATETIME2(3) = SYSUTCDATETIME();
+        EXEC dbo.TenantCreditGrants_Draw @Posts = @Posts, @MonthStart = @TodayMonth, @At = @Now;
+    END
 
     DELETE FROM dbo.HistoryEvents  WHERE RunId IN (SELECT Id FROM @Runs);
     DELETE FROM dbo.Bookmarks      WHERE RunId IN (SELECT Id FROM @Runs);

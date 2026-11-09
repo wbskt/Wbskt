@@ -1,8 +1,6 @@
-using Wbskt.Management.Host.Models;
-
 namespace Wbskt.Management.Host.Providers;
 
-/// <summary>A tenant's credit grants (<c>dbo.TenantCreditGrants</c>) and the months drawn from them.</summary>
+/// <summary>A tenant's credit grants (<c>dbo.TenantCreditGrants</c>): recorded, revoked and held as its payments change.</summary>
 public interface ICreditGrantProvider
 {
     /// <summary>Records the grant once per source and reference; false when it was already recorded.</summary>
@@ -17,8 +15,4 @@ public interface ICreditGrantProvider
     /// </summary>
     Task<bool> SetHoldAsync(string source, string sourceRef, bool held, int revision, DateTime atUtc, CancellationToken ct);
 
-    Task<IReadOnlyCollection<UnsettledCreditGrantTenant>> GetUnsettledAsync(DateOnly monthStart, CancellationToken ct);
-
-    /// <summary>Draws the month's spend past <paramref name="allowance"/> from the tenant's grants; null when the month was already settled.</summary>
-    Task<decimal?> SettleAsync(int tenantId, DateOnly monthStart, decimal allowance, CancellationToken ct);
 }

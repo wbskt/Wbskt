@@ -21,7 +21,8 @@ CREATE PROCEDURE dbo.Run_Start
     -- Credits charged for creating the run; seeded into its counters so the charge commits with it.
     @StartCost            DECIMAL(18,4) = 0,
     -- The plan's workflow credits a calendar month (UTC), pooled across @TenantId's workspaces (50033),
-    -- and with it the workspace's own cap (50034).
+    -- and with it the workspace's own cap (50034). NULL for a sub-workflow child, which spends from its
+    -- parent's budget instead.
     @CreditAllowance      DECIMAL(18,4) = NULL
 AS
 BEGIN
@@ -105,16 +106,16 @@ BEGIN
             -- IX_Runs_WorkflowRefId_CorrelationKey_Active), pooled across the tenant's workspaces
             -- (dbo.TenantWorkspaces). Counted under an application lock per tenant, so concurrent
             -- starts one short of the limit cannot all pass the count. NULL is no limit. The wait for
-            -- the lock is bounded: a start that cannot get it in a few seconds is refused as though the
-            -- plan were full, rather than holding an inbound request (and a pooled connection) for as
-            -- long as the tenant stays contended.
+            -- the lock is bounded: a start that cannot get it in a few seconds is refused as busy
+            -- (50035, which the caller retries), rather than holding an inbound request (and a pooled
+            -- connection) for as long as the tenant stays contended.
             IF @MaxActiveRuns IS NOT NULL AND @WorkspaceId IS NOT NULL
             BEGIN
                 DECLARE @Resource NVARCHAR(255) = dbo.PlanLimitLockResource(N'runs', @WorkspaceId, @TenantId);
                 DECLARE @LockResult INT;
                 EXEC @LockResult = sp_getapplock @Resource = @Resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
                 IF @LockResult < 0
-                    THROW 50026, 'The account is too busy to start another run.', 1;
+                    THROW 50035, 'The account is too busy to start another run; try again.', 1;
 
                 -- IX_Runs_WorkflowDefinitionId_Active keeps this to the runs still going.
                 IF (SELECT COUNT(*)
@@ -125,48 +126,94 @@ BEGIN
                     THROW 50026, 'The plan has reached its limit of active runs.', 1;
             END
 
-            -- The plan's monthly credits, pooled like the runs above: what the ledger holds for this
-            -- calendar month (UTC) plus what the runs still going consumed and have not posted yet. Not
-            -- locked: starts racing for the last credits are bounded instead by each run's budget, cut
-            -- to what is left. NULL is no limit.
+            -- The plan's monthly credits, pooled like the runs above. What the plan itself has covered
+            -- this calendar month (UTC) is the ledger less what was drawn from credit grants as it was
+            -- posted (dbo.TenantCreditMonths); what is left is the plan's remainder (none once a downgrade
+            -- puts the month past it) plus what the grants still hold, less what the runs still going
+            -- consumed and have not posted yet. Not locked: starts racing for the last credits are bounded
+            -- instead by each run's budget, cut to what is left, so the plan's allowance is soft by at most
+            -- those budgets. NULL is no limit.
             IF @CreditAllowance IS NOT NULL AND @WorkspaceId IS NOT NULL
             BEGIN
                 DECLARE @MonthStart DATE = DATEFROMPARTS(YEAR(@StartedAt), MONTH(@StartedAt), 1);
-                DECLARE @CreditsSpent DECIMAL(18,4) =
+                DECLARE @CreditsPosted DECIMAL(18,4) =
                     ISNULL((SELECT SUM(u.Credits)
                             FROM dbo.WorkspaceCreditUsage u
                             JOIN dbo.TenantWorkspaces(@WorkspaceId, @TenantId) w ON w.WorkspaceId = u.WorkspaceId
-                            WHERE u.Day >= @MonthStart), 0)
-                  + ISNULL((SELECT SUM(rc.CreditsConsumed - rc.PostedCredits)
+                            WHERE u.Day >= @MonthStart), 0);
+                DECLARE @CreditsUnposted DECIMAL(18,4) =
+                    ISNULL((SELECT SUM(rc.CreditsConsumed - rc.PostedCredits)
                             FROM dbo.Runs r
                             JOIN dbo.RunCounters rc ON rc.RunId = r.Id
                             JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
                             JOIN dbo.TenantWorkspaces(@WorkspaceId, @TenantId) w ON w.WorkspaceId = d.WorkspaceId
                             WHERE r.Status IN (N'Running', N'Failing', N'Cancelling')), 0);
+                DECLARE @CreditsDrawn DECIMAL(18,4) =
+                    ISNULL((SELECT Drawn FROM dbo.TenantCreditMonths WHERE TenantId = @TenantId AND MonthStart = @MonthStart), 0);
 
-                -- Credit packs the tenant bought count on top of the plan's monthly credits until they
-                -- expire; what a month spends past the plan is drawn from them when it is settled.
-                IF @TenantId IS NOT NULL
-                    SET @CreditAllowance += (SELECT Credits FROM dbo.TenantCreditGrantBalance(@TenantId, @StartedAt));
+                DECLARE @PlanLeft DECIMAL(18,4) = @CreditAllowance - (@CreditsPosted - @CreditsDrawn);
+                IF @PlanLeft < 0
+                    SET @PlanLeft = 0;
 
-                IF @CreditsSpent >= @CreditAllowance
+                DECLARE @CreditsLeft DECIMAL(18,4) = @PlanLeft - @CreditsUnposted
+                    + CASE WHEN @TenantId IS NULL THEN 0 ELSE (SELECT Credits FROM dbo.TenantCreditGrantBalance(@TenantId, @StartedAt)) END;
+
+                IF @CreditsLeft <= 0
                     THROW 50033, 'The plan has used its workflow credits for this month.', 1;
 
-                IF @CreditAllowance - @CreditsSpent < @CreditBudget
-                    SET @CreditBudget = @CreditAllowance - @CreditsSpent;
+                IF @CreditsLeft < @CreditBudget
+                    SET @CreditBudget = @CreditsLeft;
 
-                -- The workspace's own cap, if its owner set one (dbo.WorkspaceCreditCaps), checked the same
-                -- way after the tenant's allowance, so the error names the limit that is actually spent
-                -- when both are.
+                -- The workspace's own cap, if its owner set one (dbo.WorkspaceCreditCaps), checked after the
+                -- tenant's allowance, so the error names the limit that is actually spent when both are. A
+                -- cap is held exactly: what the workspace spent this month plus what its runs still going
+                -- may yet spend (each root run's unspent budget, which its sub-workflow children share) is
+                -- reserved against it, under a lock per workspace so two starts cannot both take the same
+                -- remainder. A run's charges never pass its budget, so the workspace never passes its cap.
                 DECLARE @Cap DECIMAL(18,4) = (SELECT MonthlyCreditCap FROM dbo.WorkspaceCreditCaps WHERE WorkspaceId = @WorkspaceId);
                 IF @Cap IS NOT NULL
                 BEGIN
+                    DECLARE @CapResource NVARCHAR(255) = CONCAT(N'credit-cap:', @WorkspaceId);
+                    DECLARE @CapLockResult INT;
+                    EXEC @CapLockResult = sp_getapplock @Resource = @CapResource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
+                    IF @CapLockResult < 0
+                        THROW 50035, 'The workspace is too busy to start another run; try again.', 1;
+
                     DECLARE @WorkspaceSpent DECIMAL(18,4) = (SELECT Credits FROM dbo.WorkspaceCreditsSpent(@WorkspaceId, @MonthStart));
-                    IF @WorkspaceSpent >= @Cap
+                    DECLARE @WorkspaceReserved DECIMAL(18,4) = (SELECT Credits FROM dbo.WorkspaceCreditsReserved(@WorkspaceId));
+                    DECLARE @CapLeft DECIMAL(18,4) = @Cap - @WorkspaceSpent - @WorkspaceReserved;
+
+                    IF @CapLeft <= 0 OR @CapLeft < @StartCost
                         THROW 50034, 'The workspace has used its monthly credit cap.', 1;
 
-                    IF @Cap - @WorkspaceSpent < @CreditBudget
-                        SET @CreditBudget = @Cap - @WorkspaceSpent;
+                    IF @CapLeft < @CreditBudget
+                        SET @CreditBudget = @CapLeft;
+                END
+            END
+
+            -- A sub-workflow child spends from its root run's budget (dbo.RunCounters.BudgetRunId): its
+            -- parent was checked against the plan when it started, so a parent never fails halfway
+            -- because its child was refused. Its own CreditBudget shows the budget it shares. Its start
+            -- charge goes on the root like its later charges, taken whether or not the root has room, as
+            -- a charge already made cannot be refused. The root's counter row is locked here, before the
+            -- child's is written, the order RunCounters_TryCharge takes them in.
+            DECLARE @BudgetRunId INT;
+            IF @ParentRunRefId IS NOT NULL
+            BEGIN
+                SELECT @BudgetRunId = COALESCE(rc.BudgetRunId, rc.RunId)
+                FROM dbo.Runs p
+                JOIN dbo.RunCounters rc ON rc.RunId = p.Id
+                WHERE p.RefId = @ParentRunRefId;
+
+                IF @BudgetRunId IS NOT NULL
+                BEGIN
+                    UPDATE rc WITH (ROWLOCK)
+                    SET rc.ChildCreditsConsumed = rc.ChildCreditsConsumed + @StartCost,
+                        rc.UpdatedAt = SYSUTCDATETIME()
+                    FROM dbo.RunCounters rc
+                    WHERE rc.RunId = @BudgetRunId;
+
+                    SELECT @CreditBudget = CreditBudget FROM dbo.Runs WHERE Id = @BudgetRunId;
                 END
             END
 
@@ -182,8 +229,8 @@ BEGIN
 
             SET @RunId = SCOPE_IDENTITY();
 
-            INSERT INTO dbo.RunCounters (RunId, ActiveBranchCount, CreditsConsumed)
-            VALUES (@RunId, 1, @StartCost);
+            INSERT INTO dbo.RunCounters (RunId, ActiveBranchCount, CreditsConsumed, BudgetRunId)
+            VALUES (@RunId, 1, @StartCost, @BudgetRunId);
 
             INSERT INTO dbo.Branches (RefId, RunId, NodeId, Status, LocalJson)
             VALUES (@BranchRefId, @RunId, @TriggerNodeId, N'Active', @BranchLocalJson);

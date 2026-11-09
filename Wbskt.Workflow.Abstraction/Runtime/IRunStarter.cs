@@ -8,13 +8,16 @@ public interface IRunStarter
     /// Starts a run of the workflow from its trigger node. With a <paramref name="triggerStartKey"/>, a
     /// run already started under the same key is returned instead (<see cref="RunStartResult.Created"/>
     /// false) and nothing new is created. Past the plan's limit of active runs it throws
-    /// <see cref="PlanRunLimitException"/>, and once the plan's credits for the month are spent
+    /// <see cref="PlanRunLimitException"/>, unless <paramref name="exemptFromCeiling"/>: a start that
+    /// takes a place already held (a sub-workflow child, a queued event replayed when its run finished, a
+    /// run replacing the ones it cancels). Once the plan's credits for the month are spent it throws
     /// <see cref="PlanCreditLimitException"/> (or <see cref="WorkspaceCreditCapException"/> for the
-    /// workspace's own cap), unless <paramref name="exemptFromCeiling"/>: a start
-    /// that takes a place already held (a sub-workflow child, a queued event replayed when its run
-    /// finished, a run replacing the ones it cancels). With an <paramref name="activeRunGuard"/>, a run
-    /// still active for the same trigger and correlation key refuses the start with
-    /// <see cref="ActiveRunConflictException"/>.
+    /// workspace's own cap), exempt or not: a replay or a replacement is new work. A sub-workflow child
+    /// alone is not checked, since it spends from its parent's budget. With an
+    /// <paramref name="activeRunGuard"/>, a run still active for the same trigger and correlation key
+    /// refuses the start with <see cref="ActiveRunConflictException"/>. A start that cannot get its
+    /// tenant's or workspace's lock is tried again a few times, then throws
+    /// <see cref="RunStartBusyException"/>.
     /// </summary>
     Task<RunStartResult> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, CancellationToken ct, bool exemptFromCeiling = false, ActiveRunGuard activeRunGuard = ActiveRunGuard.None);
 
@@ -62,6 +65,17 @@ public sealed class PlanCreditLimitException(int workspaceId, decimal allowance)
 /// </summary>
 public sealed class WorkspaceCreditCapException(int workspaceId)
     : InvalidOperationException($"Workspace {workspaceId} has spent its monthly credit cap.")
+{
+    public int WorkspaceId { get; } = workspaceId;
+}
+
+/// <summary>
+/// Thrown by <see cref="IRunStarter.StartAsync"/> when the start could not get its tenant's or workspace's
+/// lock after a few tries: other starts are holding it. Nothing was created, and nothing about the plan
+/// refused it; the caller may try again.
+/// </summary>
+public sealed class RunStartBusyException(int workspaceId)
+    : InvalidOperationException($"Workspace {workspaceId} is too busy to start another run; try again.")
 {
     public int WorkspaceId { get; } = workspaceId;
 }

@@ -5,7 +5,7 @@ using Wbskt.Models.Billing;
 
 namespace Wbskt.Infrastructure.Billing;
 
-public sealed class WorkspaceAccountProvider(IConfiguration configuration) : BaseSqlProvider(configuration), IWorkspaceAccountProvider
+public sealed class WorkspaceAccountProvider(IConfiguration configuration, PlanCatalog catalog) : BaseSqlProvider(configuration), IWorkspaceAccountProvider
 {
     public Task<WorkspaceAccount?> FindAsync(int workspaceId, CancellationToken ct)
     {
@@ -19,7 +19,9 @@ public sealed class WorkspaceAccountProvider(IConfiguration configuration) : Bas
             return 0;
         }
 
-        // One round trip for a page of copies: the procedure reads them with OPENJSON.
+        // One round trip for a page of copies: the procedure reads them with OPENJSON. The monthly credits go
+        // with each copy, worked out from the catalogue here, so the credit poster can draw past them from
+        // the tenant's grants in SQL.
         string json = JsonSerializer.Serialize(accounts.Select(account => new
         {
             account.WorkspaceId,
@@ -27,7 +29,8 @@ public sealed class WorkspaceAccountProvider(IConfiguration configuration) : Bas
             account.TenantRefId,
             PlanCode = account.PlanCode.ToString(),
             LimitOverrides = PlanLimitOverridesJson.Write(account.LimitOverrides),
-            account.PlanRevision
+            account.PlanRevision,
+            catalog.LimitsFor(account.PlanCode, account.LimitOverrides).CreditsPerMonth
         }));
 
         return await ExecuteScalarAsync<int>("dbo.WorkspaceAccount_Upsert", p => p.AddWithValue("@Accounts", json), ct);

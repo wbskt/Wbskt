@@ -152,7 +152,7 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
 
         int workspaceId = NewId();
         WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
-        long first = await StartAsync(wd, startCost: 1m);
+        long first = await StartAsync(wd, startCost: 1m, budget: 1m);
         await SetCapAsync(workspaceId, 4m);
         long capped = await StartAsync(wd, credits: new PlanCredits(1000m, null));
         await SetCapAsync(workspaceId, null);
@@ -225,7 +225,7 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
 
     private static int NewId() => Random.Shared.Next(1_000_000, int.MaxValue - 1);
 
-    private async Task<long> StartAsync(WorkflowDefinitionRow wd, decimal startCost = 0m, PlanCredits? credits = null)
+    private async Task<long> StartAsync(WorkflowDefinitionRow wd, decimal startCost = 0m, PlanCredits? credits = null, decimal budget = 100m)
     {
         DateTime now = DateTime.UtcNow;
         Guid triggerNodeId = Guid.NewGuid();
@@ -242,7 +242,7 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
             CompletedAt = null,
             CancellationRequestedAt = null,
             CancellationReason = null,
-            CreditBudget = 100m,
+            CreditBudget = budget,
             CreatedAt = now,
             StartCost = startCost
         };
