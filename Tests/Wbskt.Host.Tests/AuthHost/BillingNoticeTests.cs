@@ -126,6 +126,16 @@ public sealed class BillingNoticeTests
         Assert.Contains(notice.Paragraphs, p => p.Contains("hourly readings for 365 days (was 730)") && !p.Contains("run history for 30"));
     }
 
+    [Theory]
+    [InlineData(PlanCode.Free, "one message a minute")]
+    [InlineData(PlanCode.Pro, "Far past it they are slowed")]
+    [InlineData(PlanCode.Business, "your contract covers")]
+    public void The_message_warning_says_what_the_plan_does_past_its_allowance(PlanCode plan, string expected)
+    {
+        Assert.Contains(BillingNotices.MessagesApproaching(plan, 100, 80, Now).Paragraphs, p => p.Contains(expected));
+        Assert.DoesNotContain(BillingNotices.MessagesReached(PlanCode.Business, 100, 100, throttled: false, Now).Paragraphs, p => p.Contains("slowed"));
+    }
+
     [Fact]
     public async Task Nothing_is_claimed_while_there_is_no_relay_or_no_one_to_write_to_so_it_is_sent_once_there_is()
     {

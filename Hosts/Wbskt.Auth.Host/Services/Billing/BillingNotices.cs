@@ -63,9 +63,12 @@ internal static class BillingNotices
             "80% of this month's messages are used",
             [
                 $"Your account's clients have carried {Number(used)} of the {Number(allowance)} messages your {plan} plan includes this month.",
-                plan == PlanCode.Free
-                    ? $"At the allowance each client is held to one message a minute until {Date(NextMonth(at))}. Move to a paid plan to avoid that."
-                    : "Past the allowance nothing more is charged and your clients carry on. Far past it they are slowed, so if traffic keeps growing, consider a larger plan."
+                plan switch
+                {
+                    PlanCode.Free => $"At the allowance each client is held to one message a minute until {Date(NextMonth(at))}. Move to a paid plan to avoid that.",
+                    PlanCode.Business => "Past the allowance your clients carry on; your contract covers what is carried beyond it.",
+                    _ => "Past the allowance nothing more is charged and your clients carry on. Far past it they are slowed, so if traffic keeps growing, consider a larger plan."
+                }
             ]);
 
     public static BillingNotice MessagesReached(PlanCode plan, long allowance, long used, bool throttled, DateTime at) =>
@@ -74,9 +77,12 @@ internal static class BillingNotices
             "This month's messages are used",
             [
                 $"Your account's clients have carried {Number(used)} messages this month, past the {Number(allowance)} your {plan} plan includes.",
-                throttled
-                    ? $"Each client is now held to one message a minute until {Date(NextMonth(at))}. Move to a larger plan to lift that now."
-                    : "Nothing more is charged and your clients carry on. Far past the allowance they are slowed, so if traffic keeps growing, consider a larger plan."
+                (throttled, plan) switch
+                {
+                    (true, _) => $"Each client is now held to one message a minute until {Date(NextMonth(at))}. Move to a larger plan to lift that now.",
+                    (false, PlanCode.Business) => "Your clients carry on; your contract covers what is carried beyond the allowance.",
+                    _ => "Nothing more is charged and your clients carry on. Far past the allowance they are slowed, so if traffic keeps growing, consider a larger plan."
+                }
             ]);
 
     public static BillingNotice MessagesThrottled(PlanCode plan, long allowance, long throttledAt, long used, DateTime at) =>
