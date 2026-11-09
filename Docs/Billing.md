@@ -118,7 +118,18 @@ then 100% of its cap.
 A refused trigger is reported once per workflow and limit per minute as `WorkflowTriggerRefusedEvent`,
 whose `reason` is `ActiveRunLimit`, `CreditLimit` or `WorkspaceCreditCap`.
 
-Not built yet: top-up grants (#627, with payments in #631).
+**Top-ups.** Credits bought on top of the plan are grants (`dbo.TenantCreditGrants`): a number of credits
+for a tenant, spendable until it expires (12 months for a credit pack), recorded once per source and
+reference (`TenantCreditsGrantedEvent`, from the auth host's outbox, so a replayed payment adds nothing)
+and revoked by a refund (`TenantCreditGrantRevokedEvent`). `dbo.Run_Start` adds what the tenant's live
+grants still hold (`dbo.TenantCreditGrantBalance`) to the plan's monthly credits, so a tenant runs past the
+plan until the grants are spent too. The plan's credits are spent first: an hour into each month the
+management host settles the month before (`CreditGrantSettlement`, `dbo.TenantCreditGrants_Settle`),
+drawing what it spent past the plan from the grants that were live in it, soonest to expire first. A month
+is settled once (`dbo.TenantCreditGrantSettlements`). Until it is, that month's draw has not left the
+balance, so for the first hour of a month a tenant can spend up to its last month's overage twice; the
+run budgets bound it as they bound any race for the last credits. A revoked grant's drawn credits stay
+drawn; only what it still held stops counting.
 
 ## Messages
 

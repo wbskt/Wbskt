@@ -20,7 +20,14 @@ public sealed record WorkspaceUsageResponse(
 /// <summary>Used against the plan's limit, across every workspace of the account.</summary>
 public sealed record AccountUsage(CreditUsageAmount Credits, MessageUsageAmount Messages, UsageCount Clients, UsageCount ActiveRuns);
 
-public sealed record CreditUsageAmount(decimal Used, decimal Limit);
+/// <param name="Used">Workflow credits spent this month.</param>
+/// <param name="Limit">The plan's monthly credits.</param>
+/// <param name="TopUp">
+/// Credits the account bought on top, still unspent and unexpired. A run is refused once
+/// <c>Used</c> reaches <c>Limit</c> plus <c>TopUp</c>; what a month spends past <c>Limit</c> comes out of
+/// <c>TopUp</c> when the month closes.
+/// </param>
+public sealed record CreditUsageAmount(decimal Used, decimal Limit, decimal TopUp);
 
 /// <summary>Client messages both ways (sent by clients, and commands delivered to them) against the plan's monthly allowance.</summary>
 /// <param name="Throttled">

@@ -1,7 +1,7 @@
 -- What a workspace and its tenant (dbo.TenantWorkspaces, as the plan limits count them) have used of
 -- the plan: workflow credits since @MonthStart (the ledger plus running runs' unposted credits, as
 -- Run_Start counts them), client messages since @MonthStart (dbo.WorkspaceMessageUsage), registered
--- clients and runs going, and the workspace's own credit cap.
+-- clients and runs going, the workspace's own credit cap, and the credits the tenant's grants still hold.
 CREATE PROCEDURE dbo.WorkspaceUsage_GetSummary
     @WorkspaceId INT,
     @TenantId    INT,
@@ -55,6 +55,7 @@ BEGIN
         (SELECT ISNULL(SUM(Clients), 0) FROM @Clients WHERE WorkspaceId = @WorkspaceId) AS WorkspaceClients,
         (SELECT ISNULL(SUM(Runs), 0) FROM @Runs) AS TenantActiveRuns,
         (SELECT ISNULL(SUM(Runs), 0) FROM @Runs WHERE WorkspaceId = @WorkspaceId) AS WorkspaceActiveRuns,
-        (SELECT MonthlyCreditCap FROM dbo.WorkspaceCreditCaps WHERE WorkspaceId = @WorkspaceId) AS MonthlyCreditCap;
+        (SELECT MonthlyCreditCap FROM dbo.WorkspaceCreditCaps WHERE WorkspaceId = @WorkspaceId) AS MonthlyCreditCap,
+        (SELECT Credits FROM dbo.TenantCreditGrantBalance(@TenantId, SYSUTCDATETIME())) AS CreditGrantBalance;
 END;
 GO

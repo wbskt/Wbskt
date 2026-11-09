@@ -111,8 +111,11 @@ public static class Program
         builder.Services.AddScoped<IWorkspaceUsageService, WorkspaceUsageService>();
         builder.Services.AddScoped<IMessageAllowanceProvider, MessageAllowanceProvider>();
         builder.Services.AddScoped<MessageAllowanceMonitor>();
+        builder.Services.AddScoped<ICreditGrantProvider, CreditGrantProvider>();
+        builder.Services.AddScoped<CreditGrantSettlement>();
         if (role == HostRole.All)
         {
+            builder.Services.AddHostedService<CreditGrantSettlementWorker>();
             builder.Services.AddHostedService<WorkspaceAccountSyncWorker>();
             builder.Services.AddHostedService<MessageAllowanceWorker>();
         }

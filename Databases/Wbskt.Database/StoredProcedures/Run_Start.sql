@@ -144,6 +144,11 @@ BEGIN
                             JOIN dbo.TenantWorkspaces(@WorkspaceId, @TenantId) w ON w.WorkspaceId = d.WorkspaceId
                             WHERE r.Status IN (N'Running', N'Failing', N'Cancelling')), 0);
 
+                -- Credit packs the tenant bought count on top of the plan's monthly credits until they
+                -- expire; what a month spends past the plan is drawn from them when it is settled.
+                IF @TenantId IS NOT NULL
+                    SET @CreditAllowance += (SELECT Credits FROM dbo.TenantCreditGrantBalance(@TenantId, @StartedAt));
+
                 IF @CreditsSpent >= @CreditAllowance
                     THROW 50033, 'The plan has used its workflow credits for this month.', 1;
 

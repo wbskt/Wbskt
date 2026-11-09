@@ -667,6 +667,14 @@
               "string"
             ]
           },
+          "topUp": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
           "used": {
             "format": "double",
             "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
@@ -678,7 +686,8 @@
         },
         "required": [
           "used",
-          "limit"
+          "limit",
+          "topUp"
         ],
         "type": "object"
       },
