@@ -124,6 +124,42 @@ public sealed class WorkspaceAccountIntegrationTests(SqlEdgeFixture fixture)
         Assert.Null(await Provider().FindAsync(workspaceId, CancellationToken.None));
     }
 
+    [SkippableFact]
+    public async Task A_downgrade_holds_the_longest_retention_it_had_for_the_grace_days_and_an_upgrade_holds_nothing()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int workspaceId = NewWorkspaceId();
+        int upgraded = NewWorkspaceId();
+        var pro = new WorkspaceAccount(workspaceId, 43, Guid.NewGuid(), PlanCode.Pro, null, 0);
+        var free = new WorkspaceAccount(upgraded, 44, Guid.NewGuid(), PlanCode.Free, null, 0);
+        await Provider().UpsertAsync([pro, free], CancellationToken.None);
+
+        await Provider().UpsertAsync([pro with { PlanCode = PlanCode.Maker, PlanRevision = 1 }], CancellationToken.None);
+        await Provider().UpsertAsync([pro with { PlanCode = PlanCode.Free, PlanRevision = 2 }, free with { PlanCode = PlanCode.Pro, PlanRevision = 1 }], CancellationToken.None);
+
+        var held = await HeldAsync(workspaceId);
+        Assert.Equal((30, 730, 30), (held.Raw, held.Hourly, held.Runs));
+        Assert.InRange(held.Until!.Value, DateTime.UtcNow.AddDays(29), DateTime.UtcNow.AddDays(31));
+        Assert.Null((await HeldAsync(upgraded)).Until);
+    }
+
+    private async Task<(int? Raw, int? Hourly, int? Runs, DateTime? Until)> HeldAsync(int workspaceId)
+    {
+        await using var connection = new SqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new SqlCommand(
+            "SELECT HeldRawReadingsDays, HeldHourlyReadingsDays, HeldRunHistoryDays, RetentionHeldUntil FROM dbo.WorkspaceAccounts WHERE WorkspaceId = @WorkspaceId",
+            connection);
+        command.Parameters.AddWithValue("@WorkspaceId", workspaceId);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        return (
+            reader.IsDBNull(0) ? null : reader.GetInt32(0),
+            reader.IsDBNull(1) ? null : reader.GetInt32(1),
+            reader.IsDBNull(2) ? null : reader.GetInt32(2),
+            reader.IsDBNull(3) ? null : reader.GetDateTime(3));
+    }
+
     private async Task<decimal> CreditsPerMonthAsync(int workspaceId)
     {
         await using var connection = new SqlConnection(fixture.ConnectionString);

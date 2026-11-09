@@ -173,7 +173,9 @@ one, so a hold delivered after its release changes nothing.
 ## Run history
 
 A finished run, with its branches and history, is kept for the plan's `RunHistoryDays` (a tenant's
-`runHistoryDays` override wins; a workspace with no account is Free), counted from when it finished.
+`runHistoryDays` override wins), counted from when it finished. A workspace with no copy of its
+account yet loses no runs to its plan (only to the 365-day window below), and a downgrade keeps the old
+plan's days for a while (see Downgrades below).
 The engine's `HistoryRetentionGc` (hourly, leader only) hands every plan's days to
 `dbo.Run_DeleteRetired`, which works out each workspace's cutoff and deletes the runs past it, posting
 any credits they had not posted yet first. A run older than `HistoryRetentionWindowElevated` (365 days)
@@ -229,8 +231,16 @@ overrides of either apply. The management host's `ClientReadingRetentionService`
 Charts (`GET …/clients/{clientRef}/readings`) read both tables together, so a bucket's count, min, max and
 average are exact across the boundary; a rolled-up hour lands whole in the bucket its start falls in.
 CSV export reads raw readings only. Both tables and their indexes are page compressed. A workspace with
-no account copy keeps readings as Free does. Moving to a longer plan keeps what is still there; nothing
-already rolled up comes back.
+no account copy yet is skipped, so it loses nothing until its plan is known. Moving to a longer plan
+keeps what is still there; nothing already rolled up comes back.
+
+**Downgrades.** Retention sweeps cannot be undone, so a plan that lapses for a day must not cost a
+customer their history. Each account copy carries its retention days, worked out from the catalogue
+with the overrides applied (`WorkspaceAccounts.RawReadingsDays`, `HourlyReadingsDays`,
+`RunHistoryDays`). When a copy moves to shorter retention, `dbo.WorkspaceAccount_Upsert` keeps the days
+it had, or the longer hold still running from an earlier downgrade, in the `Held*` columns until
+`RetentionHeldUntil`, `Billing:RetentionGraceDays` (30) later. Until then both sweeps keep the longer
+of the two.
 
 ## Usage
 

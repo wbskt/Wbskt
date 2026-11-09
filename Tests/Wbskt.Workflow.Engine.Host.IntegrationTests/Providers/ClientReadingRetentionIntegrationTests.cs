@@ -32,7 +32,7 @@ public sealed class ClientReadingRetentionIntegrationTests(SqlEdgeFixture fixtur
     public async Task Readings_past_the_plans_raw_days_become_hours_and_a_chart_still_counts_every_one()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
-        int client = await CreateClientAsync(plan: null);
+        int client = await CreateClientAsync(plan: "Free");
         DateTime old = Now.AddDays(-5).AddMinutes(5);
         await ReadAsync(client, old, 10);
         await ReadAsync(client, old.AddMinutes(10), 20);
@@ -85,6 +85,48 @@ public sealed class ClientReadingRetentionIntegrationTests(SqlEdgeFixture fixtur
         Assert.Equal(1, await CountAsync("dbo.ClientReadingsHourly", client));
         Assert.Equal((2, 2d, 8d, 10d), await ScalarRowAsync(
             "SELECT ReadingCount, MinValue, MaxValue, SumValue FROM dbo.ClientReadingsHourly WHERE ClientId = @p0", client));
+    }
+
+    [SkippableFact]
+    public async Task A_workspace_with_no_copy_of_its_account_loses_no_readings()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int client = await CreateClientAsync(plan: null);
+        await ReadAsync(client, Now.AddDays(-40), 1);
+
+        await CompactAsync();
+
+        Assert.Equal(1, await CountAsync("dbo.ClientReadings", client));
+    }
+
+    [SkippableFact]
+    public async Task A_downgraded_workspace_keeps_its_old_plans_readings_while_the_hold_runs()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int held = await CreateClientAsync(plan: "Free");
+        int lapsed = await CreateClientAsync(plan: "Free");
+        await ScalarAsync<int>("""
+            UPDATE dbo.WorkspaceAccounts
+            SET HeldRawReadingsDays = 30, HeldHourlyReadingsDays = 730, RetentionHeldUntil = DATEADD(DAY, 1, @p1)
+            WHERE WorkspaceId = (SELECT WorkspaceId FROM dbo.Clients WHERE Id = @p0);
+            UPDATE dbo.WorkspaceAccounts
+            SET HeldRawReadingsDays = 30, HeldHourlyReadingsDays = 730, RetentionHeldUntil = DATEADD(DAY, -1, @p1)
+            WHERE WorkspaceId = (SELECT WorkspaceId FROM dbo.Clients WHERE Id = @p2);
+            SELECT 0;
+            """, held, Now, lapsed);
+        foreach (int client in new[] { held, lapsed })
+        {
+            await ReadAsync(client, Now.AddDays(-10), 1);
+            await ReadAsync(client, Now.AddDays(-100), 2);
+        }
+
+        await CompactAsync();
+
+        const string OldHours = "SELECT COUNT(*) FROM dbo.ClientReadingsHourly WHERE ClientId = @p0 AND HourStart < @p1";
+        Assert.Equal(1, await CountAsync("dbo.ClientReadings", held));
+        Assert.Equal(1, await ScalarAsync<int>(OldHours, held, Now.AddDays(-50)));
+        Assert.Equal(0, await CountAsync("dbo.ClientReadings", lapsed));
+        Assert.Equal(0, await ScalarAsync<int>(OldHours, lapsed, Now.AddDays(-50)));
     }
 
     [SkippableFact]
