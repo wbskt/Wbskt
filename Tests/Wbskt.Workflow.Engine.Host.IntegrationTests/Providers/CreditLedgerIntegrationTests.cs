@@ -1,0 +1,196 @@
+using Microsoft.Data.SqlClient;
+using Wbskt.Models.Billing;
+using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Enums;
+using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
+
+namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
+
+/// <summary>
+/// The credit ledger (dbo.WorkspaceCreditUsage): RunCredits_Post moves what runs consumed into it
+/// exactly once, and Run_Start refuses a start once the tenant has spent its plan's credits for the
+/// month (#627).
+/// </summary>
+[Collection("SqlEdge")]
+public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
+{
+    private const int PlanCreditLimitError = 50033;
+    private const string SkipReason = "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.";
+
+    [SkippableFact]
+    public async Task The_ledger_adds_up_to_what_the_runs_consumed_and_a_repeat_post_adds_nothing()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        long first = await StartAsync(wd, startCost: 1m);
+        long second = await StartAsync(wd, startCost: 1m);
+        await ChargeAsync(first, 2.5m);
+        await ChargeAsync(second, 0.25m);
+        await PostAsync();
+        await ProviderFactory.Run(fixture.ConnectionString).SetTerminalAsync(first, RunStatus.Succeeded.ToString(), DateTime.UtcNow, CancellationToken.None);
+
+        // A charge that lands after the run ended, and one on a run still going.
+        await ChargeAsync(first, 1m);
+        await ChargeAsync(second, 3m);
+        await PostAsync();
+        decimal posted = await LedgerAsync(workspaceId);
+        await PostAsync();
+
+        posted.Should().Be(1m + 2.5m + 1m + 1m + 0.25m + 3m);
+        posted.Should().Be(await ConsumedAsync(wd.Id));
+        (await LedgerAsync(workspaceId)).Should().Be(posted);
+    }
+
+    [SkippableFact]
+    public async Task Deleting_a_retired_run_posts_what_it_had_not_posted_first()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        long runId = await StartAsync(wd, startCost: 1m);
+        await ChargeAsync(runId, 4m);
+        await ProviderFactory.Run(fixture.ConnectionString).SetTerminalAsync(runId, RunStatus.Succeeded.ToString(), new DateTime(2000, 1, 1), CancellationToken.None);
+
+        await ProviderFactory.RunRetention(fixture.ConnectionString).DeleteRetiredRunsAsync(new DateTime(2001, 1, 1), 100, CancellationToken.None);
+
+        (await LedgerAsync(workspaceId)).Should().Be(5m);
+    }
+
+    [SkippableFact]
+    public async Task A_tenant_that_spent_its_credits_cannot_start_a_run_in_any_of_its_workspaces()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int tenantId = NewId();
+        int spender = NewId();
+        int sibling = NewId();
+        int stranger = NewId();
+        await AddAccountAsync(spender, tenantId);
+        await AddAccountAsync(sibling, tenantId);
+        await AddAccountAsync(stranger, tenantId + 1);
+        WorkflowDefinitionRow spenderWd = await CreateDefinitionAsync(spender);
+        WorkflowDefinitionRow siblingWd = await CreateDefinitionAsync(sibling);
+        WorkflowDefinitionRow strangerWd = await CreateDefinitionAsync(stranger);
+        long spent = await StartAsync(spenderWd, startCost: 1m);
+        await ChargeAsync(spent, 4m);
+        await PostAsync();
+
+        Func<Task> refused = () => StartAsync(siblingWd, credits: new PlanCredits(5m, tenantId));
+        long other = await StartAsync(strangerWd, credits: new PlanCredits(5m, tenantId + 1));
+
+        (await refused.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(PlanCreditLimitError);
+        other.Should().BePositive();
+    }
+
+    [SkippableFact]
+    public async Task Credits_a_running_run_has_not_posted_yet_still_count()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        long running = await StartAsync(wd, startCost: 1m);
+        await ChargeAsync(running, 4m);
+
+        Func<Task> refused = () => StartAsync(wd, credits: new PlanCredits(5m, null));
+
+        (await refused.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(PlanCreditLimitError);
+    }
+
+    [SkippableFact]
+    public async Task A_run_started_near_the_end_of_the_credits_gets_only_what_is_left_as_its_budget()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        long first = await StartAsync(wd, startCost: 1m);
+        await ChargeAsync(first, 1m);
+        await PostAsync();
+
+        long second = await StartAsync(wd, credits: new PlanCredits(5m, null));
+
+        RunRow run = await ProviderFactory.Run(fixture.ConnectionString).GetByIdAsync(second, CancellationToken.None);
+        run.CreditBudget.Should().Be(3m);
+    }
+
+    private static int NewId() => Random.Shared.Next(1_000_000, int.MaxValue - 1);
+
+    private async Task<long> StartAsync(WorkflowDefinitionRow wd, decimal startCost = 0m, PlanCredits? credits = null)
+    {
+        DateTime now = DateTime.UtcNow;
+        Guid triggerNodeId = Guid.NewGuid();
+        var run = new RunRow
+        {
+            Id = 0, RefId = Guid.NewGuid(),
+            WorkflowDefinitionId = wd.Id,
+            WorkflowRefId = wd.RefId,
+            WorkflowVersion = wd.Version,
+            TriggerNodeId = triggerNodeId,
+            CorrelationKey = "it",
+            Status = RunStatus.Running,
+            StartedAt = now,
+            CompletedAt = null,
+            CancellationRequestedAt = null,
+            CancellationReason = null,
+            CreditBudget = 100m,
+            CreatedAt = now,
+            StartCost = startCost
+        };
+        RunStartRow started = await ProviderFactory.Run(fixture.ConnectionString).StartAsync(
+            run, BranchRow.New(Guid.NewGuid(), 0, triggerNodeId, """{"trigger":{}}""", now), null, wd.WorkspaceId, null, ActiveRunGuard.None, credits, CancellationToken.None);
+        return started.Run.Id;
+    }
+
+    private async Task ChargeAsync(long runId, decimal cost)
+    {
+        CreditCharge? charge = await ProviderFactory.RunCounters(fixture.ConnectionString).TryChargeAsync((int)runId, cost, CancellationToken.None);
+        charge.Should().NotBeNull();
+    }
+
+    private Task PostAsync() =>
+        ProviderFactory.CreditUsage(fixture.ConnectionString).PostAsync(DateOnly.FromDateTime(DateTime.UtcNow), DateTime.UtcNow.AddHours(-1), 500, CancellationToken.None);
+
+    private Task<decimal> LedgerAsync(int workspaceId) =>
+        ScalarAsync("SELECT ISNULL(SUM(Credits), 0) FROM dbo.WorkspaceCreditUsage WHERE WorkspaceId = @Id", workspaceId);
+
+    private Task<decimal> ConsumedAsync(int workflowDefinitionId) =>
+        ScalarAsync("SELECT ISNULL(SUM(rc.CreditsConsumed), 0) FROM dbo.RunCounters rc JOIN dbo.Runs r ON r.Id = rc.RunId WHERE r.WorkflowDefinitionId = @Id", workflowDefinitionId);
+
+    private async Task<decimal> ScalarAsync(string sql, int id)
+    {
+        await using var connection = new SqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@Id", id);
+        return (decimal)(await command.ExecuteScalarAsync())!;
+    }
+
+    private async Task AddAccountAsync(int workspaceId, int tenantId)
+    {
+        await using var connection = new SqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new SqlCommand(
+            "INSERT INTO dbo.WorkspaceAccounts (WorkspaceId, TenantId, TenantRefId, PlanCode, PlanRevision) VALUES (@WorkspaceId, @TenantId, NEWID(), N'Free', 0)",
+            connection);
+        command.Parameters.AddWithValue("@WorkspaceId", workspaceId);
+        command.Parameters.AddWithValue("@TenantId", tenantId);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private async Task<WorkflowDefinitionRow> CreateDefinitionAsync(int workspaceId)
+    {
+        return await ProviderFactory.WorkflowDefinition(fixture.ConnectionString).InsertAsync(new WorkflowDefinitionRow
+        {
+            Id = 0, RefId = Guid.NewGuid(), Version = 0, WorkspaceId = workspaceId,
+            Name = $"IT-WD-{Guid.NewGuid():N}",
+            Description = null, IsEnabled = true,
+            DefinitionJson = """{"nodes":[],"edges":[]}""",
+            PublishedBy = 1, CreatedAt = DateTime.UtcNow
+        }, CancellationToken.None);
+    }
+}

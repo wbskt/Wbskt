@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using Wbskt.Models.Billing;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
@@ -339,6 +340,16 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
                 _refusalReporter?.Report(new RunRefusal(ex.WorkspaceId, registration.WorkflowDefinitionId, registration.WorkflowRefId, normalizedEvent.ChannelKind, ex.Limit, normalizedEvent.ReceivedAt));
                 // Settled like a drop: the claim records it, so a redelivered event is not refused twice
                 // or, worse, started late once the workspace has room.
+                return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Refused, null, correlationValue), null);
+            }
+            catch (PlanCreditLimitException ex)
+            {
+                // Refused like the run limit above, and settled the same way: started on the 1st, a
+                // redelivered event would run a month late.
+                _refusalReporter?.Report(new RunRefusal(ex.WorkspaceId, registration.WorkflowDefinitionId, registration.WorkflowRefId, normalizedEvent.ChannelKind, (int)ex.Allowance, normalizedEvent.ReceivedAt)
+                {
+                    Reason = RunRefusalReason.CreditLimit
+                });
                 return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Refused, null, correlationValue), null);
             }
             catch (ActiveRunConflictException) when (attempt < MaxStartAttempts)

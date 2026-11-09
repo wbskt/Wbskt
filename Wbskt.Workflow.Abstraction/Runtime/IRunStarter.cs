@@ -8,7 +8,8 @@ public interface IRunStarter
     /// Starts a run of the workflow from its trigger node. With a <paramref name="triggerStartKey"/>, a
     /// run already started under the same key is returned instead (<see cref="RunStartResult.Created"/>
     /// false) and nothing new is created. Past the plan's limit of active runs it throws
-    /// <see cref="PlanRunLimitException"/>, unless <paramref name="exemptFromCeiling"/>: a start
+    /// <see cref="PlanRunLimitException"/>, and once the plan's credits for the month are spent
+    /// <see cref="PlanCreditLimitException"/>, unless <paramref name="exemptFromCeiling"/>: a start
     /// that takes a place already held (a sub-workflow child, a queued event replayed when its run
     /// finished, a run replacing the ones it cancels). With an <paramref name="activeRunGuard"/>, a run
     /// still active for the same trigger and correlation key refuses the start with
@@ -40,6 +41,18 @@ public sealed class PlanRunLimitException(int workspaceId, int limit)
     public int WorkspaceId { get; } = workspaceId;
 
     public int Limit { get; } = limit;
+}
+
+/// <summary>
+/// Thrown by <see cref="IRunStarter.StartAsync"/> when the tenant of the workflow's workspace has spent
+/// <paramref name="allowance"/>, its plan's workflow credits for this calendar month. Nothing was created.
+/// </summary>
+public sealed class PlanCreditLimitException(int workspaceId, decimal allowance)
+    : InvalidOperationException($"The plan of workspace {workspaceId} has spent its {allowance} workflow credits for this month.")
+{
+    public int WorkspaceId { get; } = workspaceId;
+
+    public decimal Allowance { get; } = allowance;
 }
 
 /// <summary>Thrown by <see cref="IRunStarter.StartTestAsync"/> while another test run of the workflow is going. Nothing was created.</summary>

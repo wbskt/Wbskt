@@ -56,6 +56,10 @@ internal sealed class TestRunStarter : ITestRunStarter
         {
             return new TestRunStart(TestRunStartOutcome.WorkspaceFull);
         }
+        catch (PlanCreditLimitException)
+        {
+            return new TestRunStart(TestRunStartOutcome.CreditsSpent);
+        }
 
         await _runDispatcher.DispatchAsync(new BranchExecutionRequest(started.RunId, started.BranchId, BranchExecutionReason.TriggerStarted), ct);
         _logger?.LogInformation("Test run {RunRefId} started from definition {WorkflowDefinitionId}", started.RunRefId, workflowDefinitionId);

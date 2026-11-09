@@ -1,11 +1,12 @@
 using Wbskt.Events.Workflow;
+using Wbskt.Models.Billing;
 using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 
 /// <summary>
-/// Gathers the triggers the plan's active-run ceiling refuses into one
-/// <see cref="WorkflowTriggerRefusedEvent"/> per workflow per <see cref="Window"/>, from the first
+/// Gathers the triggers a plan limit refuses into one <see cref="WorkflowTriggerRefusedEvent"/> per
+/// workflow and limit per <see cref="Window"/>, from the first
 /// refusal on. <see cref="HostedServices.RunRefusalPublisher"/> publishes each once its window is over.
 /// </summary>
 /// <remarks>
@@ -17,7 +18,7 @@ public sealed class RunRefusalCoalescer(TimeSpan window) : IRunRefusalReporter
     public static readonly TimeSpan DefaultWindow = TimeSpan.FromMinutes(1);
 
     private readonly Lock _gate = new();
-    private readonly Dictionary<(int WorkspaceId, Guid WorkflowRefId), Bucket> _buckets = [];
+    private readonly Dictionary<(int WorkspaceId, Guid WorkflowRefId, RunRefusalReason Reason), Bucket> _buckets = [];
 
     public RunRefusalCoalescer() : this(DefaultWindow)
     {
@@ -29,7 +30,7 @@ public sealed class RunRefusalCoalescer(TimeSpan window) : IRunRefusalReporter
     {
         lock (_gate)
         {
-            var key = (refusal.WorkspaceId, refusal.WorkflowRefId);
+            var key = (refusal.WorkspaceId, refusal.WorkflowRefId, refusal.Reason);
             if (!_buckets.TryGetValue(key, out Bucket? bucket))
             {
                 _buckets[key] = bucket = new Bucket(refusal.AtUtc);
@@ -50,7 +51,7 @@ public sealed class RunRefusalCoalescer(TimeSpan window) : IRunRefusalReporter
                 _buckets.Remove(key);
             }
 
-            return due.Select(b => b.Value.ToEvent(b.Key.WorkspaceId, b.Key.WorkflowRefId)).ToList();
+            return due.Select(b => b.Value.ToEvent(b.Key.WorkspaceId, b.Key.WorkflowRefId, b.Key.Reason)).ToList();
         }
     }
 
@@ -82,7 +83,7 @@ public sealed class RunRefusalCoalescer(TimeSpan window) : IRunRefusalReporter
             }
         }
 
-        public WorkflowTriggerRefusedEvent ToEvent(int workspaceId, Guid workflowRefId) =>
-            new(workflowRefId, _workflowId, workspaceId, _count, FirstAtUtc, _lastAtUtc, string.Join(",", _kinds), _ceiling);
+        public WorkflowTriggerRefusedEvent ToEvent(int workspaceId, Guid workflowRefId, RunRefusalReason reason) =>
+            new(workflowRefId, _workflowId, workspaceId, _count, FirstAtUtc, _lastAtUtc, string.Join(",", _kinds), _ceiling, reason);
     }
 }

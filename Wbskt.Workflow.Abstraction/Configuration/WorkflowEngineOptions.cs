@@ -29,6 +29,10 @@ public sealed class WorkflowEngineOptions
     public TimeSpan PendingTriggerEventBacklogInterval { get; init; } = TimeSpan.FromMinutes(10);
     public TimeSpan PendingTriggerEventTtl { get; init; } = TimeSpan.FromHours(24);
     public TimeSpan MetricsExportInterval { get; init; } = TimeSpan.FromSeconds(15);
+    // How often runs' credits move to the ledger the monthly allowance is counted against (CreditUsagePoster),
+    // and for how long after a run ends a charge landing late is still picked up there.
+    public TimeSpan CreditPostInterval { get; init; } = TimeSpan.FromSeconds(10);
+    public TimeSpan CreditPostEndedWindow { get; init; } = TimeSpan.FromHours(1);
     public TimeSpan IdempotencyRetentionInterval { get; init; } = TimeSpan.FromHours(1);
     public TimeSpan IdempotencyRetentionWindow { get; init; } = TimeSpan.FromHours(24);
     public decimal DefaultCreditBudgetPerRun { get; init; } = 10000m;

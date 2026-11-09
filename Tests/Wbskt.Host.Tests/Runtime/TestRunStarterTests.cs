@@ -60,6 +60,18 @@ public sealed class TestRunStarterTests
         _dispatcher.VerifyNoOtherCalls();
     }
 
+    [Fact]
+    public async Task Spent_credits_start_nothing()
+    {
+        _runStarter.Setup(x => x.StartTestAsync(5, Trigger.ToString(), It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new PlanCreditLimitException(3, 2000m));
+
+        TestRunStart started = await Starter().StartAsync(5, Trigger, Payload, CancellationToken.None);
+
+        Assert.Equal(TestRunStartOutcome.CreditsSpent, started.Outcome);
+        _dispatcher.VerifyNoOtherCalls();
+    }
+
     private TestRunStarter Starter() =>
         new(_runStarter.Object, _dispatcher.Object, _runs.Object, TimeProvider.System);
 }

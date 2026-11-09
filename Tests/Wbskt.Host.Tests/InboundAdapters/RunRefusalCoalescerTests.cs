@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Workflow;
+using Wbskt.Models.Billing;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.HostedServices;
 using Wbskt.Workflow.Engine.Host.InboundAdapters;
@@ -46,6 +47,19 @@ public sealed class RunRefusalCoalescerTests
         var warnings = _coalescer.TakeDue(T0.AddMinutes(1));
 
         Assert.Equal([WorkflowA, WorkflowB], warnings.Select(w => w.WorkflowRefId).Order());
+    }
+
+    [Fact]
+    public void A_workflow_refused_for_runs_and_for_credits_gets_a_warning_for_each()
+    {
+        _coalescer.Report(Refusal(WorkflowA, "webhook", T0));
+        _coalescer.Report(Refusal(WorkflowA, "webhook", T0) with { Ceiling = 2000, Reason = RunRefusalReason.CreditLimit });
+
+        var warnings = _coalescer.TakeDue(T0.AddMinutes(1));
+
+        Assert.Equal(
+            [(RunRefusalReason.ActiveRunLimit, 200), (RunRefusalReason.CreditLimit, 2000)],
+            warnings.Select(w => (w.Reason, w.Ceiling)).Order());
     }
 
     [Fact]

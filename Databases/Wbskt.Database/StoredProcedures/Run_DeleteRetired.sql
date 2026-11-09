@@ -22,6 +22,30 @@ BEGIN
 
     BEGIN TRANSACTION;
 
+    -- Credits a run consumed after its last post go to the ledger before its counter is deleted, so the
+    -- ledger still adds up to what every run consumed. Same lock order as RunCredits_Post.
+    DECLARE @Moved TABLE (RunId INT NOT NULL PRIMARY KEY, Credits DECIMAL(18,4) NOT NULL);
+    DECLARE @Today DATE = CAST(SYSUTCDATETIME() AS DATE);
+
+    UPDATE rc
+    SET PostedCredits = rc.CreditsConsumed
+    OUTPUT inserted.RunId, inserted.PostedCredits - deleted.PostedCredits INTO @Moved (RunId, Credits)
+    FROM dbo.RunCounters rc
+    WHERE rc.RunId IN (SELECT Id FROM @Runs)
+      AND rc.CreditsConsumed <> rc.PostedCredits;
+
+    MERGE dbo.WorkspaceCreditUsage WITH (HOLDLOCK) AS t
+    USING (SELECT d.WorkspaceId, SUM(m.Credits) AS Credits
+           FROM @Moved m
+           JOIN dbo.Runs r ON r.Id = m.RunId
+           JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
+           GROUP BY d.WorkspaceId) AS s
+    ON t.WorkspaceId = s.WorkspaceId AND t.Day = @Today
+    WHEN MATCHED THEN
+        UPDATE SET Credits = t.Credits + s.Credits, UpdatedAt = SYSUTCDATETIME()
+    WHEN NOT MATCHED THEN
+        INSERT (WorkspaceId, Day, Credits) VALUES (s.WorkspaceId, @Today, s.Credits);
+
     DELETE FROM dbo.HistoryEvents  WHERE RunId IN (SELECT Id FROM @Runs);
     DELETE FROM dbo.Bookmarks      WHERE RunId IN (SELECT Id FROM @Runs);
     DELETE FROM dbo.IdempotencyKeys WHERE RunId IN (SELECT Id FROM @Runs);
