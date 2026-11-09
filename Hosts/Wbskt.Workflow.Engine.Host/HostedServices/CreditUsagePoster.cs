@@ -28,6 +28,10 @@ public sealed class CreditUsagePoster(
     // Runs that keep charging would keep a full batch posting forever; the next tick picks up the rest.
     internal const int MaxBatchesPerTick = 20;
 
+    internal static readonly TimeSpan[] WarningRetryDelays = [TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5)];
+
+    private bool _brokerDown;
+
     private readonly TimeSpan _endedWindow = options.Value.CreditPostEndedWindow;
     private readonly ILogger<CreditUsagePoster> _logger = logger;
 
@@ -52,33 +56,56 @@ public sealed class CreditUsagePoster(
         }
     }
 
-    // The credits are already posted, so a warning that fails to publish is logged and not retried.
+    // The crossing is worked out from this post's step, so it cannot be found again later: a warning is
+    // tried a few times before it is given up and logged; once one is given up the broker is taken to be
+    // down, and each is tried once until one goes through, so a long outage does not hold up the posting.
+    // The auth host sends each notice once.
     private async Task WarnAsync(IEventBus eventBus, IReadOnlyCollection<WorkspaceCreditPost> posted, CancellationToken ct)
     {
         foreach (WorkspaceCreditPost post in posted)
         {
             foreach (int percent in post.CapThresholdsCrossed())
             {
-                try
-                {
-                    await eventBus.PublishAsync(new WorkspaceCreditCapReachedEvent(post.WorkspaceId, percent, post.MonthlyCreditCap!.Value, post.SpentThisMonth), ct);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    _logger.LogWarning(ex, "Could not publish that workspace {WorkspaceId} reached {Percent}% of its credit cap", post.WorkspaceId, percent);
-                }
+                await PublishAsync(
+                    eventBus,
+                    new WorkspaceCreditCapReachedEvent(post.WorkspaceId, percent, post.MonthlyCreditCap!.Value, post.SpentThisMonth),
+                    $"workspace {post.WorkspaceId} reached {percent}% of its credit cap",
+                    ct);
             }
         }
 
         foreach (TenantAllowanceCrossing crossed in WorkspaceCreditPost.AllowanceThresholdsCrossed(posted))
         {
+            await PublishAsync(
+                eventBus,
+                new TenantCreditAllowanceReachedEvent(crossed.WorkspaceId, crossed.TenantId, crossed.Percent, crossed.Allowance, crossed.Spent),
+                $"tenant {crossed.TenantId} reached {crossed.Percent}% of its monthly credits",
+                ct);
+        }
+    }
+
+    private async Task PublishAsync<TEvent>(IEventBus eventBus, TEvent warning, string what, CancellationToken ct)
+        where TEvent : IEvent
+    {
+        for (int attempt = 0; ; attempt++)
+        {
             try
             {
-                await eventBus.PublishAsync(new TenantCreditAllowanceReachedEvent(crossed.WorkspaceId, crossed.TenantId, crossed.Percent, crossed.Allowance, crossed.Spent), ct);
+                await eventBus.PublishAsync(warning, ct);
+                _brokerDown = false;
+                return;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.LogWarning(ex, "Could not publish that tenant {TenantId} reached {Percent}% of its monthly credits", crossed.TenantId, crossed.Percent);
+                if (attempt == WarningRetryDelays.Length || _brokerDown)
+                {
+                    _brokerDown = true;
+                    _logger.LogError(ex, "Could not publish that {What}; the warning is lost", what);
+                    return;
+                }
+
+                _logger.LogWarning(ex, "Could not publish that {What}; trying again", what);
+                await Task.Delay(WarningRetryDelays[attempt], clock, ct);
             }
         }
     }

@@ -85,6 +85,19 @@ public sealed class CreditUsagePosterTests
     }
 
     [Fact]
+    public async Task A_warning_the_broker_refuses_is_tried_again_since_the_crossing_cannot_be_seen_later()
+    {
+        var provider = new RecordingCreditUsageProvider([
+            [new WorkspaceCreditPost(11, 1, 300m, 300m, null, TenantId: 1, CreditsPerMonth: 1000m, TenantSpentThisMonth: 850m)]
+        ]);
+        var bus = new RecordingEventBus(failures: 1);
+
+        await Poster(provider, bus, isLeader: true).TickAsync(CancellationToken.None);
+
+        Assert.Equal([80], bus.Published.OfType<TenantCreditAllowanceReachedEvent>().Select(e => e.Percent));
+    }
+
+    [Fact]
     public async Task A_standby_posts_nothing()
     {
         var provider = new RecordingCreditUsageProvider([]);
@@ -108,12 +121,19 @@ public sealed class CreditUsagePosterTests
         public bool IsActive => isActive;
     }
 
-    private sealed class RecordingEventBus : IEventBus
+    private sealed class RecordingEventBus(int failures = 0) : IEventBus
     {
+        private int _failures = failures;
+
         public List<IEvent> Published { get; } = [];
 
         public Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct = default) where TEvent : IEvent
         {
+            if (_failures-- > 0)
+            {
+                throw new InvalidOperationException("The broker is down.");
+            }
+
             Published.Add(@event);
             return Task.CompletedTask;
         }
