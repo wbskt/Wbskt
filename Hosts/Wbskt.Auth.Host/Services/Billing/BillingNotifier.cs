@@ -2,21 +2,28 @@ using Microsoft.Extensions.Options;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services.Email;
+using Wbskt.Infrastructure.Email;
 using Wbskt.Primitives.Constants;
 
 namespace Wbskt.Auth.Host.Services.Billing;
 
+/// <summary>
+/// Renders a notice for each billing admin and records it with its claim in one transaction
+/// (<c>dbo.BillingNotice_Record</c>); <see cref="BillingNoticeMailSender"/> hands the emails to the relay.
+/// Not the in-memory mail queue: a notice is sent once, so one lost to a restart or a refusing relay
+/// would never be sent at all.
+/// </summary>
 internal sealed class BillingNotifier(
     ITenantBillingProvider billing,
     IAccessControlProvider access,
-    IAuthMailer mailer,
+    IEmailSender sender,
     IOptions<BillingOptions> billingOptions,
     IOptions<AuthEmailOptions> emailOptions,
     ILogger<BillingNotifier> logger) : IBillingNotifier
 {
     public async Task NotifyAsync(int tenantId, BillingNotice notice, CancellationToken cancellationToken)
     {
-        if (!mailer.IsConfigured)
+        if (!sender.IsConfigured)
         {
             logger.LogWarning("No SMTP relay is configured, so tenant {TenantId} was not told about {Notice} ({Period}).", tenantId, notice.Kind, notice.PeriodKey);
             return;
@@ -37,17 +44,12 @@ internal sealed class BillingNotifier(
             return;
         }
 
-        if (!await billing.ClaimBillingNoticeAsync(tenantId, notice.Kind, notice.PeriodKey, cancellationToken))
+        AuthEmailOptions options = emailOptions.Value;
+        string billingUrl = billingOptions.Value.ReturnUrl ?? $"{options.ConsoleBaseUrl.TrimEnd('/')}/workspaces";
+        OutboundMail[] mails = recipients.Select(r => AuthEmailTemplates.Billing(options, r.Email, r.Username, notice, billingUrl)).ToArray();
+        if (await billing.RecordBillingNoticeAsync(tenantId, notice.Kind, notice.PeriodKey, mails, cancellationToken))
         {
-            return;
+            logger.LogInformation("Queued {Notice} ({Period}) for {Recipients} billing admin(s) of tenant {TenantId}.", notice.Kind, notice.PeriodKey, mails.Length, tenantId);
         }
-
-        string billingUrl = billingOptions.Value.ReturnUrl ?? $"{emailOptions.Value.ConsoleBaseUrl.TrimEnd('/')}/workspaces";
-        foreach (BillingContact recipient in recipients)
-        {
-            await mailer.QueueBillingNoticeAsync(recipient.Email, recipient.Username, notice, billingUrl, cancellationToken);
-        }
-
-        logger.LogInformation("Told {Recipients} billing admin(s) of tenant {TenantId} about {Notice} ({Period}).", recipients.Count, tenantId, notice.Kind, notice.PeriodKey);
     }
 }

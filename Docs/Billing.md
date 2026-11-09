@@ -383,11 +383,16 @@ exists, nothing is deleted: 503 `BILLING_SUBSCRIPTION_NOT_CANCELLED`, and the ca
 ## Billing emails
 
 The auth host emails a tenant's billing admins (members with `billing.manage`, an active account and a
-confirmed address) through its mail queue (`IBillingNotifier`). Each email names the number, the date and
-what to do next, and links to `Billing:Payments:ReturnUrl` (the console's billing page). Each is sent once
-per kind and period: `dbo.BillingNotice_Claim` keys `dbo.BillingNotices` by tenant, kind and period, and
-only the first claim sends. Nothing is claimed while no relay is configured or no one can be written to,
-so the notice goes out once someone can receive it.
+confirmed address) (`IBillingNotifier`). Each email names the number, the date and what to do next, and
+links to `Billing:Payments:ReturnUrl` (the console's billing page). Each is sent once per kind and period:
+`dbo.BillingNotice_Record` claims the notice in `dbo.BillingNotices` (tenant, kind, period) and queues its
+emails in `dbo.BillingNoticeMails` in the same transaction, and only the first claim queues anything.
+Nothing is claimed while no relay is configured or no one can be written to, so the notice goes out once
+someone can receive it. Not the in-memory mail queue sign-in mail uses: a billing notice is never asked
+for again, so one lost there would never be sent. `BillingNoticeMailSender` (every minute) leases due
+emails to one auth instance at a time and hands them to the relay; one refused is tried again after 1
+minute, 5, 30, 2 hours and 12 hours, then given up and logged as an error. Sent ones are removed after 30
+days.
 
 | Kind | Raised by | Period |
 |---|---|---|

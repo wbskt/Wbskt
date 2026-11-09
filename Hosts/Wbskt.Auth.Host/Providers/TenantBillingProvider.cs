@@ -1,6 +1,8 @@
+using System.Text.Json;
 using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Services.Billing;
+using Wbskt.Auth.Host.Services.Email;
 using Wbskt.Auth.Models;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Events.Outbox;
@@ -217,14 +219,50 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
         }, cancellationToken);
     }
 
-    public async Task<bool> ClaimBillingNoticeAsync(int tenantId, BillingNoticeKind kind, string periodKey, CancellationToken cancellationToken)
+    public async Task<bool> RecordBillingNoticeAsync(int tenantId, BillingNoticeKind kind, string periodKey, IReadOnlyCollection<OutboundMail> mails, CancellationToken cancellationToken)
     {
-        return await ExecuteScalarAsync<int>("dbo.BillingNotice_Claim", p =>
+        string json = JsonSerializer.Serialize(mails.Select(m => new { to = m.To, subject = m.Subject, htmlBody = m.HtmlBody }));
+        return await ExecuteScalarAsync<int>("dbo.BillingNotice_Record", p =>
         {
             p.AddWithValue("@TenantId", tenantId);
             p.AddWithValue("@Kind", kind.ToString());
             p.AddWithValue("@PeriodKey", periodKey);
+            p.AddWithValue("@Mails", json);
         }, cancellationToken) == 1;
+    }
+
+    public Task<IReadOnlyCollection<BillingNoticeMail>> TakeBillingNoticeMailsAsync(DateTime now, DateTime leaseUntil, int take, CancellationToken cancellationToken)
+    {
+        return ExecuteCollectionAsync("dbo.BillingNoticeMails_Take", p =>
+        {
+            p.AddWithValue("@Now", now);
+            p.AddWithValue("@LeaseUntil", leaseUntil);
+            p.AddWithValue("@Take", take);
+        }, r => new BillingNoticeMail(
+            r.GetInt64(r.GetOrdinal("Id")),
+            r.GetInt32(r.GetOrdinal("TenantId")),
+            Enum.Parse<BillingNoticeKind>(r.GetString(r.GetOrdinal("Kind"))),
+            r.GetString(r.GetOrdinal("ToAddress")),
+            r.GetString(r.GetOrdinal("Subject")),
+            r.GetString(r.GetOrdinal("HtmlBody")),
+            r.GetInt32(r.GetOrdinal("Attempts"))), cancellationToken);
+    }
+
+    public Task CompleteBillingNoticeMailAsync(long id, DateTime? sentAt, DateTime? retryAt, DateTime? gaveUpAt, string? error, CancellationToken cancellationToken)
+    {
+        return ExecuteNonQueryAsync("dbo.BillingNoticeMail_Complete", p =>
+        {
+            p.AddWithValue("@Id", id);
+            p.AddWithValue("@SentAt", (object?)sentAt ?? DBNull.Value);
+            p.AddWithValue("@RetryAt", (object?)retryAt ?? DBNull.Value);
+            p.AddWithValue("@GaveUpAt", (object?)gaveUpAt ?? DBNull.Value);
+            p.AddWithValue("@Error", error is null ? DBNull.Value : error.Length > 1000 ? error[..1000] : error);
+        }, cancellationToken);
+    }
+
+    public Task PurgeBillingNoticeMailsAsync(DateTime before, CancellationToken cancellationToken)
+    {
+        return ExecuteNonQueryAsync("dbo.BillingNoticeMails_Purge", p => p.AddWithValue("@Before", before), cancellationToken);
     }
 
     public Task<IReadOnlyCollection<BillingContact>> GetBillingContactsAsync(int tenantId, CancellationToken cancellationToken)

@@ -91,6 +91,7 @@ public static class Program
         builder.Services.AddHostedService<SubscriptionReviewWorker>();
         builder.Services.AddScoped<IBillingNotifier, BillingNotifier>();
         builder.Services.AddHostedService<BillingNoticeWorker>();
+        builder.Services.AddHostedService<BillingNoticeMailSender>();
         builder.Services.AddHostedService<PaymentGatewayCheck>();
         builder.Services.AddScoped<ICredentialRetentionProvider, CredentialRetentionProvider>();
         builder.Services.AddHostedService<CredentialRetentionService>();

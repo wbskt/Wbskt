@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Options;
-using Wbskt.Auth.Host.Models;
 using Wbskt.Infrastructure.Email;
 
 namespace Wbskt.Auth.Host.Services.Email;
@@ -35,9 +34,6 @@ internal sealed class QueuedAuthMailer(
 
     public ValueTask QueueEmailChangedAsync(string to, string username, string newEmail, string revertToken, DateTime expiresAtUtc, CancellationToken ct) =>
         Enqueue(AuthEmailTemplates.EmailChanged(_options, to, username, newEmail, revertToken, expiresAtUtc), nameof(QueueEmailChangedAsync));
-
-    public ValueTask QueueBillingNoticeAsync(string to, string username, BillingNotice notice, string billingUrl, CancellationToken ct) =>
-        Enqueue(AuthEmailTemplates.Billing(_options, to, username, notice, billingUrl), $"the {notice.Kind} billing notice");
 
     private ValueTask Enqueue(OutboundMail mail, string kind)
     {

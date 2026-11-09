@@ -1,0 +1,81 @@
+using Wbskt.Auth.Host.Models;
+using Wbskt.Auth.Host.Providers;
+using Wbskt.Infrastructure.Email;
+using Wbskt.Infrastructure.Hosting;
+
+namespace Wbskt.Auth.Host.Services.Billing;
+
+/// <summary>
+/// Every minute, hands the billing emails that are due (<c>dbo.BillingNoticeMails</c>) to the relay. Each
+/// is leased while it is sent, so two auth instances never both send it, and one the relay refuses is
+/// tried again later, further apart each time, until <see cref="MaxAttempts"/>. Sent ones are removed
+/// after <see cref="KeepFor"/>.
+/// </summary>
+public sealed class BillingNoticeMailSender(IServiceScopeFactory scopeFactory, TimeProvider clock, ILogger<BillingNoticeMailSender> logger)
+    : PeriodicWorker(AlwaysOpenWorkGate.Instance, scopeFactory, logger, clock)
+{
+    internal const int BatchSize = 50;
+
+    internal const int MaxAttempts = 6;
+
+    internal static readonly TimeSpan Lease = TimeSpan.FromMinutes(5);
+
+    internal static readonly TimeSpan KeepFor = TimeSpan.FromDays(30);
+
+    // After the 1st, 2nd, ... failed attempt; the 6th failure gives up, about a day after the first.
+    private static readonly TimeSpan[] Backoff = [TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(30), TimeSpan.FromHours(2), TimeSpan.FromHours(12)];
+
+    private readonly TimeProvider _clock = clock;
+
+    protected override string Name => "Billing notice mail";
+
+    protected override TimeSpan Interval { get; } = TimeSpan.FromMinutes(1);
+
+    protected override async Task RunOnceAsync(IServiceProvider services, CancellationToken ct)
+    {
+        var sender = services.GetRequiredService<IEmailSender>();
+        if (!sender.IsConfigured)
+        {
+            return;
+        }
+
+        var billing = services.GetRequiredService<ITenantBillingProvider>();
+        DateTime now = _clock.GetUtcNow().UtcDateTime;
+        foreach (BillingNoticeMail mail in await billing.TakeBillingNoticeMailsAsync(now, now + Lease, BatchSize, ct))
+        {
+            await SendAsync(sender, billing, mail, ct);
+        }
+
+        await billing.PurgeBillingNoticeMailsAsync(now - KeepFor, ct);
+    }
+
+    private async Task SendAsync(IEmailSender sender, ITenantBillingProvider billing, BillingNoticeMail mail, CancellationToken ct)
+    {
+        try
+        {
+            await sender.SendAsync(mail.To, mail.Subject, mail.HtmlBody, EmailBodyFormat.Html, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            DateTime now = _clock.GetUtcNow().UtcDateTime;
+
+            // A malformed address fails the same way every time.
+            bool giveUp = ex is FormatException || mail.Attempts >= MaxAttempts;
+            if (giveUp)
+            {
+                Logger.LogError(ex, "Gave up on the {Notice} email to {Recipient} of tenant {TenantId} after {Attempts} attempt(s).", mail.Kind, mail.To, mail.TenantId, mail.Attempts);
+            }
+            else
+            {
+                Logger.LogWarning(ex, "The relay refused the {Notice} email to {Recipient} of tenant {TenantId}; trying again.", mail.Kind, mail.To, mail.TenantId);
+            }
+
+            await billing.CompleteBillingNoticeMailAsync(
+                mail.Id, sentAt: null, retryAt: giveUp ? null : now + Backoff[Math.Min(mail.Attempts, Backoff.Length) - 1], gaveUpAt: giveUp ? now : null, ex.GetType().Name + ": " + ex.Message, CancellationToken.None);
+            return;
+        }
+
+        await billing.CompleteBillingNoticeMailAsync(mail.Id, _clock.GetUtcNow().UtcDateTime, retryAt: null, gaveUpAt: null, error: null, CancellationToken.None);
+        Logger.LogInformation("The {Notice} email to {Recipient} of tenant {TenantId} was accepted by the relay.", mail.Kind, mail.To, mail.TenantId);
+    }
+}
