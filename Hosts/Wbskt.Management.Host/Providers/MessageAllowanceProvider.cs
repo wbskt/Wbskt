@@ -46,4 +46,17 @@ internal sealed class MessageAllowanceProvider : BaseSqlProvider, IMessageAllowa
             r => r.GetInt32(0),
             ct);
     }
+
+    public async Task ReleaseNoticeAsync(int workspaceId, DateOnly monthStart, int percent, CancellationToken ct)
+    {
+        await ExecuteNonQueryAsync(
+            "dbo.WorkspaceMessageLimit_Release",
+            p =>
+            {
+                p.Add("@WorkspaceId", SqlDbType.Int).Value = workspaceId;
+                p.Add("@MonthStart", SqlDbType.Date).Value = monthStart.ToDateTime(TimeOnly.MinValue);
+                p.Add("@Percent", SqlDbType.Int).Value = percent;
+            },
+            ct);
+    }
 }

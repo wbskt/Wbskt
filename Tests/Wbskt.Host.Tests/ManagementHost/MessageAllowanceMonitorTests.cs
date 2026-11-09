@@ -109,6 +109,22 @@ public sealed class MessageAllowanceMonitorTests
     }
 
     [Fact]
+    public async Task A_notice_the_broker_refuses_is_given_back_so_the_next_check_raises_it_and_the_rest_still_go()
+    {
+        Accounts(
+            new WorkspaceMessageAccount(1, PlanCode.Free, null, Free),
+            new WorkspaceMessageAccount(2, PlanCode.Free, null, Free));
+        _bus.Setup(x => x.PublishAsync(It.Is<WorkspaceMessageLimitReachedEvent>(e => e.WorkspaceId == 1), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("The broker is down."));
+
+        await Monitor().CheckAsync(CancellationToken.None);
+
+        _allowance.Verify(x => x.ReleaseNoticeAsync(1, November, 100, It.IsAny<CancellationToken>()), Times.Once);
+        _allowance.Verify(x => x.ReleaseNoticeAsync(2, It.IsAny<DateOnly>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Equal([2], _events.OfType<WorkspaceMessageLimitReachedEvent>().Select(e => e.WorkspaceId));
+    }
+
+    [Fact]
     public async Task With_nobody_over_the_empty_list_is_still_sent_so_the_socket_hosts_let_go()
     {
         Accounts();

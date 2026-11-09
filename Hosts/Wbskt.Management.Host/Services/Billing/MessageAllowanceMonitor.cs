@@ -1,6 +1,7 @@
 using MassTransit;
 using Microsoft.Extensions.Options;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Abstractions;
 using Wbskt.Events.Billing;
 using Wbskt.Infrastructure.Billing;
 using Wbskt.Management.Host.Models;
@@ -31,6 +32,8 @@ public sealed class MessageAllowanceMonitor(
 
     private readonly decimal _paidThrottleMultiple = options.Value.PaidMessageThrottleMultiple;
 
+    private int ThrottledPercent => (int)(_paidThrottleMultiple * 100);
+
     public async Task CheckAsync(CancellationToken ct)
     {
         DateTime now = clock.GetUtcNow().UtcDateTime;
@@ -60,7 +63,7 @@ public sealed class MessageAllowanceMonitor(
         {
             logger.LogInformation("Workspace {WorkspaceId} has carried {Used} of its plan's {Limit} messages this month.",
                 usage.Account.WorkspaceId, usage.Used, usage.Allowance);
-            await eventBus.PublishAsync(new WorkspaceMessageLimitApproachingEvent(usage.Account.WorkspaceId, usage.Allowance, usage.Used), ct);
+            await AnnounceAsync(new WorkspaceMessageLimitApproachingEvent(usage.Account.WorkspaceId, usage.Allowance, usage.Used), monthStart, WarningPercent, ct);
         }
 
         IReadOnlyCollection<int> newlyReached = await RecordAsync(reached, monthStart, ReachedPercent, ct);
@@ -68,17 +71,35 @@ public sealed class MessageAllowanceMonitor(
         {
             logger.LogInformation("Workspace {WorkspaceId} reached its plan's {Limit} messages this month ({Used}); throttled: {Throttled}.",
                 usage.Account.WorkspaceId, usage.Allowance, usage.Used, usage.IsThrottled);
-            await eventBus.PublishAsync(new WorkspaceMessageLimitReachedEvent(usage.Account.WorkspaceId, usage.Allowance, usage.Used, usage.IsThrottled), ct);
+            await AnnounceAsync(new WorkspaceMessageLimitReachedEvent(usage.Account.WorkspaceId, usage.Allowance, usage.Used, usage.IsThrottled), monthStart, ReachedPercent, ct);
         }
 
         // A Free account's throttle starts at its allowance and is announced with it above.
         List<MessageAllowanceUsage> paidThrottled = throttled.Where(u => u.Account.PlanCode != PlanCode.Free).ToList();
-        IReadOnlyCollection<int> newlyThrottled = await RecordAsync(paidThrottled, monthStart, (int)(_paidThrottleMultiple * 100), ct);
+        IReadOnlyCollection<int> newlyThrottled = await RecordAsync(paidThrottled, monthStart, ThrottledPercent, ct);
         foreach (MessageAllowanceUsage usage in paidThrottled.Where(u => newlyThrottled.Contains(u.Account.WorkspaceId)))
         {
             logger.LogWarning("Workspace {WorkspaceId} carried {Used} messages this month, {Multiple} times its plan's {Limit}; its clients are throttled until the 1st.",
                 usage.Account.WorkspaceId, usage.Used, _paidThrottleMultiple, usage.Allowance);
-            await eventBus.PublishAsync(new WorkspaceMessagesThrottledEvent(usage.Account.WorkspaceId, usage.Allowance, (long)usage.ThrottleAt!.Value, usage.Used), ct);
+            await AnnounceAsync(new WorkspaceMessagesThrottledEvent(usage.Account.WorkspaceId, usage.Allowance, (long)usage.ThrottleAt!.Value, usage.Used), monthStart, ThrottledPercent, ct);
+        }
+    }
+
+    /// <summary>
+    /// Publishes a notice already recorded. One that cannot be published is given back, so the next check
+    /// raises it again rather than the account never hearing of it; the auth host sends each once.
+    /// </summary>
+    private async Task AnnounceAsync<TEvent>(TEvent notice, DateOnly monthStart, int percent, CancellationToken ct)
+        where TEvent : IWorkspaceContext
+    {
+        try
+        {
+            await eventBus.PublishAsync(notice, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Could not announce {Notice} for workspace {WorkspaceId}; it is raised again on the next check.", typeof(TEvent).Name, notice.WorkspaceId);
+            await allowance.ReleaseNoticeAsync(notice.WorkspaceId, monthStart, percent, CancellationToken.None);
         }
     }
 

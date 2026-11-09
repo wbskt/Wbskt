@@ -9,4 +9,7 @@ public interface IMessageAllowanceProvider
 
     /// <summary>Records each workspace as past <paramref name="percent"/> of its allowance this month; returns those not recorded before.</summary>
     Task<IReadOnlyCollection<int>> RecordNoticeAsync(IReadOnlyCollection<int> workspaceIds, DateOnly monthStart, int percent, CancellationToken ct);
+
+    /// <summary>Gives back a recorded notice whose event could not be published, so the next check raises it again.</summary>
+    Task ReleaseNoticeAsync(int workspaceId, DateOnly monthStart, int percent, CancellationToken ct);
 }
