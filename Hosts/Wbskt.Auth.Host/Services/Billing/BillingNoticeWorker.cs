@@ -7,16 +7,14 @@ namespace Wbskt.Auth.Host.Services.Billing;
 
 /// <summary>
 /// Hourly, tells billing admins what no event announces because it is only the clock moving: a past-due
-/// subscription whose grace period ends within <see cref="GraceWarning"/>, and a credit pack that expires
-/// within <see cref="PackWarning"/>. <see cref="IBillingNotifier"/> sends each once, so every tick may list
-/// the same ones again.
+/// subscription whose grace period ends within <see cref="GraceWarning"/>. <see cref="IBillingNotifier"/>
+/// sends each once, so every tick may list the same ones again. (A credit pack running out is announced by
+/// the management host, which knows what the pack has left.)
 /// </summary>
 public sealed class BillingNoticeWorker(IServiceScopeFactory scopeFactory, TimeProvider clock, ILogger<BillingNoticeWorker> logger)
     : PeriodicWorker(AlwaysOpenWorkGate.Instance, scopeFactory, logger, clock)
 {
     internal static readonly TimeSpan GraceWarning = TimeSpan.FromDays(2);
-
-    internal static readonly TimeSpan PackWarning = TimeSpan.FromDays(30);
 
     private readonly TimeProvider _clock = clock;
 
@@ -36,11 +34,6 @@ public sealed class BillingNoticeWorker(IServiceScopeFactory scopeFactory, TimeP
         foreach (PastDueSubscription due in await billing.GetPastDueBetweenAsync(now - grace, now - grace + GraceWarning, ct))
         {
             await NotifyAsync(notifier, due.TenantId, BillingNotices.GraceEnding(due.SubscriptionId, due.PlanCode, due.PastDueSince, grace, retentionGraceDays), ct);
-        }
-
-        foreach (ExpiringCreditPurchase pack in await billing.GetCreditPurchasesExpiringAsync(now, now + PackWarning, ct))
-        {
-            await NotifyAsync(notifier, pack.TenantId, BillingNotices.PackExpiring(pack.PaymentId, pack.Credits, pack.ExpiresAt), ct);
         }
     }
 

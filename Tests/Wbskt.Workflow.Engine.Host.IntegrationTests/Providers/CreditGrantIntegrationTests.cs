@@ -277,6 +277,35 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
             .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:DefaultConnection"] = fixture.ConnectionString })
             .Build());
 
+    [SkippableFact]
+    public async Task A_grant_running_out_with_credits_left_is_claimed_once_with_its_balance_and_spent_or_revoked_ones_never()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int tenantId = NewId();
+        int workspaceId = NewId();
+        await AddAccountAsync(workspaceId, tenantId);
+        ICreditGrantProvider grants = Grants();
+        string tag = Guid.NewGuid().ToString("N");
+        var expires = new DateTime(2090, 1, 10, 0, 0, 0, DateTimeKind.Utc);
+        await grants.InsertAsync(tenantId, 100m, DateTime.UtcNow, expires, "test", $"live_{tag}", CancellationToken.None);
+        await grants.InsertAsync(tenantId, 100m, DateTime.UtcNow, expires, "test", $"spent_{tag}", CancellationToken.None);
+        await grants.InsertAsync(tenantId, 100m, DateTime.UtcNow, expires, "test", $"revoked_{tag}", CancellationToken.None);
+        await grants.InsertAsync(tenantId, 100m, DateTime.UtcNow, expires.AddMonths(3), "test", $"later_{tag}", CancellationToken.None);
+        await ExecAsync($"UPDATE dbo.TenantCreditGrants SET Drawn = CASE WHEN SourceRef = N'live_{tag}' THEN 40 ELSE 100 END WHERE TenantId = @One AND SourceRef IN (N'live_{tag}', N'spent_{tag}') AND @Two = @Two", tenantId, 0);
+        await grants.RevokeAsync("test", $"revoked_{tag}", DateTime.UtcNow, CancellationToken.None);
+        var from = new DateTime(2090, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var first = (await grants.ClaimExpiringAsync(from, from.AddDays(30), DateTime.UtcNow, CancellationToken.None)).Where(g => g.TenantId == tenantId).ToList();
+        var again = (await grants.ClaimExpiringAsync(from, from.AddDays(30), DateTime.UtcNow, CancellationToken.None)).Where(g => g.TenantId == tenantId).ToList();
+        await grants.ReleaseExpiryWarningAsync("test", $"live_{tag}", CancellationToken.None);
+        var released = (await grants.ClaimExpiringAsync(from, from.AddDays(30), DateTime.UtcNow, CancellationToken.None)).Where(g => g.TenantId == tenantId).ToList();
+
+        first.Should().ContainSingle().Which.Should().BeEquivalentTo(new { SourceRef = $"live_{tag}", Remaining = 60m, ExpiresAt = expires, WorkspaceIds = new[] { workspaceId } });
+        again.Should().BeEmpty();
+        released.Should().ContainSingle(g => g.SourceRef == $"live_{tag}");
+    }
+
     private static int NewId() => Random.Shared.Next(1_000_000, int.MaxValue - 1);
 
     private async Task<long> StartAsync(WorkflowDefinitionRow wd, decimal startCost = 0m, PlanCredits? credits = null, decimal budget = 100m, Guid? parentRunRefId = null)

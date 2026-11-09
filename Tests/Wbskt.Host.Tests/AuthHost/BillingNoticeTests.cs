@@ -85,6 +85,7 @@ public sealed class BillingNoticeTests
             }
 
             await consumer.Consume(Context(new TenantPlanChangedEvent(TenantId, Guid.NewGuid(), PlanCode.Free, PlanCode.Pro, 5) { CreatedAtUtc = Now }));
+            await consumer.Consume(Context(new TenantCreditGrantExpiringEvent(TenantId, "dodo", "pay_1", 120m, new DateTimeOffset(Now.AddDays(12), TimeSpan.Zero))));
             await Notifier().NotifyAsync(TenantId, BillingNotices.PaymentFailed("sub_1", PlanCode.Pro, Now, TimeSpan.FromDays(7)), CancellationToken.None);
             await Worker().TickAsync(CancellationToken.None);
         }
@@ -146,7 +147,7 @@ public sealed class BillingNoticeTests
     [Fact]
     public async Task Nothing_is_claimed_while_there_is_no_relay_or_no_one_to_write_to_so_it_is_sent_once_there_is()
     {
-        BillingNotice notice = BillingNotices.PackExpiring("pay_1", 500m, Now.AddDays(10));
+        BillingNotice notice = BillingNotices.PackExpiring("dodo", "pay_1", 500m, Now.AddDays(10));
         _mailer.SetupGet(m => m.IsConfigured).Returns(false);
         await Notifier().NotifyAsync(TenantId, notice, CancellationToken.None);
 
@@ -161,14 +162,12 @@ public sealed class BillingNoticeTests
     }
 
     [Fact]
-    public async Task The_worker_looks_for_grace_periods_ending_within_two_days_and_packs_expiring_within_thirty()
+    public async Task The_worker_looks_for_grace_periods_ending_within_two_days()
     {
         await Worker().TickAsync(CancellationToken.None);
 
         _billing.Verify(b => b.GetPastDueBetweenAsync(Now.AddDays(-7), Now.AddDays(-5), It.IsAny<CancellationToken>()));
-        _billing.Verify(b => b.GetCreditPurchasesExpiringAsync(Now, Now.AddDays(30), It.IsAny<CancellationToken>()));
         Assert.Contains(_sent, s => s.Kind == BillingNoticeKind.GraceEnding && s.Mail.Subject == "Your account moves to Free on 10 November 2026");
-        Assert.Contains(_sent, s => s.Kind == BillingNoticeKind.PackExpiring && s.Period == "pay_1");
     }
 
     [Fact]
@@ -205,6 +204,16 @@ public sealed class BillingNoticeTests
     }
 
     [Fact]
+    public async Task An_expiring_pack_is_told_with_what_it_has_left()
+    {
+        await Consumer().Consume(Context(new TenantCreditGrantExpiringEvent(TenantId, "dodo", "pay_1", 1234.5m, new DateTimeOffset(Now.AddDays(12), TimeSpan.Zero))));
+
+        var sent = Assert.Single(_sent);
+        Assert.Equal("dodo:pay_1", sent.Period);
+        Assert.Equal("1,234.5 workflow credits expire on 21 November 2026", sent.Mail.Subject);
+    }
+
+    [Fact]
     public void The_email_encodes_what_the_tenant_wrote_and_links_to_the_billing_page()
     {
         BillingNotice notice = BillingNotices.CreditCap(31, "<script>x</script>", 100, 500m, 500m, Now);
@@ -227,8 +236,6 @@ public sealed class BillingNoticeTests
     {
         _billing.Setup(b => b.GetPastDueBetweenAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new PastDueSubscription(TenantId, "sub_1", PlanCode.Pro, Now.AddDays(-6))]);
-        _billing.Setup(b => b.GetCreditPurchasesExpiringAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new ExpiringCreditPurchase(TenantId, "pay_1", 500m, Now.AddDays(12))]);
         var services = new ServiceCollection()
             .AddSingleton(_billing.Object)
             .AddSingleton<IBillingNotifier>(Notifier())

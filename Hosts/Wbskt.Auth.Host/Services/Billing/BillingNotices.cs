@@ -141,13 +141,14 @@ internal static class BillingNotices
             paragraphs);
     }
 
-    public static BillingNotice PackExpiring(string paymentId, decimal credits, DateTime expiresAt) =>
-        new(BillingNoticeKind.PackExpiring, paymentId,
-            $"Your credit pack expires on {Date(expiresAt)}",
-            "A credit pack expires soon",
+    /// <param name="remaining">What the grant still holds undrawn; a grant spent to nothing is never announced.</param>
+    public static BillingNotice PackExpiring(string source, string sourceRef, decimal remaining, DateTime expiresAt) =>
+        new(BillingNoticeKind.PackExpiring, $"{source}:{sourceRef}",
+            $"{Number(remaining)} workflow credits expire on {Date(expiresAt)}",
+            "Credits expire soon",
             [
-                $"The credit pack of {Number(credits)} workflow credits you bought expires on {Date(expiresAt)}.",
-                "Credits it still holds then can no longer be spent. Runs past your plan's monthly allowance draw on it until then."
+                $"{Number(remaining)} workflow credits from a credit pack on your account are still unspent and expire on {Date(expiresAt)}.",
+                "Until then, runs past your plan's monthly allowance draw on them. After that date they can no longer be spent."
             ]);
 
     private static void Lower(List<string> paragraphs, string label, decimal before, decimal after)

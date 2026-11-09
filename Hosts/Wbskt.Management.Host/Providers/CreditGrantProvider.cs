@@ -1,5 +1,6 @@
 using System.Data;
 using Wbskt.Infrastructure;
+using Wbskt.Management.Host.Models;
 
 namespace Wbskt.Management.Host.Providers;
 
@@ -40,5 +41,34 @@ internal sealed class CreditGrantProvider : BaseSqlProvider, ICreditGrantProvide
             p.AddWithValue("@Revision", revision);
             p.Add("@At", SqlDbType.DateTime2).Value = atUtc;
         }, ct) == 1;
+    }
+
+    public Task<IReadOnlyCollection<ExpiringCreditGrant>> ClaimExpiringAsync(DateTime fromUtc, DateTime toUtc, DateTime atUtc, CancellationToken ct)
+    {
+        return ExecuteCollectionAsync("dbo.TenantCreditGrants_ClaimExpiring", p =>
+        {
+            p.Add("@From", SqlDbType.DateTime2).Value = fromUtc;
+            p.Add("@To", SqlDbType.DateTime2).Value = toUtc;
+            p.Add("@At", SqlDbType.DateTime2).Value = atUtc;
+        }, r =>
+        {
+            int workspaces = r.GetOrdinal("WorkspaceIds");
+            return new ExpiringCreditGrant(
+                r.GetInt32(r.GetOrdinal("TenantId")),
+                r.GetString(r.GetOrdinal("Source")),
+                r.GetString(r.GetOrdinal("SourceRef")),
+                r.GetDecimal(r.GetOrdinal("Remaining")),
+                r.GetDateTime(r.GetOrdinal("ExpiresAt")),
+                r.IsDBNull(workspaces) ? [] : r.GetString(workspaces).Split(',').Select(int.Parse).ToArray());
+        }, ct);
+    }
+
+    public Task ReleaseExpiryWarningAsync(string source, string sourceRef, CancellationToken ct)
+    {
+        return ExecuteNonQueryAsync("dbo.TenantCreditGrant_ReleaseExpiryWarning", p =>
+        {
+            p.AddWithValue("@Source", source);
+            p.AddWithValue("@SourceRef", sourceRef);
+        }, ct);
     }
 }

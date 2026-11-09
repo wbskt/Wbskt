@@ -402,7 +402,7 @@ days.
 | `PaymentFailed` | `TenantBillingSync`, on storing a past-due subscription | subscription and when it fell behind |
 | `GraceEnding` | `BillingNoticeWorker` (hourly), when the grace ends within 2 days | as `PaymentFailed` |
 | `Downgraded` | `TenantPlanChangedEvent` to a smaller plan, with the limits that drop and when history beyond the new retention goes (`Billing:RetentionGraceDays`) | plan revision |
-| `PackExpiring` | `BillingNoticeWorker`, a live pack expiring within 30 days | payment |
+| `PackExpiring` | `TenantCreditGrantExpiringEvent`: the management host's `CreditGrantExpiryWarning` (hourly, with the grant reconcile) claims each live grant with credits left that expires within 30 days once (`dbo.TenantCreditGrants_ClaimExpiring`) and names what it has left; a spent grant is never announced | grant |
 
 Upgrades are not emailed: the admin made them and sees them. Credits that `Run_DeleteRetired` posts are not
 looked at for the allowance crossing, so a crossing made only by them is not reported.

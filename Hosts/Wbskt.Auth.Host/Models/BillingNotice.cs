@@ -30,8 +30,5 @@ public sealed record BillingContact(int UserId, string Username, string Email);
 /// <summary>A subscription behind on payment (<c>dbo.TenantSubscriptions_GetPastDueBetween</c>).</summary>
 public sealed record PastDueSubscription(int TenantId, string SubscriptionId, PlanCode PlanCode, DateTime PastDueSince);
 
-/// <summary>A credit pack that still counts and runs out soon (<c>dbo.TenantCreditPurchases_GetExpiring</c>).</summary>
-public sealed record ExpiringCreditPurchase(int TenantId, string PaymentId, decimal Credits, DateTime ExpiresAt);
-
 /// <summary>A billing email leased for sending (<c>dbo.BillingNoticeMails_Take</c>); <see cref="Attempts"/> counts this one.</summary>
 public sealed record BillingNoticeMail(long Id, int TenantId, BillingNoticeKind Kind, string To, string Subject, string HtmlBody, int Attempts);

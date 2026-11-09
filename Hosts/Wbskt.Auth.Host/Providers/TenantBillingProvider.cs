@@ -286,19 +286,6 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
             r.GetDateTime(r.GetOrdinal("PastDueSince"))), cancellationToken);
     }
 
-    public Task<IReadOnlyCollection<ExpiringCreditPurchase>> GetCreditPurchasesExpiringAsync(DateTime from, DateTime to, CancellationToken cancellationToken)
-    {
-        return ExecuteCollectionAsync("dbo.TenantCreditPurchases_GetExpiring", p =>
-        {
-            p.AddWithValue("@From", from);
-            p.AddWithValue("@To", to);
-        }, r => new ExpiringCreditPurchase(
-            r.GetInt32(r.GetOrdinal("TenantId")),
-            r.GetString(r.GetOrdinal("PaymentId")),
-            r.GetDecimal(r.GetOrdinal("Credits")),
-            r.GetDateTime(r.GetOrdinal("ExpiresAt"))), cancellationToken);
-    }
-
     private static TenantSubscription MapSubscription(SqlDataReader r)
     {
         int pastDueSince = r.GetOrdinal("PastDueSince");
