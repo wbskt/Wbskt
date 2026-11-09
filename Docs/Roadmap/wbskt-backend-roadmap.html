@@ -319,11 +319,6 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
  ],
  "asks": [
   {
-   "title": "Deprecate and unlist Wbskt.Client on nuget.org",
-   "body": "Wbskt 0.9.0-beta.1 is on NuGet (#707). Mark Wbskt.Client 0.0.x as Legacy with Wbskt as the alternative, then unlist it so search finds only the new name.",
-   "issue": 707
-  },
-  {
    "title": "A call on deleted clients",
    "body": "Should deleting a client stop it enrolling again with the same PIN? Either a final CLIENT_DELETED login code or a warning in the delete dialog (#547).",
    "issue": 547
@@ -557,7 +552,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":715,"t":"Billing emails: notices can be lost before they reach the auth host","s":"c","m":"M2","p":167,"a":["management","engine","db"],"x":"2026-11-09"},
   {"n":713,"t":"Billing emails: say how much of an expiring credit pack is left, and skip spent packs","s":"c","m":"M2","p":167,"a":["management","auth"],"x":"2026-11-09"},
   {"n":712,"t":"Billing emails: a notice claimed but lost from the in-memory mail queue is never sent","s":"c","m":"M2","p":167,"a":["auth","db"],"x":"2026-11-09"},
-  {"n":707,"t":"Move the .NET SDK to wbskt/Wbskt.DotNet and publish it as Wbskt on NuGet","s":"o","m":"M2","p":528,"a":["sdk"],"pr":"P1","sz":"S"},
+  {"n":707,"t":"Move the .NET SDK to wbskt/Wbskt.DotNet and publish it as Wbskt on NuGet","s":"c","m":"M2","p":528,"a":["sdk"],"pr":"P1","sz":"S","x":"2026-11-09"},
   {"n":703,"t":"Capacity: warn before the database nears the SQL Express limit","s":"o","m":"M2","p":167,"a":["ops","db"]},
   {"n":702,"t":"Payments: sell one credit pack, 10,000 credits for $5","s":"o","m":"M2","p":167,"a":["auth"]},
   {"n":701,"t":"Billing: let Business run past its allowance and report the overage","s":"o","m":"M2","p":167,"a":["management"]},
