@@ -131,6 +131,16 @@ balance, so for the first hour of a month a tenant can spend up to its last mont
 run budgets bound it as they bound any race for the last credits. A revoked grant's drawn credits stay
 drawn; only what it still held stops counting.
 
+## Run history
+
+A finished run, with its branches and history, is kept for the plan's `RunHistoryDays` (a tenant's
+`runHistoryDays` override wins; a workspace with no account is Free), counted from when it finished.
+The engine's `HistoryRetentionGc` (hourly, leader only) hands every plan's days to
+`dbo.Run_DeleteRetired`, which works out each workspace's cutoff and deletes the runs past it, posting
+any credits they had not posted yet first. A run older than `HistoryRetentionWindowElevated` (365 days)
+goes whatever the plan says. Run stats over a range longer than the plan keeps count only the runs
+still kept; credit usage is read from the ledger, so it is not affected.
+
 ## Messages
 
 **The meter.** `dbo.ClientTraffic_InsertBatch`, which the event logger calls with each batch of client

@@ -1,5 +1,7 @@
 using Microsoft.Data.SqlClient;
+using Wbskt.Models.Billing;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 
@@ -154,7 +156,7 @@ public sealed class TestRunIntegrationTests(SqlEdgeFixture fixture)
         await StartAsync(runs, used, isTest: true);
         await BackdateAsync(used.Id, unused.Id);
 
-        await ProviderFactory.RunRetention(fixture.ConnectionString).DeleteRetiredRunsAsync(new DateTime(2001, 1, 1), 100, CancellationToken.None);
+        await ProviderFactory.RunRetention(fixture.ConnectionString).DeleteRetiredRunsAsync(new DateTime(2001, 1, 1), [new RunHistoryRetention(PlanCode.Free, 36_500)], new DateTime(2001, 1, 1), 100, CancellationToken.None);
 
         Assert.NotNull(await TryGetAsync(used.Id));
         Assert.Null(await TryGetAsync(unused.Id));

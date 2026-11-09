@@ -1,3 +1,4 @@
+using Wbskt.Infrastructure.Billing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -29,6 +30,7 @@ public sealed class GracefulShutdownIntegrationTests
                 services.AddWorkflowRuntime(context.Configuration);
                 services.AddSingleton<ILeadershipGate, AlwaysActiveLeadershipGate>();
                 services.AddSingleton<WorkflowMetrics>();
+                services.AddSingleton(new PlanCatalog(Microsoft.Extensions.Options.Options.Create(new PlanCatalogOptions())));
 
                 services.AddScoped(_ => CreateBookmarkProvider());
                 services.AddScoped(_ => CreateBranchProvider());
