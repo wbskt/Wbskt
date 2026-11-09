@@ -243,6 +243,18 @@ role or user belonging to another tenant reads as nonexistent.
 | `PUT {tenantRef}` | `users.manage` | Renames a tenant or changes its description. |
 | `GET {tenantRef}/usage` | `billing.read` | The tenant's plan, its limits (with any negotiated overrides applied) and its seats: `{ plan, limits, workspaces: { used, limit }, members: { used, limit } }`. A member counts suspended or not; a pending invitation does not. Credits, messages, clients and runs are pooled on the management host and read from a workspace's `…/usage`. |
 
+**Billing** (Docs/Billing.md, Payments)
+
+| Endpoint | Permission | What it does |
+|---|---|---|
+| `GET {tenantRef}/billing` | `billing.read` | `{ plan, subscription, plans, creditPacks }`. `subscription` is null until the tenant subscribes, else `{ plan, interval, status, periodEnd, cancelAtPeriodEnd, pastDueSince }`, `status` one of `Pending`, `Active`, `PastDue`, `OnHold`, `Paused`, `Cancelled`, `Failed`, `Expired`. `plans` is the `{ plan, interval }` pairs on offer (`Monthly`, `Yearly`), `creditPacks` the `{ name, credits }` packs; both empty while payments are off. |
+| `POST {tenantRef}/billing/checkout` | `billing.manage` | Body `{ plan, interval }` or `{ creditPack }`; answers `{ checkoutUrl }`, the provider's hosted checkout, paid by the caller's email. The plan or credits change when the provider's webhook confirms payment. 400 `BILLING_CHECKOUT_INVALID` (neither or both, or a plan without an interval), 400 `BILLING_OFFER_INVALID` (not on offer), 409 `BILLING_SUBSCRIPTION_ACTIVE` (already subscribed: use the portal), 503 `BILLING_UNAVAILABLE` (payments off) or `BILLING_PROVIDER_UNAVAILABLE` (the provider could not be reached). |
+| `POST {tenantRef}/billing/portal` | `billing.manage` | `{ url }`, the provider's customer portal: cards, invoices, changing or cancelling. 404 `BILLING_CUSTOMER_NOT_FOUND` before the tenant has paid for anything. |
+
+The provider's webhooks arrive at `POST /api/callbacks/billing/{provider}` (anonymous, unversioned,
+not in the API docs): 204 once stored and acted on (or set aside), 401 `BILLING_WEBHOOK_SIGNATURE_INVALID`,
+404 `BILLING_PROVIDER_NOT_FOUND`, and a 500 when acting on it failed, so the provider delivers it again.
+
 **Invitations**
 
 | Endpoint | Permission | What it does |

@@ -3,6 +3,7 @@ using FluentAssertions;
 using Wbskt.Client.Sdk;
 using Wbskt.Client.Sdk.Models;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Auth.Models;
 using Wbskt.Management.Models;
 using Wbskt.Models.Billing;
 
@@ -94,6 +95,30 @@ public sealed class UsageE2ETests(ServicesFixture fixture)
 
         usage.Workspace.Messages.Should().BeGreaterThanOrEqualTo(3, "the SDK also announces its capabilities, which is a message too");
         usage.Account.Messages.Used.Should().BeGreaterThanOrEqualTo(3, "the account pools every workspace of the tenant");
+    }
+
+    [SkippableFact]
+    public async Task BILL_05_Without_payment_credentials_nothing_is_on_offer_and_checkout_is_unavailable()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        // The suite runs with no Dodo credentials, which is also how a deployment turns payments off.
+        var (token, _) = await fixture.RegisterAndLoginUserAsync();
+        Guid tenantRef = await fixture.GetTenantRefAsync(token);
+
+        TenantBillingResponse billing = await fixture.Auth.As(token).GetBillingAsync(tenantRef);
+        var checkout = await fixture.Auth.As(token).StartCheckoutRawAsync(tenantRef, new BillingCheckoutRequest(PlanCode.Maker, BillingInterval.Monthly));
+        var portal = await fixture.Auth.As(token).OpenBillingPortalRawAsync(tenantRef);
+        var webhook = await fixture.SendRawBodyAsync(HttpMethod.Post, ServicesFixture.AuthUrl("/api/callbacks/billing/dodo"), "{}", "application/json");
+
+        billing.Plan.Should().Be(PlanCode.Free);
+        billing.Subscription.Should().BeNull();
+        billing.Plans.Should().BeEmpty();
+        billing.CreditPacks.Should().BeEmpty();
+        checkout.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        (await ServicesFixture.ReadErrorCodeAsync(checkout)).Should().Be("BILLING_UNAVAILABLE");
+        portal.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        webhook.StatusCode.Should().Be(HttpStatusCode.NotFound, "an unconfigured provider takes no webhooks");
     }
 
     private const decimal FreeCreditsPerMonth = 2_000m;

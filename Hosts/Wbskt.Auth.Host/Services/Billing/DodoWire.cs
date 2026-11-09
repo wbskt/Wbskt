@@ -1,0 +1,45 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace Wbskt.Auth.Host.Services.Billing;
+
+// Dodo Payments' JSON, only the fields read or written here (docs.dodopayments.com/api-reference).
+
+internal sealed record DodoCheckoutRequest(
+    [property: JsonPropertyName("product_cart")] IReadOnlyList<DodoCartItem> ProductCart,
+    [property: JsonPropertyName("customer")] DodoCheckoutCustomer Customer,
+    [property: JsonPropertyName("metadata")] IReadOnlyDictionary<string, string> Metadata,
+    [property: JsonPropertyName("return_url"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ReturnUrl);
+
+internal sealed record DodoCartItem(
+    [property: JsonPropertyName("product_id")] string ProductId,
+    [property: JsonPropertyName("quantity")] int Quantity);
+
+internal sealed record DodoCheckoutCustomer(
+    [property: JsonPropertyName("email")] string Email,
+    [property: JsonPropertyName("name"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name);
+
+internal sealed record DodoCheckoutResponse([property: JsonPropertyName("checkout_url")] string? CheckoutUrl);
+
+internal sealed record DodoPortalResponse([property: JsonPropertyName("link")] string? Link);
+
+internal sealed record DodoCustomer([property: JsonPropertyName("customer_id")] string? CustomerId);
+
+internal sealed record DodoSubscription(
+    [property: JsonPropertyName("subscription_id")] string? SubscriptionId,
+    [property: JsonPropertyName("status")] string? Status,
+    [property: JsonPropertyName("product_id")] string? ProductId,
+    [property: JsonPropertyName("customer")] DodoCustomer? Customer,
+    [property: JsonPropertyName("metadata")] Dictionary<string, JsonElement>? Metadata,
+    [property: JsonPropertyName("next_billing_date")] DateTimeOffset? NextBillingDate,
+    [property: JsonPropertyName("cancel_at_next_billing_date")] bool? CancelAtNextBillingDate);
+
+internal sealed record DodoPayment(
+    [property: JsonPropertyName("payment_id")] string? PaymentId,
+    [property: JsonPropertyName("status")] string? Status,
+    [property: JsonPropertyName("customer")] DodoCustomer? Customer,
+    [property: JsonPropertyName("metadata")] Dictionary<string, JsonElement>? Metadata,
+    [property: JsonPropertyName("subscription_id")] string? SubscriptionId,
+    [property: JsonPropertyName("product_cart")] IReadOnlyList<DodoCartItem>? ProductCart,
+    [property: JsonPropertyName("refund_status")] string? RefundStatus,
+    [property: JsonPropertyName("created_at")] DateTimeOffset? CreatedAt);
