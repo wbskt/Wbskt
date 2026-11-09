@@ -22,8 +22,9 @@ on:
 jobs:
   # Whether this change can affect what the jobs below test. A pull request that touches only the
   # docs or Markdown outside Clients/ (the .NET SDK packs its README) skips them. A skipped job
-  # counts as passed for a required check, where a workflow left out by `on: paths-ignore` would never report at all. Pushes and
-  # manual runs always run everything, so nothing is published from a partial check.
+  # counts as passed for a required check, where a workflow left out by `on: paths-ignore` would
+  # never report at all. Pushes and manual runs always run everything, so nothing is published from
+  # a partial check.
   changes:
     runs-on: ubuntu-latest
     permissions:
