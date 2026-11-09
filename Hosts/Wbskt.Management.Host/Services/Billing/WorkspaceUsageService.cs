@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Billing;
 using Wbskt.Management.Host.Models;
@@ -7,8 +8,9 @@ using Wbskt.Models.Billing;
 
 namespace Wbskt.Management.Host.Services.Billing;
 
-internal sealed class WorkspaceUsageService(IWorkspaceUsageProvider usage, IWorkspacePlans plans, TimeProvider clock) : IWorkspaceUsageService
+internal sealed class WorkspaceUsageService(IWorkspaceUsageProvider usage, IWorkspacePlans plans, TimeProvider clock, IOptions<BillingOptions> options) : IWorkspaceUsageService
 {
+    private readonly decimal _paidThrottleMultiple = options.Value.PaidMessageThrottleMultiple;
     private static readonly TimeSpan DefaultRange = TimeSpan.FromDays(31);
     private static readonly TimeSpan MaxRange = TimeSpan.FromDays(366);
 
@@ -39,7 +41,7 @@ internal sealed class WorkspaceUsageService(IWorkspaceUsageProvider usage, IWork
             new DateTimeOffset(periodStart.AddMonths(1)),
             new AccountUsage(
                 new CreditUsageAmount(summary.TenantCredits, plan.Limits.CreditsPerMonth, summary.CreditGrantBalance),
-                new MessageUsageAmount(summary.TenantMessages, plan.Limits.MessagesPerMonth, MessageAllowance.IsThrottled(plan.PlanCode, summary.TenantMessages, plan.Limits.MessagesPerMonth)),
+                new MessageUsageAmount(summary.TenantMessages, plan.Limits.MessagesPerMonth, MessageAllowance.IsThrottled(plan.PlanCode, summary.TenantMessages, plan.Limits.MessagesPerMonth, _paidThrottleMultiple)),
                 new UsageCount(summary.TenantClients, plan.Limits.Clients),
                 new UsageCount(summary.TenantActiveRuns, plan.Limits.ActiveRuns)),
             new WorkspaceUsageShare(summary.WorkspaceCredits, summary.MonthlyCreditCap, summary.WorkspaceMessages, summary.WorkspaceClients, summary.WorkspaceActiveRuns),

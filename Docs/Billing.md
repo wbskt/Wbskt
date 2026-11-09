@@ -70,7 +70,7 @@ dbo.Tenants.PlanCode ──(copy)──────────►  dbo.Workspac
 |---|---|---|
 | Clients | `dbo.Client_Create` (registration) and `dbo.Client_UpdateStatuses` (approval) | 50025, **409** `PLAN_CLIENT_LIMIT_REACHED` |
 | Runs going at once | `dbo.Run_Start` | 50026; a trigger's dispatch reads `Refused`, a test run is **409** `PLAN_RUN_LIMIT_REACHED` |
-| Messages a month | `MessageAllowanceMonitor`, then each socket host | Free only: each client held to one message a minute until the 1st (see Messages) |
+| Messages a month | `MessageAllowanceMonitor`, then each socket host | Free at 1×, Maker and Pro at 2×, Business never: each client held to one message a minute until the 1st (see Messages) |
 | Workflow credits a month | `dbo.Run_Start` | 50033; a trigger's dispatch reads `Refused`, a test run is **409** `PLAN_CREDIT_LIMIT_REACHED` |
 | A workspace's credit cap | `dbo.Run_Start` | 50034; a trigger's dispatch reads `Refused`, a test run is **409** `WORKSPACE_CREDIT_CAP_REACHED` |
 | (a start that waits too long for a lock) | `dbo.Run_Start` | 50035; retried, then a trigger's event is redelivered and a test run is **503** `WORKSPACE_BUSY` |
@@ -203,13 +203,19 @@ included.
   (pongs, acks, OTA status) pass, so a throttled client stays connected and keeps answering. A list
   older than 5 minutes is ignored, so a management outage lets messages through rather than throttling
   an account that has since upgraded. The list is empty again on the 1st.
-- **A paid plan is never throttled.** What it carries past the limit is overage, read from the same
-  meter when top-ups land (#627).
-- Either way `WorkspaceMessageLimitReachedEvent` is raised once per workspace and month
-  (`dbo.WorkspaceMessageLimit_Record`), and the usage API reports `messages` with `throttled`.
+- **Maker and Pro carry on past their allowance**, with no overage charge, so a customer never sees a
+  surprise bill. Only at `Billing:PaidMessageThrottleMultiple` (2) times it are they throttled the same
+  way as Free, which stops one account loading the hosts without end. The multiple is a setting so
+  pricing can move it.
+- **Business is never throttled**; overage is a matter for its contract.
+- Each account is told once per workspace and month (`dbo.WorkspaceMessageLimit_Record`, keyed by the
+  share): `WorkspaceMessageLimitApproachingEvent` at 80% (skipped when a check finds it already past
+  100%), `WorkspaceMessageLimitReachedEvent` at 100% (`throttled` true on Free), and
+  `WorkspaceMessagesThrottledEvent` when a paid plan reaches its throttle. The usage API reports
+  `messages` with `throttled`. Emailing these is a separate consumer.
 
-The throttle can trail the crossing by up to a minute plus the event logger's batching, so a Free account
-can carry a little past its allowance. Commands sent from the console or the API are not refused: they
+The throttle can trail the crossing by up to a minute plus the event logger's batching, so an account
+can carry a little past where it is throttled. Commands sent from the console or the API are not refused: they
 are counted when delivered.
 
 ## Readings

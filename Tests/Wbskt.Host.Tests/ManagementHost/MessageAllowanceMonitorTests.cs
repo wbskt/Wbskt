@@ -18,6 +18,8 @@ public sealed class MessageAllowanceMonitorTests
     private static readonly DateOnly November = new(2026, 11, 1);
     private static readonly long Free = PlanCatalog.BuiltIn[PlanCode.Free].MessagesPerMonth;
     private static readonly long Maker = PlanCatalog.BuiltIn[PlanCode.Maker].MessagesPerMonth;
+    private static readonly long Pro = PlanCatalog.BuiltIn[PlanCode.Pro].MessagesPerMonth;
+    private static readonly long Business = PlanCatalog.BuiltIn[PlanCode.Business].MessagesPerMonth;
 
     private readonly Mock<IMessageAllowanceProvider> _allowance = new();
     private readonly Mock<IPublishEndpoint> _publisher = new();
@@ -33,26 +35,54 @@ public sealed class MessageAllowanceMonitorTests
         _bus.Setup(x => x.PublishAsync(It.IsAny<WorkspaceMessageLimitReachedEvent>(), It.IsAny<CancellationToken>()))
             .Callback<WorkspaceMessageLimitReachedEvent, CancellationToken>((e, _) => _events.Add(e))
             .Returns(Task.CompletedTask);
-        _allowance.Setup(x => x.RecordLimitReachedAsync(It.IsAny<IReadOnlyCollection<int>>(), November, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IReadOnlyCollection<int> ids, DateOnly _, CancellationToken _) => ids);
+        _bus.Setup(x => x.PublishAsync(It.IsAny<WorkspaceMessageLimitApproachingEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<WorkspaceMessageLimitApproachingEvent, CancellationToken>((e, _) => _events.Add(e))
+            .Returns(Task.CompletedTask);
+        _bus.Setup(x => x.PublishAsync(It.IsAny<WorkspaceMessagesThrottledEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<WorkspaceMessagesThrottledEvent, CancellationToken>((e, _) => _events.Add(e))
+            .Returns(Task.CompletedTask);
+        _allowance.Setup(x => x.RecordNoticeAsync(It.IsAny<IReadOnlyCollection<int>>(), November, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyCollection<int> ids, DateOnly _, int _, CancellationToken _) => ids);
     }
 
     [Fact]
-    public async Task Only_free_accounts_over_their_messages_are_throttled_but_every_account_over_is_announced()
+    public async Task Free_is_throttled_at_its_allowance_maker_at_twice_it_and_each_crossing_is_announced()
     {
         Accounts(
             new WorkspaceMessageAccount(1, PlanCode.Free, null, Free),
             new WorkspaceMessageAccount(2, PlanCode.Free, null, Free - 1),
-            new WorkspaceMessageAccount(3, PlanCode.Maker, null, Maker + 1),
-            new WorkspaceMessageAccount(4, PlanCode.Maker, null, Maker - 1));
+            new WorkspaceMessageAccount(3, PlanCode.Maker, null, Maker * 3 / 2),
+            new WorkspaceMessageAccount(4, PlanCode.Maker, null, Maker * 2),
+            new WorkspaceMessageAccount(5, PlanCode.Maker, null, Maker * 7 / 10));
 
         await Monitor().CheckAsync(CancellationToken.None);
 
-        Assert.Equal([1], _snapshot!.WorkspaceIds);
+        Assert.Equal([1, 4], _snapshot!.WorkspaceIds);
         Assert.Equal(Now.UtcDateTime, _snapshot.TakenAtUtc);
         Assert.Equal(
-            [new WorkspaceMessageLimitReachedEvent(1, Free, Free, true) { CreatedAtUtc = default }, new WorkspaceMessageLimitReachedEvent(3, Maker, Maker + 1, false) { CreatedAtUtc = default }],
-            _events.Cast<WorkspaceMessageLimitReachedEvent>().Select(e => e with { CreatedAtUtc = default }));
+            new IEvent[]
+            {
+                new WorkspaceMessageLimitApproachingEvent(2, Free, Free - 1),
+                new WorkspaceMessageLimitReachedEvent(1, Free, Free, true),
+                new WorkspaceMessageLimitReachedEvent(3, Maker, Maker * 3 / 2, false),
+                new WorkspaceMessageLimitReachedEvent(4, Maker, Maker * 2, true),
+                new WorkspaceMessagesThrottledEvent(4, Maker, Maker * 2, Maker * 2)
+            }.Select(Undated),
+            _events.Select(Undated));
+    }
+
+    [Fact]
+    public async Task Business_is_never_throttled_and_a_changed_multiple_moves_the_paid_throttle()
+    {
+        Accounts(
+            new WorkspaceMessageAccount(1, PlanCode.Business, null, Business * 10),
+            new WorkspaceMessageAccount(2, PlanCode.Pro, null, Pro * 3 / 2));
+
+        await Monitor(paidMultiple: 1.5m).CheckAsync(CancellationToken.None);
+
+        Assert.Equal([2], _snapshot!.WorkspaceIds);
+        Assert.Contains(Undated(new WorkspaceMessagesThrottledEvent(2, Pro, Pro * 3 / 2, Pro * 3 / 2)), _events.Select(Undated));
+        _allowance.Verify(x => x.RecordNoticeAsync(It.Is<IReadOnlyCollection<int>>(ids => ids.SequenceEqual(new[] { 2 })), November, 150, It.IsAny<CancellationToken>()));
     }
 
     [Fact]
@@ -70,7 +100,7 @@ public sealed class MessageAllowanceMonitorTests
     public async Task A_workspace_already_announced_this_month_is_not_announced_again_but_stays_throttled()
     {
         Accounts(new WorkspaceMessageAccount(1, PlanCode.Free, null, Free + 10));
-        _allowance.Setup(x => x.RecordLimitReachedAsync(It.IsAny<IReadOnlyCollection<int>>(), November, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        _allowance.Setup(x => x.RecordNoticeAsync(It.IsAny<IReadOnlyCollection<int>>(), November, It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
 
         await Monitor().CheckAsync(CancellationToken.None);
 
@@ -92,8 +122,17 @@ public sealed class MessageAllowanceMonitorTests
     private void Accounts(params WorkspaceMessageAccount[] accounts) =>
         _allowance.Setup(x => x.GetAccountsAsync(November, It.IsAny<CancellationToken>())).ReturnsAsync(accounts);
 
-    private MessageAllowanceMonitor Monitor() =>
-        new(_allowance.Object, new PlanCatalog(Options.Create(new PlanCatalogOptions())), _publisher.Object, _bus.Object, new FixedClock(), NullLogger<MessageAllowanceMonitor>.Instance);
+    private MessageAllowanceMonitor Monitor(decimal paidMultiple = MessageAllowance.DefaultPaidThrottleMultiple) =>
+        new(_allowance.Object, new PlanCatalog(Options.Create(new PlanCatalogOptions())), _publisher.Object, _bus.Object, new FixedClock(),
+            Options.Create(new BillingOptions { PaidMessageThrottleMultiple = paidMultiple }), NullLogger<MessageAllowanceMonitor>.Instance);
+
+    private static IEvent Undated(IEvent e) => e switch
+    {
+        WorkspaceMessageLimitApproachingEvent a => a with { CreatedAtUtc = default },
+        WorkspaceMessageLimitReachedEvent r => r with { CreatedAtUtc = default },
+        WorkspaceMessagesThrottledEvent t => t with { CreatedAtUtc = default },
+        _ => e
+    };
 
     private sealed class FixedClock : TimeProvider
     {
