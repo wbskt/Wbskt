@@ -503,6 +503,18 @@ public sealed class BillingPaymentsTests
     }
 
     [Fact]
+    public async Task A_subscription_cancelled_but_still_paid_for_is_resumed_not_paid_for_again_with_a_second_checkout()
+    {
+        _stored.Add(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(10)) with { CancelAtPeriodEnd = true });
+
+        var plan = await Billing().CheckoutAsync(9, 4, new BillingCheckoutRequest(PlanCode.Pro, BillingInterval.Monthly), CancellationToken.None);
+
+        Assert.Equal("BILLING_SUBSCRIPTION_ACTIVE", plan.Error.Code);
+        Assert.Contains("Revoke the cancellation", plan.Error.Message);
+        _gateway.Verify(g => g.CreateCheckoutAsync(It.IsAny<BillingCheckout>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task A_checkout_is_paid_by_the_caller_for_the_tenant_and_a_provider_outage_is_a_503()
     {
         _accounts.Setup(a => a.GetByIdAsync(4, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = 4, Email = "a@example.com", Username = "ann" });

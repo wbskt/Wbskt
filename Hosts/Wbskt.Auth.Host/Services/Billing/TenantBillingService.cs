@@ -284,9 +284,18 @@ internal sealed class TenantBillingService(
             return Error.Validation("BILLING_OFFER_INVALID", $"{request.Plan} billed {interval} is not offered.");
         }
 
-        if (SubscriptionPlan.Deciding(await billing.GetSubscriptionsAsync(tenantId, ct)) is { } current && SubscriptionPlan.IsBilling(current))
+        TenantSubscription? current = SubscriptionPlan.Deciding(await billing.GetSubscriptionsAsync(tenantId, ct));
+        if (current is not null && SubscriptionPlan.IsBilling(current))
         {
             return Error.Conflict("BILLING_SUBSCRIPTION_ACTIVE", "The tenant already has a subscription. Change its plan with POST …/billing/plan, or cancel it in the billing portal.");
+        }
+
+        // Cancelled at the end of a period still paid for: a second subscription would bill for the same days.
+        if (current is { Status: SubscriptionStatus.Active or SubscriptionStatus.PastDue or SubscriptionStatus.OnHold, CancelAtPeriodEnd: true })
+        {
+            return Error.Conflict(
+                "BILLING_SUBSCRIPTION_ACTIVE",
+                $"The tenant's subscription is paid for until {current.CurrentPeriodEnd:yyyy-MM-dd} and ends then. Revoke the cancellation in the billing portal and change its plan, or check out once it has ended.");
         }
 
         return productId;
