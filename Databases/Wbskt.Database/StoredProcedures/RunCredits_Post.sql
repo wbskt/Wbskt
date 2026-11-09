@@ -1,7 +1,10 @@
 -- Moves the credits runs consumed since they last posted into dbo.WorkspaceCreditUsage, on @Day, for
 -- up to @BatchSize runs. Returns a row per workspace that posted: how many runs and credits it moved,
 -- what its ledger now holds for @Day's month, and its credit cap (dbo.WorkspaceCreditCaps, NULL for
--- none), so the caller can tell which caps it just carried a workspace across. Off the hot path: RunCounters_TryCharge only
+-- none), so the caller can tell which caps it just carried a workspace across; and its tenant, the plan's
+-- monthly allowance and what the tenant has posted this month with it (dbo.TenantCreditMonths), so the
+-- caller can tell when the tenant crossed its allowance. Credits Run_DeleteRetired posts are not seen
+-- here, so a crossing made only by them is not reported. Off the hot path: RunCounters_TryCharge only
 -- adds to a run's own counter, and the engine calls this every few seconds (CreditUsagePoster).
 -- Reads the runs still going and those that ended since @EndedSince, which catches a charge landing
 -- just after a run ended; Run_DeleteRetired posts anything left before a run is deleted. A run's
@@ -89,9 +92,14 @@ BEGIN
          FROM dbo.WorkspaceCreditUsage u
          WHERE u.WorkspaceId = w.WorkspaceId
            AND u.Day >= @MonthStart) AS SpentThisMonth,
-        c.MonthlyCreditCap
+        c.MonthlyCreditCap,
+        a.TenantId,
+        a.CreditsPerMonth,
+        m.Posted AS TenantSpentThisMonth
     FROM @ByWorkspace w
-    LEFT JOIN dbo.WorkspaceCreditCaps c ON c.WorkspaceId = w.WorkspaceId;
+    LEFT JOIN dbo.WorkspaceCreditCaps c ON c.WorkspaceId = w.WorkspaceId
+    LEFT JOIN dbo.WorkspaceAccounts a ON a.WorkspaceId = w.WorkspaceId
+    LEFT JOIN dbo.TenantCreditMonths m ON m.TenantId = a.TenantId AND m.MonthStart = @MonthStart;
 
     COMMIT TRANSACTION;
 END;

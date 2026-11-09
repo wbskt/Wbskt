@@ -22,6 +22,9 @@ internal sealed class CreditUsageProvider : BaseSqlProvider, ICreditUsageProvide
             r.GetInt32(r.GetOrdinal("Runs")),
             r.GetDecimal(r.GetOrdinal("Credits")),
             r.GetDecimal(r.GetOrdinal("SpentThisMonth")),
-            r.IsDBNull(r.GetOrdinal("MonthlyCreditCap")) ? null : r.GetDecimal(r.GetOrdinal("MonthlyCreditCap"))), ct);
+            r.IsDBNull(r.GetOrdinal("MonthlyCreditCap")) ? null : r.GetDecimal(r.GetOrdinal("MonthlyCreditCap")),
+            r.IsDBNull(r.GetOrdinal("TenantId")) ? null : r.GetInt32(r.GetOrdinal("TenantId")),
+            r.IsDBNull(r.GetOrdinal("CreditsPerMonth")) ? null : r.GetDecimal(r.GetOrdinal("CreditsPerMonth")),
+            r.IsDBNull(r.GetOrdinal("TenantSpentThisMonth")) ? null : r.GetDecimal(r.GetOrdinal("TenantSpentThisMonth"))), ct);
     }
 }

@@ -13,7 +13,8 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 /// cap are counted against (<c>dbo.WorkspaceCreditUsage</c>), off the hot path: a step's charge only
 /// touches its run's own counter. Run_Start adds what the runs still going have not posted yet, so the
 /// lag here never lets a start through on credits already spent. Warns when a post carries a workspace
-/// to 80% or 100% of its cap (<see cref="WorkspaceCreditCapReachedEvent"/>). Runs on the active engine only.
+/// to 80% or 100% of its cap (<see cref="WorkspaceCreditCapReachedEvent"/>), and a tenant to 80% or 100% of its
+/// plan's monthly credits (<see cref="TenantCreditAllowanceReachedEvent"/>). Runs on the active engine only.
 /// </summary>
 public sealed class CreditUsagePoster(
     TimeProvider clock,
@@ -66,6 +67,18 @@ public sealed class CreditUsagePoster(
                 {
                     _logger.LogWarning(ex, "Could not publish that workspace {WorkspaceId} reached {Percent}% of its credit cap", post.WorkspaceId, percent);
                 }
+            }
+        }
+
+        foreach (TenantAllowanceCrossing crossed in WorkspaceCreditPost.AllowanceThresholdsCrossed(posted))
+        {
+            try
+            {
+                await eventBus.PublishAsync(new TenantCreditAllowanceReachedEvent(crossed.WorkspaceId, crossed.TenantId, crossed.Percent, crossed.Allowance, crossed.Spent), ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Could not publish that tenant {TenantId} reached {Percent}% of its monthly credits", crossed.TenantId, crossed.Percent);
             }
         }
     }
