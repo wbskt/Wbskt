@@ -66,8 +66,14 @@ dbo.Tenants.PlanCode ──(copy)──────────►  dbo.Workspac
 |---|---|---|
 | Clients | `dbo.Client_Create` (registration) and `dbo.Client_UpdateStatuses` (approval) | 50025, **409** `PLAN_CLIENT_LIMIT_REACHED` |
 | Runs going at once | `dbo.Run_Start` | 50026; a trigger's dispatch reads `Refused`, a test run is **409** `PLAN_RUN_LIMIT_REACHED` |
+| Workspaces | `dbo.Workspace_Create` (auth database) | 50030, **409** `PLAN_WORKSPACE_LIMIT_REACHED` |
+| Members | `dbo.TenantInvitation_Accept`, and `dbo.TenantInvitation_Create` up front | 50031, **409** `PLAN_MEMBER_LIMIT_REACHED` |
 
-A caller reads the workspace's plan through `IWorkspacePlans` and passes the limit to the procedure as a
+Workspaces and members live in the auth database beside the plan, so the auth host reads the tenant's
+limits there (`ITenantLimits`) and the procedure counts under a lock on the tenant's row. A member is
+every row of `dbo.TenantMembers`, suspended or not; a pending invitation is not one until it is accepted.
+
+For clients and runs, a caller reads the workspace's plan through `IWorkspacePlans` and passes the limit to the procedure as a
 `PlanCeiling` (the limit and the tenant). The procedure counts across `dbo.TenantWorkspaces`, the
 workspace itself plus every workspace whose copy names the same tenant, under an application lock from
 `dbo.PlanLimitLockResource`: one lock per limit and tenant, so concurrent starts or approvals one short

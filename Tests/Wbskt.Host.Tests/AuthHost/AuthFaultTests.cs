@@ -28,7 +28,7 @@ public sealed class AuthFaultTests
     {
         _service = new TenantService(
             _tenants.Object, Mock.Of<IAccessControlProvider>(), Mock.Of<IAccountProvider>(), Mock.Of<IWorkspaceProvider>(), Mock.Of<IEventBus>(), Mock.Of<IAuthMailer>(),
-            NullLogger<TenantService>.Instance, Mock.Of<IAuditWorkspaces>());
+            NullLogger<TenantService>.Instance, new FixedTenantLimits(), Mock.Of<IAuditWorkspaces>());
     }
 
     [Fact]
@@ -75,6 +75,8 @@ public sealed class AuthFaultTests
     [InlineData(50018, "ACCOUNT_SOLE_ADMINISTRATOR")]
     [InlineData(50019, "ACCOUNT_DELETE_RETRY")]
     [InlineData(50029, "AUTH_OPERATION_REJECTED")]
+    [InlineData(50030, "PLAN_WORKSPACE_LIMIT_REACHED")]
+    [InlineData(50031, "PLAN_MEMBER_LIMIT_REACHED")]
     public void Each_guard_has_its_error(int number, string code)
     {
         Assert.True(SqlGuardErrors.TryTranslate(SqlExceptions.WithNumber(number, "guard"), null, out var error));
@@ -82,7 +84,7 @@ public sealed class AuthFaultTests
     }
 
     [Theory]
-    [InlineData(50030)]
+    [InlineData(50032)]
     [InlineData(1205)]
     public void Anything_else_from_the_database_is_a_fault(int number)
     {

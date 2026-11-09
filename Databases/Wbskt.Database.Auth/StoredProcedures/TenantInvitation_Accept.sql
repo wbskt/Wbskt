@@ -6,13 +6,18 @@
 -- possession of a leaked link is enough to join a tenant, and an invitation stops being addressed
 -- at anyone in particular.
 --
+-- @MemberLimit is the tenant's plan's limit on members (NULL is none). Joining past it raises 50031;
+-- someone already a member joins nothing, so is never refused. The tenant's row is locked before the
+-- count, so concurrent acceptances one short of the limit take turns.
+--
 -- An unknown token, a spent one and a mismatched address all raise the same error. They are the
 -- same answer to the caller -- distinguishing them would let a holder of one tenant's token probe
 -- for which addresses another invitation was issued to.
 CREATE PROCEDURE dbo.TenantInvitation_Accept
     @TokenHash VARBINARY(32),
     @UserId INT,
-    @TenantId INT OUTPUT
+    @TenantId INT OUTPUT,
+    @MemberLimit INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -40,6 +45,18 @@ BEGIN
     BEGIN
         ROLLBACK TRANSACTION;
         THROW 50011, 'Invitation is not valid.', 1;
+    END
+
+    IF @MemberLimit IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM dbo.TenantMembers WHERE TenantId = @TenantId AND UserId = @UserId)
+    BEGIN
+        SELECT @TenantId = Id FROM dbo.Tenants WITH (UPDLOCK, ROWLOCK) WHERE Id = @TenantId;
+
+        IF (SELECT COUNT(*) FROM dbo.TenantMembers WHERE TenantId = @TenantId) >= @MemberLimit
+        BEGIN
+            ROLLBACK TRANSACTION;
+            THROW 50031, 'The plan has reached its member limit.', 1;
+        END
     END
 
     UPDATE dbo.TenantInvitations

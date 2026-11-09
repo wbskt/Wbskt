@@ -43,6 +43,7 @@ internal sealed class RegistrationService : IRegistrationService
     private readonly IAuditWorkspaces _audit;
     private readonly AccountAnnouncer _announcer;
     private readonly IBreachedPasswords _breachedPasswords;
+    private readonly ITenantLimits _limits;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
     public RegistrationService(
@@ -53,9 +54,11 @@ internal sealed class RegistrationService : IRegistrationService
         ILogger<RegistrationService> logger,
         AuthMetrics metrics,
         MailCooldown mailCooldown,
+        ITenantLimits limits,
         IAuditWorkspaces? audit = null,
         IBreachedPasswords? breachedPasswords = null)
     {
+        _limits = limits;
         _audit = audit ?? AuditWorkspaces.None;
         _breachedPasswords = breachedPasswords ?? BreachedPasswords.None;
         _accounts = accounts;
@@ -121,13 +124,14 @@ internal sealed class RegistrationService : IRegistrationService
             _logger.LogInformation("Created tenant {TenantRefId} for new user ID {UserId}", tenantRefId, userId);
 
             int? joinedTenantId = null;
-            if (invitationToken is not null)
+            if (invitationToken is not null && invitation is not null)
             {
                 // Re-validated authoritatively inside the procedure. Between the check above and here
                 // the invitation could have been revoked or redeemed, in which case this throws and
                 // registration fails — the account and its own tenant survive, so the user can log in
                 // and ask for a fresh invitation rather than being stranded.
-                var tenantId = await _tenants.AcceptInvitationAsync(SecurityTokens.Hash(invitationToken), userId, cancellationToken);
+                var limits = await _limits.ForTenantAsync(invitation.TenantRef, cancellationToken);
+                var tenantId = await _tenants.AcceptInvitationAsync(SecurityTokens.Hash(invitationToken), userId, limits.Members, cancellationToken);
                 _logger.LogInformation("New user ID {UserId} joined tenant ID {TenantId} by invitation", userId, tenantId);
                 joinedTenantId = tenantId;
             }
@@ -167,6 +171,15 @@ internal sealed class RegistrationService : IRegistrationService
                 _logger.LogWarning("Registration for {Username} completed but the invitation was no longer redeemable", username);
                 _metrics.RecordRegistration("invalid_invitation");
                 return Result.Failure(InvalidInvitation);
+            }
+
+            // The inviting tenant's plan has no room for another member. As above, the account and its
+            // own tenant survive; the inviter has to make room and invite again.
+            if (ex is SqlException { Number: 50031 })
+            {
+                _logger.LogWarning("Registration for {Username} completed but the inviting tenant is at its plan's member limit", username);
+                _metrics.RecordRegistration("member_limit");
+                return Result.Failure(SqlGuardErrors.PlanMemberLimitReached);
             }
 
             // Another account's live email-change undo holds the address. Answered like an address in

@@ -134,7 +134,7 @@ public sealed class AuthLogRedactionTests
         }
 
         var serviceLogger = new RecordingLogger<WorkspaceService>();
-        var service = new WorkspaceService(workspaces.Object, auth.Object, Mock.Of<ITenantProvider>(), Mock.Of<IAccessControlProvider>(), Mock.Of<IEventBus>(), serviceLogger, new AuthMetrics());
+        var service = new WorkspaceService(workspaces.Object, auth.Object, Mock.Of<ITenantProvider>(), Mock.Of<IAccessControlProvider>(), Mock.Of<IEventBus>(), serviceLogger, new AuthMetrics(), new FixedTenantLimits());
 
         var result = await service.AddUserToWorkspaceAsync(7, new AddMemberRequest(Email));
 

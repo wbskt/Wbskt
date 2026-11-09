@@ -1,3 +1,4 @@
+using Wbskt.Infrastructure.Billing;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using StackExchange.Redis;
@@ -64,6 +65,8 @@ public static class Program
         builder.Services.AddScoped<IAuditWorkspaces, AuditWorkspaces>();
         builder.Services.AddScoped<ITenantPlanProvider, TenantPlanProvider>();
         builder.Services.AddScoped<ITenantPlanService, TenantPlanService>();
+        builder.Services.AddPlanCatalog(builder.Configuration);
+        builder.Services.AddScoped<ITenantLimits, TenantLimits>();
         builder.Services.AddScoped<ICredentialRetentionProvider, CredentialRetentionProvider>();
         builder.Services.AddHostedService<CredentialRetentionService>();
         builder.Services.AddHttpContextAccessor();

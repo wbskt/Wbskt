@@ -61,7 +61,7 @@ public sealed class InvitationMailTests
             p => p.CreateInvitationAsync(
                 It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int?>(),
                 It.Is<byte[]>(h => h.SequenceEqual(SecurityTokens.Hash(result.Value.Token))),
-                It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()),
+                It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -70,7 +70,7 @@ public sealed class InvitationMailTests
         public Harness(string tenantName = "Acme Ltd")
         {
             Tenants.Setup(p => p.CreateInvitationAsync(
-                    It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+                    It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new CreatedInvitation(Guid.NewGuid(), tenantName));
 
             Service = new TenantService(
@@ -80,7 +80,7 @@ public sealed class InvitationMailTests
                 Mock.Of<IWorkspaceProvider>(),
                 Mock.Of<IEventBus>(),
                 Mailer,
-                NullLogger<TenantService>.Instance);
+                NullLogger<TenantService>.Instance, new FixedTenantLimits());
         }
 
         public Mock<ITenantProvider> Tenants { get; } = new();

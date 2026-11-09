@@ -8,7 +8,8 @@ namespace Wbskt.Auth.Host.Providers;
 
 internal interface IWorkspaceProvider : IReferenceProvider
 {
-    Task<Guid> CreateWorkspaceAsync(string name, string description, int ownerId, int tenantId, CancellationToken cancellationToken = default);
+    /// <summary>Throws 50030 when the tenant already has <paramref name="workspaceLimit"/> workspaces (null is no limit).</summary>
+    Task<Guid> CreateWorkspaceAsync(string name, string description, int ownerId, int tenantId, int? workspaceLimit, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<Workspace>> GetWorkspacesForUserAsync(int userId, CancellationToken cancellationToken = default);
     Task AddUserToWorkspaceAsync(int workspaceId, int userId, CancellationToken cancellationToken = default);
     Task RemoveUserFromWorkspaceAsync(int workspaceId, int userId, CancellationToken cancellationToken = default);

@@ -20,7 +20,7 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
         }, cancellationToken);
     }
 
-    public async Task<Guid> CreateWorkspaceAsync(string name, string description, int ownerId, int tenantId, CancellationToken cancellationToken = default)
+    public async Task<Guid> CreateWorkspaceAsync(string name, string description, int ownerId, int tenantId, int? workspaceLimit, CancellationToken cancellationToken = default)
     {
         var parameters = await ExecuteNonQueryAsync("dbo.Workspace_Create", p =>
         {
@@ -29,6 +29,7 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
             p.AddWithValue("@OwnerUserId", ownerId);
             p.AddWithValue("@TenantId", tenantId);
             p.Add("@RefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
+            p.AddWithValue("@WorkspaceLimit", (object?)workspaceLimit ?? DBNull.Value);
         }, cancellationToken);
 
         return (Guid)parameters["@RefId"].Value;

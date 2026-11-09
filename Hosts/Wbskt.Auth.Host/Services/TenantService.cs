@@ -31,6 +31,7 @@ internal sealed class TenantService : ITenantService
     private readonly IAuthMailer _mailer;
     private readonly ILogger<TenantService> _logger;
     private readonly TenantAnnouncer _announcer;
+    private readonly ITenantLimits _limits;
 
     public TenantService(
         ITenantProvider tenants,
@@ -40,8 +41,10 @@ internal sealed class TenantService : ITenantService
         IEventBus eventBus,
         IAuthMailer mailer,
         ILogger<TenantService> logger,
+        ITenantLimits limits,
         IAuditWorkspaces? audit = null)
     {
+        _limits = limits;
         _tenants = tenants;
         _accessControl = accessControl;
         _workspaceProvider = workspaceProvider;
@@ -209,10 +212,11 @@ internal sealed class TenantService : ITenantService
 
         var token = SecurityTokens.Generate();
         var expiresAt = DateTime.UtcNow.Add(InvitationLifetime);
+        var limits = await _limits.ForTenantAsync(tenantId, cancellationToken);
 
         return await GuardAsync("CreateInvitation", async () =>
         {
-            var created = await _tenants.CreateInvitationAsync(tenantId, request.Email, roleId, SecurityTokens.Hash(token), expiresAt, callerId, workspaceIds, cancellationToken);
+            var created = await _tenants.CreateInvitationAsync(tenantId, request.Email, roleId, SecurityTokens.Hash(token), expiresAt, callerId, workspaceIds, limits.Members, cancellationToken);
             _logger.LogInformation("Invitation {RefId} issued for tenant {TenantId} by user ID {CallerId}", created.RefId, tenantId, callerId);
 
             // Queued, not awaited: an unreachable relay must not fail an invitation that has already
@@ -263,9 +267,10 @@ internal sealed class TenantService : ITenantService
 
         // Read back for the tenant name only. The procedure re-checks validity and the address
         // match under a lock, so this is a nicety, never the gate.
+        var limits = await _limits.ForTenantAsync(invitation.TenantRef, cancellationToken);
         return await GuardAsync("AcceptInvitation", async () =>
         {
-            var tenantId = await _tenants.AcceptInvitationAsync(tokenHash, callerId, cancellationToken);
+            var tenantId = await _tenants.AcceptInvitationAsync(tokenHash, callerId, limits.Members, cancellationToken);
             _logger.LogInformation("User ID {CallerId} joined tenant {TenantRef} by invitation", callerId, invitation.TenantRef);
 
             var joiner = await _announcer.UserPermissionsChangedAsync(callerId, cancellationToken);
