@@ -26,7 +26,7 @@ public sealed class BillingOptions
     public TimeSpan CreditGrantReconcileInterval { get; set; } = TimeSpan.FromHours(1);
 
     /// <summary>
-    /// How many times its monthly message allowance a Maker or Pro account may carry before its clients
+    /// How many times its monthly message allowance a Maker, Pro or Team account may carry before its clients
     /// are held to Free's one message a minute until the 1st. Paid plans are never charged for overage, so
     /// this only stops one account from loading the hosts without end. Must be more than 1 (checked at
     /// start). Free is throttled at 1x; Business never is.

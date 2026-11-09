@@ -83,6 +83,32 @@ public sealed class TenantPlanServiceTests
     }
 
     [Fact]
+    public async Task A_business_contract_is_sized_from_its_clients_and_keeps_what_the_operator_set()
+    {
+        Current(PlanCode.Free, revision: 0);
+        var expected = new PlanLimitOverrides { Clients = 5_000, MessagesPerMonth = 500_000_000, CreditsPerMonth = 1_500_000m, RunHistoryDays = 180 };
+        _plans.Setup(p => p.SetAsync(9, PlanCode.Business, expected, 0, PlanSource.Operator, null, It.IsAny<OutboxMessage>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantPlan(9, TenantRef, PlanCode.Business, expected, 1, DateTime.UtcNow));
+
+        var result = await Service().SetAsync(TenantRef, new SetTenantPlanRequest(PlanCode.Business, new PlanLimitOverrides { RunHistoryDays = 180 }, ContractClients: 5_000), PlanSource.Operator, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(expected, result.Value.LimitOverrides);
+    }
+
+    [Theory]
+    [InlineData(PlanCode.Business, 1_999)]
+    [InlineData(PlanCode.Team, 5_000)]
+    public async Task A_contract_size_is_only_for_business_and_at_least_its_minimum(PlanCode plan, int clients)
+    {
+        var result = await Service().SetAsync(TenantRef, new SetTenantPlanRequest(plan, ContractClients: clients), PlanSource.Operator, CancellationToken.None);
+
+        Assert.Equal("PLAN_CONTRACT_INVALID", result.Error.Code);
+        Assert.Equal(ErrorType.Validation, result.Error.Type);
+        _plans.Verify(p => p.FindByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Asking_for_the_plan_already_held_changes_nothing()
     {
         Current(PlanCode.Business, revision: 2, overrides: new PlanLimitOverrides { Clients = 4_000 });

@@ -35,7 +35,7 @@ CREATE TABLE dbo.WorkspaceAccounts
     UpdatedAt      DATETIME2(3)     NOT NULL CONSTRAINT DF_WorkspaceAccounts_UpdatedAt DEFAULT SYSUTCDATETIME(),
     CreatedAt      DATETIME2(3)     NOT NULL CONSTRAINT DF_WorkspaceAccounts_CreatedAt DEFAULT SYSUTCDATETIME(),
     CONSTRAINT PK_WorkspaceAccounts PRIMARY KEY CLUSTERED (WorkspaceId),
-    CONSTRAINT CK_WorkspaceAccounts_PlanCode CHECK (PlanCode = N'Free' OR PlanCode = N'Maker' OR PlanCode = N'Pro' OR PlanCode = N'Business')
+    CONSTRAINT CK_WorkspaceAccounts_PlanCode CHECK (PlanCode = N'Free' OR PlanCode = N'Maker' OR PlanCode = N'Pro' OR PlanCode = N'Team' OR PlanCode = N'Business')
 );
 GO
 

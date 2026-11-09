@@ -15,7 +15,7 @@ namespace Wbskt.Management.Host.Services.Billing;
 /// keeps) with its plan's allowance. It tells every socket host which workspaces to throttle
 /// (<see cref="MessageThrottleSnapshot"/>, the whole list every time), and announces each workspace once a
 /// month as it passes 80% (<see cref="WorkspaceMessageLimitApproachingEvent"/>), 100%
-/// (<see cref="WorkspaceMessageLimitReachedEvent"/>) and, on Maker and Pro, the throttle at
+/// (<see cref="WorkspaceMessageLimitReachedEvent"/>) and, on Maker, Pro and Team, the throttle at
 /// <see cref="BillingOptions.PaidMessageThrottleMultiple"/> times it (<see cref="WorkspaceMessagesThrottledEvent"/>).
 /// </summary>
 public sealed class MessageAllowanceMonitor(

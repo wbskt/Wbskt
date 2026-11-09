@@ -34,7 +34,7 @@ public sealed record CreditUsageAmount(decimal Used, decimal Limit, decimal TopU
 /// <summary>Client messages both ways (sent by clients, and commands delivered to them) against the plan's monthly allowance.</summary>
 /// <param name="Throttled">
 /// True when each of the account's clients may send only one message a minute until the month ends: Free
-/// once it has used its allowance, Maker and Pro at twice it. Business is never throttled. Paid plans are
+/// once it has used its allowance, Maker, Pro and Team at twice it. Business is never throttled. Paid plans are
 /// never charged for what they use past the limit.
 /// </param>
 public sealed record MessageUsageAmount(long Used, long Limit, bool Throttled);

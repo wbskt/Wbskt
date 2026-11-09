@@ -34,6 +34,26 @@ public sealed class PlanCatalogTests
     }
 
     [Fact]
+    public void Plans_are_ordered_from_smallest_to_largest()
+    {
+        // Checkout treats a higher plan as an upgrade and notices call a lower one a downgrade.
+        Assert.Equal([PlanCode.Free, PlanCode.Maker, PlanCode.Pro, PlanCode.Team, PlanCode.Business], Enum.GetValues<PlanCode>());
+    }
+
+    [Fact]
+    public void Business_is_its_smallest_contract_and_a_larger_one_scales_per_client()
+    {
+        Assert.Equal(BusinessContract.LimitsFor(BusinessContract.MinimumClients), PlanCatalog.BuiltIn[PlanCode.Business]);
+
+        PlanLimits contract = Catalog([]).LimitsFor(PlanCode.Business, BusinessContract.OverridesFor(5_000, null));
+
+        Assert.Equal(5_000, contract.Clients);
+        Assert.Equal(500_000_000, contract.MessagesPerMonth);
+        Assert.Equal(1_500_000m, contract.CreditsPerMonth);
+        Assert.Equal(90, contract.RunHistoryDays);
+    }
+
+    [Fact]
     public void Configuration_replaces_only_the_limits_it_sets()
     {
         PlanCatalog catalog = Catalog(new() { [PlanCode.Free] = new PlanLimitOverrides { Clients = 25 } });

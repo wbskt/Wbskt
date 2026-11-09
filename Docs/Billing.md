@@ -7,18 +7,23 @@ How Wbskt knows what each account may use. The build plan and the open work are 
 A **tenant** (an account) is on one plan. Every limit is pooled across the tenant's workspaces: a Maker
 tenant with three workspaces has 100 clients between them, not 100 each.
 
-| Limit | Free | Maker | Pro | Business |
-|---|---|---|---|---|
-| Price | $0 | $5 / month or $50 / year | $24 / month or $240 / year | $0.15 / client / month, minimum $250 a month |
-| Clients | 20 | 100 | 500 | 1,000 |
-| Messages a month | 1.5 M | 10 M | 50 M | 100 M |
-| Workflow credits a month | 2,000 | 25,000 | 150,000 | 300,000 |
-| Runs going at once | 20 | 100 | 200 | 200 |
-| Workspaces | 1 | 3 | 10 | 25 |
-| Members | 1 | 3 | 10 | 25 |
-| Raw readings kept | 3 days | 14 days | 30 days | 30 days |
-| Hourly readings kept | 30 days | 1 year | 2 years | 2 years |
-| Run history kept | 7 days | 14 days | 30 days | 30 days |
+| Limit | Free | Maker | Pro | Team | Business |
+|---|---|---|---|---|---|
+| Price | $0 | $5 / month or $50 / year | $24 / month or $240 / year | $99 / month or $990 / year | $0.15 / client / month, at least 2,000 clients ($300 a month), yearly by invoice |
+| Clients | 20 | 100 | 500 | 2,000 | 2,000, then the contract's |
+| Messages a month | 1.5 M | 10 M | 50 M | 200 M | 100,000 per client |
+| Workflow credits a month | 2,000 | 25,000 | 150,000 | 600,000 | 300 per client |
+| Runs going at once | 20 | 100 | 200 | 200 | 200 |
+| Workspaces | 1 | 3 | 10 | 25 | 50 |
+| Members | 1 | 3 | 10 | 25 | 50 |
+| Raw readings kept | 3 days | 14 days | 30 days | 30 days | 90 days |
+| Hourly readings kept | 30 days | 1 year | 2 years | 2 years | 2 years |
+| Run history kept | 7 days | 14 days | 30 days | 30 days | 90 days |
+
+Every self-serve plan costs about $0.05 a client at its limit, and yearly is two months free. Business
+sells what self-serve can't: longer history, a contract and invoices, and overage in place of the
+throttle. It is not sold until the two-VM setup is live, since an uptime target needs failover. The
+reasoning, with margins, is in #698.
 
 The table is `PlanCatalog.BuiltIn` (`Wbskt.Infrastructure/Billing`). Two layers can change it without a
 release, each replacing only the fields it sets:
@@ -26,6 +31,9 @@ release, each replacing only the fields it sets:
 1. **Configuration**, for every tenant on a plan: `Billing:Plans:{Plan}:{Limit}`, for example
    `Billing:Plans:Free:Clients = 25`. A negative value stops the host at start.
 2. **A tenant's overrides**, for a negotiated Business contract: `limitOverrides` on the tenant's plan.
+   The operator action takes the contract's client count (`contractClients`, at least 2,000) and
+   derives its clients, messages and credits from it (`BusinessContract`), so a contract cannot be
+   priced on one count and sized on another. The catalog's Business row is the 2,000-client contract.
 
 ## Where the plan lives
 
@@ -70,7 +78,7 @@ dbo.Tenants.PlanCode ──(copy)──────────►  dbo.Workspac
 |---|---|---|
 | Clients | `dbo.Client_Create` (registration) and `dbo.Client_UpdateStatuses` (approval) | 50025, **409** `PLAN_CLIENT_LIMIT_REACHED` |
 | Runs going at once | `dbo.Run_Start` | 50026; a trigger's dispatch reads `Refused`, a test run is **409** `PLAN_RUN_LIMIT_REACHED` |
-| Messages a month | `MessageAllowanceMonitor`, then each socket host | Free at 1×, Maker and Pro at 2×, Business never: each client held to one message a minute until the 1st (see Messages) |
+| Messages a month | `MessageAllowanceMonitor`, then each socket host | Free at 1×, Maker, Pro and Team at 2×, Business never: each client held to one message a minute until the 1st (see Messages) |
 | Workflow credits a month | `dbo.Run_Start` | 50033; a trigger's dispatch reads `Refused`, a test run is **409** `PLAN_CREDIT_LIMIT_REACHED` |
 | A workspace's credit cap | `dbo.Run_Start` | 50034; a trigger's dispatch reads `Refused`, a test run is **409** `WORKSPACE_CREDIT_CAP_REACHED` |
 | (a start that waits too long for a lock) | `dbo.Run_Start` | 50035; retried, then a trigger's event is redelivered and a test run is **503** `WORKSPACE_BUSY` |
@@ -213,7 +221,7 @@ included.
   (pongs, acks, OTA status) pass, so a throttled client stays connected and keeps answering. A list
   older than 5 minutes is ignored, so a management outage lets messages through rather than throttling
   an account that has since upgraded. The list is empty again on the 1st.
-- **Maker and Pro carry on past their allowance**, with no overage charge, so a customer never sees a
+- **Maker, Pro and Team carry on past their allowance**, with no overage charge, so a customer never sees a
   surprise bill. Only at `Billing:PaidMessageThrottleMultiple` (2) times it are they throttled the same
   way as Free, which stops one account loading the hosts without end. The multiple is a setting so
   pricing can move it.
@@ -293,6 +301,9 @@ Payments are off until the provider's API key and webhook signing secret are set
 `DODO_PAYMENTS_WEBHOOK_KEY`); the products sold are `Billing:Payments:Plans:{Plan}:{Interval}` and
 `Billing:Payments:CreditPacks:{Name}` (`ProductId`, `Credits`). The secrets come from the environment,
 never from a file in the repository.
+
+What is sold: Maker, Pro and Team, monthly and yearly (`DODO_PRODUCT_{MAKER,PRO,TEAM}_{MONTHLY,YEARLY}`). Business
+is invoiced, never checked out.
 
 - **Buying.** `POST /api/v1/tenants/{tenantRef}/billing/checkout` (`billing.manage`) names a plan and
   interval or a credit pack, and answers the provider's checkout page. The checkout carries the tenant's

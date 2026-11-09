@@ -29,6 +29,17 @@ public sealed class WorkspaceAccountIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
+    public async Task A_team_copy_is_accepted_by_the_table()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var account = new WorkspaceAccount(NewWorkspaceId(), 41, Guid.NewGuid(), PlanCode.Team, null, 1);
+
+        await Provider().UpsertAsync([account], CancellationToken.None);
+
+        Assert.Equal(PlanCode.Team, (await Provider().FindAsync(account.WorkspaceId, CancellationToken.None))!.PlanCode);
+    }
+
+    [SkippableFact]
     public async Task A_copy_carries_its_monthly_credits_and_a_catalogue_change_rewrites_it_at_the_same_revision()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
