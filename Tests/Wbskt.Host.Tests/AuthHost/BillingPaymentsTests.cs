@@ -592,6 +592,18 @@ public sealed class BillingPaymentsTests
     }
 
     [Fact]
+    public async Task A_change_made_but_not_read_back_is_still_a_success_so_it_is_not_asked_for_twice()
+    {
+        _stored.Add(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(10)) with { PlanCode = PlanCode.Maker, ProductId = "prod_maker_m" });
+        _gateway.Setup(g => g.FindSubscriptionAsync("sub_1", It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("timeout"));
+
+        var result = await Billing().ChangePlanAsync(9, new ChangePlanRequest(PlanCode.Pro, BillingInterval.Monthly), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        _gateway.Verify(g => g.ChangePlanAsync("sub_1", "prod_pro_m", PlanChangeTiming.Now, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task A_plan_change_needs_an_offer_a_live_paid_up_subscription_and_the_provider()
     {
         var offer = await Billing().ChangePlanAsync(9, new ChangePlanRequest(PlanCode.Pro, BillingInterval.Yearly), CancellationToken.None);
