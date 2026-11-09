@@ -10,4 +10,5 @@ public sealed record WorkspaceUsageSummary(
     int WorkspaceClients,
     int TenantActiveRuns,
     int WorkspaceActiveRuns,
-    decimal? MonthlyCreditCap);
+    decimal? MonthlyCreditCap,
+    decimal CreditGrantBalance);
