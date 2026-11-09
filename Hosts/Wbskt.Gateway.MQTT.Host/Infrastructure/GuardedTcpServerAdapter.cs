@@ -93,20 +93,23 @@ public sealed class GuardedTcpServerAdapter : IMqttServerAdapter
 
     private async Task ServeAsync(Socket socket, IMqttNetLogger logger)
     {
-        // Notices a peer that vanished without a FIN (power or Wi-Fi lost) even when its MQTT
-        // keep-alive is off, so it does not stay "online" until the OS gives up on its own.
-        socket.NoDelay = true;
-        socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
-        socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime, 60);
-        socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval, 10);
-        socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, 3);
-
-        var guard = new PacketSizeGuardStream(new NetworkStream(socket, ownsSocket: true), _maxPacketBytes);
-        var channel = new MqttTcpChannel(guard, socket.RemoteEndPoint!, socket.LocalEndPoint!, null);
-        using var adapter = new MqttChannelAdapter(channel, new MqttPacketFormatterAdapter(new MqttBufferWriter(4096, 65535)), logger);
-        _guards[adapter] = guard;
+        PacketSizeGuardStream? guard = null;
+        MqttChannelAdapter? adapter = null;
         try
         {
+            // Notices a peer that vanished without a FIN (power or Wi-Fi lost) even when its MQTT
+            // keep-alive is off, so it does not stay "online" until the OS gives up on its own.
+            // Inside the try: a peer that reset straight after the accept makes these throw.
+            socket.NoDelay = true;
+            socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+            socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime, 60);
+            socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval, 10);
+            socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, 3);
+
+            guard = new PacketSizeGuardStream(new NetworkStream(socket, ownsSocket: true), _maxPacketBytes);
+            var channel = new MqttTcpChannel(guard, socket.RemoteEndPoint!, socket.LocalEndPoint!, null);
+            adapter = new MqttChannelAdapter(channel, new MqttPacketFormatterAdapter(new MqttBufferWriter(4096, 65535)), logger);
+            _guards[adapter] = guard;
             if (ClientHandler is { } handler)
             {
                 await handler(adapter);
@@ -118,8 +121,20 @@ public sealed class GuardedTcpServerAdapter : IMqttServerAdapter
         }
         finally
         {
-            _guards.TryRemove(adapter, out _);
-            await guard.DisposeAsync();
+            if (adapter is not null)
+            {
+                _guards.TryRemove(adapter, out _);
+                adapter.Dispose();
+            }
+
+            if (guard is not null)
+            {
+                await guard.DisposeAsync();
+            }
+            else
+            {
+                socket.Dispose();
+            }
         }
     }
 }
