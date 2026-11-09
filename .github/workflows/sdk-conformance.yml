@@ -1,7 +1,8 @@
 name: SDK conformance
 
-# Runs the client protocol checklist (Tests/Conformance) against every SDK in this repository. The
-# suite fakes the API and socket hosts, so no database, broker or Wbskt host is started.
+# Runs the client protocol checklist (Tests/Conformance) against the .NET SDK in this repository and
+# the Python SDK from wbskt/Wbskt.Python master, so a change to the suite is checked against both.
+# The suite fakes the API and socket hosts, so no database, broker or Wbskt host is started.
 
 on:
   pull_request:
@@ -40,11 +41,16 @@ jobs:
           python-version: '3.13'
       - run: pip install -r requirements.txt
 
+      - uses: actions/checkout@v4
+        if: matrix.sdk == 'python'
+        with:
+          repository: wbskt/Wbskt.Python
+          path: wbskt-python
       - name: Python harness
         if: matrix.sdk == 'python'
         run: |
-          pip install -e ../../Clients/python
-          echo "WBSKT_HARNESS=python harnesses/python/harness.py" >> "$GITHUB_ENV"
+          pip install -e "$GITHUB_WORKSPACE/wbskt-python"
+          echo "WBSKT_HARNESS=python $GITHUB_WORKSPACE/wbskt-python/conformance/harness.py" >> "$GITHUB_ENV"
 
       - uses: actions/setup-dotnet@v4
         if: matrix.sdk == 'dotnet'

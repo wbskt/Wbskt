@@ -29,13 +29,14 @@ gateway can't drift apart unnoticed: the scenarios there need no misbehaviour on
 platform recorded through the management API.
 
 The SDK runs as a separate process, a **harness**, so any language can take part. CI
-(`.github/workflows/sdk-conformance.yml`) runs it for the Python and .NET SDKs; the ESP32 SDK runs it
-in its own repository (below).
+(`.github/workflows/sdk-conformance.yml`) runs it for the .NET SDK and for the Python SDK from
+[Wbskt.Python](https://github.com/wbskt/Wbskt.Python) `master`, whose harness lives there in
+`conformance/harness.py`. Wbskt.Python and the ESP32 SDK also run it in their own CI (below).
 
 ```sh
 pip install -r requirements.txt
-pip install -e ../../Clients/python
-WBSKT_HARNESS="python harnesses/python/harness.py" python -m pytest -v
+pip install -e <Wbskt.Python>
+WBSKT_HARNESS="python <Wbskt.Python>/conformance/harness.py" python -m pytest -v
 
 dotnet build harnesses/dotnet -c Release -o /tmp/harness
 WBSKT_HARNESS="dotnet /tmp/harness/Wbskt.Conformance.Harness.dll" python -m pytest -v
