@@ -171,14 +171,23 @@ internal sealed class TenantBillingService(
                 await gateway.ChangePlanAsync(current.SubscriptionId, productId, PlanChangeTiming.AtPeriodEnd, ct);
             }
 
-            // The provider's webhooks follow, but the caller sees the change now. A failed upgrade charge
-            // leaves the subscription on its plan, and the read says so.
-            await sync.SyncSubscriptionAsync(current.SubscriptionId, refundedThrough: null, ct);
         }
         catch (HttpRequestException ex)
         {
             logger.LogWarning(ex, "{Provider} refused or could not change subscription {SubscriptionId} of tenant {TenantId}.", gateway.Name, current.SubscriptionId, tenantId);
             return ProviderDown;
+        }
+
+        // The provider's webhooks follow, but the caller sees the change now. A failed upgrade charge
+        // leaves the subscription on its plan, and the read says so. The change is made either way, so a
+        // read that fails here is left to the webhook rather than answered as a failure to be retried.
+        try
+        {
+            await sync.SyncSubscriptionAsync(current.SubscriptionId, refundedThrough: null, ct);
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogWarning(ex, "Subscription {SubscriptionId} of tenant {TenantId} was changed but could not be read back; its webhook will bring it in.", current.SubscriptionId, tenantId);
         }
 
         logger.LogInformation(
