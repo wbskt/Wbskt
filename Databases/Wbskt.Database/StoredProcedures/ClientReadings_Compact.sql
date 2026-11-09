@@ -1,6 +1,7 @@
 -- One batch of the readings retention sweep, by each client's plan (@Retention, overridden by the
--- tenant's rawReadingsDays and hourlyReadingsDays where it has them; a workspace with no account is
--- Free):
+-- tenant's rawReadingsDays and hourlyReadingsDays where it has them, and never shorter than a
+-- retention still held after a downgrade (dbo.WorkspaceAccounts.RetentionHeldUntil). A workspace with
+-- no copy of its account yet is skipped: its plan is not known, and these deletes cannot be undone):
 --   1. Raw readings received before the plan's raw cutoff are deleted and rolled into
 --      dbo.ClientReadingsHourly in the same transaction, so each reading is counted once, in one table.
 --   2. Hourly rows older than the plan's hourly cutoff are deleted.
@@ -30,11 +31,14 @@ BEGIN
     INSERT INTO #Cutoffs (ClientId, RawCutoff, HourlyCutoff)
     SELECT
         c.Id,
-        DATEADD(DAY, -COALESCE(TRY_CAST(JSON_VALUE(a.LimitOverrides, '$.rawReadingsDays') AS INT), p.RawDays), @Now),
-        DATEADD(DAY, -COALESCE(TRY_CAST(JSON_VALUE(a.LimitOverrides, '$.hourlyReadingsDays') AS INT), p.HourlyDays), @Now)
+        DATEADD(DAY, -CASE WHEN a.RetentionHeldUntil > @Now AND a.HeldRawReadingsDays > d.RawDays THEN a.HeldRawReadingsDays ELSE d.RawDays END, @Now),
+        DATEADD(DAY, -CASE WHEN a.RetentionHeldUntil > @Now AND a.HeldHourlyReadingsDays > d.HourlyDays THEN a.HeldHourlyReadingsDays ELSE d.HourlyDays END, @Now)
     FROM dbo.Clients c
-    LEFT JOIN dbo.WorkspaceAccounts a ON a.WorkspaceId = c.WorkspaceId
-    JOIN @Retention p ON p.PlanCode = COALESCE(a.PlanCode, N'Free');
+    JOIN dbo.WorkspaceAccounts a ON a.WorkspaceId = c.WorkspaceId
+    JOIN @Retention p ON p.PlanCode = a.PlanCode
+    CROSS APPLY (SELECT
+                     COALESCE(TRY_CAST(JSON_VALUE(a.LimitOverrides, '$.rawReadingsDays') AS INT), p.RawDays) AS RawDays,
+                     COALESCE(TRY_CAST(JSON_VALUE(a.LimitOverrides, '$.hourlyReadingsDays') AS INT), p.HourlyDays) AS HourlyDays) d;
 
     BEGIN TRANSACTION;
 

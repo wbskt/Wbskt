@@ -10,6 +10,12 @@
 -- here. CreditsPerMonth is the plan's monthly workflow credits with the overrides applied, worked out by
 -- the management host from its plan catalogue, so the credit poster can draw past it from the tenant's
 -- grants in SQL (dbo.TenantCreditGrants_Draw); NULL on a copy written before it was kept.
+--
+-- RawReadingsDays, HourlyReadingsDays and RunHistoryDays are the plan's retention with the overrides
+-- applied, worked out the same way. When a copy moves to shorter retention (a downgrade, or a lapsed
+-- plan), the days it had are kept in the Held* columns until RetentionHeldUntil (Billing:
+-- RetentionGraceDays later), and the retention sweeps keep the longer of the two until then, so data a
+-- customer who pays again the next day still wants is not deleted the night they lapse.
 CREATE TABLE dbo.WorkspaceAccounts
 (
     WorkspaceId    INT              NOT NULL,
@@ -19,6 +25,13 @@ CREATE TABLE dbo.WorkspaceAccounts
     LimitOverrides NVARCHAR(MAX)    NULL,
     PlanRevision   INT              NOT NULL,
     CreditsPerMonth DECIMAL(18,4)   NULL,
+    RawReadingsDays        INT          NULL,
+    HourlyReadingsDays     INT          NULL,
+    RunHistoryDays         INT          NULL,
+    HeldRawReadingsDays    INT          NULL,
+    HeldHourlyReadingsDays INT          NULL,
+    HeldRunHistoryDays     INT          NULL,
+    RetentionHeldUntil     DATETIME2(3) NULL,
     UpdatedAt      DATETIME2(3)     NOT NULL CONSTRAINT DF_WorkspaceAccounts_UpdatedAt DEFAULT SYSUTCDATETIME(),
     CreatedAt      DATETIME2(3)     NOT NULL CONSTRAINT DF_WorkspaceAccounts_CreatedAt DEFAULT SYSUTCDATETIME(),
     CONSTRAINT PK_WorkspaceAccounts PRIMARY KEY CLUSTERED (WorkspaceId),

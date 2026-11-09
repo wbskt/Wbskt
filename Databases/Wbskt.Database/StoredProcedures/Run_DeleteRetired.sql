@@ -1,9 +1,10 @@
 -- Deletes up to @BatchSize finished runs, with everything that hangs off them, and the test copies of
 -- workflows that no run points at any more. Returns how many runs went.
 -- A run goes once it finished before its workspace's plan cutoff: @NowUtc less the plan's days in
--- @Retention, or the tenant's runHistoryDays override; a workspace with no account is Free. A run
--- finished before @CutoffUtc goes whatever the plan says, so no run outlives HistoryRetentionGc's
--- elevated window.
+-- @Retention, or the tenant's runHistoryDays override, and never sooner than a retention still held
+-- after a downgrade (dbo.WorkspaceAccounts.RetentionHeldUntil). A workspace with no copy of its account
+-- yet has no plan cutoff: its plan is not known. A run finished before @CutoffUtc goes whatever the plan
+-- says, so no run outlives HistoryRetentionGc's elevated window.
 CREATE PROCEDURE dbo.Run_DeleteRetired
     @NowUtc    DATETIME2(3),
     @Retention dbo.RunHistoryRetentionTableType READONLY,
@@ -21,11 +22,12 @@ BEGIN
 
     INSERT INTO #Cutoffs (WorkspaceId, CutoffUtc)
     SELECT
-        w.WorkspaceId,
-        DATEADD(DAY, -COALESCE(TRY_CAST(JSON_VALUE(a.LimitOverrides, '$.runHistoryDays') AS INT), p.Days), @NowUtc)
-    FROM (SELECT DISTINCT WorkspaceId FROM dbo.WorkflowDefinitions) w
-    LEFT JOIN dbo.WorkspaceAccounts a ON a.WorkspaceId = w.WorkspaceId
-    JOIN @Retention p ON p.PlanCode = COALESCE(a.PlanCode, N'Free');
+        a.WorkspaceId,
+        DATEADD(DAY, -CASE WHEN a.RetentionHeldUntil > @NowUtc AND a.HeldRunHistoryDays > d.Days THEN a.HeldRunHistoryDays ELSE d.Days END, @NowUtc)
+    FROM dbo.WorkspaceAccounts a
+    JOIN @Retention p ON p.PlanCode = a.PlanCode
+    CROSS APPLY (SELECT COALESCE(TRY_CAST(JSON_VALUE(a.LimitOverrides, '$.runHistoryDays') AS INT), p.Days) AS Days) d
+    WHERE EXISTS (SELECT 1 FROM dbo.WorkflowDefinitions wd WHERE wd.WorkspaceId = a.WorkspaceId);
 
     DECLARE @Runs TABLE (Id INT NOT NULL PRIMARY KEY);
 
