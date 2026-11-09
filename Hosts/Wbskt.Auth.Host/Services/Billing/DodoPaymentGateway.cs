@@ -72,7 +72,8 @@ public sealed class DodoPaymentGateway(HttpClient http, IOptions<DodoOptions> op
             s.Customer?.CustomerId ?? "",
             ReadTenantRef(s.Metadata),
             s.NextBillingDate ?? clock.GetUtcNow(),
-            s.CancelAtNextBillingDate ?? false);
+            s.CancelAtNextBillingDate ?? false,
+            s.ScheduledChange is { ProductId: { Length: > 0 } product, EffectiveAt: { } effectiveAt } ? new ProviderScheduledChange(product, effectiveAt) : null);
     }
 
     public async Task<ProviderPayment?> FindPaymentAsync(string paymentId, CancellationToken ct)
@@ -129,6 +130,30 @@ public sealed class DodoPaymentGateway(HttpClient http, IOptions<DodoOptions> op
         }
 
         EnsureSucceeded(response, "cancel a subscription");
+    }
+
+    public async Task ChangePlanAsync(string subscriptionId, string productId, PlanChangeTiming timing, CancellationToken ct)
+    {
+        // An upgrade charges the prorated difference now and changes nothing if that charge fails; a
+        // downgrade waits for the next billing date, which then bills the new plan in full, and replaces
+        // a downgrade already scheduled.
+        DodoChangePlanRequest request = timing == PlanChangeTiming.Now
+            ? new DodoChangePlanRequest(productId, 1, "prorated_immediately", "immediately", "prevent_change", null)
+            : new DodoChangePlanRequest(productId, 1, "full_immediately", "next_billing_date", null, true);
+
+        using HttpResponseMessage response = await http.PostAsJsonAsync($"subscriptions/{Uri.EscapeDataString(subscriptionId)}/change-plan", request, Json, ct);
+        EnsureSucceeded(response, "change a subscription's plan");
+    }
+
+    public async Task CancelScheduledChangeAsync(string subscriptionId, CancellationToken ct)
+    {
+        using HttpResponseMessage response = await http.DeleteAsync($"subscriptions/{Uri.EscapeDataString(subscriptionId)}/change-plan/scheduled", ct);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return;
+        }
+
+        EnsureSucceeded(response, "cancel a scheduled plan change");
     }
 
     public async Task RefundPaymentAsync(string paymentId, string reason, CancellationToken ct)

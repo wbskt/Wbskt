@@ -12,6 +12,12 @@ public interface ITenantBillingService
     /// <summary>Starts the provider's checkout for a plan or a credit pack, for the signed-in <paramref name="userId"/> to pay.</summary>
     Task<Result<BillingCheckoutResponse>> CheckoutAsync(int tenantId, int userId, BillingCheckoutRequest request, CancellationToken ct);
 
+    /// <summary>
+    /// Moves the tenant's subscription to another plan or interval: an upgrade at once, with the
+    /// difference charged now; a downgrade at the end of the period paid for. Answers the billing read.
+    /// </summary>
+    Task<Result<TenantBillingResponse>> ChangePlanAsync(int tenantId, ChangePlanRequest request, CancellationToken ct);
+
     /// <summary>The provider's customer portal, once the tenant has paid for something.</summary>
     Task<Result<BillingPortalResponse>> PortalAsync(int tenantId, CancellationToken ct);
 

@@ -27,13 +27,27 @@ public sealed record TenantBillingResponse(
 /// <param name="PeriodEnd">The end of the period paid for: when it renews, or when a cancelled subscription ends.</param>
 /// <param name="CancelAtPeriodEnd">True when it has been cancelled and stops at <c>PeriodEnd</c>.</param>
 /// <param name="PastDueSince">When a renewal first failed; the plan drops to Free after the grace period.</param>
+/// <param name="ScheduledPlan">A downgrade asked for, which takes effect at <c>ScheduledAt</c>; null for none.</param>
+/// <param name="ScheduledInterval">The interval the downgrade bills at.</param>
+/// <param name="ScheduledAt">When the downgrade takes effect: the end of the period paid for.</param>
 public sealed record TenantSubscriptionResponse(
     PlanCode Plan,
     BillingInterval Interval,
     SubscriptionStatus Status,
     DateTimeOffset PeriodEnd,
     bool CancelAtPeriodEnd,
-    DateTimeOffset? PastDueSince);
+    DateTimeOffset? PastDueSince,
+    PlanCode? ScheduledPlan,
+    BillingInterval? ScheduledInterval,
+    DateTimeOffset? ScheduledAt);
+
+/// <summary>
+/// The plan to move a subscription to. A higher plan, or the same plan billed yearly instead of monthly,
+/// takes effect at once and the difference for the rest of the period is charged now; anything else
+/// takes effect at the end of the period paid for. Asking for the plan already held drops a scheduled
+/// change.
+/// </summary>
+public sealed record ChangePlanRequest(PlanCode Plan, BillingInterval Interval);
 
 public sealed record PlanOffer(PlanCode Plan, BillingInterval Interval);
 

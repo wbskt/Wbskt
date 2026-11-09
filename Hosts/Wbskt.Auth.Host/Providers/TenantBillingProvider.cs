@@ -57,6 +57,9 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
             p.AddWithValue("@CancelAtPeriodEnd", s.CancelAtPeriodEnd);
             p.AddWithValue("@Now", now);
             p.AddWithValue("@RefundedThrough", (object?)refundedThrough ?? DBNull.Value);
+            p.AddWithValue("@ScheduledPlanCode", (object?)s.ScheduledPlan?.ToString() ?? DBNull.Value);
+            p.AddWithValue("@ScheduledBillingInterval", (object?)s.ScheduledInterval?.ToString() ?? DBNull.Value);
+            p.AddWithValue("@ScheduledAt", (object?)s.ScheduledAt ?? DBNull.Value);
         }, MapSubscription, new InvalidOperationException("TenantSubscription_Upsert did not return a row."), cancellationToken);
     }
 
@@ -220,6 +223,9 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
         int refundedThrough = r.GetOrdinal("RefundedThrough");
         int duplicateAt = r.GetOrdinal("DuplicateAt");
         int duplicateRefund = r.GetOrdinal("DuplicateRefundPaymentId");
+        int scheduledPlan = r.GetOrdinal("ScheduledPlanCode");
+        int scheduledInterval = r.GetOrdinal("ScheduledBillingInterval");
+        int scheduledAt = r.GetOrdinal("ScheduledAt");
         SubscriptionStatusNames.TryParse(r.GetString(r.GetOrdinal("Status")), out SubscriptionStatus status);
         return new TenantSubscription(
             r.GetInt32(r.GetOrdinal("TenantId")),
@@ -236,6 +242,9 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
             r.IsDBNull(refundedThrough) ? null : r.GetDateTime(refundedThrough),
             r.IsDBNull(duplicateAt) ? null : r.GetDateTime(duplicateAt),
             r.IsDBNull(duplicateRefund) ? null : r.GetString(duplicateRefund),
-            r.GetDateTime(r.GetOrdinal("CreatedAt")));
+            r.GetDateTime(r.GetOrdinal("CreatedAt")),
+            r.IsDBNull(scheduledPlan) ? null : Enum.Parse<PlanCode>(r.GetString(scheduledPlan)),
+            r.IsDBNull(scheduledInterval) ? null : Enum.Parse<BillingInterval>(r.GetString(scheduledInterval)),
+            r.IsDBNull(scheduledAt) ? null : r.GetDateTime(scheduledAt));
     }
 }

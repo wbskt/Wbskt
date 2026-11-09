@@ -21,6 +21,9 @@ BEGIN
         s.RefundedThrough,
         s.DuplicateAt,
         s.DuplicateRefundPaymentId,
+        s.ScheduledPlanCode,
+        s.ScheduledBillingInterval,
+        s.ScheduledAt,
         s.CreatedAt,
         s.UpdatedAt
     FROM dbo.TenantSubscriptions s

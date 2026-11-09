@@ -536,6 +536,101 @@ public sealed class BillingPaymentsTests
         Assert.Equal(Now, read.Value.Subscription.PastDueSince);
     }
 
+    // ----- Changing plan -----------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(PlanCode.Pro, BillingInterval.Monthly, PlanCode.Maker, BillingInterval.Monthly, PlanChangeTiming.AtPeriodEnd)]
+    [InlineData(PlanCode.Maker, BillingInterval.Monthly, PlanCode.Pro, BillingInterval.Monthly, PlanChangeTiming.Now)]
+    [InlineData(PlanCode.Maker, BillingInterval.Monthly, PlanCode.Maker, BillingInterval.Yearly, PlanChangeTiming.Now)]
+    [InlineData(PlanCode.Maker, BillingInterval.Yearly, PlanCode.Maker, BillingInterval.Monthly, PlanChangeTiming.AtPeriodEnd)]
+    public async Task An_upgrade_changes_the_plan_at_once_and_a_downgrade_at_the_end_of_the_period(
+        PlanCode from, BillingInterval fromInterval, PlanCode to, BillingInterval toInterval, PlanChangeTiming timing)
+    {
+        _stored.Add(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(10)) with { PlanCode = from, Interval = fromInterval });
+        ProviderSays(new ProviderSubscription("sub_1", SubscriptionStatus.Active, _options.Plans[from][fromInterval], "cus_1", TenantRef, Now.AddDays(10), false));
+
+        var result = await Billing().ChangePlanAsync(9, new ChangePlanRequest(to, toInterval), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        _gateway.Verify(g => g.ChangePlanAsync("sub_1", _options.Plans[to][toInterval], timing, It.IsAny<CancellationToken>()), Times.Once);
+        _gateway.Verify(g => g.FindSubscriptionAsync("sub_1", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_scheduled_downgrade_shows_on_the_billing_read_and_asking_for_the_current_plan_drops_it()
+    {
+        _stored.Add(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(10)));
+        ProviderSays(new ProviderSubscription("sub_1", SubscriptionStatus.Active, "prod_pro_m", "cus_1", TenantRef, Now.AddDays(10), false,
+            new ProviderScheduledChange("prod_maker_m", Now.AddDays(10))));
+
+        var scheduled = await Billing().ChangePlanAsync(9, new ChangePlanRequest(PlanCode.Maker, BillingInterval.Monthly), CancellationToken.None);
+        ProviderSays(new ProviderSubscription("sub_1", SubscriptionStatus.Active, "prod_pro_m", "cus_1", TenantRef, Now.AddDays(10), false));
+        var kept = await Billing().ChangePlanAsync(9, new ChangePlanRequest(PlanCode.Pro, BillingInterval.Monthly), CancellationToken.None);
+
+        Assert.Equal((PlanCode.Maker, BillingInterval.Monthly, Now.AddDays(10)),
+            (scheduled.Value.Subscription!.ScheduledPlan, scheduled.Value.Subscription.ScheduledInterval, scheduled.Value.Subscription.ScheduledAt));
+        Assert.Null(kept.Value.Subscription!.ScheduledPlan);
+        _gateway.Verify(g => g.CancelScheduledChangeAsync("sub_1", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task An_upgrade_drops_a_scheduled_downgrade_first_so_the_period_end_does_not_undo_it()
+    {
+        _stored.Add(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(10)) with
+        {
+            PlanCode = PlanCode.Maker, ProductId = "prod_maker_y", Interval = BillingInterval.Yearly, ScheduledPlan = PlanCode.Maker, ScheduledInterval = BillingInterval.Monthly, ScheduledAt = Now.UtcDateTime.AddDays(10)
+        });
+        ProviderSays(new ProviderSubscription("sub_1", SubscriptionStatus.Active, "prod_pro_m", "cus_1", TenantRef, Now.AddDays(30), false));
+        var order = new List<string>();
+        _gateway.Setup(g => g.CancelScheduledChangeAsync("sub_1", It.IsAny<CancellationToken>())).Callback(() => order.Add("cancel")).Returns(Task.CompletedTask);
+        _gateway.Setup(g => g.ChangePlanAsync("sub_1", "prod_pro_m", PlanChangeTiming.Now, It.IsAny<CancellationToken>())).Callback(() => order.Add("change")).Returns(Task.CompletedTask);
+
+        var result = await Billing().ChangePlanAsync(9, new ChangePlanRequest(PlanCode.Pro, BillingInterval.Monthly), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(["cancel", "change"], order);
+    }
+
+    [Fact]
+    public async Task A_plan_change_needs_an_offer_a_live_paid_up_subscription_and_the_provider()
+    {
+        var offer = await Billing().ChangePlanAsync(9, new ChangePlanRequest(PlanCode.Pro, BillingInterval.Yearly), CancellationToken.None);
+        var none = await Billing().ChangePlanAsync(9, new ChangePlanRequest(PlanCode.Pro, BillingInterval.Monthly), CancellationToken.None);
+        _stored.Add(Subscription(SubscriptionStatus.PastDue, Now.UtcDateTime.AddDays(10)) with { PlanCode = PlanCode.Maker, PastDueSince = Now.UtcDateTime });
+        var pastDue = await Billing().ChangePlanAsync(9, new ChangePlanRequest(PlanCode.Pro, BillingInterval.Monthly), CancellationToken.None);
+        _stored.Clear();
+        _stored.Add(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(10)) with { PlanCode = PlanCode.Maker });
+        _gateway.Setup(g => g.ChangePlanAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<PlanChangeTiming>(), It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("down"));
+        var down = await Billing().ChangePlanAsync(9, new ChangePlanRequest(PlanCode.Pro, BillingInterval.Monthly), CancellationToken.None);
+
+        Assert.Equal("BILLING_OFFER_INVALID", offer.Error.Code);
+        Assert.Equal("BILLING_SUBSCRIPTION_REQUIRED", none.Error.Code);
+        Assert.Equal("BILLING_SUBSCRIPTION_NOT_CHANGEABLE", pastDue.Error.Code);
+        Assert.Equal("BILLING_PROVIDER_UNAVAILABLE", down.Error.Code);
+    }
+
+    [Fact]
+    public async Task Dodo_changes_plan_and_drops_a_scheduled_change_with_the_documented_calls()
+    {
+        var handler = new StubHandler(request => request.Method == HttpMethod.Delete ? new HttpResponseMessage(HttpStatusCode.NotFound) : Json("{}"));
+        var gateway = Dodo(handler);
+
+        await gateway.ChangePlanAsync("sub_1", "prod_pro_m", PlanChangeTiming.Now, CancellationToken.None);
+        await gateway.ChangePlanAsync("sub_1", "prod_maker_m", PlanChangeTiming.AtPeriodEnd, CancellationToken.None);
+        await gateway.CancelScheduledChangeAsync("sub_1", CancellationToken.None);
+
+        Assert.Equal("/subscriptions/sub_1/change-plan", handler.Requests[0].RequestUri!.AbsolutePath);
+        JsonElement upgrade = JsonDocument.Parse(handler.Bodies[0]).RootElement;
+        Assert.Equal(("prod_pro_m", 1, "prorated_immediately", "immediately", "prevent_change"),
+            (upgrade.GetProperty("product_id").GetString(), upgrade.GetProperty("quantity").GetInt32(), upgrade.GetProperty("proration_billing_mode").GetString(),
+             upgrade.GetProperty("effective_at").GetString(), upgrade.GetProperty("on_payment_failure").GetString()));
+        JsonElement downgrade = JsonDocument.Parse(handler.Bodies[1]).RootElement;
+        Assert.Equal(("full_immediately", "next_billing_date", true),
+            (downgrade.GetProperty("proration_billing_mode").GetString(), downgrade.GetProperty("effective_at").GetString(), downgrade.GetProperty("cancel_scheduled_change_plan").GetBoolean()));
+        Assert.Equal(HttpMethod.Delete, handler.Requests[2].Method);
+        Assert.Equal("/subscriptions/sub_1/change-plan/scheduled", handler.Requests[2].RequestUri!.AbsolutePath);
+    }
+
     [Fact]
     public async Task The_portal_needs_a_tenant_that_has_paid()
     {
@@ -553,7 +648,8 @@ public sealed class BillingPaymentsTests
         {
             "/subscriptions/sub_1" => Json($$"""
                 {"subscription_id":"sub_1","status":"past_due","product_id":"prod_pro_m","customer":{"customer_id":"cus_1"},
-                 "metadata":{"tenant_ref":"{{TenantRef}}"},"next_billing_date":"2026-12-09T12:00:00Z","cancel_at_next_billing_date":true}
+                 "metadata":{"tenant_ref":"{{TenantRef}}"},"next_billing_date":"2026-12-09T12:00:00Z","cancel_at_next_billing_date":true,
+                 "scheduled_change":{"id":"sc_1","product_id":"prod_maker_m","quantity":1,"effective_at":"2026-12-09T12:00:00Z","created_at":"2026-11-09T12:00:00Z","addons":[]} }
                 """),
             "/payments/pay_1" => Json("""
                 {"payment_id":"pay_1","status":"succeeded","customer":{"customer_id":"cus_1"},"metadata":{"tenant_ref":42},
@@ -567,7 +663,8 @@ public sealed class BillingPaymentsTests
         ProviderPayment? payment = await gateway.FindPaymentAsync("pay_1", CancellationToken.None);
         ProviderPayment? missing = await gateway.FindPaymentAsync("pay_x", CancellationToken.None);
 
-        Assert.Equal(new ProviderSubscription("sub_1", SubscriptionStatus.PastDue, "prod_pro_m", "cus_1", TenantRef, new DateTimeOffset(2026, 12, 9, 12, 0, 0, TimeSpan.Zero), true), subscription);
+        Assert.Equal(new ProviderSubscription("sub_1", SubscriptionStatus.PastDue, "prod_pro_m", "cus_1", TenantRef, new DateTimeOffset(2026, 12, 9, 12, 0, 0, TimeSpan.Zero), true,
+            new ProviderScheduledChange("prod_maker_m", new DateTimeOffset(2026, 12, 9, 12, 0, 0, TimeSpan.Zero))), subscription);
         Assert.NotNull(payment);
         Assert.Null(payment.TenantRef);
         Assert.Null(payment.SubscriptionId);
@@ -693,7 +790,7 @@ public sealed class BillingPaymentsTests
     private BillingWebhookService Webhooks() => new(_gateway.Object, _billing.Object, Sync(), new AuthMetrics(), NullLogger<BillingWebhookService>.Instance);
 
     private TenantBillingService Billing() => new(
-        _gateway.Object, _billing.Object, _plans.Object, _accounts.Object, Options.Create(_options), new FixedClock(Now), NullLogger<TenantBillingService>.Instance);
+        _gateway.Object, _billing.Object, _plans.Object, _accounts.Object, Options.Create(_options), new FixedClock(Now), Sync(), NullLogger<TenantBillingService>.Instance);
 
     private static DodoPaymentGateway Dodo(StubHandler handler)
     {

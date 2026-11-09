@@ -9,6 +9,8 @@
 -- chargeback: the paid plan is withheld until the subscription is paid past it again.
 -- DuplicateAt is when this subscription was found billing beside an older one of the tenant's and
 -- cancelled; DuplicateRefundPaymentId is its payment refunded for that, so it is refunded once.
+-- ScheduledPlanCode and ScheduledBillingInterval are a downgrade the provider will make at ScheduledAt
+-- (the end of the period paid for), until then the subscription stays on PlanCode.
 CREATE TABLE dbo.TenantSubscriptions
 (
     TenantId                 INT           NOT NULL,
@@ -25,6 +27,9 @@ CREATE TABLE dbo.TenantSubscriptions
     RefundedThrough          DATETIME2(3)  NULL,
     DuplicateAt              DATETIME2(3)  NULL,
     DuplicateRefundPaymentId NVARCHAR(200) NULL,
+    ScheduledPlanCode        NVARCHAR(20)  NULL,
+    ScheduledBillingInterval NVARCHAR(20)  NULL,
+    ScheduledAt              DATETIME2(3)  NULL,
     UpdatedAt                DATETIME2(3)  NOT NULL CONSTRAINT DF_TenantSubscriptions_UpdatedAt DEFAULT SYSUTCDATETIME(),
     CreatedAt                DATETIME2(3)  NOT NULL CONSTRAINT DF_TenantSubscriptions_CreatedAt DEFAULT SYSUTCDATETIME(),
     CONSTRAINT PK_TenantSubscriptions PRIMARY KEY (Provider, SubscriptionId),

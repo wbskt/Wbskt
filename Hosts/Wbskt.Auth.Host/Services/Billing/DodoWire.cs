@@ -32,7 +32,20 @@ internal sealed record DodoSubscription(
     [property: JsonPropertyName("customer")] DodoCustomer? Customer,
     [property: JsonPropertyName("metadata")] Dictionary<string, JsonElement>? Metadata,
     [property: JsonPropertyName("next_billing_date")] DateTimeOffset? NextBillingDate,
-    [property: JsonPropertyName("cancel_at_next_billing_date")] bool? CancelAtNextBillingDate);
+    [property: JsonPropertyName("cancel_at_next_billing_date")] bool? CancelAtNextBillingDate,
+    [property: JsonPropertyName("scheduled_change")] DodoScheduledChange? ScheduledChange = null);
+
+internal sealed record DodoScheduledChange(
+    [property: JsonPropertyName("product_id")] string? ProductId,
+    [property: JsonPropertyName("effective_at")] DateTimeOffset? EffectiveAt);
+
+internal sealed record DodoChangePlanRequest(
+    [property: JsonPropertyName("product_id")] string ProductId,
+    [property: JsonPropertyName("quantity")] int Quantity,
+    [property: JsonPropertyName("proration_billing_mode")] string ProrationBillingMode,
+    [property: JsonPropertyName("effective_at")] string EffectiveAt,
+    [property: JsonPropertyName("on_payment_failure"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? OnPaymentFailure,
+    [property: JsonPropertyName("cancel_scheduled_change_plan"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? CancelScheduledChangePlan);
 
 internal sealed record DodoPayment(
     [property: JsonPropertyName("payment_id")] string? PaymentId,

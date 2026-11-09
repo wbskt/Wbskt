@@ -9,6 +9,8 @@ namespace Wbskt.Auth.Host.Models;
 /// payment's period, before which the paid plan is withheld. <c>DuplicateAt</c> is when it was found
 /// billing beside an older subscription of the tenant's and cancelled; <c>DuplicateRefundPaymentId</c> is
 /// its payment refunded for that. <c>CreatedAt</c> is when it was first stored here.
+/// <c>ScheduledPlan</c> and <c>ScheduledInterval</c> are a downgrade the provider will make at
+/// <c>ScheduledAt</c>, the end of the period paid for.
 /// </summary>
 public sealed record TenantSubscription(
     int TenantId,
@@ -25,7 +27,10 @@ public sealed record TenantSubscription(
     DateTime? RefundedThrough,
     DateTime? DuplicateAt = null,
     string? DuplicateRefundPaymentId = null,
-    DateTime CreatedAt = default);
+    DateTime CreatedAt = default,
+    PlanCode? ScheduledPlan = null,
+    BillingInterval? ScheduledInterval = null,
+    DateTime? ScheduledAt = null);
 
 /// <summary>A webhook delivery as stored: its row, and when an earlier delivery of it was acted on.</summary>
 public sealed record BillingWebhookDelivery(long Id, DateTime? ProcessedAt);

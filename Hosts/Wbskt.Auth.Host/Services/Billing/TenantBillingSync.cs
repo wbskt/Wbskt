@@ -124,6 +124,9 @@ internal sealed class TenantBillingSync(
             return (BillingSyncResult.SetAside($"Subscription {subscriptionId} is for product {subscription.ProductId}, which is not a plan here."), null);
         }
 
+        // A change scheduled to a product that is not a plan here is not shown; the sync after it applies
+        // sets it aside as it would any such subscription.
+        var scheduled = subscription.Scheduled is { } change ? options.Value.FindPlan(change.ProductId) : null;
         DateTime now = clock.GetUtcNow().UtcDateTime;
         TenantSubscription saved = await billing.UpsertSubscriptionAsync(
             new TenantSubscription(
@@ -138,7 +141,12 @@ internal sealed class TenantBillingSync(
                 subscription.PeriodEnd.UtcDateTime,
                 subscription.CancelAtPeriodEnd,
                 PastDueSince: null,
-                RefundedThrough: null),
+                RefundedThrough: null)
+            {
+                ScheduledPlan = scheduled?.Plan,
+                ScheduledInterval = scheduled?.Interval,
+                ScheduledAt = scheduled is null ? null : subscription.Scheduled!.EffectiveAt.UtcDateTime
+            },
             now,
             refundedThrough,
             ct);

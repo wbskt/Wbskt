@@ -20,6 +20,9 @@ BEGIN
         RefundedThrough,
         DuplicateAt,
         DuplicateRefundPaymentId,
+        ScheduledPlanCode,
+        ScheduledBillingInterval,
+        ScheduledAt,
         CreatedAt,
         UpdatedAt
     FROM dbo.TenantSubscriptions
