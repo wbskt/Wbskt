@@ -53,6 +53,19 @@ public sealed class InboundMessageDispatcher
             return;
         }
 
+        // A Free account past its monthly messages: the client's own messages go through one a minute.
+        // Not counted towards the budget's disconnect: a device that keeps its usual pace is slowed, not cut off.
+        if (!MessageTypes.IsSystem(message.Type) && context.Allowance?.TryTake() == false)
+        {
+            _metrics.Dropped("allowance");
+            if (context.Allowance.ConsecutiveHeldBack == 1)
+            {
+                _logger.LogInformation("Client {ClientRefId}'s account has used its monthly messages; holding it to one a minute.", context.ClientRefId);
+            }
+
+            return;
+        }
+
         // Every handler publishes to the broker. A message that can't be published is dropped and
         // counted, never fatal: during a broker restart every client that sent anything would otherwise
         // be disconnected, and reconnect into the same outage.

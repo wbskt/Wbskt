@@ -4,6 +4,8 @@ namespace Wbskt.Management.Host.Models;
 public sealed record WorkspaceUsageSummary(
     decimal TenantCredits,
     decimal WorkspaceCredits,
+    long TenantMessages,
+    long WorkspaceMessages,
     int TenantClients,
     int WorkspaceClients,
     int TenantActiveRuns,

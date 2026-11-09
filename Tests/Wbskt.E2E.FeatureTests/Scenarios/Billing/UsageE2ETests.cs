@@ -1,5 +1,7 @@
 using System.Net;
 using FluentAssertions;
+using Wbskt.Client.Sdk;
+using Wbskt.Client.Sdk.Models;
 using Wbskt.E2E.FeatureTests.Fixtures;
 using Wbskt.Management.Models;
 using Wbskt.Models.Billing;
@@ -44,6 +46,7 @@ public sealed class UsageE2ETests(ServicesFixture fixture)
         cap.Should().Be(new WorkspaceCreditCapResponse(250m, 0m, false));
         usage.Plan.Should().Be(PlanCode.Free);
         usage.Account.Credits.Should().Be(new CreditUsageAmount(0m, FreeCreditsPerMonth));
+        usage.Account.Messages.Throttled.Should().BeFalse();
         usage.Workspace.MonthlyCreditCap.Should().Be(250m);
         usage.Days.Should().BeEmpty();
         usage.PeriodEnd.Should().Be(usage.PeriodStart.AddMonths(1));
@@ -60,6 +63,37 @@ public sealed class UsageE2ETests(ServicesFixture fixture)
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("WORKSPACE_CREDIT_CAP_INVALID");
+    }
+
+    [SkippableFact]
+    public async Task BILL_04_A_clients_messages_are_metered_on_its_workspace()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
+        var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
+        var clientName = $"e2e-meter-{Guid.NewGuid():N}";
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, clientName);
+        await using var client = new WbsktClient(
+            new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, clientName, null),
+            new InMemoryClientStorage(clientRefId, secret));
+        await client.StartAsync();
+
+        for (int i = 0; i < 3; i++)
+        {
+            await client.SendAsync("meter.reading", new { i });
+        }
+
+        // The meter moves when the event logger writes its batch, a moment after the messages.
+        WorkspaceUsageResponse usage = await fixture.Management.As(token).GetUsageAsync(workspaceRef);
+        for (var deadline = DateTime.UtcNow.AddSeconds(30); usage.Workspace.Messages < 3 && DateTime.UtcNow < deadline;)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(500));
+            usage = await fixture.Management.As(token).GetUsageAsync(workspaceRef);
+        }
+
+        usage.Workspace.Messages.Should().BeGreaterThanOrEqualTo(3, "the SDK also announces its capabilities, which is a message too");
+        usage.Account.Messages.Used.Should().BeGreaterThanOrEqualTo(3, "the account pools every workspace of the tenant");
     }
 
     private const decimal FreeCreditsPerMonth = 2_000m;

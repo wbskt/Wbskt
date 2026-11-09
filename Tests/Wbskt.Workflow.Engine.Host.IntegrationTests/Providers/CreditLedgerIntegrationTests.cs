@@ -203,7 +203,7 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         var summary = await usage.GetSummaryAsync(mine, tenantId, new DateOnly(today.Year, today.Month, 1), CancellationToken.None);
         var days = await usage.GetDailyCreditsAsync(mine, today.AddDays(-1), today, CancellationToken.None);
 
-        summary.Should().Be(new Wbskt.Management.Host.Models.WorkspaceUsageSummary(7m, 3m, 0, 0, 2, 1, 50m));
+        summary.Should().Be(new Wbskt.Management.Host.Models.WorkspaceUsageSummary(7m, 3m, 0, 0, 0, 0, 2, 1, 50m));
         days.Should().Equal(new Wbskt.Management.Models.DailyCreditUsage(today, 3m));
     }
 

@@ -39,9 +39,10 @@ internal sealed class WorkspaceUsageService(IWorkspaceUsageProvider usage, IWork
             new DateTimeOffset(periodStart.AddMonths(1)),
             new AccountUsage(
                 new CreditUsageAmount(summary.TenantCredits, plan.Limits.CreditsPerMonth),
+                new MessageUsageAmount(summary.TenantMessages, plan.Limits.MessagesPerMonth, MessageAllowance.IsThrottled(plan.PlanCode, summary.TenantMessages, plan.Limits.MessagesPerMonth)),
                 new UsageCount(summary.TenantClients, plan.Limits.Clients),
                 new UsageCount(summary.TenantActiveRuns, plan.Limits.ActiveRuns)),
-            new WorkspaceUsageShare(summary.WorkspaceCredits, summary.MonthlyCreditCap, summary.WorkspaceClients, summary.WorkspaceActiveRuns),
+            new WorkspaceUsageShare(summary.WorkspaceCredits, summary.MonthlyCreditCap, summary.WorkspaceMessages, summary.WorkspaceClients, summary.WorkspaceActiveRuns),
             days));
     }
 }

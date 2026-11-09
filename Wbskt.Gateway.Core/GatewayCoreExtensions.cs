@@ -33,6 +33,8 @@ public static class GatewayCoreExtensions
         // Every transport takes the same client token.
         services.AddWbsktJwtTrust(JwtIssuers.Management, JwtAudiences.Socket);
         services.AddSingleton<SupersedeMonitor>();
+        // Which workspaces are past a Free plan's monthly messages, from the management host every minute.
+        services.AddSingleton<MessageThrottle>();
         services.AddSingleton<ClientSessions>();
         // What a client sends: one handler per protocol message type, and the client's own messages.
         services.AddSingleton<IInboundMessageHandler, PongHandler>();

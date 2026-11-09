@@ -109,9 +109,12 @@ public static class Program
         builder.Services.AddScoped<IWorkspaceCreditCapService, WorkspaceCreditCapService>();
         builder.Services.AddScoped<IWorkspaceUsageProvider, WorkspaceUsageProvider>();
         builder.Services.AddScoped<IWorkspaceUsageService, WorkspaceUsageService>();
+        builder.Services.AddScoped<IMessageAllowanceProvider, MessageAllowanceProvider>();
+        builder.Services.AddScoped<MessageAllowanceMonitor>();
         if (role == HostRole.All)
         {
             builder.Services.AddHostedService<WorkspaceAccountSyncWorker>();
+            builder.Services.AddHostedService<MessageAllowanceWorker>();
         }
         builder.Services.AddScoped<IMessageTemplateProvider, MessageTemplateProvider>();
         builder.Services.AddScoped<IMessageTemplateService, MessageTemplateService>();
