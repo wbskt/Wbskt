@@ -29,14 +29,19 @@ BEGIN
 
     DECLARE @Runs TABLE (Id INT NOT NULL PRIMARY KEY);
 
+    -- A seek per workflow on IX_Runs_WorkflowDefinitionId_CompletedAt, up to its own cutoff: the runs a
+    -- longer plan still keeps are never read, where one scan of every finished run by CompletedAt passed
+    -- over all of them on every batch.
     INSERT INTO @Runs (Id)
-    SELECT TOP (@BatchSize) r.Id
-    FROM dbo.Runs r
-    JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
+    SELECT TOP (@BatchSize) x.Id
+    FROM dbo.WorkflowDefinitions d
     LEFT JOIN #Cutoffs c ON c.WorkspaceId = d.WorkspaceId
-    WHERE r.CompletedAt IS NOT NULL
-      AND (r.CompletedAt < @CutoffUtc OR r.CompletedAt < c.CutoffUtc)
-    ORDER BY r.CompletedAt;
+    CROSS APPLY (SELECT TOP (@BatchSize) r.Id, r.CompletedAt
+                 FROM dbo.Runs r
+                 WHERE r.WorkflowDefinitionId = d.Id
+                   AND r.CompletedAt < CASE WHEN c.CutoffUtc > @CutoffUtc THEN c.CutoffUtc ELSE @CutoffUtc END
+                 ORDER BY r.CompletedAt) x
+    ORDER BY x.CompletedAt;
 
     BEGIN TRANSACTION;
 
