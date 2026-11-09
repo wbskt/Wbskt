@@ -30,4 +30,5 @@ public static class PermissionNames
     public const string LogsRead = "logs.read";
     public const string IntegrationsRead = "integrations.read";
     public const string IntegrationsManage = "integrations.manage";
+    public const string BillingManage = "billing.manage";
 }

@@ -628,6 +628,22 @@ public sealed class TriggerDispatcherTests
     }
 
     [Fact]
+    public async Task A_start_refused_by_the_workspaces_cap_is_reported_as_such()
+    {
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel);
+        var reporter = new RecordingRefusalReporter();
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration),
+            runStarter: new RecordingRunStarter([]) { CapSpent = true },
+            refusalReporter: reporter);
+
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        Assert.Equal(TriggerDispatchOutcome.Refused, result.Outcome);
+        Assert.Equal(RunRefusalReason.WorkspaceCreditCap, Assert.Single(reporter.Refusals).Reason);
+    }
+
+    [Fact]
     public async Task A_start_that_goes_through_reports_nothing()
     {
         var reporter = new RecordingRefusalReporter();
@@ -1156,6 +1172,7 @@ public sealed class TriggerDispatcherTests
         /// <summary>While set, every start is refused as though the workspace were at its run ceiling.</summary>
         public bool AtCeiling { get; set; }
         public bool CreditsSpent { get; init; }
+        public bool CapSpent { get; init; }
 
         /// <summary>Refuses only the first start it sees, as for a trigger in the one full workspace.</summary>
         public bool RefuseFirst { get; set; }
@@ -1191,6 +1208,11 @@ public sealed class TriggerDispatcherTests
                 if (CreditsSpent && !exemptFromCeiling)
                 {
                     throw new PlanCreditLimitException(1, 2000.5m);
+                }
+
+                if (CapSpent && !exemptFromCeiling)
+                {
+                    throw new WorkspaceCreditCapException(1);
                 }
 
                 if (triggerStartKey != null && _byKey.TryGetValue(triggerStartKey, out RunStartResult? existing))

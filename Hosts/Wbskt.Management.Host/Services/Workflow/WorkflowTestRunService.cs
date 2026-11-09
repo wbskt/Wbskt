@@ -138,6 +138,11 @@ public sealed class WorkflowTestRunService : IWorkflowTestRunService
                     "PLAN_CREDIT_LIMIT_REACHED",
                     "The plan has used its workflow credits for this month. Runs start again on the 1st, or after an upgrade."));
 
+            case EngineTestRunOutcome.WorkspaceCreditCapReached:
+                return Result<StartTestRunResponse>.Failure(Error.Conflict(
+                    "WORKSPACE_CREDIT_CAP_REACHED",
+                    "This workspace has used its monthly credit cap. Runs start again on the 1st, or when the cap is raised."));
+
             default:
                 throw new InvalidOperationException($"Unrecognised engine outcome '{response.Outcome}' for a test run of workflow '{workflowRefId}'.");
         }

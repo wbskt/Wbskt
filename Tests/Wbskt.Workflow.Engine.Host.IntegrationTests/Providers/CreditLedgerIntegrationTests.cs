@@ -16,6 +16,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
 {
     private const int PlanCreditLimitError = 50033;
+    private const int WorkspaceCreditCapError = 50034;
     private const string SkipReason = "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.";
 
     [SkippableFact]
@@ -118,6 +119,82 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         run.CreditBudget.Should().Be(3m);
     }
 
+    [SkippableFact]
+    public async Task A_workspace_at_its_cap_cannot_start_a_run_while_an_uncapped_one_of_the_same_tenant_can()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int tenantId = NewId();
+        int capped = NewId();
+        int uncapped = NewId();
+        await AddAccountAsync(capped, tenantId);
+        await AddAccountAsync(uncapped, tenantId);
+        WorkflowDefinitionRow cappedWd = await CreateDefinitionAsync(capped);
+        WorkflowDefinitionRow uncappedWd = await CreateDefinitionAsync(uncapped);
+        long spent = await StartAsync(cappedWd, startCost: 1m);
+        await ChargeAsync(spent, 2m);
+        await PostAsync();
+        decimal reported = await SetCapAsync(capped, 3m);
+
+        Func<Task> refused = () => StartAsync(cappedWd, credits: new PlanCredits(1000m, tenantId));
+        long other = await StartAsync(uncappedWd, credits: new PlanCredits(1000m, tenantId));
+
+        reported.Should().Be(3m);
+        (await refused.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(WorkspaceCreditCapError);
+        other.Should().BePositive();
+    }
+
+    [SkippableFact]
+    public async Task A_cap_cuts_the_budget_to_what_it_leaves_and_removing_it_lifts_that()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        long first = await StartAsync(wd, startCost: 1m);
+        await SetCapAsync(workspaceId, 4m);
+        long capped = await StartAsync(wd, credits: new PlanCredits(1000m, null));
+        await SetCapAsync(workspaceId, null);
+        long uncapped = await StartAsync(wd, credits: new PlanCredits(1000m, null));
+
+        var runs = ProviderFactory.Run(fixture.ConnectionString);
+        (await runs.GetByIdAsync(capped, CancellationToken.None)).CreditBudget.Should().Be(3m);
+        (await runs.GetByIdAsync(uncapped, CancellationToken.None)).CreditBudget.Should().Be(100m);
+        first.Should().BePositive();
+    }
+
+    [SkippableFact]
+    public async Task A_post_reports_each_workspaces_month_and_its_cap()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        await SetCapAsync(workspaceId, 10m);
+        long runId = await StartAsync(wd, startCost: 1m);
+        await ChargeAsync(runId, 7m);
+
+        IReadOnlyCollection<WorkspaceCreditPost> posted = await PostAsync();
+
+        posted.Should().ContainSingle(p => p.WorkspaceId == workspaceId)
+            .Which.Should().Be(new WorkspaceCreditPost(workspaceId, 1, 8m, 8m, 10m));
+    }
+
+    private async Task<decimal> SetCapAsync(int workspaceId, decimal? cap)
+    {
+        await using var connection = new SqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new SqlCommand("dbo.WorkspaceCreditCap_Set", connection) { CommandType = System.Data.CommandType.StoredProcedure };
+        command.Parameters.AddWithValue("@WorkspaceId", workspaceId);
+        command.Parameters.Add("@MonthlyCreditCap", System.Data.SqlDbType.Decimal).Value = (object?)cap ?? DBNull.Value;
+        command.Parameters["@MonthlyCreditCap"].Precision = 18;
+        command.Parameters["@MonthlyCreditCap"].Scale = 4;
+        command.Parameters.AddWithValue("@MonthStart", new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1));
+        await using var reader = await command.ExecuteReaderAsync();
+        await reader.ReadAsync();
+        return reader.GetDecimal(reader.GetOrdinal("CreditsSpent"));
+    }
+
     private static int NewId() => Random.Shared.Next(1_000_000, int.MaxValue - 1);
 
     private async Task<long> StartAsync(WorkflowDefinitionRow wd, decimal startCost = 0m, PlanCredits? credits = null)
@@ -152,7 +229,7 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         charge.Should().NotBeNull();
     }
 
-    private Task PostAsync() =>
+    private Task<IReadOnlyCollection<WorkspaceCreditPost>> PostAsync() =>
         ProviderFactory.CreditUsage(fixture.ConnectionString).PostAsync(DateOnly.FromDateTime(DateTime.UtcNow), DateTime.UtcNow.AddHours(-1), 500, CancellationToken.None);
 
     private Task<decimal> LedgerAsync(int workspaceId) =>

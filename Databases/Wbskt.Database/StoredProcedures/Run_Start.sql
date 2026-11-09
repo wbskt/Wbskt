@@ -20,7 +20,8 @@ CREATE PROCEDURE dbo.Run_Start
     @IsTest               BIT = 0,
     -- Credits charged for creating the run; seeded into its counters so the charge commits with it.
     @StartCost            DECIMAL(18,4) = 0,
-    -- The plan's workflow credits a calendar month (UTC), pooled across @TenantId's workspaces (50033).
+    -- The plan's workflow credits a calendar month (UTC), pooled across @TenantId's workspaces (50033),
+    -- and with it the workspace's own cap (50034).
     @CreditAllowance      DECIMAL(18,4) = NULL
 AS
 BEGIN
@@ -148,6 +149,20 @@ BEGIN
 
                 IF @CreditAllowance - @CreditsSpent < @CreditBudget
                     SET @CreditBudget = @CreditAllowance - @CreditsSpent;
+
+                -- The workspace's own cap, if its owner set one (dbo.WorkspaceCreditCaps), checked the same
+                -- way after the tenant's allowance, so the error names the limit that is actually spent
+                -- when both are.
+                DECLARE @Cap DECIMAL(18,4) = (SELECT MonthlyCreditCap FROM dbo.WorkspaceCreditCaps WHERE WorkspaceId = @WorkspaceId);
+                IF @Cap IS NOT NULL
+                BEGIN
+                    DECLARE @WorkspaceSpent DECIMAL(18,4) = (SELECT Credits FROM dbo.WorkspaceCreditsSpent(@WorkspaceId, @MonthStart));
+                    IF @WorkspaceSpent >= @Cap
+                        THROW 50034, 'The workspace has used its monthly credit cap.', 1;
+
+                    IF @Cap - @WorkspaceSpent < @CreditBudget
+                        SET @CreditBudget = @Cap - @WorkspaceSpent;
+                END
             END
 
             -- Last, after every check that can refuse the start, so the lock it takes on the workflow's

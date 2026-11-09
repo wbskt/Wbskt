@@ -13,7 +13,8 @@ public enum TestRunStartOutcome
     Started,
     TestRunActive,
     WorkspaceFull,
-    CreditsSpent
+    CreditsSpent,
+    WorkspaceCreditCapReached
 }
 
 public sealed record TestRunStart(TestRunStartOutcome Outcome, Guid? RunRefId = null, Guid? ActiveRunRefId = null);

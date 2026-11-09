@@ -10,5 +10,8 @@ public enum RunRefusalReason
     ActiveRunLimit,
 
     /// <summary>The plan had spent its workflow credits for the month.</summary>
-    CreditLimit
+    CreditLimit,
+
+    /// <summary>The workspace had spent its own monthly credit cap.</summary>
+    WorkspaceCreditCap
 }

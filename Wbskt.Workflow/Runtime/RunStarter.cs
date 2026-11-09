@@ -21,6 +21,7 @@ internal sealed class RunStarter : IRunStarter
     private const int ActiveRunConflictError = 50028; // THROW in dbo.Run_Start
     private const int TestRunActiveError = 50029; // THROW in dbo.Run_Start
     private const int PlanCreditLimitError = 50033; // THROW in dbo.Run_Start
+    private const int WorkspaceCreditCapError = 50034; // THROW in dbo.Run_Start
 
     private readonly IRunProvider _runProvider;
     private readonly IRunJournal _journal;
@@ -158,6 +159,13 @@ internal sealed class RunStarter : IRunStarter
                     definition.WorkspaceId, credits!.MonthlyAllowance, definition.RefId, triggerEvent.ChannelKind);
                 throw new PlanCreditLimitException(definition.WorkspaceId, credits.MonthlyAllowance);
             }
+            catch (SqlException ex) when (ex.Number == WorkspaceCreditCapError)
+            {
+                _workflowMetrics?.RecordRunRefused(definition.RefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId);
+                _logger?.LogWarning("Workspace {WorkspaceId} has spent its monthly credit cap; workflow {WorkflowRefId} was not started for {Channel}",
+                    definition.WorkspaceId, definition.RefId, triggerEvent.ChannelKind);
+                throw new WorkspaceCreditCapException(definition.WorkspaceId);
+            }
 
             RunRow createdRun = started.Run;
             if (!started.Created)
@@ -209,7 +217,7 @@ internal sealed class RunStarter : IRunStarter
 
             return new RunStartResult(createdRun.Id, createdRun.RefId, started.RootBranchId, true);
         }
-        catch (Exception ex) when (ex is not PlanRunLimitException and not PlanCreditLimitException and not ActiveRunConflictException and not TestRunActiveException)
+        catch (Exception ex) when (ex is not PlanRunLimitException and not PlanCreditLimitException and not WorkspaceCreditCapException and not ActiveRunConflictException and not TestRunActiveException)
         {
             _logger?.LogError(ex, "Failed to start run for workflow definition {WorkflowDefinitionId} and trigger {TriggerNodeId}", workflowDefinitionId, triggerNodeId);
             throw;

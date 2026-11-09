@@ -25,7 +25,10 @@ public enum EngineTestRunOutcome
     WorkspaceFull,
 
     /// <summary>The plan has spent its workflow credits for the month.</summary>
-    CreditsSpent
+    CreditsSpent,
+
+    /// <summary>The workspace has spent its own monthly credit cap.</summary>
+    WorkspaceCreditCapReached
 }
 
 public sealed record EngineTestRunResponse(EngineTestRunOutcome Outcome, Guid? RunRefId = null, Guid? ActiveRunRefId = null);
