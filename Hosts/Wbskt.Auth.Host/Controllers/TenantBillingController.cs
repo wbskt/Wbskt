@@ -28,7 +28,7 @@ public class TenantBillingController(ITenantBillingService billing) : ApiControl
 
     /// <summary>
     /// Starts the provider's checkout for a paid plan or a credit pack, paid by the signed-in user.
-    /// A tenant already subscribed changes its plan in the portal instead.
+    /// A tenant already subscribed changes its plan with <c>POST …/billing/plan</c> instead.
     /// </summary>
     [HttpPost("checkout")]
     [RequiresTenantPermission(PermissionNames.BillingManage)]
@@ -36,6 +36,18 @@ public class TenantBillingController(ITenantBillingService billing) : ApiControl
     {
         var caller = CurrentUserId();
         return caller.IsFailure ? MapError(caller.Error) : MapResult(await billing.CheckoutAsync(tenantId, caller.Value, request, cancellationToken));
+    }
+
+    /// <summary>
+    /// Moves the subscription to another plan or interval: an upgrade takes effect at once and the
+    /// difference is charged now; a downgrade takes effect at the end of the period paid for and shows
+    /// as the subscription's scheduled plan until then. Asking for the current plan drops a scheduled downgrade.
+    /// </summary>
+    [HttpPost("plan")]
+    [RequiresTenantPermission(PermissionNames.BillingManage)]
+    public async Task<ActionResult<TenantBillingResponse>> ChangePlan([FromTenant] int tenantId, [FromBody] ChangePlanRequest request, CancellationToken cancellationToken)
+    {
+        return MapResult(await billing.ChangePlanAsync(tenantId, request, cancellationToken));
     }
 
     /// <summary>The provider's customer portal: cards, invoices, changing or cancelling the subscription.</summary>

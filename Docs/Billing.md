@@ -296,7 +296,7 @@ never from a file in the repository.
 - **Buying.** `POST /api/v1/tenants/{tenantRef}/billing/checkout` (`billing.manage`) names a plan and
   interval or a credit pack, and answers the provider's checkout page. The checkout carries the tenant's
   reference in the provider's metadata (`tenant_ref`) and is paid by the signed-in user's email. A tenant
-  whose subscription is still billing changes or cancels it in the provider's portal
+  whose subscription is still billing changes its plan (below) or cancels it in the provider's portal
   (`POST …/billing/portal`) rather than starting a second one (409 `BILLING_SUBSCRIPTION_ACTIVE`).
   A plan checkout stays open for `Billing:Payments:CheckoutReuseWindow` (30 minutes,
   `dbo.TenantCheckouts`): asking again for the same product in that time, from another tab or another
@@ -313,6 +313,18 @@ never from a file in the repository.
   delivery that fails or times out, and acting on it is idempotent, so a slow or failed read only
   costs a redelivery. Queuing the work instead would add a second store and a worker for no gain in
   what the tenant ends up on.
+- **Changing plan.** `POST /api/v1/tenants/{tenantRef}/billing/plan` (`billing.manage`) with `{ plan,
+  interval }` decides when the change takes effect, rather than the provider's defaults. An upgrade (a
+  higher plan, or the same plan yearly instead of monthly) takes effect at once: the provider charges the
+  prorated difference now (`prorated_immediately`) and leaves the plan as it was if that charge fails
+  (`prevent_change`). Anything else is a downgrade, which the provider schedules for the end of the period
+  paid for (`next_billing_date`), so the customer keeps what they paid for; until then the billing read
+  shows it as the subscription's `scheduledPlan`, `scheduledInterval` and `scheduledAt` (stored from the
+  provider's `scheduled_change`). An upgrade first drops a scheduled downgrade, which would otherwise
+  undo it at the period's end, and asking for the plan already held drops it too. The subscription is
+  read back at once, so the answer shows the change without waiting for the webhook. A subscription that
+  is cancelled or behind on payment is changed in the portal instead (409
+  `BILLING_SUBSCRIPTION_NOT_CHANGEABLE`); a tenant with none checks out (409 `BILLING_SUBSCRIPTION_REQUIRED`).
 - **Subscriptions.** Every subscription as read is stored (`dbo.TenantSubscriptions`, keyed by provider
   and subscription id). The one that decides the plan (`SubscriptionPlan.Deciding`) is the oldest still
   billing that is not a duplicate, else the newest. Its status decides the plan (`SubscriptionPlan.Decide`): active, past due or on hold for under 7 days

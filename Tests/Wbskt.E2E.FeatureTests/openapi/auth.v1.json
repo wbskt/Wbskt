@@ -143,6 +143,21 @@
         ],
         "type": "object"
       },
+      "ChangePlanRequest": {
+        "properties": {
+          "interval": {
+            "$ref": "#/components/schemas/BillingInterval"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PlanCode"
+          }
+        },
+        "required": [
+          "plan",
+          "interval"
+        ],
+        "type": "object"
+      },
       "CreateGroupRequest": {
         "properties": {
           "name": {
@@ -1066,6 +1081,29 @@
           "plan": {
             "$ref": "#/components/schemas/PlanCode"
           },
+          "scheduledAt": {
+            "format": "date-time"
+          },
+          "scheduledInterval": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BillingInterval"
+              }
+            ]
+          },
+          "scheduledPlan": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PlanCode"
+              }
+            ]
+          },
           "status": {
             "$ref": "#/components/schemas/SubscriptionStatus"
           }
@@ -1076,7 +1114,10 @@
           "status",
           "periodEnd",
           "cancelAtPeriodEnd",
-          "pastDueSince"
+          "pastDueSince",
+          "scheduledPlan",
+          "scheduledInterval",
+          "scheduledAt"
         ],
         "type": "object"
       },
@@ -2249,6 +2290,66 @@
               "text/plain": {
                 "schema": {
                   "$ref": "#/components/schemas/BillingCheckoutResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "TenantBilling"
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantRef}/billing/plan": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenantRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePlanRequest"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePlanRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantBillingResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantBillingResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantBillingResponse"
                 }
               }
             },

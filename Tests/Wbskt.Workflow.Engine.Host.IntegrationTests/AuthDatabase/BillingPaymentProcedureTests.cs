@@ -56,6 +56,20 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
     }
 
     [SkippableFact]
+    public async Task A_scheduled_downgrade_is_stored_as_read_and_cleared_when_the_provider_drops_it()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int tenantId = await CreateTenantAsync();
+        string subscriptionId = $"sub_{Guid.NewGuid():N}";
+
+        var scheduled = await UpsertScheduledAsync(tenantId, subscriptionId, ("Maker", "Yearly", Now.AddMonths(1)));
+        var dropped = await UpsertScheduledAsync(tenantId, subscriptionId, null);
+
+        Assert.Equal(("Maker", "Yearly", Now.AddMonths(1)), scheduled);
+        Assert.Null(dropped);
+    }
+
+    [SkippableFact]
     public async Task A_refund_mark_is_kept_across_reads_and_a_second_subscription_is_kept_beside_the_first()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
@@ -346,6 +360,32 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
         int refunded = reader.GetOrdinal("RefundedThrough");
         return (reader.GetString(reader.GetOrdinal("SubscriptionId")), reader.GetString(reader.GetOrdinal("Status")),
             reader.IsDBNull(pastDue) ? null : reader.GetDateTime(pastDue), reader.IsDBNull(refunded) ? null : reader.GetDateTime(refunded));
+    }
+
+    private async Task<(string Plan, string Interval, DateTime At)?> UpsertScheduledAsync(int tenantId, string subscriptionId, (string Plan, string Interval, DateTime At)? scheduled)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = Procedure(conn, "dbo.TenantSubscription_Upsert");
+        cmd.Parameters.AddWithValue("@TenantId", tenantId);
+        cmd.Parameters.AddWithValue("@Provider", "dodo");
+        cmd.Parameters.AddWithValue("@SubscriptionId", subscriptionId);
+        cmd.Parameters.AddWithValue("@CustomerId", "cus_1");
+        cmd.Parameters.AddWithValue("@ProductId", "prod_1");
+        cmd.Parameters.AddWithValue("@PlanCode", "Pro");
+        cmd.Parameters.AddWithValue("@BillingInterval", "Yearly");
+        cmd.Parameters.AddWithValue("@Status", "active");
+        cmd.Parameters.AddWithValue("@CurrentPeriodEnd", Now.AddMonths(1));
+        cmd.Parameters.AddWithValue("@CancelAtPeriodEnd", false);
+        cmd.Parameters.AddWithValue("@Now", Now);
+        cmd.Parameters.AddWithValue("@ScheduledPlanCode", (object?)scheduled?.Plan ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@ScheduledBillingInterval", (object?)scheduled?.Interval ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@ScheduledAt", (object?)scheduled?.At ?? DBNull.Value);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        int plan = reader.GetOrdinal("ScheduledPlanCode");
+        return reader.IsDBNull(plan)
+            ? null
+            : (reader.GetString(plan), reader.GetString(reader.GetOrdinal("ScheduledBillingInterval")), reader.GetDateTime(reader.GetOrdinal("ScheduledAt")));
     }
 
     private async Task<IReadOnlyCollection<int>> GetToReviewAsync(DateTime now, DateTime pastDueSince)

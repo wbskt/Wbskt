@@ -15,6 +15,7 @@ internal sealed class TenantBillingService(
     IAccountProvider accounts,
     IOptions<BillingOptions> options,
     TimeProvider clock,
+    TenantBillingSync sync,
     ILogger<TenantBillingService> logger) : ITenantBillingService
 {
     private static readonly Error TenantNotFound = Error.Forbidden("TENANT_NOT_FOUND", "Tenant not found.");
@@ -60,7 +61,10 @@ internal sealed class TenantBillingService(
                 subscription.Status,
                 subscription.CurrentPeriodEnd.ToUtcOffset(),
                 subscription.CancelAtPeriodEnd,
-                subscription.PastDueSince?.ToUtcOffset()),
+                subscription.PastDueSince?.ToUtcOffset(),
+                subscription.ScheduledPlan,
+                subscription.ScheduledInterval,
+                subscription.ScheduledAt?.ToUtcOffset()),
             gateway.IsConfigured
                 ? offers.Plans.SelectMany(p => p.Value.Where(i => !string.IsNullOrEmpty(i.Value)).Select(i => new PlanOffer(p.Key, i.Key))).OrderBy(o => o.Plan).ThenBy(o => o.Interval).ToList()
                 : [],
@@ -114,6 +118,76 @@ internal sealed class TenantBillingService(
         }
     }
 
+    public async Task<Result<TenantBillingResponse>> ChangePlanAsync(int tenantId, ChangePlanRequest request, CancellationToken ct)
+    {
+        if (!gateway.IsConfigured)
+        {
+            return NotConfigured;
+        }
+
+        if (!options.Value.Plans.TryGetValue(request.Plan, out var intervals) || !intervals.TryGetValue(request.Interval, out string? productId) || string.IsNullOrEmpty(productId))
+        {
+            return Error.Validation("BILLING_OFFER_INVALID", $"{request.Plan} billed {request.Interval} is not offered.");
+        }
+
+        if (SubscriptionPlan.Deciding(await billing.GetSubscriptionsAsync(tenantId, ct)) is not { } current || !SubscriptionPlan.IsBilling(current))
+        {
+            return Error.Conflict("BILLING_SUBSCRIPTION_REQUIRED", "The tenant has no subscription to change. Start one with a checkout.");
+        }
+
+        if (current.CancelAtPeriodEnd || current.PastDueSince is not null)
+        {
+            return Error.Conflict(
+                "BILLING_SUBSCRIPTION_NOT_CHANGEABLE",
+                "The subscription is cancelled or has a failed payment. Resume it or settle the payment in the billing portal first.");
+        }
+
+        bool same = current.PlanCode == request.Plan && current.Interval == request.Interval;
+        bool upgrade = request.Plan > current.PlanCode
+            || (request.Plan == current.PlanCode && current.Interval == BillingInterval.Monthly && request.Interval == BillingInterval.Yearly);
+        try
+        {
+            if (same)
+            {
+                if (current.ScheduledPlan is null)
+                {
+                    return await GetAsync(tenantId, ct);
+                }
+
+                await gateway.CancelScheduledChangeAsync(current.SubscriptionId, ct);
+            }
+            else if (upgrade)
+            {
+                // A downgrade still scheduled would undo the upgrade at the period's end.
+                if (current.ScheduledPlan is not null)
+                {
+                    await gateway.CancelScheduledChangeAsync(current.SubscriptionId, ct);
+                }
+
+                await gateway.ChangePlanAsync(current.SubscriptionId, productId, PlanChangeTiming.Now, ct);
+            }
+            else
+            {
+                await gateway.ChangePlanAsync(current.SubscriptionId, productId, PlanChangeTiming.AtPeriodEnd, ct);
+            }
+
+            // The provider's webhooks follow, but the caller sees the change now. A failed upgrade charge
+            // leaves the subscription on its plan, and the read says so.
+            await sync.SyncSubscriptionAsync(current.SubscriptionId, refundedThrough: null, ct);
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogWarning(ex, "{Provider} refused or could not change subscription {SubscriptionId} of tenant {TenantId}.", gateway.Name, current.SubscriptionId, tenantId);
+            return ProviderDown;
+        }
+
+        logger.LogInformation(
+            "Tenant {TenantId} asked to move subscription {SubscriptionId} from {Plan} {Interval} to {NewPlan} {NewInterval} ({Timing}).",
+            tenantId, current.SubscriptionId, current.PlanCode, current.Interval, request.Plan, request.Interval,
+            same ? "scheduled change dropped" : upgrade ? "now" : "at period end");
+        return await GetAsync(tenantId, ct);
+    }
+
     public async Task<Result<BillingPortalResponse>> PortalAsync(int tenantId, CancellationToken ct)
     {
         if (!gateway.IsConfigured)
@@ -165,7 +239,7 @@ internal sealed class TenantBillingService(
 
         if (SubscriptionPlan.Deciding(await billing.GetSubscriptionsAsync(tenantId, ct)) is { } current && SubscriptionPlan.IsBilling(current))
         {
-            return Error.Conflict("BILLING_SUBSCRIPTION_ACTIVE", "The tenant already has a subscription. Change or cancel it in the billing portal.");
+            return Error.Conflict("BILLING_SUBSCRIPTION_ACTIVE", "The tenant already has a subscription. Change its plan with POST …/billing/plan, or cancel it in the billing portal.");
         }
 
         return productId;
