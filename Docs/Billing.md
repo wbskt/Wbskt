@@ -66,6 +66,7 @@ dbo.Tenants.PlanCode ──(copy)──────────►  dbo.Workspac
 |---|---|---|
 | Clients | `dbo.Client_Create` (registration) and `dbo.Client_UpdateStatuses` (approval) | 50025, **409** `PLAN_CLIENT_LIMIT_REACHED` |
 | Runs going at once | `dbo.Run_Start` | 50026; a trigger's dispatch reads `Refused`, a test run is **409** `PLAN_RUN_LIMIT_REACHED` |
+| Messages a month | `MessageAllowanceMonitor`, then each socket host | Free only: each client held to one message a minute until the 1st (see Messages) |
 | Workflow credits a month | `dbo.Run_Start` | 50033; a trigger's dispatch reads `Refused`, a test run is **409** `PLAN_CREDIT_LIMIT_REACHED` |
 | A workspace's credit cap | `dbo.Run_Start` | 50034; a trigger's dispatch reads `Refused`, a test run is **409** `WORKSPACE_CREDIT_CAP_REACHED` |
 | Workspaces | `dbo.Workspace_Create` (auth database) | 50030, **409** `PLAN_WORKSPACE_LIMIT_REACHED` |
@@ -119,6 +120,36 @@ whose `reason` is `ActiveRunLimit`, `CreditLimit` or `WorkspaceCreditCap`.
 
 Not built yet: top-up grants (#627, with payments in #631).
 
+## Messages
+
+**The meter.** `dbo.ClientTraffic_InsertBatch`, which the event logger calls with each batch of client
+traffic, also counts what it inserted into `dbo.WorkspaceMessageUsage` (per workspace per UTC day): a
+client's message (`ClientMessageReceivedEvent`) is inbound, a command delivered to a client
+(`ClientCommandDeliveredEvent`) outbound, and the plan's `MessagesPerMonth` counts both. It counts the
+rows the insert wrote, in the same transaction, so the meter matches the traffic table and a redelivered
+event adds nothing. The meter outlives the traffic's retention.
+
+**The allowance.** The management host's `MessageAllowanceMonitor` (`MessageAllowanceWorker`, every
+`Billing:MessageAllowanceInterval`, 1 minute) reads each account's month from the meter, pooled over the
+tenant's workspaces (`dbo.WorkspaceMessageUsage_GetAccounts`), and compares it with the plan, overrides
+included.
+
+- **Free over its allowance is throttled**, not cut off: each of its clients may send one of its own
+  messages a minute until the 1st. The monitor sends every socket host the whole list of throttled
+  workspaces each time (`MessageThrottleSnapshot`, not an `IEvent`); the gateway's `MessageThrottle`
+  holds it and each session's `ClientAllowance` lets one message a minute through. `sys.*` messages
+  (pongs, acks, OTA status) pass, so a throttled client stays connected and keeps answering. A list
+  older than 5 minutes is ignored, so a management outage lets messages through rather than throttling
+  an account that has since upgraded. The list is empty again on the 1st.
+- **A paid plan is never throttled.** What it carries past the limit is overage, read from the same
+  meter when top-ups land (#627).
+- Either way `WorkspaceMessageLimitReachedEvent` is raised once per workspace and month
+  (`dbo.WorkspaceMessageLimit_Record`), and the usage API reports `messages` with `throttled`.
+
+The throttle can trail the crossing by up to a minute plus the event logger's batching, so a Free account
+can carry a little past its allowance. Commands sent from the console or the API are not refused: they
+are counted when delivered.
+
 ## Usage
 
 Two reads show a plan against what has been used, both behind `billing.read` (every member's default):
@@ -126,15 +157,15 @@ Two reads show a plan against what has been used, both behind `billing.read` (ev
 - **The tenant's seats** on the auth host, `GET /api/v1/tenants/{tenantRef}/usage`: the plan, its limits
   and how many workspaces and members the tenant has, counted as `dbo.Workspace_Create` and the
   invitation procedures count them (`dbo.TenantSeats_GetBy_TenantId`).
-- **Credits, clients and runs** on the management host, `GET /api/v1/workspaces/{workspaceRef}/usage`:
+- **Credits, messages, clients and runs** on the management host, `GET /api/v1/workspaces/{workspaceRef}/usage`:
   this month's use pooled across the tenant's workspaces (`dbo.TenantWorkspaces`, as the limits are
   checked), this workspace's share and cap, and its credits per day from the ledger
   (`dbo.WorkspaceUsage_GetSummary`, `dbo.WorkspaceCreditUsage_GetDaily`). Credits are counted as
   `dbo.Run_Start` counts them, so a run is refused exactly when `used` reaches `limit`.
 
 The split follows where the data lives: seats are counted in the auth database, everything else in the
-main one, and neither host calls the other to answer. Message usage joins the management read with the
-message meter (#629).
+main one, and neither host calls the other to answer. Messages are on the management read, from the
+message meter (see Messages).
 
 Lock order, where a procedure takes more than one: the trigger key lock, then the test-run lock, then the
 plan lock (`dbo.Run_Start`); the clients' and policies' rows, then the plan lock (client procedures).

@@ -11,10 +11,14 @@
           },
           "credits": {
             "$ref": "#/components/schemas/CreditUsageAmount"
+          },
+          "messages": {
+            "$ref": "#/components/schemas/MessageUsageAmount"
           }
         },
         "required": [
           "credits",
+          "messages",
           "clients",
           "activeRuns"
         ],
@@ -1447,6 +1451,35 @@
           "policyRefId",
           "createdAt",
           "updatedAt"
+        ],
+        "type": "object"
+      },
+      "MessageUsageAmount": {
+        "properties": {
+          "limit": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "throttled": {
+            "type": "boolean"
+          },
+          "used": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "used",
+          "limit",
+          "throttled"
         ],
         "type": "object"
       },
@@ -3931,6 +3964,14 @@
               "string"
             ]
           },
+          "messages": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
           "monthlyCreditCap": {
             "format": "double",
             "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
@@ -3944,6 +3985,7 @@
         "required": [
           "credits",
           "monthlyCreditCap",
+          "messages",
           "clients",
           "activeRuns"
         ],

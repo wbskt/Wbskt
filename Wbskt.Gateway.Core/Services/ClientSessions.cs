@@ -30,6 +30,8 @@ public sealed class ClientSessions
     private readonly ILogger<ClientSessions> _logger;
     private readonly ILogger<ClientInbox> _inboxLogger;
     private readonly SupersedeMonitor _supersedes;
+    private readonly MessageThrottle _throttle;
+    private readonly TimeProvider _time;
     private readonly string _hostId;
 
     /// <summary>How long one publish of a client's message or announcement may take before it is given up.</summary>
@@ -46,8 +48,12 @@ public sealed class ClientSessions
         IHostApplicationLifetime lifetime,
         ILogger<ClientSessions> logger,
         ILogger<ClientInbox> inboxLogger,
-        SupersedeMonitor? supersedes = null)
+        SupersedeMonitor? supersedes = null,
+        MessageThrottle? throttle = null,
+        TimeProvider? time = null)
     {
+        _time = time ?? TimeProvider.System;
+        _throttle = throttle ?? new MessageThrottle(_time);
         _supersedes = supersedes ?? new SupersedeMonitor();
         _connections = connections;
         _accessGate = accessGate;
@@ -129,7 +135,8 @@ public sealed class ClientSessions
             announcing = AnnounceConnectedAsync(
                 new ClientConnectedEvent(clientRefId, connection.ClientId, connection.WorkspaceId, _hostId), stopAnnouncing.Token);
 
-            var inbox = new ClientInbox(new InboundContext(clientRefId, connection), new MessageBudget(_budgetOptions), _dispatcher, _metrics, _inboxLogger);
+            var context = new InboundContext(clientRefId, connection) { Allowance = new ClientAllowance(_throttle, connection.WorkspaceId, _time) };
+            var inbox = new ClientInbox(context, new MessageBudget(_budgetOptions), _dispatcher, _metrics, _inboxLogger);
             reason = await receive(inbox);
         }
         catch (OperationCanceledException)

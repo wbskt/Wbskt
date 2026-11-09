@@ -48,6 +48,21 @@ public sealed class InboundMessageDispatcherTests
         received.WorkspaceId.Should().Be(2);
     }
 
+    [Fact]
+    public async Task A_throttled_clients_own_messages_go_through_one_a_minute_but_its_system_messages_all_do()
+    {
+        var throttle = new MessageThrottle(TimeProvider.System);
+        throttle.Replace([2], DateTime.UtcNow);
+        var context = new InboundContext(ClientRefId, _connection) { Allowance = new ClientAllowance(throttle, 2, TimeProvider.System) };
+
+        await _dispatcher.DispatchAsync(context, """{"type":"temp.reading","payload":{}}""", CancellationToken.None);
+        await _dispatcher.DispatchAsync(context, """{"type":"temp.reading","payload":{}}""", CancellationToken.None);
+        await _dispatcher.DispatchAsync(context, $$$"""{"type":"sys.ack","payload":{"commandId":"{{{CommandId}}}"}}""", CancellationToken.None);
+
+        _bus.Published.OfType<ClientMessageReceivedEvent>().Should().ContainSingle();
+        _bus.Published.OfType<ClientCommandAckedEvent>().Should().ContainSingle();
+    }
+
     [Theory]
     [InlineData("not json")]
     [InlineData("""{"payload":{}}""")]

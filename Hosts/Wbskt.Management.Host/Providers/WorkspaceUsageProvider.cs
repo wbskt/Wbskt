@@ -22,6 +22,8 @@ internal sealed class WorkspaceUsageProvider : BaseSqlProvider, IWorkspaceUsageP
             r => new WorkspaceUsageSummary(
                 r.GetDecimal(r.GetOrdinal("TenantCredits")),
                 r.GetDecimal(r.GetOrdinal("WorkspaceCredits")),
+                r.GetInt64(r.GetOrdinal("TenantMessages")),
+                r.GetInt64(r.GetOrdinal("WorkspaceMessages")),
                 r.GetInt32(r.GetOrdinal("TenantClients")),
                 r.GetInt32(r.GetOrdinal("WorkspaceClients")),
                 r.GetInt32(r.GetOrdinal("TenantActiveRuns")),
