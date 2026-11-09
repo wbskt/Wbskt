@@ -12,6 +12,9 @@ internal interface ITenantPlanProvider
 
     Task<TenantPlan?> FindByIdAsync(int tenantId, CancellationToken cancellationToken);
 
+    /// <summary>The tenant's workspaces and members, as its plan's limits count them.</summary>
+    Task<(int Workspaces, int Members)> GetSeatsAsync(int tenantId, CancellationToken cancellationToken);
+
     /// <summary>
     /// Puts the tenant on <paramref name="planCode"/> and queues <paramref name="changedEvent"/> in the
     /// same transaction, if its plan is still at <paramref name="expectedRevision"/>. Null when it was

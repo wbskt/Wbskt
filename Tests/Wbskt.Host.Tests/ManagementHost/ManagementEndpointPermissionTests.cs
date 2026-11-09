@@ -43,6 +43,7 @@ public sealed class ManagementEndpointPermissionTests
         ["EventLogsController.GetSummary"] = PermissionNames.LogsRead,
         ["EventLogsController.GetCsv"] = PermissionNames.LogsRead,
         ["WorkspaceCreditCapController.Put"] = PermissionNames.BillingManage,
+        ["WorkspaceUsageController.Get"] = PermissionNames.BillingRead,
         ["IntegrationsController.GetAll"] = PermissionNames.IntegrationsRead,
         ["IntegrationsController.Get"] = PermissionNames.IntegrationsRead,
         ["IntegrationsController.GetUsage"] = PermissionNames.IntegrationsRead,

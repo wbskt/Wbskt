@@ -67,6 +67,7 @@ public static class Program
         builder.Services.AddScoped<ITenantPlanService, TenantPlanService>();
         builder.Services.AddPlanCatalog(builder.Configuration);
         builder.Services.AddScoped<ITenantLimits, TenantLimits>();
+        builder.Services.AddScoped<ITenantUsageService, TenantUsageService>();
         builder.Services.AddScoped<ICredentialRetentionProvider, CredentialRetentionProvider>();
         builder.Services.AddHostedService<CredentialRetentionService>();
         builder.Services.AddHttpContextAccessor();

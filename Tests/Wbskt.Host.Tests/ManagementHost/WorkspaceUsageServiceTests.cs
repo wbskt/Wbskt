@@ -1,0 +1,68 @@
+using Moq;
+using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Billing;
+using Wbskt.Management.Host.Models;
+using Wbskt.Management.Host.Providers;
+using Wbskt.Management.Host.Services.Billing;
+using Wbskt.Management.Models;
+using Wbskt.Models.Billing;
+
+namespace Wbskt.Host.Tests.ManagementHost;
+
+public sealed class WorkspaceUsageServiceTests
+{
+    private static readonly DateTimeOffset Now = new(2026, 11, 9, 4, 0, 0, TimeSpan.Zero);
+    private readonly Mock<IWorkspaceUsageProvider> _usage = new();
+
+    [Fact]
+    public async Task Usage_is_the_plans_limits_against_the_accounts_totals_and_the_workspaces_share()
+    {
+        _usage.Setup(x => x.GetSummaryAsync(7, 3, new DateOnly(2026, 11, 1), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkspaceUsageSummary(1500m, 400m, 60, 12, 5, 1, 1000m));
+        _usage.Setup(x => x.GetDailyCreditsAsync(7, new DateOnly(2026, 10, 9), new DateOnly(2026, 11, 9), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new DailyCreditUsage(new DateOnly(2026, 11, 2), 400m)]);
+        var service = new WorkspaceUsageService(_usage.Object, new FixedWorkspacePlans(PlanCode.Maker, tenantId: 3), new FixedClock());
+
+        Result<WorkspaceUsageResponse> result = await service.GetAsync(7, null, null, CancellationToken.None);
+
+        PlanLimits maker = PlanCatalog.BuiltIn[PlanCode.Maker];
+        WorkspaceUsageResponse usage = result.Value;
+        Assert.Equal(PlanCode.Maker, usage.Plan);
+        Assert.Equal((new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 12, 1, 0, 0, 0, TimeSpan.Zero)), (usage.PeriodStart, usage.PeriodEnd));
+        Assert.Equal(new CreditUsageAmount(1500m, maker.CreditsPerMonth), usage.Account.Credits);
+        Assert.Equal(new UsageCount(60, maker.Clients), usage.Account.Clients);
+        Assert.Equal(new UsageCount(5, maker.ActiveRuns), usage.Account.ActiveRuns);
+        Assert.Equal(new WorkspaceUsageShare(400m, 1000m, 12, 1), usage.Workspace);
+        Assert.Single(usage.Days);
+    }
+
+    [Fact]
+    public async Task A_range_ending_at_midnight_leaves_out_the_day_it_starts()
+    {
+        _usage.Setup(x => x.GetSummaryAsync(7, null, It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkspaceUsageSummary(0, 0, 0, 0, 0, 0, null));
+        _usage.Setup(x => x.GetDailyCreditsAsync(7, new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 3), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        var service = new WorkspaceUsageService(_usage.Object, new FixedWorkspacePlans(), new FixedClock());
+
+        Result<WorkspaceUsageResponse> result = await service.GetAsync(7, new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 11, 4, 0, 0, 0, TimeSpan.Zero), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        _usage.Verify(x => x.GetDailyCreditsAsync(7, new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 3), It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task A_range_longer_than_a_year_is_refused()
+    {
+        var service = new WorkspaceUsageService(_usage.Object, new FixedWorkspacePlans(), new FixedClock());
+
+        Result<WorkspaceUsageResponse> result = await service.GetAsync(7, Now.AddDays(-400), Now, CancellationToken.None);
+
+        Assert.Equal("TIME_RANGE_TOO_LONG", result.Error.Code);
+        _usage.VerifyNoOtherCalls();
+    }
+
+    private sealed class FixedClock : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+}

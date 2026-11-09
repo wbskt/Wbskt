@@ -1,6 +1,25 @@
 {
   "components": {
     "schemas": {
+      "AccountUsage": {
+        "properties": {
+          "activeRuns": {
+            "$ref": "#/components/schemas/UsageCount"
+          },
+          "clients": {
+            "$ref": "#/components/schemas/UsageCount"
+          },
+          "credits": {
+            "$ref": "#/components/schemas/CreditUsageAmount"
+          }
+        },
+        "required": [
+          "credits",
+          "clients",
+          "activeRuns"
+        ],
+        "type": "object"
+      },
       "BranchSummaryDto": {
         "properties": {
           "createdAt": {
@@ -631,6 +650,52 @@
           "command",
           "description",
           "parameters"
+        ],
+        "type": "object"
+      },
+      "CreditUsageAmount": {
+        "properties": {
+          "limit": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "used": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "used",
+          "limit"
+        ],
+        "type": "object"
+      },
+      "DailyCreditUsage": {
+        "properties": {
+          "credits": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "day": {
+            "format": "date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "day",
+          "credits"
         ],
         "type": "object"
       },
@@ -1810,6 +1875,14 @@
         ],
         "type": "object"
       },
+      "PlanCode": {
+        "enum": [
+          "Free",
+          "Maker",
+          "Pro",
+          "Business"
+        ]
+      },
       "PropertySchema": {
         "properties": {
           "dataType": {
@@ -2919,6 +2992,31 @@
         ],
         "type": "object"
       },
+      "UsageCount": {
+        "properties": {
+          "limit": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "used": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "used",
+          "limit"
+        ],
+        "type": "object"
+      },
       "WorkflowDefinition": {
         "properties": {
           "createdAt": {
@@ -3770,6 +3868,84 @@
           "successRate",
           "workflows",
           "days"
+        ],
+        "type": "object"
+      },
+      "WorkspaceUsageResponse": {
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/AccountUsage"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/DailyCreditUsage"
+            },
+            "type": "array"
+          },
+          "periodEnd": {
+            "format": "date-time"
+          },
+          "periodStart": {
+            "format": "date-time"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PlanCode"
+          },
+          "workspace": {
+            "$ref": "#/components/schemas/WorkspaceUsageShare"
+          }
+        },
+        "required": [
+          "plan",
+          "periodStart",
+          "periodEnd",
+          "account",
+          "workspace",
+          "days"
+        ],
+        "type": "object"
+      },
+      "WorkspaceUsageShare": {
+        "properties": {
+          "activeRuns": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "clients": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "credits": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "monthlyCreditCap": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "credits",
+          "monthlyCreditCap",
+          "clients",
+          "activeRuns"
         ],
         "type": "object"
       }
@@ -6779,6 +6955,60 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspaceRef}/usage": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "from",
+            "schema": {
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "schema": {
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspaceRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceUsageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceUsageResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceUsageResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "WorkspaceUsage"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspaceRef}/workflows": {
       "get": {
         "parameters": [
@@ -8098,6 +8328,9 @@
     },
     {
       "name": "WorkspaceMessageStats"
+    },
+    {
+      "name": "WorkspaceUsage"
     },
     {
       "name": "PublicCallback"

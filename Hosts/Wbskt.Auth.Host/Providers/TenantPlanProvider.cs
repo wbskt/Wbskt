@@ -10,6 +10,16 @@ namespace Wbskt.Auth.Host.Providers;
 
 internal sealed class TenantPlanProvider(IConfiguration configuration) : BaseSqlProvider(configuration, "AuthDBConnection"), ITenantPlanProvider
 {
+    public Task<(int Workspaces, int Members)> GetSeatsAsync(int tenantId, CancellationToken cancellationToken)
+    {
+        return ExecuteSingleAsync(
+            "dbo.TenantSeats_GetBy_TenantId",
+            p => p.AddWithValue("@TenantId", tenantId),
+            r => (r.GetInt32(r.GetOrdinal("Workspaces")), r.GetInt32(r.GetOrdinal("Members"))),
+            new InvalidOperationException("TenantSeats_GetBy_TenantId did not return a row."),
+            cancellationToken);
+    }
+
     public Task<TenantPlan?> FindByRefIdAsync(Guid tenantRef, CancellationToken cancellationToken)
     {
         return ExecuteFindAsync("dbo.TenantPlan_GetBy_RefId", p => p.AddWithValue("@RefId", tenantRef), MapPlan, cancellationToken);
