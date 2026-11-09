@@ -221,6 +221,57 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
         (await counters.TryAsync(run, 45m)).Should().BeNull("the run's own budget still holds");
     }
 
+    [SkippableFact]
+    public async Task The_reconcile_puts_back_a_grant_whose_row_was_lost_and_a_refund_whose_event_was()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int tenantId = NewId();
+        string paymentId = $"pay_{Guid.NewGuid():N}";
+        var purchase = new Wbskt.Auth.Models.CreditPurchaseResponse(
+            1, tenantId, Guid.NewGuid(), "test", paymentId, 500m, DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(364), null, false, 0);
+        var auth = new OnePagePurchases(purchase);
+        using var metrics = new Wbskt.Management.Host.Telemetry.ManagementMetrics();
+        var reconcile = new Wbskt.Management.Host.Services.Billing.CreditGrantReconcile(
+            auth, Grants(), metrics, TimeProvider.System, Microsoft.Extensions.Logging.Abstractions.NullLogger<Wbskt.Management.Host.Services.Billing.CreditGrantReconcile>.Instance);
+
+        (await reconcile.ReconcileAsync(CancellationToken.None)).Should().Be(1, "the grant was never recorded");
+        (await reconcile.ReconcileAsync(CancellationToken.None)).Should().Be(0);
+        await ExecSqlAsync("DELETE FROM dbo.TenantCreditGrants WHERE Source = N'test' AND SourceRef = @Ref", paymentId);
+        (await reconcile.ReconcileAsync(CancellationToken.None)).Should().Be(1, "the deleted row comes back");
+        (await DrawnAsync(paymentId)).Should().Be(0m);
+
+        auth.Purchase = purchase with { RefundedAt = DateTimeOffset.UtcNow };
+        (await reconcile.ReconcileAsync(CancellationToken.None)).Should().Be(1, "the refund's revocation was never delivered");
+        (await ScalarSqlAsync("SELECT COUNT(*) FROM dbo.TenantCreditGrants WHERE SourceRef = @Ref AND RevokedAt IS NOT NULL", paymentId)).Should().Be(1);
+    }
+
+    private async Task ExecSqlAsync(string sql, string reference)
+    {
+        await using var connection = new SqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@Ref", reference);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private async Task<int> ScalarSqlAsync(string sql, string reference)
+    {
+        await using var connection = new SqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@Ref", reference);
+        return (int)(await command.ExecuteScalarAsync())!;
+    }
+
+    private sealed class OnePagePurchases(Wbskt.Auth.Models.CreditPurchaseResponse purchase) : Wbskt.Management.Host.Services.Clients.ICreditPurchasesClient
+    {
+        public Wbskt.Auth.Models.CreditPurchaseResponse Purchase { get; set; } = purchase;
+
+        public Task<Wbskt.Models.Page<Wbskt.Auth.Models.CreditPurchaseResponse>> GetPageAsync(string? cursor, CancellationToken cancellationToken) =>
+            Task.FromResult(new Wbskt.Models.Page<Wbskt.Auth.Models.CreditPurchaseResponse> { Items = [Purchase], NextCursor = null });
+    }
+
     private ICreditGrantProvider Grants() =>
         new CreditGrantProvider(new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:DefaultConnection"] = fixture.ConnectionString })

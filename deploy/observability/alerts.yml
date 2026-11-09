@@ -71,6 +71,19 @@ groups:
             Check the auth host's logs for the provider's status codes and dbo.BillingWebhookEvents
             for the rows left unprocessed.
 
+      - alert: CreditGrantsRepaired
+        # The hourly reconcile wrote a credit grant change an event should have: a pack paid for whose
+        # credits never arrived, or a refund or chargeback that was not applied. Repaired now, but the
+        # event path that lost it needs a look.
+        expr: sum by (change) (increase(wbskt_management_credit_grants_repaired_total[2h])) > 0
+        labels:
+          severity: warn
+        annotations:
+          summary: "The credit grant reconcile repaired {{ $value }} {{ $labels.change }} change(s)"
+          description: >-
+            Read the management host's "Repaired the credit grant" log lines for the payments, then
+            look for the Tenant credit events in the dead-letter queues and the auth outbox.
+
       - alert: WorkspaceRunCeilingReached
         # A workspace whose plan already has as many active runs as it allows (PlanLimits.ActiveRuns,
         # pooled across the tenant's workspaces) has its triggers refused (sub-workflow children fail

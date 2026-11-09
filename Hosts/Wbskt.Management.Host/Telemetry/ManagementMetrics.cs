@@ -24,6 +24,7 @@ public sealed class ManagementMetrics : IWorkerTickMetrics, IDisposable
         Commands = _meter.CreateCounter<long>("wbskt_management_commands_total");
         WorkerTicks = _meter.CreateCounter<long>("wbskt_management_worker_ticks_total");
         WorkspacesRetiredBySweep = _meter.CreateCounter<long>("wbskt_management_workspaces_retired_by_sweep_total");
+        CreditGrantsRepaired = _meter.CreateCounter<long>("wbskt_management_credit_grants_repaired_total");
     }
 
     public Counter<long> Registrations { get; }
@@ -39,6 +40,12 @@ public sealed class ManagementMetrics : IWorkerTickMetrics, IDisposable
     /// </summary>
     public Counter<long> WorkspacesRetiredBySweep { get; }
 
+    /// <summary>
+    /// Credit grant changes the hourly reconcile had to make, tagged <c>change</c> (granted, revoked, held
+    /// or released): each a grant event that was lost or whose handling gave up. Zero is the healthy value.
+    /// </summary>
+    public Counter<long> CreditGrantsRepaired { get; }
+
     public void RecordRegistration(Result result) => Registrations.Add(1, Outcome(result));
 
     public void RecordClientLogin(Result result) => ClientLogins.Add(1, Outcome(result));
@@ -52,6 +59,8 @@ public sealed class ManagementMetrics : IWorkerTickMetrics, IDisposable
         WorkerTicks.Add(1, new TagList { { "worker", worker }, { "outcome", outcome } });
 
     public void RecordWorkspaceRetiredBySweep() => WorkspacesRetiredBySweep.Add(1);
+
+    public void RecordCreditGrantRepaired(string change) => CreditGrantsRepaired.Add(1, new KeyValuePair<string, object?>("change", change));
 
     public void Dispose() => _meter.Dispose();
 }

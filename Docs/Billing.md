@@ -164,6 +164,14 @@ downgrade draws only from what is posted after it, and a grant that expired is n
 balance a start reads is always current. A revoked grant's drawn credits stay drawn; only what it still
 held stops counting.
 
+**Reconcile.** Grants reach the main database only through those events, so the management host's
+`CreditGrantReconcileWorker` (every `Billing:CreditGrantReconcileInterval`, 1 hour) reads every credit pack
+bought from the auth host (`GET /api/internal/billing/credit-purchases`, `dbo.TenantCreditPurchase_GetPage`)
+and makes the writes an event would have: the grant, its revocation and its latest hold or release. Each
+write is idempotent, so the reconcile and the events can meet in any order. Each repair is logged and
+counted on `wbskt_management_credit_grants_repaired_total{change}`, which the `CreditGrantsRepaired`
+alert watches.
+
 A grant whose payment has an open chargeback is **held** (`TenantCreditGrantHoldChangedEvent`,
 `dbo.TenantCreditGrant_SetHold`): it stops counting towards the balance and is not drawn from while held,
 and counts again once the chargeback is won or withdrawn. A lost chargeback revokes it as a refund does.

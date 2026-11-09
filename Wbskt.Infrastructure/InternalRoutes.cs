@@ -37,6 +37,13 @@ public static class InternalRoutes
     public const string TenantPlan = Prefix + "/tenants/{tenantRef:guid}/plan";
 
     /// <summary>
+    /// Auth host: every credit pack bought, with its refund and hold, a page at a time
+    /// (<c>?cursor=&amp;limit=</c>), for the management host's reconcile of the main database's grants.
+    /// Called by a background job, so it takes <see cref="ApiKeyHeader"/>.
+    /// </summary>
+    public const string CreditPurchases = Prefix + "/billing/credit-purchases";
+
+    /// <summary>
     /// The shared key an internal route called by a background job (no user token to forward) checks:
     /// the auth host's <c>Internal:ApiKey</c>, sent by the management host from
     /// <c>Services:AuthInternalApiKey</c>.

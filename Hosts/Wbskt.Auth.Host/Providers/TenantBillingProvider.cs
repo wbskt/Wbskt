@@ -1,8 +1,10 @@
 using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Services.Billing;
+using Wbskt.Auth.Models;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Events.Outbox;
+using Wbskt.Models;
 using Wbskt.Models.Billing;
 
 namespace Wbskt.Auth.Host.Providers;
@@ -120,6 +122,30 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
             p.AddWithValue("@OutboxPayload", revoked.Payload);
         }, cancellationToken);
         return tenantId is not null;
+    }
+
+    public Task<IReadOnlyCollection<CreditPurchaseResponse>> GetCreditPurchasesAsync(int? afterId, int take, CancellationToken cancellationToken)
+    {
+        return ExecuteCollectionAsync("dbo.TenantCreditPurchase_GetPage", p =>
+        {
+            p.AddWithValue("@AfterId", (object?)afterId ?? DBNull.Value);
+            p.AddWithValue("@Take", take);
+        }, r =>
+        {
+            int refundedAt = r.GetOrdinal("RefundedAt");
+            return new CreditPurchaseResponse(
+                r.GetInt32(r.GetOrdinal("Id")),
+                r.GetInt32(r.GetOrdinal("TenantId")),
+                r.GetGuid(r.GetOrdinal("TenantRefId")),
+                r.GetString(r.GetOrdinal("Provider")),
+                r.GetString(r.GetOrdinal("PaymentId")),
+                r.GetDecimal(r.GetOrdinal("Credits")),
+                r.GetDateTime(r.GetOrdinal("PurchasedAt")).ToUtcOffset(),
+                r.GetDateTime(r.GetOrdinal("ExpiresAt")).ToUtcOffset(),
+                r.IsDBNull(refundedAt) ? null : r.GetDateTime(refundedAt).ToUtcOffset(),
+                !r.IsDBNull(r.GetOrdinal("HeldAt")),
+                r.GetInt32(r.GetOrdinal("HoldRevision")));
+        }, cancellationToken);
     }
 
     public Task<TenantCreditPurchase?> FindCreditPurchaseAsync(string provider, string paymentId, CancellationToken cancellationToken)

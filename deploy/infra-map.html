@@ -612,7 +612,7 @@ const PORTS = [
  ['VM sshd','22','Internet (cloud firewall)','SSH for you and CI'],
 ];
 const INTERNAL = [
- ['management','http://auth:8080','AUTH_INTERNAL_API_KEY on /api/internal','Workspace data, deleted-workspace sweep'],
+ ['management','http://auth:8080','AUTH_INTERNAL_API_KEY on /api/internal','Workspace data, deleted-workspace sweep, workspace account sync, hourly credit grant reconcile'],
  ['management','http://auth:8080/.well-known/jwks.json','none (public keys)','Validate user tokens'],
  ['gateway-ws, gateway-mqtt','http://management:8080/.well-known/jwks.json','none (public keys)','Validate client tokens'],
  ['management','http://traefik:8081','ENGINE_INBOUND_API_KEY','Runs, signals, integration sealing'],
@@ -626,6 +626,7 @@ const ALERTS = [
  ['WorkflowWakeBacklog','Workflows','Timers or timeouts over a minute past due and unclaimed'],
  ['WorkflowDispatchBacklog','Workflows','Over 500 branches queued in the engine for 10 minutes'],
  ['BillingWebhooksSetAside','Billing','A payment webhook was set aside (no tenant, product or subscription) in the last hour'],
+ ['CreditGrantsRepaired','Billing','The hourly reconcile wrote a credit grant change an event lost'],
  ['BillingWebhooksFailing','Billing','More than 5 payment webhooks failed in the last hour'],
  ['WorkspaceRunCeilingReached','Workflows','A workspace is refusing triggers at its active-run ceiling (5 min)'],
  ['EngineNotReporting','Workflows','No engine has reported metrics for 5 minutes'],
