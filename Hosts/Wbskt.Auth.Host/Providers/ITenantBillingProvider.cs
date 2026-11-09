@@ -1,4 +1,5 @@
 using Wbskt.Auth.Host.Models;
+using Wbskt.Auth.Host.Services.Email;
 using Wbskt.Auth.Models;
 using Wbskt.Infrastructure.Events.Outbox;
 
@@ -66,8 +67,20 @@ internal interface ITenantBillingProvider
     /// <summary>The tenant's customer id with <paramref name="provider"/>, for its portal; null when it never paid.</summary>
     Task<string?> FindCustomerIdAsync(int tenantId, string provider, CancellationToken cancellationToken);
 
-    /// <summary>Claims the notice <paramref name="kind"/> for <paramref name="periodKey"/>: true the first time only.</summary>
-    Task<bool> ClaimBillingNoticeAsync(int tenantId, BillingNoticeKind kind, string periodKey, CancellationToken cancellationToken);
+    /// <summary>
+    /// Claims the notice <paramref name="kind"/> for <paramref name="periodKey"/> and queues <paramref name="mails"/>
+    /// with it, in one transaction: true the first time only, and nothing is queued after.
+    /// </summary>
+    Task<bool> RecordBillingNoticeAsync(int tenantId, BillingNoticeKind kind, string periodKey, IReadOnlyCollection<OutboundMail> mails, CancellationToken cancellationToken);
+
+    /// <summary>Leases up to <paramref name="take"/> due billing emails until <paramref name="leaseUntil"/>, counting the attempt.</summary>
+    Task<IReadOnlyCollection<BillingNoticeMail>> TakeBillingNoticeMailsAsync(DateTime now, DateTime leaseUntil, int take, CancellationToken cancellationToken);
+
+    /// <summary>Records a leased billing email as sent, to retry at <paramref name="retryAt"/>, or given up.</summary>
+    Task CompleteBillingNoticeMailAsync(long id, DateTime? sentAt, DateTime? retryAt, DateTime? gaveUpAt, string? error, CancellationToken cancellationToken);
+
+    /// <summary>Removes billing emails sent or given up before <paramref name="before"/>.</summary>
+    Task PurgeBillingNoticeMailsAsync(DateTime before, CancellationToken cancellationToken);
 
     /// <summary>The tenant's members who can be written to; which of them manage billing is the caller's to check.</summary>
     Task<IReadOnlyCollection<BillingContact>> GetBillingContactsAsync(int tenantId, CancellationToken cancellationToken);

@@ -82,6 +82,31 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
         int missing = await ClaimNoticeAsync(int.MaxValue, "Messages80", "2026-11");
 
         Assert.Equal((1, 0, 1, 1, 0), (first, again, nextMonth, otherKind, missing));
+        Assert.Equal(3, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.BillingNoticeMails WHERE TenantId = @p0", tenantId));
+    }
+
+    [SkippableFact]
+    public async Task A_queued_billing_email_is_leased_to_one_sender_and_taken_again_only_once_its_lease_or_retry_is_due()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int tenantId = await CreateTenantAsync();
+        await ClaimNoticeAsync(tenantId, "PaymentFailed", $"sub_{Guid.NewGuid():N}");
+        long id = await ScalarAsync<long>("SELECT Id FROM dbo.BillingNoticeMails WHERE TenantId = @p0", tenantId);
+        DateTime far = DateTime.UtcNow.AddYears(1);
+
+        var first = await TakeMailsAsync(far, far.AddMinutes(5));
+        var whileLeased = await TakeMailsAsync(far.AddMinutes(1), far.AddMinutes(6));
+        await ProcScalarAsync("dbo.BillingNoticeMail_Complete", ("@Id", id), ("@RetryAt", far.AddMinutes(30)), ("@Error", "IOException: closed"));
+        var beforeRetry = await TakeMailsAsync(far.AddMinutes(10), far.AddMinutes(15));
+        var retried = await TakeMailsAsync(far.AddMinutes(30), far.AddMinutes(35));
+        await ProcScalarAsync("dbo.BillingNoticeMail_Complete", ("@Id", id), ("@SentAt", far.AddMinutes(31)));
+        var afterSent = await TakeMailsAsync(far.AddDays(1), far.AddDays(1).AddMinutes(5));
+
+        Assert.Equal(1, first.Single(m => m.Id == id).Attempts);
+        Assert.DoesNotContain(whileLeased, m => m.Id == id);
+        Assert.DoesNotContain(beforeRetry, m => m.Id == id);
+        Assert.Equal(2, retried.Single(m => m.Id == id).Attempts);
+        Assert.DoesNotContain(afterSent, m => m.Id == id);
     }
 
     [SkippableFact]
@@ -580,7 +605,25 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
     }
 
     private Task<int> ClaimNoticeAsync(int tenantId, string kind, string periodKey) =>
-        ProcScalarAsync("dbo.BillingNotice_Claim", ("@TenantId", tenantId), ("@Kind", kind), ("@PeriodKey", periodKey));
+        ProcScalarAsync("dbo.BillingNotice_Record", ("@TenantId", tenantId), ("@Kind", kind), ("@PeriodKey", periodKey),
+            ("@Mails", $$"""[{"to":"a@example.test","subject":"{{kind}} {{periodKey}}","htmlBody":"<p>x</p>"}]"""));
+
+    private async Task<List<(long Id, int Attempts)>> TakeMailsAsync(DateTime now, DateTime leaseUntil)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = Procedure(conn, "dbo.BillingNoticeMails_Take");
+        cmd.Parameters.AddWithValue("@Now", now);
+        cmd.Parameters.AddWithValue("@LeaseUntil", leaseUntil);
+        cmd.Parameters.AddWithValue("@Take", 1000);
+        var taken = new List<(long, int)>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            taken.Add((reader.GetInt64(reader.GetOrdinal("Id")), reader.GetInt32(reader.GetOrdinal("Attempts"))));
+        }
+
+        return taken;
+    }
 
     private async Task<List<string>> ListAsync(string procedure, DateTime from, DateTime to, string column)
     {

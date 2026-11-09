@@ -13,6 +13,7 @@ using Wbskt.Auth.Models;
 using Wbskt.Events.Auth;
 using Wbskt.Events.Billing;
 using Wbskt.Infrastructure.Billing;
+using Wbskt.Infrastructure.Email;
 using Wbskt.Models.Billing;
 using Wbskt.Primitives.Constants;
 
@@ -31,19 +32,25 @@ public sealed class BillingNoticeTests
     private readonly Mock<IAccessControlProvider> _access = new();
     private readonly Mock<ITenantPlanProvider> _plans = new();
     private readonly Mock<IWorkspaceProvider> _workspaces = new();
-    private readonly Mock<IAuthMailer> _mailer = new();
+    private readonly Mock<IEmailSender> _mailer = new();
     private readonly HashSet<(int, BillingNoticeKind, string)> _claimed = [];
-    private readonly List<(string To, BillingNotice Notice, string Url)> _sent = [];
+    private readonly List<(string To, BillingNoticeKind Kind, string Period, OutboundMail Mail)> _sent = [];
     private readonly BillingOptions _options = new() { ReturnUrl = "https://console.example/billing" };
 
     public BillingNoticeTests()
     {
         _mailer.SetupGet(m => m.IsConfigured).Returns(true);
-        _mailer.Setup(m => m.QueueBillingNoticeAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<BillingNotice>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Callback((string to, string _, BillingNotice notice, string url, CancellationToken _) => _sent.Add((to, notice, url)))
-            .Returns(ValueTask.CompletedTask);
-        _billing.Setup(b => b.ClaimBillingNoticeAsync(It.IsAny<int>(), It.IsAny<BillingNoticeKind>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((int tenantId, BillingNoticeKind kind, string period, CancellationToken _) => _claimed.Add((tenantId, kind, period)));
+        _billing.Setup(b => b.RecordBillingNoticeAsync(It.IsAny<int>(), It.IsAny<BillingNoticeKind>(), It.IsAny<string>(), It.IsAny<IReadOnlyCollection<OutboundMail>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((int tenantId, BillingNoticeKind kind, string period, IReadOnlyCollection<OutboundMail> mails, CancellationToken _) =>
+            {
+                if (!_claimed.Add((tenantId, kind, period)))
+                {
+                    return false;
+                }
+
+                _sent.AddRange(mails.Select(m => (m.To, kind, period, m)));
+                return true;
+            });
         _billing.Setup(b => b.GetBillingContactsAsync(TenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new BillingContact(1, "owner", "owner@example.com"), new BillingContact(2, "dev", "dev@example.com")]);
         _access.Setup(a => a.VerifyPermissionAsync(1, TenantId, null, PermissionNames.BillingManage, It.IsAny<CancellationToken>())).ReturnsAsync(true);
@@ -82,9 +89,9 @@ public sealed class BillingNoticeTests
             await Worker().TickAsync(CancellationToken.None);
         }
 
-        Assert.Equal(Enum.GetValues<BillingNoticeKind>().Order(), _sent.Select(s => s.Notice.Kind).Order());
+        Assert.Equal(Enum.GetValues<BillingNoticeKind>().Order(), _sent.Select(s => s.Kind).Order());
         Assert.All(_sent, s => Assert.Equal("owner@example.com", s.To));
-        Assert.All(_sent, s => Assert.Equal("https://console.example/billing", s.Url));
+        Assert.All(_sent, s => Assert.Contains("href=\"https://console.example/billing\"", s.Mail.HtmlBody));
 
         // A new month is a new period for the month's warnings.
         await consumer.Consume(Context(new TenantCreditAllowanceReachedEvent(31, TenantId, 80, 2000m, 1600m) { CreatedAtUtc = nextMonth }));
@@ -100,8 +107,8 @@ public sealed class BillingNoticeTests
         await consumer.Consume(Context(new WorkspaceCreditCapReachedEvent(31, 100, 500m, 500m) { CreatedAtUtc = Now }));
         await consumer.Consume(Context(new WorkspaceCreditCapReachedEvent(32, 100, 500m, 500m) { CreatedAtUtc = Now }));
 
-        Assert.Equal(["2026-11:31", "2026-11:32"], _sent.Select(s => s.Notice.PeriodKey).Order());
-        Assert.Contains("<Greenhouse>", _sent[0].Notice.Subject);
+        Assert.Equal(["2026-11:31", "2026-11:32"], _sent.Select(s => s.Period).Order());
+        Assert.Contains("<Greenhouse>", _sent[0].Mail.Subject);
     }
 
     [Fact]
@@ -160,8 +167,41 @@ public sealed class BillingNoticeTests
 
         _billing.Verify(b => b.GetPastDueBetweenAsync(Now.AddDays(-7), Now.AddDays(-5), It.IsAny<CancellationToken>()));
         _billing.Verify(b => b.GetCreditPurchasesExpiringAsync(Now, Now.AddDays(30), It.IsAny<CancellationToken>()));
-        Assert.Contains(_sent, s => s.Notice is { Kind: BillingNoticeKind.GraceEnding, Subject: "Your account moves to Free on 10 November 2026" });
-        Assert.Contains(_sent, s => s.Notice is { Kind: BillingNoticeKind.PackExpiring, PeriodKey: "pay_1" });
+        Assert.Contains(_sent, s => s.Kind == BillingNoticeKind.GraceEnding && s.Mail.Subject == "Your account moves to Free on 10 November 2026");
+        Assert.Contains(_sent, s => s.Kind == BillingNoticeKind.PackExpiring && s.Period == "pay_1");
+    }
+
+    [Fact]
+    public async Task A_refused_email_is_tried_again_later_and_given_up_after_the_last_attempt_while_a_sent_one_is_marked_sent()
+    {
+        var taken = new BillingNoticeMail[]
+        {
+            new(1, TenantId, BillingNoticeKind.PaymentFailed, "ok@example.com", "s", "<p>b</p>", 1),
+            new(2, TenantId, BillingNoticeKind.PaymentFailed, "down@example.com", "s", "<p>b</p>", 2),
+            new(3, TenantId, BillingNoticeKind.PaymentFailed, "down@example.com", "s", "<p>b</p>", BillingNoticeMailSender.MaxAttempts),
+            new(4, TenantId, BillingNoticeKind.PaymentFailed, "not an address", "s", "<p>b</p>", 1)
+        };
+        _billing.Setup(b => b.TakeBillingNoticeMailsAsync(Now, Now + BillingNoticeMailSender.Lease, BillingNoticeMailSender.BatchSize, It.IsAny<CancellationToken>())).ReturnsAsync(taken);
+        _mailer.Setup(m => m.SendAsync("down@example.com", It.IsAny<string>(), It.IsAny<string>(), EmailBodyFormat.Html, It.IsAny<CancellationToken>())).ThrowsAsync(new IOException("relay closed"));
+        _mailer.Setup(m => m.SendAsync("not an address", It.IsAny<string>(), It.IsAny<string>(), EmailBodyFormat.Html, It.IsAny<CancellationToken>())).ThrowsAsync(new FormatException("bad"));
+
+        await MailSender().TickAsync(CancellationToken.None);
+
+        _billing.Verify(b => b.CompleteBillingNoticeMailAsync(1, Now, null, null, null, It.IsAny<CancellationToken>()));
+        _billing.Verify(b => b.CompleteBillingNoticeMailAsync(2, null, Now.AddMinutes(5), null, It.Is<string>(e => e.Contains("relay closed")), It.IsAny<CancellationToken>()));
+        _billing.Verify(b => b.CompleteBillingNoticeMailAsync(3, null, null, Now, It.IsAny<string>(), It.IsAny<CancellationToken>()));
+        _billing.Verify(b => b.CompleteBillingNoticeMailAsync(4, null, null, Now, It.IsAny<string>(), It.IsAny<CancellationToken>()));
+        _billing.Verify(b => b.PurgeBillingNoticeMailsAsync(Now - BillingNoticeMailSender.KeepFor, It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task Without_a_relay_nothing_is_taken_so_nothing_uses_up_its_attempts()
+    {
+        _mailer.SetupGet(m => m.IsConfigured).Returns(false);
+
+        await MailSender().TickAsync(CancellationToken.None);
+
+        _billing.Verify(b => b.TakeBillingNoticeMailsAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -196,6 +236,15 @@ public sealed class BillingNoticeTests
             .AddSingleton<IConfiguration>(new ConfigurationBuilder().Build())
             .BuildServiceProvider();
         return new BillingNoticeWorker(services.GetRequiredService<IServiceScopeFactory>(), new FixedClock(), NullLogger<BillingNoticeWorker>.Instance);
+    }
+
+    private BillingNoticeMailSender MailSender()
+    {
+        var services = new ServiceCollection()
+            .AddSingleton(_billing.Object)
+            .AddSingleton(_mailer.Object)
+            .BuildServiceProvider();
+        return new BillingNoticeMailSender(services.GetRequiredService<IServiceScopeFactory>(), new FixedClock(), NullLogger<BillingNoticeMailSender>.Instance);
     }
 
     private static ConsumeContext<T> Context<T>(T message) where T : class
