@@ -17,4 +17,12 @@ public sealed class BillingOptions
     /// about this far past its allowance before its clients are slowed.
     /// </summary>
     public TimeSpan MessageAllowanceInterval { get; set; } = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// How many times its monthly message allowance a Maker or Pro account may carry before its clients
+    /// are held to Free's one message a minute until the 1st. Paid plans are never charged for overage, so
+    /// this only stops one account from loading the hosts without end. Free is throttled at 1x; Business
+    /// never is.
+    /// </summary>
+    public decimal PaidMessageThrottleMultiple { get; set; } = Wbskt.Infrastructure.Billing.MessageAllowance.DefaultPaidThrottleMultiple;
 }

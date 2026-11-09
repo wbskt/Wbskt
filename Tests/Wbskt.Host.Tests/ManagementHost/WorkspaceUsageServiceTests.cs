@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using Moq;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Billing;
@@ -21,7 +22,7 @@ public sealed class WorkspaceUsageServiceTests
             .ReturnsAsync(new WorkspaceUsageSummary(1500m, 400m, 900_000, 250_000, 60, 12, 5, 1, 1000m, 500m));
         _usage.Setup(x => x.GetDailyCreditsAsync(7, new DateOnly(2026, 10, 9), new DateOnly(2026, 11, 9), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new DailyCreditUsage(new DateOnly(2026, 11, 2), 400m)]);
-        var service = new WorkspaceUsageService(_usage.Object, new FixedWorkspacePlans(PlanCode.Maker, tenantId: 3), new FixedClock());
+        var service = new WorkspaceUsageService(_usage.Object, new FixedWorkspacePlans(PlanCode.Maker, tenantId: 3), new FixedClock(), Options.Create(new BillingOptions()));
 
         Result<WorkspaceUsageResponse> result = await service.GetAsync(7, null, null, CancellationToken.None);
 
@@ -43,7 +44,7 @@ public sealed class WorkspaceUsageServiceTests
         _usage.Setup(x => x.GetSummaryAsync(7, null, It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new WorkspaceUsageSummary(0, 0, 0, 0, 0, 0, 0, 0, null, 0));
         _usage.Setup(x => x.GetDailyCreditsAsync(7, new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 3), It.IsAny<CancellationToken>())).ReturnsAsync([]);
-        var service = new WorkspaceUsageService(_usage.Object, new FixedWorkspacePlans(), new FixedClock());
+        var service = new WorkspaceUsageService(_usage.Object, new FixedWorkspacePlans(), new FixedClock(), Options.Create(new BillingOptions()));
 
         Result<WorkspaceUsageResponse> result = await service.GetAsync(7, new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 11, 4, 0, 0, 0, TimeSpan.Zero), CancellationToken.None);
 
@@ -54,13 +55,15 @@ public sealed class WorkspaceUsageServiceTests
     [Theory]
     [InlineData(PlanCode.Free, 1_500_000, true)]
     [InlineData(PlanCode.Free, 1_499_999, false)]
-    [InlineData(PlanCode.Maker, 20_000_000, false)]
-    public async Task Only_a_free_account_that_used_its_messages_is_throttled(PlanCode plan, long used, bool throttled)
+    [InlineData(PlanCode.Maker, 19_999_999, false)]
+    [InlineData(PlanCode.Maker, 20_000_000, true)]
+    [InlineData(PlanCode.Business, 1_000_000_000, false)]
+    public async Task Free_is_throttled_at_its_messages_a_paid_plan_at_twice_them_and_business_never(PlanCode plan, long used, bool throttled)
     {
         _usage.Setup(x => x.GetSummaryAsync(7, null, It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new WorkspaceUsageSummary(0, 0, used, used, 0, 0, 0, 0, null, 0));
         _usage.Setup(x => x.GetDailyCreditsAsync(7, It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
-        var service = new WorkspaceUsageService(_usage.Object, new FixedWorkspacePlans(plan), new FixedClock());
+        var service = new WorkspaceUsageService(_usage.Object, new FixedWorkspacePlans(plan), new FixedClock(), Options.Create(new BillingOptions()));
 
         Result<WorkspaceUsageResponse> result = await service.GetAsync(7, null, null, CancellationToken.None);
 
@@ -70,7 +73,7 @@ public sealed class WorkspaceUsageServiceTests
     [Fact]
     public async Task A_range_longer_than_a_year_is_refused()
     {
-        var service = new WorkspaceUsageService(_usage.Object, new FixedWorkspacePlans(), new FixedClock());
+        var service = new WorkspaceUsageService(_usage.Object, new FixedWorkspacePlans(), new FixedClock(), Options.Create(new BillingOptions()));
 
         Result<WorkspaceUsageResponse> result = await service.GetAsync(7, Now.AddDays(-400), Now, CancellationToken.None);
 

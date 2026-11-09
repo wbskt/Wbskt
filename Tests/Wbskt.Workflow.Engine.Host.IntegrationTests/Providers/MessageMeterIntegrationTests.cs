@@ -72,8 +72,9 @@ public sealed class MessageMeterIntegrationTests(SqlEdgeFixture fixture)
         Assert.Equal(new WorkspaceMessageAccount(busy, PlanCode.Maker, null, 2), accounts.Single(a => a.WorkspaceId == busy));
         Assert.Equal(new WorkspaceMessageAccount(quiet, PlanCode.Maker, new PlanLimitOverrides { MessagesPerMonth = 5 }, 2), accounts.Single(a => a.WorkspaceId == quiet));
         Assert.Equal(new WorkspaceMessageAccount(alone, PlanCode.Free, null, 1), accounts.Single(a => a.WorkspaceId == alone));
-        Assert.Equal([busy, quiet], (await provider.RecordLimitReachedAsync([busy, quiet], monthStart, CancellationToken.None)).Order().Reverse());
-        Assert.Equal([alone], await provider.RecordLimitReachedAsync([busy, alone], monthStart, CancellationToken.None));
+        Assert.Equal([busy, quiet], (await provider.RecordNoticeAsync([busy, quiet], monthStart, 100, CancellationToken.None)).Order().Reverse());
+        Assert.Equal([alone], await provider.RecordNoticeAsync([busy, alone], monthStart, 100, CancellationToken.None));
+        Assert.Equal([busy], await provider.RecordNoticeAsync([busy], monthStart, 80, CancellationToken.None));
     }
 
     private async Task TrafficAsync(params EventLogEntry[] entries)
