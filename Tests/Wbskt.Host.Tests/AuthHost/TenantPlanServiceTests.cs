@@ -62,6 +62,27 @@ public sealed class TenantPlanServiceTests
     }
 
     [Fact]
+    public async Task An_operator_business_plan_carries_its_source_end_and_overrides_into_the_audited_event()
+    {
+        Current(PlanCode.Free, revision: 0);
+        var endsAt = new DateTimeOffset(2027, 6, 30, 0, 0, 0, TimeSpan.Zero);
+        var overrides = new PlanLimitOverrides { Clients = 4_000 };
+        OutboxMessage? queued = null;
+        _plans.Setup(p => p.SetAsync(9, PlanCode.Business, overrides, 0, PlanSource.Operator, endsAt.UtcDateTime, It.IsAny<OutboxMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<int, PlanCode, PlanLimitOverrides?, int, PlanSource, DateTime?, OutboxMessage, CancellationToken>((_, _, _, _, _, _, message, _) => queued = message)
+            .ReturnsAsync(new TenantPlan(9, TenantRef, PlanCode.Business, overrides, 1, DateTime.UtcNow));
+
+        var result = await Service().SetAsync(TenantRef, new SetTenantPlanRequest(PlanCode.Business, overrides, EndsAt: endsAt), PlanSource.Operator, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(queued);
+        using JsonDocument payload = JsonDocument.Parse(queued.Payload);
+        Assert.Equal("Operator", payload.RootElement.GetProperty("source").GetString());
+        Assert.Equal(endsAt, payload.RootElement.GetProperty("endsAt").GetDateTimeOffset());
+        Assert.Equal(4_000, payload.RootElement.GetProperty("limitOverrides").GetProperty("clients").GetInt32());
+    }
+
+    [Fact]
     public async Task Asking_for_the_plan_already_held_changes_nothing()
     {
         Current(PlanCode.Business, revision: 2, overrides: new PlanLimitOverrides { Clients = 4_000 });

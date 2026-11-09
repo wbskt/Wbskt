@@ -340,7 +340,9 @@ never from a file in the repository.
 An operator sets a plan through `PUT /api/internal/tenants/{tenantRef}/plan`, optionally with `endsAt`.
 It is recorded as an `Operator` plan and outranks any subscription until `endsAt` passes (never, without
 one); `SubscriptionReviewWorker` then puts the tenant back on what its subscription pays for, clearing the
-operator's limit overrides.
+operator's limit overrides. This is how a Business plan is sold: the operator sets the plan, its
+negotiated overrides and the contract's end date in one call. Each change is in every workspace's audit
+log as `TenantPlanChangedEvent`, with the plan's source, end date and overrides.
 
 **Deleting an account** (`POST /api/auth/account/delete`) cancels, with the provider, every subscription
 still billing of the tenants the account is the only member of, before anything is deleted, since those
