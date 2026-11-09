@@ -130,7 +130,7 @@ internal sealed class AccountDeletionService : IAccountDeletionService
                 await _gateway.CancelSubscriptionAsync(subscription.SubscriptionId, cancellationToken);
                 _logger.LogInformation("Cancelled subscription {SubscriptionId} of tenant {TenantId} before deleting account {UserId}.", subscription.SubscriptionId, subscription.TenantId, userId);
             }
-            catch (HttpRequestException ex)
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
             {
                 _logger.LogWarning(ex, "Account deletion refused: could not cancel subscription {SubscriptionId} of tenant {TenantId} for user {UserId}.", subscription.SubscriptionId, subscription.TenantId, userId);
                 return Result.Failure(SubscriptionNotCancelled);

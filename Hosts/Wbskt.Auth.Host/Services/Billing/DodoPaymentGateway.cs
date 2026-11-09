@@ -116,6 +116,18 @@ public sealed class DodoPaymentGateway(HttpClient http, IOptions<DodoOptions> op
             Content = JsonContent.Create(new DodoSubscriptionUpdate("cancelled"), options: Json)
         };
         using HttpResponseMessage response = await http.SendAsync(request, ct);
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        // A stored copy can still say billing after an earlier cancel went through: one already ended (or
+        // unknown to Dodo) is what was asked for, so a refusal of it is not a failure.
+        if (await FindSubscriptionAsync(subscriptionId, ct) is not { } current || !SubscriptionPlan.IsLive(current.Status))
+        {
+            return;
+        }
+
         EnsureSucceeded(response, "cancel a subscription");
     }
 
