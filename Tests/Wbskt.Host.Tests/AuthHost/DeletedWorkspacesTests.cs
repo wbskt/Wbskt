@@ -10,7 +10,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using Wbskt.Auth.Host.Authorization;
 using Wbskt.Auth.Host.Controllers;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services;
@@ -19,6 +18,7 @@ using Wbskt.Auth.Models;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Host.Tests.Infrastructure;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Authorization;
 
 namespace Wbskt.Host.Tests.AuthHost;
 
