@@ -320,7 +320,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
  "asks": [
   {
    "title": "An API key for the NuGet account that owns Wbskt.Client",
-   "body": "With it, the SDKs go to NuGet, PyPI and the Arduino Library Manager (#528). Start the Arduino registry first: its review takes a few days.",
+   "body": "With it, the .NET SDK goes to NuGet (#528). Python is already on PyPI; the Arduino Library Manager is next, and its review takes a few days.",
    "issue": 528
   },
   {
@@ -355,7 +355,8 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   },
   "528": {
    "state": "you",
-   "why": "Betas, CI lint and the release runbook are merged. Before PyPI, the Python SDK moves to wbskt/Wbskt.Python (#683). Publishing to the three registries is what remains."
+   "why": "Python is out: wbskt 0.9.0b1 is on PyPI (9 Nov), published from its own repository, wbskt/Wbskt.Python (#683, PR #684). Left: NuGet (needs the API key) and the Arduino Library Manager.",
+   "prs": [684]
   },
   "547": {
    "state": "decide",
@@ -556,7 +557,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   }
  ],
  "issues": [
-  {"n":683,"t":"Move the Python SDK into its own repository, wbskt/Wbskt.Python","s":"o","m":"M2","p":528,"a":["sdk"],"pr":"P1","sz":"S"},
+  {"n":683,"t":"Move the Python SDK into its own repository, wbskt/Wbskt.Python","s":"c","m":"M2","p":528,"a":["sdk"],"pr":"P1","sz":"S","x":"2026-11-09"},
   {"n":661,"t":"Change a subscribed tenant's plan in place instead of through the portal","s":"o","m":"M3","p":167,"a":["auth"]},
   {"n":660,"t":"Prune processed billing webhooks from the auth database","s":"o","m":"M3","p":167,"a":["auth","db"]},
   {"n":655,"t":"MQTT gateway: finish #519's test scope and keep client IPs through Traefik","s":"o","m":"M2","p":519,"a":["socket","ops"]},
