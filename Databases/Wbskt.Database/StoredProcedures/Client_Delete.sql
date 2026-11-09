@@ -1,4 +1,5 @@
--- Removes a client, its tags, its waiting commands and what it reported about itself. Its event-log rows stay: they keep the
+-- Removes a client, its tags, its waiting commands and what it reported about itself, and queues its
+-- readings to be cleared. Its event-log rows stay: they keep the
 -- client's RefId, and FK_EventLogs_Client was dropped so history does not pin the row (and so a
 -- message logged after the delete cannot fail the whole buffered insert batch).
 --
@@ -27,6 +28,11 @@ BEGIN
     DELETE FROM dbo.ClientTags WHERE ClientId = @Id;
     DELETE FROM dbo.QueuedCommands WHERE ClientId = @Id;
     DELETE FROM dbo.Clients WHERE Id = @Id AND WorkspaceId = @WorkspaceId;
+
+    -- Its readings are cleared later, in batches (dbo.ClientReadings_Compact).
+    INSERT INTO dbo.DeletedClientReadings (ClientId)
+    SELECT @Id
+    WHERE NOT EXISTS (SELECT 1 FROM dbo.DeletedClientReadings WHERE ClientId = @Id);
 
     COMMIT TRANSACTION;
     SELECT 1 AS DeletedCount;

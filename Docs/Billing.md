@@ -161,6 +161,28 @@ The throttle can trail the crossing by up to a minute plus the event logger's ba
 can carry a little past its allowance. Commands sent from the console or the API are not refused: they
 are counted when delivered.
 
+## Readings
+
+Every number a client reports in a `state.report` is a reading (`dbo.ClientReadings`), kept as sent for
+the plan's `RawReadingsDays` and then as an hourly roll-up (`dbo.ClientReadingsHourly`: count, min, max
+and sum per client, variable and hour of the client's time) for its `HourlyReadingsDays`. A tenant's
+overrides of either apply. The management host's `ClientReadingRetentionService` (every
+`Readings:RetentionInterval`, 1 hour) runs `dbo.ClientReadings_Compact` in batches:
+
+- raw readings received before the plan's raw cutoff are deleted and added to their hour in the same
+  transaction, so each reading is counted in exactly one table, and a reading arriving late for an hour
+  already rolled up adds to it;
+- hourly rows older than the plan's hourly cutoff are deleted;
+- a deleted client's raw and hourly readings are cleared. `dbo.Client_Delete` queues the client
+  (`dbo.DeletedClientReadings`) rather than deleting its history in its own transaction, and a report
+  from a client deleted meanwhile is dropped.
+
+Charts (`GET …/clients/{clientRef}/readings`) read both tables together, so a bucket's count, min, max and
+average are exact across the boundary; a rolled-up hour lands whole in the bucket its start falls in.
+CSV export reads raw readings only. Both tables and their indexes are page compressed. A workspace with
+no account copy keeps readings as Free does. Moving to a longer plan keeps what is still there; nothing
+already rolled up comes back.
+
 ## Usage
 
 Two reads show a plan against what has been used, both behind `billing.read` (every member's default):

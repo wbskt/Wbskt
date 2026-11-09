@@ -23,7 +23,8 @@ public interface IClientReadingService
 public sealed class ClientReadingService : IClientReadingService
 {
     internal static readonly TimeSpan DefaultRange = TimeSpan.FromDays(1);
-    internal static readonly TimeSpan MaxRange = TimeSpan.FromDays(400);
+    // Two years and a little: the longest a plan keeps the hourly roll-up (Pro's HourlyReadingsDays).
+    internal static readonly TimeSpan MaxRange = TimeSpan.FromDays(740);
     internal const int TargetBuckets = 500;
     internal const int MaxBuckets = 2000;
     internal const int MaxExportRows = 100_000;
