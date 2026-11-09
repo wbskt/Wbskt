@@ -134,7 +134,7 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
     }
 
     [SkippableFact]
-    public async Task The_notice_worker_lists_past_due_subscriptions_and_live_packs_inside_their_windows_only()
+    public async Task The_notice_worker_lists_past_due_subscriptions_inside_its_window_only()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
         int tenantId = await CreateTenantAsync();
@@ -143,22 +143,11 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
         await UpsertAsync(tenantId, inside, "past_due", Now.AddDays(-6));
         await UpsertAsync(tenantId, paid, "past_due", Now.AddDays(-6));
         await UpsertAsync(tenantId, paid, "active", Now);
-        string soon = $"pay_{Guid.NewGuid():N}";
-        string refunded = $"pay_{Guid.NewGuid():N}";
-        await RecordPurchaseAsync(tenantId, soon, "{}");
-        await RecordPurchaseAsync(tenantId, refunded, "{}");
-        await RefundPurchaseAsync(refunded, "{}");
-        DateTime expiresAt = await ScalarAsync<DateTime>("SELECT ExpiresAt FROM dbo.TenantCreditPurchases WHERE PaymentId = @p0", soon);
 
         var pastDue = await ListAsync("dbo.TenantSubscriptions_GetPastDueBetween", Now.AddDays(-7), Now.AddDays(-5), "SubscriptionId");
-        var expiring = await ListAsync("dbo.TenantCreditPurchases_GetExpiring", expiresAt.AddDays(-30), expiresAt, "PaymentId");
-        var notYet = await ListAsync("dbo.TenantCreditPurchases_GetExpiring", expiresAt.AddDays(-60), expiresAt.AddDays(-30), "PaymentId");
 
         Assert.Contains(inside, pastDue);
         Assert.DoesNotContain(paid, pastDue);
-        Assert.Contains(soon, expiring);
-        Assert.DoesNotContain(refunded, expiring);
-        Assert.DoesNotContain(soon, notYet);
     }
 
     [SkippableFact]

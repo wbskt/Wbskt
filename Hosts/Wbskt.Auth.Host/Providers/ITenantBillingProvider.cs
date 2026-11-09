@@ -87,7 +87,4 @@ internal interface ITenantBillingProvider
 
     /// <summary>Subscriptions still behind on payment that fell behind after <paramref name="from"/> and by <paramref name="to"/>.</summary>
     Task<IReadOnlyCollection<PastDueSubscription>> GetPastDueBetweenAsync(DateTime from, DateTime to, CancellationToken cancellationToken);
-
-    /// <summary>Credit packs that still count and expire after <paramref name="from"/> and by <paramref name="to"/>.</summary>
-    Task<IReadOnlyCollection<ExpiringCreditPurchase>> GetCreditPurchasesExpiringAsync(DateTime from, DateTime to, CancellationToken cancellationToken);
 }

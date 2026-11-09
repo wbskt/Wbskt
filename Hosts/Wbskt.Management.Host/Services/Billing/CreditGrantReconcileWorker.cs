@@ -6,8 +6,9 @@ namespace Wbskt.Management.Host.Services.Billing;
 
 /// <summary>
 /// Runs <see cref="CreditGrantReconcile"/> every <see cref="BillingOptions.CreditGrantReconcileInterval"/>,
-/// so a credit grant whose event was lost is right within the hour. Each management replica runs it; the
-/// writes are idempotent, so two at once only repeat work.
+/// so a credit grant whose event was lost is right within the hour, then announces the grants that run out
+/// soon (<see cref="CreditGrantExpiryWarning"/>). Each management replica runs it; the writes are
+/// idempotent and each warning is claimed once, so two at once only repeat work.
 /// </summary>
 public sealed class CreditGrantReconcileWorker(IServiceScopeFactory scopeFactory, IOptions<BillingOptions> options, ILogger<CreditGrantReconcileWorker> logger)
     : PeriodicWorker(AlwaysOpenWorkGate.Instance, scopeFactory, logger)
@@ -19,5 +20,6 @@ public sealed class CreditGrantReconcileWorker(IServiceScopeFactory scopeFactory
     protected override async Task RunOnceAsync(IServiceProvider services, CancellationToken ct)
     {
         await services.GetRequiredService<CreditGrantReconcile>().ReconcileAsync(ct);
+        await services.GetRequiredService<CreditGrantExpiryWarning>().WarnAsync(ct);
     }
 }

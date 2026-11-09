@@ -26,8 +26,15 @@ internal sealed class BillingNoticeConsumer(
         IConsumer<WorkspaceMessageLimitApproachingEvent>,
         IConsumer<WorkspaceMessageLimitReachedEvent>,
         IConsumer<WorkspaceMessagesThrottledEvent>,
-        IConsumer<TenantPlanChangedEvent>
+        IConsumer<TenantPlanChangedEvent>,
+        IConsumer<TenantCreditGrantExpiringEvent>
 {
+    public Task Consume(ConsumeContext<TenantCreditGrantExpiringEvent> context)
+    {
+        TenantCreditGrantExpiringEvent e = context.Message;
+        return notifier.NotifyAsync(e.TenantId, BillingNotices.PackExpiring(e.Source, e.SourceRef, e.Remaining, e.ExpiresAt.UtcDateTime), context.CancellationToken);
+    }
+
     public Task Consume(ConsumeContext<TenantCreditAllowanceReachedEvent> context)
     {
         TenantCreditAllowanceReachedEvent e = context.Message;

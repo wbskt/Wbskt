@@ -118,6 +118,7 @@ public static class Program
         builder.Services.AddScoped<MessageAllowanceMonitor>();
         builder.Services.AddScoped<ICreditGrantProvider, CreditGrantProvider>();
         builder.Services.AddScoped<CreditGrantReconcile>();
+        builder.Services.AddScoped<CreditGrantExpiryWarning>();
         if (role == HostRole.All)
         {
             builder.Services.AddHostedService<WorkspaceAccountSyncWorker>();
