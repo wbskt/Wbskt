@@ -149,6 +149,34 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
+    public async Task An_upgrade_lets_the_plan_cover_what_it_now_allows_before_a_grant_is_drawn_again()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int tenantId = NewId();
+        int workspaceId = NewId();
+        await AddAccountAsync(workspaceId, tenantId, creditsPerMonth: 10m);
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        string pack = $"pack_{Guid.NewGuid():N}";
+        await Grants().InsertAsync(tenantId, 50m, DateTime.UtcNow.AddDays(-1), DateTime.UtcNow.AddMonths(6), "test", pack, CancellationToken.None);
+        long run = await StartAsync(wd, budget: 1000m);
+        await ChargeAsync(run, 15m);
+        await PostAsync();
+
+        (await DrawnAsync(pack)).Should().Be(5m, "15 posted against an allowance of 10");
+        await ExecAsync("UPDATE dbo.WorkspaceAccounts SET CreditsPerMonth = 100 WHERE WorkspaceId = @One", workspaceId, workspaceId);
+        await ChargeAsync(run, 85m);
+        await PostAsync();
+
+        (await DrawnAsync(pack)).Should().Be(5m, "the plan has covered 10 and now covers up to 100, so 85 more is its own");
+        await ChargeAsync(run, 10m);
+        await PostAsync();
+
+        (await DrawnAsync(pack)).Should().Be(10m, "the plan covers 5 of the 10 and the pack the other 5");
+        (await MonthAsync(tenantId)).Should().Be((110m, 10m));
+    }
+
+    [SkippableFact]
     public async Task A_sub_workflow_child_spends_from_its_parents_budget()
     {
         Skip.IfNot(fixture.IsAvailable, SkipReason);
