@@ -6,7 +6,10 @@
 -- Reads the runs still going and those that ended since @EndedSince, which catches a charge landing
 -- just after a run ended; Run_DeleteRetired posts anything left before a run is deleted. A run's
 -- PostedCredits moves in the same statement that reads its delta, so a retry never posts twice.
--- Lock order: the runs' counters, then the ledger rows (as in Run_DeleteRetired).
+-- What a tenant posts past its plan's allowance is drawn from its credit grants in the same transaction
+-- (dbo.TenantCreditGrants_Draw).
+-- Lock order: the runs' counters, then the ledger rows, then the tenants' month rows and grants (as in
+-- Run_DeleteRetired).
 CREATE PROCEDURE dbo.RunCredits_Post
     @Day        DATE,
     @EndedSince DATETIME2(3),
@@ -59,9 +62,24 @@ BEGIN
     WHEN NOT MATCHED THEN
         INSERT (WorkspaceId, Day, Credits) VALUES (s.WorkspaceId, @Day, s.Credits);
 
+    DECLARE @MonthStart DATE = DATEFROMPARTS(YEAR(@Day), MONTH(@Day), 1);
+
+    -- What each tenant posted past its plan's monthly allowance is drawn from its credit grants now,
+    -- under the allowance it has now. A workspace with no copy of its account has no tenant to draw for.
+    DECLARE @Posts dbo.TenantCreditPostTableType;
+    INSERT INTO @Posts (TenantId, Credits, Allowance)
+    SELECT a.TenantId, SUM(w.Credits), MAX(a.CreditsPerMonth)
+    FROM @ByWorkspace w
+    JOIN dbo.WorkspaceAccounts a ON a.WorkspaceId = w.WorkspaceId
+    WHERE a.CreditsPerMonth IS NOT NULL
+    GROUP BY a.TenantId;
+
+    DECLARE @Now DATETIME2(3) = SYSUTCDATETIME();
+    IF EXISTS (SELECT 1 FROM @Posts)
+        EXEC dbo.TenantCreditGrants_Draw @Posts = @Posts, @MonthStart = @MonthStart, @At = @Now;
+
     -- Read before the commit, while the ledger rows just written are still held, so two posts that
     -- meet on a workspace each see their own step across a cap.
-    DECLARE @MonthStart DATE = DATEFROMPARTS(YEAR(@Day), MONTH(@Day), 1);
 
     SELECT
         w.WorkspaceId,

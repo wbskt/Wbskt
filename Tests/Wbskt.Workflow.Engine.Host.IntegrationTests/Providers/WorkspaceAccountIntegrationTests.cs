@@ -29,6 +29,27 @@ public sealed class WorkspaceAccountIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
+    public async Task A_copy_carries_its_monthly_credits_and_a_catalogue_change_rewrites_it_at_the_same_revision()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var account = new WorkspaceAccount(NewWorkspaceId(), 41, Guid.NewGuid(), PlanCode.Business, new PlanLimitOverrides { CreditsPerMonth = 750_000.5m }, 3);
+        await Provider().UpsertAsync([account], CancellationToken.None);
+        decimal overridden = await CreditsPerMonthAsync(account.WorkspaceId);
+
+        var repriced = new PlanCatalog(Microsoft.Extensions.Options.Options.Create(new PlanCatalogOptions
+        {
+            Plans = new Dictionary<PlanCode, PlanLimitOverrides> { [PlanCode.Maker] = new() { CreditsPerMonth = 30_000m } }
+        }));
+        var maker = account with { WorkspaceId = NewWorkspaceId(), PlanCode = PlanCode.Maker, LimitOverrides = null };
+        await Provider().UpsertAsync([maker], CancellationToken.None);
+        int changed = await new WorkspaceAccountProvider(Configuration(), repriced).UpsertAsync([maker], CancellationToken.None);
+
+        Assert.Equal(750_000.5m, overridden);
+        Assert.Equal(1, changed);
+        Assert.Equal(30_000m, await CreditsPerMonthAsync(maker.WorkspaceId));
+    }
+
+    [SkippableFact]
     public async Task An_older_revision_never_replaces_a_newer_copy()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
@@ -103,10 +124,19 @@ public sealed class WorkspaceAccountIntegrationTests(SqlEdgeFixture fixture)
         Assert.Null(await Provider().FindAsync(workspaceId, CancellationToken.None));
     }
 
+    private async Task<decimal> CreditsPerMonthAsync(int workspaceId)
+    {
+        await using var connection = new SqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new SqlCommand("SELECT CreditsPerMonth FROM dbo.WorkspaceAccounts WHERE WorkspaceId = @WorkspaceId", connection);
+        command.Parameters.AddWithValue("@WorkspaceId", workspaceId);
+        return (decimal)(await command.ExecuteScalarAsync())!;
+    }
+
     // Workspaces live in the auth database, so any id will do here; a random high one keeps tests apart.
     private static int NewWorkspaceId() => Random.Shared.Next(1_000_000, int.MaxValue);
 
-    private WorkspaceAccountProvider Provider() => new(Configuration());
+    private WorkspaceAccountProvider Provider() => new(Configuration(), new PlanCatalog(Microsoft.Extensions.Options.Options.Create(new PlanCatalogOptions())));
 
     private IConfiguration Configuration() => new ConfigurationBuilder()
         .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:DefaultConnection"] = fixture.ConnectionString })

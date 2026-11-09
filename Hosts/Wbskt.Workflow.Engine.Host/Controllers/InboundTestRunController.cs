@@ -22,6 +22,7 @@ public sealed class InboundTestRunController(ITestRunStarter starter) : Controll
             TestRunStartOutcome.WorkspaceFull => EngineTestRunOutcome.WorkspaceFull,
             TestRunStartOutcome.CreditsSpent => EngineTestRunOutcome.CreditsSpent,
             TestRunStartOutcome.WorkspaceCreditCapReached => EngineTestRunOutcome.WorkspaceCreditCapReached,
+            TestRunStartOutcome.Busy => EngineTestRunOutcome.Busy,
             _ => throw new InvalidOperationException($"Unrecognised test run outcome '{started.Outcome}'.")
         };
         return new EngineTestRunResponse(outcome, started.RunRefId, started.ActiveRunRefId);

@@ -22,6 +22,11 @@ internal sealed class RunStarter : IRunStarter
     private const int TestRunActiveError = 50029; // THROW in dbo.Run_Start
     private const int PlanCreditLimitError = 50033; // THROW in dbo.Run_Start
     private const int WorkspaceCreditCapError = 50034; // THROW in dbo.Run_Start
+    private const int StartBusyError = 50035; // THROW in dbo.Run_Start
+
+    // Tries of a start that times out waiting for its tenant's or workspace's lock, and the pause after
+    // each but the last: contention clears in well under a second unless a burst keeps it held.
+    internal static readonly TimeSpan[] BusyBackoff = [TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(200)];
 
     private readonly IRunProvider _runProvider;
     private readonly IRunJournal _journal;
@@ -80,9 +85,13 @@ internal sealed class RunStarter : IRunStarter
             WorkflowDefinitionRow definition = await _workflowDefinitionProvider.GetByIdAsync(workflowDefinitionId, ct);
             decimal creditBudget = ResolveCreditBudget(await _workflowDefinitionCache.GetAsync(workflowDefinitionId, ct));
             DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
-            WorkspacePlan? plan = exemptFromCeiling ? null : await _plans.GetAsync(definition.WorkspaceId, ct);
-            PlanCeiling? ceiling = plan?.ActiveRunCeiling;
-            PlanCredits? credits = plan?.Credits;
+            WorkspacePlan plan = await _plans.GetAsync(definition.WorkspaceId, ct);
+            PlanCeiling? ceiling = exemptFromCeiling ? null : plan.ActiveRunCeiling;
+            Guid? parentRunRefId = ReadParentRunRefId(triggerEvent);
+
+            // A sub-workflow child spends from its parent's budget (Run_Start), so only it skips the
+            // month's credits and the workspace cap; a replay or a replacement run is new work.
+            PlanCredits? credits = parentRunRefId is null ? plan.Credits : null;
 
             // In practice the dispatcher has always set this by now - it normalizes the event per
             // registration before starting a run. The fallback is kept because this is a public entry point
@@ -107,7 +116,7 @@ internal sealed class RunStarter : IRunStarter
             RunStartRow started;
             try
             {
-                started = await _runProvider.StartAsync(
+                started = await StartWithRetryAsync(definition.WorkspaceId, () => _runProvider.StartAsync(
                     new RunRow
                     {
                         Id = 0,
@@ -124,7 +133,7 @@ internal sealed class RunStarter : IRunStarter
                         CancellationReason = null,
                         CreditBudget = creditBudget,
                         CreatedAt = nowUtc,
-                        ParentRunRefId = ReadParentRunRefId(triggerEvent),
+                        ParentRunRefId = parentRunRefId,
                         IsTest = isTest,
                         StartCost = _runStartCost
                     },
@@ -135,7 +144,7 @@ internal sealed class RunStarter : IRunStarter
                     ceiling,
                     activeRunGuard,
                     credits,
-                    ct);
+                    ct), ct);
             }
             catch (SqlException ex) when (ex.Number == ActiveRunConflictError)
             {
@@ -217,10 +226,38 @@ internal sealed class RunStarter : IRunStarter
 
             return new RunStartResult(createdRun.Id, createdRun.RefId, started.RootBranchId, true);
         }
-        catch (Exception ex) when (ex is not PlanRunLimitException and not PlanCreditLimitException and not WorkspaceCreditCapException and not ActiveRunConflictException and not TestRunActiveException)
+        catch (Exception ex) when (ex is not PlanRunLimitException and not PlanCreditLimitException and not WorkspaceCreditCapException and not ActiveRunConflictException and not TestRunActiveException and not RunStartBusyException)
         {
             _logger?.LogError(ex, "Failed to start run for workflow definition {WorkflowDefinitionId} and trigger {TriggerNodeId}", workflowDefinitionId, triggerNodeId);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Runs the start, trying again after a pause when it timed out waiting for its tenant's or
+    /// workspace's lock; after the last try it throws <see cref="RunStartBusyException"/>. A lock timeout
+    /// says other starts are holding the lock, not that the plan is full.
+    /// </summary>
+    private async Task<RunStartRow> StartWithRetryAsync(int workspaceId, Func<Task<RunStartRow>> start, CancellationToken ct)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return await start();
+            }
+            catch (SqlException ex) when (ex.Number == StartBusyError)
+            {
+                bool gaveUp = attempt >= BusyBackoff.Length;
+                _workflowMetrics?.RecordRunStartBusy(workspaceId, gaveUp);
+                if (gaveUp)
+                {
+                    _logger?.LogWarning("Workspace {WorkspaceId}: gave up starting a run after {Attempts} tries waiting for its plan lock", workspaceId, attempt + 1);
+                    throw new RunStartBusyException(workspaceId);
+                }
+
+                await Task.Delay(BusyBackoff[attempt], _clock, ct);
+            }
         }
     }
 

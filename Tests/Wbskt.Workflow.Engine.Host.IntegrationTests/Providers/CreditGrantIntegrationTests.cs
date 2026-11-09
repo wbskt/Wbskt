@@ -11,13 +11,16 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 
 /// <summary>
 /// Credit grants (top-ups, #627): Run_Start counts what a tenant's grants still hold on top of its plan's
-/// monthly credits, a grant is recorded and revoked once per source, and settling a month draws its spend
-/// past the plan from the grants, soonest to expire first, once.
+/// monthly credits, a grant is recorded and revoked once per source, and credits posted past the plan's
+/// allowance of the moment are drawn from the grants, soonest to expire first, as they are posted (#680).
+/// Also the run budgets around them: a sub-workflow child spends from its parent's budget (#679), and a
+/// workspace's cap reserves its running runs' budgets so it is never passed (#688).
 /// </summary>
 [Collection("SqlEdge")]
 public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
 {
     private const int PlanCreditLimitError = 50033;
+    private const int WorkspaceCreditCapError = 50034;
     private const string SkipReason = "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.";
 
     [SkippableFact]
@@ -91,53 +94,100 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
-    public async Task Settling_a_month_draws_its_overage_from_the_soonest_to_expire_grant_first_and_only_once()
-    {
-        Skip.IfNot(fixture.IsAvailable, SkipReason);
-
-        int tenantId = NewId();
-        int one = NewId();
-        int two = NewId();
-        await AddAccountAsync(one, tenantId);
-        await AddAccountAsync(two, tenantId);
-        var month = new DateOnly(2001, 1, 1);
-        await ExecAsync("""
-            INSERT INTO dbo.WorkspaceCreditUsage (WorkspaceId, Day, Credits)
-            VALUES (@One, '2001-01-03', 15), (@Two, '2001-01-20', 10), (@One, '2001-02-01', 1000);
-            """, one, two);
-        ICreditGrantProvider grants = Grants();
-        string later = $"later_{Guid.NewGuid():N}";
-        string sooner = $"sooner_{Guid.NewGuid():N}";
-        await grants.InsertAsync(tenantId, 20m, new DateTime(2000, 12, 1), new DateTime(2001, 6, 1), "test", later, CancellationToken.None);
-        await grants.InsertAsync(tenantId, 10m, new DateTime(2000, 12, 1), new DateTime(2001, 3, 1), "test", sooner, CancellationToken.None);
-
-        (await grants.GetUnsettledAsync(month, CancellationToken.None)).Should().Contain(t => t.TenantId == tenantId && t.PlanCode == PlanCode.Free);
-        decimal? drawn = await grants.SettleAsync(tenantId, month, 10m, CancellationToken.None);
-        decimal? again = await grants.SettleAsync(tenantId, month, 10m, CancellationToken.None);
-
-        drawn.Should().Be(15m, "25 spent in January against an allowance of 10");
-        again.Should().BeNull();
-        (await DrawnAsync(sooner)).Should().Be(10m);
-        (await DrawnAsync(later)).Should().Be(5m);
-        (await grants.GetUnsettledAsync(month, CancellationToken.None)).Should().NotContain(t => t.TenantId == tenantId);
-    }
-
-    [SkippableFact]
-    public async Task A_month_within_its_allowance_draws_nothing()
+    public async Task Credits_posted_past_the_allowance_are_drawn_from_the_soonest_to_expire_grant_as_they_are_posted()
     {
         Skip.IfNot(fixture.IsAvailable, SkipReason);
 
         int tenantId = NewId();
         int workspaceId = NewId();
-        await AddAccountAsync(workspaceId, tenantId);
-        await ExecAsync("INSERT INTO dbo.WorkspaceCreditUsage (WorkspaceId, Day, Credits) VALUES (@One, '2001-01-03', 4)", workspaceId, workspaceId);
-        string payment = $"pay_{Guid.NewGuid():N}";
-        await Grants().InsertAsync(tenantId, 20m, new DateTime(2000, 12, 1), new DateTime(2001, 6, 1), "test", payment, CancellationToken.None);
+        await AddAccountAsync(workspaceId, tenantId, creditsPerMonth: 10m);
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        ICreditGrantProvider grants = Grants();
+        string later = $"later_{Guid.NewGuid():N}";
+        string sooner = $"sooner_{Guid.NewGuid():N}";
+        await grants.InsertAsync(tenantId, 20m, DateTime.UtcNow.AddDays(-1), DateTime.UtcNow.AddMonths(6), "test", later, CancellationToken.None);
+        await grants.InsertAsync(tenantId, 10m, DateTime.UtcNow.AddDays(-1), DateTime.UtcNow.AddMonths(3), "test", sooner, CancellationToken.None);
+        long run = await StartAsync(wd, startCost: 1m);
+        await ChargeAsync(run, 24m);
 
-        decimal? drawn = await Grants().SettleAsync(tenantId, new DateOnly(2001, 1, 1), 10m, CancellationToken.None);
+        await PostAsync();
+        await PostAsync();
 
-        drawn.Should().Be(0m);
-        (await DrawnAsync(payment)).Should().Be(0m);
+        (await DrawnAsync(sooner)).Should().Be(10m, "25 posted against an allowance of 10, the sooner grant first");
+        (await DrawnAsync(later)).Should().Be(5m);
+        (await MonthAsync(tenantId)).Should().Be((25m, 15m), "a second post with nothing new draws nothing");
+        long next = await StartAsync(wd, credits: new PlanCredits(10m, tenantId));
+        (await ProviderFactory.Run(fixture.ConnectionString).GetByIdAsync(next, CancellationToken.None)).CreditBudget
+            .Should().Be(15m, "the plan's 10 are covered and what the grants still hold is left");
+    }
+
+    [SkippableFact]
+    public async Task A_downgrade_draws_only_what_is_posted_after_it_and_never_from_an_expired_grant()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int tenantId = NewId();
+        int workspaceId = NewId();
+        await AddAccountAsync(workspaceId, tenantId, creditsPerMonth: 100m);
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        string live = $"live_{Guid.NewGuid():N}";
+        string expired = $"expired_{Guid.NewGuid():N}";
+        await Grants().InsertAsync(tenantId, 50m, DateTime.UtcNow.AddDays(-40), DateTime.UtcNow.AddDays(-1), "test", expired, CancellationToken.None);
+        await Grants().InsertAsync(tenantId, 50m, DateTime.UtcNow.AddDays(-1), DateTime.UtcNow.AddMonths(6), "test", live, CancellationToken.None);
+        long run = await StartAsync(wd);
+        await ChargeAsync(run, 60m);
+        await PostAsync();
+
+        (await DrawnAsync(live)).Should().Be(0m, "60 is inside the plan's 100");
+        await ExecAsync("UPDATE dbo.WorkspaceAccounts SET CreditsPerMonth = 10 WHERE WorkspaceId = @One", workspaceId, workspaceId);
+        await ChargeAsync(run, 5m);
+        await PostAsync();
+
+        (await DrawnAsync(live)).Should().Be(5m, "only what was posted after the downgrade, not the 50 already past it");
+        (await DrawnAsync(expired)).Should().Be(0m);
+        (await MonthAsync(tenantId)).Should().Be((65m, 5m));
+    }
+
+    [SkippableFact]
+    public async Task A_sub_workflow_child_spends_from_its_parents_budget()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        long parent = await StartAsync(wd, budget: 10m);
+        Guid parentRef = (await ProviderFactory.Run(fixture.ConnectionString).GetByIdAsync(parent, CancellationToken.None)).RefId;
+        long child = await StartAsync(wd, startCost: 1m, budget: 100m, parentRunRefId: parentRef);
+        long grandchild = await StartAsync(wd, budget: 100m, parentRunRefId: (await ProviderFactory.Run(fixture.ConnectionString).GetByIdAsync(child, CancellationToken.None)).RefId);
+        ChargeCounter counters = new(ProviderFactory.RunCounters(fixture.ConnectionString));
+
+        (await counters.TryAsync(child, 4m)).Should().Be((5m, 10m), "the child's start cost and charge go on the parent's budget");
+        (await counters.TryAsync(grandchild, 3m)).Should().Be((8m, 10m), "a grandchild shares the same root budget");
+        (await counters.TryAsync(parent, 2m)).Should().Be((10m, 10m));
+        (await counters.TryAsync(child, 1m)).Should().BeNull("the shared budget is spent");
+        (await ProviderFactory.Run(fixture.ConnectionString).GetByIdAsync(child, CancellationToken.None)).CreditBudget.Should().Be(10m);
+        (await ConsumedAsync(child)).Should().Be(5m, "what the child consumed is still its own, for the ledger");
+    }
+
+    [SkippableFact]
+    public async Task A_workspace_cap_reserves_its_running_runs_budgets_so_it_is_never_passed()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int tenantId = NewId();
+        int workspaceId = NewId();
+        await AddAccountAsync(workspaceId, tenantId, creditsPerMonth: 1_000m);
+        await ExecAsync("INSERT INTO dbo.WorkspaceCreditCaps (WorkspaceId, MonthlyCreditCap) VALUES (@One, 150)", workspaceId, workspaceId);
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        var credits = new PlanCredits(1_000m, tenantId);
+
+        long first = await StartAsync(wd, credits: credits, budget: 100m);
+        long second = await StartAsync(wd, credits: credits, budget: 100m);
+        Func<Task> third = () => StartAsync(wd, credits: credits, budget: 100m);
+
+        (await ProviderFactory.Run(fixture.ConnectionString).GetByIdAsync(first, CancellationToken.None)).CreditBudget.Should().Be(100m);
+        (await ProviderFactory.Run(fixture.ConnectionString).GetByIdAsync(second, CancellationToken.None)).CreditBudget.Should().Be(50m, "100 of the 150 is reserved by the first run");
+        (await third.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(WorkspaceCreditCapError);
     }
 
     private ICreditGrantProvider Grants() =>
@@ -147,7 +197,7 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
 
     private static int NewId() => Random.Shared.Next(1_000_000, int.MaxValue - 1);
 
-    private async Task<long> StartAsync(WorkflowDefinitionRow wd, decimal startCost = 0m, PlanCredits? credits = null)
+    private async Task<long> StartAsync(WorkflowDefinitionRow wd, decimal startCost = 0m, PlanCredits? credits = null, decimal budget = 100m, Guid? parentRunRefId = null)
     {
         DateTime now = DateTime.UtcNow;
         Guid triggerNodeId = Guid.NewGuid();
@@ -164,9 +214,10 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
             CompletedAt = null,
             CancellationRequestedAt = null,
             CancellationReason = null,
-            CreditBudget = 100m,
+            CreditBudget = budget,
             CreatedAt = now,
-            StartCost = startCost
+            StartCost = startCost,
+            ParentRunRefId = parentRunRefId
         };
         RunStartRow started = await ProviderFactory.Run(fixture.ConnectionString).StartAsync(
             run, BranchRow.New(Guid.NewGuid(), 0, triggerNodeId, """{"trigger":{}}""", now), null, wd.WorkspaceId, null, ActiveRunGuard.None, credits, CancellationToken.None);
@@ -188,6 +239,37 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
         return (decimal)(await command.ExecuteScalarAsync())!;
     }
 
+    private async Task PostAsync() =>
+        await ProviderFactory.CreditUsage(fixture.ConnectionString).PostAsync(DateOnly.FromDateTime(DateTime.UtcNow), DateTime.UtcNow.AddMinutes(-5), 100_000, CancellationToken.None);
+
+    private async Task<(decimal Posted, decimal Drawn)> MonthAsync(int tenantId)
+    {
+        await using var connection = new SqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new SqlCommand(
+            "SELECT Posted, Drawn FROM dbo.TenantCreditMonths WHERE TenantId = @TenantId AND MonthStart = DATEFROMPARTS(YEAR(SYSUTCDATETIME()), MONTH(SYSUTCDATETIME()), 1)",
+            connection);
+        command.Parameters.AddWithValue("@TenantId", tenantId);
+        await using var reader = await command.ExecuteReaderAsync();
+        (await reader.ReadAsync()).Should().BeTrue();
+        return (reader.GetDecimal(0), reader.GetDecimal(1));
+    }
+
+    private async Task<decimal> ConsumedAsync(long runId)
+    {
+        await using var connection = new SqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new SqlCommand("SELECT CreditsConsumed FROM dbo.RunCounters WHERE RunId = @RunId", connection);
+        command.Parameters.AddWithValue("@RunId", (int)runId);
+        return (decimal)(await command.ExecuteScalarAsync())!;
+    }
+
+    private sealed class ChargeCounter(Wbskt.Workflow.Providers.RunCountersProvider counters)
+    {
+        public async Task<(decimal Spent, decimal Budget)?> TryAsync(long runId, decimal cost) =>
+            await counters.TryChargeAsync((int)runId, cost, CancellationToken.None) is { } charge ? (charge.Spent, charge.Budget) : null;
+    }
+
     private async Task ExecAsync(string sql, int one, int two)
     {
         await using var connection = new SqlConnection(fixture.ConnectionString);
@@ -198,15 +280,16 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
         await command.ExecuteNonQueryAsync();
     }
 
-    private async Task AddAccountAsync(int workspaceId, int tenantId)
+    private async Task AddAccountAsync(int workspaceId, int tenantId, decimal? creditsPerMonth = null)
     {
         await using var connection = new SqlConnection(fixture.ConnectionString);
         await connection.OpenAsync();
         await using var command = new SqlCommand(
-            "INSERT INTO dbo.WorkspaceAccounts (WorkspaceId, TenantId, TenantRefId, PlanCode, PlanRevision) VALUES (@WorkspaceId, @TenantId, NEWID(), N'Free', 0)",
+            "INSERT INTO dbo.WorkspaceAccounts (WorkspaceId, TenantId, TenantRefId, PlanCode, PlanRevision, CreditsPerMonth) VALUES (@WorkspaceId, @TenantId, NEWID(), N'Free', 0, @CreditsPerMonth)",
             connection);
         command.Parameters.AddWithValue("@WorkspaceId", workspaceId);
         command.Parameters.AddWithValue("@TenantId", tenantId);
+        command.Parameters.AddWithValue("@CreditsPerMonth", (object?)creditsPerMonth ?? DBNull.Value);
         await command.ExecuteNonQueryAsync();
     }
 

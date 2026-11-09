@@ -325,6 +325,9 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             // refusing them would lose work rather than shed it: a sub-workflow child (its parent is running),
             // a queued event's replay (the run that finished made the room, and the event has left the queue),
             // and a start replacing the runs it has just cancelled (refusing it would leave nothing running).
+            // The ceiling only: the replay and the replacement are new work, so the month's credits and the
+            // workspace cap still hold them (#679). A lock timeout is retried in the starter and, if it
+            // persists, thrown as RunStartBusyException, so the event is delivered again rather than settled.
             bool exemptFromCeiling = normalizedEvent.StartsChildRun
                 || normalizedEvent.ReplayFor is not null
                 || (concurrencyDecision.Outcome == TriggerConcurrencyOutcome.ProceedAfterCancellingActive && concurrencyDecision.RunIdsToCancel.Count > 0);

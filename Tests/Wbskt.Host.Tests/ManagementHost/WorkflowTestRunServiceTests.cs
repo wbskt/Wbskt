@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Host.Services.Workflow;
@@ -111,6 +112,20 @@ public sealed class WorkflowTestRunServiceTests
 
         Assert.Equal("TEST_RUN_ACTIVE", result.Error.Code);
         Assert.Contains(active.ToString(), result.Error.Message);
+        _definitions.Verify(x => x.DeleteUnreferencedAsync(CopyId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_workspace_too_busy_to_start_the_run_is_told_to_retry_and_its_copy_is_removed()
+    {
+        Draft(baseVersion: 1, TriggerA);
+        _engine.Setup(x => x.StartTestRunAsync(It.IsAny<EngineTestRunRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new EngineTestRunResponse(EngineTestRunOutcome.Busy));
+
+        var result = await Service().StartAsync(WorkspaceId, RefId, new StartTestRunRequest(TestRunSource.Draft), CancellationToken.None);
+
+        Assert.Equal("WORKSPACE_BUSY", result.Error.Code);
+        Assert.Equal(ErrorType.Unavailable, result.Error.Type);
         _definitions.Verify(x => x.DeleteUnreferencedAsync(CopyId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
