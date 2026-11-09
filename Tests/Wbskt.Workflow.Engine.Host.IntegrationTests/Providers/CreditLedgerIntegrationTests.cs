@@ -1,6 +1,7 @@
 using Microsoft.Data.SqlClient;
 using Wbskt.Models.Billing;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
@@ -56,7 +57,7 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         await ChargeAsync(runId, 4m);
         await ProviderFactory.Run(fixture.ConnectionString).SetTerminalAsync(runId, RunStatus.Succeeded.ToString(), new DateTime(2000, 1, 1), CancellationToken.None);
 
-        await ProviderFactory.RunRetention(fixture.ConnectionString).DeleteRetiredRunsAsync(new DateTime(2001, 1, 1), 100, CancellationToken.None);
+        await ProviderFactory.RunRetention(fixture.ConnectionString).DeleteRetiredRunsAsync(new DateTime(2001, 1, 1), [new RunHistoryRetention(PlanCode.Free, 36_500)], new DateTime(2001, 1, 1), 100, CancellationToken.None);
 
         (await LedgerAsync(workspaceId)).Should().Be(5m);
     }

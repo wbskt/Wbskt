@@ -1,9 +1,12 @@
--- Deletes up to @BatchSize runs that completed before @CutoffUtc, with everything that hangs off
--- them, and the test copies of workflows that no run points at any more. Returns how many runs went.
--- HistoryRetentionGc calls it with the elevated window - the point at which even a run's Warn/Error
--- history has been deleted - so a run is only removed once there is nothing left to inspect but its
--- summary row.
+-- Deletes up to @BatchSize finished runs, with everything that hangs off them, and the test copies of
+-- workflows that no run points at any more. Returns how many runs went.
+-- A run goes once it finished before its workspace's plan cutoff: @NowUtc less the plan's days in
+-- @Retention, or the tenant's runHistoryDays override; a workspace with no account is Free. A run
+-- finished before @CutoffUtc goes whatever the plan says, so no run outlives HistoryRetentionGc's
+-- elevated window.
 CREATE PROCEDURE dbo.Run_DeleteRetired
+    @NowUtc    DATETIME2(3),
+    @Retention dbo.RunHistoryRetentionTableType READONLY,
     @CutoffUtc DATETIME2(3),
     @BatchSize INT
 AS
@@ -11,14 +14,29 @@ BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
 
+    CREATE TABLE #Cutoffs (
+        WorkspaceId INT          NOT NULL PRIMARY KEY,
+        CutoffUtc   DATETIME2(3) NOT NULL
+    );
+
+    INSERT INTO #Cutoffs (WorkspaceId, CutoffUtc)
+    SELECT
+        w.WorkspaceId,
+        DATEADD(DAY, -COALESCE(TRY_CAST(JSON_VALUE(a.LimitOverrides, '$.runHistoryDays') AS INT), p.Days), @NowUtc)
+    FROM (SELECT DISTINCT WorkspaceId FROM dbo.WorkflowDefinitions) w
+    LEFT JOIN dbo.WorkspaceAccounts a ON a.WorkspaceId = w.WorkspaceId
+    JOIN @Retention p ON p.PlanCode = COALESCE(a.PlanCode, N'Free');
+
     DECLARE @Runs TABLE (Id INT NOT NULL PRIMARY KEY);
 
     INSERT INTO @Runs (Id)
-    SELECT TOP (@BatchSize) Id
-    FROM dbo.Runs
-    WHERE CompletedAt IS NOT NULL
-      AND CompletedAt < @CutoffUtc
-    ORDER BY CompletedAt;
+    SELECT TOP (@BatchSize) r.Id
+    FROM dbo.Runs r
+    JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
+    LEFT JOIN #Cutoffs c ON c.WorkspaceId = d.WorkspaceId
+    WHERE r.CompletedAt IS NOT NULL
+      AND (r.CompletedAt < @CutoffUtc OR r.CompletedAt < c.CutoffUtc)
+    ORDER BY r.CompletedAt;
 
     BEGIN TRANSACTION;
 
@@ -58,12 +76,14 @@ BEGIN
     DELETE FROM dbo.Branches       WHERE RunId IN (SELECT Id FROM @Runs);
     DELETE FROM dbo.Runs           WHERE Id IN (SELECT Id FROM @Runs);
 
-    -- A test copy is kept only for the runs started from it. Past the cutoff, so a copy whose run is
-    -- still being started is never taken.
+    -- A test copy is kept only for the runs started from it. A day old at least, so a copy whose run is
+    -- still being started is never taken, even on a plan overridden to keep no history.
     DELETE WD
     FROM dbo.WorkflowDefinitions WD
+    LEFT JOIN #Cutoffs c ON c.WorkspaceId = WD.WorkspaceId
     WHERE WD.Kind = N'Test'
-      AND WD.CreatedAt < @CutoffUtc
+      AND WD.CreatedAt < DATEADD(DAY, -1, @NowUtc)
+      AND (WD.CreatedAt < @CutoffUtc OR WD.CreatedAt < c.CutoffUtc)
       AND NOT EXISTS (SELECT 1 FROM dbo.Runs R WHERE R.WorkflowDefinitionId = WD.Id);
 
     COMMIT TRANSACTION;

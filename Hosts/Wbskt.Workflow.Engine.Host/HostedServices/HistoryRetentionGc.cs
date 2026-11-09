@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Options;
+using Wbskt.Infrastructure.Billing;
+using Wbskt.Models.Billing;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -11,7 +13,8 @@ public sealed class HistoryRetentionGc(
     ILeadershipGate leadership,
     IServiceScopeFactory scopeFactory,
     ILogger<HistoryRetentionGc> logger,
-    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger)
+    IOptions<WorkflowEngineOptions> options,
+    PlanCatalog catalog) : LeaderPeriodicWorker(leadership, scopeFactory, logger)
 {
     private const int BatchSize = 5000;
     // Each run takes its branches and history with it, so a run batch is much heavier than a row batch.
@@ -26,8 +29,9 @@ public sealed class HistoryRetentionGc(
     protected override async Task RunOnceAsync(IServiceProvider services, CancellationToken ct)
     {
         var historyEventProvider = services.GetRequiredService<IHistoryEventProvider>();
-        DateTime cutoffUtc = clock.GetUtcNow().UtcDateTime - _retentionWindow;
-        DateTime elevatedCutoffUtc = clock.GetUtcNow().UtcDateTime - _elevatedRetentionWindow;
+        DateTime nowUtc = clock.GetUtcNow().UtcDateTime;
+        DateTime cutoffUtc = nowUtc - _retentionWindow;
+        DateTime elevatedCutoffUtc = nowUtc - _elevatedRetentionWindow;
         while (true)
         {
             int deleted = await historyEventProvider.DeleteForRetiredRunsAsync(cutoffUtc, BatchSize, elevatedCutoffUtc, ct);
@@ -37,8 +41,11 @@ public sealed class HistoryRetentionGc(
             }
         }
 
-        // Once even a run's Warn/Error history is past retention, the run row and its branches are
-        // all that is left; without this they were kept forever, full branch state included.
+        // A run goes, with all its history, once its workspace's plan stops keeping it, and in any case
+        // once even its Warn/Error history is past the elevated window.
+        IReadOnlyCollection<RunHistoryRetention> retention = Enum.GetValues<PlanCode>()
+            .Select(plan => new RunHistoryRetention(plan, catalog.LimitsFor(plan).RunHistoryDays))
+            .ToList();
         var runRetentionProvider = services.GetService<IRunRetentionProvider>();
         if (runRetentionProvider is null)
         {
@@ -47,7 +54,7 @@ public sealed class HistoryRetentionGc(
 
         while (true)
         {
-            int deleted = await runRetentionProvider.DeleteRetiredRunsAsync(elevatedCutoffUtc, RunBatchSize, ct);
+            int deleted = await runRetentionProvider.DeleteRetiredRunsAsync(nowUtc, retention, elevatedCutoffUtc, RunBatchSize, ct);
             if (deleted < RunBatchSize)
             {
                 return;

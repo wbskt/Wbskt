@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Wbskt.Infrastructure.Billing;
+using Wbskt.Models.Billing;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -15,7 +17,7 @@ public sealed class HistoryRetentionGcTests
         // Arrange
         var leadership = new FixedLeadershipGate(true);
         var historyProvider = new RecordingHistoryEventProvider([5000, 100]);
-        var gc = new HistoryRetentionGc(new FixedClock(), leadership, WorkerTestServices.Scopes(historyProvider), NullLogger<HistoryRetentionGc>.Instance, WorkerTestServices.Options());
+        var gc = new HistoryRetentionGc(new FixedClock(), leadership, WorkerTestServices.Scopes(historyProvider), NullLogger<HistoryRetentionGc>.Instance, WorkerTestServices.Options(), Catalog());
 
         // Act
         await gc.TickAsync(CancellationToken.None);
@@ -31,7 +33,7 @@ public sealed class HistoryRetentionGcTests
         // Arrange
         var leadership = new FixedLeadershipGate(false);
         var historyProvider = new RecordingHistoryEventProvider([5000]);
-        var gc = new HistoryRetentionGc(new FixedClock(), leadership, WorkerTestServices.Scopes(historyProvider), NullLogger<HistoryRetentionGc>.Instance, WorkerTestServices.Options());
+        var gc = new HistoryRetentionGc(new FixedClock(), leadership, WorkerTestServices.Scopes(historyProvider), NullLogger<HistoryRetentionGc>.Instance, WorkerTestServices.Options(), Catalog());
 
         // Act
         await gc.TickAsync(CancellationToken.None);
@@ -46,23 +48,44 @@ public sealed class HistoryRetentionGcTests
     {
         var historyProvider = new RecordingHistoryEventProvider([0]);
         var runProvider = new RecordingRunRetentionProvider([HistoryRetentionGc.RunBatchSize, 3]);
-        var gc = new HistoryRetentionGc(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(historyProvider, runProvider), NullLogger<HistoryRetentionGc>.Instance, WorkerTestServices.Options(new WorkflowEngineOptions { HistoryRetentionWindowElevated = TimeSpan.FromDays(365) }));
+        var gc = new HistoryRetentionGc(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(historyProvider, runProvider), NullLogger<HistoryRetentionGc>.Instance, WorkerTestServices.Options(new WorkflowEngineOptions { HistoryRetentionWindowElevated = TimeSpan.FromDays(365) }), Catalog());
 
         await gc.TickAsync(CancellationToken.None);
 
-        var expectedCutoff = new DateTime(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc).AddDays(-365);
-        Assert.Equal([(expectedCutoff, HistoryRetentionGc.RunBatchSize), (expectedCutoff, HistoryRetentionGc.RunBatchSize)], runProvider.DeleteCalls);
+        var now = new DateTime(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc);
+        var expected = (now, now.AddDays(-365), HistoryRetentionGc.RunBatchSize);
+        Assert.Equal([expected, expected], runProvider.DeleteCalls.Select(c => (c.NowUtc, c.CutoffUtc, c.BatchSize)));
     }
+
+    [Fact]
+    public async Task Tick_passes_each_plans_run_history_days_with_configuration_applied()
+    {
+        var runProvider = new RecordingRunRetentionProvider([0]);
+        var catalog = new PlanCatalog(Microsoft.Extensions.Options.Options.Create(new PlanCatalogOptions
+        {
+            Plans = new() { [PlanCode.Maker] = new PlanLimitOverrides { RunHistoryDays = 21 } }
+        }));
+        var gc = new HistoryRetentionGc(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(new RecordingHistoryEventProvider([0]), runProvider), NullLogger<HistoryRetentionGc>.Instance, WorkerTestServices.Options(), catalog);
+
+        await gc.TickAsync(CancellationToken.None);
+
+        var retention = Assert.Single(runProvider.DeleteCalls).Retention;
+        Assert.Equal(
+            [new RunHistoryRetention(PlanCode.Free, 7), new RunHistoryRetention(PlanCode.Maker, 21), new RunHistoryRetention(PlanCode.Pro, 30), new RunHistoryRetention(PlanCode.Business, 30)],
+            retention.OrderBy(r => r.PlanCode));
+    }
+
+    private static PlanCatalog Catalog() => new(Microsoft.Extensions.Options.Options.Create(new PlanCatalogOptions()));
 
     private sealed class RecordingRunRetentionProvider(IReadOnlyCollection<int> deletes) : IRunRetentionProvider
     {
         private readonly Queue<int> _deletes = new(deletes);
 
-        public List<(DateTime CutoffUtc, int BatchSize)> DeleteCalls { get; } = [];
+        public List<(DateTime NowUtc, IReadOnlyCollection<RunHistoryRetention> Retention, DateTime CutoffUtc, int BatchSize)> DeleteCalls { get; } = [];
 
-        public Task<int> DeleteRetiredRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
+        public Task<int> DeleteRetiredRunsAsync(DateTime nowUtc, IReadOnlyCollection<RunHistoryRetention> retention, DateTime cutoffUtc, int batchSize, CancellationToken ct)
         {
-            DeleteCalls.Add((cutoffUtc, batchSize));
+            DeleteCalls.Add((nowUtc, retention, cutoffUtc, batchSize));
             return Task.FromResult(_deletes.Dequeue());
         }
     }
