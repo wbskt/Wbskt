@@ -58,6 +58,8 @@ public sealed class EventLoggerHandler : IConsumer<Batch<IEvent>>
             await _eventProvider.InsertBatchAsync(EventLogTable.Build(auditEntries), context.CancellationToken);
         }
 
+        // This insert is also the plan's message meter (dbo.WorkspaceMessageUsage): an account's messages are
+        // counted only as their traffic is logged here (MessageMeterTests).
         if (trafficEntries.Count > 0)
         {
             await _eventProvider.InsertClientTrafficBatchAsync(EventLogTable.Build(trafficEntries), context.CancellationToken);
