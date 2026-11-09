@@ -297,8 +297,8 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "short": "M2",
    "due": "2026-11-30",
    "start": "2026-11-01",
-   "open": 19,
-   "closed": 142
+   "open": 17,
+   "closed": 145
   },
   {
    "name": "M3 Go public",
@@ -342,7 +342,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
  "work": {
   "519": {
    "state": "progress",
-   "why": "Gateway.Core is ready for a second transport (#638, PR #642, merged 9 Nov). The MQTT host (#639), its deploy on mqtt.DOMAIN:8883 and :1883 (#640) and its E2E scenarios (#641) were reviewed as #645 to #647 and go in together as PR #654, so one CI run covers the E2E scenarios with the host. Moved from Post-launch to M2 on 8 Nov.",
+   "why": "The MQTT gateway is merged (PR #642 and PR #654, 9 Nov): mqtts://mqtt.DOMAIN:8883 and plain :1883, with all five MQTT E2E scenarios passing in CI. Left: a workflow-trigger E2E scenario, the message budget over MQTT, conformance for the binding, and client IPs through Traefik's TCP router (#655). The first deploy that includes it needs the operator steps in deploy/README.md: DNS, firewall 8883 and 1883, and recreating Traefik.",
    "prs": [
     642,
     654
@@ -555,9 +555,10 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   }
  ],
  "issues": [
-  {"n":641,"t":"E2E scenarios for the MQTT gateway","s":"o","m":"M2","p":519,"a":["socket"]},
-  {"n":640,"t":"Deploy the MQTT gateway: gateway-mqtt service and a Traefik TCP router on 8883","s":"o","m":"M2","p":519,"a":["socket","ops"]},
-  {"n":639,"t":"Wbskt.Gateway.MQTT.Host: embedded MQTTnet server over Gateway.Core","s":"o","m":"M2","p":519,"a":["socket"]},
+  {"n":655,"t":"MQTT gateway: finish #519's test scope and keep client IPs through Traefik","s":"o","m":"M2","p":519,"a":["socket","ops"]},
+  {"n":641,"t":"E2E scenarios for the MQTT gateway","s":"c","m":"M2","p":519,"a":["socket"],"x":"2026-11-09"},
+  {"n":640,"t":"Deploy the MQTT gateway: gateway-mqtt service and a Traefik TCP router on 8883","s":"c","m":"M2","p":519,"a":["socket","ops"],"x":"2026-11-09"},
+  {"n":639,"t":"Wbskt.Gateway.MQTT.Host: embedded MQTTnet server over Gateway.Core","s":"c","m":"M2","p":519,"a":["socket"],"x":"2026-11-09"},
   {"n":650,"t":"Python SDK CI: Python 3.9 is gone from ubuntu-latest (Ubuntu 26.04)","s":"c","m":"M2","p":null,"a":["sdk"],"x":"2026-11-09"},
   {"n":638,"t":"Gateway.Core: make the transport close a method of the connection, and add GatewayTransport.Mqtt","s":"c","m":"M2","p":519,"a":["socket"],"x":"2026-11-09"},
   {"n":634,"t":"Credits: optional monthly cap per workspace","s":"o","m":"M3","p":167,"a":["management","engine"]},
@@ -601,7 +602,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":537,"t":"Architecture review (2 Nov): follow-ups","s":"o","m":"M2","p":null,"a":[],"epic":1,"sub":{"completed":13,"total":15}},
   {"n":528,"t":"Release the client SDKs 1.0: NuGet, PyPI and the Arduino Library Manager","s":"o","m":"M2","p":174,"a":["sdk"],"pr":"P1","sz":"S"},
   {"n":525,"t":"Split Wbskt.Infrastructure so the gateways take only hosting and security","s":"o","m":"Post","p":179,"a":["socket"],"pr":"P3","sz":"M"},
-  {"n":519,"t":"Add Wbskt.Gateway.MQTT.Host: a client gateway for MQTT over Gateway.Core","s":"o","m":"M2","p":null,"a":["socket"],"epic":1,"sub":{"completed":1,"total":4}},
+  {"n":519,"t":"Add Wbskt.Gateway.MQTT.Host: a client gateway for MQTT over Gateway.Core","s":"o","m":"M2","p":null,"a":["socket"],"epic":1,"sub":{"completed":4,"total":5}},
   {"n":510,"t":"OTA firmware updates for ESP32 boards as a system command","s":"o","m":"M2","p":null,"a":["socket","sdk"],"epic":1,"sub":{"completed":3,"total":4}},
   {"n":500,"t":"Remove the unversioned /api aliases","s":"o","m":"Post","p":null,"a":[]},
   {"n":490,"t":"Send a signal by correlation, not only to a run","s":"o","m":"Post","p":172,"a":["management","engine"],"sz":"M"},
