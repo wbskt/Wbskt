@@ -170,6 +170,10 @@ BEGIN
                 -- may yet spend (each root run's unspent budget, which its sub-workflow children share) is
                 -- reserved against it, under a lock per workspace so two starts cannot both take the same
                 -- remainder. A run's charges never pass its budget, so the workspace never passes its cap.
+                -- The budget is leased: the run gets a twentieth of the cap (or its start cost, if more)
+                -- and RunCounters_TryCharge extends it as it is spent, up to @BudgetCeiling, so one run
+                -- going does not hold the whole cap away from the next.
+                DECLARE @BudgetCeiling DECIMAL(18,4);
                 DECLARE @Cap DECIMAL(18,4) = (SELECT MonthlyCreditCap FROM dbo.WorkspaceCreditCaps WHERE WorkspaceId = @WorkspaceId);
                 IF @Cap IS NOT NULL
                 BEGIN
@@ -188,6 +192,11 @@ BEGIN
 
                     IF @CapLeft < @CreditBudget
                         SET @CreditBudget = @CapLeft;
+
+                    SET @BudgetCeiling = @CreditBudget;
+                    DECLARE @Lease DECIMAL(18,4) = CASE WHEN @StartCost > @Cap / 20 THEN @StartCost ELSE @Cap / 20 END;
+                    IF @Lease < @CreditBudget
+                        SET @CreditBudget = @Lease;
                 END
             END
 
@@ -213,7 +222,10 @@ BEGIN
                     FROM dbo.RunCounters rc
                     WHERE rc.RunId = @BudgetRunId;
 
-                    SELECT @CreditBudget = CreditBudget FROM dbo.Runs WHERE Id = @BudgetRunId;
+                    SELECT @CreditBudget = COALESCE(rc.BudgetCeiling, r.CreditBudget)
+                    FROM dbo.Runs r
+                    JOIN dbo.RunCounters rc ON rc.RunId = r.Id
+                    WHERE r.Id = @BudgetRunId;
                 END
             END
 
@@ -229,8 +241,8 @@ BEGIN
 
             SET @RunId = SCOPE_IDENTITY();
 
-            INSERT INTO dbo.RunCounters (RunId, ActiveBranchCount, CreditsConsumed, BudgetRunId)
-            VALUES (@RunId, 1, @StartCost, @BudgetRunId);
+            INSERT INTO dbo.RunCounters (RunId, ActiveBranchCount, CreditsConsumed, BudgetRunId, BudgetCeiling)
+            VALUES (@RunId, 1, @StartCost, @BudgetRunId, @BudgetCeiling);
 
             INSERT INTO dbo.Branches (RefId, RunId, NodeId, Status, LocalJson)
             VALUES (@BranchRefId, @RunId, @TriggerNodeId, N'Active', @BranchLocalJson);

@@ -126,13 +126,20 @@ lock per workspace (`credit-cap:{workspaceId}`), it counts what the workspace sp
 not (`dbo.WorkspaceCreditsSpent`), plus the unspent budget of each of its running root runs
 (`dbo.WorkspaceCreditsReserved`), and refuses with 50034 (**409** `WORKSPACE_CREDIT_CAP_REACHED` on a test
 run) when what is left would not cover the start's own cost. Otherwise it cuts the run's budget to the
-smaller of the two remainders. A run cannot charge past its budget, so the workspace cannot pass its cap,
-however many runs it starts at once. Lowering a cap below what was already spent refuses new runs at
+smaller of the two remainders. That remainder is the run's ceiling, not its budget: so that one run
+going does not hold the whole cap away from the next, a capped run's budget is leased, a twentieth of the
+cap (or its start cost, if more) at a time (`dbo.RunCounters.BudgetCeiling`). When a charge would pass the
+lease, `dbo.RunCounters_TryCharge` takes the same lock and extends it by what the charge needs (at least
+another twentieth), up to the ceiling and what the cap still has free, or refuses the charge
+(`OutOfCredits`) and takes nothing. A run cannot charge past its budget, so the workspace cannot pass its
+cap, however many runs it starts at once. With the cap removed, a lease extends straight to its ceiling. Lowering a cap below what was already spent refuses new runs at
 once, and the response says so (`capReached`). As it posts, `CreditUsagePoster` raises
 `WorkspaceCreditCapReachedEvent` when a post carries a workspace across 80% and then 100% of its cap.
 
 **Busy.** Both locks a start can wait on (the tenant's run limit and a workspace's cap) give up after five
-seconds with 50035 rather than hold an inbound request and a pooled connection. `RunStarter` tries again
+seconds with 50035 rather than hold an inbound request and a pooled connection. (A lease extension, which
+is not on an inbound request, waits up to 30 seconds for the cap's lock before it fails its step with
+50035.) `RunStarter` tries again
 twice (after 50 ms, then 200 ms), then throws `RunStartBusyException`: a trigger's event goes back to the
 queue to be redelivered, and a test run answers **503** `WORKSPACE_BUSY` with `Retry-After`. A busy start
 is never read as a full plan. Each one counts on `wbskt_workflow_run_starts_busy_total`

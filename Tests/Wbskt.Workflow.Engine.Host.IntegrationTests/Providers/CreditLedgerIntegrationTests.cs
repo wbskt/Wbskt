@@ -159,7 +159,10 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         long uncapped = await StartAsync(wd, credits: new PlanCredits(1000m, null));
 
         var runs = ProviderFactory.Run(fixture.ConnectionString);
-        (await runs.GetByIdAsync(capped, CancellationToken.None)).CreditBudget.Should().Be(3m);
+        var counters = ProviderFactory.RunCounters(fixture.ConnectionString);
+        (await runs.GetByIdAsync(capped, CancellationToken.None)).CreditBudget.Should().Be(0.2m, "a capped run leases a twentieth of the cap at a time");
+        (await counters.TryChargeAsync((int)capped, 3m, CancellationToken.None)).Should().Be(new CreditCharge(3m, 3m), "the lease grows up to what the cap left");
+        (await counters.TryChargeAsync((int)capped, 0.01m, CancellationToken.None)).Should().BeNull();
         (await runs.GetByIdAsync(uncapped, CancellationToken.None)).CreditBudget.Should().Be(100m);
         first.Should().BePositive();
     }
