@@ -113,5 +113,8 @@ research, and use by charities, schools and public institutions are all allowed.
 Commercial use is not covered by that license. If you want to use Wbskt commercially, contact
 the maintainers for a commercial license.
 
-The client SDKs and protocol types under [`Clients/`](Clients/) are the exception: they are
-[MIT licensed](Clients/LICENSE), so they can ship inside any client or product, commercial or not.
+The client SDKs are the exception. They live in their own MIT-licensed repositories,
+[Wbskt.DotNet](https://github.com/wbskt/Wbskt.DotNet), [Wbskt.Python](https://github.com/wbskt/Wbskt.Python)
+and [Wbskt.Arduino](https://github.com/wbskt/Wbskt.Arduino), so they can ship inside any client or
+product, commercial or not. The protocol types and API clients under [`Clients/`](Clients/) are
+[MIT licensed](Clients/LICENSE) too.
