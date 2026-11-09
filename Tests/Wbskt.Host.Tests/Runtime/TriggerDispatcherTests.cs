@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Wbskt.Models.Billing;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models.Expressions;
@@ -609,6 +610,24 @@ public sealed class TriggerDispatcherTests
     }
 
     [Fact]
+    public async Task A_start_refused_for_spent_credits_is_reported_as_such_and_starts_nothing()
+    {
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel);
+        var reporter = new RecordingRefusalReporter();
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration),
+            runStarter: new RecordingRunStarter([]) { CreditsSpent = true },
+            refusalReporter: reporter);
+        InboundEvent evt = CreateInboundEvent();
+
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(evt, CancellationToken.None);
+
+        Assert.Equal(TriggerDispatchOutcome.Refused, result.Outcome);
+        RunRefusal refusal = Assert.Single(reporter.Refusals);
+        Assert.Equal(new RunRefusal(1, registration.WorkflowDefinitionId, registration.WorkflowRefId, "client", 2000, evt.ReceivedAt) { Reason = RunRefusalReason.CreditLimit }, refusal);
+    }
+
+    [Fact]
     public async Task A_start_that_goes_through_reports_nothing()
     {
         var reporter = new RecordingRefusalReporter();
@@ -1136,6 +1155,7 @@ public sealed class TriggerDispatcherTests
 
         /// <summary>While set, every start is refused as though the workspace were at its run ceiling.</summary>
         public bool AtCeiling { get; set; }
+        public bool CreditsSpent { get; init; }
 
         /// <summary>Refuses only the first start it sees, as for a trigger in the one full workspace.</summary>
         public bool RefuseFirst { get; set; }
@@ -1166,6 +1186,11 @@ public sealed class TriggerDispatcherTests
                 {
                     RefuseFirst = false;
                     throw new PlanRunLimitException(1, 3);
+                }
+
+                if (CreditsSpent && !exemptFromCeiling)
+                {
+                    throw new PlanCreditLimitException(1, 2000.5m);
                 }
 
                 if (triggerStartKey != null && _byKey.TryGetValue(triggerStartKey, out RunStartResult? existing))

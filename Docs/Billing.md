@@ -66,6 +66,7 @@ dbo.Tenants.PlanCode ──(copy)──────────►  dbo.Workspac
 |---|---|---|
 | Clients | `dbo.Client_Create` (registration) and `dbo.Client_UpdateStatuses` (approval) | 50025, **409** `PLAN_CLIENT_LIMIT_REACHED` |
 | Runs going at once | `dbo.Run_Start` | 50026; a trigger's dispatch reads `Refused`, a test run is **409** `PLAN_RUN_LIMIT_REACHED` |
+| Workflow credits a month | `dbo.Run_Start` | 50033; a trigger's dispatch reads `Refused`, a test run is **409** `PLAN_CREDIT_LIMIT_REACHED` |
 | Workspaces | `dbo.Workspace_Create` (auth database) | 50030, **409** `PLAN_WORKSPACE_LIMIT_REACHED` |
 | Members | `dbo.TenantInvitation_Accept`, and `dbo.TenantInvitation_Create` up front | 50031, **409** `PLAN_MEMBER_LIMIT_REACHED` |
 
@@ -82,6 +83,30 @@ has no tenant yet, so it is counted, and locked, on its own against Free's limit
 
 A limit only refuses what would go past it. After a downgrade, clients and runs already over the new
 limit stay as they are; registrations, approvals and starts are refused until the tenant is back under it.
+
+## Credits
+
+A run's steps charge its own counter (`dbo.RunCounters_TryCharge`, against the run's budget), so the hot
+path never touches a shared row. The engine's `CreditUsagePoster` (every 10 s, leader only) moves what
+each run consumed since it last posted into the ledger, `dbo.WorkspaceCreditUsage` (credits per workspace
+per UTC day), through `dbo.RunCredits_Post`. A run's `PostedCredits` moves in the same statement that
+reads its delta, so a repeated or retried post adds nothing, and the ledger adds up exactly to what the
+runs consumed. `dbo.Run_DeleteRetired` posts anything a run had left before deleting it, so the ledger
+outlives the runs.
+
+`dbo.Run_Start` adds up the tenant's ledger for the calendar month (UTC) plus what its running runs have
+not posted yet, and refuses the start (50033) once that reaches the plan's `CreditsPerMonth`. Otherwise
+the new run's budget is cut to what is left. The check takes no lock: starts racing for the last credits
+can overrun by at most the budgets they were given, which together are bounded by what was left times the
+runs going at once. A run already going is never stopped for the month's credits; it stops only at its
+own budget (`OutOfCredits`). Starts that take a place already held (a sub-workflow child, a queued event's
+replay, a run replacing those it cancels) skip the check, as they skip the active-run limit.
+
+A refused trigger is reported once per workflow and limit per minute as `WorkflowTriggerRefusedEvent`,
+whose `reason` is `ActiveRunLimit` or `CreditLimit`.
+
+Not built yet: top-up grants (#627, with payments in #631), per-workspace caps (#634) and the usage API
+(#630), which reads the same ledger.
 
 Lock order, where a procedure takes more than one: the trigger key lock, then the test-run lock, then the
 plan lock (`dbo.Run_Start`); the clients' and policies' rows, then the plan lock (client procedures).

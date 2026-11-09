@@ -69,6 +69,7 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<IBookmarkProvider, BookmarkProvider>();
         services.AddScoped<IHistoryEventProvider, HistoryEventProvider>();
         services.AddScoped<IRunRetentionProvider, RunRetentionProvider>();
+        services.AddScoped<ICreditUsageProvider, CreditUsageProvider>();
         services.AddScoped<IIdempotencyKeyProvider, IdempotencyKeyProvider>();
         services.AddScoped<ISharedVariableProvider, SharedVariableProvider>();
         services.AddScoped<IPendingTriggerEventProvider, PendingTriggerEventProvider>();

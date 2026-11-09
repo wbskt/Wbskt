@@ -139,6 +139,10 @@ executor stamps `trigger` and `triggeredAt` and continues.
   trigger kinds and the ceiling. `RunRefusalPublisher` sends each when its window ends, on every
   replica, and flushes the rest on shutdown. A console banner reads it with
   `GET event-logs?eventNames=WorkflowTriggerRefusedEvent&from=…&limit=1`.
+* **Plan credits**: `Run_Start` refuses (50033, outcome `Refused`) once the tenant's ledger for the
+  month plus its running runs' unposted credits reach the plan's `CreditsPerMonth`, and otherwise cuts
+  the run's budget to what is left. Same exemptions, and reported the same way with
+  `reason: CreditLimit`.
 * `ParentRunRefId` is set only when the event says it starts a child run.
 * `RunStarted` is journaled without the trigger body.
 
@@ -309,6 +313,7 @@ All run on the leader only.
 | `RunReaper` | 5 min | Fails runs older than `RunStuckThreshold` (30 min) that are not terminal but have no active branch and no bookmark (`REAPER_TIMEOUT`), and finalizes them. |
 | `HistoryRetentionGc` | 1 h | Deletes Info history after 30 days and Warn/Error after 365 days, then deletes retired runs. |
 | `IdempotencyKeyGc` | 1 h | Deletes idempotency keys older than 24 h. |
+| `CreditUsagePoster` | 10 s | Moves what runs consumed since their last post into `dbo.WorkspaceCreditUsage`, the ledger the plan's monthly credits are counted against (`Docs/Billing.md`). |
 | `PendingTriggerEventBacklogReaper` | periodic | Drops queued trigger events older than 24 h. |
 | `MetricsExporter` | periodic | Exports the gauge metrics below. |
 

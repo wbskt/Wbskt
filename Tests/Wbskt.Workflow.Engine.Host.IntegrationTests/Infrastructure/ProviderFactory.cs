@@ -34,6 +34,9 @@ internal static class ProviderFactory
     public static RunCountersProvider RunCounters(string connectionString)
         => new(BuildConfiguration(connectionString));
 
+    public static CreditUsageProvider CreditUsage(string connectionString)
+        => new(BuildConfiguration(connectionString));
+
     public static BranchProvider Branch(string connectionString)
         => new(BuildConfiguration(connectionString));
 

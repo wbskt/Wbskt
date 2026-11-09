@@ -11,4 +11,7 @@ public sealed record WorkspacePlan(int WorkspaceId, int? TenantId, PlanCode Plan
 
     /// <summary>Runs going at once, pooled across the tenant's workspaces.</summary>
     public PlanCeiling ActiveRunCeiling => new(Limits.ActiveRuns, TenantId);
+
+    /// <summary>Workflow credits a calendar month, pooled across the tenant's workspaces.</summary>
+    public PlanCredits Credits => new(Limits.CreditsPerMonth, TenantId);
 }

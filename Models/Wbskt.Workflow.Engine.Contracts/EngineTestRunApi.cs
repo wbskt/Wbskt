@@ -22,7 +22,10 @@ public enum EngineTestRunOutcome
     TestRunActive,
 
     /// <summary>The workspace is at its limit of runs going at once.</summary>
-    WorkspaceFull
+    WorkspaceFull,
+
+    /// <summary>The plan has spent its workflow credits for the month.</summary>
+    CreditsSpent
 }
 
 public sealed record EngineTestRunResponse(EngineTestRunOutcome Outcome, Guid? RunRefId = null, Guid? ActiveRunRefId = null);

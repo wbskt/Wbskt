@@ -111,6 +111,7 @@ public static class Program
         services.AddHostedService<HistoryRetentionGc>();
         services.AddHostedService<TriggerOutcomeFlusher>();
         services.AddHostedService<IdempotencyKeyGc>();
+        services.AddHostedService<CreditUsagePoster>();
         services.AddHostedService<PendingTriggerEventBacklogReaper>();
         services.AddHostedService<MetricsExporter>();
         services.AddHostedService<RunRefusalPublisher>();

@@ -6,6 +6,7 @@ using Wbskt.Infrastructure.Billing;
 using Wbskt.Models.Billing;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
@@ -188,6 +189,49 @@ public sealed class RunStarterTests
     }
 
     [Fact]
+    public async Task Start_passes_the_plans_monthly_credits_to_the_store()
+    {
+        List<string> operations = [];
+        var runProvider = new RecordingRunProvider(operations);
+        var plans = new FixedWorkspacePlans(PlanCode.Maker, tenantId: 9, adjust: l => l with { CreditsPerMonth = 123m });
+        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions(), plans: plans);
+
+        await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), AnEvent(), null, CancellationToken.None);
+
+        Assert.Equal(new PlanCredits(123m, 9), runProvider.Credits);
+    }
+
+    [Fact]
+    public async Task Start_once_the_months_credits_are_spent_is_refused_and_writes_no_history()
+    {
+        List<string> operations = [];
+        var runProvider = new RecordingRunProvider(operations) { CreditsSpent = true };
+        var historyProvider = new RecordingHistoryEventProvider(operations);
+        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions(), historyProvider,
+            plans: new FixedWorkspacePlans(adjust: l => l with { CreditsPerMonth = 50m }));
+
+        var refused = await Assert.ThrowsAsync<PlanCreditLimitException>(() =>
+            starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), AnEvent(), "trigger-start:5:abc", CancellationToken.None));
+
+        Assert.Equal(50m, refused.Allowance);
+        Assert.Equal(["run"], operations);
+        Assert.Empty(historyProvider.Events);
+    }
+
+    [Fact]
+    public async Task An_exempt_start_sends_no_credit_allowance()
+    {
+        List<string> operations = [];
+        var runProvider = new RecordingRunProvider(operations) { CreditsSpent = true };
+        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions());
+
+        RunStartResult result = await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), AnEvent(), null, CancellationToken.None, exemptFromCeiling: true);
+
+        Assert.True(result.Created);
+        Assert.Null(runProvider.Credits);
+    }
+
+    [Fact]
     public async Task Start_at_the_ceiling_is_refused_and_writes_no_history()
     {
         List<string> operations = [];
@@ -347,6 +391,20 @@ public sealed class RunStarterTests
         public bool AtCeiling { get; init; }
         public int WorkspaceId { get; private set; }
         public PlanCeiling? Ceiling { get; private set; }
+        public bool CreditsSpent { get; init; }
+        public PlanCredits? Credits { get; private set; }
+
+        public Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, PlanCeiling? ceiling, ActiveRunGuard activeRunGuard, PlanCredits? creditAllowance, CancellationToken ct)
+        {
+            Credits = creditAllowance;
+            if (CreditsSpent && creditAllowance is not null)
+            {
+                operations.Add("run");
+                throw AuthHost.SqlExceptions.WithNumber(50033, "The plan has used its workflow credits for this month.");
+            }
+
+            return StartAsync(run, rootBranch, triggerStartKey, workspaceId, ceiling, ct);
+        }
 
         public Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, PlanCeiling? ceiling, CancellationToken ct)
         {

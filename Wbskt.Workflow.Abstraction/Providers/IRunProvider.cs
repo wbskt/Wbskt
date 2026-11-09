@@ -31,6 +31,14 @@ public interface IRunProvider
     Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, PlanCeiling? ceiling, ActiveRunGuard activeRunGuard, CancellationToken ct)
         => StartAsync(run, rootBranch, triggerStartKey, workspaceId, ceiling, ct);
 
+    /// <summary>
+    /// As above, and refused with <c>SqlException</c> 50033 when the tenant of <paramref name="workspaceId"/>
+    /// has spent <paramref name="creditAllowance"/>, its plan's credits for the month; otherwise the run's
+    /// budget is cut to what is left. A null allowance is none. Pooled like <paramref name="ceiling"/>.
+    /// </summary>
+    Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, PlanCeiling? ceiling, ActiveRunGuard activeRunGuard, PlanCredits? creditAllowance, CancellationToken ct)
+        => StartAsync(run, rootBranch, triggerStartKey, workspaceId, ceiling, activeRunGuard, ct);
+
     /// <summary>The run <see cref="StartAsync"/> created under this key, if there is one.</summary>
     Task<RunStartRow?> FindByTriggerStartKeyAsync(string triggerStartKey, CancellationToken ct)
         => Task.FromResult<RunStartRow?>(null);

@@ -19,7 +19,9 @@ CREATE PROCEDURE dbo.Run_Start
     -- A test run (see dbo.WorkflowDefinitions.Kind): at most one goes at a time per workflow (50029).
     @IsTest               BIT = 0,
     -- Credits charged for creating the run; seeded into its counters so the charge commits with it.
-    @StartCost            DECIMAL(18,4) = 0
+    @StartCost            DECIMAL(18,4) = 0,
+    -- The plan's workflow credits a calendar month (UTC), pooled across @TenantId's workspaces (50033).
+    @CreditAllowance      DECIMAL(18,4) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -120,6 +122,32 @@ BEGIN
                     JOIN dbo.TenantWorkspaces(@WorkspaceId, @TenantId) w ON w.WorkspaceId = d.WorkspaceId
                     WHERE r.Status IN (N'Running', N'Failing', N'Cancelling')) >= @MaxActiveRuns
                     THROW 50026, 'The plan has reached its limit of active runs.', 1;
+            END
+
+            -- The plan's monthly credits, pooled like the runs above: what the ledger holds for this
+            -- calendar month (UTC) plus what the runs still going consumed and have not posted yet. Not
+            -- locked: starts racing for the last credits are bounded instead by each run's budget, cut
+            -- to what is left. NULL is no limit.
+            IF @CreditAllowance IS NOT NULL AND @WorkspaceId IS NOT NULL
+            BEGIN
+                DECLARE @MonthStart DATE = DATEFROMPARTS(YEAR(@StartedAt), MONTH(@StartedAt), 1);
+                DECLARE @CreditsSpent DECIMAL(18,4) =
+                    ISNULL((SELECT SUM(u.Credits)
+                            FROM dbo.WorkspaceCreditUsage u
+                            JOIN dbo.TenantWorkspaces(@WorkspaceId, @TenantId) w ON w.WorkspaceId = u.WorkspaceId
+                            WHERE u.Day >= @MonthStart), 0)
+                  + ISNULL((SELECT SUM(rc.CreditsConsumed - rc.PostedCredits)
+                            FROM dbo.Runs r
+                            JOIN dbo.RunCounters rc ON rc.RunId = r.Id
+                            JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
+                            JOIN dbo.TenantWorkspaces(@WorkspaceId, @TenantId) w ON w.WorkspaceId = d.WorkspaceId
+                            WHERE r.Status IN (N'Running', N'Failing', N'Cancelling')), 0);
+
+                IF @CreditsSpent >= @CreditAllowance
+                    THROW 50033, 'The plan has used its workflow credits for this month.', 1;
+
+                IF @CreditAllowance - @CreditsSpent < @CreditBudget
+                    SET @CreditBudget = @CreditAllowance - @CreditsSpent;
             END
 
             -- Last, after every check that can refuse the start, so the lock it takes on the workflow's

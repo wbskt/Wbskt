@@ -42,7 +42,10 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
     public Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, PlanCeiling? ceiling, CancellationToken ct)
         => StartAsync(run, rootBranch, triggerStartKey, workspaceId, ceiling, ActiveRunGuard.None, ct);
 
-    public async Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, PlanCeiling? ceiling, ActiveRunGuard activeRunGuard, CancellationToken ct)
+    public Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, PlanCeiling? ceiling, ActiveRunGuard activeRunGuard, CancellationToken ct)
+        => StartAsync(run, rootBranch, triggerStartKey, workspaceId, ceiling, activeRunGuard, null, ct);
+
+    public async Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, PlanCeiling? ceiling, ActiveRunGuard activeRunGuard, PlanCredits? creditAllowance, CancellationToken ct)
     {
         return await ExecuteSingleAsync(
             "dbo.Run_Start",
@@ -63,11 +66,20 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
                 p.AddWithValue("@ActiveRunGuard", (byte)activeRunGuard);
                 p.AddWithValue("@IsTest", run.IsTest);
                 p.AddWithValue("@StartCost", run.StartCost);
-                if (ceiling is not null)
+                if (ceiling is not null || creditAllowance is not null)
                 {
                     p.AddWithValue("@WorkspaceId", workspaceId);
+                    p.AddWithValue("@TenantId", (object?)(ceiling?.TenantId ?? creditAllowance?.TenantId) ?? DBNull.Value);
+                }
+
+                if (ceiling is not null)
+                {
                     p.AddWithValue("@MaxActiveRuns", ceiling.Limit);
-                    p.AddWithValue("@TenantId", (object?)ceiling.TenantId ?? DBNull.Value);
+                }
+
+                if (creditAllowance is not null)
+                {
+                    p.AddWithValue("@CreditAllowance", creditAllowance.MonthlyAllowance);
                 }
             },
             MapStart,
