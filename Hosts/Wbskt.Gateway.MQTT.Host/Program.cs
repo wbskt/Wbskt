@@ -23,6 +23,7 @@ public static class Program
         builder.Services.AddGatewayCore(builder.Configuration, GatewayTransport.Mqtt);
         builder.Services.Configure<MqttGatewayOptions>(builder.Configuration.GetSection(MqttGatewayOptions.SectionName));
         builder.Services.AddSingleton<MqttNetLoggerBridge>();
+        builder.Services.AddSingleton<MqttConnectAuthenticator>();
         builder.Services.AddSingleton<MqttGateway>();
         // Registered after the bus (in AddGatewayCore), so it stops first and sessions can still
         // announce their end as the host shuts down.
