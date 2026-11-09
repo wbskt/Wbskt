@@ -622,6 +622,22 @@ public sealed class BillingPaymentsTests
     }
 
     [Fact]
+    public async Task A_failed_upgrade_puts_back_the_downgrade_it_dropped_so_the_customer_does_not_renew_on_the_plan_they_left()
+    {
+        _stored.Add(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(10)) with
+        {
+            PlanCode = PlanCode.Maker, ProductId = "prod_maker_y", Interval = BillingInterval.Yearly, ScheduledPlan = PlanCode.Maker, ScheduledInterval = BillingInterval.Monthly, ScheduledAt = Now.UtcDateTime.AddDays(10)
+        });
+        _gateway.Setup(g => g.ChangePlanAsync("sub_1", "prod_pro_m", PlanChangeTiming.Now, It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("card declined"));
+
+        var result = await Billing().ChangePlanAsync(9, new ChangePlanRequest(PlanCode.Pro, BillingInterval.Monthly), CancellationToken.None);
+
+        Assert.Equal("BILLING_PROVIDER_UNAVAILABLE", result.Error.Code);
+        _gateway.Verify(g => g.CancelScheduledChangeAsync("sub_1", It.IsAny<CancellationToken>()), Times.Once);
+        _gateway.Verify(g => g.ChangePlanAsync("sub_1", "prod_maker_m", PlanChangeTiming.AtPeriodEnd, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task A_change_made_but_not_read_back_is_still_a_success_so_it_is_not_asked_for_twice()
     {
         _stored.Add(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(10)) with { PlanCode = PlanCode.Maker, ProductId = "prod_maker_m" });

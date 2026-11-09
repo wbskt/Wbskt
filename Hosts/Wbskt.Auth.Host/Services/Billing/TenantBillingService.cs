@@ -158,13 +158,7 @@ internal sealed class TenantBillingService(
             }
             else if (upgrade)
             {
-                // A downgrade still scheduled would undo the upgrade at the period's end.
-                if (current.ScheduledPlan is not null)
-                {
-                    await gateway.CancelScheduledChangeAsync(current.SubscriptionId, ct);
-                }
-
-                await gateway.ChangePlanAsync(current.SubscriptionId, productId, PlanChangeTiming.Now, ct);
+                await UpgradeAsync(current, productId, ct);
             }
             else
             {
@@ -195,6 +189,50 @@ internal sealed class TenantBillingService(
             tenantId, current.SubscriptionId, current.PlanCode, current.Interval, request.Plan, request.Interval,
             same ? "scheduled change dropped" : upgrade ? "now" : "at period end");
         return await GetAsync(tenantId, ct);
+    }
+
+    /// <summary>
+    /// Moves the subscription up at once. A downgrade still scheduled would undo the upgrade at the
+    /// period's end, so it is dropped first, and scheduled again if the upgrade does not go through, so
+    /// the customer does not renew on the plan they asked to leave.
+    /// </summary>
+    private async Task UpgradeAsync(TenantSubscription current, string productId, CancellationToken ct)
+    {
+        if (current.ScheduledPlan is not { } scheduledPlan || current.ScheduledInterval is not { } scheduledInterval)
+        {
+            await gateway.ChangePlanAsync(current.SubscriptionId, productId, PlanChangeTiming.Now, ct);
+            return;
+        }
+
+        await gateway.CancelScheduledChangeAsync(current.SubscriptionId, ct);
+        try
+        {
+            await gateway.ChangePlanAsync(current.SubscriptionId, productId, PlanChangeTiming.Now, ct);
+        }
+        catch (HttpRequestException)
+        {
+            if (options.Value.Plans.TryGetValue(scheduledPlan, out var intervals) && intervals.TryGetValue(scheduledInterval, out string? scheduledProduct) && !string.IsNullOrEmpty(scheduledProduct))
+            {
+                await RescheduleAsync(current, scheduledProduct);
+            }
+
+            throw;
+        }
+    }
+
+    private async Task RescheduleAsync(TenantSubscription current, string scheduledProduct)
+    {
+        try
+        {
+            await gateway.ChangePlanAsync(current.SubscriptionId, scheduledProduct, PlanChangeTiming.AtPeriodEnd, CancellationToken.None);
+            logger.LogWarning("Upgrade of subscription {SubscriptionId} of tenant {TenantId} failed; its scheduled move to {Plan} {Interval} was put back.",
+                current.SubscriptionId, current.TenantId, current.ScheduledPlan, current.ScheduledInterval);
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogError(ex, "Upgrade of subscription {SubscriptionId} of tenant {TenantId} failed and its scheduled move to {Plan} {Interval} could not be put back; it renews on {Current}.",
+                current.SubscriptionId, current.TenantId, current.ScheduledPlan, current.ScheduledInterval, current.PlanCode);
+        }
     }
 
     public async Task<Result<BillingPortalResponse>> PortalAsync(int tenantId, CancellationToken ct)
