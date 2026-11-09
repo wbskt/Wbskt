@@ -19,6 +19,7 @@ internal sealed class TenantBillingSync(
     ITenantPlanProvider plans,
     ITenantPlanService planService,
     IAuditWorkspaces audit,
+    IBillingNotifier notifier,
     IOptions<BillingOptions> options,
     TimeProvider clock,
     ILogger<TenantBillingSync> logger)
@@ -151,9 +152,32 @@ internal sealed class TenantBillingSync(
             refundedThrough,
             ct);
 
+        await TellPaymentFailedAsync(saved, ct);
+
         IReadOnlyCollection<TenantSubscription> all = await CancelDuplicatesAsync(tenant, await billing.GetSubscriptionsAsync(tenant.TenantId, ct), now, ct);
         await ApplyAsync(tenant, SubscriptionPlan.Deciding(all), now, ct);
         return (BillingSyncResult.Done, all.FirstOrDefault(s => s.SubscriptionId == saved.SubscriptionId) ?? saved);
+    }
+
+    /// <summary>
+    /// Tells the billing admins once that a renewal failed and until when the plan holds. The subscription
+    /// is already stored, so a notice that cannot be sent is logged rather than failing the sync.
+    /// </summary>
+    private async Task TellPaymentFailedAsync(TenantSubscription saved, CancellationToken ct)
+    {
+        if (saved is not { PastDueSince: { } pastDueSince, DuplicateAt: null })
+        {
+            return;
+        }
+
+        try
+        {
+            await notifier.NotifyAsync(saved.TenantId, BillingNotices.PaymentFailed(saved.SubscriptionId, saved.PlanCode, pastDueSince, options.Value.PastDueGrace), ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Could not tell tenant {TenantId} that subscription {SubscriptionId}'s payment failed.", saved.TenantId, saved.SubscriptionId);
+        }
     }
 
     /// <summary>

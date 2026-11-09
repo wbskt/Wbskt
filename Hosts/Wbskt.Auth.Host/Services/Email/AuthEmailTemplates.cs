@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using Wbskt.Auth.Host.Models;
 
 namespace Wbskt.Auth.Host.Services.Email;
 
@@ -129,6 +130,25 @@ internal static class AuthEmailTemplates
                  {Expiry(expiresAtUtc)}
                  <p class="muted">Undoing it signs the account out everywhere again. Then reset your password, since whoever made the change may know it.</p>
                  """));
+    }
+
+    /// <summary>
+    /// A billing notice: its paragraphs, each encoded (a workspace name is the tenant's own text), and the
+    /// way to the billing page.
+    /// </summary>
+    public static OutboundMail Billing(AuthEmailOptions options, string to, string username, BillingNotice notice, string billingUrl)
+    {
+        var body = new StringBuilder();
+        body.Append("<p>Hello ").Append(Field(username)).Append(" — this is about your ").Append(Field(options.ProductName)).Append(" account.</p>");
+        foreach (string paragraph in notice.Paragraphs)
+        {
+            body.Append("<p>").Append(Field(paragraph)).Append("</p>");
+        }
+
+        body.Append(Button(billingUrl, "Open billing"));
+        body.Append("""<p class="muted">You get this because you manage billing for the account. We send each notice once.</p>""");
+
+        return new OutboundMail(to, Subject(notice.Subject), Layout(options, notice.Heading, body.ToString()));
     }
 
     /// <summary>

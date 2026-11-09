@@ -1,3 +1,5 @@
+using Wbskt.Auth.Host.Models;
+
 namespace Wbskt.Auth.Host.Services.Email;
 
 /// <summary>
@@ -31,4 +33,7 @@ internal interface IAuthMailer
 
     /// <summary>Tells the old address the account moved to <paramref name="newEmail"/>, with the link that undoes it.</summary>
     ValueTask QueueEmailChangedAsync(string to, string username, string newEmail, string revertToken, DateTime expiresAtUtc, CancellationToken ct);
+
+    /// <summary>A billing notice to one of the tenant's billing admins, with a link to <paramref name="billingUrl"/>.</summary>
+    ValueTask QueueBillingNoticeAsync(string to, string username, BillingNotice notice, string billingUrl, CancellationToken ct);
 }

@@ -70,6 +70,73 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
     }
 
     [SkippableFact]
+    public async Task A_billing_notice_is_claimed_once_per_kind_and_period_and_never_for_a_missing_tenant()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int tenantId = await CreateTenantAsync();
+
+        int first = await ClaimNoticeAsync(tenantId, "Messages80", "2026-11");
+        int again = await ClaimNoticeAsync(tenantId, "Messages80", "2026-11");
+        int nextMonth = await ClaimNoticeAsync(tenantId, "Messages80", "2026-12");
+        int otherKind = await ClaimNoticeAsync(tenantId, "Messages100", "2026-11");
+        int missing = await ClaimNoticeAsync(int.MaxValue, "Messages80", "2026-11");
+
+        Assert.Equal((1, 0, 1, 1, 0), (first, again, nextMonth, otherKind, missing));
+    }
+
+    [SkippableFact]
+    public async Task Billing_contacts_are_the_members_with_a_confirmed_address_who_are_not_suspended()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int confirmed = await CreateUserAsync();
+        int unconfirmed = await CreateUserAsync();
+        int suspended = await CreateUserAsync();
+        await ScalarAsync<int>("UPDATE dbo.Users SET IsEmailVerified = 1 WHERE Id IN (@p0, @p1); SELECT 1;", confirmed, suspended);
+        int tenantId = await CreateTenantAsync("Free", confirmed, unconfirmed, suspended);
+        await ScalarAsync<int>("UPDATE dbo.TenantMembers SET IsSuspended = 1 WHERE TenantId = @p0 AND UserId = @p1; SELECT 1;", tenantId, suspended);
+
+        await using var conn = await OpenAsync();
+        await using var cmd = Procedure(conn, "dbo.TenantMember_GetContacts");
+        cmd.Parameters.AddWithValue("@TenantId", tenantId);
+        var ids = new List<int>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            ids.Add(reader.GetInt32(reader.GetOrdinal("Id")));
+        }
+
+        Assert.Equal([confirmed], ids);
+    }
+
+    [SkippableFact]
+    public async Task The_notice_worker_lists_past_due_subscriptions_and_live_packs_inside_their_windows_only()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int tenantId = await CreateTenantAsync();
+        string inside = $"sub_{Guid.NewGuid():N}";
+        string paid = $"sub_{Guid.NewGuid():N}";
+        await UpsertAsync(tenantId, inside, "past_due", Now.AddDays(-6));
+        await UpsertAsync(tenantId, paid, "past_due", Now.AddDays(-6));
+        await UpsertAsync(tenantId, paid, "active", Now);
+        string soon = $"pay_{Guid.NewGuid():N}";
+        string refunded = $"pay_{Guid.NewGuid():N}";
+        await RecordPurchaseAsync(tenantId, soon, "{}");
+        await RecordPurchaseAsync(tenantId, refunded, "{}");
+        await RefundPurchaseAsync(refunded, "{}");
+        DateTime expiresAt = await ScalarAsync<DateTime>("SELECT ExpiresAt FROM dbo.TenantCreditPurchases WHERE PaymentId = @p0", soon);
+
+        var pastDue = await ListAsync("dbo.TenantSubscriptions_GetPastDueBetween", Now.AddDays(-7), Now.AddDays(-5), "SubscriptionId");
+        var expiring = await ListAsync("dbo.TenantCreditPurchases_GetExpiring", expiresAt.AddDays(-30), expiresAt, "PaymentId");
+        var notYet = await ListAsync("dbo.TenantCreditPurchases_GetExpiring", expiresAt.AddDays(-60), expiresAt.AddDays(-30), "PaymentId");
+
+        Assert.Contains(inside, pastDue);
+        Assert.DoesNotContain(paid, pastDue);
+        Assert.Contains(soon, expiring);
+        Assert.DoesNotContain(refunded, expiring);
+        Assert.DoesNotContain(soon, notYet);
+    }
+
+    [SkippableFact]
     public async Task A_refund_mark_is_kept_across_reads_and_a_second_subscription_is_kept_beside_the_first()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
@@ -510,6 +577,25 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
         cmd.Parameters.AddWithValue("@ProductId", productId);
         cmd.Parameters.AddWithValue("@Now", now);
         return await cmd.ExecuteScalarAsync() as string;
+    }
+
+    private Task<int> ClaimNoticeAsync(int tenantId, string kind, string periodKey) =>
+        ProcScalarAsync("dbo.BillingNotice_Claim", ("@TenantId", tenantId), ("@Kind", kind), ("@PeriodKey", periodKey));
+
+    private async Task<List<string>> ListAsync(string procedure, DateTime from, DateTime to, string column)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = Procedure(conn, procedure);
+        cmd.Parameters.AddWithValue("@From", from);
+        cmd.Parameters.AddWithValue("@To", to);
+        var values = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            values.Add(reader.GetString(reader.GetOrdinal(column)));
+        }
+
+        return values;
     }
 
     private async Task<int> ProcScalarAsync(string name, params (string Name, object Value)[] args)

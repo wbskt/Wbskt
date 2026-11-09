@@ -65,4 +65,16 @@ internal interface ITenantBillingProvider
 
     /// <summary>The tenant's customer id with <paramref name="provider"/>, for its portal; null when it never paid.</summary>
     Task<string?> FindCustomerIdAsync(int tenantId, string provider, CancellationToken cancellationToken);
+
+    /// <summary>Claims the notice <paramref name="kind"/> for <paramref name="periodKey"/>: true the first time only.</summary>
+    Task<bool> ClaimBillingNoticeAsync(int tenantId, BillingNoticeKind kind, string periodKey, CancellationToken cancellationToken);
+
+    /// <summary>The tenant's members who can be written to; which of them manage billing is the caller's to check.</summary>
+    Task<IReadOnlyCollection<BillingContact>> GetBillingContactsAsync(int tenantId, CancellationToken cancellationToken);
+
+    /// <summary>Subscriptions still behind on payment that fell behind after <paramref name="from"/> and by <paramref name="to"/>.</summary>
+    Task<IReadOnlyCollection<PastDueSubscription>> GetPastDueBetweenAsync(DateTime from, DateTime to, CancellationToken cancellationToken);
+
+    /// <summary>Credit packs that still count and expire after <paramref name="from"/> and by <paramref name="to"/>.</summary>
+    Task<IReadOnlyCollection<ExpiringCreditPurchase>> GetCreditPurchasesExpiringAsync(DateTime from, DateTime to, CancellationToken cancellationToken);
 }

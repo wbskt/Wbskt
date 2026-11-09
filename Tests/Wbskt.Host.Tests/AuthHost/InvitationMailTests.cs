@@ -112,5 +112,7 @@ public sealed class InvitationMailTests
         public ValueTask QueueEmailChangeAsync(string to, string username, string token, DateTime expiresAtUtc, CancellationToken ct) => ValueTask.CompletedTask;
 
         public ValueTask QueueEmailChangedAsync(string to, string username, string newEmail, string revertToken, DateTime expiresAtUtc, CancellationToken ct) => ValueTask.CompletedTask;
+
+        public ValueTask QueueBillingNoticeAsync(string to, string username, Wbskt.Auth.Host.Models.BillingNotice notice, string billingUrl, CancellationToken ct) => ValueTask.CompletedTask;
     }
 }

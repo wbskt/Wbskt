@@ -221,7 +221,7 @@ included.
   share): `WorkspaceMessageLimitApproachingEvent` at 80% (skipped when a check finds it already past
   100%), `WorkspaceMessageLimitReachedEvent` at 100% (`throttled` true on Free), and
   `WorkspaceMessagesThrottledEvent` when a paid plan reaches its throttle. The usage API reports
-  `messages` with `throttled`. Emailing these is a separate consumer.
+  `messages` with `throttled`. The auth host emails these (see Billing emails).
 
 The throttle can trail the crossing by up to a minute plus the event logger's batching, so an account
 can carry a little past where it is throttled. Commands sent from the console or the API are not refused: they
@@ -379,6 +379,28 @@ exists, nothing is deleted: 503 `BILLING_SUBSCRIPTION_NOT_CANCELLED`, and the ca
   reached no tenant), `BillingWebhooksFailing` on more than five failures in an hour.
 - The webhook endpoint has its own per-IP limit (`billing-webhooks`, 600 a minute), generous for a
   provider's retry burst; a refused delivery is redelivered.
+
+## Billing emails
+
+The auth host emails a tenant's billing admins (members with `billing.manage`, an active account and a
+confirmed address) through its mail queue (`IBillingNotifier`). Each email names the number, the date and
+what to do next, and links to `Billing:Payments:ReturnUrl` (the console's billing page). Each is sent once
+per kind and period: `dbo.BillingNotice_Claim` keys `dbo.BillingNotices` by tenant, kind and period, and
+only the first claim sends. Nothing is claimed while no relay is configured or no one can be written to,
+so the notice goes out once someone can receive it.
+
+| Kind | Raised by | Period |
+|---|---|---|
+| `CreditAllowance80`, `CreditAllowance100` | `TenantCreditAllowanceReachedEvent` (engine, `CreditUsagePoster`) | month |
+| `CreditCap80`, `CreditCap100` | `WorkspaceCreditCapReachedEvent` | month and workspace |
+| `Messages80`, `Messages100`, `MessagesThrottled` | the management host's message events | month (every workspace of the account reports; one email) |
+| `PaymentFailed` | `TenantBillingSync`, on storing a past-due subscription | subscription and when it fell behind |
+| `GraceEnding` | `BillingNoticeWorker` (hourly), when the grace ends within 2 days | as `PaymentFailed` |
+| `Downgraded` | `TenantPlanChangedEvent` to a smaller plan, with the limits that drop and when history beyond the new retention goes (`Billing:RetentionGraceDays`) | plan revision |
+| `PackExpiring` | `BillingNoticeWorker`, a live pack expiring within 30 days | payment |
+
+Upgrades are not emailed: the admin made them and sees them. Credits that `Run_DeleteRetired` posts are not
+looked at for the allowance crossing, so a crossing made only by them is not reported.
 
 Lock order, where a procedure takes more than one: the trigger key lock, then the test-run lock, then the
 plan lock, then the workspace's cap lock, then the root run's counter row (`dbo.Run_Start`); the run
