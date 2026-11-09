@@ -462,6 +462,7 @@ alerts fire and reach nobody, and Alertmanager says so in its log.
 | `BackupMissing` / `BackupNeverReported` | no successful backup for 26 hours |
 | `BackupFailed` | `backup.sh` failed (raised immediately by `scripts/alert.sh`) |
 | `DatabaseNearExpressLimit` | a database's data files pass 8 GiB of the Express edition's 10 GB (pushed nightly by `backup.sh`) |
+| `DatabaseAtExpressLimit` | a database's data files pass 9 GiB; Express refuses writes at 10 GB (pages) |
 | `DiskAlmostFull` | any real filesystem on the VM has under 15% free for 10 minutes |
 | `DiskFillingFast` | at the last 6 hours' rate a filesystem under 40% free fills within 24 hours |
 | `NodeExporterDown` | Prometheus cannot scrape node-exporter, so nothing is watching disk space |
@@ -673,7 +674,7 @@ uses at most about 1.4 GB for its buffer pool, and the lesser of one socket or f
 in the schema needs more, and CI runs its SQL Server as Express too, so a feature it lacks fails
 there first. `SQL_MEMORY_LIMIT_MB` (default 2048) stops SQL Server from planning for 80% of the
 VM's RAM. 2048 is as low as it goes: SQL Server treats any lower value as about 2000 MB, so a
-smaller number only looks tighter. On Express the buffer pool cap is what binds in practice. `DatabaseNearExpressLimit` warns at 8 GiB.
+smaller number only looks tighter. On Express the buffer pool cap is what binds in practice. `DatabaseNearExpressLimit` warns at 8 GiB and `DatabaseAtExpressLimit` pages at 9 GiB.
 
 The edition is read when the container starts, and the data files carry over: an existing
 Developer volume comes up as Express with its databases online, and switching back is the same

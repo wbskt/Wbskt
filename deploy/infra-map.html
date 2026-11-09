@@ -644,6 +644,7 @@ const ALERTS = [
  ['BackupNeverReported','Backups','No backup has ever reported success'],
  ['BackupFailed','Backups','backup.sh failed; raised directly by alert.sh, not a Prometheus rule'],
  ['DatabaseNearExpressLimit','Backups','A database’s data files pass 8 GiB of Express’s 10 GB (size pushed nightly by backup.sh)'],
+ ['DatabaseAtExpressLimit','Backups','A database’s data files pass 9 GiB; Express stops writes at 10 GB (page)'],
  ['DiskAlmostFull','VM','A real filesystem on the VM has under 15% free for 10 minutes'],
  ['DiskFillingFast','VM','At the last 6 hours’ rate a filesystem under 40% free fills within 24 hours'],
  ['NodeExporterDown','VM','Prometheus cannot scrape node-exporter, so disk space is unwatched'],
