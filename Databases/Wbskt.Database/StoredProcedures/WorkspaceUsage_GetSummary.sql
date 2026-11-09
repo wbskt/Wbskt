@@ -1,7 +1,8 @@
 -- What a workspace and its tenant (dbo.TenantWorkspaces, as the plan limits count them) have used of
 -- the plan: workflow credits since @MonthStart (the ledger plus running runs' unposted credits, as
 -- Run_Start counts them), client messages since @MonthStart (dbo.WorkspaceMessageUsage), registered
--- clients and runs going, the workspace's own credit cap, and the credits the tenant's grants still hold.
+-- clients and runs going, the workspace's own credit cap and what its runs going hold of it, the credits
+-- the tenant's grants still hold, and which of those expire first: when, and how many.
 CREATE PROCEDURE dbo.WorkspaceUsage_GetSummary
     @WorkspaceId INT,
     @TenantId    INT,
@@ -46,6 +47,18 @@ BEGIN
     WHERE r.Status IN (N'Running', N'Failing', N'Cancelling')
     GROUP BY d.WorkspaceId;
 
+    -- The live grant that expires first, as dbo.TenantCreditGrantBalance counts live; a grant drawn to
+    -- nothing is left out, since nothing of it can expire.
+    DECLARE @Now DATETIME2(3) = SYSUTCDATETIME();
+    DECLARE @NextExpiresAt DATETIME2(3) = (
+        SELECT MIN(g.ExpiresAt)
+        FROM dbo.TenantCreditGrants g
+        WHERE g.TenantId = @TenantId
+          AND g.RevokedAt IS NULL
+          AND g.HeldAt IS NULL
+          AND g.ExpiresAt > @Now
+          AND g.Credits > g.Drawn);
+
     SELECT
         (SELECT ISNULL(SUM(Credits), 0) FROM @Credits) AS TenantCredits,
         (SELECT ISNULL(SUM(Credits), 0) FROM @Credits WHERE WorkspaceId = @WorkspaceId) AS WorkspaceCredits,
@@ -56,6 +69,14 @@ BEGIN
         (SELECT ISNULL(SUM(Runs), 0) FROM @Runs) AS TenantActiveRuns,
         (SELECT ISNULL(SUM(Runs), 0) FROM @Runs WHERE WorkspaceId = @WorkspaceId) AS WorkspaceActiveRuns,
         (SELECT MonthlyCreditCap FROM dbo.WorkspaceCreditCaps WHERE WorkspaceId = @WorkspaceId) AS MonthlyCreditCap,
-        (SELECT Credits FROM dbo.TenantCreditGrantBalance(@TenantId, SYSUTCDATETIME())) AS CreditGrantBalance;
+        (SELECT Credits FROM dbo.TenantCreditGrantBalance(@TenantId, @Now)) AS CreditGrantBalance,
+        (SELECT Credits FROM dbo.WorkspaceCreditsReserved(@WorkspaceId)) AS WorkspaceCreditsReserved,
+        @NextExpiresAt AS CreditGrantNextExpiresAt,
+        (SELECT ISNULL(SUM(g.Credits - g.Drawn), 0)
+         FROM dbo.TenantCreditGrants g
+         WHERE g.TenantId = @TenantId
+           AND g.RevokedAt IS NULL
+           AND g.HeldAt IS NULL
+           AND g.ExpiresAt = @NextExpiresAt) AS CreditGrantNextExpiring;
 END;
 GO

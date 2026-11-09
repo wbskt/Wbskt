@@ -46,9 +46,10 @@ public sealed class UsageE2ETests(ServicesFixture fixture)
 
         cap.Should().Be(new WorkspaceCreditCapResponse(250m, 0m, false));
         usage.Plan.Should().Be(PlanCode.Free);
-        usage.Account.Credits.Should().Be(new CreditUsageAmount(0m, FreeCreditsPerMonth, 0m));
+        usage.Account.Credits.Should().Be(new CreditUsageAmount(0m, FreeCreditsPerMonth, 0m, null, 0m));
         usage.Account.Messages.Throttled.Should().BeFalse();
         usage.Workspace.MonthlyCreditCap.Should().Be(250m);
+        usage.Workspace.CreditsReserved.Should().Be(0m);
         usage.Days.Should().BeEmpty();
         usage.PeriodEnd.Should().Be(usage.PeriodStart.AddMonths(1));
     }

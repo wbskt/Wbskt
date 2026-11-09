@@ -11,6 +11,9 @@ namespace Wbskt.Management.Host.Providers;
 public interface IClientProvider : IReferenceProvider
 {
     Task<int> GetRegisteredCountByPolicyIdAsync(int policyId, CancellationToken cancellationToken = default);
+
+    /// <summary>Registered clients across the account of <paramref name="workspaceId"/>, as its plan's client limit counts them.</summary>
+    Task<int> GetRegisteredCountByAccountAsync(int workspaceId, int? tenantId, CancellationToken cancellationToken = default);
     /// <summary>
     /// <paramref name="statuses"/>, when not empty, lists only clients in one of them. <paramref name="tag"/>,
     /// when given, must already be normalised (<see cref="ClientTags.TryNormalize"/>).

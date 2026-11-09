@@ -4,6 +4,7 @@ using Wbskt.Infrastructure.Billing;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Models;
+using Wbskt.Models;
 using Wbskt.Models.Billing;
 
 namespace Wbskt.Management.Host.Services.Billing;
@@ -40,11 +41,16 @@ internal sealed class WorkspaceUsageService(IWorkspaceUsageProvider usage, IWork
             new DateTimeOffset(periodStart),
             new DateTimeOffset(periodStart.AddMonths(1)),
             new AccountUsage(
-                new CreditUsageAmount(summary.TenantCredits, plan.Limits.CreditsPerMonth, summary.CreditGrantBalance),
+                new CreditUsageAmount(
+                    summary.TenantCredits,
+                    plan.Limits.CreditsPerMonth,
+                    summary.CreditGrantBalance,
+                    summary.CreditGrantNextExpiresAt?.ToUtcOffset(),
+                    summary.CreditGrantNextExpiring),
                 new MessageUsageAmount(summary.TenantMessages, plan.Limits.MessagesPerMonth, MessageAllowance.IsThrottled(plan.PlanCode, summary.TenantMessages, plan.Limits.MessagesPerMonth, _paidThrottleMultiple)),
                 new UsageCount(summary.TenantClients, plan.Limits.Clients),
                 new UsageCount(summary.TenantActiveRuns, plan.Limits.ActiveRuns)),
-            new WorkspaceUsageShare(summary.WorkspaceCredits, summary.MonthlyCreditCap, summary.WorkspaceMessages, summary.WorkspaceClients, summary.WorkspaceActiveRuns),
+            new WorkspaceUsageShare(summary.WorkspaceCredits, summary.MonthlyCreditCap, summary.WorkspaceMessages, summary.WorkspaceClients, summary.WorkspaceActiveRuns, summary.WorkspaceCreditsReserved),
             days));
     }
 }

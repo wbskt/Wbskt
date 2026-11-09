@@ -50,9 +50,10 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
     /// clients, which is shared by all of the account's workspaces. Pending clients do not count until
     /// they are approved, so a leaked PIN for a policy that needs approval cannot fill the plan.
     /// </summary>
-    internal static Error PlanLimitReached(int limit) => Error.Conflict(
+    internal static Error PlanLimitReached(WorkspacePlan plan, int current) => Error.Conflict(
         "PLAN_CLIENT_LIMIT_REACHED",
-        $"Your plan allows {limit} clients across all of its workspaces. Remove one you no longer use, or upgrade.");
+        $"You have {current} clients; {plan.PlanCode} allows {plan.Limits.Clients} across all of the account's workspaces. Remove one you no longer use, or upgrade.")
+        .AtPlanLimit(plan.PlanCode.ToString(), plan.Limits.Clients, current);
 
     public async Task<Result<ClientRegistrationResponse>> InitiateRegistrationAsync(ClientRegistrationRequest request, CancellationToken cancellationToken = default)
     {
@@ -100,7 +101,8 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
         var secret = ClientSecrets.Generate();
         var initialStatus = policy.AutoApproval ? ClientStatus.Registered : ClientStatus.Pending;
 
-        PlanCeiling ceiling = (await _plans.GetAsync(policy.WorkspaceId, cancellationToken)).ClientCeiling;
+        WorkspacePlan plan = await _plans.GetAsync(policy.WorkspaceId, cancellationToken);
+        PlanCeiling ceiling = plan.ClientCeiling;
         Client client;
         try
         {
@@ -109,7 +111,8 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
         catch (SqlException ex) when (ex.Number == PlanLimitReachedError)
         {
             _logger.LogWarning("Client registration failed: WorkspaceId {WorkspaceId} is at its plan's limit of {MaxClients} clients", policy.WorkspaceId, ceiling.Limit);
-            return Result<ClientRegistrationResponse>.Failure(PlanLimitReached(ceiling.Limit));
+            int current = await _clientProvider.GetRegisteredCountByAccountAsync(policy.WorkspaceId, plan.TenantId, cancellationToken);
+            return Result<ClientRegistrationResponse>.Failure(PlanLimitReached(plan, current));
         }
         catch (SqlException ex) when (ex.Number == PolicyLimitReachedError && policy.MaxClients.HasValue)
         {

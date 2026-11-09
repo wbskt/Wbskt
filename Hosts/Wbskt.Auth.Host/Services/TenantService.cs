@@ -214,7 +214,7 @@ internal sealed class TenantService : ITenantService
         var expiresAt = DateTime.UtcNow.Add(InvitationLifetime);
         var limits = await _limits.ForTenantAsync(tenantId, cancellationToken);
 
-        return await GuardAsync("CreateInvitation", async () =>
+        Result<CreatedInvitationResponse> result = await GuardAsync("CreateInvitation", async () =>
         {
             var created = await _tenants.CreateInvitationAsync(tenantId, request.Email, roleId, SecurityTokens.Hash(token), expiresAt, callerId, workspaceIds, limits.Members, cancellationToken);
             _logger.LogInformation("Invitation {RefId} issued for tenant {TenantId} by user ID {CallerId}", created.RefId, tenantId, callerId);
@@ -228,6 +228,7 @@ internal sealed class TenantService : ITenantService
             // The raw token appears here and nowhere else — not in the store, and not in this log line.
             return new CreatedInvitationResponse(created.RefId, request.Email, expiresAt.ToUtcOffset(), token);
         });
+        return result.IsSuccess ? result : Result<CreatedInvitationResponse>.Failure(await _limits.WithSeatsAsync(result.Error, tenantId, cancellationToken));
     }
 
     public async Task<Result<IPagedList<InvitationResponse>>> GetInvitationsAsync(int tenantId, int skip, int take, CancellationToken cancellationToken = default)
@@ -268,7 +269,7 @@ internal sealed class TenantService : ITenantService
         // Read back for the tenant name only. The procedure re-checks validity and the address
         // match under a lock, so this is a nicety, never the gate.
         var limits = await _limits.ForTenantAsync(invitation.TenantRef, cancellationToken);
-        return await GuardAsync("AcceptInvitation", async () =>
+        Result<AcceptInvitationResponse> accepted = await GuardAsync("AcceptInvitation", async () =>
         {
             var tenantId = await _tenants.AcceptInvitationAsync(tokenHash, callerId, limits.Members, cancellationToken);
             _logger.LogInformation("User ID {CallerId} joined tenant {TenantRef} by invitation", callerId, invitation.TenantRef);
@@ -277,6 +278,7 @@ internal sealed class TenantService : ITenantService
             await _announcer.ToTenantAsync(new InvitationAcceptedEvent(invitation.RefId, invitation.Email, callerId, joiner.RefId), tenantId, cancellationToken);
             return new AcceptInvitationResponse(invitation.TenantRef, invitation.TenantName);
         });
+        return accepted.IsSuccess ? accepted : Result<AcceptInvitationResponse>.Failure(await _limits.WithSeatsAsync(accepted.Error, invitation.TenantRef, cancellationToken));
     }
 
     // ----- Shared plumbing ---------------------------------------------------------------------

@@ -19,7 +19,7 @@ public sealed class WorkspaceUsageServiceTests
     public async Task Usage_is_the_plans_limits_against_the_accounts_totals_and_the_workspaces_share()
     {
         _usage.Setup(x => x.GetSummaryAsync(7, 3, new DateOnly(2026, 11, 1), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new WorkspaceUsageSummary(1500m, 400m, 900_000, 250_000, 60, 12, 5, 1, 1000m, 500m));
+            .ReturnsAsync(new WorkspaceUsageSummary(1500m, 400m, 900_000, 250_000, 60, 12, 5, 1, 1000m, 500m, 120m, new DateTime(2027, 1, 15, 0, 0, 0, DateTimeKind.Utc), 200m));
         _usage.Setup(x => x.GetDailyCreditsAsync(7, new DateOnly(2026, 10, 9), new DateOnly(2026, 11, 9), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new DailyCreditUsage(new DateOnly(2026, 11, 2), 400m)]);
         var service = new WorkspaceUsageService(_usage.Object, new FixedWorkspacePlans(PlanCode.Maker, tenantId: 3), new FixedClock(), Options.Create(new BillingOptions()));
@@ -30,11 +30,11 @@ public sealed class WorkspaceUsageServiceTests
         WorkspaceUsageResponse usage = result.Value;
         Assert.Equal(PlanCode.Maker, usage.Plan);
         Assert.Equal((new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 12, 1, 0, 0, 0, TimeSpan.Zero)), (usage.PeriodStart, usage.PeriodEnd));
-        Assert.Equal(new CreditUsageAmount(1500m, maker.CreditsPerMonth, 500m), usage.Account.Credits);
+        Assert.Equal(new CreditUsageAmount(1500m, maker.CreditsPerMonth, 500m, new DateTimeOffset(2027, 1, 15, 0, 0, 0, TimeSpan.Zero), 200m), usage.Account.Credits);
         Assert.Equal(new MessageUsageAmount(900_000, maker.MessagesPerMonth, false), usage.Account.Messages);
         Assert.Equal(new UsageCount(60, maker.Clients), usage.Account.Clients);
         Assert.Equal(new UsageCount(5, maker.ActiveRuns), usage.Account.ActiveRuns);
-        Assert.Equal(new WorkspaceUsageShare(400m, 1000m, 250_000, 12, 1), usage.Workspace);
+        Assert.Equal(new WorkspaceUsageShare(400m, 1000m, 250_000, 12, 1, 120m), usage.Workspace);
         Assert.Single(usage.Days);
     }
 

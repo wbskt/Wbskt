@@ -10,6 +10,15 @@ public sealed record Error(string Code, string Message, ErrorType Type)
 
     public bool IsNone => this == None;
 
+    /// <summary>
+    /// For a refusal at a plan's limit, the numbers behind it, sent as the problem's <c>plan</c>,
+    /// <c>limit</c> and <c>current</c> extensions so a client can say "You have 140 clients; Maker allows 100".
+    /// </summary>
+    public PlanLimitDetail? PlanLimit { get; init; }
+
+    /// <summary>This error with the numbers of the plan limit that refused the request.</summary>
+    public Error AtPlanLimit(string plan, long limit, long current) => this with { PlanLimit = new PlanLimitDetail(plan, limit, current) };
+
     // Factory methods — one per ErrorType, kept in sync with the enum
     public static Error Failure(string code, string message) => new(code, message, ErrorType.Failure);
     public static Error Validation(string code, string message) => new(code, message, ErrorType.Validation);
@@ -27,6 +36,11 @@ public sealed record Error(string Code, string Message, ErrorType Type)
     /// done, so the same request can simply be retried. Maps to 503 with <c>Retry-After</c>.</summary>
     public static Error Unavailable(string code, string message) => new(code, message, ErrorType.Unavailable);
 }
+
+/// <param name="Plan">The plan whose limit refused the request.</param>
+/// <param name="Limit">What the plan allows.</param>
+/// <param name="Current">What the account has now; more than <paramref name="Limit"/> after a downgrade.</param>
+public sealed record PlanLimitDetail(string Plan, long Limit, long Current);
 
 public class Result
 {
