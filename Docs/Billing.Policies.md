@@ -35,7 +35,7 @@ customer-facing parts of it, so a change here goes there too.
   it. At twice the allowance (`Billing:PaidMessageThrottleMultiple`, 2) the clients are held to Free's one
   message a minute until the 1st, so one account cannot load the hosts without end; a notice goes out
   when that happens. An account that needs more should move up a plan.
-- **Business** is never slowed.
+- **Business** is never slowed. Messages past the contract's allowance are invoiced at $1 per million.
 
 ## Retention after a downgrade
 
@@ -43,6 +43,14 @@ Moving to a plan that keeps data for less time does not delete the older data at
 (`Billing:RetentionGraceDays`) the longest retention the workspace had keeps applying, to readings and
 to run history, so moving back up within that time loses nothing. After that the new plan's retention
 applies and the sweeps remove what is older.
+
+## Credits over the plan
+
+- **Free, Maker, Pro and Team**: past the month's credits, runs draw on credit packs; with none left,
+  new runs are refused until the 1st. Runs already going finish.
+- **Business**: runs carry on past the contract's credits, to twice them. Credit packs are used first,
+  then the rest is invoiced at $0.50 per 1,000 credits. Notices at 80% and 100% say so, so the invoice is
+  never a surprise.
 
 ## Credit caps
 

@@ -118,6 +118,20 @@ last credits can overrun by at most the budgets they were given, which together 
 left times the runs going at once. A run already going is never stopped for the month's credits; it stops
 only at its own budget (`OutOfCredits`).
 
+**Business runs past its credits.** On Business the engine passes `dbo.Run_Start` twice the plan's
+`CreditsPerMonth` (`PlanCredits.RunsRefusedAt`, `BusinessContract.CreditOverageMultiple`), so a
+customer's alarms keep running near month end and a runaway loop still stops. Past the allowance its
+credit packs are drawn first, as on every plan; what the plan covered past `CreditsPerMonth` is invoiced
+at $0.50 per 1,000 credits. A workspace cap is still held exactly. The 80% and 100% notices go out as on
+every plan, and on Business they say the runs carry on, what the overage costs and where runs stop.
+
+**Overage report.** `GET /api/internal/billing/business-overage?year=&month=` on the management host
+(shared internal key, backend network only) lists each Business tenant's month: messages from the meter
+(`dbo.WorkspaceMessageUsage`) against `MessagesPerMonth`, credits the plan covered
+(`dbo.TenantCreditMonths`, Posted less what packs paid for) against `CreditsPerMonth`, and the amount at
+the contract's rates ($1 per million extra messages, $0.50 per 1,000 extra credits, rounded to the cent).
+It reads each tenant's contract as it stands now, so run it for last month before changing a contract.
+
 Starts that take a place already held (a queued event's replay, a run replacing those it cancels) skip
 the limit on runs going at once, but not the month's credits: a replay after the credits ran out is
 refused like any other start. A sub-workflow child is not checked at all. It spends from its root run's
@@ -225,7 +239,8 @@ included.
   surprise bill. Only at `Billing:PaidMessageThrottleMultiple` (2) times it are they throttled the same
   way as Free, which stops one account loading the hosts without end. The multiple is a setting so
   pricing can move it.
-- **Business is never throttled**; overage is a matter for its contract.
+- **Business is never throttled**; what it carries past the allowance is invoiced at $1 per million
+  messages (see the overage report under Credits).
 - Each account is told once per workspace and month (`dbo.WorkspaceMessageLimit_Record`, keyed by the
   share): `WorkspaceMessageLimitApproachingEvent` at 80% (skipped when a check finds it already past
   100%), `WorkspaceMessageLimitReachedEvent` at 100% (`throttled` true on Free), and

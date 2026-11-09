@@ -604,7 +604,7 @@ engine is never exposed publicly and the manual/signal channels never get a publ
 
 | Endpoint | Permission | What it does |
 |---|---|---|
-| `GET /api/v1/workspaces/{workspaceRef}/usage` | `billing.read` | What the plan allows against what has been used this calendar month (UTC): `{ plan, periodStart, periodEnd, account, workspace, days }`. `account` is pooled across the account's workspaces, as the limits are: `credits: { used, limit, topUp }` (`topUp` is what bought credit packs still hold; a run is refused once `used` reaches `limit + topUp`), `messages: { used, limit, throttled }`, `clients` and `activeRuns: { used, limit }`. `workspace` is this workspace's share: `credits`, `monthlyCreditCap` (null when uncapped), `messages`, `clients`, `activeRuns`. Messages count both ways: what clients sent and the commands delivered to them. `throttled` is true for a Free account that has used its messages, whose clients may then send one message a minute each until the 1st. Credits count the ledger plus what running runs have not posted yet, as a run start does; clients are approved ones. `days` is this workspace's credits per UTC day from `from` to `to` (default the last 31 days, at most 366), leaving out days with none. |
+| `GET /api/v1/workspaces/{workspaceRef}/usage` | `billing.read` | What the plan allows against what has been used this calendar month (UTC): `{ plan, periodStart, periodEnd, account, workspace, days }`. `account` is pooled across the account's workspaces, as the limits are: `credits: { used, limit, topUp }` (`topUp` is what bought credit packs still hold; a run is refused once `used` reaches `limit + topUp`, or twice `limit` plus `topUp` on Business, whose runs carry on past the allowance and are invoiced for it), `messages: { used, limit, throttled }`, `clients` and `activeRuns: { used, limit }`. `workspace` is this workspace's share: `credits`, `monthlyCreditCap` (null when uncapped), `messages`, `clients`, `activeRuns`. Messages count both ways: what clients sent and the commands delivered to them. `throttled` is true for a Free account that has used its messages, whose clients may then send one message a minute each until the 1st. Credits count the ledger plus what running runs have not posted yet, as a run start does; clients are approved ones. `days` is this workspace's credits per UTC day from `from` to `to` (default the last 31 days, at most 366), leaving out days with none. |
 | `PUT /api/v1/workspaces/{workspaceRef}/credit-cap` | `billing.manage` | Sets the workspace's monthly credit cap, `{ monthlyCreditCap }`, or removes it with null. A ceiling on what it may spend of the account's shared credits in a calendar month (UTC), not a reservation: the caps of an account's workspaces may add up to more than it has. **200** `{ monthlyCreditCap, creditsSpentThisMonth, capReached }`; `capReached` true means the workspace already spent that much, so its new runs are refused from now on. Below 0 or above 10^12 is **400** `WORKSPACE_CREDIT_CAP_INVALID`. Raises `WorkspaceCreditCapSetEvent`. |
 
 A workspace whose spend reaches 80% and then 100% of its cap raises `WorkspaceCreditCapReachedEvent`
@@ -615,6 +615,12 @@ and `Refused` (reported with `reason: WorkspaceCreditCap`) for a trigger.
 An account found over its monthly messages raises `WorkspaceMessageLimitReachedEvent` once per workspace
 and month (Warning, `OnWorkspaceMessageLimitReachedEvent { messagesPerMonth, messagesUsed, throttled, createdAtUtc }`),
 within about a minute of the crossing. `throttled` is true on Free; on a paid plan nothing is slowed.
+
+For operators, the Business overage behind the invoice:
+
+| Endpoint | Guard | What it does |
+|---|---|---|
+| `GET /api/internal/billing/business-overage?year=&month=` | shared internal key | **Backend network only; for operators.** Each Business tenant's use past its contract in that calendar month (UTC), for the invoice: `{ monthStart, tenants: [{ tenantRefId, messagesPerMonth, messagesUsed, extraMessages, creditsPerMonth, creditsUsed, creditsFromPacks, extraCredits, amountUsd }] }`. Credits its packs paid for are not overage. Guarded like the auth host's internal routes: `X-Wbskt-Internal-Key` must match this host's `Internal:ApiKey` (`AUTH_INTERNAL_API_KEY`). `BILLING_MONTH_INVALID` (400) for a month that has not started or does not exist. |
 
 ### 2.12 Operational
 

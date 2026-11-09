@@ -165,8 +165,8 @@ internal sealed class RunStarter : IRunStarter
             {
                 _workflowMetrics?.RecordRunRefused(definition.RefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId);
                 _logger?.LogWarning("Workspace {WorkspaceId} has spent its plan's {Allowance} credits for the month; workflow {WorkflowRefId} was not started for {Channel}",
-                    definition.WorkspaceId, credits!.MonthlyAllowance, definition.RefId, triggerEvent.ChannelKind);
-                throw new PlanCreditLimitException(definition.WorkspaceId, credits.MonthlyAllowance);
+                    definition.WorkspaceId, credits!.RunsRefusedAt, definition.RefId, triggerEvent.ChannelKind);
+                throw new PlanCreditLimitException(definition.WorkspaceId, credits.RunsRefusedAt);
             }
             catch (SqlException ex) when (ex.Number == WorkspaceCreditCapError)
             {

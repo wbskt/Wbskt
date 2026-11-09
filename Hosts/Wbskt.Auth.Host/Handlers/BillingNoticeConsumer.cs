@@ -35,10 +35,11 @@ internal sealed class BillingNoticeConsumer(
         return notifier.NotifyAsync(e.TenantId, BillingNotices.PackExpiring(e.Source, e.SourceRef, e.Remaining, e.ExpiresAt.UtcDateTime), context.CancellationToken);
     }
 
-    public Task Consume(ConsumeContext<TenantCreditAllowanceReachedEvent> context)
+    public async Task Consume(ConsumeContext<TenantCreditAllowanceReachedEvent> context)
     {
         TenantCreditAllowanceReachedEvent e = context.Message;
-        return notifier.NotifyAsync(e.TenantId, BillingNotices.CreditAllowance(e.Percent, e.CreditsPerMonth, e.CreditsSpent, e.CreatedAtUtc), context.CancellationToken);
+        PlanCode plan = (await plans.FindByIdAsync(e.TenantId, context.CancellationToken))?.PlanCode ?? PlanCode.Free;
+        await notifier.NotifyAsync(e.TenantId, BillingNotices.CreditAllowance(plan, e.Percent, e.CreditsPerMonth, e.CreditsSpent, e.CreatedAtUtc), context.CancellationToken);
     }
 
     public async Task Consume(ConsumeContext<WorkspaceCreditCapReachedEvent> context)

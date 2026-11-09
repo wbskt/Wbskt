@@ -114,6 +114,8 @@ public static class Program
         builder.Services.AddScoped<IWorkspaceCreditCapService, WorkspaceCreditCapService>();
         builder.Services.AddScoped<IWorkspaceUsageProvider, WorkspaceUsageProvider>();
         builder.Services.AddScoped<IWorkspaceUsageService, WorkspaceUsageService>();
+        builder.Services.AddScoped<IBusinessUsageProvider, BusinessUsageProvider>();
+        builder.Services.AddScoped<IBusinessOverageService, BusinessOverageService>();
         builder.Services.AddScoped<IMessageAllowanceProvider, MessageAllowanceProvider>();
         builder.Services.AddScoped<MessageAllowanceMonitor>();
         builder.Services.AddScoped<ICreditGrantProvider, CreditGrantProvider>();

@@ -79,7 +79,7 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
 
                 if (creditAllowance is not null)
                 {
-                    p.AddWithValue("@CreditAllowance", creditAllowance.MonthlyAllowance);
+                    p.AddWithValue("@CreditAllowance", creditAllowance.RunsRefusedAt);
                 }
             },
             MapStart,

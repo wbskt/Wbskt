@@ -13,10 +13,15 @@ internal static class BillingNotices
 {
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
-    public static BillingNotice CreditAllowance(int percent, decimal allowance, decimal used, DateTime at)
+    public static BillingNotice CreditAllowance(PlanCode plan, int percent, decimal allowance, decimal used, DateTime at)
     {
         string month = Month(at);
         string resets = Date(NextMonth(at));
+        if (plan == PlanCode.Business)
+        {
+            return BusinessCreditAllowance(percent, allowance, used, month, resets);
+        }
+
         return percent >= 100
             ? new BillingNotice(BillingNoticeKind.CreditAllowance100, month,
                 "Your account has used this month's workflow credits",
@@ -33,6 +38,30 @@ internal static class BillingNotices
                     $"Your account's workspaces have used {Number(used)} of the {Number(allowance)} workflow credits your plan includes this month.",
                     $"Past the allowance, runs draw on the credit packs you have bought; with none left, new runs are refused until {resets}.",
                     "If you expect to need more, buy a credit pack or move to a larger plan."
+                ]);
+    }
+
+    // Business runs carry on past the allowance and the overage is invoiced, so its notices say what it will cost.
+    private static BillingNotice BusinessCreditAllowance(int percent, decimal allowance, decimal used, string month, string resets)
+    {
+        string rate = $"${BusinessContract.UsdPerThousandExtraCredits.ToString("0.00", Invariant)} per 1,000 credits";
+        string ceiling = Number(allowance * BusinessContract.CreditOverageMultiple);
+        return percent >= 100
+            ? new BillingNotice(BillingNoticeKind.CreditAllowance100, month,
+                "Your account has used this month's workflow credits",
+                "This month's workflow credits are used",
+                [
+                    $"Your account's workspaces have used {Number(used)} workflow credits this month, all {Number(allowance)} your contract includes.",
+                    $"Runs carry on. Credits past the allowance come from your credit packs first, then are invoiced at {rate} under your contract, up to {ceiling} credits in all this month. Past that, new runs are refused until {resets}.",
+                    "If you expect to need more every month, reply to resize your contract."
+                ])
+            : new BillingNotice(BillingNoticeKind.CreditAllowance80, month,
+                $"Your account has used {percent}% of this month's workflow credits",
+                $"{percent}% of this month's workflow credits are used",
+                [
+                    $"Your account's workspaces have used {Number(used)} of the {Number(allowance)} workflow credits your contract includes this month.",
+                    $"Past the allowance runs carry on, invoiced at {rate}, up to {ceiling} credits in all this month; new runs are refused past that until {resets}.",
+                    "If you expect to need more every month, reply to resize your contract."
                 ]);
     }
 
