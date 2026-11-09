@@ -2,9 +2,11 @@
 -- allowance, as they are posted. Called by dbo.RunCredits_Post and dbo.Run_DeleteRetired inside their
 -- transactions, after they have added the credits to dbo.WorkspaceCreditUsage.
 --
--- For each tenant, the month's Posted moves by the credits just posted; the part of that step past
--- @Allowance (the allowance at this moment, so a downgrade draws nothing for what was posted before it)
--- is taken from its live grants, soonest to expire first, and added to the month's Drawn. A grant that
+-- For each tenant, the month's Posted moves by the credits just posted. What the plan has covered is
+-- Posted less Drawn, as dbo.Run_Start counts it; the part of the step that takes that past @Allowance
+-- (the allowance at this moment, so a downgrade draws nothing for what was posted before it, and an
+-- upgrade lets the plan cover what it now allows before any grant is drawn) is taken from its live
+-- grants, soonest to expire first, and added to the month's Drawn. A grant that
 -- is revoked, held over a chargeback or expired at @At gives nothing. When the grants hold less than the
 -- step, what they hold is drawn and the rest is past the plan: Run_Start refuses once nothing is left.
 --
@@ -25,7 +27,7 @@ BEGIN
         TenantId INT           NOT NULL PRIMARY KEY,
         Before   DECIMAL(18,4) NOT NULL,
         After    DECIMAL(18,4) NOT NULL,
-        Excess     DECIMAL(18,4) NULL
+        Excess   DECIMAL(18,4) NULL
     );
 
     BEGIN TRANSACTION;
@@ -48,7 +50,7 @@ BEGIN
     UPDATE m
     SET Posted = m.Posted + p.Credits,
         UpdatedAt = SYSUTCDATETIME()
-    OUTPUT inserted.TenantId, deleted.Posted, inserted.Posted, NULL INTO @Steps (TenantId, Before, After, Excess)
+    OUTPUT inserted.TenantId, deleted.Posted - deleted.Drawn, inserted.Posted - inserted.Drawn, NULL INTO @Steps (TenantId, Before, After, Excess)
     FROM dbo.TenantCreditMonths m
     JOIN @Posts p ON p.TenantId = m.TenantId
     WHERE m.MonthStart = @MonthStart;
