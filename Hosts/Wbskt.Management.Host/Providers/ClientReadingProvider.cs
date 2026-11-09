@@ -70,12 +70,29 @@ internal sealed class ClientReadingProvider : BaseSqlProvider, IClientReadingPro
             cancellationToken);
     }
 
-    public async Task<int> DeleteBeforeAsync(DateTime cutoffUtc, int batchSize, CancellationToken cancellationToken = default)
+    public Task<ReadingCompaction> CompactAsync(DateTime nowUtc, IReadOnlyCollection<ReadingRetention> retention, int batchSize, CancellationToken cancellationToken = default)
     {
-        return await ExecuteScalarAsync<int>("dbo.ClientReadings_DeleteBefore", p =>
+        var table = new DataTable();
+        table.Columns.Add("PlanCode", typeof(string));
+        table.Columns.Add("RawDays", typeof(int));
+        table.Columns.Add("HourlyDays", typeof(int));
+        foreach (ReadingRetention plan in retention)
         {
-            p.Add("@CutoffUtc", SqlDbType.DateTime2).Value = cutoffUtc;
+            table.Rows.Add(plan.PlanCode.ToString(), plan.RawDays, plan.HourlyDays);
+        }
+
+        return ExecuteSingleAsync("dbo.ClientReadings_Compact", p =>
+        {
+            p.Add("@Now", SqlDbType.DateTime2).Value = nowUtc;
+            var parameter = p.AddWithValue("@Retention", table);
+            parameter.SqlDbType = SqlDbType.Structured;
+            parameter.TypeName = "dbo.ReadingRetentionTableType";
             p.AddWithValue("@BatchSize", batchSize);
-        }, cancellationToken);
+        }, r => new ReadingCompaction(
+            r.GetInt32(r.GetOrdinal("RolledUp")),
+            r.GetInt32(r.GetOrdinal("HourlyDeleted")),
+            r.GetInt32(r.GetOrdinal("Cleared"))),
+            new InvalidOperationException("ClientReadings_Compact did not return a row."),
+            cancellationToken);
     }
 }

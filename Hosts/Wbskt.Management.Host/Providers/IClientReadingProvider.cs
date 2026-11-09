@@ -14,6 +14,10 @@ public interface IClientReadingProvider
     /// <summary>Up to <paramref name="maxRows"/> readings in [from, to), oldest first; every variable when <paramref name="name"/> is null.</summary>
     Task<IReadOnlyCollection<ClientReading>> GetRangeAsync(int clientId, string? name, DateTime fromUtc, DateTime toUtc, int maxRows, CancellationToken cancellationToken = default);
 
-    /// <summary>Deletes up to <paramref name="batchSize"/> readings received before the cutoff; returns how many went.</summary>
-    Task<int> DeleteBeforeAsync(DateTime cutoffUtc, int batchSize, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// One batch of retention by each client's plan: rolls raw readings past <paramref name="retention"/>'s
+    /// raw days into the hourly roll-up, deletes hourly rows past its hourly days, and clears deleted
+    /// clients' readings; up to <paramref name="batchSize"/> rows each.
+    /// </summary>
+    Task<ReadingCompaction> CompactAsync(DateTime nowUtc, IReadOnlyCollection<ReadingRetention> retention, int batchSize, CancellationToken cancellationToken = default);
 }

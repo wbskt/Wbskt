@@ -31,7 +31,7 @@ public sealed class ClientReadingServiceTests
     [InlineData("-5m")]
     [InlineData("5x")]
     [InlineData("1.5h")]
-    [InlineData("500d")]
+    [InlineData("800d")]
     [InlineData("99999999999999999999")]
     public void Bad_bucket_sizes_are_refused(string text)
     {
@@ -77,7 +77,7 @@ public sealed class ClientReadingServiceTests
     [InlineData("temp", null, null, "5x", "READINGS_BUCKET_INVALID")]
     [InlineData("temp", null, null, "1s", "READINGS_TOO_MANY_BUCKETS")]
     [InlineData("temp", -1, -2, null, "TIME_RANGE_INVALID")]
-    [InlineData("temp", -500, null, null, "TIME_RANGE_TOO_LONG")]
+    [InlineData("temp", -800, null, null, "TIME_RANGE_TOO_LONG")]
     public async Task Bad_queries_are_refused(string? name, int? fromDays, int? toDays, string? bucket, string code)
     {
         var result = await Service().GetBucketsAsync(ClientId, name,
