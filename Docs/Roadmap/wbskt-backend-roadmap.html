@@ -320,7 +320,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
  "asks": [
   {
    "title": "Deprecate and unlist Wbskt.Client on nuget.org",
-   "body": "Wbskt 0.9.0-beta.1 is on NuGet (#707). Mark Wbskt.Client 0.0.x as Legacy with Wbskt as the alternative, then unlist it so search finds only the new name. The Arduino Library Manager is next, and its review takes a few days.",
+   "body": "Wbskt 0.9.0-beta.1 is on NuGet (#707). Mark Wbskt.Client 0.0.x as Legacy with Wbskt as the alternative, then unlist it so search finds only the new name.",
    "issue": 707
   },
   {
@@ -355,7 +355,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   },
   "528": {
    "state": "you",
-   "why": "Python is out: wbskt 0.9.0b1 is on PyPI (9 Nov), published from its own repository, wbskt/Wbskt.Python (#683, PR #684). The .NET SDK is out too: Wbskt 0.9.0-beta.1 is on NuGet (9 Nov), from wbskt/Wbskt.DotNet, renamed to match (#707, PR #709). Left: the Arduino Library Manager.",
+   "why": "Python is out: wbskt 0.9.0b1 is on PyPI (9 Nov), published from its own repository, wbskt/Wbskt.Python (#683, PR #684). The .NET SDK is out too: Wbskt 0.9.0-beta.1 is on NuGet (9 Nov), from wbskt/Wbskt.DotNet, renamed to match (#707, PR #709). The ESP32 library is in the Arduino Library Manager as Wbskt 0.9.0-beta.1 (indexed 9 Nov, arduino/library-registry#9601). Left: the first PlatformIO publish of wbskt/Wbskt by hand (Arduino#12, PR Arduino#13 makes later tags publish themselves), and the call on 1.0.",
    "prs": [684, 709]
   },
   "547": {
@@ -542,12 +542,6 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "title": "No rollback from a bad deploy",
    "body": "No image pinning or drift detection yet (#460).",
    "issue": 460
-  },
-  {
-   "level": "med",
-   "title": "SDK release depends on registry reviews",
-   "body": "The Arduino Library Manager review takes days, so #528 needs to start well before 30 Nov.",
-   "issue": 528
   },
   {
    "level": "low",
