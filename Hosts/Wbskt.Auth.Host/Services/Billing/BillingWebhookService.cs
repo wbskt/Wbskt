@@ -1,5 +1,6 @@
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
+using Wbskt.Auth.Host.Telemetry;
 using Wbskt.Infrastructure;
 
 namespace Wbskt.Auth.Host.Services.Billing;
@@ -8,6 +9,7 @@ internal sealed class BillingWebhookService(
     IPaymentGateway gateway,
     ITenantBillingProvider billing,
     TenantBillingSync sync,
+    AuthMetrics metrics,
     ILogger<BillingWebhookService> logger) : IBillingWebhookService
 {
     public async Task<Result> ReceiveAsync(string provider, IReadOnlyDictionary<string, string> headers, string body, CancellationToken ct)
@@ -41,6 +43,7 @@ internal sealed class BillingWebhookService(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Kept unprocessed with the reason, and failed back to the provider so it delivers the event again.
+            metrics.RecordBillingWebhook(webhook.Type, "failed");
             await billing.CompleteWebhookAsync(delivery.Id, processed: false, $"{ex.GetType().Name}: {ex.Message}", CancellationToken.None);
             throw;
         }
@@ -49,6 +52,8 @@ internal sealed class BillingWebhookService(
         {
             logger.LogWarning("Set aside {Provider} webhook {EventId} ({Type}): {Reason}", gateway.Name, webhook.EventId, webhook.Type, result.Reason);
         }
+
+        metrics.RecordBillingWebhook(webhook.Type, result.Reason is null ? "done" : "set_aside");
 
         await billing.CompleteWebhookAsync(delivery.Id, processed: true, result.Reason, ct);
         return Result.Success();

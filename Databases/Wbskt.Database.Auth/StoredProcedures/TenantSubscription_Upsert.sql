@@ -1,6 +1,7 @@
--- Writes the tenant's subscription as just read from the provider. PastDueSince is kept from the stored
+-- Writes a tenant's subscription as just read from the provider. PastDueSince is kept from the stored
 -- row while the subscription stays past due or on hold, set when it becomes so, and cleared otherwise;
--- RefundedThrough is kept unless @RefundedThrough sets it. Returns the stored row.
+-- RefundedThrough is kept unless @RefundedThrough sets it, and the duplicate marks are always kept.
+-- Returns the stored row.
 CREATE PROCEDURE dbo.TenantSubscription_Upsert
     @TenantId          INT,
     @Provider          NVARCHAR(40),
@@ -21,28 +22,17 @@ BEGIN
 
     DECLARE @PastDue BIT = CASE WHEN @Status IN (N'past_due', N'on_hold') THEN 1 ELSE 0 END;
 
-    BEGIN TRANSACTION;
-
-    -- Another subscription of the tenant's is replaced, and so is this subscription's row under another
-    -- tenant (it cannot move, but a stale row must not block the unique key).
-    DELETE FROM dbo.TenantSubscriptions
-    WHERE Provider = @Provider AND SubscriptionId = @SubscriptionId AND TenantId <> @TenantId;
-
     MERGE dbo.TenantSubscriptions WITH (HOLDLOCK) AS t
-    USING (SELECT @TenantId AS TenantId) AS s
-       ON t.TenantId = s.TenantId
+    USING (SELECT @Provider AS Provider, @SubscriptionId AS SubscriptionId) AS s
+       ON t.Provider = s.Provider AND t.SubscriptionId = s.SubscriptionId
     WHEN MATCHED THEN
         UPDATE SET
-            Provider = @Provider,
+            TenantId = @TenantId,
             PastDueSince = CASE
                 WHEN @PastDue = 0 THEN NULL
-                WHEN t.SubscriptionId = @SubscriptionId AND t.PastDueSince IS NOT NULL THEN t.PastDueSince
+                WHEN t.PastDueSince IS NOT NULL THEN t.PastDueSince
                 ELSE @Now END,
-            RefundedThrough = CASE
-                WHEN @RefundedThrough IS NOT NULL THEN @RefundedThrough
-                WHEN t.SubscriptionId = @SubscriptionId THEN t.RefundedThrough
-                ELSE NULL END,
-            SubscriptionId = @SubscriptionId,
+            RefundedThrough = COALESCE(@RefundedThrough, t.RefundedThrough),
             CustomerId = @CustomerId,
             ProductId = @ProductId,
             PlanCode = @PlanCode,
@@ -52,12 +42,28 @@ BEGIN
             CancelAtPeriodEnd = @CancelAtPeriodEnd,
             UpdatedAt = @Now
     WHEN NOT MATCHED THEN
-        INSERT (TenantId, Provider, SubscriptionId, CustomerId, ProductId, PlanCode, BillingInterval, Status, CurrentPeriodEnd, CancelAtPeriodEnd, PastDueSince, RefundedThrough, UpdatedAt)
+        INSERT (TenantId, Provider, SubscriptionId, CustomerId, ProductId, PlanCode, BillingInterval, Status, CurrentPeriodEnd, CancelAtPeriodEnd, PastDueSince, RefundedThrough, UpdatedAt, CreatedAt)
         VALUES (@TenantId, @Provider, @SubscriptionId, @CustomerId, @ProductId, @PlanCode, @BillingInterval, @Status, @CurrentPeriodEnd, @CancelAtPeriodEnd,
-                CASE WHEN @PastDue = 1 THEN @Now END, @RefundedThrough, @Now);
+                CASE WHEN @PastDue = 1 THEN @Now END, @RefundedThrough, @Now, @Now);
 
-    COMMIT TRANSACTION;
-
-    EXEC dbo.TenantSubscription_GetBy_TenantId @TenantId = @TenantId;
+    SELECT
+        TenantId,
+        Provider,
+        SubscriptionId,
+        CustomerId,
+        ProductId,
+        PlanCode,
+        BillingInterval,
+        Status,
+        CurrentPeriodEnd,
+        CancelAtPeriodEnd,
+        PastDueSince,
+        RefundedThrough,
+        DuplicateAt,
+        DuplicateRefundPaymentId,
+        CreatedAt,
+        UpdatedAt
+    FROM dbo.TenantSubscriptions
+    WHERE Provider = @Provider AND SubscriptionId = @SubscriptionId;
 END
 GO

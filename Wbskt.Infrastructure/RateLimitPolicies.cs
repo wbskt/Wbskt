@@ -29,6 +29,12 @@ public static class RateLimitPolicies
     public const string SignUpChallenge = "signup-challenge";
 
     /// <summary>
+    /// A payment provider's webhooks. Anonymous, proven by a signature that is cheap to check; the budget
+    /// is generous enough for the provider's retry bursts and only stops a flood. Partitioned per IP.
+    /// </summary>
+    public const string BillingWebhooks = "billing-webhooks";
+
+    /// <summary>
     /// Client enrollment by registration PIN. Anonymous by necessity - the client has no credential
     /// yet - and the PIN is the only thing standing between the internet and a client in someone's
     /// workspace, so guessing at it has to be slow. Partitioned per IP.

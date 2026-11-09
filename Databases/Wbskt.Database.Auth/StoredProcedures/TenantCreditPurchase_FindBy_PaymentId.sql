@@ -1,4 +1,4 @@
--- The tenant a credit pack bought with @PaymentId was for, and whether it was refunded.
+-- The tenant a credit pack bought with @PaymentId was for, whether it was refunded, and its hold.
 CREATE PROCEDURE dbo.TenantCreditPurchase_FindBy_PaymentId
     @Provider  NVARCHAR(40),
     @PaymentId NVARCHAR(200)
@@ -9,7 +9,9 @@ BEGIN
     SELECT
         TenantId,
         Credits,
-        RefundedAt
+        RefundedAt,
+        HeldAt,
+        HoldRevision
     FROM dbo.TenantCreditPurchases
     WHERE Provider = @Provider AND PaymentId = @PaymentId;
 END

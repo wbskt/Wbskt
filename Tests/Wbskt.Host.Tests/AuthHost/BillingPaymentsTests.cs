@@ -8,6 +8,7 @@ using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services;
 using Wbskt.Auth.Host.Services.Billing;
+using Wbskt.Auth.Host.Telemetry;
 using Wbskt.Auth.Models;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Events.Outbox;
@@ -17,8 +18,8 @@ namespace Wbskt.Host.Tests.AuthHost;
 
 /// <summary>
 /// Payments on the auth host (#631): the webhook signature, what a subscription's state puts the tenant
-/// on, the sync that acts on what the provider says, the webhook's once-only handling, checkout's
-/// refusals, and Dodo's JSON.
+/// on, the sync that acts on what the provider says (duplicates #682, operator plans #685, chargebacks
+/// #686), the webhook's once-only handling, checkout's refusals and reuse, and Dodo's JSON.
 /// </summary>
 public sealed class BillingPaymentsTests
 {
@@ -33,6 +34,7 @@ public sealed class BillingPaymentsTests
     private readonly Mock<ITenantPlanService> _planService = new();
     private readonly Mock<IAuditWorkspaces> _audit = new();
     private readonly Mock<IAccountProvider> _accounts = new();
+    private readonly List<TenantSubscription> _stored = [];
 
     private readonly BillingOptions _options = new()
     {
@@ -52,13 +54,25 @@ public sealed class BillingPaymentsTests
         _plans.Setup(p => p.FindByIdAsync(9, It.IsAny<CancellationToken>())).ReturnsAsync(() => Tenant);
         _audit.Setup(a => a.OfTenantAsync(9, It.IsAny<CancellationToken>())).ReturnsAsync([31, 32]);
         _billing.Setup(b => b.UpsertSubscriptionAsync(It.IsAny<TenantSubscription>(), It.IsAny<DateTime>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((TenantSubscription s, DateTime now, DateTime? refunded, CancellationToken _) => s with
+            .ReturnsAsync((TenantSubscription s, DateTime now, DateTime? refunded, CancellationToken _) =>
             {
-                PastDueSince = s.Status is SubscriptionStatus.PastDue or SubscriptionStatus.OnHold ? now : null,
-                RefundedThrough = refunded
+                TenantSubscription? before = _stored.Find(x => x.SubscriptionId == s.SubscriptionId);
+                TenantSubscription saved = s with
+                {
+                    PastDueSince = s.Status is SubscriptionStatus.PastDue or SubscriptionStatus.OnHold ? now : null,
+                    RefundedThrough = refunded ?? before?.RefundedThrough,
+                    DuplicateAt = before?.DuplicateAt,
+                    DuplicateRefundPaymentId = before?.DuplicateRefundPaymentId,
+                    CreatedAt = before?.CreatedAt ?? now
+                };
+                _stored.RemoveAll(x => x.SubscriptionId == s.SubscriptionId);
+                _stored.Add(saved);
+                return saved;
             });
-        _planService.Setup(p => p.SetAsync(TenantRef, It.IsAny<SetTenantPlanRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid _, SetTenantPlanRequest r, CancellationToken _) => new TenantPlanResponse(TenantRef, r.PlanCode, r.LimitOverrides, 2, Now));
+        _billing.Setup(b => b.GetSubscriptionsAsync(9, It.IsAny<CancellationToken>())).ReturnsAsync(() => _stored.ToList());
+        _billing.Setup(b => b.ClaimDuplicateRefundAsync("dodo", It.IsAny<string>(), It.IsAny<string>(), false, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _planService.Setup(p => p.SetAsync(TenantRef, It.IsAny<SetTenantPlanRequest>(), It.IsAny<PlanSource>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid _, SetTenantPlanRequest r, PlanSource source, CancellationToken _) => new TenantPlanResponse(TenantRef, r.PlanCode, r.LimitOverrides, 2, Now, source));
     }
 
     private TenantPlan Tenant { get; set; } = new(9, TenantRef, PlanCode.Free, new PlanLimitOverrides { Clients = 40 }, 1, null);
@@ -142,33 +156,118 @@ public sealed class BillingPaymentsTests
             It.IsAny<DateTime>(), null, It.IsAny<CancellationToken>()));
         _planService.Verify(p => p.SetAsync(TenantRef,
             It.Is<SetTenantPlanRequest>(r => r.PlanCode == PlanCode.Maker && r.LimitOverrides!.Clients == 40 && r.ExpectedRevision == 1),
-            It.IsAny<CancellationToken>()));
+            It.IsAny<PlanSource>(), It.IsAny<CancellationToken>()));
     }
 
     [Fact]
     public async Task A_plan_changed_meanwhile_is_read_again_and_written_over()
     {
         ProviderSays(new ProviderSubscription("sub_1", SubscriptionStatus.Active, "prod_pro_m", "cus_1", TenantRef, Now.AddMonths(1), false));
-        _planService.SetupSequence(p => p.SetAsync(TenantRef, It.IsAny<SetTenantPlanRequest>(), It.IsAny<CancellationToken>()))
+        _planService.SetupSequence(p => p.SetAsync(TenantRef, It.IsAny<SetTenantPlanRequest>(), It.IsAny<PlanSource>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Error.Conflict("TENANT_PLAN_CHANGED", "changed"))
             .ReturnsAsync(new TenantPlanResponse(TenantRef, PlanCode.Pro, null, 3, Now));
 
         await Sync().SyncSubscriptionAsync("sub_1", refundedThrough: null, CancellationToken.None);
 
-        _planService.Verify(p => p.SetAsync(TenantRef, It.Is<SetTenantPlanRequest>(r => r.PlanCode == PlanCode.Pro), It.IsAny<CancellationToken>()), Times.Exactly(2));
+        _planService.Verify(p => p.SetAsync(TenantRef, It.Is<SetTenantPlanRequest>(r => r.PlanCode == PlanCode.Pro), It.IsAny<PlanSource>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
     [Fact]
-    public async Task An_older_subscription_ending_does_not_replace_the_tenants_newer_live_one()
+    public async Task An_older_subscription_ending_leaves_the_plan_to_the_tenants_newer_live_one()
     {
+        _stored.Add(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(20)) with { SubscriptionId = "sub_new", CreatedAt = Now.UtcDateTime.AddDays(-3) });
         ProviderSays(new ProviderSubscription("sub_old", SubscriptionStatus.Cancelled, "prod_maker_m", "cus_1", TenantRef, Now.AddDays(-1), true));
-        _billing.Setup(b => b.FindSubscriptionAsync(9, It.IsAny<CancellationToken>())).ReturnsAsync(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(20)) with { SubscriptionId = "sub_new" });
 
         var result = await Sync().SyncSubscriptionAsync("sub_old", refundedThrough: null, CancellationToken.None);
 
-        Assert.NotNull(result.Reason);
-        _billing.Verify(b => b.UpsertSubscriptionAsync(It.IsAny<TenantSubscription>(), It.IsAny<DateTime>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Null(result.Reason);
+        Assert.Equal(2, _stored.Count);
+        _planService.Verify(p => p.SetAsync(TenantRef, It.Is<SetTenantPlanRequest>(r => r.PlanCode == PlanCode.Pro), PlanSource.Subscription, It.IsAny<CancellationToken>()));
+        _planService.Verify(p => p.SetAsync(TenantRef, It.Is<SetTenantPlanRequest>(r => r.PlanCode == PlanCode.Free), It.IsAny<PlanSource>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_second_subscription_paid_beside_the_first_is_cancelled_and_the_first_keeps_deciding()
+    {
+        _stored.Add(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(28)) with { SubscriptionId = "sub_first", PlanCode = PlanCode.Maker, CreatedAt = Now.UtcDateTime.AddMinutes(-2) });
+        ProviderSays(new ProviderSubscription("sub_second", SubscriptionStatus.Active, "prod_pro_m", "cus_1", TenantRef, Now.AddMonths(1), false));
+
+        await Sync().SyncSubscriptionAsync("sub_second", refundedThrough: null, CancellationToken.None);
+
+        _billing.Verify(b => b.MarkDuplicateSubscriptionAsync("dodo", "sub_second", Now.UtcDateTime, It.IsAny<CancellationToken>()));
+        _gateway.Verify(g => g.CancelSubscriptionAsync("sub_second", It.IsAny<CancellationToken>()));
+        _gateway.Verify(g => g.CancelSubscriptionAsync("sub_first", It.IsAny<CancellationToken>()), Times.Never);
+        _planService.Verify(p => p.SetAsync(TenantRef, It.Is<SetTenantPlanRequest>(r => r.PlanCode == PlanCode.Maker), PlanSource.Subscription, It.IsAny<CancellationToken>()));
+        _planService.Verify(p => p.SetAsync(TenantRef, It.Is<SetTenantPlanRequest>(r => r.PlanCode == PlanCode.Pro), It.IsAny<PlanSource>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_duplicates_payment_is_refunded_once_and_a_refused_refund_gives_the_claim_back()
+    {
+        _stored.Add(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(28)) with { SubscriptionId = "sub_first", CreatedAt = Now.UtcDateTime.AddMinutes(-2) });
+        _stored.Add(Subscription(SubscriptionStatus.Cancelled, Now.UtcDateTime.AddDays(30)) with { SubscriptionId = "sub_second", DuplicateAt = Now.UtcDateTime, CreatedAt = Now.UtcDateTime });
+        ProviderSays(new ProviderSubscription("sub_second", SubscriptionStatus.Cancelled, "prod_pro_m", "cus_1", TenantRef, Now.AddMonths(1), false));
+        PaymentSays(new ProviderPayment("pay_2", true, "cus_1", TenantRef, "sub_second", [new PaymentLine("prod_pro_m", 1)], false, Now));
+        _gateway.SetupSequence(g => g.RefundPaymentAsync("pay_2", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("down"))
+            .Returns(Task.CompletedTask);
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => Sync().SyncPaymentAsync("pay_2", CancellationToken.None));
+        await Sync().SyncPaymentAsync("pay_2", CancellationToken.None);
+
+        _billing.Verify(b => b.ClaimDuplicateRefundAsync("dodo", "sub_second", "pay_2", true, It.IsAny<CancellationToken>()), Times.Once);
+        _gateway.Verify(g => g.RefundPaymentAsync("pay_2", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+        _gateway.Verify(g => g.CancelSubscriptionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task An_operators_plan_is_left_alone_until_its_end_date()
+    {
+        Tenant = Tenant with { PlanCode = PlanCode.Business, Source = PlanSource.Operator, EndsAt = Now.UtcDateTime.AddDays(1) };
+        ProviderSays(new ProviderSubscription("sub_1", SubscriptionStatus.Active, "prod_maker_m", "cus_1", TenantRef, Now.AddMonths(1), false));
+
+        await Sync().SyncSubscriptionAsync("sub_1", refundedThrough: null, CancellationToken.None);
+
         VerifyPlanNotSet();
+    }
+
+    [Fact]
+    public async Task An_ended_operators_plan_goes_back_to_the_subscription_without_its_contract_overrides()
+    {
+        Tenant = Tenant with { PlanCode = PlanCode.Business, Source = PlanSource.Operator, EndsAt = Now.UtcDateTime.AddDays(-1) };
+        ProviderSays(new ProviderSubscription("sub_1", SubscriptionStatus.Active, "prod_maker_m", "cus_1", TenantRef, Now.AddMonths(1), false));
+
+        await Sync().SyncSubscriptionAsync("sub_1", refundedThrough: null, CancellationToken.None);
+
+        _planService.Verify(p => p.SetAsync(TenantRef, It.Is<SetTenantPlanRequest>(r => r.PlanCode == PlanCode.Maker && r.LimitOverrides == null), PlanSource.Subscription, It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task An_ended_operators_plan_with_no_subscription_goes_back_to_free()
+    {
+        Tenant = Tenant with { PlanCode = PlanCode.Pro, Source = PlanSource.Operator, EndsAt = Now.UtcDateTime.AddMinutes(-1) };
+
+        await Sync().ReviewAsync(9, CancellationToken.None);
+
+        _planService.Verify(p => p.SetAsync(TenantRef, It.Is<SetTenantPlanRequest>(r => r.PlanCode == PlanCode.Free && r.LimitOverrides == null), PlanSource.Default, It.IsAny<CancellationToken>()));
+        _gateway.Verify(g => g.FindSubscriptionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public void The_deciding_subscription_is_the_oldest_billing_then_the_newest_live_then_the_newest()
+    {
+        DateTime t = Now.UtcDateTime;
+        var oldBilling = Subscription(SubscriptionStatus.Active, t.AddDays(9)) with { SubscriptionId = "a", CreatedAt = t.AddDays(-9) };
+        var newBilling = oldBilling with { SubscriptionId = "b", CreatedAt = t.AddDays(-1) };
+        var cancelling = oldBilling with { SubscriptionId = "c", CancelAtPeriodEnd = true, CreatedAt = t.AddDays(-20) };
+        var ended = Subscription(SubscriptionStatus.Expired, t.AddDays(-5)) with { SubscriptionId = "d", CreatedAt = t };
+        var duplicate = newBilling with { SubscriptionId = "e", DuplicateAt = t, CreatedAt = t.AddDays(-30) };
+
+        Assert.Equal("a", SubscriptionPlan.Deciding([newBilling, ended, oldBilling, cancelling, duplicate])!.SubscriptionId);
+        Assert.Equal("c", SubscriptionPlan.Deciding([ended, cancelling, duplicate])!.SubscriptionId);
+        Assert.Equal("d", SubscriptionPlan.Deciding([ended, duplicate])!.SubscriptionId);
+        Assert.Null(SubscriptionPlan.Deciding([]));
+        Assert.Equal(["b"], SubscriptionPlan.Duplicates([newBilling, oldBilling, cancelling, duplicate]).Select(d => d.SubscriptionId));
     }
 
     [Theory]
@@ -220,6 +319,43 @@ public sealed class BillingPaymentsTests
     }
 
     [Fact]
+    public async Task A_chargeback_holds_a_credit_pack_and_winning_it_releases_it()
+    {
+        _billing.Setup(b => b.RecordCreditPurchaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<OutboxMessage>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        _billing.Setup(b => b.SetCreditPurchaseHoldAsync("dodo", "pay_1", It.IsAny<bool>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<OutboxMessage>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        _billing.Setup(b => b.FindCreditPurchaseAsync("dodo", "pay_1", It.IsAny<CancellationToken>())).ReturnsAsync(new TenantCreditPurchase(9, 500m, null));
+        PaymentSays(new ProviderPayment("pay_1", true, "cus_1", TenantRef, null, [new PaymentLine("prod_boost", 1)], false, Now, PaymentDispute.Open));
+        await Sync().SyncPaymentAsync("pay_1", CancellationToken.None);
+
+        _billing.Setup(b => b.FindCreditPurchaseAsync("dodo", "pay_1", It.IsAny<CancellationToken>())).ReturnsAsync(new TenantCreditPurchase(9, 500m, null, Now.UtcDateTime, 1));
+        PaymentSays(new ProviderPayment("pay_1", true, "cus_1", TenantRef, null, [new PaymentLine("prod_boost", 1)], false, Now, PaymentDispute.None));
+        await Sync().SyncPaymentAsync("pay_1", CancellationToken.None);
+
+        _billing.Verify(b => b.SetCreditPurchaseHoldAsync("dodo", "pay_1", true, It.IsAny<DateTime>(), 0,
+            It.Is<OutboxMessage>(m => m.MessageType == "Wbskt.Events.Billing.TenantCreditGrantHoldChangedEvent" && m.Payload.Contains("\"revision\":1")), It.IsAny<CancellationToken>()));
+        _billing.Verify(b => b.SetCreditPurchaseHoldAsync("dodo", "pay_1", false, It.IsAny<DateTime>(), 1,
+            It.Is<OutboxMessage>(m => m.Payload.Contains("\"held\":false") && m.Payload.Contains("\"revision\":2")), It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task A_lost_chargeback_takes_a_pack_back_and_withholds_a_subscriptions_period()
+    {
+        PaymentSays(new ProviderPayment("pay_1", true, "cus_1", TenantRef, null, [new PaymentLine("prod_boost", 1)], false, Now, PaymentDispute.Lost));
+        _billing.Setup(b => b.FindCreditPurchaseAsync("dodo", "pay_1", It.IsAny<CancellationToken>())).ReturnsAsync(new TenantCreditPurchase(9, 500m, null, Now.UtcDateTime, 1));
+        _billing.Setup(b => b.RefundCreditPurchaseAsync("dodo", "pay_1", It.IsAny<DateTime>(), It.IsAny<OutboxMessage>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        Tenant = Tenant with { PlanCode = PlanCode.Pro };
+        PaymentSays(new ProviderPayment("pay_2", true, "cus_1", TenantRef, "sub_1", [new PaymentLine("prod_pro_m", 1)], false, Now.AddDays(-3), PaymentDispute.Lost));
+        ProviderSays(new ProviderSubscription("sub_1", SubscriptionStatus.Active, "prod_pro_m", "cus_1", TenantRef, Now.AddDays(27), false));
+
+        await Sync().SyncPaymentAsync("pay_1", CancellationToken.None);
+        await Sync().SyncPaymentAsync("pay_2", CancellationToken.None);
+
+        _billing.Verify(b => b.RefundCreditPurchaseAsync("dodo", "pay_1", It.IsAny<DateTime>(), It.IsAny<OutboxMessage>(), It.IsAny<CancellationToken>()));
+        _planService.Verify(p => p.SetAsync(TenantRef, It.Is<SetTenantPlanRequest>(r => r.PlanCode == PlanCode.Free), PlanSource.Subscription, It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
     public async Task A_failed_credit_pack_payment_grants_nothing()
     {
         PaymentSays(new ProviderPayment("pay_1", false, "cus_1", TenantRef, null, [new PaymentLine("prod_boost", 1)], false, Now));
@@ -241,19 +377,18 @@ public sealed class BillingPaymentsTests
 
         DateTime expected = SubscriptionPlan.RefundedThrough(Now.UtcDateTime.AddDays(-3), BillingInterval.Monthly);
         _billing.Verify(b => b.UpsertSubscriptionAsync(It.IsAny<TenantSubscription>(), It.IsAny<DateTime>(), expected, It.IsAny<CancellationToken>()));
-        _planService.Verify(p => p.SetAsync(TenantRef, It.Is<SetTenantPlanRequest>(r => r.PlanCode == PlanCode.Free), It.IsAny<CancellationToken>()));
+        _planService.Verify(p => p.SetAsync(TenantRef, It.Is<SetTenantPlanRequest>(r => r.PlanCode == PlanCode.Free), It.IsAny<PlanSource>(), It.IsAny<CancellationToken>()));
     }
 
     [Fact]
     public async Task A_review_falls_back_to_the_stored_copy_when_the_provider_no_longer_knows_the_subscription()
     {
         Tenant = Tenant with { PlanCode = PlanCode.Maker };
-        _billing.Setup(b => b.FindSubscriptionAsync(9, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Subscription(SubscriptionStatus.Cancelled, Now.UtcDateTime.AddDays(-1)) with { PlanCode = PlanCode.Maker });
+        _stored.Add(Subscription(SubscriptionStatus.Cancelled, Now.UtcDateTime.AddDays(-1)) with { PlanCode = PlanCode.Maker });
 
         await Sync().ReviewAsync(9, CancellationToken.None);
 
-        _planService.Verify(p => p.SetAsync(TenantRef, It.Is<SetTenantPlanRequest>(r => r.PlanCode == PlanCode.Free), It.IsAny<CancellationToken>()));
+        _planService.Verify(p => p.SetAsync(TenantRef, It.Is<SetTenantPlanRequest>(r => r.PlanCode == PlanCode.Free), It.IsAny<PlanSource>(), It.IsAny<CancellationToken>()));
     }
 
     // ----- Webhooks ----------------------------------------------------------------------------------
@@ -326,7 +461,7 @@ public sealed class BillingPaymentsTests
     [Fact]
     public async Task A_tenant_already_subscribed_changes_its_plan_in_the_portal_not_a_second_checkout()
     {
-        _billing.Setup(b => b.FindSubscriptionAsync(9, It.IsAny<CancellationToken>())).ReturnsAsync(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(10)));
+        _stored.Add(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(10)));
 
         var plan = await Billing().CheckoutAsync(9, 4, new BillingCheckoutRequest(PlanCode.Pro, BillingInterval.Monthly), CancellationToken.None);
         _accounts.Setup(a => a.GetByIdAsync(4, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = 4, Email = "a@example.com", Username = "ann" });
@@ -355,6 +490,25 @@ public sealed class BillingPaymentsTests
     }
 
     [Fact]
+    public async Task A_plan_checkout_still_open_is_handed_out_again_and_a_new_one_is_kept_for_reuse()
+    {
+        _accounts.Setup(a => a.GetByIdAsync(4, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = 4, Email = "a@example.com", Username = "ann" });
+        _gateway.Setup(g => g.CreateCheckoutAsync(It.IsAny<BillingCheckout>(), It.IsAny<CancellationToken>())).ReturnsAsync("https://pay/new");
+        _billing.Setup(b => b.FindOpenCheckoutAsync(9, "dodo", "prod_pro_m", Now.UtcDateTime, It.IsAny<CancellationToken>())).ReturnsAsync("https://pay/open");
+
+        var reused = await Billing().CheckoutAsync(9, 4, new BillingCheckoutRequest(PlanCode.Pro, BillingInterval.Monthly), CancellationToken.None);
+        var fresh = await Billing().CheckoutAsync(9, 4, new BillingCheckoutRequest(PlanCode.Maker, BillingInterval.Monthly), CancellationToken.None);
+        var pack = await Billing().CheckoutAsync(9, 4, new BillingCheckoutRequest(CreditPack: "Boost"), CancellationToken.None);
+
+        Assert.Equal("https://pay/open", reused.Value.CheckoutUrl);
+        Assert.Equal("https://pay/new", fresh.Value.CheckoutUrl);
+        Assert.Equal("https://pay/new", pack.Value.CheckoutUrl);
+        _gateway.Verify(g => g.CreateCheckoutAsync(It.Is<BillingCheckout>(c => c.ProductId == "prod_pro_m"), It.IsAny<CancellationToken>()), Times.Never);
+        _billing.Verify(b => b.RecordCheckoutAsync(9, "dodo", "prod_maker_m", "https://pay/new", Now.UtcDateTime, Now.UtcDateTime.AddMinutes(30), It.IsAny<CancellationToken>()));
+        _billing.Verify(b => b.RecordCheckoutAsync(9, "dodo", "prod_boost", It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Without_credentials_nothing_is_offered_and_checkout_is_unavailable()
     {
         _gateway.SetupGet(g => g.IsConfigured).Returns(false);
@@ -370,7 +524,7 @@ public sealed class BillingPaymentsTests
     [Fact]
     public async Task The_billing_read_lists_what_is_on_offer_and_the_subscription()
     {
-        _billing.Setup(b => b.FindSubscriptionAsync(9, It.IsAny<CancellationToken>())).ReturnsAsync(Subscription(SubscriptionStatus.PastDue, Now.UtcDateTime.AddDays(3)) with { PastDueSince = Now.UtcDateTime });
+        _stored.Add(Subscription(SubscriptionStatus.PastDue, Now.UtcDateTime.AddDays(3)) with { PastDueSince = Now.UtcDateTime });
 
         var read = await Billing().GetAsync(9, CancellationToken.None);
 
@@ -424,6 +578,65 @@ public sealed class BillingPaymentsTests
     }
 
     [Fact]
+    public async Task Dodo_reads_a_payments_latest_dispute_and_cancels_and_refunds_with_the_documented_calls()
+    {
+        var handler = new StubHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/payments/pay_1" => Json("""
+                {"payment_id":"pay_1","status":"succeeded","customer":{"customer_id":"cus_1"},"product_cart":[],"refund_status":null,
+                 "disputes":[{"dispute_id":"dis_2","dispute_status":"dispute_lost","created_at":"2026-11-08T00:00:00Z"},
+                             {"dispute_id":"dis_1","dispute_status":"dispute_won","created_at":"2026-11-02T00:00:00Z"}]}
+                """),
+            "/payments/pay_2" => Json("""{"payment_id":"pay_2","status":"succeeded","disputes":[{"dispute_status":"dispute_challenged","created_at":"2026-11-08T00:00:00Z"}]}"""),
+            _ => Json("{}")
+        });
+        var gateway = Dodo(handler);
+
+        ProviderPayment? lost = await gateway.FindPaymentAsync("pay_1", CancellationToken.None);
+        ProviderPayment? open = await gateway.FindPaymentAsync("pay_2", CancellationToken.None);
+        await gateway.CancelSubscriptionAsync("sub_1", CancellationToken.None);
+        await gateway.RefundPaymentAsync("pay_3", "Duplicate", CancellationToken.None);
+
+        Assert.Equal(PaymentDispute.Lost, lost!.Dispute);
+        Assert.True(lost.Reversed);
+        Assert.Equal(PaymentDispute.Open, open!.Dispute);
+        Assert.False(open.Reversed);
+        Assert.Equal(HttpMethod.Patch, handler.Requests[2].Method);
+        Assert.Equal("/subscriptions/sub_1", handler.Requests[2].RequestUri!.AbsolutePath);
+        Assert.Equal("cancelled", JsonDocument.Parse(handler.Bodies[2]).RootElement.GetProperty("status").GetString());
+        Assert.Equal("/refunds", handler.Requests[3].RequestUri!.AbsolutePath);
+        Assert.Equal("pay_3", JsonDocument.Parse(handler.Bodies[3]).RootElement.GetProperty("payment_id").GetString());
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.OK, true)]
+    [InlineData(HttpStatusCode.Unauthorized, false)]
+    public async Task A_key_the_provider_refuses_is_reported_at_start(HttpStatusCode status, bool accepted)
+    {
+        var gateway = Dodo(new StubHandler(_ => new HttpResponseMessage(status) { Content = new StringContent("{}") }));
+
+        Assert.Equal(accepted, await gateway.AcceptsCredentialsAsync(CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("test_mode", true)]
+    [InlineData("live_mode", true)]
+    [InlineData("live", false)]
+    public void An_unknown_dodo_mode_stops_the_host_at_start(string mode, bool valid)
+    {
+        var options = new DodoOptions { Environment = mode };
+
+        if (valid)
+        {
+            options.EnsureValid();
+        }
+        else
+        {
+            Assert.Throws<InvalidOperationException>(options.EnsureValid);
+        }
+    }
+
+    [Fact]
     public async Task A_dodo_checkout_carries_the_tenant_in_its_metadata()
     {
         var handler = new StubHandler(_ => Json("""{"session_id":"cks_1","checkout_url":"https://test.checkout.dodopayments.com/cks_1"}"""));
@@ -462,10 +675,10 @@ public sealed class BillingPaymentsTests
         _gateway.Object, _billing.Object, _plans.Object, _planService.Object, _audit.Object,
         Options.Create(_options), new FixedClock(Now), NullLogger<TenantBillingSync>.Instance);
 
-    private BillingWebhookService Webhooks() => new(_gateway.Object, _billing.Object, Sync(), NullLogger<BillingWebhookService>.Instance);
+    private BillingWebhookService Webhooks() => new(_gateway.Object, _billing.Object, Sync(), new AuthMetrics(), NullLogger<BillingWebhookService>.Instance);
 
     private TenantBillingService Billing() => new(
-        _gateway.Object, _billing.Object, _plans.Object, _accounts.Object, Options.Create(_options), NullLogger<TenantBillingService>.Instance);
+        _gateway.Object, _billing.Object, _plans.Object, _accounts.Object, Options.Create(_options), new FixedClock(Now), NullLogger<TenantBillingService>.Instance);
 
     private static DodoPaymentGateway Dodo(StubHandler handler)
     {
@@ -489,7 +702,7 @@ public sealed class BillingPaymentsTests
     }
 
     private void VerifyPlanNotSet() =>
-        _planService.Verify(p => p.SetAsync(It.IsAny<Guid>(), It.IsAny<SetTenantPlanRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+        _planService.Verify(p => p.SetAsync(It.IsAny<Guid>(), It.IsAny<SetTenantPlanRequest>(), It.IsAny<PlanSource>(), It.IsAny<CancellationToken>()), Times.Never);
 
     private static TenantSubscription Subscription(SubscriptionStatus status, DateTime periodEnd) =>
         new(9, "dodo", "sub_1", "cus_1", "prod_pro_m", PlanCode.Pro, BillingInterval.Monthly, status, periodEnd, false, null, null);

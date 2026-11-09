@@ -50,6 +50,29 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
+    public async Task A_held_grant_does_not_count_until_released_and_a_late_hold_changes_nothing()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int tenantId = NewId();
+        int workspaceId = NewId();
+        await AddAccountAsync(workspaceId, tenantId);
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        await StartAsync(wd, startCost: 5m);
+        string payment = $"pay_{Guid.NewGuid():N}";
+        ICreditGrantProvider grants = Grants();
+        await grants.InsertAsync(tenantId, 3m, DateTime.UtcNow, DateTime.UtcNow.AddMonths(12), "test", payment, CancellationToken.None);
+        Func<Task> start = () => StartAsync(wd, credits: new PlanCredits(5m, tenantId));
+
+        (await grants.SetHoldAsync("test", payment, held: true, revision: 1, DateTime.UtcNow, CancellationToken.None)).Should().BeTrue();
+        (await start.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(PlanCreditLimitError);
+        (await grants.SetHoldAsync("test", payment, held: false, revision: 2, DateTime.UtcNow, CancellationToken.None)).Should().BeTrue();
+        (await grants.SetHoldAsync("test", payment, held: true, revision: 1, DateTime.UtcNow, CancellationToken.None)).Should().BeFalse("a hold delivered after its release is stale");
+        await start.Should().NotThrowAsync();
+        (await grants.SetHoldAsync("test", $"pay_{Guid.NewGuid():N}", held: true, revision: 1, DateTime.UtcNow, CancellationToken.None)).Should().BeFalse("there is no such grant");
+    }
+
+    [SkippableFact]
     public async Task An_expired_grant_does_not_count()
     {
         Skip.IfNot(fixture.IsAvailable, SkipReason);

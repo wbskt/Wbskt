@@ -42,4 +42,16 @@ internal sealed record DodoPayment(
     [property: JsonPropertyName("subscription_id")] string? SubscriptionId,
     [property: JsonPropertyName("product_cart")] IReadOnlyList<DodoCartItem>? ProductCart,
     [property: JsonPropertyName("refund_status")] string? RefundStatus,
+    [property: JsonPropertyName("created_at")] DateTimeOffset? CreatedAt,
+    [property: JsonPropertyName("disputes")] IReadOnlyList<DodoDispute>? Disputes = null);
+
+internal sealed record DodoDispute(
+    [property: JsonPropertyName("dispute_id")] string? DisputeId,
+    [property: JsonPropertyName("dispute_status")] string? DisputeStatus,
     [property: JsonPropertyName("created_at")] DateTimeOffset? CreatedAt);
+
+internal sealed record DodoSubscriptionUpdate([property: JsonPropertyName("status")] string Status);
+
+internal sealed record DodoRefundRequest(
+    [property: JsonPropertyName("payment_id")] string PaymentId,
+    [property: JsonPropertyName("reason")] string Reason);

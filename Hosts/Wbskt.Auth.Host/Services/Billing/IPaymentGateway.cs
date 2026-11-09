@@ -26,6 +26,18 @@ public interface IPaymentGateway
     Task<ProviderPayment?> FindPaymentAsync(string paymentId, CancellationToken ct);
 
     /// <summary>
+    /// Whether the provider accepts this deployment's credentials, by one harmless read. False when it
+    /// refuses them, as it does a live key sent to its test API; throws when it cannot be reached.
+    /// </summary>
+    Task<bool> AcceptsCredentialsAsync(CancellationToken ct);
+
+    /// <summary>Cancels the subscription now, so it never charges again. Cancelling one already ended is harmless.</summary>
+    Task CancelSubscriptionAsync(string subscriptionId, CancellationToken ct);
+
+    /// <summary>Refunds the whole of the payment, giving <paramref name="reason"/> to the provider.</summary>
+    Task RefundPaymentAsync(string paymentId, string reason, CancellationToken ct);
+
+    /// <summary>
     /// Checks a delivered webhook's signature over its raw body and reads it; null when the signature or
     /// its timestamp does not hold up.
     /// </summary>
@@ -54,7 +66,7 @@ public sealed record ProviderSubscription(
 /// <summary>
 /// A payment as the provider reports it. <c>SubscriptionId</c> is the subscription it paid for, null for
 /// a one-time purchase; <c>Lines</c> is what it bought; <c>FullyRefunded</c> is true once all of it has
-/// been refunded.
+/// been refunded; <c>Dispute</c> is where its latest chargeback stands.
 /// </summary>
 public sealed record ProviderPayment(
     string Id,
@@ -64,7 +76,25 @@ public sealed record ProviderPayment(
     string? SubscriptionId,
     IReadOnlyList<PaymentLine> Lines,
     bool FullyRefunded,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    PaymentDispute Dispute = PaymentDispute.None)
+{
+    /// <summary>The money went back to the buyer: refunded in full, or a chargeback lost.</summary>
+    public bool Reversed => FullyRefunded || Dispute == PaymentDispute.Lost;
+}
+
+/// <summary>Where a payment's latest chargeback stands.</summary>
+public enum PaymentDispute
+{
+    /// <summary>None, or one won or withdrawn: the payment stands.</summary>
+    None,
+
+    /// <summary>Opened or challenged, not decided yet.</summary>
+    Open,
+
+    /// <summary>Lost, accepted or expired: the money went back to the buyer.</summary>
+    Lost
+}
 
 public sealed record PaymentLine(string ProductId, int Quantity);
 

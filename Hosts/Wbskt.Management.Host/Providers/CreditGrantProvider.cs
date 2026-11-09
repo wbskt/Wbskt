@@ -33,6 +33,18 @@ internal sealed class CreditGrantProvider : BaseSqlProvider, ICreditGrantProvide
         }, ct) == 1;
     }
 
+    public async Task<bool> SetHoldAsync(string source, string sourceRef, bool held, int revision, DateTime atUtc, CancellationToken ct)
+    {
+        return await ExecuteScalarAsync<int>("dbo.TenantCreditGrant_SetHold", p =>
+        {
+            p.AddWithValue("@Source", source);
+            p.AddWithValue("@SourceRef", sourceRef);
+            p.AddWithValue("@Held", held);
+            p.AddWithValue("@Revision", revision);
+            p.Add("@At", SqlDbType.DateTime2).Value = atUtc;
+        }, ct) == 1;
+    }
+
     public async Task<IReadOnlyCollection<UnsettledCreditGrantTenant>> GetUnsettledAsync(DateOnly monthStart, CancellationToken ct)
     {
         return await ExecuteCollectionAsync(

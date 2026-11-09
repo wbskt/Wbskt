@@ -25,6 +25,12 @@ public sealed class BillingOptions
     /// <summary>How long a past-due subscription keeps its paid plan before the tenant drops to Free.</summary>
     public TimeSpan PastDueGrace { get; set; } = TimeSpan.FromDays(7);
 
+    /// <summary>
+    /// How long a plan checkout stays open for reuse: another request for the same plan in that time gets
+    /// the same page, so two tabs or two admins cannot each pay for a subscription.
+    /// </summary>
+    public TimeSpan CheckoutReuseWindow { get; set; } = TimeSpan.FromMinutes(30);
+
     /// <summary>Where the provider sends the buyer back after checkout and from its portal, such as the console's billing page.</summary>
     public string? ReturnUrl { get; set; }
 

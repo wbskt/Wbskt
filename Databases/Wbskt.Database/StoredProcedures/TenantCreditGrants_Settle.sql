@@ -44,6 +44,7 @@ BEGIN
       AND ExpiresAt > @MonthStart
       AND GrantedAt < @MonthEnd
       AND (RevokedAt IS NULL OR RevokedAt > @MonthStart)
+      AND HeldAt IS NULL
       AND Drawn < Credits;
 
     -- Each grant gives what is left of the overage after the grants before it, up to what it holds.

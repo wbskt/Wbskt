@@ -10,7 +10,9 @@ BEGIN
         PlanCode,
         PlanLimitOverrides,
         PlanRevision,
-        PlanChangedAt
+        PlanChangedAt,
+        PlanSource,
+        PlanEndsAt
     FROM dbo.Tenants
     WHERE Id = @Id;
 END

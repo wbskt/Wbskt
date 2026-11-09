@@ -1,4 +1,4 @@
--- The tenant's subscription with a payment provider, if it has one.
+-- Every subscription the tenant has had with a payment provider, oldest first.
 CREATE PROCEDURE dbo.TenantSubscription_GetBy_TenantId
     @TenantId INT
 AS
@@ -18,8 +18,12 @@ BEGIN
         CancelAtPeriodEnd,
         PastDueSince,
         RefundedThrough,
+        DuplicateAt,
+        DuplicateRefundPaymentId,
+        CreatedAt,
         UpdatedAt
     FROM dbo.TenantSubscriptions
-    WHERE TenantId = @TenantId;
+    WHERE TenantId = @TenantId
+    ORDER BY CreatedAt, SubscriptionId;
 END
 GO

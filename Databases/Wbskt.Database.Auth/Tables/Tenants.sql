@@ -15,8 +15,16 @@ CREATE TABLE dbo.Tenants (
     -- older copy never replaces a newer one, and a change made from a stale read is refused.
     PlanRevision INT NOT NULL CONSTRAINT DF_Tenants_PlanRevision DEFAULT 0,
     PlanChangedAt DATETIME2(3) NULL,
+    -- Who set the plan (Wbskt.Models.Billing.PlanSource): Default (never changed), Subscription (the
+    -- payment provider's sync) or Operator. The sync only moves a plan it set itself or the default, so an
+    -- operator's negotiated or goodwill plan is not undone by the next renewal.
+    PlanSource NVARCHAR(20) NOT NULL CONSTRAINT DF_Tenants_PlanSource DEFAULT N'Default',
+    -- When an operator's plan ends; the review worker then hands the tenant back to its subscription, or
+    -- to Free. NULL while it has no end, and for every other source.
+    PlanEndsAt DATETIME2(3) NULL,
     CONSTRAINT PK_Tenants PRIMARY KEY CLUSTERED (Id ASC),
     CONSTRAINT UQ_Tenants_RefId UNIQUE (RefId),
-    CONSTRAINT CK_Tenants_PlanCode CHECK (PlanCode = N'Free' OR PlanCode = N'Maker' OR PlanCode = N'Pro' OR PlanCode = N'Business')
+    CONSTRAINT CK_Tenants_PlanCode CHECK (PlanCode = N'Free' OR PlanCode = N'Maker' OR PlanCode = N'Pro' OR PlanCode = N'Business'),
+    CONSTRAINT CK_Tenants_PlanSource CHECK (PlanSource = N'Default' OR PlanSource = N'Subscription' OR PlanSource = N'Operator')
 );
 GO

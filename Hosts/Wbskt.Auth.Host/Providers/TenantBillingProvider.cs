@@ -34,9 +34,9 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
         }, cancellationToken);
     }
 
-    public Task<TenantSubscription?> FindSubscriptionAsync(int tenantId, CancellationToken cancellationToken)
+    public Task<IReadOnlyCollection<TenantSubscription>> GetSubscriptionsAsync(int tenantId, CancellationToken cancellationToken)
     {
-        return ExecuteFindAsync("dbo.TenantSubscription_GetBy_TenantId", p => p.AddWithValue("@TenantId", tenantId), MapSubscription, cancellationToken);
+        return ExecuteCollectionAsync("dbo.TenantSubscription_GetBy_TenantId", p => p.AddWithValue("@TenantId", tenantId), MapSubscription, cancellationToken);
     }
 
     public Task<TenantSubscription> UpsertSubscriptionAsync(TenantSubscription s, DateTime now, DateTime? refundedThrough, CancellationToken cancellationToken)
@@ -56,6 +56,32 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
             p.AddWithValue("@Now", now);
             p.AddWithValue("@RefundedThrough", (object?)refundedThrough ?? DBNull.Value);
         }, MapSubscription, new InvalidOperationException("TenantSubscription_Upsert did not return a row."), cancellationToken);
+    }
+
+    public async Task<bool> MarkDuplicateSubscriptionAsync(string provider, string subscriptionId, DateTime now, CancellationToken cancellationToken)
+    {
+        return await ExecuteScalarAsync<int>("dbo.TenantSubscription_MarkDuplicate", p =>
+        {
+            p.AddWithValue("@Provider", provider);
+            p.AddWithValue("@SubscriptionId", subscriptionId);
+            p.AddWithValue("@Now", now);
+        }, cancellationToken) == 1;
+    }
+
+    public async Task<bool> ClaimDuplicateRefundAsync(string provider, string subscriptionId, string paymentId, bool release, CancellationToken cancellationToken)
+    {
+        return await ExecuteScalarAsync<int>("dbo.TenantSubscription_ClaimDuplicateRefund", p =>
+        {
+            p.AddWithValue("@Provider", provider);
+            p.AddWithValue("@SubscriptionId", subscriptionId);
+            p.AddWithValue("@PaymentId", paymentId);
+            p.AddWithValue("@Release", release);
+        }, cancellationToken) == 1;
+    }
+
+    public Task<IReadOnlyCollection<TenantSubscription>> GetLiveSubscriptionsOfSoleTenantsAsync(int userId, CancellationToken cancellationToken)
+    {
+        return ExecuteCollectionAsync("dbo.TenantSubscription_GetLiveBy_SoleMember", p => p.AddWithValue("@UserId", userId), MapSubscription, cancellationToken);
     }
 
     public Task<IReadOnlyCollection<int>> GetSubscriptionsToReviewAsync(DateTime now, DateTime pastDueSince, CancellationToken cancellationToken)
@@ -105,7 +131,51 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
         }, r =>
         {
             int refundedAt = r.GetOrdinal("RefundedAt");
-            return new TenantCreditPurchase(r.GetInt32(r.GetOrdinal("TenantId")), r.GetDecimal(r.GetOrdinal("Credits")), r.IsDBNull(refundedAt) ? null : r.GetDateTime(refundedAt));
+            int heldAt = r.GetOrdinal("HeldAt");
+            return new TenantCreditPurchase(
+                r.GetInt32(r.GetOrdinal("TenantId")),
+                r.GetDecimal(r.GetOrdinal("Credits")),
+                r.IsDBNull(refundedAt) ? null : r.GetDateTime(refundedAt),
+                r.IsDBNull(heldAt) ? null : r.GetDateTime(heldAt),
+                r.GetInt32(r.GetOrdinal("HoldRevision")));
+        }, cancellationToken);
+    }
+
+    public async Task<bool> SetCreditPurchaseHoldAsync(string provider, string paymentId, bool held, DateTime at, int expectedRevision, OutboxMessage changed, CancellationToken cancellationToken)
+    {
+        return await ExecuteScalarAsync<int>("dbo.TenantCreditPurchase_SetHold", p =>
+        {
+            p.AddWithValue("@Provider", provider);
+            p.AddWithValue("@PaymentId", paymentId);
+            p.AddWithValue("@Held", held);
+            p.AddWithValue("@At", at);
+            p.AddWithValue("@ExpectedRevision", expectedRevision);
+            p.AddWithValue("@OutboxMessageType", changed.MessageType);
+            p.AddWithValue("@OutboxPayload", changed.Payload);
+        }, cancellationToken) == 1;
+    }
+
+    public Task<string?> FindOpenCheckoutAsync(int tenantId, string provider, string productId, DateTime now, CancellationToken cancellationToken)
+    {
+        return ExecuteScalarAsync<string>("dbo.TenantCheckout_FindOpen", p =>
+        {
+            p.AddWithValue("@TenantId", tenantId);
+            p.AddWithValue("@Provider", provider);
+            p.AddWithValue("@ProductId", productId);
+            p.AddWithValue("@Now", now);
+        }, cancellationToken);
+    }
+
+    public Task RecordCheckoutAsync(int tenantId, string provider, string productId, string checkoutUrl, DateTime openedAt, DateTime expiresAt, CancellationToken cancellationToken)
+    {
+        return ExecuteNonQueryAsync("dbo.TenantCheckout_Record", p =>
+        {
+            p.AddWithValue("@TenantId", tenantId);
+            p.AddWithValue("@Provider", provider);
+            p.AddWithValue("@ProductId", productId);
+            p.AddWithValue("@CheckoutUrl", checkoutUrl);
+            p.AddWithValue("@OpenedAt", openedAt);
+            p.AddWithValue("@ExpiresAt", expiresAt);
         }, cancellationToken);
     }
 
@@ -122,6 +192,8 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
     {
         int pastDueSince = r.GetOrdinal("PastDueSince");
         int refundedThrough = r.GetOrdinal("RefundedThrough");
+        int duplicateAt = r.GetOrdinal("DuplicateAt");
+        int duplicateRefund = r.GetOrdinal("DuplicateRefundPaymentId");
         SubscriptionStatusNames.TryParse(r.GetString(r.GetOrdinal("Status")), out SubscriptionStatus status);
         return new TenantSubscription(
             r.GetInt32(r.GetOrdinal("TenantId")),
@@ -135,6 +207,9 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
             r.GetDateTime(r.GetOrdinal("CurrentPeriodEnd")),
             r.GetBoolean(r.GetOrdinal("CancelAtPeriodEnd")),
             r.IsDBNull(pastDueSince) ? null : r.GetDateTime(pastDueSince),
-            r.IsDBNull(refundedThrough) ? null : r.GetDateTime(refundedThrough));
+            r.IsDBNull(refundedThrough) ? null : r.GetDateTime(refundedThrough),
+            r.IsDBNull(duplicateAt) ? null : r.GetDateTime(duplicateAt),
+            r.IsDBNull(duplicateRefund) ? null : r.GetString(duplicateRefund),
+            r.GetDateTime(r.GetOrdinal("CreatedAt")));
     }
 }
