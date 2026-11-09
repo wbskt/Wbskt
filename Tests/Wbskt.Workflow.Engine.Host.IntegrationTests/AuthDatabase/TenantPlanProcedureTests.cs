@@ -55,6 +55,19 @@ public sealed class TenantPlanProcedureTests(AuthSqlFixture fixture)
         Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.OutboxMessages WHERE Payload = @p0", payload));
     }
 
+    [SkippableTheory]
+    [InlineData("Team")]
+    [InlineData("Business")]
+    public async Task Every_plan_code_is_accepted_by_the_table(string planCode)
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int tenantId = await CreateTenantAsync();
+
+        var set = await SetAsync(tenantId, planCode, null, expectedRevision: 0, "{}");
+
+        Assert.Equal(planCode, set?.PlanCode);
+    }
+
     [SkippableFact]
     public async Task An_unknown_plan_code_is_refused_by_the_table()
     {

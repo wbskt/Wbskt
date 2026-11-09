@@ -226,6 +226,8 @@ services:
       Billing__Payments__Plans__Maker__Yearly: ${DODO_PRODUCT_MAKER_YEARLY:-}
       Billing__Payments__Plans__Pro__Monthly: ${DODO_PRODUCT_PRO_MONTHLY:-}
       Billing__Payments__Plans__Pro__Yearly: ${DODO_PRODUCT_PRO_YEARLY:-}
+      Billing__Payments__Plans__Team__Monthly: ${DODO_PRODUCT_TEAM_MONTHLY:-}
+      Billing__Payments__Plans__Team__Yearly: ${DODO_PRODUCT_TEAM_YEARLY:-}
     volumes:
       - ../config:/Config:ro
     healthcheck:

@@ -15,5 +15,6 @@ public enum PlanCode
     Free,
     Maker,
     Pro,
+    Team,
     Business
 }

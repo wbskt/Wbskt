@@ -21,8 +21,10 @@ public record DeletedWorkspacesResponse(int[] WorkspaceIds);
 /// change (409) if the plan has moved on since the caller read it. An operator's plan holds until
 /// <paramref name="EndsAt"/> (never, when left out); the tenant then goes back to its subscription's plan,
 /// or to Free. Setting an end date that has passed hands it back at the next review.
+/// <paramref name="ContractClients"/> sizes a Business contract: its clients, messages and credits follow
+/// from it (<c>BusinessContract</c>) unless <paramref name="LimitOverrides"/> sets them.
 /// </summary>
-public record SetTenantPlanRequest(PlanCode PlanCode, PlanLimitOverrides? LimitOverrides = null, int? ExpectedRevision = null, DateTimeOffset? EndsAt = null);
+public record SetTenantPlanRequest(PlanCode PlanCode, PlanLimitOverrides? LimitOverrides = null, int? ExpectedRevision = null, DateTimeOffset? EndsAt = null, int? ContractClients = null);
 
 /// <summary>A tenant's plan as it stands: who set it, and when an operator's plan ends.</summary>
 public record TenantPlanResponse(

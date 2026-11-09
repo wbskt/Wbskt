@@ -5,7 +5,7 @@ using Wbskt.Models;
 namespace Wbskt.Events.Billing;
 
 /// <summary>
-/// A paid account (Maker or Pro) carried <c>Billing:PaidMessageThrottleMultiple</c> times its plan's
+/// A paid account (Maker, Pro or Team) carried <c>Billing:PaidMessageThrottleMultiple</c> times its plan's
 /// client messages this month, so its clients are now held to one message a minute each until the 1st.
 /// Sent once per workspace and month by the management host's <c>MessageAllowanceMonitor</c>. A Free
 /// account's throttle is announced by <see cref="WorkspaceMessageLimitReachedEvent"/> instead, since it

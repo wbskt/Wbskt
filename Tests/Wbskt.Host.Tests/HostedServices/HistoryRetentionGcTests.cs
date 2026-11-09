@@ -71,7 +71,7 @@ public sealed class HistoryRetentionGcTests
 
         var retention = Assert.Single(runProvider.DeleteCalls).Retention;
         Assert.Equal(
-            [new RunHistoryRetention(PlanCode.Free, 7), new RunHistoryRetention(PlanCode.Maker, 21), new RunHistoryRetention(PlanCode.Pro, 30), new RunHistoryRetention(PlanCode.Business, 30)],
+            [new RunHistoryRetention(PlanCode.Free, 7), new RunHistoryRetention(PlanCode.Maker, 21), new RunHistoryRetention(PlanCode.Pro, 30), new RunHistoryRetention(PlanCode.Team, 30), new RunHistoryRetention(PlanCode.Business, 90)],
             retention.OrderBy(r => r.PlanCode));
     }
 

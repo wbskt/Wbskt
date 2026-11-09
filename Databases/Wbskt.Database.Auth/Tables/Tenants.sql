@@ -24,7 +24,7 @@ CREATE TABLE dbo.Tenants (
     PlanEndsAt DATETIME2(3) NULL,
     CONSTRAINT PK_Tenants PRIMARY KEY CLUSTERED (Id ASC),
     CONSTRAINT UQ_Tenants_RefId UNIQUE (RefId),
-    CONSTRAINT CK_Tenants_PlanCode CHECK (PlanCode = N'Free' OR PlanCode = N'Maker' OR PlanCode = N'Pro' OR PlanCode = N'Business'),
+    CONSTRAINT CK_Tenants_PlanCode CHECK (PlanCode = N'Free' OR PlanCode = N'Maker' OR PlanCode = N'Pro' OR PlanCode = N'Team' OR PlanCode = N'Business'),
     CONSTRAINT CK_Tenants_PlanSource CHECK (PlanSource = N'Default' OR PlanSource = N'Subscription' OR PlanSource = N'Operator')
 );
 GO

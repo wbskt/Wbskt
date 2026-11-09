@@ -31,7 +31,7 @@ customer-facing parts of it, so a change here goes there too.
 
 - **Free** clients are slowed to one message a minute each once the workspace has sent its monthly
   allowance, until the 1st.
-- **Maker and Pro** are never charged for messages past the allowance. Notices go out at 80% and 100% of
+- **Maker, Pro and Team** are never charged for messages past the allowance. Notices go out at 80% and 100% of
   it. At twice the allowance (`Billing:PaidMessageThrottleMultiple`, 2) the clients are held to Free's one
   message a minute until the 1st, so one account cannot load the hosts without end; a notice goes out
   when that happens. An account that needs more should move up a plan.

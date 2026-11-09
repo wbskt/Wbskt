@@ -27,6 +27,11 @@ internal sealed class TenantPlanService(ITenantPlanProvider plans, IAuditWorkspa
             return Error.Validation("PLAN_CODE_INVALID", $"'planCode' must be one of {string.Join(", ", Enum.GetNames<PlanCode>())}.");
         }
 
+        if (request.ContractClients is { } contractClients && (request.PlanCode != PlanCode.Business || contractClients < BusinessContract.MinimumClients))
+        {
+            return Error.Validation("PLAN_CONTRACT_INVALID", $"'contractClients' sizes a Business plan and must be at least {BusinessContract.MinimumClients}.");
+        }
+
         IReadOnlyCollection<string> negative = request.LimitOverrides?.NegativeFields() ?? [];
         if (negative.Count > 0)
         {
@@ -45,7 +50,10 @@ internal sealed class TenantPlanService(ITenantPlanProvider plans, IAuditWorkspa
         }
 
         // An empty set of overrides is stored as none, so it compares equal to none here too.
-        PlanLimitOverrides? overrides = request.LimitOverrides == new PlanLimitOverrides() ? null : request.LimitOverrides;
+        PlanLimitOverrides? requested = request.ContractClients is { } clients
+            ? BusinessContract.OverridesFor(clients, request.LimitOverrides)
+            : request.LimitOverrides;
+        PlanLimitOverrides? overrides = requested == new PlanLimitOverrides() ? null : requested;
         DateTime? endsAt = source == PlanSource.Operator ? request.EndsAt?.UtcDateTime : null;
         if (current.PlanCode == request.PlanCode && current.LimitOverrides == overrides && current.Source == source && current.EndsAt == endsAt)
         {

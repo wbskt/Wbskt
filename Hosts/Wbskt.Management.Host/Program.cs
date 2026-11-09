@@ -103,7 +103,7 @@ public static class Program
         }
         // Each workspace's copy of its tenant's plan, kept from the auth host; see WorkspaceAccountSync.
         builder.Services.AddWorkspacePlans(builder.Configuration);
-        // A paid throttle at or under the allowance would throttle Maker and Pro as Free is, and share the
+        // A paid throttle at or under the allowance would throttle Maker, Pro and Team as Free is, and share the
         // 100% notice, so its own announcement would never go out.
         builder.Services.AddOptions<BillingOptions>()
             .Bind(builder.Configuration.GetSection(BillingOptions.SectionName))

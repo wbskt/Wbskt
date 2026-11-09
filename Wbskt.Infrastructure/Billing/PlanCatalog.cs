@@ -19,7 +19,10 @@ public sealed class PlanCatalog
         [PlanCode.Free] = new(Clients: 20, MessagesPerMonth: 1_500_000, CreditsPerMonth: 2_000m, ActiveRuns: 20, Workspaces: 1, Members: 1, RawReadingsDays: 3, HourlyReadingsDays: 30, RunHistoryDays: 7),
         [PlanCode.Maker] = new(Clients: 100, MessagesPerMonth: 10_000_000, CreditsPerMonth: 25_000m, ActiveRuns: 100, Workspaces: 3, Members: 3, RawReadingsDays: 14, HourlyReadingsDays: 365, RunHistoryDays: 14),
         [PlanCode.Pro] = new(Clients: 500, MessagesPerMonth: 50_000_000, CreditsPerMonth: 150_000m, ActiveRuns: 200, Workspaces: 10, Members: 10, RawReadingsDays: 30, HourlyReadingsDays: 730, RunHistoryDays: 30),
-        [PlanCode.Business] = new(Clients: 1_000, MessagesPerMonth: 100_000_000, CreditsPerMonth: 300_000m, ActiveRuns: 200, Workspaces: 25, Members: 25, RawReadingsDays: 30, HourlyReadingsDays: 730, RunHistoryDays: 30)
+        [PlanCode.Team] = new(Clients: 2_000, MessagesPerMonth: 200_000_000, CreditsPerMonth: 600_000m, ActiveRuns: 200, Workspaces: 25, Members: 25, RawReadingsDays: 30, HourlyReadingsDays: 730, RunHistoryDays: 30),
+
+        // Business's row is its smallest contract; a larger one sets its own limits (BusinessContract).
+        [PlanCode.Business] = BusinessContract.LimitsFor(BusinessContract.MinimumClients)
     };
 
     private readonly IReadOnlyDictionary<PlanCode, PlanLimits> _plans;

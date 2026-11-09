@@ -5,7 +5,7 @@ namespace Wbskt.Infrastructure.Billing;
 /// <summary>
 /// What happens to an account's client messages once it has used its plan's monthly allowance
 /// (Docs/Billing.md, Messages). A throttled account's clients may each send one message every
-/// <see cref="ThrottledInterval"/> until the month ends. Free is throttled at its allowance; Maker and Pro
+/// <see cref="ThrottledInterval"/> until the month ends. Free is throttled at its allowance; Maker, Pro and Team
 /// carry on past theirs with no overage charge, and are throttled the same way only at
 /// <c>Billing:PaidMessageThrottleMultiple</c> times it. Business is never throttled.
 /// </summary>
