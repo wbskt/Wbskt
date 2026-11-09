@@ -268,6 +268,36 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
         Assert.Null(await FindCustomerAsync(await CreateTenantAsync()));
     }
 
+    [SkippableFact]
+    public async Task Credit_purchases_page_by_id_with_their_refund_and_hold()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int tenantId = await CreateTenantAsync();
+        string refunded = $"pay_{Guid.NewGuid():N}";
+        string held = $"pay_{Guid.NewGuid():N}";
+        await RecordPurchaseAsync(tenantId, refunded, "{}");
+        await RecordPurchaseAsync(tenantId, held, "{}");
+        await RefundPurchaseAsync(refunded, "{}");
+        await SetHoldAsync(held, held: true, expectedRevision: 0, Guid.NewGuid().ToString("N"));
+        int first = await ScalarAsync<int>("SELECT Id FROM dbo.TenantCreditPurchases WHERE PaymentId = @p0", refunded);
+
+        await using var conn = await OpenAsync();
+        await using var cmd = Procedure(conn, "dbo.TenantCreditPurchase_GetPage");
+        cmd.Parameters.AddWithValue("@AfterId", first - 1);
+        cmd.Parameters.AddWithValue("@Take", 2);
+        var rows = new List<(string PaymentId, bool Refunded, bool Held, int HoldRevision)>();
+        await using (var reader = await cmd.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync())
+            {
+                rows.Add((reader.GetString(reader.GetOrdinal("PaymentId")), !reader.IsDBNull(reader.GetOrdinal("RefundedAt")),
+                    !reader.IsDBNull(reader.GetOrdinal("HeldAt")), reader.GetInt32(reader.GetOrdinal("HoldRevision"))));
+            }
+        }
+
+        Assert.Equal([(refunded, true, false, 0), (held, false, true, 1)], rows);
+    }
+
     private async Task<(long Id, DateTime? ProcessedAt)> RecordWebhookAsync(string eventId)
     {
         await using var conn = await OpenAsync();

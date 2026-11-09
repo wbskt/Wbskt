@@ -1,4 +1,5 @@
 using Wbskt.Auth.Host.Models;
+using Wbskt.Auth.Models;
 using Wbskt.Infrastructure.Events.Outbox;
 
 namespace Wbskt.Auth.Host.Providers;
@@ -44,6 +45,9 @@ internal interface ITenantBillingProvider
 
     /// <summary>Marks a credit pack refunded and queues its revocation, once. False when there was nothing to refund.</summary>
     Task<bool> RefundCreditPurchaseAsync(string provider, string paymentId, DateTime refundedAt, OutboxMessage revoked, CancellationToken cancellationToken);
+
+    /// <summary>Credit packs bought, in id order after <paramref name="afterId"/>, for the main database's reconcile.</summary>
+    Task<IReadOnlyCollection<CreditPurchaseResponse>> GetCreditPurchasesAsync(int? afterId, int take, CancellationToken cancellationToken);
 
     Task<TenantCreditPurchase?> FindCreditPurchaseAsync(string provider, string paymentId, CancellationToken cancellationToken);
 

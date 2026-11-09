@@ -1,5 +1,6 @@
 using Wbskt.Auth.Models;
 using Wbskt.Infrastructure;
+using Wbskt.Models;
 
 namespace Wbskt.Auth.Host.Services.Billing;
 
@@ -13,6 +14,9 @@ public interface ITenantBillingService
 
     /// <summary>The provider's customer portal, once the tenant has paid for something.</summary>
     Task<Result<BillingPortalResponse>> PortalAsync(int tenantId, CancellationToken ct);
+
+    /// <summary>Every credit pack bought, a page at a time by id, for the main database's reconcile of its grants.</summary>
+    Task<Result<Page<CreditPurchaseResponse>>> GetCreditPurchasesAsync(PageRequest page, CancellationToken ct);
 }
 
 /// <summary>Receives a payment provider's webhooks.</summary>

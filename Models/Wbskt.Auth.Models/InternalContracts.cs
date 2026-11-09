@@ -36,3 +36,21 @@ public record TenantPlanResponse(
 
 /// <summary>A workspace and its tenant's plan, for the main database's copy (<c>InternalRoutes.WorkspaceAccounts</c>).</summary>
 public record WorkspaceAccountResponse(int WorkspaceId, int TenantId, Guid TenantRefId, PlanCode PlanCode, PlanLimitOverrides? LimitOverrides, int PlanRevision);
+
+/// <summary>
+/// A credit pack bought, as the auth database holds it (<c>InternalRoutes.CreditPurchases</c>): what the
+/// main database's grant for <paramref name="Source"/> and <paramref name="SourceRef"/> must match.
+/// </summary>
+/// <param name="HoldRevision">Raised by every hold and release; 0 when the pack was never held.</param>
+public record CreditPurchaseResponse(
+    int Id,
+    int TenantId,
+    Guid TenantRefId,
+    string Source,
+    string SourceRef,
+    decimal Credits,
+    DateTimeOffset PurchasedAt,
+    DateTimeOffset ExpiresAt,
+    DateTimeOffset? RefundedAt,
+    bool Held,
+    int HoldRevision);

@@ -19,6 +19,13 @@ public sealed class BillingOptions
     public TimeSpan MessageAllowanceInterval { get; set; } = TimeSpan.FromMinutes(1);
 
     /// <summary>
+    /// How often every credit pack bought is compared with the main database's grants
+    /// (<c>CreditGrantReconcileWorker</c>). Events keep the grants current in seconds; this only bounds how
+    /// long a grant an event missed stays wrong.
+    /// </summary>
+    public TimeSpan CreditGrantReconcileInterval { get; set; } = TimeSpan.FromHours(1);
+
+    /// <summary>
     /// How many times its monthly message allowance a Maker or Pro account may carry before its clients
     /// are held to Free's one message a minute until the 1st. Paid plans are never charged for overage, so
     /// this only stops one account from loading the hosts without end. Free is throttled at 1x; Business

@@ -112,10 +112,12 @@ public static class Program
         builder.Services.AddScoped<IMessageAllowanceProvider, MessageAllowanceProvider>();
         builder.Services.AddScoped<MessageAllowanceMonitor>();
         builder.Services.AddScoped<ICreditGrantProvider, CreditGrantProvider>();
+        builder.Services.AddScoped<CreditGrantReconcile>();
         if (role == HostRole.All)
         {
             builder.Services.AddHostedService<WorkspaceAccountSyncWorker>();
             builder.Services.AddHostedService<MessageAllowanceWorker>();
+            builder.Services.AddHostedService<CreditGrantReconcileWorker>();
         }
         builder.Services.AddScoped<IMessageTemplateProvider, MessageTemplateProvider>();
         builder.Services.AddScoped<IMessageTemplateService, MessageTemplateService>();
@@ -168,6 +170,7 @@ public static class Program
         builder.Services.AddTransient<AuthInternalApiKeyHandler>();
         AddAuthInternalClient<IDeletedWorkspacesClient, DeletedWorkspacesClient>(builder);
         AddAuthInternalClient<IWorkspaceAccountsClient, WorkspaceAccountsClient>(builder);
+        AddAuthInternalClient<ICreditPurchasesClient, CreditPurchasesClient>(builder);
         // A user token names its user by RefId; the id this host's records use comes from the auth host.
         builder.Services.AddUserIdLookup(sp => sp.GetRequiredService<IAuthServiceClient>());
         // WorkspacePermissionFilter resolves each workspace route through the auth host.

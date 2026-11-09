@@ -14,5 +14,4 @@ public interface ICreditGrantProvider
     /// than the one it holds; false when there was no such grant or the revision was not newer.
     /// </summary>
     Task<bool> SetHoldAsync(string source, string sourceRef, bool held, int revision, DateTime atUtc, CancellationToken ct);
-
 }
