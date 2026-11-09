@@ -516,4 +516,24 @@ public sealed class WbsktAuthClient : WbsktApiClient
     /// <summary><see cref="GetTenantUsageAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> GetTenantUsageRawAsync(Guid tenantRef, CancellationToken cancellationToken = default) =>
         SendRawAsync(HttpMethod.Get, $"/api/v1/tenants/{tenantRef}/usage", null, cancellationToken);
+
+    /// <summary>The tenant's plan, its subscription and what it can buy. <c>GET /api/v1/tenants/{tenantRef}/billing</c>.</summary>
+    public Task<TenantBillingResponse> GetBillingAsync(Guid tenantRef, CancellationToken cancellationToken = default) =>
+        ReceiveAsync<TenantBillingResponse>(SendRawAsync(HttpMethod.Get, $"/api/v1/tenants/{tenantRef}/billing", null, cancellationToken), cancellationToken);
+
+    /// <summary>Starts the payment provider's checkout for a plan or a credit pack. <c>POST /api/v1/tenants/{tenantRef}/billing/checkout</c>.</summary>
+    public Task<BillingCheckoutResponse> StartCheckoutAsync(Guid tenantRef, BillingCheckoutRequest request, CancellationToken cancellationToken = default) =>
+        ReceiveAsync<BillingCheckoutResponse>(StartCheckoutRawAsync(tenantRef, request, cancellationToken), cancellationToken);
+
+    /// <summary><see cref="StartCheckoutAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
+    public Task<HttpResponseMessage> StartCheckoutRawAsync(Guid tenantRef, BillingCheckoutRequest request, CancellationToken cancellationToken = default) =>
+        SendRawAsync(HttpMethod.Post, $"/api/v1/tenants/{tenantRef}/billing/checkout", request, cancellationToken);
+
+    /// <summary>A link to the payment provider's customer portal. <c>POST /api/v1/tenants/{tenantRef}/billing/portal</c>.</summary>
+    public Task<BillingPortalResponse> OpenBillingPortalAsync(Guid tenantRef, CancellationToken cancellationToken = default) =>
+        ReceiveAsync<BillingPortalResponse>(OpenBillingPortalRawAsync(tenantRef, cancellationToken), cancellationToken);
+
+    /// <summary><see cref="OpenBillingPortalAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
+    public Task<HttpResponseMessage> OpenBillingPortalRawAsync(Guid tenantRef, CancellationToken cancellationToken = default) =>
+        SendRawAsync(HttpMethod.Post, $"/api/v1/tenants/{tenantRef}/billing/portal", null, cancellationToken);
 }

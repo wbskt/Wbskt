@@ -54,6 +54,65 @@
         ],
         "type": "object"
       },
+      "BillingCheckoutRequest": {
+        "properties": {
+          "creditPack": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "interval": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BillingInterval"
+              }
+            ]
+          },
+          "plan": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PlanCode"
+              }
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "BillingCheckoutResponse": {
+        "properties": {
+          "checkoutUrl": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "checkoutUrl"
+        ],
+        "type": "object"
+      },
+      "BillingInterval": {
+        "enum": [
+          "Monthly",
+          "Yearly"
+        ]
+      },
+      "BillingPortalResponse": {
+        "properties": {
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      },
       "ChangeEmailRequest": {
         "properties": {
           "newEmail": {
@@ -206,6 +265,26 @@
           "email",
           "expiresAt",
           "token"
+        ],
+        "type": "object"
+      },
+      "CreditPackOffer": {
+        "properties": {
+          "credits": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "credits"
         ],
         "type": "object"
       },
@@ -659,6 +738,21 @@
         ],
         "type": "object"
       },
+      "PlanOffer": {
+        "properties": {
+          "interval": {
+            "$ref": "#/components/schemas/BillingInterval"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PlanCode"
+          }
+        },
+        "required": [
+          "plan",
+          "interval"
+        ],
+        "type": "object"
+      },
       "RefreshTokenRequest": {
         "properties": {
           "refreshToken": {
@@ -857,6 +951,54 @@
         ],
         "type": "object"
       },
+      "SubscriptionStatus": {
+        "enum": [
+          "Pending",
+          "Active",
+          "PastDue",
+          "OnHold",
+          "Paused",
+          "Cancelled",
+          "Failed",
+          "Expired"
+        ]
+      },
+      "TenantBillingResponse": {
+        "properties": {
+          "creditPacks": {
+            "items": {
+              "$ref": "#/components/schemas/CreditPackOffer"
+            },
+            "type": "array"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PlanCode"
+          },
+          "plans": {
+            "items": {
+              "$ref": "#/components/schemas/PlanOffer"
+            },
+            "type": "array"
+          },
+          "subscription": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TenantSubscriptionResponse"
+              }
+            ]
+          }
+        },
+        "required": [
+          "plan",
+          "subscription",
+          "plans",
+          "creditPacks"
+        ],
+        "type": "object"
+      },
       "TenantMemberResponse": {
         "properties": {
           "email": {
@@ -904,6 +1046,37 @@
         "required": [
           "refId",
           "name"
+        ],
+        "type": "object"
+      },
+      "TenantSubscriptionResponse": {
+        "properties": {
+          "cancelAtPeriodEnd": {
+            "type": "boolean"
+          },
+          "interval": {
+            "$ref": "#/components/schemas/BillingInterval"
+          },
+          "pastDueSince": {
+            "format": "date-time"
+          },
+          "periodEnd": {
+            "format": "date-time"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PlanCode"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SubscriptionStatus"
+          }
+        },
+        "required": [
+          "plan",
+          "interval",
+          "status",
+          "periodEnd",
+          "cancelAtPeriodEnd",
+          "pastDueSince"
         ],
         "type": "object"
       },
@@ -1984,6 +2157,146 @@
         },
         "tags": [
           "Management"
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantRef}/billing": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenantRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantBillingResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantBillingResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantBillingResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "TenantBilling"
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantRef}/billing/checkout": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenantRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingCheckoutRequest"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingCheckoutRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingCheckoutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingCheckoutResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingCheckoutResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingCheckoutResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "TenantBilling"
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantRef}/billing/portal": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenantRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingPortalResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingPortalResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingPortalResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "TenantBilling"
         ]
       }
     },
@@ -3975,6 +4288,9 @@
     },
     {
       "name": "Management"
+    },
+    {
+      "name": "TenantBilling"
     },
     {
       "name": "Workspaces"

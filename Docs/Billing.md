@@ -178,5 +178,50 @@ The split follows where the data lives: seats are counted in the auth database, 
 main one, and neither host calls the other to answer. Messages are on the management read, from the
 message meter (see Messages).
 
+## Payments
+
+Money is taken by a payment provider on its own hosted pages; Dodo Payments is the first
+(`DodoPaymentGateway`, behind `IPaymentGateway`). The auth host owns the plan, so payments live there.
+Payments are off until the provider's API key and webhook signing secret are set
+(`Billing__Dodo__ApiKey`, `Billing__Dodo__WebhookSecret`, or `DODO_PAYMENTS_API_KEY` and
+`DODO_PAYMENTS_WEBHOOK_KEY`); the products sold are `Billing:Payments:Plans:{Plan}:{Interval}` and
+`Billing:Payments:CreditPacks:{Name}` (`ProductId`, `Credits`). The secrets come from the environment,
+never from a file in the repository.
+
+- **Buying.** `POST /api/v1/tenants/{tenantRef}/billing/checkout` (`billing.manage`) names a plan and
+  interval or a credit pack, and answers the provider's checkout page. The checkout carries the tenant's
+  reference in the provider's metadata (`tenant_ref`) and is paid by the signed-in user's email. A tenant
+  whose subscription is still billing changes or cancels it in the provider's portal
+  (`POST …/billing/portal`) rather than starting a second one (409 `BILLING_SUBSCRIPTION_ACTIVE`).
+  Nothing changes until the provider confirms the payment.
+- **Webhooks.** The provider posts to `/api/callbacks/billing/{provider}` (anonymous, unversioned, on
+  api.DOMAIN and auth.DOMAIN). The Standard Webhooks signature over the raw body is checked first, with
+  5 minutes' tolerance on its timestamp. Each event is stored once per provider and event id
+  (`dbo.BillingWebhookEvents`) before it is acted on: a delivery of one already acted on is answered
+  without acting again, and one that failed is acted on again when the provider redelivers it. An event
+  only says which subscription or payment to read: `TenantBillingSync` reads it from the provider, so a
+  late, repeated or reordered delivery cannot move a tenant to a plan it no longer pays for.
+- **Subscriptions.** The subscription as read is stored (`dbo.TenantSubscriptions`, one per tenant) and
+  decides the plan (`SubscriptionPlan.Decide`): active, past due or on hold for under 7 days
+  (`Billing:Payments:PastDueGrace`), or cancelled but inside the period paid for, keeps the paid plan;
+  failed, expired, paused, past the grace period or past a cancelled period puts the tenant on Free; a
+  pending one changes nothing. The plan moves through `ITenantPlanService.SetAsync`, so its overrides are
+  kept and `TenantPlanChangedEvent` reaches the management host as for any plan change. An ended
+  subscription's events do not replace a newer live one. Lapses with no webhook (a grace period running
+  out, a cancelled period ending) are caught by `SubscriptionReviewWorker`, hourly, which reads each
+  such subscription again before acting.
+- **Credit packs.** A one-time payment for a credit pack is recorded once per payment
+  (`dbo.TenantCreditPurchases`), and the same transaction writes `TenantCreditsGrantedEvent` to the
+  outbox; the grant is spendable for `Billing:Payments:CreditPackValidity` (365 days). A full refund
+  writes `TenantCreditGrantRevokedEvent` once (see Top-ups under Credits).
+- **Refunds of a subscription payment** withhold the paid plan until the subscription has been paid past
+  the refunded period. A partial refund changes nothing.
+- **Reading.** `GET /api/v1/tenants/{tenantRef}/billing` (`billing.read`) answers the plan, the
+  subscription (status, period end, whether it ends there, when it fell past due) and what is on offer.
+  Offers are empty while payments are off.
+
+An operator can still set any plan through `PUT /api/internal/tenants/{tenantRef}/plan`; a tenant's next
+subscription event puts it back on the plan its subscription pays for.
+
 Lock order, where a procedure takes more than one: the trigger key lock, then the test-run lock, then the
 plan lock (`dbo.Run_Start`); the clients' and policies' rows, then the plan lock (client procedures).

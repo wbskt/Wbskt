@@ -7,6 +7,7 @@ using Wbskt.Auth.Host.Authorization;
 using Wbskt.Auth.Host.Controllers;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services;
+using Wbskt.Auth.Host.Services.Billing;
 using Wbskt.Auth.Host.Services.Email;
 using Wbskt.Auth.Host.Services.Passwords;
 using Wbskt.Infrastructure.Middlewares;
@@ -68,6 +69,25 @@ public static class Program
         builder.Services.AddPlanCatalog(builder.Configuration);
         builder.Services.AddScoped<ITenantLimits, TenantLimits>();
         builder.Services.AddScoped<ITenantUsageService, TenantUsageService>();
+        // Payments: the provider's checkout, portal and webhooks (Docs/Billing.md, Payments). Off until the
+        // provider's API key and webhook secret are set; the products sold come from Billing:Payments.
+        builder.Services.Configure<BillingOptions>(builder.Configuration.GetSection(BillingOptions.SectionName));
+        var dodoOptions = DodoOptions.From(builder.Configuration);
+        builder.Services.AddSingleton(Options.Create(dodoOptions));
+        builder.Services.AddHttpClient<IPaymentGateway, DodoPaymentGateway>(client =>
+        {
+            client.BaseAddress = dodoOptions.ResolveBaseAddress();
+            client.Timeout = TimeSpan.FromSeconds(30);
+            if (dodoOptions.ApiKey is { } apiKey)
+            {
+                client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+            }
+        });
+        builder.Services.AddScoped<ITenantBillingProvider, TenantBillingProvider>();
+        builder.Services.AddScoped<TenantBillingSync>();
+        builder.Services.AddScoped<ITenantBillingService, TenantBillingService>();
+        builder.Services.AddScoped<IBillingWebhookService, BillingWebhookService>();
+        builder.Services.AddHostedService<SubscriptionReviewWorker>();
         builder.Services.AddScoped<ICredentialRetentionProvider, CredentialRetentionProvider>();
         builder.Services.AddHostedService<CredentialRetentionService>();
         builder.Services.AddHttpContextAccessor();
