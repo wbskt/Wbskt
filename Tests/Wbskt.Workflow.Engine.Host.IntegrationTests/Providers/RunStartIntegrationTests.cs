@@ -15,6 +15,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
 {
     private const int PlanRunLimitError = 50026;
+    private const int StartBusyError = 50035;
     private const int ActiveRunConflictError = 50028;
     private const string SkipReason = "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.";
 
@@ -334,7 +335,7 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
-    public async Task A_start_that_cannot_get_the_plan_lock_in_time_is_refused()
+    public async Task A_start_that_cannot_get_the_plan_lock_in_time_is_refused_as_busy_not_full()
     {
         Skip.IfNot(fixture.IsAvailable, SkipReason);
 
@@ -360,7 +361,7 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
         (RunRow run, BranchRow branch) = NewRun(wd);
         Func<Task> act = () => ProviderFactory.Run(fixture.ConnectionString).StartAsync(run, branch, null, workspaceId, new PlanCeiling(10, tenantId), CancellationToken.None);
 
-        (await act.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(PlanRunLimitError);
+        (await act.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(StartBusyError);
         await tx.RollbackAsync();
         (await ProviderFactory.Run(fixture.ConnectionString).FindRowByRefIdAsync(run.RefId, CancellationToken.None)).Should().BeNull();
     }
