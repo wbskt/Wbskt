@@ -42,6 +42,10 @@ dbo.Tenants.PlanCode ──(copy)──────────►  dbo.Workspac
   `PlanRevision` and writes `TenantPlanChangedEvent` to the outbox in the same transaction
   (`dbo.TenantPlan_Set`). A change worked out from a stale read is refused, and asking for the plan
   already held is a no-op, so a webhook delivered twice is harmless.
+- **Every plan records who set it** (`PlanSource`): `Default` (Free, never paid for), `Subscription`
+  (a paid subscription's plan) or `Operator` (set by an operator, optionally until `PlanEndsAt`). An
+  operator's plan outranks a subscription while it holds: billing leaves it alone until its end date
+  passes, and then puts the tenant back on whatever its subscription pays for (Free when nothing).
 - **The main database holds a copy per workspace** (`dbo.WorkspaceAccounts`), because the hosts that
   enforce limits read the main database and must not call the auth host on every client message or
   run start. `TenantId` on the copy is what lets pooled limits be counted there.
@@ -130,6 +134,12 @@ is settled once (`dbo.TenantCreditGrantSettlements`). Until it is, that month's 
 balance, so for the first hour of a month a tenant can spend up to its last month's overage twice; the
 run budgets bound it as they bound any race for the last credits. A revoked grant's drawn credits stay
 drawn; only what it still held stops counting.
+
+A grant whose payment has an open chargeback is **held** (`TenantCreditGrantHoldChangedEvent`,
+`dbo.TenantCreditGrant_SetHold`): it stops counting towards the balance and is not drawn from while held,
+and counts again once the chargeback is won or withdrawn. A lost chargeback revokes it as a refund does.
+Each hold and release carries the purchase's `HoldRevision`, and the main database applies only a newer
+one, so a hold delivered after its release changes nothing.
 
 ## Run history
 
@@ -225,6 +235,9 @@ never from a file in the repository.
   reference in the provider's metadata (`tenant_ref`) and is paid by the signed-in user's email. A tenant
   whose subscription is still billing changes or cancels it in the provider's portal
   (`POST …/billing/portal`) rather than starting a second one (409 `BILLING_SUBSCRIPTION_ACTIVE`).
+  A plan checkout stays open for `Billing:Payments:CheckoutReuseWindow` (30 minutes,
+  `dbo.TenantCheckouts`): asking again for the same product in that time, from another tab or another
+  admin, answers the same page rather than a second checkout that could be paid as well.
   Nothing changes until the provider confirms the payment.
 - **Webhooks.** The provider posts to `/api/callbacks/billing/{provider}` (anonymous, unversioned, on
   api.DOMAIN and auth.DOMAIN). The Standard Webhooks signature over the raw body is checked first, with
@@ -233,15 +246,24 @@ never from a file in the repository.
   without acting again, and one that failed is acted on again when the provider redelivers it. An event
   only says which subscription or payment to read: `TenantBillingSync` reads it from the provider, so a
   late, repeated or reordered delivery cannot move a tenant to a plan it no longer pays for.
-- **Subscriptions.** The subscription as read is stored (`dbo.TenantSubscriptions`, one per tenant) and
-  decides the plan (`SubscriptionPlan.Decide`): active, past due or on hold for under 7 days
+- **Subscriptions.** Every subscription as read is stored (`dbo.TenantSubscriptions`, keyed by provider
+  and subscription id). The one that decides the plan (`SubscriptionPlan.Deciding`) is the oldest still
+  billing that is not a duplicate, else the newest. Its status decides the plan (`SubscriptionPlan.Decide`): active, past due or on hold for under 7 days
   (`Billing:Payments:PastDueGrace`), or cancelled but inside the period paid for, keeps the paid plan;
   failed, expired, paused, past the grace period or past a cancelled period puts the tenant on Free; a
   pending one changes nothing. The plan moves through `ITenantPlanService.SetAsync`, so its overrides are
   kept and `TenantPlanChangedEvent` reaches the management host as for any plan change. An ended
   subscription's events do not replace a newer live one. Lapses with no webhook (a grace period running
   out, a cancelled period ending) are caught by `SubscriptionReviewWorker`, hourly, which reads each
-  such subscription again before acting.
+  such subscription again before acting. The worker runs with payments off too, applying the stored
+  copy, so an operator's plan still ends on time.
+- **A second subscription paid for anyway** (two checkouts paid at once) is a duplicate: it is marked
+  (`dbo.TenantSubscription_MarkDuplicate`), cancelled with the provider, and its payment refunded in full
+  once (`dbo.TenantSubscription_ClaimDuplicateRefund`; a refused refund releases the claim, so the next
+  event asks again). The tenant keeps the plan of its first subscription.
+- **Chargebacks.** A payment whose dispute is open puts a credit pack on hold (see Credits); a lost
+  dispute counts as a full refund, for a pack and for a subscription payment. A won or withdrawn dispute
+  changes nothing.
 - **Credit packs.** A one-time payment for a credit pack is recorded once per payment
   (`dbo.TenantCreditPurchases`), and the same transaction writes `TenantCreditsGrantedEvent` to the
   outbox; the grant is spendable for `Billing:Payments:CreditPackValidity` (365 days). A full refund
@@ -252,8 +274,25 @@ never from a file in the repository.
   subscription (status, period end, whether it ends there, when it fell past due) and what is on offer.
   Offers are empty while payments are off.
 
-An operator can still set any plan through `PUT /api/internal/tenants/{tenantRef}/plan`; a tenant's next
-subscription event puts it back on the plan its subscription pays for.
+An operator sets a plan through `PUT /api/internal/tenants/{tenantRef}/plan`, optionally with `endsAt`.
+It is recorded as an `Operator` plan and outranks any subscription until `endsAt` passes (never, without
+one); `SubscriptionReviewWorker` then puts the tenant back on what its subscription pays for, clearing the
+operator's limit overrides.
+
+**Deleting an account** (`POST /api/auth/account/delete`) cancels, with the provider, every subscription
+still billing of the tenants the account is the only member of, before anything is deleted, since those
+tenants go with it. If the provider cannot be reached, or payments are off while such a subscription
+exists, nothing is deleted: 503 `BILLING_SUBSCRIPTION_NOT_CANCELLED`, and the caller tries again.
+
+**Operations.**
+- `Billing:Dodo:Environment` must be `test_mode` or `live_mode`; anything else stops the host at start.
+  Once started, `PaymentGatewayCheck` asks the provider whether it accepts the API key and logs a
+  Critical line if not (usually a key for the other mode).
+- Webhook outcomes are counted (`wbskt_auth_billing_webhooks_total{type,outcome}`: `done`, `set_aside`,
+  `failed`). `BillingWebhooksSetAside` fires on any webhook set aside in an hour (a payment that may have
+  reached no tenant), `BillingWebhooksFailing` on more than five failures in an hour.
+- The webhook endpoint has its own per-IP limit (`billing-webhooks`, 600 a minute), generous for a
+  provider's retry burst; a refused delivery is redelivered.
 
 Lock order, where a procedure takes more than one: the trigger key lock, then the test-run lock, then the
 plan lock (`dbo.Run_Start`); the clients' and policies' rows, then the plan lock (client procedures).

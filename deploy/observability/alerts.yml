@@ -44,6 +44,33 @@ groups:
         annotations:
           summary: "{{ $value }} branches are queued for execution in the engine"
 
+      - alert: BillingWebhooksSetAside
+        # A payment webhook that names no tenant here, no plan or pack on offer, or a subscription the
+        # provider does not know. For a paying customer that means a tenant left on the wrong plan or
+        # without the credits it bought, with nothing else to say so.
+        expr: sum by (type) (increase(wbskt_auth_billing_webhooks_total{outcome="set_aside"}[1h])) > 0
+        labels:
+          severity: warn
+        annotations:
+          summary: "{{ $value }} {{ $labels.type }} payment webhooks were set aside in the last hour"
+          description: >-
+            Read the reason in dbo.BillingWebhookEvents.LastError (auth database) or the auth host's
+            "Set aside" log line. A subscription naming no tenant usually means the checkout's
+            metadata did not reach it; a product not on offer means a Billing:Payments product id is
+            missing.
+
+      - alert: BillingWebhooksFailing
+        # The provider delivers a failed webhook again, so one failure is noise; several in an hour mean
+        # the provider's API or the auth database is refusing us.
+        expr: sum(increase(wbskt_auth_billing_webhooks_total{outcome="failed"}[1h])) > 5
+        labels:
+          severity: warn
+        annotations:
+          summary: "{{ $value }} payment webhooks failed in the last hour"
+          description: >-
+            Check the auth host's logs for the provider's status codes and dbo.BillingWebhookEvents
+            for the rows left unprocessed.
+
       - alert: WorkspaceRunCeilingReached
         # A workspace whose plan already has as many active runs as it allows (PlanLimits.ActiveRuns,
         # pooled across the tenant's workspaces) has its triggers refused (sub-workflow children fail
