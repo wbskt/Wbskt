@@ -170,24 +170,55 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
-    public async Task A_workspace_cap_reserves_its_running_runs_budgets_so_it_is_never_passed()
+    public async Task A_capped_workspaces_runs_lease_their_budgets_so_several_go_at_once_and_the_cap_is_never_passed()
     {
         Skip.IfNot(fixture.IsAvailable, SkipReason);
 
         int tenantId = NewId();
         int workspaceId = NewId();
         await AddAccountAsync(workspaceId, tenantId, creditsPerMonth: 1_000m);
-        await ExecAsync("INSERT INTO dbo.WorkspaceCreditCaps (WorkspaceId, MonthlyCreditCap) VALUES (@One, 150)", workspaceId, workspaceId);
+        await ExecAsync("INSERT INTO dbo.WorkspaceCreditCaps (WorkspaceId, MonthlyCreditCap) VALUES (@One, 100)", workspaceId, workspaceId);
         WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
         var credits = new PlanCredits(1_000m, tenantId);
+        var runs = ProviderFactory.Run(fixture.ConnectionString);
+        ChargeCounter counters = new(ProviderFactory.RunCounters(fixture.ConnectionString));
 
-        long first = await StartAsync(wd, credits: credits, budget: 100m);
-        long second = await StartAsync(wd, credits: credits, budget: 100m);
-        Func<Task> third = () => StartAsync(wd, credits: credits, budget: 100m);
+        long first = await StartAsync(wd, credits: credits, budget: 1_000m);
+        long second = await StartAsync(wd, credits: credits, budget: 1_000m);
 
-        (await ProviderFactory.Run(fixture.ConnectionString).GetByIdAsync(first, CancellationToken.None)).CreditBudget.Should().Be(100m);
-        (await ProviderFactory.Run(fixture.ConnectionString).GetByIdAsync(second, CancellationToken.None)).CreditBudget.Should().Be(50m, "100 of the 150 is reserved by the first run");
-        (await third.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(WorkspaceCreditCapError);
+        (await runs.GetByIdAsync(first, CancellationToken.None)).CreditBudget.Should().Be(5m, "a run leases a twentieth of the cap");
+        (await runs.GetByIdAsync(second, CancellationToken.None)).CreditBudget.Should().Be(5m);
+        (await counters.TryAsync(first, 30m)).Should().Be((30m, 100m), "the lease grows by what the charge needs, up to the run's ceiling");
+        (await counters.TryAsync(second, 80m)).Should().BeNull("only 65 of the cap is not spent or held by the first run");
+        (await runs.GetByIdAsync(second, CancellationToken.None)).CreditBudget.Should().Be(5m, "a refused charge takes no lease");
+        (await counters.TryAsync(second, 60m)).Should().Be((60m, 95m));
+
+        long third = await StartAsync(wd, credits: credits, budget: 1_000m);
+        (await runs.GetByIdAsync(third, CancellationToken.None)).CreditBudget.Should().Be(5m);
+        (await counters.TryAsync(first, 6m)).Should().BeNull("90 is spent and the third run holds the last 5");
+        (await counters.TryAsync(third, 5m)).Should().Be((5m, 10m));
+        (await counters.TryAsync(third, 5m)).Should().Be((10m, 10m), "the third run takes the last of the cap");
+        Func<Task> fourth = () => StartAsync(wd, credits: credits, budget: 1_000m);
+        (await fourth.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(WorkspaceCreditCapError);
+    }
+
+    [SkippableFact]
+    public async Task A_leased_budget_goes_to_its_ceiling_once_the_cap_is_removed()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int tenantId = NewId();
+        int workspaceId = NewId();
+        await AddAccountAsync(workspaceId, tenantId, creditsPerMonth: 1_000m);
+        await ExecAsync("INSERT INTO dbo.WorkspaceCreditCaps (WorkspaceId, MonthlyCreditCap) VALUES (@One, 100)", workspaceId, workspaceId);
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        long run = await StartAsync(wd, credits: new PlanCredits(1_000m, tenantId), budget: 50m);
+        await ExecAsync("DELETE FROM dbo.WorkspaceCreditCaps WHERE WorkspaceId = @One OR WorkspaceId = @Two", workspaceId, workspaceId);
+        ChargeCounter counters = new(ProviderFactory.RunCounters(fixture.ConnectionString));
+
+        (await counters.TryAsync(run, 6m)).Should().Be((6m, 50m));
+        (await ProviderFactory.Run(fixture.ConnectionString).GetByIdAsync(run, CancellationToken.None)).CreditBudget.Should().Be(50m);
+        (await counters.TryAsync(run, 45m)).Should().BeNull("the run's own budget still holds");
     }
 
     private ICreditGrantProvider Grants() =>

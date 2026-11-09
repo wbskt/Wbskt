@@ -9,14 +9,15 @@ BEGIN
     -- Atomic budget-checked charge: the WHERE clause re-checks the budget under the same row lock as the
     -- increment, so concurrent callers on the same run can never overshoot CreditBudget between them.
     -- No row returned means the run is out of credits; otherwise the row is what was spent of the budget
-    -- the charge was held to, and that budget.
+    -- the charge was held to, and that budget (its ceiling, for a leased one).
     DECLARE @Charged TABLE (Spent DECIMAL(18,4) NOT NULL, Budget DECIMAL(18,4) NOT NULL);
 
-    -- A run with its own budget: one statement, as on every charge before sub-workflow budgets.
+    -- A run with its own budget and room in it: one statement, as on every charge before sub-workflow
+    -- budgets and leases.
     UPDATE rc WITH (ROWLOCK)
     SET rc.CreditsConsumed = rc.CreditsConsumed + @Cost,
         rc.UpdatedAt = SYSUTCDATETIME()
-    OUTPUT inserted.CreditsConsumed + inserted.ChildCreditsConsumed, r.CreditBudget INTO @Charged (Spent, Budget)
+    OUTPUT inserted.CreditsConsumed + inserted.ChildCreditsConsumed, COALESCE(inserted.BudgetCeiling, r.CreditBudget) INTO @Charged (Spent, Budget)
     FROM dbo.RunCounters rc
     JOIN dbo.Runs r ON r.Id = rc.RunId
     WHERE rc.RunId = @RunId
@@ -25,32 +26,102 @@ BEGIN
 
     IF @@ROWCOUNT = 0
     BEGIN
-        -- A sub-workflow child: held to its root run's budget, which the root and all its children share.
-        -- The root's row first, then the child's, the order Run_Start takes them in.
+        -- A sub-workflow child is held to its root run's budget, which the root and all its children
+        -- share; a run with its own budget is its own root.
         DECLARE @BudgetRunId INT = (SELECT BudgetRunId FROM dbo.RunCounters WHERE RunId = @RunId);
-        IF @BudgetRunId IS NOT NULL
+        DECLARE @Root INT = COALESCE(@BudgetRunId, @RunId);
+
+        BEGIN TRANSACTION;
+
+        -- A leased budget that the charge would pass is extended from what the workspace's cap has left,
+        -- under the cap's lock (as Run_Start takes it, before any counter row): by the larger of what
+        -- the charge needs and a twentieth of the cap, never past the ceiling or the cap. With the cap
+        -- removed since, the budget goes straight to its ceiling. The extension is reserved against the
+        -- cap from then on, as the lease it adds to was.
+        DECLARE @Ceiling DECIMAL(18,4);
+        DECLARE @WorkspaceId INT;
+        SELECT @Ceiling = rc.BudgetCeiling, @WorkspaceId = d.WorkspaceId
+        FROM dbo.RunCounters rc
+        JOIN dbo.Runs r ON r.Id = rc.RunId
+        JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
+        WHERE rc.RunId = @Root;
+
+        IF @Ceiling IS NOT NULL
+           AND EXISTS (SELECT 1
+                       FROM dbo.RunCounters rc
+                       JOIN dbo.Runs r ON r.Id = rc.RunId
+                       WHERE rc.RunId = @Root
+                         AND r.CreditBudget < rc.BudgetCeiling
+                         AND rc.CreditsConsumed + rc.ChildCreditsConsumed + @Cost > r.CreditBudget)
         BEGIN
-            BEGIN TRANSACTION;
+            DECLARE @CapResource NVARCHAR(255) = CONCAT(N'credit-cap:', @WorkspaceId);
+            DECLARE @CapLockResult INT;
+            EXEC @CapLockResult = sp_getapplock @Resource = @CapResource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 30000;
+            IF @CapLockResult < 0
+                THROW 50035, 'The workspace is too busy to extend the run''s credit budget; try again.', 1;
 
-            UPDATE rc WITH (ROWLOCK)
-            SET rc.ChildCreditsConsumed = rc.ChildCreditsConsumed + @Cost,
-                rc.UpdatedAt = SYSUTCDATETIME()
-            OUTPUT inserted.CreditsConsumed + inserted.ChildCreditsConsumed, r.CreditBudget INTO @Charged (Spent, Budget)
-            FROM dbo.RunCounters rc
-            JOIN dbo.Runs r ON r.Id = rc.RunId
-            WHERE rc.RunId = @BudgetRunId
-              AND rc.CreditsConsumed + rc.ChildCreditsConsumed + @Cost <= r.CreditBudget;
-
-            IF @@ROWCOUNT > 0
+            -- What the cap has free is read before the run's own rows are locked: RunCredits_Post locks
+            -- counter rows in its own order, and reading the others' counters while holding the root's
+            -- could meet it the other way round. The root's spent and reserved parts add up to the same
+            -- whether a charge lands on it meanwhile or not, so the figure holds.
+            DECLARE @Cap DECIMAL(18,4) = (SELECT MonthlyCreditCap FROM dbo.WorkspaceCreditCaps WHERE WorkspaceId = @WorkspaceId);
+            DECLARE @CapLeft DECIMAL(18,4);
+            IF @Cap IS NOT NULL
             BEGIN
-                UPDATE dbo.RunCounters WITH (ROWLOCK)
-                SET CreditsConsumed = CreditsConsumed + @Cost,
-                    UpdatedAt = SYSUTCDATETIME()
-                WHERE RunId = @RunId;
+                DECLARE @MonthStart DATE = DATEFROMPARTS(YEAR(SYSUTCDATETIME()), MONTH(SYSUTCDATETIME()), 1);
+                SET @CapLeft = @Cap
+                    - (SELECT Credits FROM dbo.WorkspaceCreditsSpent(@WorkspaceId, @MonthStart))
+                    - (SELECT Credits FROM dbo.WorkspaceCreditsReserved(@WorkspaceId));
             END
 
-            COMMIT TRANSACTION;
+            DECLARE @Budget DECIMAL(18,4);
+            DECLARE @Spent DECIMAL(18,4);
+            SELECT @Budget = r.CreditBudget, @Spent = rc.CreditsConsumed + rc.ChildCreditsConsumed
+            FROM dbo.RunCounters rc WITH (UPDLOCK)
+            JOIN dbo.Runs r WITH (UPDLOCK) ON r.Id = rc.RunId
+            WHERE rc.RunId = @Root;
+
+            DECLARE @Need DECIMAL(18,4) = @Spent + @Cost - @Budget;
+            IF @Need > 0 AND @Budget < @Ceiling
+            BEGIN
+                DECLARE @Extend DECIMAL(18,4) = @Ceiling - @Budget;
+                IF @Cap IS NOT NULL
+                BEGIN
+                    DECLARE @Lease DECIMAL(18,4) = CASE WHEN @Need > @Cap / 20 THEN @Need ELSE @Cap / 20 END;
+                    IF @Lease < @Extend
+                        SET @Extend = @Lease;
+                    IF @CapLeft < @Extend
+                        SET @Extend = @CapLeft;
+                END
+
+                -- Only an extension that lets the charge through is taken, so a refused charge leaves
+                -- nothing of the cap held by a run that cannot use it.
+                IF @Extend >= @Need
+                    UPDATE dbo.Runs
+                    SET CreditBudget = CreditBudget + @Extend
+                    WHERE Id = @Root;
+            END
         END
+
+        UPDATE rc WITH (ROWLOCK)
+        SET rc.CreditsConsumed = rc.CreditsConsumed + CASE WHEN @BudgetRunId IS NULL THEN @Cost ELSE 0 END,
+            rc.ChildCreditsConsumed = rc.ChildCreditsConsumed + CASE WHEN @BudgetRunId IS NULL THEN 0 ELSE @Cost END,
+            rc.UpdatedAt = SYSUTCDATETIME()
+        OUTPUT inserted.CreditsConsumed + inserted.ChildCreditsConsumed, COALESCE(inserted.BudgetCeiling, r.CreditBudget) INTO @Charged (Spent, Budget)
+        FROM dbo.RunCounters rc
+        JOIN dbo.Runs r ON r.Id = rc.RunId
+        WHERE rc.RunId = @Root
+          AND rc.CreditsConsumed + rc.ChildCreditsConsumed + @Cost <= r.CreditBudget;
+
+        IF @@ROWCOUNT > 0 AND @BudgetRunId IS NOT NULL
+        BEGIN
+            UPDATE dbo.RunCounters WITH (ROWLOCK)
+            SET CreditsConsumed = CreditsConsumed + @Cost,
+                UpdatedAt = SYSUTCDATETIME()
+            WHERE RunId = @RunId;
+        END
+
+        COMMIT TRANSACTION;
     END
 
     SELECT Spent, Budget FROM @Charged;
