@@ -41,10 +41,25 @@ jobs:
           python-version: '3.13'
       - run: pip install -r requirements.txt
 
+      # A protocol change merges here first, so its Python half can't be on Wbskt.Python master yet.
+      # A branch of the same name there is used instead, when one exists.
+      - name: Pick the Wbskt.Python branch
+        id: python-ref
+        if: matrix.sdk == 'python'
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          ref=master
+          if [[ -n "$BRANCH" ]] && git ls-remote --exit-code --heads https://github.com/wbskt/Wbskt.Python.git "$BRANCH" > /dev/null; then
+            ref="$BRANCH"
+          fi
+          echo "Using wbskt/Wbskt.Python@$ref"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         if: matrix.sdk == 'python'
         with:
           repository: wbskt/Wbskt.Python
+          ref: ${{ steps.python-ref.outputs.ref }}
           path: wbskt-python
       - name: Python harness
         if: matrix.sdk == 'python'

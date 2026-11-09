@@ -31,7 +31,9 @@ platform recorded through the management API.
 The SDK runs as a separate process, a **harness**, so any language can take part. CI
 (`.github/workflows/sdk-conformance.yml`) runs it for the .NET SDK and for the Python SDK from
 [Wbskt.Python](https://github.com/wbskt/Wbskt.Python) `master`, whose harness lives there in
-`conformance/harness.py`. Wbskt.Python and the ESP32 SDK also run it in their own CI (below).
+`conformance/harness.py`. Wbskt.Python and the ESP32 SDK also run it in their own CI (below). A protocol change
+that needs a Python SDK change too merges here first: push the SDK half to Wbskt.Python on a branch
+with the same name as this PR's, and this repository's CI runs the suite against that branch.
 
 ```sh
 pip install -r requirements.txt
