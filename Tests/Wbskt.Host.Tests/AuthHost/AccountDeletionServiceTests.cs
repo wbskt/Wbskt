@@ -63,11 +63,14 @@ public sealed class AccountDeletionServiceTests
         _gateway.Setup(g => g.CancelSubscriptionAsync("sub_1", It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("down"));
 
         var down = await Service().DeleteAccountAsync(42, Password, Ip);
+        _gateway.Setup(g => g.CancelSubscriptionAsync("sub_1", It.IsAny<CancellationToken>())).ThrowsAsync(new TaskCanceledException("timed out"));
+        var timedOut = await Service().DeleteAccountAsync(42, Password, Ip);
         _gateway.SetupGet(g => g.IsConfigured).Returns(false);
         var unconfigured = await Service().DeleteAccountAsync(42, Password, Ip);
 
         Assert.Equal("BILLING_SUBSCRIPTION_NOT_CANCELLED", down.Error.Code);
         Assert.Equal(Wbskt.Infrastructure.ErrorType.Unavailable, down.Error.Type);
+        Assert.Equal("BILLING_SUBSCRIPTION_NOT_CANCELLED", timedOut.Error.Code);
         Assert.Equal("BILLING_SUBSCRIPTION_NOT_CANCELLED", unconfigured.Error.Code);
         _accounts.Verify(p => p.DeleteUserAsync(It.IsAny<int>(), It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), It.IsAny<CancellationToken>()), Times.Never);
         _accessTokens.Verify(a => a.RevokeUserAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);

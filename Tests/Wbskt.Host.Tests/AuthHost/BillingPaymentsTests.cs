@@ -609,6 +609,21 @@ public sealed class BillingPaymentsTests
     }
 
     [Theory]
+    [InlineData("cancelled", false)]
+    [InlineData("active", true)]
+    public async Task Cancelling_a_subscription_dodo_already_ended_is_not_a_failure(string status, bool throws)
+    {
+        var handler = new StubHandler(request => request.Method == HttpMethod.Patch
+            ? new HttpResponseMessage(HttpStatusCode.UnprocessableEntity)
+            : Json($$"""{"subscription_id":"sub_1","status":"{{status}}","product_id":"prod_pro_m","next_billing_date":"2026-12-09T12:00:00Z"}"""));
+        var gateway = Dodo(handler);
+
+        Exception? thrown = await Record.ExceptionAsync(() => gateway.CancelSubscriptionAsync("sub_1", CancellationToken.None));
+
+        Assert.Equal(throws, thrown is HttpRequestException);
+    }
+
+    [Theory]
     [InlineData(HttpStatusCode.OK, true)]
     [InlineData(HttpStatusCode.Unauthorized, false)]
     public async Task A_key_the_provider_refuses_is_reported_at_start(HttpStatusCode status, bool accepted)
