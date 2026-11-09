@@ -113,6 +113,22 @@ public sealed class BillingNoticeTests
     }
 
     [Fact]
+    public async Task A_business_account_hears_its_runs_carry_on_and_what_the_overage_costs()
+    {
+        _plans.Setup(p => p.FindByIdAsync(TenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantPlan(TenantId, Guid.NewGuid(), PlanCode.Business, null, 3, null));
+
+        await Consumer().Consume(Context(new TenantCreditAllowanceReachedEvent(31, TenantId, 100, 600_000m, 600_000m) { CreatedAtUtc = Now }));
+
+        var sent = Assert.Single(_sent);
+        Assert.Equal(BillingNoticeKind.CreditAllowance100, sent.Kind);
+        Assert.Contains("Runs carry on", sent.Mail.HtmlBody);
+        Assert.Contains("$0.50 per 1,000 credits", sent.Mail.HtmlBody);
+        Assert.Contains("1,200,000 credits", sent.Mail.HtmlBody);
+        Assert.DoesNotContain("move to a larger plan", sent.Mail.HtmlBody);
+    }
+
+    [Fact]
     public async Task An_upgrade_or_a_change_of_limits_alone_is_not_announced()
     {
         BillingNoticeConsumer consumer = Consumer();

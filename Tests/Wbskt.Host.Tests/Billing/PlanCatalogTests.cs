@@ -53,6 +53,18 @@ public sealed class PlanCatalogTests
         Assert.Equal(90, contract.RunHistoryDays);
     }
 
+    [Theory]
+    [InlineData(PlanCode.Free, 1)]
+    [InlineData(PlanCode.Team, 1)]
+    [InlineData(PlanCode.Business, 2)]
+    public void Only_business_runs_carry_on_past_the_months_credits(PlanCode plan, int multiple)
+    {
+        PlanCredits credits = new WorkspacePlan(1, 9, plan, PlanCatalog.BuiltIn[plan] with { CreditsPerMonth = 1_000m }).Credits;
+
+        Assert.Equal(1_000m, credits.MonthlyAllowance);
+        Assert.Equal(1_000m * multiple, credits.RunsRefusedAt);
+    }
+
     [Fact]
     public void Configuration_replaces_only_the_limits_it_sets()
     {

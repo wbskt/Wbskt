@@ -21,7 +21,8 @@ CREATE PROCEDURE dbo.Run_Start
     -- Credits charged for creating the run; seeded into its counters so the charge commits with it.
     @StartCost            DECIMAL(18,4) = 0,
     -- The plan's workflow credits a calendar month (UTC), pooled across @TenantId's workspaces (50033),
-    -- and with it the workspace's own cap (50034). NULL for a sub-workflow child, which spends from its
+    -- and with it the workspace's own cap (50034). On Business this is a multiple of the allowance
+    -- (PlanCredits.RunsRefusedAt), since its runs carry on past it and the overage is invoiced. NULL for a sub-workflow child, which spends from its
     -- parent's budget instead.
     @CreditAllowance      DECIMAL(18,4) = NULL
 AS

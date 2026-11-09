@@ -14,6 +14,18 @@ public static class BusinessContract
 
     public const decimal CreditsPerClient = 300m;
 
+    /// <summary>
+    /// How far past its monthly credits a Business account's runs carry on before new ones are refused, so a
+    /// customer's alarms do not stop near month end, while a runaway loop still does.
+    /// </summary>
+    public const decimal CreditOverageMultiple = 2m;
+
+    /// <summary>The contract's rate for client messages past the monthly allowance, in USD per million.</summary>
+    public const decimal UsdPerMillionExtraMessages = 1m;
+
+    /// <summary>The contract's rate for workflow credits past the monthly allowance, in USD per thousand.</summary>
+    public const decimal UsdPerThousandExtraCredits = 0.50m;
+
     /// <summary>Business's limits for a contract of <paramref name="clients"/>; the plan catalog's row is the smallest.</summary>
     public static PlanLimits LimitsFor(int clients) => new(
         Clients: clients,

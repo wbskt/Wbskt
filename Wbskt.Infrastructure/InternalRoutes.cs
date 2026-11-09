@@ -44,9 +44,15 @@ public static class InternalRoutes
     public const string CreditPurchases = Prefix + "/billing/credit-purchases";
 
     /// <summary>
-    /// The shared key an internal route called by a background job (no user token to forward) checks:
-    /// the auth host's <c>Internal:ApiKey</c>, sent by the management host from
-    /// <c>Services:AuthInternalApiKey</c>.
+    /// Management host: each Business tenant's overage in a month (<c>?year=&amp;month=</c>), for the
+    /// invoice. Called by an operator from inside the backend network, so it takes <see cref="ApiKeyHeader"/>.
+    /// </summary>
+    public const string BusinessOverage = Prefix + "/billing/business-overage";
+
+    /// <summary>
+    /// The shared key an internal route called with no user token to forward checks: <c>Internal:ApiKey</c>
+    /// on the host that serves it, sent by the management host to the auth host from
+    /// <c>Services:AuthInternalApiKey</c>, and by an operator.
     /// </summary>
     public const string ApiKeyHeader = "X-Wbskt-Internal-Key";
 }
