@@ -302,8 +302,10 @@ Payments are off until the provider's API key and webhook signing secret are set
 `Billing:Payments:CreditPacks:{Name}` (`ProductId`, `Credits`). The secrets come from the environment,
 never from a file in the repository.
 
-What is sold: Maker, Pro and Team, monthly and yearly (`DODO_PRODUCT_{MAKER,PRO,TEAM}_{MONTHLY,YEARLY}`). Business
-is invoiced, never checked out.
+What is sold: Maker, Pro and Team, monthly and yearly (`DODO_PRODUCT_{MAKER,PRO,TEAM}_{MONTHLY,YEARLY}`),
+and one credit pack, `Pack10k`: 10,000 credits for $5 (`DODO_PRODUCT_CREDITS_10K`), on every plan. At
+$0.50 per 1,000 a pack costs more per credit than any plan (Maker gives 5,000 a dollar, Pro 6,250, Team
+6,060), so a pack covers a spike and an upgrade covers growth. Business is invoiced, never checked out.
 
 - **Buying.** `POST /api/v1/tenants/{tenantRef}/billing/checkout` (`billing.manage`) names a plan and
   interval or a credit pack, and answers the provider's checkout page. The checkout carries the tenant's

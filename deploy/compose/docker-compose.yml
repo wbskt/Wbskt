@@ -228,6 +228,9 @@ services:
       Billing__Payments__Plans__Pro__Yearly: ${DODO_PRODUCT_PRO_YEARLY:-}
       Billing__Payments__Plans__Team__Monthly: ${DODO_PRODUCT_TEAM_MONTHLY:-}
       Billing__Payments__Plans__Team__Yearly: ${DODO_PRODUCT_TEAM_YEARLY:-}
+      # The one credit pack: 10,000 credits for $5. Empty is not offered.
+      Billing__Payments__CreditPacks__Pack10k__ProductId: ${DODO_PRODUCT_CREDITS_10K:-}
+      Billing__Payments__CreditPacks__Pack10k__Credits: 10000
     volumes:
       - ../config:/Config:ro
     healthcheck:
