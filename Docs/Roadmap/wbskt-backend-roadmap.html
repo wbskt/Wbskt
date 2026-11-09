@@ -297,8 +297,8 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "short": "M2",
    "due": "2026-11-30",
    "start": "2026-11-01",
-   "open": 17,
-   "closed": 145
+   "open": 31,
+   "closed": 154
   },
   {
    "name": "M3 Go public",
@@ -350,8 +350,8 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   },
   "167": {
    "state": "progress",
-   "why": "Everything from the 8 Nov split is merged by 9 Nov: plans and their limits (#626), the credit ledger and grants (#627), the run-start charge (#628), the message meter with Free throttled over its month (#629), the usage API (#630), Dodo payments for subscriptions and credit packs (#631), workspace credit caps (#634), and readings and run history kept per plan (#632). Left before charging: the Dodo keys, webhook secret and product IDs on the VM, and the console screens (Console#151, Amal). Follow-ups: pruning billing webhooks (#660) and changing plan in place (#661).",
-   "prs": [653, 657, 658, 659, 662, 663]
+   "why": "Billing is built (8–9 Nov) and its review is being worked through. Merged: the review's high-severity fixes (#678, #682, #685–#687, PR #704) and the credit fixes (#679, #680, #688, #692, PR #706: grants drawn as credits post, capped runs on leased budgets, a lock timeout answered as busy). In PR #708: the 30-day retention grace (#689), grant reconcile from the auth host (#690), paid plans throttled at twice their allowance (#691), and the rest of the small hardening and the written billing policies (#693). Next: the gaps the review found (#694–#697) and the pricing changes (#698–#703, separate thread). Left before charging: the Dodo keys and product IDs on the VM and the console screens (Console#151, Amal).",
+   "prs": [653, 657, 658, 659, 662, 663, 704, 706, 708]
   },
   "528": {
    "state": "you",
@@ -557,6 +557,29 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   }
  ],
  "issues": [
+  {"n":703,"t":"Capacity: warn before the database nears the SQL Express limit","s":"o","m":"M2","p":167,"a":["ops","db"]},
+  {"n":702,"t":"Payments: sell one credit pack, 10,000 credits for $5","s":"o","m":"M2","p":167,"a":["auth"]},
+  {"n":701,"t":"Billing: let Business run past its allowance and report the overage","s":"o","m":"M2","p":167,"a":["management"]},
+  {"n":700,"t":"Plans: price Business per client with a 2,000-client minimum","s":"o","m":"M2","p":167,"a":["management"]},
+  {"n":699,"t":"Plans: add a Team plan at $99 for 2,000 clients","s":"o","m":"M2","p":167,"a":["management"]},
+  {"n":698,"t":"Pricing: a plan ladder that fits customers and margins","s":"o","m":"M2","p":167,"a":["management"]},
+  {"n":697,"t":"Billing: operator action for Business plans, and written billing policies","s":"o","m":"M2","p":167,"a":["auth"]},
+  {"n":696,"t":"Usage: report pack balance, expiry and reserved credits; explain over-limit refusals","s":"o","m":"M2","p":167,"a":["management"]},
+  {"n":695,"t":"Billing: upgrade at once with proration, downgrade at the end of the period","s":"o","m":"M2","p":167,"a":["auth"]},
+  {"n":694,"t":"Billing: email customers about limits, payments and downgrades","s":"o","m":"M2","p":167,"a":["auth","management"]},
+  {"n":693,"t":"Billing: small hardening from the billing review (L1–L8)","s":"o","m":"M2","p":167,"a":["management","auth","db"]},
+  {"n":692,"t":"Engine: a tenant lock timeout must not read as \"plan full\"","s":"c","m":"M2","p":167,"a":["engine"],"x":"2026-11-09"},
+  {"n":691,"t":"Messages: soft-throttle paid plans at twice their monthly allowance","s":"o","m":"M2","p":167,"a":["management","socket"]},
+  {"n":690,"t":"Credits: reconcile purchased credit grants from the auth host","s":"o","m":"M2","p":167,"a":["management","auth"]},
+  {"n":689,"t":"Retention: keep the old plan's retention for 30 days after a downgrade","s":"o","m":"M2","p":167,"a":["management","db"]},
+  {"n":688,"t":"Credits: hold the workspace cap exactly by reserving running runs' budget","s":"c","m":"M2","p":167,"a":["engine","db"],"x":"2026-11-09"},
+  {"n":687,"t":"Billing: verify the Dodo wire format and alert on set-aside webhooks","s":"c","m":"M2","p":167,"a":["auth","ops"],"x":"2026-11-09"},
+  {"n":686,"t":"Billing: handle disputes and chargebacks","s":"c","m":"M2","p":167,"a":["auth"],"x":"2026-11-09"},
+  {"n":685,"t":"Billing: subscription sync overwrites a plan an operator set","s":"c","m":"M2","p":167,"a":["auth"],"x":"2026-11-09"},
+  {"n":682,"t":"Payments: two checkouts can create two live subscriptions, and only one is tracked","s":"c","m":"M2","p":167,"a":["auth"],"x":"2026-11-09"},
+  {"n":680,"t":"Credits: settle a month against the plan the tenant had that month, not at settle time","s":"c","m":"M2","p":167,"a":["engine","db"],"x":"2026-11-09"},
+  {"n":679,"t":"Credits: exempt run starts skip the monthly allowance and the workspace cap","s":"c","m":"M2","p":167,"a":["engine","db"],"x":"2026-11-09"},
+  {"n":678,"t":"Billing: deleting an account leaves its paid subscription charging","s":"c","m":"M2","p":167,"a":["auth"],"x":"2026-11-09"},
   {"n":683,"t":"Move the Python SDK into its own repository, wbskt/Wbskt.Python","s":"c","m":"M2","p":528,"a":["sdk"],"pr":"P1","sz":"S","x":"2026-11-09"},
   {"n":661,"t":"Change a subscribed tenant's plan in place instead of through the portal","s":"o","m":"M3","p":167,"a":["auth"]},
   {"n":660,"t":"Prune processed billing webhooks from the auth database","s":"o","m":"M3","p":167,"a":["auth","db"]},
