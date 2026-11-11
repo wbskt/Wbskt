@@ -282,7 +282,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
      p = parent issue, s = o|c, a = areas, pr = priority, sz = size. "work" adds a state and a sentence to an issue number. -->
 <script type="application/json" id="roadmap-data">
 {
- "asOf": "2026-11-10",
+ "asOf": "2026-11-11",
  "headline": "M2 backend has 6 pieces of real work left: two wait on you (the SDK release keys and the deleted-client call), the never-ending-runs epic (#594), and the housekeeping epic (#618), now down to one M3 item. Drafts and test runs merged as PR #615 and PR #617, and run numbers as PR #612. Four issues stand between the backend and going public on 31 Dec; everything else is Post-launch.",
  "milestones": [
   {
@@ -453,7 +453,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "doc": "db-review/Database.Review.2026-10-03.md"
   }
  ],
- "nextReview": "Every 5th day when anything was committed since the last report. Brief: Docs/Reviews/README.md (#623).",
+ "nextReview": "Every 5th day when anything was committed since the last report. Brief: Docs/Reviews/README.md (#623), ten lanes since #728, including credits, billing and pricing, tenants and access, and the Python, .NET and Arduino libraries.",
  "decisions": [
   {
    "status": "open",
@@ -547,6 +547,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   }
  ],
  "issues": [
+  {"n":728,"t":"Review brief: add lanes for credits, billing and pricing, tenants and access, and the client libraries","s":"c","m":"M2","p":618,"a":[],"x":"2026-11-11"},
   {"n":726,"t":"Move the databases from SQL Server to PostgreSQL, step by step after launch","s":"o","m":"Post","p":null,"a":["db"]},
   {"n":718,"t":"Credits: after an upgrade mid-month, packs are drawn before the plan's credits run out","s":"c","m":"M2","p":167,"a":["db"],"x":"2026-11-09"},
   {"n":717,"t":"Billing: a failed upgrade drops the downgrade the customer had scheduled","s":"c","m":"M2","p":167,"a":["auth"],"x":"2026-11-09"},
@@ -600,7 +601,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":621,"t":"Bring deploy/infra-map.html up to date with the project copy and make it the source","s":"c","m":"M2","p":618,"a":[],"x":"2026-11-08"},
   {"n":620,"t":"Write the commit and PR rules into CONTRIBUTING.md and CLAUDE.md (Wbskt, Arduino, website)","s":"c","m":"M2","p":618,"a":[],"x":"2026-11-08"},
   {"n":619,"t":"Export SQL index usage and deadlock graphs from production for the review","s":"o","m":"M3","p":618,"a":[]},
-  {"n":618,"t":"Project housekeeping: review routine, written guidelines, roadmap in the repo","s":"o","m":"M2","p":null,"a":[],"epic":1,"sub":{"completed":5,"total":6}},
+  {"n":618,"t":"Project housekeeping: review routine, written guidelines, roadmap in the repo","s":"o","m":"M2","p":null,"a":[],"epic":1,"sub":{"completed":6,"total":7}},
   {"n":616,"t":"Cap the size of a workflow definition on publish and draft save","s":"o","m":"M3","p":null,"a":[]},
   {"n":614,"t":"Sandboxed shared variables for test runs","s":"o","m":"Post","p":null,"a":["engine"]},
   {"n":611,"t":"Workspace setting: when a day starts (time zone)","s":"o","m":"Post","p":null,"a":[]},
