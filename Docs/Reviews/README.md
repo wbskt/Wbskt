@@ -24,8 +24,8 @@ Reports live beside this file as `YYYY-MM-DD.md`, one per review. The newest rep
 
 Run the ten lanes in parallel. Each lane reviews everything changed since `D` in depth, then takes a
 lighter pass over the rest of its area for drift. A lane also owns the tests (`Tests/`) and the docs
-(`Docs/`) for its area, and says where they no longer match the code. Every lane looks for: inconsistencies between
-components, missed or misused design patterns, dead or obsolete code, edge cases, performance, and
+(`Docs/`) for its area, and says where they no longer match the code. Every lane looks for:
+inconsistencies between components, missed or misused design patterns, dead or obsolete code, edge cases, performance, and
 breaks from [Coding.Conventions.md](../Coding.Conventions.md) (console:
 `CODING_GUIDELINES.md`).
 
