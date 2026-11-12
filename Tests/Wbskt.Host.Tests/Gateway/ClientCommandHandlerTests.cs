@@ -26,7 +26,7 @@ public sealed class ClientCommandHandlerTests
     private readonly Mock<IConnectionManager> _connections = new();
     private readonly Mock<IEventBus> _bus = new();
     private readonly Mock<ICommandSender> _commands = new();
-    private readonly FakeClientConnection _connection = new() { ClientId = 42, WorkspaceId = 7 };
+    private readonly FakeClientConnection _connection = new() { ClientId = 42, WorkspaceId = 7, TokenIssuedAtUtc = DateTime.UtcNow };
 
     private IReadOnlyList<string> _sentFrames => _connection.Sent;
 

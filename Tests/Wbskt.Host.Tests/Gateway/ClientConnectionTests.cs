@@ -55,7 +55,7 @@ public sealed class ClientConnectionTests
         var socket = new Mock<System.Net.WebSockets.WebSocket>();
         socket.SetupGet(x => x.State).Returns(WebSocketState.Open);
         socket.Setup(x => x.CloseOutputAsync(It.IsAny<WebSocketCloseStatus>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        return (new ClientConnection { Socket = socket.Object, ClientId = 1, WorkspaceId = 2 }, socket);
+        return (new ClientConnection { Socket = socket.Object, ClientId = 1, WorkspaceId = 2, TokenIssuedAtUtc = DateTime.UtcNow }, socket);
     }
 }
 

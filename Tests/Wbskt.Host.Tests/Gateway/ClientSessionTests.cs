@@ -44,7 +44,7 @@ public sealed class ClientSessionTests
             Options.Create(budget ?? new MessageBudgetOptions()), lifetime.Object, NullLogger<ClientSessions>.Instance, NullLogger<ClientInbox>.Instance, _supersedes);
     }
 
-    private static FakeClientConnection Connection() => new() { ClientId = 42, WorkspaceId = 7 };
+    private static FakeClientConnection Connection() => new() { ClientId = 42, WorkspaceId = 7, TokenIssuedAtUtc = DateTime.UtcNow };
 
     private static ClaimsPrincipal ClientUser() => new(new ClaimsIdentity(ClientClaims.For(ClientRefId, "sensor", Guid.NewGuid(), 42, 7), "test"));
 

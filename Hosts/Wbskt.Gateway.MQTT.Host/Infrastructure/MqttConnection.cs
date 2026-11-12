@@ -43,6 +43,7 @@ public sealed class MqttConnection : ClientConnectionBase
         Admission = admission;
         ClientId = admission.Identity.ClientId;
         WorkspaceId = admission.Identity.WorkspaceId;
+        TokenIssuedAtUtc = admission.Identity.IssuedAtUtc;
         MqttClientId = admission.Identity.ClientRefId.ToString("D");
         UpTopic = MqttBinding.UpTopic(admission.Identity.ClientRefId);
         DownTopic = MqttBinding.DownTopic(admission.Identity.ClientRefId);

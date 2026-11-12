@@ -25,6 +25,12 @@ public interface IClientConnection
     /// </summary>
     DateTime EstablishedAtUtc { get; }
 
+    /// <summary>
+    /// When the token the client connected with was issued (UTC), so a cutoff written while the host
+    /// missed its event still closes the connection (see <see cref="HostedServices.AccessRecheck"/>).
+    /// </summary>
+    DateTime TokenIssuedAtUtc { get; }
+
     /// <summary>Whether messages can be sent to the client now.</summary>
     bool IsOpen { get; }
 
