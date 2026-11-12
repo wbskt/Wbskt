@@ -61,6 +61,31 @@ public sealed class SmtpDeliveryIntegrationTests
     }
 
     /// <summary>
+    /// The auth host's mail: one message carrying both a text and an HTML part, so a text-only client
+    /// still gets the link. Both parts have to survive the relay, not just the sender's API.
+    /// </summary>
+    [SkippableFact]
+    public async Task A_multipart_message_arrives_with_both_text_and_html()
+    {
+        Skip.IfNot(await SinkIsReachableAsync(), "No SMTP sink reachable — skipping.");
+
+        string marker = $"probe-{Guid.NewGuid():N}";
+        var sender = NewSender();
+
+        await sender.SendMultipartAsync(
+            $"{marker}@example.test",
+            $"Multipart {marker}",
+            $"Hello {marker} — plain",
+            $"<p>Hello <b>{marker}</b> — html</p>",
+            CancellationToken.None);
+
+        JsonElement message = await WaitForMessageAsync(marker);
+
+        Assert.Contains($"Hello {marker} — plain", message.GetProperty("Text").GetString() ?? string.Empty);
+        Assert.Contains($"<b>{marker}</b> — html", message.GetProperty("HTML").GetString() ?? string.Empty);
+    }
+
+    /// <summary>
     /// The workflow email node's body is written by a workspace member and sanitised nowhere, so it
     /// must arrive as text a client renders literally. Asserting it at the wire, because this is the
     /// one property that a mistake in the sender would quietly invert.

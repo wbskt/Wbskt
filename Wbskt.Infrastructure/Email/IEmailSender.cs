@@ -27,4 +27,12 @@ public interface IEmailSender
     bool IsConfigured { get; }
 
     Task SendAsync(string to, string subject, string body, EmailBodyFormat format, CancellationToken ct);
+
+    /// <summary>
+    /// Sends a <c>multipart/alternative</c> message: <paramref name="textBody"/> for clients that show
+    /// only text or block HTML, and <paramref name="htmlBody"/> for the rest. The HTML part carries the
+    /// same trust boundary as <see cref="EmailBodyFormat.Html"/>: only bodies rendered from a template in
+    /// this repository.
+    /// </summary>
+    Task SendMultipartAsync(string to, string subject, string textBody, string htmlBody, CancellationToken ct);
 }

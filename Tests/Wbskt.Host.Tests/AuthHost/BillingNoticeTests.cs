@@ -191,14 +191,17 @@ public sealed class BillingNoticeTests
     {
         var taken = new BillingNoticeMail[]
         {
-            new(1, TenantId, BillingNoticeKind.PaymentFailed, "ok@example.com", "s", "<p>b</p>", 1),
-            new(2, TenantId, BillingNoticeKind.PaymentFailed, "down@example.com", "s", "<p>b</p>", 2),
-            new(3, TenantId, BillingNoticeKind.PaymentFailed, "down@example.com", "s", "<p>b</p>", BillingNoticeMailSender.MaxAttempts),
-            new(4, TenantId, BillingNoticeKind.PaymentFailed, "not an address", "s", "<p>b</p>", 1)
+            new(1, TenantId, BillingNoticeKind.PaymentFailed, "ok@example.com", "s", "b", "<p>b</p>", 1),
+            new(2, TenantId, BillingNoticeKind.PaymentFailed, "down@example.com", "s", "b", "<p>b</p>", 2),
+
+            // Queued before plain-text bodies were stored: it still goes, as HTML only.
+            new(3, TenantId, BillingNoticeKind.PaymentFailed, "down@example.com", "s", null, "<p>b</p>", BillingNoticeMailSender.MaxAttempts),
+            new(4, TenantId, BillingNoticeKind.PaymentFailed, "not an address", "s", "b", "<p>b</p>", 1)
         };
         _billing.Setup(b => b.TakeBillingNoticeMailsAsync(Now, Now + BillingNoticeMailSender.Lease, BillingNoticeMailSender.BatchSize, It.IsAny<CancellationToken>())).ReturnsAsync(taken);
         _mailer.Setup(m => m.SendAsync("down@example.com", It.IsAny<string>(), It.IsAny<string>(), EmailBodyFormat.Html, It.IsAny<CancellationToken>())).ThrowsAsync(new IOException("relay closed"));
-        _mailer.Setup(m => m.SendAsync("not an address", It.IsAny<string>(), It.IsAny<string>(), EmailBodyFormat.Html, It.IsAny<CancellationToken>())).ThrowsAsync(new FormatException("bad"));
+        _mailer.Setup(m => m.SendMultipartAsync("down@example.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new IOException("relay closed"));
+        _mailer.Setup(m => m.SendMultipartAsync("not an address", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new FormatException("bad"));
 
         await MailSender().TickAsync(CancellationToken.None);
 
@@ -207,25 +210,27 @@ public sealed class BillingNoticeTests
         _billing.Verify(b => b.CompleteBillingNoticeMailAsync(3, null, null, Now, It.IsAny<string>(), It.IsAny<CancellationToken>()));
         _billing.Verify(b => b.CompleteBillingNoticeMailAsync(4, null, null, Now, It.IsAny<string>(), It.IsAny<CancellationToken>()));
         _billing.Verify(b => b.PurgeBillingNoticeMailsAsync(Now - BillingNoticeMailSender.KeepFor, It.IsAny<CancellationToken>()));
+        _mailer.Verify(m => m.SendMultipartAsync("ok@example.com", "s", "b", "<p>b</p>", It.IsAny<CancellationToken>()));
+        _mailer.Verify(m => m.SendAsync("down@example.com", "s", "<p>b</p>", EmailBodyFormat.Html, It.IsAny<CancellationToken>()));
     }
 
     [Fact]
     public async Task A_slow_relay_stops_the_batch_before_the_lease_runs_out()
     {
         var taken = Enumerable.Range(1, 10)
-            .Select(id => new BillingNoticeMail(id, TenantId, BillingNoticeKind.PaymentFailed, $"t{id}@example.com", "s", "<p>b</p>", 1))
+            .Select(id => new BillingNoticeMail(id, TenantId, BillingNoticeKind.PaymentFailed, $"t{id}@example.com", "s", "b", "<p>b</p>", 1))
             .ToArray();
         _billing.Setup(b => b.TakeBillingNoticeMailsAsync(Now, Now + BillingNoticeMailSender.Lease, BillingNoticeMailSender.BatchSize, It.IsAny<CancellationToken>())).ReturnsAsync(taken);
         var clock = new SteppingClock();
 
         // Each send takes a minute of the five-minute lease.
-        _mailer.Setup(m => m.SendAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), EmailBodyFormat.Html, It.IsAny<CancellationToken>()))
+        _mailer.Setup(m => m.SendMultipartAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Callback(() => clock.Elapsed += TimeSpan.FromMinutes(1))
             .Returns(Task.CompletedTask);
 
         await MailSender(clock).TickAsync(CancellationToken.None);
 
-        _mailer.Verify(m => m.SendAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), EmailBodyFormat.Html, It.IsAny<CancellationToken>()), Times.Exactly(4));
+        _mailer.Verify(m => m.SendMultipartAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Exactly(4));
 
         // The six never tried are handed back under the lease they were taken with, so none of them
         // loses an attempt to the slow relay.

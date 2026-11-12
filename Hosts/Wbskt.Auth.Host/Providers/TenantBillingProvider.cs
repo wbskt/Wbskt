@@ -252,7 +252,7 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
 
     public async Task<bool> RecordBillingNoticeAsync(int tenantId, BillingNoticeKind kind, string periodKey, IReadOnlyCollection<OutboundMail> mails, CancellationToken cancellationToken)
     {
-        string json = JsonSerializer.Serialize(mails.Select(m => new { to = m.To, subject = m.Subject, htmlBody = m.HtmlBody }));
+        string json = JsonSerializer.Serialize(mails.Select(m => new { to = m.To, subject = m.Subject, textBody = m.TextBody, htmlBody = m.HtmlBody }));
         return await ExecuteScalarAsync<int>("dbo.BillingNotice_Record", p =>
         {
             p.AddWithValue("@TenantId", tenantId);
@@ -275,6 +275,7 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
             Enum.Parse<BillingNoticeKind>(r.GetString(r.GetOrdinal("Kind"))),
             r.GetString(r.GetOrdinal("ToAddress")),
             r.GetString(r.GetOrdinal("Subject")),
+            r.IsDBNull(r.GetOrdinal("TextBody")) ? null : r.GetString(r.GetOrdinal("TextBody")),
             r.GetString(r.GetOrdinal("HtmlBody")),
             r.GetInt32(r.GetOrdinal("Attempts"))), cancellationToken);
     }

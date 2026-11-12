@@ -16,7 +16,7 @@ namespace Wbskt.Host.Tests.AuthHost;
 /// </summary>
 public sealed class OutboundMailPipelineTests
 {
-    private static OutboundMail Message(string to = "someone@example.test") => new(to, "Subject", "<p>Body</p>");
+    private static OutboundMail Message(string to = "someone@example.test") => new(to, "Subject", "Body", "<p>Body</p>");
 
     // ---------------------------------------------------------------- queue
 
@@ -61,23 +61,23 @@ public sealed class OutboundMailPipelineTests
     // ---------------------------------------------------------------- dispatcher
 
     [Fact]
-    public async Task The_dispatcher_sends_queued_mail_as_html()
+    public async Task The_dispatcher_sends_queued_mail_as_text_with_an_html_alternative()
     {
         var sender = new ScriptedSender();
         await using var harness = new DispatcherHarness(sender);
 
         await harness.StartAsync();
-        harness.Queue.TryWrite(new OutboundMail("someone@example.test", "Confirm your address", "<p>Hello</p>"));
+        harness.Queue.TryWrite(new OutboundMail("someone@example.test", "Confirm your address", "Hello", "<p>Hello</p>"));
 
         var sent = await sender.WaitForNextAsync();
 
         Assert.Equal("someone@example.test", sent.To);
         Assert.Equal("Confirm your address", sent.Subject);
-        Assert.Equal("<p>Hello</p>", sent.Body);
+        Assert.Equal("Hello", sent.Text);
 
         // Html, unlike the workflow email node. These bodies are ours and are built from templates in
         // this repository, which is the whole reason the format is a per-send argument.
-        Assert.Equal(EmailBodyFormat.Html, sent.Format);
+        Assert.Equal("<p>Hello</p>", sent.Html);
     }
 
     /// <summary>
@@ -92,7 +92,7 @@ public sealed class OutboundMailPipelineTests
         await using var harness = new DispatcherHarness(sender, logger);
 
         await harness.StartAsync();
-        harness.Queue.TryWrite(new OutboundMail("someone@example.test", "Reset your password", "<p>the-raw-token</p>"));
+        harness.Queue.TryWrite(new OutboundMail("someone@example.test", "Reset your password", "the-raw-token", "<p>the-raw-token</p>"));
         await sender.WaitForNextAsync();
 
         var line = await logger.WaitForAsync(m => m.Contains("accepted by the relay"));
@@ -217,6 +217,7 @@ public sealed class OutboundMailPipelineTests
         // The token exists only inside the rendered body by this point — there is no field on the
         // queued item holding it, which is what keeps it out of anything that logs the queue.
         Assert.Contains("the-raw-token", mail!.HtmlBody);
+        Assert.Contains("the-raw-token", mail.TextBody);
         Assert.DoesNotContain("the-raw-token", mail.To);
         Assert.DoesNotContain("the-raw-token", mail.Subject);
     }
@@ -304,8 +305,8 @@ public sealed class OutboundMailPipelineTests
     private sealed class ScriptedSender(int failures = 0, Func<Exception>? failWith = null) : IEmailSender
     {
         private readonly Lock _gate = new();
-        private readonly List<(string To, string Subject, string Body, EmailBodyFormat Format)> _sent = [];
-        private TaskCompletionSource<(string To, string Subject, string Body, EmailBodyFormat Format)> _next = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly List<(string To, string Subject, string Text, string Html)> _sent = [];
+        private TaskCompletionSource<(string To, string Subject, string Text, string Html)> _next = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _remainingFailures = failures;
 
         public bool Configured { get; init; } = true;
@@ -321,7 +322,10 @@ public sealed class OutboundMailPipelineTests
 
         private readonly List<string> _attempted = [];
 
-        public Task SendAsync(string to, string subject, string body, EmailBodyFormat format, CancellationToken ct)
+        public Task SendAsync(string to, string subject, string body, EmailBodyFormat format, CancellationToken ct) =>
+            throw new InvalidOperationException("Auth mail goes out as multipart, never as a single body.");
+
+        public Task SendMultipartAsync(string to, string subject, string textBody, string htmlBody, CancellationToken ct)
         {
             lock (_gate)
             {
@@ -334,14 +338,14 @@ public sealed class OutboundMailPipelineTests
                     throw (failWith ?? (() => new IOException("send failed")))();
                 }
 
-                _sent.Add((to, subject, body, format));
-                _next.TrySetResult((to, subject, body, format));
+                _sent.Add((to, subject, textBody, htmlBody));
+                _next.TrySetResult((to, subject, textBody, htmlBody));
             }
 
             return Task.CompletedTask;
         }
 
-        public async Task<(string To, string Subject, string Body, EmailBodyFormat Format)> WaitForNextAsync()
+        public async Task<(string To, string Subject, string Text, string Html)> WaitForNextAsync()
         {
             var completed = await Task.WhenAny(_next.Task, Task.Delay(TimeSpan.FromSeconds(5)));
             Assert.Same(_next.Task, completed);

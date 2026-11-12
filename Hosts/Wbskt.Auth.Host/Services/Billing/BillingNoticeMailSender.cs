@@ -75,7 +75,14 @@ public sealed class BillingNoticeMailSender(IServiceScopeFactory scopeFactory, T
     {
         try
         {
-            await sender.SendAsync(mail.To, mail.Subject, mail.HtmlBody, EmailBodyFormat.Html, ct);
+            if (mail.TextBody is null)
+            {
+                await sender.SendAsync(mail.To, mail.Subject, mail.HtmlBody, EmailBodyFormat.Html, ct);
+            }
+            else
+            {
+                await sender.SendMultipartAsync(mail.To, mail.Subject, mail.TextBody, mail.HtmlBody, ct);
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

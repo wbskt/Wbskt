@@ -16,6 +16,7 @@ BEGIN
             Kind,
             ToAddress,
             Subject,
+            TextBody,
             HtmlBody,
             Attempts,
             NextAttemptAt
@@ -33,6 +34,7 @@ BEGIN
         inserted.Kind,
         inserted.ToAddress,
         inserted.Subject,
+        inserted.TextBody,
         inserted.HtmlBody,
         inserted.Attempts;
 END
