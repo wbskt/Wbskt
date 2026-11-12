@@ -2,14 +2,20 @@
 -- what the workspace has spent since @MonthStart, so a caller lowering the cap below that can say new
 -- runs are refused at once.
 --
+-- The cap row is written first. Run_Start reads it WITH (HOLDLOCK) and holds that to its commit, so the
+-- write waits for a start already past that read, and a start after it waits for this commit and sees
+-- the new cap: no run starts under the old cap once this one is in.
+--
 -- Setting a cap also brings the workspace's root runs still going under it, under the cap's lock as
 -- Run_Start and RunCounters_TryCharge take it: each one's budget is cut to what it has spent, and one
 -- that was given its whole budget (no cap when it started) keeps that budget as its ceiling. Its next
 -- charge then goes through RunCounters_TryCharge's lease path, which extends it only from what the cap
 -- has left, so a run already going cannot spend past a cap set while it runs, and the unspent budgets it
--- held stop counting as reserved against the cap. The counters are not locked: a charge landing as the
--- budget is cut was already allowed by the old budget, and the next one goes through the lease.
--- 50035 when the lock is not free within five seconds.
+-- held stop counting as reserved against the cap. A charge whose statement read the run's budget before
+-- the cut can still land on top of it; that overshoot is at most one charge per run, and the lease path
+-- counts it as spent rather than as budget.
+-- 50035 when the lock is not free within five seconds. Its priority is high: a deadlock with
+-- RunCredits_Post makes the poster, which retries on its next tick, the one rolled back.
 CREATE PROCEDURE dbo.WorkspaceCreditCap_Set
     @WorkspaceId      INT,
     @MonthlyCreditCap DECIMAL(18,4),
@@ -18,6 +24,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
+    SET DEADLOCK_PRIORITY HIGH;
 
     BEGIN TRANSACTION;
 
@@ -27,12 +34,6 @@ BEGIN
     END
     ELSE
     BEGIN
-        DECLARE @CapResource NVARCHAR(255) = CONCAT(N'credit-cap:', @WorkspaceId);
-        DECLARE @CapLockResult INT;
-        EXEC @CapLockResult = sp_getapplock @Resource = @CapResource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
-        IF @CapLockResult < 0
-            THROW 50035, 'The workspace is too busy to set its credit cap; try again.', 1;
-
         MERGE dbo.WorkspaceCreditCaps WITH (HOLDLOCK) AS t
         USING (SELECT @WorkspaceId AS WorkspaceId) AS s
         ON t.WorkspaceId = s.WorkspaceId
@@ -40,6 +41,12 @@ BEGIN
             UPDATE SET MonthlyCreditCap = @MonthlyCreditCap, UpdatedAt = SYSUTCDATETIME()
         WHEN NOT MATCHED THEN
             INSERT (WorkspaceId, MonthlyCreditCap) VALUES (@WorkspaceId, @MonthlyCreditCap);
+
+        DECLARE @CapResource NVARCHAR(255) = CONCAT(N'credit-cap:', @WorkspaceId);
+        DECLARE @CapLockResult INT;
+        EXEC @CapLockResult = sp_getapplock @Resource = @CapResource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
+        IF @CapLockResult < 0
+            THROW 50035, 'The workspace is too busy to set its credit cap; try again.', 1;
 
         -- The ceiling first, from the budget before it is cut. The Status IN list is
         -- IX_Runs_WorkflowDefinitionId_Active's filter word for word.
