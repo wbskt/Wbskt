@@ -87,6 +87,20 @@ public sealed class WorkflowEngineClientTests
     }
 
     [Fact]
+    public async Task StartManualRunAsync_reads_a_refusal_without_a_reason_as_the_run_limit()
+    {
+        // An older engine, or a claim settled before the reason was stored, sends none.
+        string body = JsonSerializer.Serialize(
+            new InboundResponse(InboundOutcome.Refused, null, [new InboundRegistrationOutcome(Guid.NewGuid(), InboundOutcome.Refused, null, "")]),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var client = new WorkflowEngineClient(BuildClient(new StubHttpHandler(HttpStatusCode.OK, body)));
+
+        StartRunResponse response = await client.StartManualRunAsync(Guid.NewGuid(), new StartRunRequest("node", null), CancellationToken.None);
+
+        Assert.Equal(StartRunOutcome.PlanRunLimitReached, response.Outcome);
+    }
+
+    [Fact]
     public async Task StartManualRunAsync_reports_the_started_run()
     {
         var workflowRefId = Guid.NewGuid();

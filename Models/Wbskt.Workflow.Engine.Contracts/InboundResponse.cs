@@ -50,8 +50,8 @@ public enum InboundOutcome
     Refused,
 
     /// <summary>
-    /// Too many runs were starting in the workspace at once and nothing was decided. The same call can
-    /// simply be sent again.
+    /// Too many runs were starting in the workspace at once, so a start did not happen and its claim was
+    /// released. Answered by the manual endpoint only; send the call again with the same idempotency key.
     /// </summary>
     Busy
 }

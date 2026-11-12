@@ -43,8 +43,8 @@ internal sealed class WorkflowEngineClient : IWorkflowEngineClient
         return new StartRunResponse(engineResponse?.RunRefId ?? Guid.Empty, outcome);
     }
 
-    // A manual trigger is always AllowParallel, so a refusal is the plan's and names its limit; a
-    // response from an engine that does not send the reason yet reads as the run limit.
+    // A refusal names the plan limit; one without a reason (an older engine, or a claim settled before
+    // the reason was stored) reads as the run limit.
     private static StartRunOutcome ToRefusal(InboundResponse response) =>
         response.Registrations.FirstOrDefault(r => r.Outcome == InboundOutcome.Refused)?.RefusalReason switch
         {

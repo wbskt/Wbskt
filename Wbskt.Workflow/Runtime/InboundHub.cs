@@ -55,6 +55,13 @@ internal sealed class InboundHub : IInboundHub
             _metrics?.RecordInboundEvent(normalizedEvent.ChannelKind, result.Outcome.ToString());
             return result;
         }
+        catch (RunStartBusyException ex)
+        {
+            // Contention, not a fault: the event is redelivered or the caller told to send it again.
+            _metrics?.RecordInboundEvent(normalizedEvent.ChannelKind, "Busy");
+            _logger.LogWarning(ex, "Inbound event {InboundEventId} found its workspace too busy to start a run.", normalizedEvent.InboundEventId);
+            throw;
+        }
         catch (Exception ex)
         {
             _metrics?.RecordInboundEvent(normalizedEvent.ChannelKind, "Failed");

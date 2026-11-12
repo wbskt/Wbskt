@@ -37,7 +37,7 @@ public enum StartRunOutcome
     /// <summary>The workspace has spent its own monthly credit cap.</summary>
     WorkspaceCreditCapReached,
 
-    /// <summary>Too many runs were starting in the workspace at once; nothing was decided, so it can be sent again.</summary>
+    /// <summary>Too many runs were starting in the workspace at once; send it again, with the same idempotency key.</summary>
     Busy
 }
 

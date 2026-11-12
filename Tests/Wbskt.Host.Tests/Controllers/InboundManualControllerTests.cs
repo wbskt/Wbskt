@@ -130,6 +130,23 @@ public sealed class InboundManualControllerTests
     }
 
     [Fact]
+    public async Task Post_names_every_refusal_reason_the_engine_has()
+    {
+        // A new RunRefusalReason without a mapping would fail every manual run it refused.
+        var workflowRefId = Guid.NewGuid();
+        RunRefusalReason[] reasons = Enum.GetValues<RunRefusalReason>();
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.Refused, null, null, "ok",
+                reasons.Select((reason, i) => new TriggerRegistrationDispatch(i, workflowRefId, TriggerDispatchOutcome.Refused, null, "ok", RefusalReason: reason)).ToArray()));
+        var controller = new InboundManualController(hub.Object);
+
+        InboundResponse response = await controller.Post(workflowRefId, JsonSerializer.SerializeToElement(new { }), null, CancellationToken.None);
+
+        Assert.Equal(reasons.Length, response.Registrations.Select(r => r.RefusalReason).OfType<InboundRefusalReason>().Distinct().Count());
+    }
+
+    [Fact]
     public async Task Post_reports_a_busy_workspace_instead_of_failing()
     {
         // #771: the workspace's start lock stayed taken through every retry. That was a 500.

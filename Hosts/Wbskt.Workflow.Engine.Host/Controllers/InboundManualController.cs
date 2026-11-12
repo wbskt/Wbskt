@@ -27,8 +27,10 @@ public sealed class InboundManualController(IInboundHub hub) : ControllerBase
         }
         catch (RunStartBusyException)
         {
-            // The workspace's start lock stayed taken through every retry. Nothing was decided and the
-            // claims were released, so the caller is told to send it again rather than shown a 500.
+            // The workspace's start lock stayed taken through every retry. The registration that hit it
+            // started nothing and the claims were released, so the caller is told to send it again (with
+            // the same idempotency key, should an earlier manual trigger of the workflow have started).
+            // A 500 said the engine was broken.
             return new InboundResponse(InboundOutcome.Busy, null, []);
         }
 
