@@ -42,7 +42,7 @@ public sealed class StalePresenceSweeperTests
 
         await CreateSweeper(provider.Object, bus.Object, new PresenceOptions()).SweepAsync(CancellationToken.None);
 
-        bus.Verify(b => b.PublishAsync(It.Is<ClientDisconnectedEvent>(e => e.CreatedAtUtc == expiredAt), It.IsAny<CancellationToken>()), Times.Once);
+        bus.Verify(b => b.PublishAsync(It.Is<ClientDisconnectedEvent>(e => e.CreatedAtUtc == expiredAt && e.IsExpiry), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
