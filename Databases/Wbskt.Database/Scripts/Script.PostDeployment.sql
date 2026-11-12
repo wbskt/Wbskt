@@ -142,15 +142,7 @@ UPDATE dbo.RunCounters
         AND CreditsConsumed <> PostedCredits;
 GO
 
--- 5. Queue the readings of workspaces deleted before dbo.Workspace_Retire queued them itself.
--- Their copy of the account was kept (RetiredAt), so their clients are found here; the readings sweep
--- then clears them in batches. A no-op once every retired workspace's clients are queued or cleared.
-INSERT INTO dbo.DeletedClientReadings (ClientId)
-SELECT c.Id
-FROM dbo.Clients c
-JOIN dbo.WorkspaceAccounts a ON a.WorkspaceId = c.WorkspaceId
-WHERE a.RetiredAt IS NOT NULL
-    AND NOT EXISTS (SELECT 1 FROM dbo.DeletedClientReadings d WHERE d.ClientId = c.Id)
-    AND (EXISTS (SELECT 1 FROM dbo.ClientReadings r WHERE r.ClientId = c.Id)
-        OR EXISTS (SELECT 1 FROM dbo.ClientReadingsHourly h WHERE h.ClientId = c.Id));
+-- 5. Queue the readings of workspaces deleted before dbo.Workspace_Retire queued them itself
+-- (dbo.DeletedClientReadings_QueueRetired explains which). A no-op once they are queued or cleared.
+EXEC dbo.DeletedClientReadings_QueueRetired;
 GO
