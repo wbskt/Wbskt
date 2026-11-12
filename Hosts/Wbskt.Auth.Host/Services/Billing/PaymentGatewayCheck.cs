@@ -72,8 +72,7 @@ public sealed class PaymentGatewayCheck(
                     continue;
                 }
 
-                ProviderProduct? product = await gateway.FindProductAsync(productId, ct);
-                problems.AddRange(Compare(what, product, expected, interval));
+                problems.AddRange(await CheckProductAsync(gateway, what, productId, expected, interval, ct));
             }
         }
 
@@ -91,11 +90,23 @@ public sealed class PaymentGatewayCheck(
                 continue;
             }
 
-            ProviderProduct? product = await gateway.FindProductAsync(pack.ProductId, ct);
-            problems.AddRange(Compare(what, product, pack.PriceUsd, interval: null));
+            problems.AddRange(await CheckProductAsync(gateway, what, pack.ProductId, pack.PriceUsd, interval: null, ct));
         }
 
         return problems;
+    }
+
+    // One product the provider cannot answer for is a problem of its own; the rest are still checked.
+    private static async Task<IEnumerable<string>> CheckProductAsync(IPaymentGateway gateway, string what, string productId, decimal expected, BillingInterval? interval, CancellationToken ct)
+    {
+        try
+        {
+            return Compare(what, await gateway.FindProductAsync(productId, ct), expected, interval).ToList();
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            return [$"{what} could not be read: {ex.Message}"];
+        }
     }
 
     // A plan is a subscription charged every interval; a pack (interval null) is charged once.
@@ -110,6 +121,16 @@ public sealed class PaymentGatewayCheck(
         if (!string.Equals(product.Currency, Currency, StringComparison.OrdinalIgnoreCase) || product.Amount != expected)
         {
             yield return $"{what} costs {product.Amount} {product.Currency}, not {expected} {Currency}.";
+        }
+
+        if (product.Discounted)
+        {
+            yield return $"{what} has a discount, so it sells for less than {expected} {Currency}.";
+        }
+
+        if (product.TrialDays > 0)
+        {
+            yield return $"{what} has a {product.TrialDays}-day free trial, which the plan catalogue does not give.";
         }
 
         if (product.Recurring != interval.HasValue)

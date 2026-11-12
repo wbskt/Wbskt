@@ -149,7 +149,8 @@ public sealed record ProviderIdList(IReadOnlyCollection<string> Ids, bool Comple
 public sealed record ProviderWebhook(string EventId, string Type, string? SubscriptionId, string? PaymentId);
 
 /// <summary>
-/// A product as the provider prices it: the amount in the currency's main unit, the currency, and for a
-/// subscription how often it charges (<c>Interval</c> null when it is neither monthly nor yearly).
+/// A product as the provider prices it: the amount in the currency's main unit (before tax), the currency,
+/// for a subscription how often it charges (<c>Interval</c> null when it is neither monthly nor yearly),
+/// and whether it takes less than that amount at first: a discount, or a free trial.
 /// </summary>
-public sealed record ProviderProduct(decimal Amount, string Currency, bool Recurring, BillingInterval? Interval);
+public sealed record ProviderProduct(decimal Amount, string Currency, bool Recurring, BillingInterval? Interval, bool Discounted = false, int TrialDays = 0);
