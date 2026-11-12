@@ -70,12 +70,14 @@ public sealed class SubWorkflowNodeExecutorTests
         hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 99, null, "ok"));
         var hook = new Mock<ISubWorkflowCompletionHook>();
-        var executor = new SubWorkflowNodeExecutor(hub.Object, StartedRunProvider().Object, new FixedClock(), completionHook: hook.Object);
+        Mock<IRunProvider> runProvider = StartedRunProvider();
+        var executor = new SubWorkflowNodeExecutor(hub.Object, runProvider.Object, new FixedClock(), completionHook: hook.Object);
 
         var wait = Assert.IsType<NodeExecutionResult.WaitForBookmark>(await executor.ExecuteAsync(Context(new Dictionary<string, JsonElement>()), CancellationToken.None));
         await wait.AfterParked!(CancellationToken.None);
 
         hook.VerifyNoOtherCalls();
+        runProvider.Verify(r => r.GetByIdAsync(99, It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
     [Fact]

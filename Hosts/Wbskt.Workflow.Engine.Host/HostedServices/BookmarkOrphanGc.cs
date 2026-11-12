@@ -50,7 +50,8 @@ public sealed class BookmarkOrphanGc(
     /// A parent parked on a child that has ended waits for ever when the child's completion event was
     /// lost: the finalizer stopped between the terminal status and the hook, or the event came before the
     /// parent parked and its own check did not run. Raising it again is harmless when it was not lost:
-    /// the first event to claim the bookmark wins and a later one matches nothing.
+    /// the first event to claim the bookmark wins and a later one matches nothing. It waits the stranded
+    /// threshold after the child ended, so a completion still on its way is not raised twice for nothing.
     /// </summary>
     private async Task WakeParentsOfEndedChildrenAsync(IServiceProvider services, CancellationToken ct)
     {
@@ -63,13 +64,13 @@ public sealed class BookmarkOrphanGc(
         }
 
         var completionHook = services.GetRequiredService<ISubWorkflowCompletionHook>();
-        int woken = 0;
+        int raised = 0;
         foreach (RunRow child in children)
         {
             try
             {
                 await completionHook.OnRunCompletedAsync(child.RefId, child.Status, child.OutputJson, ct);
-                woken++;
+                raised++;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -77,7 +78,10 @@ public sealed class BookmarkOrphanGc(
             }
         }
 
-        Logger.LogWarning("Orphan GC raised the completion of {Count} child runs a parent was still waiting on", woken);
+        if (raised > 0)
+        {
+            Logger.LogWarning("Orphan GC raised the completion of {Count} child runs a parent was still waiting on", raised);
+        }
     }
 
     private async Task FailStrandedBranchesAsync(IServiceProvider services, CancellationToken ct)
