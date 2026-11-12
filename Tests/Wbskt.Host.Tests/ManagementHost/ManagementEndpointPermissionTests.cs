@@ -15,7 +15,9 @@ namespace Wbskt.Host.Tests.ManagementHost;
 /// </summary>
 public sealed class ManagementEndpointPermissionTests
 {
-    private const string WorkspaceRoutePrefix = "api/workspaces/{workspaceRef";
+    // Contained, not a prefix: routes start with the API version (api/v1/workspaces/...), and a prefix
+    // check written before it matched nothing, so it passed whatever it was given.
+    private const string WorkspaceRouteSegment = "/workspaces/{workspaceRef";
 
     /// <summary>What every workspace-scoped action requires. A change here is a change to who can do what.</summary>
     private static readonly Dictionary<string, string> Expected = new()
@@ -100,11 +102,15 @@ public sealed class ManagementEndpointPermissionTests
     [Fact]
     public void Every_workspace_scoped_action_declares_its_permissions()
     {
-        var undeclared = Actions()
-            .Where(a => a.Route.StartsWith(WorkspaceRoutePrefix, StringComparison.OrdinalIgnoreCase) && a.Requirements.Count == 0)
+        var scoped = Actions()
+            .Where(a => a.Route.Contains(WorkspaceRouteSegment, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var undeclared = scoped
+            .Where(a => a.Requirements.Count == 0)
             .Select(a => $"{a.Name} ({a.Route})")
             .ToList();
 
+        scoped.Should().HaveCountGreaterThan(Expected.Count / 2, "the route filter must find the workspace-scoped actions, or this test checks nothing");
         undeclared.Should().BeEmpty("a workspace-scoped action needs [RequiresPermission], or any member of the workspace could call it");
     }
 
