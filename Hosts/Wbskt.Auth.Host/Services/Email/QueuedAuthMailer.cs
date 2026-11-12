@@ -44,15 +44,16 @@ internal sealed class QueuedAuthMailer(
         // is unreachable would undo work the user can see for a reason they cannot act on.
         if (!sender.IsConfigured)
         {
+            metrics.RecordMail(MailOutcome.NotConfigured);
             logger.LogError(
                 "No SMTP relay is configured (Auth:Email), so {MailKind} was not sent. Sign-in requires a verified address, " +
                 "so accounts created while this is true cannot be used.", kind);
             return ValueTask.CompletedTask;
         }
 
-        if (!queue.TryWrite(mail))
+        if (!queue.TryWrite(mail with { Kind = kind }))
         {
-            metrics.RecordMail("dropped");
+            metrics.RecordMail(MailOutcome.QueueFull);
             logger.LogError("The outbound mail queue is full; {MailKind} was dropped. The relay is not keeping up.", kind);
         }
 

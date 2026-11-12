@@ -1,3 +1,5 @@
+using OpenTelemetry.Metrics;
+using System.Net.Mail;
 using Wbskt.Infrastructure.Billing;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -110,6 +112,13 @@ public static class Program
         if (relay.SendTimeout <= TimeSpan.Zero || relay.SendTimeout >= BillingNoticeMailSender.LeaseReserve)
         {
             throw new InvalidOperationException($"Auth:Email:SendTimeout must be above zero and below {BillingNoticeMailSender.LeaseReserve}; it is {relay.SendTimeout}.");
+        }
+
+        // Checked here rather than on the first send: a malformed from-address fails every message the
+        // same way, which would read as a broken relay.
+        if (relay.IsConfigured && !MailAddress.TryCreate(relay.FromAddress, out _))
+        {
+            throw new InvalidOperationException("Auth:Email:FromAddress is not a valid address.");
         }
 
         builder.Services.AddSingleton(Options.Create(relay));
@@ -246,6 +255,10 @@ public static class Program
         builder.Services.AddCustomOpenApi();
 
         var app = builder.Build();
+
+        // Start the metrics pipeline before anything builds AuthMetrics, whose zero points for the
+        // alerted series are recorded in its constructor and are lost with no listener attached.
+        app.Services.GetService<MeterProvider>();
 
         // Loud, at startup, every time. A control that can be switched off from configuration is only
         // safe if turning it off is impossible to do quietly.

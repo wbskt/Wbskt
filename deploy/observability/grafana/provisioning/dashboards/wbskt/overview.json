@@ -540,7 +540,7 @@
     {
       "type": "timeseries",
       "title": "Mail by outcome, and queued",
-      "description": "Messages per minute the auth host handed to the relay (sent), retried (failed) or gave up on (dropped, which raises MailFailing), and how many wait in its queue.",
+      "description": "Messages per minute the auth host handed to the relay (sent), gave up on (dropped, queue_full: MailFailing), or could not send to one recipient (rejected, invalid_address); attempts tried again (retried); and, on the right axis, how many wait in its queue.",
       "id": 24,
       "datasource": {
         "type": "prometheus",
@@ -568,7 +568,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(wbskt_auth_mail_queue_depth)",
+          "expr": "sum(wbskt_auth_mail_queue_depth)",
           "legendFormat": "queued",
           "refId": "B",
           "range": true
@@ -598,12 +598,29 @@
             "fillOpacity": 10,
             "showPoints": "never",
             "stacking": {
-              "mode": "normal",
+              "mode": "none",
               "group": "A"
             }
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "queued"
+            },
+            "properties": [
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          }
+        ]
       }
     },
     {

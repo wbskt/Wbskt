@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using Wbskt.Auth.Host.Telemetry;
 
 namespace Wbskt.Auth.Host.Services.Email;
 
@@ -33,6 +34,11 @@ internal sealed class OutboundMailQueue
             FullMode = BoundedChannelFullMode.Wait,
             SingleReader = true
         });
+
+    public OutboundMailQueue(AuthMetrics? metrics = null)
+    {
+        metrics?.ObserveMailQueueDepth(() => _channel.Reader.Count);
+    }
 
     /// <summary>
     /// Queues a message, or returns false when the queue is saturated. Never blocks and never waits.

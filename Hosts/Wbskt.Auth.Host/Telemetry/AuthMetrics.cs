@@ -37,7 +37,9 @@ public sealed class AuthMetrics : IWorkerTickMetrics, IDisposable
         // The series the alerts watch start at zero, so the first one counted is an increase: a series that
         // first appears at 1 has no earlier sample, and increase() would miss it.
         RecordBillingRefund("unconfirmed", 0);
-        Mail.Add(0, new KeyValuePair<string, object?>("outcome", "dropped"));
+        Mail.Add(0, new KeyValuePair<string, object?>("outcome", MailOutcome.Dropped));
+        Mail.Add(0, new KeyValuePair<string, object?>("outcome", MailOutcome.QueueFull));
+        Mail.Add(0, new KeyValuePair<string, object?>("outcome", MailOutcome.Sent));
         BillingWebhooks.Add(0, new KeyValuePair<string, object?>("type", "unknown"), new KeyValuePair<string, object?>("outcome", "signature_invalid"));
         foreach ((string kind, string outcome) in ReconcileAlerted)
         {
@@ -56,9 +58,9 @@ public sealed class AuthMetrics : IWorkerTickMetrics, IDisposable
     public Counter<long> MailSuppressed { get; }
 
     /// <summary>
-    /// Outbound mail, tagged <c>outcome</c>: sent (the relay took it), failed (one attempt failed and is
-    /// retried), dropped (given up after the retries, or refused by a full queue) or invalid_address
-    /// (malformed, so never retried). MailFailing watches dropped.
+    /// Outbound mail, tagged <c>outcome</c> (one of <see cref="MailOutcome"/>). Each counts a message,
+    /// except retried, which counts attempts. MailFailing watches dropped and queue_full, and
+    /// MailRelayDown those with no sent beside them.
     /// </summary>
     public Counter<long> Mail { get; }
 
@@ -128,7 +130,10 @@ public sealed class AuthMetrics : IWorkerTickMetrics, IDisposable
     public void RecordMail(string outcome) =>
         Mail.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
 
-    /// <summary>Reports how many messages wait for the relay as <c>wbskt_auth_mail_queue_depth</c>, read at each scrape.</summary>
+    /// <summary>
+    /// Reports how many messages wait for the relay as <c>wbskt_auth_mail_queue_depth</c>, read at each
+    /// scrape. Called once, by the queue.
+    /// </summary>
     public void ObserveMailQueueDepth(Func<int> depth) =>
         _meter.CreateObservableGauge("wbskt_auth_mail_queue_depth", depth);
 

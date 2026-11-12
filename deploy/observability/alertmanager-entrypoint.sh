@@ -62,6 +62,11 @@ if [ -z "$receivers" ]; then
     echo "alertmanager: neither ALERT_EMAIL_TO nor ALERT_WEBHOOK_URL is set - alerts will not be delivered anywhere" >&2
 else
     echo "alertmanager: delivering alerts by $receivers"
+    if [ "$receivers" = "email" ]; then
+        # Mailed through the auth host's relay, so MailRelayDown, the alert for that relay failing,
+        # cannot be delivered when it fires.
+        echo "alertmanager: only email is configured - set ALERT_WEBHOOK_URL too, or MailRelayDown reaches nobody" >&2
+    fi
 fi
 
 exec /bin/alertmanager --config.file="$config" --storage.path=/alertmanager "$@"

@@ -8,4 +8,5 @@ namespace Wbskt.Auth.Host.Services.Email;
 /// anything would think to log: by this point the token exists only inside the two bodies,
 /// and nothing logs a body.
 /// </remarks>
-internal sealed record OutboundMail(string To, string Subject, string TextBody, string HtmlBody);
+/// <param name="Kind">Which message this is, for log lines: the subject can carry a tenant's name.</param>
+internal sealed record OutboundMail(string To, string Subject, string TextBody, string HtmlBody, string Kind = "mail");

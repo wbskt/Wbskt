@@ -44,6 +44,35 @@ groups:
         annotations:
           summary: "{{ $value }} branches are queued for execution in the engine"
 
+      - alert: MailRelayDown
+        # The auth host gave up on mail and sent none in 15 minutes: the relay is refusing everything
+        # (expired credential, sending limit, outage). Every confirmation, invitation and password reset
+        # goes this way, and sign-in needs a confirmed address, so nobody new can get in.
+        expr: |
+          sum(increase(wbskt_auth_mail_total{outcome=~"dropped|queue_full"}[15m])) > 0
+          and (sum(increase(wbskt_auth_mail_total{outcome="sent"}[15m])) or vector(0)) == 0
+        labels:
+          severity: page
+        annotations:
+          summary: "No mail went out in 15 minutes and {{ $value | printf \"%.0f\" }} were given up on"
+          description: >-
+            The auth host's "was not sent after" lines name the relay's status code. This alert is
+            mailed through that same relay when ALERT_EMAIL_TO is the only receiver, so it reaches
+            someone only with ALERT_WEBHOOK_URL set.
+
+      - alert: MailFailing
+        # Some mail was given up on after its retries (about 10 seconds), or refused by a full queue,
+        # while other mail still went out: a relay blip, or a backlog building.
+        expr: sum(increase(wbskt_auth_mail_total{outcome=~"dropped|queue_full"}[15m])) > 0
+        labels:
+          severity: warn
+        annotations:
+          summary: "{{ $value | printf \"%.0f\" }} outgoing mails were given up on in the last 15 minutes"
+          description: >-
+            dropped means the relay refused or did not answer through the retries; queue_full means
+            wbskt_auth_mail_queue_depth reached its cap. The auth host's error lines carry the relay's
+            status code. Users can ask for each message again.
+
       - alert: BillingWebhooksSetAside
         # A payment webhook that names no tenant here, no plan or pack on offer, or a subscription the
         # provider does not know. For a paying customer that means a tenant left on the wrong plan or
@@ -70,20 +99,6 @@ groups:
           description: >-
             Check the auth host's logs for the provider's status codes and dbo.BillingWebhookEvents
             for the rows left unprocessed.
-
-      - alert: MailFailing
-        # The auth host gave up on a message after its retries, or its queue was full. Every
-        # confirmation, invitation and password reset goes this way, and sign-in needs a confirmed
-        # address, so a relay that refuses mail means nobody new can get in.
-        expr: sum(increase(wbskt_auth_mail_total{outcome="dropped"}[15m])) > 0
-        labels:
-          severity: page
-        annotations:
-          summary: "{{ $value }} outgoing mails were dropped in the last 15 minutes"
-          description: >-
-            The SMTP relay is refusing or not answering (expired credential, sending limit, provider
-            outage), or the queue (wbskt_auth_mail_queue_depth) filled. The auth host's error lines
-            "was not sent after" and "outbound mail queue is full" carry the relay's error.
 
       - alert: BillingRefundUnconfirmed
         # A duplicate subscription's refund timed out or the provider answered with an error that does not
