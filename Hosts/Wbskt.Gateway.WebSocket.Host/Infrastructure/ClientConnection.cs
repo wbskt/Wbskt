@@ -26,6 +26,13 @@ public sealed class ClientConnection : ClientConnectionBase, IDisposable
     /// <summary>Cancelled when a requested close was not answered in time, to cut the receive loop short.</summary>
     public CancellationToken Closing => _closing.Token;
 
+    /// <summary>
+    /// Asks for a close with 1001 (<see cref="DisconnectReason.ServerStopping"/>) once <paramref name="stopping"/>
+    /// is cancelled, so a client can tell a deploy from a fault. Dispose it when the connection ends.
+    /// </summary>
+    public CancellationTokenRegistration CloseOnStop(CancellationToken stopping) =>
+        stopping.Register(() => _ = RequestCloseAsync(DisconnectReason.ServerStopping, DisconnectReason.ServerStopping.Describe()));
+
     protected override async Task SendTextAsync(string text, CancellationToken cancellationToken)
     {
         var bytes = Encoding.UTF8.GetBytes(text);

@@ -50,6 +50,40 @@ public sealed class ClientConnectionTests
         await connection.CloseTransportAsync(DisconnectReason.ClientClosed);
     }
 
+    [Fact]
+    public async Task A_stopping_host_sends_the_client_a_1001_close_it_can_read()
+    {
+        using var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        using var clientTcp = new System.Net.Sockets.TcpClient();
+        await clientTcp.ConnectAsync(System.Net.IPAddress.Loopback, ((System.Net.IPEndPoint)listener.LocalEndpoint).Port);
+        using var serverTcp = await listener.AcceptTcpClientAsync();
+        using var serverSocket = System.Net.WebSockets.WebSocket.CreateFromStream(serverTcp.GetStream(), isServer: true, subProtocol: null, keepAliveInterval: Timeout.InfiniteTimeSpan);
+        using var clientSocket = System.Net.WebSockets.WebSocket.CreateFromStream(clientTcp.GetStream(), isServer: false, subProtocol: null, keepAliveInterval: Timeout.InfiniteTimeSpan);
+        using var connection = new ClientConnection { Socket = serverSocket, ClientId = 1, WorkspaceId = 2 };
+        using var stopping = new CancellationTokenSource();
+        using var closeOnStop = connection.CloseOnStop(stopping.Token);
+
+        stopping.Cancel();
+        var received = await clientSocket.ReceiveAsync(new byte[64], new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
+
+        Assert.Equal(WebSocketMessageType.Close, received.MessageType);
+        Assert.Equal(WebSocketCloseStatus.EndpointUnavailable, clientSocket.CloseStatus);
+        Assert.Equal(DisconnectReason.ServerStopping, connection.CloseRequest?.Reason);
+    }
+
+    [Fact]
+    public async Task A_connection_that_ended_before_the_host_stopped_is_not_closed_again()
+    {
+        var (connection, socket) = Connection();
+        using var stopping = new CancellationTokenSource();
+        connection.CloseOnStop(stopping.Token).Dispose();
+
+        await stopping.CancelAsync();
+
+        socket.Verify(x => x.CloseOutputAsync(It.IsAny<WebSocketCloseStatus>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     private static (ClientConnection Connection, Mock<System.Net.WebSockets.WebSocket> Socket) Connection()
     {
         var socket = new Mock<System.Net.WebSockets.WebSocket>();
