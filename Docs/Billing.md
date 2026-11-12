@@ -72,8 +72,10 @@ dbo.Tenants.PlanCode ──(copy)──────────►  dbo.Workspac
   month it was part of still counts what it spent: the tenant's credits and messages are summed through
   the copies, so removing it handed the month's usage back, and deleting a workspace and making another
   reset both meters. The retention sweeps also go on reaching its readings and runs. It adds nothing to
-  the counts of clients and runs going, as it has none left. A sync that writes the copy again leaves
-  the mark alone.
+  the counts of clients and runs going, as it has none left, and it is not read for the tenant's plan
+  or listed for message warnings. A sync that updates the copy leaves the mark alone; one that arrives
+  after a retire that found no copy inserts an unmarked row, which is harmless, since the workspace
+  holds nothing live to count. Retired copies are not pruned yet (#803).
 
 ## Enforcing the limits
 
