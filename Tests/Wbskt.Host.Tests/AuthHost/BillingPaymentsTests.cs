@@ -790,6 +790,21 @@ public sealed class BillingPaymentsTests
     }
 
     [Fact]
+    public async Task A_plan_without_a_catalogue_price_or_a_pack_without_a_price_is_neither_offered_nor_sold()
+    {
+        _options.Plans[PlanCode.Business] = new() { [BillingInterval.Yearly] = "prod_business" };
+        _options.CreditPacks["Unpriced"] = new CreditPackOptions { ProductId = "prod_unpriced", Credits = 1_000m };
+
+        var read = await Billing().GetAsync(9, CancellationToken.None);
+        var plan = await Billing().CheckoutAsync(9, 4, new BillingCheckoutRequest(PlanCode.Business, BillingInterval.Yearly), CancellationToken.None);
+        var pack = await Billing().CheckoutAsync(9, 4, new BillingCheckoutRequest(null, null, "Unpriced"), CancellationToken.None);
+
+        Assert.DoesNotContain(read.Value.Plans, o => o.Plan == PlanCode.Business);
+        Assert.DoesNotContain(read.Value.CreditPacks, o => o.Name == "Unpriced");
+        Assert.Equal(("BILLING_OFFER_INVALID", "BILLING_OFFER_INVALID"), (plan.Error.Code, pack.Error.Code));
+    }
+
+    [Fact]
     public async Task The_billing_read_lists_what_is_on_offer_and_the_subscription()
     {
         _stored.Add(Subscription(SubscriptionStatus.PastDue, Now.UtcDateTime.AddDays(3)) with { PastDueSince = Now.UtcDateTime });
@@ -1125,12 +1140,18 @@ public sealed class BillingPaymentsTests
             "/products/prod_y" => Json("""{"product_id":"prod_y","is_recurring":true,"price":{"type":"recurring_price","price":5000,"currency":"USD","payment_frequency_count":1,"payment_frequency_interval":"Year"}}"""),
             "/products/prod_q" => Json("""{"product_id":"prod_q","is_recurring":true,"price":{"type":"recurring_price","price":1500,"currency":"USD","payment_frequency_count":3,"payment_frequency_interval":"Month"}}"""),
             "/products/prod_pack" => Json("""{"product_id":"prod_pack","is_recurring":false,"price":{"type":"one_time_price","price":500,"currency":"EUR"}}"""),
+            "/products/prod_12m" => Json("""{"product_id":"prod_12m","is_recurring":true,"price":{"type":"recurring_price","price":24000,"currency":"USD","payment_frequency_count":12,"payment_frequency_interval":"month","discount_bps":1000,"trial_period_days":14}}"""),
+            "/products/prod_usage" => Json("""{"product_id":"prod_usage","is_recurring":true,"price":{"type":"usage_based_price","fixed_price":2400,"currency":"USD","payment_frequency_count":1,"payment_frequency_interval":"Month"}}"""),
+            "/products/prod_bad" => new HttpResponseMessage(HttpStatusCode.UnprocessableEntity),
             _ => new HttpResponseMessage(HttpStatusCode.NotFound)
         }));
 
         Assert.Equal(new ProviderProduct(50m, "USD", true, BillingInterval.Yearly), await gateway.FindProductAsync("prod_y", CancellationToken.None));
         Assert.Equal(new ProviderProduct(15m, "USD", true, null), await gateway.FindProductAsync("prod_q", CancellationToken.None));
         Assert.Equal(new ProviderProduct(5m, "EUR", false, null), await gateway.FindProductAsync("prod_pack", CancellationToken.None));
+        Assert.Equal(new ProviderProduct(240m, "USD", true, BillingInterval.Yearly, Discounted: true, TrialDays: 14), await gateway.FindProductAsync("prod_12m", CancellationToken.None));
+        Assert.Equal(new ProviderProduct(24m, "USD", true, BillingInterval.Monthly), await gateway.FindProductAsync("prod_usage", CancellationToken.None));
+        await Assert.ThrowsAsync<HttpRequestException>(() => gateway.FindProductAsync("prod_bad", CancellationToken.None));
         Assert.Null(await gateway.FindProductAsync("prod_gone", CancellationToken.None));
     }
 
@@ -1143,7 +1164,7 @@ public sealed class BillingPaymentsTests
             {
                 [PlanCode.Maker] = new() { [BillingInterval.Monthly] = "prod_ok", [BillingInterval.Yearly] = "prod_monthly_as_yearly" },
                 [PlanCode.Pro] = new() { [BillingInterval.Monthly] = "prod_maker", [BillingInterval.Yearly] = "" },
-                [PlanCode.Team] = new() { [BillingInterval.Monthly] = "prod_gone" },
+                [PlanCode.Team] = new() { [BillingInterval.Monthly] = "prod_trial", [BillingInterval.Yearly] = "prod_gone" },
                 [PlanCode.Business] = new() { [BillingInterval.Yearly] = "prod_business" }
             },
             CreditPacks = new()
@@ -1156,6 +1177,8 @@ public sealed class BillingPaymentsTests
         _gateway.Setup(g => g.FindProductAsync("prod_monthly_as_yearly", It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderProduct(50m, "USD", true, BillingInterval.Monthly));
         _gateway.Setup(g => g.FindProductAsync("prod_maker", It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderProduct(5m, "USD", true, BillingInterval.Monthly));
         _gateway.Setup(g => g.FindProductAsync("prod_pack", It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderProduct(5m, "usd", false, null));
+        _gateway.Setup(g => g.FindProductAsync("prod_gone", It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("Dodo refused to read a product: 422."));
+        _gateway.Setup(g => g.FindProductAsync("prod_trial", It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderProduct(99m, "USD", true, BillingInterval.Monthly, Discounted: true, TrialDays: 30));
 
         IReadOnlyCollection<string> problems = await PaymentGatewayCheck.FindPriceProblemsAsync(_gateway.Object, options, CancellationToken.None);
 
@@ -1163,7 +1186,9 @@ public sealed class BillingPaymentsTests
             [
                 "Maker Yearly (prod_monthly_as_yearly) is billed Monthly, not Yearly.",
                 "Pro Monthly (prod_maker) costs 5 USD, not 24 USD.",
-                "Team Monthly (prod_gone) does not exist at the provider.",
+                "Team Monthly (prod_trial) has a discount, so it sells for less than 99 USD.",
+                "Team Monthly (prod_trial) has a 30-day free trial, which the plan catalogue does not give.",
+                "Team Yearly (prod_gone) could not be read: Dodo refused to read a product: 422.",
                 "Business Yearly (prod_business) is configured, but the catalogue has no price for it, so it is not offered.",
                 "credit pack Unpriced (prod_unpriced) has no PriceUsd configured, so it shows as free."
             ],

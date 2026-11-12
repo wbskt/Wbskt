@@ -113,15 +113,22 @@ public sealed class DodoPaymentGateway(HttpClient http, IOptions<DodoOptions> op
             ?? throw new InvalidOperationException("Dodo answered a product with no body.");
         DodoPrice price = product.Price ?? throw new InvalidOperationException($"Dodo's product {productId} has no price.");
         long minor = price.Price ?? price.FixedPrice ?? throw new InvalidOperationException($"Dodo's product {productId} has no amount.");
-        BillingInterval? interval = (price.PaymentFrequencyCount, price.PaymentFrequencyInterval) switch
+        BillingInterval? interval = (price.PaymentFrequencyCount, price.PaymentFrequencyInterval?.ToLowerInvariant()) switch
         {
-            (1, "Month") => BillingInterval.Monthly,
-            (1, "Year") or (12, "Month") => BillingInterval.Yearly,
+            (1, "month") => BillingInterval.Monthly,
+            (1, "year") or (12, "month") => BillingInterval.Yearly,
             _ => null
         };
 
-        // Every currency the plans are priced in has two decimal places.
-        return new ProviderProduct(minor / 100m, price.Currency ?? "", product.IsRecurring, product.IsRecurring ? interval : null);
+        // A usage-based price is checked on its fixed fee only. The amount is read as two decimal places,
+        // which every currency the plans are priced in has; another currency is a mismatch either way.
+        return new ProviderProduct(
+            minor / 100m,
+            price.Currency ?? "",
+            product.IsRecurring,
+            product.IsRecurring ? interval : null,
+            Discounted: price.Discount is > 0 || price.DiscountBps is > 0,
+            TrialDays: price.TrialPeriodDays ?? 0);
     }
 
     public async Task<bool> AcceptsCredentialsAsync(CancellationToken ct)

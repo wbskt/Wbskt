@@ -67,13 +67,13 @@ internal sealed class TenantBillingService(
                 subscription.ScheduledAt?.ToUtcOffset()),
             gateway.IsConfigured
                 ? offers.Plans
-                    .SelectMany(p => p.Value
-                        .Where(i => !string.IsNullOrEmpty(i.Value) && PlanPrices.UsdFor(p.Key, i.Key) is not null)
-                        .Select(i => new PlanOffer(p.Key, i.Key, PlanPrices.UsdFor(p.Key, i.Key) ?? 0m)))
+                    .SelectMany(p => p.Value.Keys
+                        .Where(interval => offers.FindOfferedPlanProduct(p.Key, interval) is not null)
+                        .Select(interval => new PlanOffer(p.Key, interval, PlanPrices.UsdFor(p.Key, interval) ?? 0m)))
                     .OrderBy(o => o.Plan).ThenBy(o => o.Interval).ToList()
                 : [],
             gateway.IsConfigured
-                ? offers.CreditPacks.Where(p => !string.IsNullOrEmpty(p.Value.ProductId) && p.Value.Credits > 0).Select(p => new CreditPackOffer(p.Key, p.Value.Credits, p.Value.PriceUsd)).OrderBy(o => o.Credits).ToList()
+                ? offers.CreditPacks.Where(p => p.Value.IsOffered).Select(p => new CreditPackOffer(p.Key, p.Value.Credits, p.Value.PriceUsd)).OrderBy(o => o.Credits).ToList()
                 : []);
     }
 
@@ -138,7 +138,7 @@ internal sealed class TenantBillingService(
             return NotConfigured;
         }
 
-        if (!options.Value.Plans.TryGetValue(request.Plan, out var intervals) || !intervals.TryGetValue(request.Interval, out string? productId) || string.IsNullOrEmpty(productId))
+        if (options.Value.FindOfferedPlanProduct(request.Plan, request.Interval) is not { } productId)
         {
             return Error.Validation("BILLING_OFFER_INVALID", $"{request.Plan} billed {request.Interval} is not offered.");
         }
@@ -224,7 +224,7 @@ internal sealed class TenantBillingService(
         }
         catch (HttpRequestException)
         {
-            if (options.Value.Plans.TryGetValue(scheduledPlan, out var intervals) && intervals.TryGetValue(scheduledInterval, out string? scheduledProduct) && !string.IsNullOrEmpty(scheduledProduct))
+            if (options.Value.FindOfferedPlanProduct(scheduledPlan, scheduledInterval) is { } scheduledProduct)
             {
                 await RescheduleAsync(current, scheduledProduct);
             }
@@ -290,7 +290,7 @@ internal sealed class TenantBillingService(
 
         if (request.CreditPack is { } pack)
         {
-            return offers.CreditPacks.TryGetValue(pack, out CreditPackOptions? packOptions) && !string.IsNullOrEmpty(packOptions.ProductId) && packOptions.Credits > 0
+            return offers.FindOfferedCreditPack(pack) is { } packOptions
                 ? packOptions.ProductId
                 : Error.Validation("BILLING_OFFER_INVALID", $"Credit pack '{pack}' is not offered.");
         }
@@ -300,7 +300,7 @@ internal sealed class TenantBillingService(
             return Error.Validation("BILLING_CHECKOUT_INVALID", "A plan needs an 'interval': Monthly or Yearly.");
         }
 
-        if (!offers.Plans.TryGetValue(request.Plan!.Value, out var intervals) || !intervals.TryGetValue(interval, out string? productId) || string.IsNullOrEmpty(productId))
+        if (offers.FindOfferedPlanProduct(request.Plan!.Value, interval) is not { } productId)
         {
             return Error.Validation("BILLING_OFFER_INVALID", $"{request.Plan} billed {interval} is not offered.");
         }
