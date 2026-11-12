@@ -41,6 +41,9 @@ public interface IPaymentGateway
     /// </summary>
     Task<bool> AcceptsCredentialsAsync(CancellationToken ct);
 
+    /// <summary>How the provider prices <paramref name="productId"/> now; null when it has no such product.</summary>
+    Task<ProviderProduct?> FindProductAsync(string productId, CancellationToken ct);
+
     /// <summary>Cancels the subscription now, so it never charges again. Cancelling one already ended is harmless.</summary>
     Task CancelSubscriptionAsync(string subscriptionId, CancellationToken ct);
 
@@ -144,3 +147,9 @@ public sealed record ProviderIdList(IReadOnlyCollection<string> Ids, bool Comple
 
 /// <summary>A verified webhook: its id (for idempotency), its type, and what it names.</summary>
 public sealed record ProviderWebhook(string EventId, string Type, string? SubscriptionId, string? PaymentId);
+
+/// <summary>
+/// A product as the provider prices it: the amount in the currency's main unit, the currency, and for a
+/// subscription how often it charges (<c>Interval</c> null when it is neither monthly nor yearly).
+/// </summary>
+public sealed record ProviderProduct(decimal Amount, string Currency, bool Recurring, BillingInterval? Interval);

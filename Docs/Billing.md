@@ -372,7 +372,7 @@ Payments are off until the provider's API key and webhook signing secret are set
 never from a file in the repository.
 
 What is sold: Maker, Pro and Team, monthly and yearly (`DODO_PRODUCT_{MAKER,PRO,TEAM}_{MONTHLY,YEARLY}`),
-and one credit pack, `Pack10k`: 10,000 credits for $5 (`DODO_PRODUCT_CREDITS_10K`), on every plan. At
+and one credit pack, `Pack10k`: 10,000 credits for $5 (`DODO_PRODUCT_CREDITS_10K`, `PriceUsd: 5`), on every plan. At
 $0.50 per 1,000 a pack costs more per credit than any plan (Maker gives 5,000 a dollar, Pro 6,250, Team
 6,060), so a pack covers a spike and an upgrade covers growth. Business is invoiced, never checked out.
 
@@ -496,7 +496,12 @@ exists, nothing is deleted: 503 `BILLING_SUBSCRIPTION_NOT_CANCELLED`, and the ca
 **Operations.**
 - `Billing:Dodo:Environment` must be `test_mode` or `live_mode`; anything else stops the host at start.
   Once started, `PaymentGatewayCheck` asks the provider whether it accepts the API key and logs a
-  Critical line if not (usually a key for the other mode).
+  Critical line if not (usually a key for the other mode). It then reads every configured plan and pack
+  product (`GET /products/{id}`) and logs a Critical line for each one whose price, currency (USD) or
+  billing interval differs from the catalogue (`PlanPrices`, and a pack's `PriceUsd`), or that does not
+  exist: a product id set to another plan's product, or a price changed in the dashboard, would
+  otherwise let a customer pay one price for another plan's limits. A plan the catalogue has no price
+  for is not offered.
 - Webhook outcomes are counted (`wbskt_auth_billing_webhooks_total{type,outcome}`: `done`, `set_aside`,
   `failed`, `signature_invalid`, and `signature_missing` for a request with no signature at all, such as
   a scanner). `BillingWebhooksSetAside` fires on any webhook set aside in an hour (a
