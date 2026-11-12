@@ -21,27 +21,25 @@ public interface IIdempotencyKeyProvider
     /// Settles an event claim as Succeeded, only while <paramref name="claimToken"/> still holds it: an
     /// engine whose claim was released and taken over by a redelivery must not overwrite the new holder's.
     /// </summary>
-    Task<IdempotencyKeyRow> MarkClaimSucceededAsync(string keyValue, Guid claimToken, string resultJson, CancellationToken ct) =>
-        MarkSucceededAsync(keyValue, resultJson, ct);
+    Task<IdempotencyKeyRow> MarkClaimSucceededAsync(string keyValue, Guid claimToken, string resultJson, CancellationToken ct);
 
     /// <summary>Settles an event claim as Failed, only while <paramref name="claimToken"/> still holds it.</summary>
-    Task<IdempotencyKeyRow> MarkClaimFailedAsync(string keyValue, Guid claimToken, string errorJson, CancellationToken ct) =>
-        MarkFailedAsync(keyValue, errorJson, ct);
+    Task<IdempotencyKeyRow> MarkClaimFailedAsync(string keyValue, Guid claimToken, string errorJson, CancellationToken ct);
 
     /// <summary>
     /// Records on a Pending inbound-event claim that the event had waiting branches to wake
     /// (<see cref="IdempotencyClaimResults.Resumed"/>), so a redelivery that reclaims it after a stop does
     /// not take it for an event that only starts trigger runs.
     /// </summary>
-    Task MarkResumedAsync(string keyValue, Guid claimToken, CancellationToken ct) => Task.CompletedTask;
+    Task MarkResumedAsync(string keyValue, Guid claimToken, CancellationToken ct);
 
     /// <summary>
-    /// Settles every Pending trigger-start claim whose run exists, and marks every other Pending
-    /// inbound-event and trigger-start claim Failed, so a redelivery of its event can
-    /// reclaim it. Only a new leader calls it, before its bus starts, when any such claim was left by an
-    /// engine that stopped mid-dispatch. Returns the number changed.
+    /// Marks every Pending inbound-event and trigger-start claim Failed, so a redelivery of its event can
+    /// reclaim it, then settles every unsettled trigger-start claim whose run exists, since recovery runs
+    /// that run. Only a new leader calls it, before its bus starts, when any Pending claim was left by an
+    /// engine that stopped mid-dispatch. Returns the number marked Failed.
     /// </summary>
-    Task<int> FailAbandonedClaimsAsync(CancellationToken ct) => throw new NotSupportedException();
+    Task<int> ReleaseAbandonedClaimsAsync(CancellationToken ct);
 
     /// <summary>Deletes up to <paramref name="batchSize"/> idempotency rows created before the cutoff. Returns the count deleted.</summary>
     Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct);

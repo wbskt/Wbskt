@@ -59,6 +59,11 @@ public sealed class IdempotencyKeyGcTests
 
     private sealed class RecordingIdempotencyKeyProvider(IReadOnlyCollection<int> deletes) : IIdempotencyKeyProvider
     {
+        public Task<IdempotencyKeyRow> MarkClaimSucceededAsync(string keyValue, Guid claimToken, string resultJson, CancellationToken ct) => MarkSucceededAsync(keyValue, resultJson, ct);
+        public Task<IdempotencyKeyRow> MarkClaimFailedAsync(string keyValue, Guid claimToken, string errorJson, CancellationToken ct) => MarkFailedAsync(keyValue, errorJson, ct);
+        public Task MarkResumedAsync(string keyValue, Guid claimToken, CancellationToken ct) => Task.CompletedTask;
+        public Task<int> ReleaseAbandonedClaimsAsync(CancellationToken ct) => throw new NotSupportedException();
+
         private readonly Queue<int> _deletes = new(deletes);
 
         public List<(DateTime CutoffUtc, int BatchSize)> DeleteCalls { get; } = [];

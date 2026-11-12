@@ -172,7 +172,10 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
                 try
                 {
                     (dispatch, branchToDispatch) = await StartForRegistrationAsync(registration, normalizedEvent, correlationValue, startKey, registrationClaim.Reclaimed, ct);
-                    await _idempotencyKeyProvider.MarkClaimSucceededAsync(startKey, registrationClaim.Token, JsonSerializer.Serialize(dispatch, EngineJson.Options), ct);
+
+                    // Not ct: the run exists by now, and a stop that left its claim Failed would have the redelivery
+                    // hand its branch to the pump again.
+                    await _idempotencyKeyProvider.MarkClaimSucceededAsync(startKey, registrationClaim.Token, JsonSerializer.Serialize(dispatch, EngineJson.Options), CancellationToken.None);
                 }
                 catch
                 {

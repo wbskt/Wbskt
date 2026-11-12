@@ -521,6 +521,44 @@ public sealed class TriggerDispatcherTests
     }
 
     [Fact]
+    public async Task Dispatch_settles_each_claim_with_the_token_it_was_taken_under()
+    {
+        // #770: a settle only lands while its token still holds the claim, so every settle must carry the
+        // token of the claim it took, or a run that did start is left Pending.
+        var eventToken = Guid.NewGuid();
+        var idempotency = new InMemoryIdempotencyKeyProvider();
+        string startKey = "trigger-start:5:" + EventHash("evt-1");
+        var dispatcher = CreateDispatcher(
+            bookmarkResumer: new RecordingBookmarkResumer(new BookmarkMatchResult(false, null, false, "inbound-event:evt-1", eventToken)),
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel)),
+            idempotency: idempotency);
+
+        await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        Guid startToken = idempotency.Find(startKey)!.BranchRefId;
+        Assert.Equal([(startKey, startToken), ("inbound-event:evt-1", eventToken)], idempotency.ClaimSettles);
+        Assert.Equal(IdempotencyKeyStatus.Succeeded, idempotency.Find(startKey)!.Status);
+    }
+
+    [Fact]
+    public async Task A_start_claim_taken_over_before_it_settles_is_left_to_its_new_holder()
+    {
+        // A new leader released the claim and a redelivery reclaimed it while this attempt was starting
+        // the run; this attempt's settle must not overwrite the new holder's claim.
+        var idempotency = new InMemoryIdempotencyKeyProvider();
+        string startKey = "trigger-start:5:" + EventHash("evt-1");
+        idempotency.TakeOverBeforeSettle.Add(startKey);
+        var dispatcher = CreateDispatcher(
+            bookmarkResumer: new RecordingBookmarkResumer(new BookmarkMatchResult(false, null, false, "inbound-event:evt-1")),
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel)),
+            idempotency: idempotency);
+
+        await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        Assert.Equal(IdempotencyKeyStatus.Pending, idempotency.Find(startKey)!.Status);
+    }
+
+    [Fact]
     public async Task A_concurrent_redelivery_does_not_start_a_registration_another_attempt_is_starting()
     {
         var operations = new List<string>();
@@ -954,6 +992,12 @@ public sealed class TriggerDispatcherTests
 
         public List<string> Failed { get; } = [];
 
+        /// <summary>Every token-guarded settle, with the token it carried.</summary>
+        public List<(string KeyValue, Guid ClaimToken)> ClaimSettles { get; } = [];
+
+        /// <summary>Keys another holder reclaims just before this attempt's settle, as a redelivery after a release would.</summary>
+        public HashSet<string> TakeOverBeforeSettle { get; } = [];
+
         /// <summary>Keys whose next MarkSucceeded throws, as if the attempt died just before settling.</summary>
         public HashSet<string> FailNextMarkSucceeded { get; } = [];
 
@@ -1027,6 +1071,47 @@ public sealed class TriggerDispatcherTests
         }
 
         public Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotImplementedException();
+
+        public Task<IdempotencyKeyRow> MarkClaimSucceededAsync(string keyValue, Guid claimToken, string resultJson, CancellationToken ct)
+        {
+            lock (_gate)
+            {
+                ClaimSettles.Add((keyValue, claimToken));
+                if (TakeOverBeforeSettle.Remove(keyValue))
+                {
+                    _rows[keyValue] = NewRow(keyValue, Guid.NewGuid());
+                }
+
+                if (IsHeldByAnother(keyValue, claimToken))
+                {
+                    return Task.FromResult(_rows[keyValue]);
+                }
+            }
+
+            return MarkSucceededAsync(keyValue, resultJson, ct);
+        }
+
+        public Task<IdempotencyKeyRow> MarkClaimFailedAsync(string keyValue, Guid claimToken, string errorJson, CancellationToken ct)
+        {
+            lock (_gate)
+            {
+                ClaimSettles.Add((keyValue, claimToken));
+                if (IsHeldByAnother(keyValue, claimToken))
+                {
+                    return Task.FromResult(_rows[keyValue]);
+                }
+            }
+
+            return MarkFailedAsync(keyValue, errorJson, ct);
+        }
+
+        public Task MarkResumedAsync(string keyValue, Guid claimToken, CancellationToken ct) => Task.CompletedTask;
+
+        public Task<int> ReleaseAbandonedClaimsAsync(CancellationToken ct) => throw new NotImplementedException();
+
+        // A row the resumer stand-in never claimed has no token to compare.
+        private bool IsHeldByAnother(string keyValue, Guid claimToken) =>
+            _rows.TryGetValue(keyValue, out IdempotencyKeyRow? row) && row.BranchRefId != Guid.Empty && row.BranchRefId != claimToken;
 
         private IdempotencyKeyRow Settle(string keyValue, string status, string? resultJson)
         {

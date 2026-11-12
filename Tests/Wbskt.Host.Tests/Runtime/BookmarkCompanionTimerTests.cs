@@ -339,6 +339,11 @@ public sealed class BookmarkCompanionTimerTests
 
     private sealed class RecordingIdempotencyKeyProvider : IIdempotencyKeyProvider
     {
+        public Task<IdempotencyKeyRow> MarkClaimSucceededAsync(string keyValue, Guid claimToken, string resultJson, CancellationToken ct) => MarkSucceededAsync(keyValue, resultJson, ct);
+        public Task<IdempotencyKeyRow> MarkClaimFailedAsync(string keyValue, Guid claimToken, string errorJson, CancellationToken ct) => MarkFailedAsync(keyValue, errorJson, ct);
+        public Task MarkResumedAsync(string keyValue, Guid claimToken, CancellationToken ct) => Task.CompletedTask;
+        public Task<int> ReleaseAbandonedClaimsAsync(CancellationToken ct) => throw new NotSupportedException();
+
         public static RecordingIdempotencyKeyProvider NewClaim() => new();
 
         public Task<IdempotencyKeyRow> UpsertPendingAsync(string keyValue, int runId, Guid branchRefId, Guid nodeId, int attempt, CancellationToken ct)
