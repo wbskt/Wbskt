@@ -28,7 +28,7 @@ public interface IPaymentGateway
     /// <summary>
     /// The subscriptions made at or after <paramref name="createdFrom"/>, by id, for the reconcile that
     /// reads each one again in case its webhooks were never delivered. One never paid for (a checkout
-    /// left open) is left out.
+    /// left open) is left out; a payment that names it still reads it, as that payment's webhook would.
     /// </summary>
     Task<ProviderIdList> ListSubscriptionIdsAsync(DateTimeOffset createdFrom, CancellationToken ct);
 
@@ -136,11 +136,11 @@ public enum PaymentDispute
 
 public sealed record PaymentLine(string ProductId, int Quantity);
 
-/// <summary>A verified webhook: its id (for idempotency), its type, and what it names.</summary>
 /// <summary>
 /// Ids the provider listed, each once. <c>Complete</c> is false when the list was cut short at the most
 /// pages read at once, so the rest were not.
 /// </summary>
 public sealed record ProviderIdList(IReadOnlyCollection<string> Ids, bool Complete);
 
+/// <summary>A verified webhook: its id (for idempotency), its type, and what it names.</summary>
 public sealed record ProviderWebhook(string EventId, string Type, string? SubscriptionId, string? PaymentId);

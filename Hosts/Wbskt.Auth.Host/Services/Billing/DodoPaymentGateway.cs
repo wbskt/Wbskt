@@ -104,7 +104,7 @@ public sealed class DodoPaymentGateway(HttpClient http, IOptions<DodoOptions> op
             ReadDispute(p.Disputes));
     }
 
-    // A pending subscription is a checkout not paid for; storing one could let it decide the plan later.
+    // A pending subscription is a checkout not paid for: nothing to reconcile until a payment names it.
     public async Task<ProviderIdList> ListSubscriptionIdsAsync(DateTimeOffset createdFrom, CancellationToken ct) =>
         await ListIdsAsync("subscriptions", createdFrom, item => item.Status == "pending" ? null : item.SubscriptionId, ct);
 

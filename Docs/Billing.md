@@ -509,7 +509,7 @@ exists, nothing is deleted: 503 `BILLING_SUBSCRIPTION_NOT_CANCELLED`, and the ca
   restart (`dbo.BillingReconcile_Claim` keeps when it last started in `dbo.BillingReconciles`). It lists
   the provider's subscriptions and payments made in the last `Billing:Payments:ReconcileWindow` (3 days,
   longer than the provider's day of redeliveries), leaving out subscriptions never paid for (a checkout
-  left open), and reads each one again through `TenantBillingSync`, as a webhook would, pausing
+  left open, `pending`), and reads each one again through `TenantBillingSync`, as a webhook would, pausing
   `ReconcilePause` (250 ms) between them for the provider's rate limit. A first payment whose webhooks
   all failed (paid, still on Free), a credit pack whose payment never arrived (no purchase row, so the
   hourly grant reconcile has nothing to repair) and a renewal's failed payment are all caught within a
@@ -521,8 +521,12 @@ exists, nothing is deleted: 503 `BILLING_SUBSCRIPTION_NOT_CANCELLED`, and the ca
   webhook arrived, the older provider subscription is the one marked duplicate and refunded.
   It counts each read on `wbskt_auth_billing_reconciles_total` (`kind`, `outcome`); a list the provider
   refused is `kind="<kind>_list", outcome="failed"` and one cut short at the 50-page cap (5,000 items)
-  is `outcome="truncated"`. `BillingReconcileFailing` fires on any failed or truncated in a day; those
-  are read again the next day while they are still in the window. A cancellation of an older
+  is `outcome="truncated"`; a provider timeout counts as failed. `BillingReconcileFailing` fires on any
+  failed or truncated in a day; those are read again the next day while they are still in the window.
+  A run stopped partway (the host shut down in a deploy) gives its claim back (`dbo.BillingReconcile_Release`),
+  so the next hourly ask on any replica runs it again. A cut-short list may leave out the items nearest
+  the end of the window if the provider lists newest first. A pending subscription is left out of the
+  list, but a payment that names one still stores it, as that payment's webhook would. A cancellation of an older
   subscription is not in the list; the hourly review catches it once the subscription still reads
   `active` a day past its period.
 - A subscription that still reads `active` a day after the period it paid for ended is read again from
