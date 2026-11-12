@@ -72,6 +72,9 @@ jobs:
       # refused, not queued: left at 20, most runs never start and the scenario waits out its
       # timeout for the rest.
       Billing__Plans__Free__ActiveRuns: "2000"
+      # The same workspace also runs out of Free's monthly credits part way through the thousand runs,
+      # which end OutOfCredits instead of Succeeded.
+      Billing__Plans__Free__CreditsPerMonth: "1000000"
       E2E_STRESS_TESTS: "1"
       # The auth host's internal key, so the load tester's step can put its account on a plan with room
       # (PUT /api/internal/tenants/{tenantRef}/plan), and the same key on the management host, which
