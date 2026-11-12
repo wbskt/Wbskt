@@ -72,14 +72,15 @@ groups:
             for the rows left unprocessed.
 
       - alert: BillingWebhookSignaturesRefused
-        # Every delivery refused for its signature usually means the signing secret was rotated on one
-        # side only. The provider stops redelivering after about a day, and events lost then are not
-        # sent again, so this pages well before that.
-        expr: sum(increase(wbskt_auth_billing_webhooks_total{outcome="signature_invalid"}[30m])) > 3
+        # Deliveries that carry a signature which does not hold up usually mean the signing secret was
+        # rotated on one side only (a request with no signature is counted apart, as signature_missing).
+        # The provider's retries are spread over about a day and events lost then are not sent again, so
+        # the window is two hours: wide enough to see a quiet day's few deliveries, short of that day.
+        expr: sum(increase(wbskt_auth_billing_webhooks_total{outcome="signature_invalid"}[2h])) > 2
         labels:
           severity: critical
         annotations:
-          summary: "{{ $value }} payment webhooks were refused for their signature in 30 minutes"
+          summary: "{{ $value }} payment webhooks were refused for their signature in two hours"
           description: >-
             Compare Billing:Dodo:WebhookSecret on the auth host with the webhook's secret in the
             provider's dashboard. Once fixed, replay the refused deliveries from the dashboard; the

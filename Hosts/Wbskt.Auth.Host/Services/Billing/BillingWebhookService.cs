@@ -21,10 +21,19 @@ internal sealed class BillingWebhookService(
 
         if (gateway.ReadWebhook(headers, body) is not { } webhook)
         {
-            // Counted: a secret rotated on one side only refuses every delivery, and the provider gives up
-            // after about a day, so this has to be seen before then.
-            metrics.RecordBillingWebhook("unknown", "signature_invalid");
-            logger.LogWarning("Refused a {Provider} webhook whose signature does not hold up.", gateway.Name);
+            // A signature that does not hold up is counted apart from a request with none: a secret rotated on
+            // one side only refuses every real delivery, and the provider gives up after about a day, while
+            // a request with no signature at all is a scanner on a public URL.
+            if (headers.ContainsKey("webhook-signature"))
+            {
+                metrics.RecordBillingWebhook("unknown", "signature_invalid");
+                logger.LogWarning("Refused a {Provider} webhook whose signature does not hold up.", gateway.Name);
+            }
+            else
+            {
+                metrics.RecordBillingWebhook("unknown", "signature_missing");
+            }
+
             return Result.Failure(Error.Unauthorized("BILLING_WEBHOOK_SIGNATURE_INVALID", "The webhook signature does not hold up."));
         }
 

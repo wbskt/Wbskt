@@ -639,7 +639,7 @@ const ALERTS = [
  ['BillingWebhooksSetAside','Billing','A payment webhook was set aside (no tenant, product or subscription) in the last hour'],
  ['CreditGrantsRepaired','Billing','The hourly reconcile wrote a credit grant change an event lost'],
  ['BillingWebhooksFailing','Billing','More than 5 payment webhooks failed in the last hour'],
- ['BillingWebhookSignaturesRefused','Billing','More than 3 payment webhooks refused for their signature in 30 minutes (secret rotated on one side)'],
+ ['BillingWebhookSignaturesRefused','Billing','More than 2 payment webhooks whose signature does not hold up in two hours (secret rotated on one side)'],
  ['WorkspaceRunCeilingReached','Workflows','A workspace is refusing triggers at its active-run ceiling (5 min)'],
  ['EngineNotReporting','Workflows','No engine has reported metrics for 5 minutes'],
  ['DeadLetteredMessages','Bus','Any MassTransit _error or _skipped queue holds messages'],
