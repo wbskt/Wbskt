@@ -46,6 +46,10 @@ jobs:
       cancel-in-progress: false
     # Gate on a GitHub Environment so production deploys can require a reviewer's approval.
     environment: production
+    permissions:
+      contents: read
+      # The last step opens an issue when a deploy fails, so a failure is not left to be noticed.
+      issues: write
     steps:
       # Inputs and secrets are passed through env, never interpolated into the script body - a
       # ${{ }} expansion inside `run:` is substituted as raw text and would let a crafted input
@@ -74,6 +78,25 @@ jobs:
             echo "::error::invalid services '$SERVICES'" && exit 1
           fi
 
+      # Retries only the connection, never deploy.sh: the key is locked to a forced command, so any
+      # ssh that gets in starts a deploy. A TCP probe of port 22 tells a VM that is briefly unreachable
+      # from one that is down without running anything on it.
+      - name: Wait for SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 20 bash -c 'exec 3<>"/dev/tcp/$DEPLOY_HOST/22"'; then
+              exit 0
+            fi
+            echo "port 22 did not answer (attempt $attempt of 3)"
+            if [[ "$attempt" -lt 3 ]]; then
+              sleep $((attempt * 15))
+            fi
+          done
+          echo "::error::the VM did not answer on port 22 after 3 attempts"
+          exit 1
+
       - name: Deploy
         env:
           TAG: ${{ inputs.tag }}
@@ -93,7 +116,26 @@ jobs:
             args+=(--skip-migrations)
           fi
           echo "deploy.sh ${args[*]}"
-          ssh -i "$RUNNER_TEMP/id_deploy" -o IdentitiesOnly=yes -o BatchMode=yes \
+          ssh -i "$RUNNER_TEMP/id_deploy" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 \
             -o UserKnownHostsFile="$RUNNER_TEMP/known_hosts" \
             "$DEPLOY_USER@$DEPLOY_HOST" \
             "$DEPLOY_PATH/deploy/scripts/deploy.sh" "${args[@]}"
+
+      # One open issue per run of failures: later failures comment on it instead of opening more.
+      - name: Open an issue for the failed deploy
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Production deploy failed"
+          body="The deploy of \`$TAG\` failed: $RUN_URL"
+          number=$(gh issue list --state open --search "\"$title\" in:title" --json number,title \
+            --jq "map(select(.title == \"$title\"))[0].number // empty")
+          if [[ -n "$number" ]]; then
+            gh issue comment "$number" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
