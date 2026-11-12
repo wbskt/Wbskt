@@ -243,6 +243,27 @@ public sealed class BillingNoticeTests
     }
 
     [Fact]
+    public async Task A_recipient_refused_for_good_is_given_up_at_once_and_a_sender_format_error_is_tried_again()
+    {
+        var taken = new BillingNoticeMail[]
+        {
+            new(1, TenantId, BillingNoticeKind.PaymentFailed, "gone@example.com", "s", "b", "<p>b</p>", 1),
+            new(2, TenantId, BillingNoticeKind.PaymentFailed, "ok@example.com", "s", "b", "<p>b</p>", 1)
+        };
+        _billing.Setup(b => b.TakeBillingNoticeMailsAsync(Now, Now + BillingNoticeMailSender.Lease, BillingNoticeMailSender.BatchSize, It.IsAny<CancellationToken>())).ReturnsAsync(taken);
+        _mailer.Setup(m => m.SendMultipartAsync("gone@example.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new System.Net.Mail.SmtpFailedRecipientException(System.Net.Mail.SmtpStatusCode.MailboxUnavailable, "<gone@example.com>", "5.1.1 <gone@example.com>: Recipient address rejected"));
+
+        // The recipient is well formed, so this is about the sender's address and may be fixed by a restart.
+        _mailer.Setup(m => m.SendMultipartAsync("ok@example.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new FormatException("bad from"));
+
+        await MailSender().TickAsync(CancellationToken.None);
+
+        _billing.Verify(b => b.CompleteBillingNoticeMailAsync(1, null, null, Now, It.Is<string>(e => !e.Contains("gone@")), It.IsAny<CancellationToken>()));
+        _billing.Verify(b => b.CompleteBillingNoticeMailAsync(2, null, Now.AddMinutes(1), null, It.IsAny<string>(), It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
     public async Task Without_a_relay_nothing_is_taken_so_nothing_uses_up_its_attempts()
     {
         _mailer.SetupGet(m => m.IsConfigured).Returns(false);

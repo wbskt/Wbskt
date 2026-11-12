@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using System.Diagnostics.Metrics;
 using System.Net.Mail;
+using System.Net.Sockets;
 using Wbskt.Auth.Host.Services.Email;
 using Wbskt.Auth.Host.Telemetry;
 using Wbskt.Infrastructure.Email;
@@ -222,6 +223,25 @@ public sealed class OutboundMailPipelineTests
 
         Assert.Equal(3, sender.Attempts);
         Assert.Contains(MailOutcome.Dropped, outcomes.Seen);
+    }
+
+    [Fact]
+    public void A_relay_that_cannot_be_reached_is_described_by_the_socket_error_under_it()
+    {
+        var ex = new SmtpException("Failure sending mail.", new IOException("Unable to connect", new SocketException((int)SocketError.ConnectionRefused)));
+
+        Assert.Equal("SmtpException (-1 GeneralFailure) <- IOException <- SocketException (ConnectionRefused)", MailFailure.Describe(ex));
+    }
+
+    [Fact]
+    public void A_refused_recipient_is_described_without_the_relay_reply_that_names_it()
+    {
+        var ex = new SmtpFailedRecipientException(SmtpStatusCode.MailboxUnavailable, "<someone@example.com>", "5.1.1 <someone@example.com>: Recipient address rejected");
+
+        string described = MailFailure.Describe(ex);
+
+        Assert.DoesNotContain("someone", described);
+        Assert.StartsWith("SmtpFailedRecipientException (550 MailboxUnavailable)", described);
     }
 
     [Fact]

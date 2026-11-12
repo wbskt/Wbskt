@@ -90,8 +90,8 @@ public sealed class BillingNoticeMailSender(IServiceScopeFactory scopeFactory, T
         {
             DateTime now = _clock.GetUtcNow().UtcDateTime;
 
-            // A malformed address fails the same way every time.
-            bool giveUp = ex is FormatException || mail.Attempts >= MaxAttempts;
+            // A malformed address, or a recipient the relay refuses for good, fails the same way every time.
+            bool giveUp = MailFailure.IsMalformedRecipient(ex, mail.To) || MailFailure.IsPermanentRecipientRefusal(ex) || mail.Attempts >= MaxAttempts;
             if (giveUp)
             {
                 Logger.LogError("Gave up on the {Notice} email to {RecipientFingerprint} of tenant {TenantId} after {Attempts} attempt(s): {Failure}.", mail.Kind, EmailFingerprint.Of(mail.To), mail.TenantId, mail.Attempts, MailFailure.Describe(ex));

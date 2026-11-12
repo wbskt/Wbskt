@@ -39,6 +39,7 @@ public sealed class AuthMetrics : IWorkerTickMetrics, IDisposable
         RecordBillingRefund("unconfirmed", 0);
         Mail.Add(0, new KeyValuePair<string, object?>("outcome", MailOutcome.Dropped));
         Mail.Add(0, new KeyValuePair<string, object?>("outcome", MailOutcome.QueueFull));
+        Mail.Add(0, new KeyValuePair<string, object?>("outcome", MailOutcome.Rejected));
         Mail.Add(0, new KeyValuePair<string, object?>("outcome", MailOutcome.Sent));
         BillingWebhooks.Add(0, new KeyValuePair<string, object?>("type", "unknown"), new KeyValuePair<string, object?>("outcome", "signature_invalid"));
         foreach ((string kind, string outcome) in ReconcileAlerted)
