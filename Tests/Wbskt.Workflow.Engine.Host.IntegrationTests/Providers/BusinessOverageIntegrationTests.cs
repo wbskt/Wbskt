@@ -101,7 +101,7 @@ public sealed class BusinessOverageIntegrationTests(SqlEdgeFixture fixture)
         await AddCreditMonthAsync(ended, month, posted: 160m, drawn: 0m);
         Guid endedRef = await TenantRefAsync(endedWorkspace);
 
-        // A contract that ended with the month before is still seen for a few minutes into this one.
+        // A contract that ended with the month before is still seen into this one, for up to two hours.
         int lagging = NewId();
         int laggingWorkspace = NewId();
         await AddAccountAsync(laggingWorkspace, lagging, "Business", Contract, 100m);
@@ -110,8 +110,7 @@ public sealed class BusinessOverageIntegrationTests(SqlEdgeFixture fixture)
         await ExecuteAsync("UPDATE dbo.WorkspaceAccounts SET PlanCode = N'Team', LimitOverrides = NULL, PlanRevision = 2 WHERE WorkspaceId = @p0;", laggingWorkspace);
 
         // Seen on Business during the month; then a workspace is deleted and the contract ends. (Tracking
-        // also records every other test's Business tenants against this month of its own, and closes the
-        // month before it, which no other test reports on.)
+        // also records every other test's Business tenants against this month of its own.)
         await Service(month.AddDays(10)).TrackAsync(CancellationToken.None);
         await ExecuteAsync("UPDATE dbo.WorkspaceAccounts SET RetiredAt = SYSUTCDATETIME() WHERE WorkspaceId = @p0;", deletedWorkspace);
         await ExecuteAsync("UPDATE dbo.WorkspaceAccounts SET PlanCode = N'Free', LimitOverrides = NULL, PlanRevision = 2 WHERE WorkspaceId = @p0;", endedWorkspace);

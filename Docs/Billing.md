@@ -151,7 +151,7 @@ month out as it stands and says `closed: false`. Client messages count on the da
 ones the meter takes in after the close (an outage longer than the delay) are left off that month's
 invoice; credits are posted on the day the poster runs, so a late post lands in the next month instead.
 A month is its tracked tenants plus any tenant on Business now whose plan copy has not changed since
-before the month ended (one a tick missed). A month before the worker first ran is never closed: who was
+before the month ended (one a tick missed). A month the worker first ran partway through closes with the tenants seen from then on (`BusinessMonths.TrackedFrom`), plus those still on Business at the close. A month before the worker first ran is never closed: who was
 on Business in it cannot be known, so it is worked out as it stands each time, from the tenants on
 Business now. Messages are summed from the meter through every workspace the tenant has had, deleted
 ones included, since a deleted workspace's copy is kept (`RetiredAt`). A tenant on Business for part of
