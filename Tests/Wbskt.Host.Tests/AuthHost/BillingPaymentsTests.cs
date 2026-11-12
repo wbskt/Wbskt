@@ -1072,6 +1072,18 @@ public sealed class BillingPaymentsTests
     }
 
     [Fact]
+    public async Task A_dodo_checkout_with_an_empty_customer_id_makes_a_new_customer()
+    {
+        var handler = new StubHandler(_ => Json("""{"session_id":"cks_1","checkout_url":"https://test.checkout.dodopayments.com/cks_1"}"""));
+
+        await Dodo(handler).CreateCheckoutAsync(new BillingCheckout("prod_boost", TenantRef, "a@example.com", "ann", null, ""), CancellationToken.None);
+
+        using JsonDocument sent = JsonDocument.Parse(handler.Bodies[0]);
+        Assert.Equal("a@example.com", sent.RootElement.GetProperty("customer").GetProperty("email").GetString());
+        Assert.True(sent.RootElement.GetProperty("feature_flags").GetProperty("always_create_new_customer").GetBoolean());
+    }
+
+    [Fact]
     public async Task A_dodo_checkout_for_a_tenant_with_a_customer_attaches_that_customer()
     {
         var handler = new StubHandler(_ => Json("""{"session_id":"cks_1","checkout_url":"https://test.checkout.dodopayments.com/cks_1"}"""));
