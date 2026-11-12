@@ -77,12 +77,14 @@ dbo.Tenants.PlanCode ──(copy)──────────►  dbo.Workspac
   after a retire that found no copy inserts an unmarked row, which is harmless, since the workspace
   holds nothing live to count. The management host's daily deleted-workspace sweep prunes a retired
   copy once nothing reads it (`dbo.WorkspaceAccount_DeleteRetired`): it was retired before last month,
-  its workspace used no credits or messages this month or last, every month it sent messages in is
-  closed, and none of its runs or readings are left. Readings stay out of it afterwards because every
+  its workspace used no credits or messages this month or last, no Business invoice month still
+  worked out live would sum its messages (a month not closed in which its tenant was on Business, or
+  any month not closed while its tenant is on Business now), and none of its runs or readings are left. Readings stay out of it afterwards because every
   client a retire leaves is revoked or rejected, and `dbo.ClientReadings_InsertBatch` drops their
-  reports. A sync that read the workspace before its delete and wrote after the prune, a month or more
+  reports, as it drops a report a client sent just before a user revoked it. A sync that read the workspace before its delete and wrote after the prune, a month or more
   later, would put back an unmarked copy; the auth host deletes the workspace row first, so that needs a
-  page held for over a month, and is not guarded against.
+  page held for over a month, and is not guarded against (the copy would then also be listed for credit
+  expiry warnings again).
 
 ## Enforcing the limits
 
@@ -175,8 +177,8 @@ A month is its tracked tenants plus any tenant on Business now whose plan copy h
 before the month ended (one a tick missed). A month the worker first ran partway through closes with the tenants seen from then on (`BusinessMonths.TrackedFrom`), plus those still on Business at the close. A month before the worker first ran is never closed: who was
 on Business in it cannot be known, so it is worked out as it stands each time, from the tenants on
 Business now. Messages are summed from the meter through every workspace the tenant has had, deleted
-ones included, since a deleted workspace's copy is kept (`RetiredAt`) until every month it sent
-messages in is closed. A tenant on Business for part of
+ones included, since a deleted workspace's copy is kept (`RetiredAt`) while a month not closed
+would still sum its messages. A tenant on Business for part of
 a month is billed for the whole month's use against its contract; there is no proration.
 
 Starts that take a place already held (a queued event's replay, a run replacing those it cancels) skip

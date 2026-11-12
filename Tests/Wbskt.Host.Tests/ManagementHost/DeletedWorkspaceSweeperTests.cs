@@ -143,6 +143,19 @@ public sealed class DeletedWorkspaceSweeperTests : IDisposable
     }
 
     [Fact]
+    public async Task A_tick_cut_short_by_shutdown_does_not_prune()
+    {
+        _auth.Setup(a => a.GetDeletedBetweenAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        using var stopping = new CancellationTokenSource();
+        await stopping.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Sweeper().TickAsync(stopping.Token));
+
+        _provider.Verify(p => p.DeleteRetiredAccountsAsync(It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task A_prune_that_fails_after_a_good_sweep_fails_the_tick()
     {
         _auth.Setup(a => a.GetDeletedBetweenAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
