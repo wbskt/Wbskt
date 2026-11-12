@@ -23,6 +23,9 @@ internal sealed class AccessRecheck(
     ILogger<AccessRecheck> logger)
     : PeriodicWorker(AlwaysOpenWorkGate.Instance, scopeFactory, logger)
 {
+    // Warned once when the cutoffs become unreadable, not on every tick of an outage.
+    private bool _cutoffsUnreadable;
+
     protected override string Name => "Access recheck";
 
     protected override TimeSpan Interval { get; } = options.Value.EffectiveInterval;
@@ -41,29 +44,54 @@ internal sealed class AccessRecheck(
         }
 
         var result = await accessGate.RecheckAsync(held.Select(c => new ClientToken(c.Key, c.Value.TokenIssuedAtUtc)).ToList(), ct);
-        if (!result.CutoffsRead)
+        NoteCutoffsRead(result.CutoffsRead, held.Count);
+
+        // This host's list already refused these: their revoke arrived and is closing them.
+        foreach (var clientRefId in result.RefusedHere)
         {
-            Logger.LogWarning("Could not read the token cutoffs; {Count} held connections were checked against this host's list only.", held.Count);
+            await CloseAsync(clientRefId, held[clientRefId]);
         }
 
-        foreach (var clientRefId in result.RefusedHere.Concat(result.RefusedByCutoffs))
+        foreach (var clientRefId in result.RefusedByCutoffs)
         {
-            bool missed = result.RefusedByCutoffs.Contains(clientRefId);
-            if (missed)
+            var connection = held[clientRefId];
+
+            // A revoke whose event is only late lands in this host's list before its close; that is not a miss.
+            bool late = accessGate.IsRefusedHere(clientRefId, connection.TokenIssuedAtUtc);
+            if (await CloseAsync(clientRefId, connection) && !late)
             {
-                Logger.LogWarning("Client {ClientRefId} holds a token its cutoff refuses, and this host never received the revoke; closing.", clientRefId);
+                Logger.LogWarning("Client {ClientRefId} holds a token its cutoff refuses, and this host never received the revoke; closed.", clientRefId);
                 metrics.AccessRecheckClosed();
             }
+        }
+    }
 
-            try
-            {
-                // The connection read above, not the client's: a newer connection with a fresh token is not this one.
-                await held[clientRefId].RequestCloseAsync(DisconnectReason.Revoked, DisconnectReason.Revoked.Describe());
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                Logger.LogWarning(ex, "Could not close client {ClientRefId}'s refused connection; the next check tries again.", clientRefId);
-            }
+    private void NoteCutoffsRead(bool read, int held)
+    {
+        if (!read && !_cutoffsUnreadable)
+        {
+            Logger.LogWarning("Could not read the token cutoffs; {Count} held connections are checked against this host's list only until they can be read.", held);
+        }
+        else if (read && _cutoffsUnreadable)
+        {
+            Logger.LogInformation("The token cutoffs can be read again.");
+        }
+
+        _cutoffsUnreadable = !read;
+    }
+
+    // True when this check's close was the first asked for: the connection read above, not the client's,
+    // so a newer connection with a fresh token is never closed.
+    private async Task<bool> CloseAsync(Guid clientRefId, IClientConnection connection)
+    {
+        try
+        {
+            return await connection.RequestCloseAsync(DisconnectReason.Revoked, DisconnectReason.Revoked.Describe());
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Logger.LogWarning(ex, "Closing client {ClientRefId}'s refused connection failed; its session ends on the close request.", clientRefId);
+            return true;
         }
     }
 }

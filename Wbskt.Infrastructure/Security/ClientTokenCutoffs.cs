@@ -26,7 +26,8 @@ public interface IClientTokenCutoffs
 
     /// <summary>
     /// Which of <paramref name="tokens"/> are refused, read in batches, or <c>null</c> when Redis could
-    /// not say for all of them. For a host re-checking the connections it holds.
+    /// not say for all of them (refusals found in earlier batches are dropped too; the next check reads
+    /// them again). For a host re-checking the connections it holds.
     /// </summary>
     Task<IReadOnlyCollection<Guid>?> FindRefusedAsync(IReadOnlyCollection<ClientToken> tokens, CancellationToken cancellationToken = default);
 }
