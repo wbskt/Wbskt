@@ -256,8 +256,9 @@ internal sealed class TenantBillingService(
             return Error.NotFound("BILLING_CUSTOMER_NOT_FOUND", "The tenant has not paid for anything yet, so it has no billing portal.");
         }
 
-        // A customer another tenant pays as too would open that tenant's subscriptions, invoices and card.
-        if (customer.Shared)
+        // A customer another tenant pays as too would open that tenant's subscriptions, invoices and card;
+        // and a portal of the tenant's own customer would not show its live subscription under a shared one.
+        if (customer.Shared || customer.LiveShared)
         {
             logger.LogWarning("Tenant {TenantId} pays {Provider} as customer {CustomerId}, which another tenant pays as too; its portal is refused.", tenantId, gateway.Name, customer.CustomerId);
             return Error.Conflict("BILLING_CUSTOMER_SHARED", "The tenant pays as a customer another tenant pays as too, so its portal would show that tenant's billing. Contact support to separate them.");

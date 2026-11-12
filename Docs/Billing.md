@@ -335,29 +335,33 @@ $0.50 per 1,000 a pack costs more per credit than any plan (Maker gives 5,000 a 
 
 - **Buying.** `POST /api/v1/tenants/{tenantRef}/billing/checkout` (`billing.manage`) names a plan and
   interval or a credit pack, and answers the provider's checkout page. The checkout carries the tenant's
-  reference in the provider's metadata (`tenant_ref`). Each tenant is its own customer with the provider:
-  a tenant that has not paid yet checks out as a new customer, from the signed-in user's email and name
-  (`always_create_new_customer`), never one the provider finds by that email; once it has paid, later
-  checkouts attach the customer it paid as, whoever opens them
-  (`dbo.TenantBillingCustomer_FindBy_TenantId`). Otherwise one person paying for two tenants would be one customer, and a billing admin of either would
-  see and cancel the other's subscriptions in the portal. Two checkouts opened before the first is paid
-  (a plan and a pack) make two customers; the portal opens the one with a live subscription.
-  A tenant whose subscription is still billing changes its plan (below) or cancels it in the provider's portal
-  (`POST …/billing/portal`) rather than starting a second one (409 `BILLING_SUBSCRIPTION_ACTIVE`). So does
-  a subscription cancelled at the end of a period still paid for: a second one would bill for the same
-  days, so the customer revokes the cancellation in the portal and changes plan, or checks out once it ends.
+  reference in the provider's metadata (`tenant_ref`). Each tenant is its own customer with the
+  provider: a tenant that has not paid yet checks out as a new customer, from the signed-in user's email
+  and name (`always_create_new_customer`), never one the provider finds by that email; once it has paid,
+  later checkouts attach the customer it paid as, whoever opens them
+  (`dbo.TenantBillingCustomer_FindBy_TenantId`). Otherwise one person paying for two tenants would be
+  one customer, and a billing admin of either would see and cancel the other's subscriptions in the
+  portal. Two checkouts opened before the first is paid (a plan and a pack) make two customers; the
+  portal opens the one with a live subscription.
+  A tenant whose subscription is still billing changes its plan (below) or cancels it in the provider's
+  portal (`POST …/billing/portal`) rather than starting a second one (409 `BILLING_SUBSCRIPTION_ACTIVE`).
+  So does a subscription cancelled at the end of a period still paid for: a second one would bill for
+  the same days, so the customer revokes the cancellation in the portal and changes plan, or checks out
+  once it ends.
   A plan checkout stays open for `Billing:Payments:CheckoutReuseWindow` (30 minutes,
   `dbo.TenantCheckouts`): asking again for the same product in that time, from another tab or another
   admin, answers the same page rather than a second checkout that could be paid as well.
   Nothing changes until the provider confirms the payment.
 - **A customer two tenants share.** Checkouts before each tenant had its own customer could make one
   person's tenants share one. Such a customer is never attached to a checkout again (the next one makes
-  the tenant a customer of its own, which it keeps from then on), its portal is refused to both tenants
-  (409 `BILLING_CUSTOMER_SHARED`), and a warning is logged for each refusal and for a payment the sync
-  records under one. A provider customer cannot be split, so support separates them: it cancels the subscription
-  at the end of its period from the provider's dashboard (or does what the tenant asks there), and the
-  tenant checks out again once it ends, as a customer of its own. Deleting one of the two tenants removes
-  its rows, and the other's portal opens again on a customer that still holds the deleted tenant's
+  the tenant a customer of its own, which it keeps from then on). Its portal is refused to both tenants
+  (409 `BILLING_CUSTOMER_SHARED`), and so is the portal of a tenant's own customer while its live
+  subscription is still under a shared one, which that portal would not show. A warning is logged for
+  each refusal and for a new subscription or credit pack the sync records under a shared customer. A
+  provider customer cannot be split, so support separates them: it cancels the subscription at the end
+  of its period from the provider's dashboard (or does what the tenant asks there), and the tenant checks
+  out again once it ends, as a customer of its own. Deleting one of the two tenants removes its rows, and
+  the other's portal opens again on a customer that still holds the deleted tenant's
   invoices. The tenants that share one are found with:
 
   ```sql
