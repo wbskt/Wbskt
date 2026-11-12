@@ -493,16 +493,18 @@ Two things outside the VM cover that:
   so after setting it run `docker compose up -d --force-recreate prometheus alertmanager`, then check
   that the service shows a first ping: a check that never got one stays "new" and never alerts, so a
   setup that never worked looks the same as a healthy one. Without the URL, Alertmanager's log says
-  nothing outside will notice.
+  nothing outside will notice. Watchdog shows as firing in the Alertmanager UI; never silence it,
+  since a silence stops the pings and sets the switch off.
 - **An outside probe.** `.github/workflows/outside-probe.yml` checks `https://auth.<DOMAIN>/healthz/ready`,
-  `api.` and `ws.` the same way, and the console, every 10 minutes from GitHub, retrying for about a
-  minute so a deploy's restart is ridden out. Set the repository variable `PROBE_DOMAIN` to `DOMAIN`
+  `api.` and `ws.` the same way, and the console, every 10 minutes from GitHub, retrying for about
+  three minutes so a deploy's restart is ridden out. Set the repository variable `PROBE_DOMAIN` to `DOMAIN`
   to turn it on. A failure opens the issue "Outside probe failing" (label `outside-probe`), the next
   passing probe closes it, and a later failure reopens it. Only people watching the repository with
   issue notifications on hear about it. GitHub starts scheduled runs late at times, so expect it
-  within 10 to 30 minutes, and it stops scheduled workflows in a repository with no activity for 60
-  days: a probe that stopped running raises nothing, so look at its run list now and then. MQTT
-  (`mqtt.<DOMAIN>:8883`) is not probed.
+  within 10 to 30 minutes, and in a public repository it stops scheduled workflows after 60 days
+  without activity: a probe that stopped running raises nothing, so look at its run list now and
+  then. MQTT (`mqtt.<DOMAIN>:8883`) and client-auth (whose `api.` paths are only its own routes, so
+  `api.<DOMAIN>/healthz/ready` reaches management) are not probed.
 
 Disk and container alerts come from `node-exporter` (host filesystems) and `cadvisor` (per-container
 start times), both on the backend network only. Neither is started by `deploy.sh`; on a VM that

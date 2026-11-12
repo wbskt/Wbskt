@@ -23,7 +23,7 @@ jobs:
   probe:
     if: ${{ vars.PROBE_DOMAIN != '' }}
     runs-on: ubuntu-latest
-    # Well above the slowest probe: a host that drops packets costs each URL about 2 minutes of
+    # Well above the slowest probe: a host that drops packets costs each URL about 5 minutes of
     # connect timeouts and retries, and the URLs are probed side by side.
     timeout-minutes: 10
     outputs:
@@ -35,9 +35,10 @@ jobs:
           DOMAIN: ${{ vars.PROBE_DOMAIN }}
         run: |
           set -uo pipefail
-          # Readiness, so a host that is up but cannot reach SQL or the broker counts as down. Five
-          # tries over about a minute, any error included (--fail makes Traefik's 404 for a host with
-          # no healthy replica one), so a deploy's restart of a single replica is ridden out.
+          # Readiness, so a host that is up but cannot reach SQL or the broker counts as down. Nine
+          # tries over about three minutes, any error included (--fail makes Traefik's 404 for a host
+          # with no healthy replica one), so a deploy's restart of a single replica (30s stop grace,
+          # then start period and health check, up to about 90s) is ridden out.
           urls=(
             "https://auth.$DOMAIN/healthz/ready"
             "https://api.$DOMAIN/healthz/ready"
@@ -47,7 +48,7 @@ jobs:
           dir=$(mktemp -d)
           for i in "${!urls[@]}"; do
             curl -sS --fail -o /dev/null -w '%{http_code}' --connect-timeout 10 --max-time 15 \
-              --retry 4 --retry-delay 15 --retry-all-errors "${urls[$i]}" > "$dir/$i" 2>/dev/null &
+              --retry 8 --retry-delay 20 --retry-all-errors "${urls[$i]}" > "$dir/$i" 2>/dev/null &
           done
           wait
           failed=()

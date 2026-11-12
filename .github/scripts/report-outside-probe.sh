@@ -19,7 +19,7 @@ run_url="$GITHUB_SERVER_URL/$repo/actions/runs/$GITHUB_RUN_ID"
 now="$(date -u +'%Y-%m-%d %H:%M UTC')"
 
 latest() {
-  gh issue list --repo "$repo" --label "$label" --state "$1" --limit 1 --json number --jq '.[0].number // empty'
+  gh issue list --repo "$repo" --label "$label" --author app/github-actions --state "$1" --limit 1 --json number --jq '.[0].number // empty'
 }
 
 case "$result" in
