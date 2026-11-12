@@ -472,7 +472,7 @@ alerts fire and reach nobody, and Alertmanager says so in its log.
 | `RabbitMQMemoryAlarm` | RabbitMQ's memory alarm is on, so it blocks every publish (page) |
 | `EngineNotReporting` | no engine has reported metrics for about 10 minutes (held back while the collector is down) |
 | `HostNotReporting` | every replica of auth, management, client-auth or a gateway has gone quiet for about 10 minutes (one alert per service, held back while the collector is down) |
-| `PeriodicJobFailing` | a periodic job on a running container has failed every tick since it started, failed most of its ticks (more than 3) over 15 minutes, or failed without once succeeding in 6 hours (49 for a daily job); it fires after holding 10 minutes (warn) |
+| `PeriodicJobFailing` | a periodic job on a running container has failed every tick since it started, failed most of its ticks (more than 2) over 30 minutes, or failed without once succeeding in 6 hours (49 for a daily job); it fires after holding 10 minutes (warn) |
 | `DeletedWorkspaceRetiredBySweep` | management's daily deleted workspace sweep retired a workspace its delete event had missed |
 | `MailRelayDown` | the auth host gave up on two or more mails (including ones the relay refused) and sent none in 15 minutes, so nobody new can confirm an address (pages; it is mailed through that relay, so it needs `ALERT_WEBHOOK_URL` to reach anyone) |
 | `MailFailing` | the auth host gave up on an outgoing mail in 15 minutes, after its retries or because its queue was full, while other mail still went out |
