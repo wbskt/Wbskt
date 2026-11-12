@@ -26,6 +26,15 @@ public interface IPaymentGateway
     Task<ProviderPayment?> FindPaymentAsync(string paymentId, CancellationToken ct);
 
     /// <summary>
+    /// The subscriptions made at or after <paramref name="createdFrom"/>, by id, for the reconcile that
+    /// reads each one again in case its webhooks were never delivered.
+    /// </summary>
+    Task<IReadOnlyCollection<string>> ListSubscriptionIdsAsync(DateTimeOffset createdFrom, CancellationToken ct);
+
+    /// <summary>The payments made at or after <paramref name="createdFrom"/>, by id, for the same reconcile.</summary>
+    Task<IReadOnlyCollection<string>> ListPaymentIdsAsync(DateTimeOffset createdFrom, CancellationToken ct);
+
+    /// <summary>
     /// Whether the provider accepts this deployment's credentials, by one harmless read. False when it
     /// refuses them, as it does a live key sent to its test API; throws when it cannot be reached.
     /// </summary>

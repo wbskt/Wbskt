@@ -16,6 +16,9 @@ public sealed class DodoPaymentGateway(HttpClient http, IOptions<DodoOptions> op
     /// <summary>The metadata key a checkout carries the tenant's reference in.</summary>
     internal const string TenantRefKey = "tenant_ref";
 
+    private const int ListPageSize = 100;
+    private const int MaxListPages = 50;
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     public string Name => ProviderName;
@@ -100,6 +103,12 @@ public sealed class DodoPaymentGateway(HttpClient http, IOptions<DodoOptions> op
             p.CreatedAt ?? clock.GetUtcNow(),
             ReadDispute(p.Disputes));
     }
+
+    public async Task<IReadOnlyCollection<string>> ListSubscriptionIdsAsync(DateTimeOffset createdFrom, CancellationToken ct) =>
+        await ListIdsAsync("subscriptions", createdFrom, item => item.SubscriptionId, ct);
+
+    public async Task<IReadOnlyCollection<string>> ListPaymentIdsAsync(DateTimeOffset createdFrom, CancellationToken ct) =>
+        await ListIdsAsync("payments", createdFrom, item => item.PaymentId, ct);
 
     public async Task<bool> AcceptsCredentialsAsync(CancellationToken ct)
     {
@@ -209,6 +218,28 @@ public sealed class DodoPaymentGateway(HttpClient http, IOptions<DodoOptions> op
         metadata is not null && metadata.TryGetValue(TenantRefKey, out JsonElement value) && value.ValueKind == JsonValueKind.String && Guid.TryParse(value.GetString(), out Guid tenantRef)
             ? tenantRef
             : null;
+
+    // Dodo pages by number (from 0, at most 100 a page) and says nothing of a next page: a short page is
+    // the last. The pages read are capped, so a window far longer than intended cannot run on for ever.
+    private async Task<IReadOnlyCollection<string>> ListIdsAsync(string path, DateTimeOffset createdFrom, Func<DodoListItem, string?> id, CancellationToken ct)
+    {
+        string from = Uri.EscapeDataString(createdFrom.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", System.Globalization.CultureInfo.InvariantCulture));
+        var ids = new List<string>();
+        for (int page = 0; page < MaxListPages; page++)
+        {
+            using HttpResponseMessage response = await http.GetAsync($"{path}?created_at_gte={from}&page_size={ListPageSize}&page_number={page}", ct);
+            DodoList? body = await ReadAsync<DodoList>(response, $"list {path}", ct);
+            IReadOnlyList<DodoListItem> items = body?.Items ?? [];
+            ids.AddRange(items.Select(id).OfType<string>().Where(i => i.Length > 0));
+            if (items.Count < ListPageSize)
+            {
+                return ids;
+            }
+        }
+
+        logger.LogWarning("Listed {Pages} pages of Dodo {Path} since {From} and stopped; the rest are not reconciled this time.", MaxListPages, path, createdFrom);
+        return ids;
+    }
 
     private static async Task<T?> ReadAsync<T>(HttpResponseMessage response, string what, CancellationToken ct)
     {

@@ -26,6 +26,13 @@ public sealed class BillingOptions
     public TimeSpan PastDueGrace { get; set; } = TimeSpan.FromDays(7);
 
     /// <summary>
+    /// How far back the daily reconcile (<c>BillingReconcileWorker</c>) reads the provider's subscriptions
+    /// and payments again. Longer than the provider keeps redelivering a webhook (about a day for Dodo), so
+    /// one it gave up on is still in the window, and long enough to cover a reconcile that missed a day.
+    /// </summary>
+    public TimeSpan ReconcileWindow { get; set; } = TimeSpan.FromDays(3);
+
+    /// <summary>
     /// How long a plan checkout stays open for reuse: another request for the same plan in that time gets
     /// the same page, so two tabs or two admins cannot each pay for a subscription.
     /// </summary>

@@ -504,9 +504,20 @@ exists, nothing is deleted: 503 `BILLING_SUBSCRIPTION_NOT_CANCELLED`, and the ca
   hour, and `BillingWebhookSignaturesRefused` (critical) on more than two signatures that do not
   hold up in two hours: the provider stops redelivering after about a day, so a secret rotated on one side only has
   to be fixed before then, and the refused deliveries replayed from its dashboard.
+- **Webhooks never delivered.** `BillingReconcileWorker` (daily, starting a day after the host starts)
+  lists the provider's subscriptions and payments made in the last `Billing:Payments:ReconcileWindow`
+  (3 days, longer than the provider's day of redeliveries) and reads each one again through
+  `TenantBillingSync`, as a webhook would. A first payment whose webhooks all failed (paid, still on
+  Free), a credit pack whose payment never arrived (no purchase row, so the hourly grant reconcile has
+  nothing to repair) and a renewal's failed payment are all caught within a day. Reading what was
+  already handled changes nothing. It counts each read on `wbskt_auth_billing_reconciles_total` (`kind`,
+  `outcome`), and `BillingReconcileFailing` fires on any it could not read in a day; those are read again
+  the next day while they are still in the window. A cancellation of an older subscription is not in the
+  list; the hourly review catches it once the subscription still reads `active` a day past its period.
 - A subscription that still reads `active` a day after the period it paid for ended is read again from
   the provider by the hourly review, so a renewal or cancellation whose webhook never arrived is
-  repaired. A first payment or a credit pack whose webhook never arrived is not yet (#747).
+  repaired. A first payment or a credit pack whose webhook never arrived is caught by the daily
+  reconcile (above).
 - The webhook endpoint has its own per-IP limit (`billing-webhooks`, 600 a minute), generous for a
   provider's retry burst; a refused delivery is redelivered.
 
