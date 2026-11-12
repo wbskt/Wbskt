@@ -23,12 +23,12 @@ CREATE TABLE dbo.RunCounters
     -- posts still counts what it spent and one that ended long ago is still posted.
     HasUnposted       BIT           NOT NULL CONSTRAINT DF_RunCounters_HasUnposted DEFAULT 0,
     -- A root run held to the plan's monthly credits gets its budget in leases too (Run_Start):
-    -- CreditAllowance is the allowance it was started under and TenantId the tenant it counts against
-    -- (NULL before the workspace's copy arrived), so RunCounters_TryCharge extends the lease from what
-    -- the tenant has left. NULL allowance for a run not held to one (a sub-workflow child, a run started
-    -- before leasing), whose budget does not count as reserved (dbo.TenantCreditsReserved).
+    -- CreditAllowance is the allowance it was started under (RunCounters_TryCharge reads the plan the
+    -- tenant is on now, and falls back to it) and CreditLease the size of a lease, so the lease path
+    -- extends it from what the tenant has left. NULL for a run not held to one (a sub-workflow child, a
+    -- run started before leasing), whose budget does not count as reserved (dbo.TenantCreditsReserved).
     CreditAllowance   DECIMAL(18,4) NULL,
-    TenantId          INT           NULL,
+    CreditLease       DECIMAL(18,4) NULL,
     CONSTRAINT FK_RunCounters_Runs FOREIGN KEY (RunId) REFERENCES dbo.Runs (Id)
 );
 GO

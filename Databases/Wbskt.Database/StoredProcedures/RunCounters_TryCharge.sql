@@ -36,19 +36,29 @@ BEGIN
 
         -- A leased budget that the charge would pass is extended from what the tenant's monthly credits
         -- and the workspace's cap have left, under their locks (as Run_Start takes them, the tenant's
-        -- first, and both before any counter row): by the larger of what the charge needs and a lease (a
-        -- twentieth of the allowance, or of what the tenant has left if more, and no more than a
-        -- twentieth of the cap), never past the ceiling or what either has left. With neither held to
+        -- first, and both before any counter row): by the larger of what the charge needs and a lease (the
+        -- run's lease size, no more than a twentieth of what the tenant has left or of the cap), never
+        -- past the ceiling or what either has left. The tenant and its allowance are read from the plan
+        -- copy as it is now (dbo.PlanCreditsRefusedAt), so a run going through a plan change is held to
+        -- the new plan, and one started before its workspace's copy arrived counts with its tenant once
+        -- it has; the allowance it started under stands in for a copy without one. With neither held to
         -- (the cap removed since, on a run started without an allowance), the budget goes straight to its
         -- ceiling. The extension is reserved from then on, as the lease it adds to was.
         DECLARE @Ceiling DECIMAL(18,4);
         DECLARE @WorkspaceId INT;
         DECLARE @Allowance DECIMAL(18,4);
+        DECLARE @RunLease DECIMAL(18,4);
         DECLARE @TenantId INT;
-        SELECT @Ceiling = rc.BudgetCeiling, @WorkspaceId = d.WorkspaceId, @Allowance = rc.CreditAllowance, @TenantId = rc.TenantId
+        SELECT @Ceiling = rc.BudgetCeiling,
+               @WorkspaceId = d.WorkspaceId,
+               @Allowance = CASE WHEN rc.CreditAllowance IS NULL THEN NULL
+                                 ELSE COALESCE(dbo.PlanCreditsRefusedAt(wa.PlanCode, wa.CreditsPerMonth), rc.CreditAllowance) END,
+               @RunLease = rc.CreditLease,
+               @TenantId = wa.TenantId
         FROM dbo.RunCounters rc
         JOIN dbo.Runs r ON r.Id = rc.RunId
         JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
+        LEFT JOIN dbo.WorkspaceAccounts wa ON wa.WorkspaceId = d.WorkspaceId
         WHERE rc.RunId = @Root;
 
         IF @Ceiling IS NOT NULL
@@ -112,7 +122,11 @@ BEGIN
                 DECLARE @Extend DECIMAL(18,4) = @Ceiling - @Budget;
                 DECLARE @Lease DECIMAL(18,4);
                 IF @Allowance IS NOT NULL
-                    SET @Lease = CASE WHEN @TenantLeft > @Allowance THEN @TenantLeft ELSE @Allowance END / 20;
+                BEGIN
+                    SET @Lease = COALESCE(@RunLease, @Allowance / 20);
+                    IF @TenantLeft / 20 < @Lease
+                        SET @Lease = @TenantLeft / 20;
+                END
                 IF @Cap IS NOT NULL AND (@Lease IS NULL OR @Cap / 20 < @Lease)
                     SET @Lease = @Cap / 20;
 

@@ -38,7 +38,7 @@ public sealed class BusinessOverageIntegrationTests(SqlEdgeFixture fixture)
         await ChargeAsync(spender, 15m);
         await PostAsync();
         long past = await StartAsync(wd, credits);
-        await ChargeAsync(spender, 5m);
+        await ChargeAsync(past, 5m);
         await PostAsync();
         Func<Task> atTwice = () => StartAsync(wd, credits);
 
