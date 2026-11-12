@@ -84,6 +84,18 @@ BEGIN
     WHERE a.CreditsPerMonth IS NOT NULL
     GROUP BY a.TenantId;
 
+    -- A deleted workspace's copy (RetiredAt) keeps the allowance it last had: use a live copy's when
+    -- there is one, as RunCredits_Post does.
+    UPDATE p
+    SET Allowance = l.Allowance
+    FROM @Posts p
+    CROSS APPLY (SELECT MAX(a.CreditsPerMonth) AS Allowance
+                 FROM dbo.WorkspaceAccounts a
+                 WHERE a.TenantId = p.TenantId
+                   AND a.RetiredAt IS NULL
+                   AND a.CreditsPerMonth IS NOT NULL) l
+    WHERE l.Allowance IS NOT NULL;
+
     IF EXISTS (SELECT 1 FROM @Posts)
     BEGIN
         DECLARE @TodayMonth DATE = DATEFROMPARTS(YEAR(@Today), MONTH(@Today), 1);
