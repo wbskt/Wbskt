@@ -26,7 +26,7 @@ public sealed class SocketHostPresenceSnapshotHandlerTests
         var context = new Mock<ConsumeContext<SocketHostPresenceSnapshot>>();
         context.SetupGet(c => c.Message).Returns(new SocketHostPresenceSnapshot("socket-a", [held], takenAt));
 
-        await new SocketHostPresenceSnapshotHandler(provider.Object, bus.Object, NullLogger<SocketHostPresenceSnapshotHandler>.Instance).Consume(context.Object);
+        await new SocketHostPresenceSnapshotHandler(provider.Object, Mock.Of<ISocketHostProvider>(), bus.Object, NullLogger<SocketHostPresenceSnapshotHandler>.Instance).Consume(context.Object);
 
         bus.Verify(b => b.PublishAsync(
             It.Is<ClientDisconnectedEvent>(e => e.ClientRefId == lost.ClientRefId && e.ClientId == 4 && e.WorkspaceId == 9 && e.HostId == "socket-a"
@@ -49,7 +49,7 @@ public sealed class SocketHostPresenceSnapshotHandlerTests
         var context = new Mock<ConsumeContext<SocketHostPresenceSnapshot>>();
         context.SetupGet(c => c.Message).Returns(new SocketHostPresenceSnapshot("socket-a", [restored.ClientRefId], takenAt));
 
-        await new SocketHostPresenceSnapshotHandler(provider.Object, bus.Object, NullLogger<SocketHostPresenceSnapshotHandler>.Instance).Consume(context.Object);
+        await new SocketHostPresenceSnapshotHandler(provider.Object, Mock.Of<ISocketHostProvider>(), bus.Object, NullLogger<SocketHostPresenceSnapshotHandler>.Instance).Consume(context.Object);
 
         bus.Verify(b => b.PublishAsync(
             It.Is<ClientConnectedEvent>(e => e.ClientRefId == restored.ClientRefId && e.ClientId == 5 && e.WorkspaceId == 9 && e.HostId == "socket-a" && e.IsRestored && e.CreatedAtUtc == restoredAt),

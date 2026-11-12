@@ -47,8 +47,9 @@ BEGIN
         AND c.ConnectedAt < @ChangedBefore
         AND NOT EXISTS (SELECT 1 FROM @ConnectedRefIds r WHERE r.RefId = c.RefId);
 
-    -- Dated just after the last change recorded (the sweep's expiry, which Client_ExpirePresence dates),
-    -- not at the snapshot: any connect or disconnect a host saw after the expiry, still on its way, wins.
+    -- Dated just after the last change a host saw (the sweep's expiry does not write LastActivityAt), not
+    -- at the snapshot: a connect or disconnect from the outage, still on its way, wins over the restore.
+    -- @TakenAt is on the host's clock; the margin assumes it is within a minute of the others.
     UPDATE c
     SET
         IsConnected = 1,

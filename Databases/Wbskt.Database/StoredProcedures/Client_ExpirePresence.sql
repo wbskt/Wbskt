@@ -1,8 +1,9 @@
 -- Clears the presence of clients held by a socket host that has not sent a heartbeat for
 -- @StaleAfterSeconds (see dbo.SocketHosts): it crashed, was replaced by a deploy under a new host
 -- id, or was scaled away, so the disconnects it owed will never arrive. Returns the cleared clients
--- so the caller can announce each as disconnected, dated by the expiry recorded here (never earlier
--- than the row's last change), so a snapshot that sets the client back online can be dated after it.
+-- so the caller can announce each as disconnected, dated by this sweep. LastActivityAt is left alone:
+-- it holds the last change a host saw, and an inferred expiry must not outrank a real connect or
+-- disconnect from the outage whose event is still on its way.
 --
 -- A connection younger than the window is left alone, so a host whose first heartbeat has not been
 -- recorded yet is not mistaken for a dead one. The UPDATE claims each row once, so two management
@@ -20,9 +21,8 @@ BEGIN
     SET
         IsConnected = 0,
         ConnectedAt = NULL,
-        ConnectedHostId = NULL,
-        LastActivityAt = CASE WHEN c.LastActivityAt > @Now THEN c.LastActivityAt ELSE @Now END
-    OUTPUT deleted.Id, deleted.RefId, deleted.WorkspaceId, deleted.ConnectedHostId, inserted.LastActivityAt AS ChangedAt
+        ConnectedHostId = NULL
+    OUTPUT deleted.Id, deleted.RefId, deleted.WorkspaceId, deleted.ConnectedHostId, @Now AS ChangedAt
     FROM dbo.Clients c
     WHERE c.IsConnected = 1
         AND (c.ConnectedAt IS NULL OR c.ConnectedAt < @StaleBefore)

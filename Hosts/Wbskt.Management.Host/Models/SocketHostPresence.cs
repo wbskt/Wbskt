@@ -2,7 +2,7 @@ namespace Wbskt.Management.Host.Models;
 
 /// <summary>
 /// A client whose presence was cleared because the socket host holding it went silent (or restarted).
-/// <c>ChangedAt</c> is the time the expiry recorded, when it recorded one; its announcement is dated by it.
+/// <c>ChangedAt</c> is when the sweep expired it, when it says; its announcement is dated by it.
 /// </summary>
 public sealed record ExpiredPresence(int ClientId, Guid ClientRefId, int WorkspaceId, string? HostId, DateTime? ChangedAt = null);
 

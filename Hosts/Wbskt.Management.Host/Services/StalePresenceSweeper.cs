@@ -63,10 +63,10 @@ public sealed class StalePresenceSweeper : PeriodicWorker
             // costs the announcement, so it is logged and the rest still go out.
             try
             {
-                var disconnected = new ClientDisconnectedEvent(client.ClientRefId, client.ClientId, client.WorkspaceId, Reason, client.HostId ?? string.Empty);
+                var disconnected = new ClientDisconnectedEvent(client.ClientRefId, client.ClientId, client.WorkspaceId, Reason, client.HostId ?? string.Empty, IsExpiry: true);
                 if (client.ChangedAt is { } changedAt)
                 {
-                    // Dated as the database recorded it, so presence applies it as the same change.
+                    // Dated by the sweep's own clock, so the engine's offline checks all start from one moment.
                     disconnected = disconnected with { CreatedAtUtc = changedAt };
                 }
 
