@@ -20,6 +20,9 @@ concurrency:
 jobs:
   live:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
     timeout-minutes: 40
     services:
       sqlserver:
@@ -157,3 +160,9 @@ jobs:
             e2e-hosts/*.log
             live-output.txt
           if-no-files-found: ignore
+
+      - name: Report the failure
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/report-nightly-failure.sh "Nightly conformance"
