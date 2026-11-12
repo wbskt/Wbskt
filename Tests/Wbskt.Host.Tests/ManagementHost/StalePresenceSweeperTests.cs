@@ -32,6 +32,20 @@ public sealed class StalePresenceSweeperTests
     }
 
     [Fact]
+    public async Task A_disconnect_is_dated_by_the_expiry_the_database_recorded()
+    {
+        var expiredAt = new DateTime(2026, 11, 12, 10, 0, 0, 500, DateTimeKind.Utc);
+        var client = new ExpiredPresence(1, Guid.NewGuid(), 7, "old-container", expiredAt);
+        var provider = new Mock<IClientProvider>();
+        provider.Setup(p => p.ExpirePresenceAsync(It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>())).ReturnsAsync([client]);
+        var bus = new Mock<IEventBus>();
+
+        await CreateSweeper(provider.Object, bus.Object, new PresenceOptions()).SweepAsync(CancellationToken.None);
+
+        bus.Verify(b => b.PublishAsync(It.Is<ClientDisconnectedEvent>(e => e.CreatedAtUtc == expiredAt), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task A_host_counts_as_gone_after_the_configured_silence()
     {
         var provider = new Mock<IClientProvider>();

@@ -46,6 +46,7 @@ public sealed class SocketHostPresenceIntegrationTests(SqlEdgeFixture fixture)
         Assert.Equal(deadClient, only.ClientId);
         Assert.Equal(deadRef, only.ClientRefId);
         Assert.Equal(deadHost, only.HostId);
+        Assert.NotNull(only.ChangedAt);
         Assert.False(await IsConnectedAsync(deadClient));
         Assert.True(await IsConnectedAsync(liveClient));
         Assert.True(await IsConnectedAsync(newClient));
@@ -154,30 +155,42 @@ public sealed class SocketHostPresenceIntegrationTests(SqlEdgeFixture fixture)
         var clients = new ClientProvider(ProviderFactory.BuildConfiguration(fixture.ConnectionString));
         int workspaceId = Random.Shared.Next(1_000_000, int.MaxValue);
         string host = $"live-{Guid.NewGuid():N}";
+        string otherHost = $"other-{Guid.NewGuid():N}";
         var takenAt = DateTime.UtcNow;
+        var expiredAt = takenAt.AddMinutes(-3);
 
         // Expired by the sweep while the host's heartbeats could not get through.
         (int expired, Guid expiredRef) = await CreateClientAsync(workspaceId);
         await PresenceAsync(expired, takenAt.AddMinutes(-10), host);
-        await MarkOfflineAsync(expired);
+        await ExpireAsync(expired, expiredAt);
+
+        // Revoked in the same outage: the host's own access re-check closes it, it is not shown online.
+        (int revoked, Guid revokedRef) = await CreateClientAsync(workspaceId);
+        await PresenceAsync(revoked, takenAt.AddMinutes(-10), host);
+        await ExpireAsync(revoked, expiredAt);
+        await SetStatusAsync(revoked, 2);
 
         // Disconnected while the snapshot was being taken: its own disconnect decides.
         (int justLeft, Guid justLeftRef) = await CreateClientAsync(workspaceId);
         await PresenceAsync(justLeft, takenAt.AddMinutes(-10), host);
         await clients.UpdatePresenceAsync(justLeft, false, takenAt.AddSeconds(-5), host);
 
-        var repaired = await clients.ReconcilePresenceByHostAsync(host, [expiredRef, justLeftRef], takenAt, TimeSpan.FromMinutes(1));
+        var repaired = await clients.ReconcilePresenceByHostAsync(host, [expiredRef, revokedRef, justLeftRef], takenAt, TimeSpan.FromMinutes(1));
 
         var only = Assert.Single(repaired);
         Assert.Equal((expired, expiredRef, true), (only.ClientId, only.ClientRefId, only.Connected));
+        Assert.Equal(expiredAt.AddMilliseconds(1), only.ChangedAt, TimeSpan.FromMilliseconds(1));
         Assert.True(await IsConnectedAsync(expired));
+        Assert.False(await IsConnectedAsync(revoked));
         Assert.False(await IsConnectedAsync(justLeft));
 
-        // A disconnect the host saw after the snapshot still wins; one from before it is stale.
-        await clients.UpdatePresenceAsync(expired, false, takenAt.AddMinutes(-2), host);
+        // The sweep's own disconnect, arriving late, is the change the restore already follows.
+        await clients.UpdatePresenceAsync(expired, false, expiredAt, host);
         Assert.True(await IsConnectedAsync(expired));
-        await clients.UpdatePresenceAsync(expired, false, takenAt.AddSeconds(1), host);
-        Assert.False(await IsConnectedAsync(expired));
+
+        // A connect on another host dated after the expiry, still on its way, wins over the restore.
+        await clients.UpdatePresenceAsync(expired, true, expiredAt.AddSeconds(1), otherHost);
+        Assert.Equal(otherHost, await ConnectedHostAsync(expired));
         Assert.Empty(await clients.ReconcilePresenceByHostAsync(host, [], takenAt.AddSeconds(2), TimeSpan.FromMinutes(1)));
     }
 
@@ -209,8 +222,8 @@ public sealed class SocketHostPresenceIntegrationTests(SqlEdgeFixture fixture)
             DECLARE @PolicyId INT;
             INSERT INTO dbo.RegistrationPolicies (WorkspaceId, Pin, Name) VALUES (@WorkspaceId, LEFT(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 20), N'lease');
             SET @PolicyId = SCOPE_IDENTITY();
-            INSERT INTO dbo.Clients (WorkspaceId, PolicyId, Name, SecretHash) OUTPUT INSERTED.Id, INSERTED.RefId
-            VALUES (@WorkspaceId, @PolicyId, N'lease', 0x00);
+            INSERT INTO dbo.Clients (WorkspaceId, PolicyId, Name, SecretHash, Status) OUTPUT INSERTED.Id, INSERTED.RefId
+            VALUES (@WorkspaceId, @PolicyId, N'lease', 0x00, 1);
             """, conn);
         cmd.Parameters.AddWithValue("@WorkspaceId", workspaceId);
         await using var reader = await cmd.ExecuteReaderAsync();
@@ -229,12 +242,31 @@ public sealed class SocketHostPresenceIntegrationTests(SqlEdgeFixture fixture)
         await cmd.ExecuteNonQueryAsync();
     }
 
-    private async Task MarkOfflineAsync(int clientId)
+    // As Client_ExpirePresence leaves a client it expires, without needing its host to be silent.
+    private async Task ExpireAsync(int clientId, DateTime expiredAt)
     {
         await using var conn = await OpenAsync();
-        await using var cmd = new SqlCommand("UPDATE dbo.Clients SET IsConnected = 0, ConnectedAt = NULL, ConnectedHostId = NULL WHERE Id = @Id", conn);
+        await using var cmd = new SqlCommand("UPDATE dbo.Clients SET IsConnected = 0, ConnectedAt = NULL, ConnectedHostId = NULL, LastActivityAt = @At WHERE Id = @Id", conn);
         cmd.Parameters.AddWithValue("@Id", clientId);
+        cmd.Parameters.Add("@At", SqlDbType.DateTime2).Value = expiredAt;
         await cmd.ExecuteNonQueryAsync();
+    }
+
+    private async Task SetStatusAsync(int clientId, byte status)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = new SqlCommand("UPDATE dbo.Clients SET Status = @Status WHERE Id = @Id", conn);
+        cmd.Parameters.AddWithValue("@Id", clientId);
+        cmd.Parameters.AddWithValue("@Status", status);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private async Task<string?> ConnectedHostAsync(int clientId)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = new SqlCommand("SELECT ConnectedHostId FROM dbo.Clients WHERE Id = @Id", conn);
+        cmd.Parameters.AddWithValue("@Id", clientId);
+        return await cmd.ExecuteScalarAsync() as string;
     }
 
     private async Task<bool> IsConnectedAsync(int clientId)
