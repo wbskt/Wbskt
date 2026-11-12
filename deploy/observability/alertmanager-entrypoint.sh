@@ -5,6 +5,9 @@
 #
 #   ALERT_EMAIL_TO      where alerts are mailed; needs SMTP_HOST and SMTP_FROM_ADDRESS too
 #   ALERT_WEBHOOK_URL   a Slack/Teams/ntfy-compatible webhook, as well as or instead of email
+#   ALERT_DEADMANS_URL  a dead man's switch (a healthchecks.io-style ping URL) that Watchdog, the
+#                       always-firing rule, is posted to every 5 minutes; the service there alerts
+#                       when the posts stop, which is how an outage of this whole VM is noticed
 #
 # With neither set, alerts still fire and are visible in Grafana and the Alertmanager UI; they just
 # reach nobody, which the startup log says plainly.
@@ -29,7 +32,21 @@ require_tls="$(printf '%s' "${SMTP_USE_STARTTLS:-true}" | tr '[:upper:]' '[:lowe
     echo "  group_wait: 30s"
     echo "  group_interval: 5m"
     echo "  repeat_interval: 4h"
+    # Watchdog always fires: it goes only to the dead man's switch, or nowhere when there is none,
+    # and never to the people the default receiver reaches.
+    echo "  routes:"
+    echo "    - matchers: ['alertname=\"Watchdog\"']"
+    echo "      receiver: deadmans"
+    echo "      group_wait: 0s"
+    echo "      group_interval: 1m"
+    echo "      repeat_interval: 5m"
     echo "receivers:"
+    echo "  - name: deadmans"
+    if [ -n "${ALERT_DEADMANS_URL:-}" ]; then
+        echo "    webhook_configs:"
+        printf '      - url: %s\n' "$(q "$ALERT_DEADMANS_URL")"
+        echo "        send_resolved: false"
+    fi
     echo "  - name: default"
 
     if [ -n "${ALERT_EMAIL_TO:-}" ]; then
@@ -67,6 +84,10 @@ else
         # cannot be delivered when it fires.
         echo "alertmanager: only email is configured - set ALERT_WEBHOOK_URL too, or MailRelayDown reaches nobody" >&2
     fi
+fi
+
+if [ -z "${ALERT_DEADMANS_URL:-}" ]; then
+    echo "alertmanager: ALERT_DEADMANS_URL is not set - if this VM goes down, nothing outside it notices" >&2
 fi
 
 exec /bin/alertmanager --config.file="$config" --storage.path=/alertmanager "$@"

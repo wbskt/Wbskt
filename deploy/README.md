@@ -454,6 +454,7 @@ alerts fire and reach nobody, and Alertmanager says so in its log.
 
 | Alert | Fires when |
 |---|---|
+| `Watchdog` | always: it goes only to `ALERT_DEADMANS_URL` every 5 minutes, so an outside service notices when it stops (see below) |
 | `WorkflowRunFailureRateHigh` | over 25% of at least 20 runs failed in 15 minutes |
 | `WorkflowWakeBacklog` | timers or timeouts are over a minute past due and unclaimed |
 | `WorkflowDispatchBacklog` | over 500 branches queued in the engine for 10 minutes |
@@ -478,6 +479,23 @@ alerts fire and reach nobody, and Alertmanager says so in its log.
 | `MailFailing` | the auth host gave up on an outgoing mail in 15 minutes, after its retries or because its queue was full, while other mail still went out |
 
 Engine readiness is deliberately not alerted on: a standby engine is not ready by design.
+
+### Alerts from outside
+
+Every rule above is evaluated and sent from the VM it watches, so when the whole machine stops, goes
+offline, fills its disk until Docker stops, or loses Prometheus or Alertmanager, nothing is sent.
+Two things outside the VM cover that:
+
+- **A dead man's switch.** Make a check at a service such as healthchecks.io with a 5 minute period
+  and about 10 minutes' grace, and put its ping URL in `ALERT_DEADMANS_URL`. Alertmanager posts the
+  always-firing `Watchdog` alert there every 5 minutes, and nowhere else. When the posts stop, that
+  service alerts you, through its own channels. Recreate Alertmanager after setting it
+  (`docker compose up -d alertmanager`); without it, its log says nothing outside will notice.
+- **An outside probe.** `.github/workflows/outside-probe.yml` checks `https://auth.<DOMAIN>/healthz/ready`,
+  `api.` and `ws.` the same way, and the console, every 10 minutes from GitHub. Set the repository
+  variable `PROBE_DOMAIN` to `DOMAIN` to turn it on. A failure opens the issue "Outside probe
+  failing", which notifies the repository's watchers; the next passing probe closes it. GitHub starts
+  scheduled runs late at times, so expect it within 10 to 30 minutes.
 
 Disk and container alerts come from `node-exporter` (host filesystems) and `cadvisor` (per-container
 start times), both on the backend network only. Neither is started by `deploy.sh`; on a VM that

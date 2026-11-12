@@ -376,7 +376,7 @@ pre { margin: 0; background: var(--canvas); border: 1px solid var(--line-soft); 
         <div class="cmd"><div class="cmdbox"><pre data-tpl="ssh -L 3000:127.0.0.1:3000 -L 9093:127.0.0.1:9093 {vm}
 # Grafana:      http://localhost:3000
 # Alertmanager: http://localhost:9093"></pre><button class="copy">Copy</button></div></div>
-        <p style="margin-top:10px">Alerts go to <code>ALERT_EMAIL_TO</code> (through the <code>SMTP_*</code> relay) and/or <code>ALERT_WEBHOOK_URL</code>. With neither set, alerts fire and reach nobody.</p>
+        <p style="margin-top:10px">Alerts go to <code>ALERT_EMAIL_TO</code> (through the <code>SMTP_*</code> relay) and/or <code>ALERT_WEBHOOK_URL</code>. With neither set, alerts fire and reach nobody. Two checks live outside the VM: the Watchdog alert to the dead man's switch at <code>ALERT_DEADMANS_URL</code>, and outside-probe.yml.</p>
       </div>
     </div>
     <h3 style="margin:18px 0 8px">Alert rules <span class="mono" style="color:var(--muted);font-weight:400">deploy/observability/alerts.yml</span></h3>
@@ -435,7 +435,7 @@ const HX = i => 60 + i * 200;
 node('sshd','sshd + deploy.sh','deploy user · docker group','host',HX(0),628,180,48,{ title:'SSH and deploy.sh', what:'The VM host itself. CI’s deploy key is pinned in authorized_keys to ssh-forced-command.sh, which can only run deploy.sh.', facts:[['Port','22, open in the cloud firewall'],['User','in the docker group (root-equivalent)'],['Forced command','deploy/scripts/ssh-forced-command.sh'],['deploy.sh does','sync checkout to the tag’s commit, prune images, require 3 GB free, pull, migrate, restart client-auth then the rest, wait up to 240s for health']], cmds:[['Deploy backend by hand','{path}/deploy/scripts/deploy.sh --tag sha-<short>'],['Deploy only some hosts','{path}/deploy/scripts/deploy.sh --tag sha-<short> --services auth,management']], go:'pipeline' });
 node('cron','cron · backup.sh','nightly 02:00','host',HX(1),628,180,48,{ title:'Nightly backup', what:'backup.sh from cron: full backups of both databases with checksum, verified, gzipped on the host, copied to BACKUP_DIR, then pushed off the box.', facts:[['Schedule','0 2 * * * (crontab of the deploy user)'],['Staging','/var/opt/mssql/backups inside the sql container'],['Local copies','BACKUP_DIR (default /var/backups/wbskt), kept BACKUP_RETENTION_DAYS (14)'],['Log','/var/log/wbskt-backup.log']], env:['BACKUP_DIR','BACKUP_RETENTION_DAYS','BACKUP_UPLOAD_CMD','BACKUP_ALLOW_LOCAL_ONLY','BACKUP_ALERT_CMD'], cmds:[['Check the whole setup','{path}/deploy/scripts/backup-check.sh'],['Last backup run','tail -n 50 /var/log/wbskt-backup.log'],['Local backup files','ls -lh /var/backups/wbskt']], go:'runbook' });
 node('grafana','Grafana','127.0.0.1:3000','host',HX(2),628,180,48,{ title:'Grafana', what:'Dashboards and Explore over Prometheus, Loki and Tempo (datasources provisioned). Loopback only.', facts:[['Memory limit','256m, GOMEMLIMIT 217MiB'],['Image','grafana/grafana:12.1.1'],['Listens','127.0.0.1:3000 on the VM'],['Login','admin / GRAFANA_ADMIN_PASSWORD'],['Volume','grafana-data'],['Health','wget /api/health every 30s']], env:['GRAFANA_ADMIN_PASSWORD'], cmds:[['Open from your laptop','ssh -L 3000:127.0.0.1:3000 {vm}']] });
-node('alertmanager','Alertmanager','127.0.0.1:9093','host',HX(3),628,180,48,{ title:'Alertmanager', what:'Delivers alerts from Prometheus and from alert.sh (backup failures) by email and/or webhook.', facts:[['Memory limit','64m'],['Image','prom/alertmanager:v0.28.1'],['Listens','127.0.0.1:9093 on the VM'],['Volume','alertmanager-data']], env:['ALERT_EMAIL_TO','ALERT_WEBHOOK_URL','SMTP_HOST','SMTP_PORT','SMTP_USE_STARTTLS','SMTP_USERNAME','SMTP_PASSWORD','SMTP_FROM_ADDRESS'], cmds:[['Firing alerts','curl -s http://127.0.0.1:9093/api/v2/alerts | head -c 2000']] });
+node('alertmanager','Alertmanager','127.0.0.1:9093','host',HX(3),628,180,48,{ title:'Alertmanager', what:'Delivers alerts from Prometheus and from alert.sh (backup failures) by email and/or webhook, and posts the always-firing Watchdog only to ALERT_DEADMANS_URL every 5 minutes, so a service outside the VM notices when it stops.', facts:[['Memory limit','64m'],['Image','prom/alertmanager:v0.28.1'],['Listens','127.0.0.1:9093 on the VM'],['Volume','alertmanager-data']], env:['ALERT_EMAIL_TO','ALERT_WEBHOOK_URL','ALERT_DEADMANS_URL','SMTP_HOST','SMTP_PORT','SMTP_USE_STARTTLS','SMTP_USERNAME','SMTP_PASSWORD','SMTP_FROM_ADDRESS'], cmds:[['Firing alerts','curl -s http://127.0.0.1:9093/api/v2/alerts | head -c 2000']] });
 node('pushgateway','Pushgateway','127.0.0.1:9091','host',HX(4),628,180,48,{ title:'Pushgateway', what:'Receives backup.sh’s success timestamp, which lets the BackupMissing rule notice when cron stops running the script at all.', facts:[['Memory limit','64m'],['Image','prom/pushgateway:v1.11.1'],['Listens','127.0.0.1:9091 on the VM'],['Persistence','pushgateway-data → /pushgateway, written every minute and on shutdown, so a restart keeps the timestamp']], cmds:[['What it holds now','curl -s 127.0.0.1:9091/metrics | grep ^wbskt_']] });
 
 // edges: [id, from, to, label]
@@ -581,6 +581,7 @@ const ENV = [
  ['METRICS_RETENTION','Observability','plain',false,'15d',[['prometheus','--storage.tsdb.retention.time']],''],
  ['ALERT_EMAIL_TO','Observability','plain',false,'',[['alertmanager','ALERT_EMAIL_TO']],'Set this or the webhook, or alerts reach nobody.'],
  ['ALERT_WEBHOOK_URL','Observability','secret',false,'',[['alertmanager','ALERT_WEBHOOK_URL']],'Webhook URLs often embed a token.'],
+ ['ALERT_DEADMANS_URL','Observability','secret',false,'',[['alertmanager','ALERT_DEADMANS_URL']],'A dead man\'s switch ping URL (healthchecks.io style). Watchdog goes only here, every 5 minutes; without it nothing outside notices the VM going down.'],
  ['MIGRATE_FRESH','Shell only (migrator)','plain',false,'false',[['migrator','MIGRATE_FRESH']],'Not in .env; deploy.sh forces it off. Drops and recreates both databases.'],
  ['MIGRATE_ALLOW_DATA_LOSS','Shell only (migrator)','plain',false,'false',[['migrator','MIGRATE_ALLOW_DATA_LOSS']],'Not in .env; deploy.sh forces it off. Lets a schema change destroy rows.'],
  ['MIGRATE_COMMAND_TIMEOUT','Shell only (migrator)','plain',false,'1800',[['migrator','MIGRATE_COMMAND_TIMEOUT']],'Not in .env. Seconds one statement of the publish may run; 0 is no limit.'],
@@ -638,6 +639,7 @@ const INTERNAL = [
  ['all six hosts','http://otel-collector:4317','none','OTLP telemetry'],
 ];
 const ALERTS = [
+ ['Watchdog','Telemetry','Always firing; sent only to ALERT_DEADMANS_URL every 5 minutes, so an outside dead man\'s switch notices the VM or its alerting going quiet'],
  ['WorkflowRunFailureRateHigh','Workflows','Over 25% of at least 20 runs failed in 15 minutes'],
  ['WorkflowWakeBacklog','Workflows','Timers or timeouts over a minute past due and unclaimed'],
  ['WorkflowDispatchBacklog','Workflows','Over 500 branches queued in the engine for 10 minutes'],
@@ -1049,6 +1051,7 @@ function buildPipeline() {
     <div class="stages">
       <div class="stage"><b>03:00 nightly-stress.yml</b><span>hosts from source; the thousand-run concurrency scenario and the load tester holding 200 clients, its account put on Team first through the internal plan route</span></div>
       <div class="stage"><b>03:30 nightly-conformance.yml</b><span>same hosts; the conformance suite's live scenarios through the .NET harness from wbskt/Wbskt.DotNet master, checking the fake still matches the gateway; fails if they skip</span></div>
+      <div class="stage"><b>every 10 min outside-probe.yml</b><span>from outside the VM: readiness of auth., api. and ws.&lt;PROBE_DOMAIN&gt; and the console; a failure opens the issue “Outside probe failing”, the next pass closes it. Off until the PROBE_DOMAIN repository variable is set</span></div>
       <div class="stage"><b>On a failed scheduled run</b><span>report-nightly-failure.sh opens the issue “Nightly run failing: &lt;workflow&gt;”, or comments on the one already open</span></div>
     </div></div>
   <div class="twocol">
