@@ -362,7 +362,7 @@ pre { margin: 0; background: var(--canvas); border: 1px solid var(--line-soft); 
 
   <section class="view" id="v-alerts" hidden>
     <h2>Observability</h2>
-    <p class="lede">Every host sends traces, metrics and logs over OTLP to the collector, which fans them out. None of it is publicly routed: open Grafana through an SSH tunnel.</p>
+    <p class="lede">Every host sends traces, metrics and logs over OTLP to the collector, which fans them out. None of it is publicly routed: open Grafana through an SSH tunnel. Grafana comes with one provisioned dashboard, “Wbskt overview” (<code>deploy/observability/grafana/provisioning/dashboards/wbskt/overview.json</code>).</p>
     <div class="twocol" style="margin-bottom:14px">
       <div class="sheet"><table><thead><tr><th>Signal</th><th>Store</th><th>Retention</th><th>Read it in</th></tr></thead><tbody>
         <tr><td>Traces</td><td>Tempo 2.8.2</td><td>72 hours</td><td>Grafana → Explore → Tempo</td></tr>
