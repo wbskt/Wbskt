@@ -169,8 +169,9 @@ the owner sets a cap stops at the cap rather than at its own budget. Charges alr
 budget is cut (one per branch charging at that moment) can still land, never past the budget the run held
 before. A start reads the cap row with `HOLDLOCK` and the set writes it first, so no run starts under the
 old cap once the new one is in. Lowering a cap below what was already spent refuses new runs at once,
-and the response says so (`capReached`). As it posts, `CreditUsagePoster` raises
-`WorkspaceCreditCapReachedEvent` when a post carries a workspace across 80% and then 100% of its cap.
+and the response says so (`capReached`). After it posts, `CreditUsagePoster` raises
+`WorkspaceCreditCapReachedEvent` for each of 80% and 100% of its cap a workspace's posted spend has
+reached and was not yet told of (see the notices below).
 
 **Busy.** The locks a start can wait on (the tenant's run limit and a workspace's cap) give up after five
 seconds with 50035 rather than hold an inbound request and a pooled connection. A start also reads a
@@ -458,7 +459,16 @@ emails in `dbo.BillingNoticeMails` in the same transaction, and only the first c
 Nothing is claimed while no relay is configured or no one can be written to, so the notice goes out once
 someone can receive it. The hosts that raise the events keep them too: the management host gives back a
 message notice whose event the broker refused, so the next minute's check raises it again, and the
-engine tries a credit crossing's event three more times, since the crossing cannot be found again later. Not the in-memory mail queue sign-in mail uses: a billing notice is never asked
+engine works out the credit notices owed from what the ledger holds against what was already announced
+(`dbo.CreditNotices_GetDue`: `WorkspaceCreditCaps.NotifiedPercent` for the month in
+`NotifiedMonthStart`, `TenantCreditMonths.NotifiedPercent`), and marks each threshold only once its event
+is published. A notice the broker refuses, one owed when the engine stopped between a post and the
+publish, and one reached only by credits `Run_DeleteRetired` posted are all found again: the poster
+looks on the tick after one that could not publish everything, within a minute of a tick that posted, and
+at least every 5 minutes; a notice still refused after ten checks in a row is logged as an error. Raising
+a cap clears what was announced against it, so the new cap's thresholds are announced as they are reached
+(the emails stay once a month). After the deploy that added these columns, a notice already sent this
+month is published once more and the auth host ignores it. A notice owed at the end of a month and still not published when the month turns is dropped. Not the in-memory mail queue sign-in mail uses: a billing notice is never asked
 for again, so one lost there would never be sent. `BillingNoticeMailSender` (every minute) leases due
 emails to one auth instance at a time and hands them to the relay; one refused is tried again after 1
 minute, 5, 30, 2 hours and 12 hours, then given up and logged as an error. Sent ones are removed after 30
@@ -474,8 +484,7 @@ days.
 | `Downgraded` | `TenantPlanChangedEvent` to a smaller plan, with the limits that drop and when history beyond the new retention goes (`Billing:RetentionGraceDays`) | plan revision |
 | `PackExpiring` | `TenantCreditGrantExpiringEvent`: the management host's `CreditGrantExpiryWarning` (hourly, with the grant reconcile) claims each live grant with credits left that expires within 30 days once (`dbo.TenantCreditGrants_ClaimExpiring`) and names what it has left; a spent grant is never announced | grant |
 
-Upgrades are not emailed: the admin made them and sees them. Credits that `Run_DeleteRetired` posts are not
-looked at for the allowance crossing, so a crossing made only by them is not reported.
+Upgrades are not emailed: the admin made them and sees them.
 
 Lock order, where a procedure takes more than one: the trigger key lock, then the test-run lock, then the
 plan lock, then the workspace's cap lock, then the root run's counter row (`dbo.Run_Start`); the run

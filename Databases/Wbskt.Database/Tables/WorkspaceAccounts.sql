@@ -45,5 +45,6 @@ CREATE TABLE dbo.WorkspaceAccounts
 GO
 
 CREATE NONCLUSTERED INDEX IX_WorkspaceAccounts_TenantId
-    ON dbo.WorkspaceAccounts (TenantId);
+    ON dbo.WorkspaceAccounts (TenantId)
+    INCLUDE (CreditsPerMonth, RetiredAt);
 GO

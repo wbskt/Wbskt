@@ -291,7 +291,23 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
-    public async Task A_post_reports_each_workspaces_month_and_its_cap()
+    public async Task A_post_reports_what_each_workspace_moved()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        long runId = await StartAsync(wd, startCost: 1m);
+        await ChargeAsync(runId, 7m);
+
+        IReadOnlyCollection<WorkspaceCreditPost> posted = await PostAsync();
+
+        posted.Should().ContainSingle(p => p.WorkspaceId == workspaceId)
+            .Which.Should().Be(new WorkspaceCreditPost(workspaceId, 1, 8m));
+    }
+
+    [SkippableFact]
+    public async Task A_cap_reached_stays_owed_until_it_is_marked_and_another_month_starts_again()
     {
         Skip.IfNot(fixture.IsAvailable, SkipReason);
 
@@ -300,11 +316,110 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         await SetCapAsync(workspaceId, 10m);
         long runId = await StartAsync(wd, startCost: 1m);
         await ChargeAsync(runId, 7m);
+        await PostAsync();
+        var credits = ProviderFactory.CreditUsage(fixture.ConnectionString);
 
-        IReadOnlyCollection<WorkspaceCreditPost> posted = await PostAsync();
+        CreditNotice owed = (await credits.GetDueNoticesAsync(ThisMonth, CancellationToken.None)).Single(n => n.WorkspaceId == workspaceId);
+        CreditNotice stillOwed = (await credits.GetDueNoticesAsync(ThisMonth, CancellationToken.None)).Single(n => n.WorkspaceId == workspaceId);
+        await credits.MarkNotifiedAsync(owed, ThisMonth, 80, CancellationToken.None);
+        IReadOnlyCollection<CreditNotice> afterMark = await credits.GetDueNoticesAsync(ThisMonth, CancellationToken.None);
+        IReadOnlyCollection<CreditNotice> nextMonth = await credits.GetDueNoticesAsync(ThisMonth.AddMonths(1), CancellationToken.None);
 
-        posted.Should().ContainSingle(p => p.WorkspaceId == workspaceId)
-            .Which.Should().Be(new WorkspaceCreditPost(workspaceId, 1, 8m, 8m, 10m));
+        owed.Should().Be(new CreditNotice(CreditNoticeKind.Cap, workspaceId, null, 10m, 8m, 80, 0));
+        stillOwed.Should().Be(owed);
+        afterMark.Should().NotContain(n => n.WorkspaceId == workspaceId);
+        nextMonth.Should().NotContain(n => n.WorkspaceId == workspaceId, "nothing is posted next month yet");
+    }
+
+    [SkippableFact]
+    public async Task A_cap_reached_only_by_credits_posted_as_a_run_is_deleted_is_owed()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        long runId = await StartAsync(wd, startCost: 1m);
+        await ChargeAsync(runId, 8m);
+        await ProviderFactory.Run(fixture.ConnectionString).SetTerminalAsync(runId, RunStatus.Succeeded.ToString(), new DateTime(2000, 1, 1), CancellationToken.None);
+        await SetCapAsync(workspaceId, 10m);
+
+        await ProviderFactory.RunRetention(fixture.ConnectionString).DeleteRetiredRunsAsync(new DateTime(2001, 1, 1), [new RunHistoryRetention(PlanCode.Free, 36_500)], new DateTime(2001, 1, 1), 100, CancellationToken.None);
+
+        (await ProviderFactory.CreditUsage(fixture.ConnectionString).GetDueNoticesAsync(ThisMonth, CancellationToken.None))
+            .Should().ContainSingle(n => n.WorkspaceId == workspaceId)
+            .Which.Owed().Should().Equal(80);
+    }
+
+    [SkippableFact]
+    public async Task A_cap_marked_last_month_or_raised_since_is_owed_again_and_a_mark_never_goes_down()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        await SetCapAsync(workspaceId, 10m);
+        long runId = await StartAsync(wd, startCost: 1m);
+        await ChargeAsync(runId, 8m);
+        await PostAsync();
+        var credits = ProviderFactory.CreditUsage(fixture.ConnectionString);
+        CreditNotice owed = (await credits.GetDueNoticesAsync(ThisMonth, CancellationToken.None)).Single(n => n.WorkspaceId == workspaceId);
+
+        await credits.MarkNotifiedAsync(owed, ThisMonth.AddMonths(-1), 100, CancellationToken.None);
+        bool owedAfterLastMonthsMark = (await credits.GetDueNoticesAsync(ThisMonth, CancellationToken.None)).Any(n => n.WorkspaceId == workspaceId);
+        await credits.MarkNotifiedAsync(owed, ThisMonth, 80, CancellationToken.None);
+        await credits.MarkNotifiedAsync(owed, ThisMonth.AddMonths(-1), 100, CancellationToken.None);
+        bool owedAfterThisMonthsMark = (await credits.GetDueNoticesAsync(ThisMonth, CancellationToken.None)).Any(n => n.WorkspaceId == workspaceId);
+        await SetCapAsync(workspaceId, 11m);
+        IReadOnlyCollection<CreditNotice> afterRaise = await credits.GetDueNoticesAsync(ThisMonth, CancellationToken.None);
+
+        owedAfterLastMonthsMark.Should().BeTrue("a mark for another month counts as none");
+        owedAfterThisMonthsMark.Should().BeFalse("an older month's mark does not take this month's back");
+        afterRaise.Should().ContainSingle(n => n.WorkspaceId == workspaceId).Which.Owed().Should().Equal(80);
+    }
+
+    [SkippableFact]
+    public async Task An_allowance_notice_names_a_live_workspace_over_a_deleted_one_that_spent_more()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int tenantId = NewId();
+        int live = NewId();
+        int deleted = NewId();
+        await AddAccountAsync(live, tenantId, creditsPerMonth: 10m);
+        await AddAccountAsync(deleted, tenantId, creditsPerMonth: 10m);
+        await StartAsync(await CreateDefinitionAsync(live), startCost: 1m);
+        await StartAsync(await CreateDefinitionAsync(deleted), startCost: 8m);
+        await PostAsync();
+        await RetireAsync(deleted);
+
+        (await ProviderFactory.CreditUsage(fixture.ConnectionString).GetDueNoticesAsync(ThisMonth, CancellationToken.None))
+            .Should().ContainSingle(n => n.TenantId == tenantId)
+            .Which.WorkspaceId.Should().Be(live);
+    }
+
+    [SkippableFact]
+    public async Task A_tenant_past_its_allowance_is_owed_both_thresholds_named_for_its_biggest_workspace()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int tenantId = NewId();
+        int small = NewId();
+        int big = NewId();
+        await AddAccountAsync(small, tenantId, creditsPerMonth: 10m);
+        await AddAccountAsync(big, tenantId, creditsPerMonth: 10m);
+        long smallRun = await StartAsync(await CreateDefinitionAsync(small), startCost: 2m);
+        long bigRun = await StartAsync(await CreateDefinitionAsync(big), startCost: 9m);
+        await PostAsync();
+        var credits = ProviderFactory.CreditUsage(fixture.ConnectionString);
+
+        CreditNotice owed = (await credits.GetDueNoticesAsync(ThisMonth, CancellationToken.None)).Single(n => n.TenantId == tenantId);
+        await credits.MarkNotifiedAsync(owed, ThisMonth, 100, CancellationToken.None);
+
+        owed.Should().Be(new CreditNotice(CreditNoticeKind.Allowance, big, tenantId, 10m, 11m, 100, 0));
+        owed.Owed().Should().Equal(80, 100);
+        (await credits.GetDueNoticesAsync(ThisMonth, CancellationToken.None)).Should().NotContain(n => n.TenantId == tenantId);
+        smallRun.Should().BePositive();
+        bigRun.Should().BePositive();
     }
 
     [SkippableFact]
@@ -424,15 +539,20 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         await using SqlDataReader reader = await command.ExecuteReaderAsync();
     }
 
-    private async Task AddAccountAsync(int workspaceId, int tenantId)
+    private static DateOnly ThisMonth => new(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+
+    private async Task AddAccountAsync(int workspaceId, int tenantId, decimal? creditsPerMonth = null)
     {
         await using var connection = new SqlConnection(fixture.ConnectionString);
         await connection.OpenAsync();
         await using var command = new SqlCommand(
-            "INSERT INTO dbo.WorkspaceAccounts (WorkspaceId, TenantId, TenantRefId, PlanCode, PlanRevision) VALUES (@WorkspaceId, @TenantId, NEWID(), N'Free', 0)",
+            "INSERT INTO dbo.WorkspaceAccounts (WorkspaceId, TenantId, TenantRefId, PlanCode, PlanRevision, CreditsPerMonth) VALUES (@WorkspaceId, @TenantId, NEWID(), N'Free', 0, @CreditsPerMonth)",
             connection);
         command.Parameters.AddWithValue("@WorkspaceId", workspaceId);
         command.Parameters.AddWithValue("@TenantId", tenantId);
+        command.Parameters.Add("@CreditsPerMonth", System.Data.SqlDbType.Decimal).Value = (object?)creditsPerMonth ?? DBNull.Value;
+        command.Parameters["@CreditsPerMonth"].Precision = 18;
+        command.Parameters["@CreditsPerMonth"].Scale = 4;
         await command.ExecuteNonQueryAsync();
     }
 

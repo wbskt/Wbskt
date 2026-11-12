@@ -42,7 +42,11 @@ BEGIN
         USING (SELECT @WorkspaceId AS WorkspaceId) AS s
         ON t.WorkspaceId = s.WorkspaceId
         WHEN MATCHED THEN
-            UPDATE SET MonthlyCreditCap = @MonthlyCreditCap, UpdatedAt = SYSUTCDATETIME()
+            UPDATE SET MonthlyCreditCap = @MonthlyCreditCap,
+                       -- A raised cap is announced again as its new thresholds are reached, as a cap
+                       -- removed and set again is (the auth host still emails once a month).
+                       NotifiedPercent = CASE WHEN @MonthlyCreditCap > t.MonthlyCreditCap THEN 0 ELSE t.NotifiedPercent END,
+                       UpdatedAt = SYSUTCDATETIME()
         WHEN NOT MATCHED THEN
             INSERT (WorkspaceId, MonthlyCreditCap) VALUES (@WorkspaceId, @MonthlyCreditCap);
 
