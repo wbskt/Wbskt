@@ -282,8 +282,8 @@ not in the API docs): 204 once stored and acted on (or set aside), 401 `BILLING_
 |---|---|---|
 | `GET {tenantRef}/groups` | `users.read` | Lists groups. Groups nest via `ParentGroupId` and a user inherits from ancestors. |
 | `POST {tenantRef}/groups` | `users.manage` | Creates a group, optionally under a parent. |
-| `PUT {tenantRef}/groups/{groupRef}` | `users.manage` | Renames a group or re-parents it. |
-| `DELETE {tenantRef}/groups/{groupRef}` | `users.manage` | Deletes a group. |
+| `PUT {tenantRef}/groups/{groupRef}` | `users.manage` | Renames a group. Its parent is set when it is created and does not change. |
+| `DELETE {tenantRef}/groups/{groupRef}` | `users.manage`, and `roles.manage` for a group that carries roles | Deletes a group. A group with child groups is refused. Deleting one that carries roles, its own or a parent's, takes them from its members, so it also needs `roles.manage` (403 `PERMISSION_UNAUTHORIZED` without it). |
 | `GET {tenantRef}/groups/{groupRef}/roles` | `roles.read` | Lists role assignments on the group, with their scope. |
 | `POST {tenantRef}/groups/{groupRef}/roles/{roleRef}` | `roles.manage` | Assigns a role to the group. Body carries `workspaceRef` — null means tenant-wide. |
 | `DELETE {tenantRef}/groups/{groupRef}/roles/{roleRef}` | `roles.manage` | Removes it. Scope travels as a `workspaceRef` query parameter. |
@@ -296,7 +296,7 @@ not in the API docs): 204 once stored and acted on (or set aside), 401 `BILLING_
 | `GET {tenantRef}/members/{userRef}/roles` | `roles.read` | The member's role assignments and their scopes. |
 | `GET {tenantRef}/members/{userRef}/permissions` | `roles.read` | Direct user-level permission overrides. |
 | `GET {tenantRef}/members/{userRef}/groups` | `users.read` | Group memberships. |
-| `POST` / `DELETE {tenantRef}/members/{userRef}/groups/{groupRef}` | `users.manage`, and `roles.manage` to add to a group that carries roles | Adds or removes a group membership. A group that carries roles, its own or a parent's, grants them, so adding to one also needs `roles.manage` (403 `PERMISSION_UNAUTHORIZED` without it). |
+| `POST` / `DELETE {tenantRef}/members/{userRef}/groups/{groupRef}` | `users.manage`, and `roles.manage` for a group that carries roles | Adds or removes a group membership. A group that carries roles, its own or a parent's, grants them, so adding someone to it or removing them also needs `roles.manage` (403 `PERMISSION_UNAUTHORIZED` without it). |
 | `POST` / `DELETE {tenantRef}/members/{userRef}/roles/{roleRef}` | `roles.manage` | Assigns or removes a role, scoped tenant-wide or to one workspace. |
 | `POST {tenantRef}/members/{userRef}/permissions` | `roles.manage` | Grants or denies a slug directly on the user. A user-level entry outranks anything role-derived. |
 | `DELETE {tenantRef}/members/{userRef}/permissions/{permissionSlug}` | `roles.manage` | **Deletes the override, does not deny it.** Denying would leave the override in place; deleting returns the decision to the user's roles. Without this an accidental grant could never be undone through the API. |
