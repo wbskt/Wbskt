@@ -38,7 +38,6 @@ internal sealed class OutboundMailDispatcher : BackgroundService
         _logger = logger;
         _metrics = metrics;
         _retryDelays = retryDelays ?? DefaultRetryDelays;
-        metrics.ObserveMailQueueDepth(() => queue.Count);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -61,6 +60,9 @@ internal sealed class OutboundMailDispatcher : BackgroundService
 
     private async Task SendWithRetryAsync(OutboundMail mail, CancellationToken ct)
     {
+        // Never the address, only its fingerprint (EmailFingerprint), and never the subject, which can
+        // carry a tenant's name; never the body either, which carries the token.
+        string recipient = EmailFingerprint.Of(mail.To);
         for (int attempt = 0; ; attempt++)
         {
             try
@@ -68,10 +70,9 @@ internal sealed class OutboundMailDispatcher : BackgroundService
                 await _sender.SendMultipartAsync(mail.To, mail.Subject, mail.TextBody, mail.HtmlBody, ct);
 
                 // The relay took it; delivery from there is the relay's. Without this line a missing
-                // mail cannot be told apart from one that was never handed over. Never the body (it
-                // carries the token) and never the address, only its fingerprint (EmailFingerprint).
-                _metrics.RecordMail("sent");
-                _logger.LogInformation("Mail \"{Subject}\" to {RecipientFingerprint} accepted by the relay.", mail.Subject, EmailFingerprint.Of(mail.To));
+                // mail cannot be told apart from one that was never handed over.
+                _metrics.RecordMail(MailOutcome.Sent);
+                _logger.LogInformation("Mail {MailKind} to {RecipientFingerprint} accepted by the relay.", mail.Kind, recipient);
                 return;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -80,25 +81,33 @@ internal sealed class OutboundMailDispatcher : BackgroundService
                 // reissued, which is why that is acceptable and why nothing here blocks shutdown.
                 return;
             }
-            catch (FormatException ex)
+            catch (Exception ex) when (MailFailure.IsMalformedRecipient(ex, mail.To))
             {
-                // A malformed address fails identically on every attempt. An operator finds the
-                // account by checking a suspect address against the fingerprint.
-                _metrics.RecordMail("invalid_address");
-                _logger.LogWarning(ex, "Mail \"{Subject}\" to {RecipientFingerprint} was not sent: the address is malformed.", mail.Subject, EmailFingerprint.Of(mail.To));
+                // Fails identically on every attempt. An operator finds the account by checking a
+                // suspect address against the fingerprint.
+                _metrics.RecordMail(MailOutcome.InvalidAddress);
+                _logger.LogWarning("Mail {MailKind} to {RecipientFingerprint} was not sent: the address is malformed.", mail.Kind, recipient);
+                return;
+            }
+            catch (Exception ex) when (MailFailure.IsPermanentRecipientRefusal(ex))
+            {
+                // The relay will not take this recipient, so trying again only delays the rest. One
+                // bad mailbox is not the relay failing, so it is counted apart and does not alert.
+                _metrics.RecordMail(MailOutcome.Rejected);
+                _logger.LogWarning("Mail {MailKind} to {RecipientFingerprint} was refused by the relay: {Failure}.", mail.Kind, recipient, MailFailure.Describe(ex));
                 return;
             }
             catch (Exception ex)
             {
                 if (attempt >= _retryDelays.Count)
                 {
-                    _metrics.RecordMail("dropped");
-                    _logger.LogError(ex, "Mail \"{Subject}\" to {RecipientFingerprint} was not sent after {Attempts} attempts.", mail.Subject, EmailFingerprint.Of(mail.To), attempt + 1);
+                    _metrics.RecordMail(MailOutcome.Dropped);
+                    _logger.LogError("Mail {MailKind} to {RecipientFingerprint} was not sent after {Attempts} attempts: {Failure}.", mail.Kind, recipient, attempt + 1, MailFailure.Describe(ex));
                     return;
                 }
 
-                _metrics.RecordMail("failed");
-                _logger.LogWarning(ex, "Mail \"{Subject}\" to {RecipientFingerprint} failed on attempt {Attempt}; retrying.", mail.Subject, EmailFingerprint.Of(mail.To), attempt + 1);
+                _metrics.RecordMail(MailOutcome.Retried);
+                _logger.LogWarning("Mail {MailKind} to {RecipientFingerprint} failed on attempt {Attempt}; retrying: {Failure}.", mail.Kind, recipient, attempt + 1, MailFailure.Describe(ex));
 
                 try
                 {

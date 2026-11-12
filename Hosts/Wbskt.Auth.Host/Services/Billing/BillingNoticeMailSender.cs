@@ -1,3 +1,5 @@
+using Wbskt.Auth.Host.Services.Email;
+using Wbskt.Auth.Host.Telemetry;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Infrastructure.Email;
@@ -92,19 +94,19 @@ public sealed class BillingNoticeMailSender(IServiceScopeFactory scopeFactory, T
             bool giveUp = ex is FormatException || mail.Attempts >= MaxAttempts;
             if (giveUp)
             {
-                Logger.LogError(ex, "Gave up on the {Notice} email to {Recipient} of tenant {TenantId} after {Attempts} attempt(s).", mail.Kind, mail.To, mail.TenantId, mail.Attempts);
+                Logger.LogError("Gave up on the {Notice} email to {RecipientFingerprint} of tenant {TenantId} after {Attempts} attempt(s): {Failure}.", mail.Kind, EmailFingerprint.Of(mail.To), mail.TenantId, mail.Attempts, MailFailure.Describe(ex));
             }
             else
             {
-                Logger.LogWarning(ex, "The relay refused the {Notice} email to {Recipient} of tenant {TenantId}; trying again.", mail.Kind, mail.To, mail.TenantId);
+                Logger.LogWarning("The relay refused the {Notice} email to {RecipientFingerprint} of tenant {TenantId}; trying again: {Failure}.", mail.Kind, EmailFingerprint.Of(mail.To), mail.TenantId, MailFailure.Describe(ex));
             }
 
             await billing.CompleteBillingNoticeMailAsync(
-                mail.Id, sentAt: null, retryAt: giveUp ? null : now + Backoff[Math.Min(mail.Attempts, Backoff.Length) - 1], gaveUpAt: giveUp ? now : null, ex.GetType().Name + ": " + ex.Message, CancellationToken.None);
+                mail.Id, sentAt: null, retryAt: giveUp ? null : now + Backoff[Math.Min(mail.Attempts, Backoff.Length) - 1], gaveUpAt: giveUp ? now : null, MailFailure.Describe(ex), CancellationToken.None);
             return;
         }
 
         await billing.CompleteBillingNoticeMailAsync(mail.Id, _clock.GetUtcNow().UtcDateTime, retryAt: null, gaveUpAt: null, error: null, CancellationToken.None);
-        Logger.LogInformation("The {Notice} email to {Recipient} of tenant {TenantId} was accepted by the relay.", mail.Kind, mail.To, mail.TenantId);
+        Logger.LogInformation("The {Notice} email to {RecipientFingerprint} of tenant {TenantId} was accepted by the relay.", mail.Kind, EmailFingerprint.Of(mail.To), mail.TenantId);
     }
 }
