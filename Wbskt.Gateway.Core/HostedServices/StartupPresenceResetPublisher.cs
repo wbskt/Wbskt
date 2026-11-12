@@ -15,24 +15,28 @@ internal sealed class StartupPresenceResetPublisher : BackgroundService
     private readonly IEventBus _eventBus;
     private readonly ILogger<StartupPresenceResetPublisher> _logger;
     private readonly string _hostId;
+    private readonly SocketHostStartedEvent _started;
 
     public StartupPresenceResetPublisher(IEventBus eventBus, ILogger<StartupPresenceResetPublisher> logger, BusInstanceId busInstanceId)
     {
         _eventBus = eventBus;
         _logger = logger;
         _hostId = busInstanceId.Value;
+
+        // Made here, not in ExecuteAsync: its time is the start the management host clears presence up
+        // to, so it must come before any connection. Every hosted service is constructed before any of
+        // them starts listening, and ExecuteAsync runs on the thread pool after StartAsync returns. A
+        // retry reuses it, so it never moves past clients that have reconnected since.
+        _started = new SocketHostStartedEvent(_hostId);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Made once, before the first attempt: its time is the start the management host clears presence
-        // up to, and a retry must not move it past clients that have reconnected since.
-        var started = new SocketHostStartedEvent(_hostId);
         for (var attempt = 1; attempt <= MaxAttempts && !stoppingToken.IsCancellationRequested; attempt++)
         {
             try
             {
-                await _eventBus.PublishAsync(started, stoppingToken);
+                await _eventBus.PublishAsync(_started, stoppingToken);
                 _logger.LogInformation("Published SocketHostStartedEvent (presence reset for host {HostId}).", _hostId);
                 return;
             }
