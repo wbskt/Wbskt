@@ -187,13 +187,9 @@ internal sealed class RegistrationService : IRegistrationService
                     : await _limits.WithSeatsAsync(SqlGuardErrors.PlanMemberLimitReached, invitation.TenantRef, cancellationToken));
             }
 
-            // Another account's live email-change undo holds the address. Answered like an address in
-            // use, so the form says nothing about the account, but nobody is mailed: the holder already
-            // has the undo link.
             if (ex is SqlException { Number: 50027 })
             {
-                _metrics.RecordRegistration("reserved_address");
-                return Result.Success();
+                return await HandleReservedAddressAsync(username, cancellationToken);
             }
 
             if (ex is SqlException { Number: 2601 or 2627 })
@@ -282,6 +278,28 @@ internal sealed class RegistrationService : IRegistrationService
         await _mailer.QueueEmailVerificationAsync(user.Email, user.Username, token, expiresAt, cancellationToken);
 
         _logger.LogInformation("Email verification issued for user {UserId}", user.Id);
+    }
+
+    /// <summary>
+    /// Answers a registration refused because another account's live email-change undo holds the address
+    /// (50027): like an address in use, so the form says nothing about the account, but nobody is mailed,
+    /// since the holder already has the undo link.
+    /// </summary>
+    /// <remarks>
+    /// The username still decides first, as in <see cref="HandleRegistrationConflictAsync"/>: otherwise a
+    /// held username sent with each address would answer 204 for a reserved one and 409 for the rest.
+    /// Internal for the same reason as that method.
+    /// </remarks>
+    internal async Task<Result> HandleReservedAddressAsync(string username, CancellationToken cancellationToken)
+    {
+        if (await _accounts.FindIdByUsernameAsync(username, cancellationToken) is not null)
+        {
+            _metrics.RecordRegistration("conflict");
+            return Result.Failure(UsernameConflict);
+        }
+
+        _metrics.RecordRegistration("reserved_address");
+        return Result.Success();
     }
 
     /// <summary>
