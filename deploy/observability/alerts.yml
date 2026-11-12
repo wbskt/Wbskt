@@ -346,7 +346,7 @@ groups:
           description: >-
             On the VM, docker compose ps and docker compose logs --tail 200 for that service (the job
             without its wbskt- prefix, such as auth or gateway-ws) show whether it is down or only its
-            telemetry is.
+            telemetry is. A service scaled to 0 replicas fires this too.
 
       - alert: PeriodicJobFailing
         # A periodic job (credit posting, reconciles, retention, the deleted-workspace sweep, the
@@ -355,12 +355,14 @@ groups:
         # - it has failed every tick since its container started. Read off the raw counters, because a
         #   series that first appears at 1 is a step increase() cannot see: a daily job's only tick
         #   after a deploy, or a new engine leader's first.
-        # - most of its last 15 minutes' ticks failed, and more than three (the jobs that run every few
-        #   seconds or minutes).
-        # - it failed and has not once succeeded in 6 hours (hourly jobs) or 49 hours (daily ones).
-        # Containers that stopped pushing drop out through target_info, so a deploy or an engine failover
-        # clears the alert instead of a dead container's failure holding it. A standby engine records no
-        # ticks.
+        # - most of its last 30 minutes' ticks failed, and more than two (jobs that run every 10 minutes
+        #   or more often; slower ones are left to the next arm).
+        # - it failed and has not once succeeded in 6 hours (hourly jobs) or 49 hours (daily ones). A
+        #   job's first failure on a container makes a series increase() cannot see, so a daily job that
+        #   once succeeded alerts on its second failure in a row.
+        # Containers that stopped pushing drop out through target_info, so a deploy or a dead engine
+        # clears the alert. An engine demoted to standby keeps pushing its old counters, so a failure it
+        # had as leader holds the alert until it restarts or the window passes.
         expr: |
           (
             (
@@ -368,9 +370,9 @@ groups:
               unless on (job, instance, worker) sum by (job, instance, worker) ({__name__=~"wbskt_(auth|management|workflow|gateway)_worker_ticks_total", outcome="ok"}) > 0
             )
             or (
-              sum by (job, instance, worker) (increase({__name__=~"wbskt_(auth|management|workflow|gateway)_worker_ticks_total", outcome="failed"}[15m]))
-                / sum by (job, instance, worker) (increase({__name__=~"wbskt_(auth|management|workflow|gateway)_worker_ticks_total"}[15m])) > 0.5
-              and sum by (job, instance, worker) (increase({__name__=~"wbskt_(auth|management|workflow|gateway)_worker_ticks_total", outcome="failed"}[15m])) > 3
+              sum by (job, instance, worker) (increase({__name__=~"wbskt_(auth|management|workflow|gateway)_worker_ticks_total", outcome="failed"}[30m]))
+                / sum by (job, instance, worker) (increase({__name__=~"wbskt_(auth|management|workflow|gateway)_worker_ticks_total"}[30m])) > 0.5
+              and sum by (job, instance, worker) (increase({__name__=~"wbskt_(auth|management|workflow|gateway)_worker_ticks_total", outcome="failed"}[30m])) > 2
             )
             or (
               sum by (job, instance, worker) (increase({__name__=~"wbskt_(auth|management|workflow|gateway)_worker_ticks_total", outcome="failed"}[6h])) > 0
@@ -386,7 +388,7 @@ groups:
         labels:
           severity: warn
         annotations:
-          summary: "{{ $labels.worker }} on {{ $labels.job }} keeps failing"
+          summary: "{{ $labels.worker }} on {{ $labels.job }} ({{ $labels.instance }}) keeps failing"
           description: >-
             Its error lines name the failure: docker compose logs for that service (the job without its
             wbskt- prefix), or Loki with {service_name="{{ $labels.job }}"} |= "{{ $labels.worker }}".
