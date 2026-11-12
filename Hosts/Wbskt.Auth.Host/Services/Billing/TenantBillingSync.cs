@@ -1,6 +1,8 @@
+using System.Net;
 using Microsoft.Extensions.Options;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
+using Wbskt.Auth.Host.Telemetry;
 using Wbskt.Auth.Models;
 using Wbskt.Events.Billing;
 using Wbskt.Infrastructure.Events.Outbox;
@@ -22,6 +24,7 @@ internal sealed class TenantBillingSync(
     IBillingNotifier notifier,
     IOptions<BillingOptions> options,
     TimeProvider clock,
+    AuthMetrics metrics,
     ILogger<TenantBillingSync> logger)
 {
     private const int PlanWriteAttempts = 3;
@@ -210,11 +213,13 @@ internal sealed class TenantBillingSync(
 
     /// <summary>
     /// Refunds the payment of a subscription cancelled as a duplicate, once. The claim is taken first, so a
-    /// redelivered webhook does not ask again. It is given back only when the provider refused the request (a
-    /// 4xx), since then nothing was refunded. A timeout, a dropped connection, a server error or a cancelled
-    /// request may have
-    /// reached the provider, and asking again could refund twice, so the claim stays and an operator checks
-    /// the payment (the error names it).
+    /// redelivered webhook does not ask again. It is given back only when the request certainly did nothing:
+    /// the connection was never made, or the provider refused it with a 4xx other than a conflict or an
+    /// unprocessable request, which may mean the payment is already refunded. Anything else (a timeout, a
+    /// dropped connection, a server error) may have refunded, and asking again could refund twice, so the
+    /// claim stays, the outcome is counted as unconfirmed for the alert, and an operator checks the payment.
+    /// The call runs on the host's token rather than the webhook request's, so a provider that hangs up on
+    /// its own delivery does not cut the refund short.
     /// </summary>
     private async Task RefundDuplicateAsync(TenantSubscription duplicate, ProviderPayment payment, CancellationToken ct)
     {
@@ -225,22 +230,29 @@ internal sealed class TenantBillingSync(
 
         try
         {
-            await gateway.RefundPaymentAsync(payment.Id, "Duplicate subscription: the account already had one.", ct);
+            await gateway.RefundPaymentAsync(payment.Id, "Duplicate subscription: the account already had one.", CancellationToken.None);
+            metrics.RecordBillingRefund("done");
             logger.LogWarning("Refunded payment {PaymentId} of duplicate subscription {SubscriptionId} of tenant {TenantId}.", payment.Id, duplicate.SubscriptionId, duplicate.TenantId);
         }
-        catch (HttpRequestException refused) when (refused.StatusCode is { } status && (int)status is >= 400 and < 500)
+        catch (HttpRequestException refused) when (DidNothing(refused))
         {
+            metrics.RecordBillingRefund("refused");
             await ReleaseRefundClaimAsync(duplicate, payment, refused);
             throw;
         }
-        catch (Exception unanswered)
+        catch (Exception unconfirmed)
         {
-            logger.LogError(unanswered,
-                "The refund of payment {PaymentId} of duplicate subscription {SubscriptionId} of tenant {TenantId} got no answer. It may have gone through, so it is not asked for again: check the payment with the provider and refund it by hand if it was not.",
+            metrics.RecordBillingRefund("unconfirmed");
+            logger.LogError(unconfirmed,
+                "The refund of payment {PaymentId} of duplicate subscription {SubscriptionId} of tenant {TenantId} is unconfirmed. It may have gone through, so it is not asked for again: check the payment with the provider and refund it by hand if it was not.",
                 payment.Id, duplicate.SubscriptionId, duplicate.TenantId);
             throw;
         }
     }
+
+    private static bool DidNothing(HttpRequestException ex) =>
+        ex.HttpRequestError == HttpRequestError.ConnectionError
+        || ex.StatusCode is { } status && (int)status is >= 400 and < 500 && status is not (HttpStatusCode.Conflict or HttpStatusCode.UnprocessableEntity);
 
     /// <summary>
     /// Gives back a refund claim after the provider refused the refund. A failure to give it back is logged,

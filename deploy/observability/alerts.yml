@@ -71,6 +71,20 @@ groups:
             Check the auth host's logs for the provider's status codes and dbo.BillingWebhookEvents
             for the rows left unprocessed.
 
+      - alert: BillingRefundUnconfirmed
+        # A duplicate subscription's refund timed out or the provider answered with an error that does not
+        # say nothing happened. It is not asked for again, since that could refund twice, so a person has
+        # to check whether the customer got their money back.
+        expr: sum(increase(wbskt_auth_billing_refunds_total{outcome="unconfirmed"}[1h])) > 0
+        labels:
+          severity: warn
+        annotations:
+          summary: "A duplicate subscription's refund is unconfirmed"
+          description: >-
+            The auth host's error log names the payment. Look it up in the provider's dashboard and refund
+            it by hand if no refund is there. Its claim stays on dbo.TenantSubscriptions
+            (DuplicateRefundPaymentId, DuplicateRefundClaimedAt), so the host will not ask again.
+
       - alert: BillingWebhookSignaturesRefused
         # Deliveries that carry a signature which does not hold up usually mean the signing secret was
         # rotated on one side only (a request with no signature is counted apart, as signature_missing).

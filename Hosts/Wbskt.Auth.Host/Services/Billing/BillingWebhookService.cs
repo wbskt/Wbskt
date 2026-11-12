@@ -53,7 +53,8 @@ internal sealed class BillingWebhookService(
                 _ => BillingSyncResult.SetAside($"A {webhook.Type} event names no subscription or payment.")
             };
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        // A timeout inside the sync is a failure like any other; only the request itself going away is not.
+        catch (Exception ex) when (!ct.IsCancellationRequested)
         {
             // Kept unprocessed with the reason, and failed back to the provider so it delivers the event again.
             metrics.RecordBillingWebhook(webhook.Type, "failed");

@@ -240,7 +240,7 @@ public sealed class BillingPaymentsTests
         ProviderSays(new ProviderSubscription("sub_second", SubscriptionStatus.Cancelled, "prod_pro_m", "cus_1", TenantRef, Now.AddMonths(1), false));
         PaymentSays(new ProviderPayment("pay_2", true, "cus_1", TenantRef, "sub_second", [new PaymentLine("prod_pro_m", 1)], false, Now));
         _gateway.SetupSequence(g => g.RefundPaymentAsync("pay_2", It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new HttpRequestException("refused", null, HttpStatusCode.UnprocessableEntity))
+            .ThrowsAsync(new HttpRequestException("refused", null, HttpStatusCode.BadRequest))
             .Returns(Task.CompletedTask);
 
         await Assert.ThrowsAsync<HttpRequestException>(() => Sync().SyncPaymentAsync("pay_2", CancellationToken.None));
@@ -252,22 +252,64 @@ public sealed class BillingPaymentsTests
     }
 
     /// <summary>
-    /// A refund call that times out may still have reached the provider. Asking again on the next delivery
-    /// could refund twice, so the claim is kept and the error is left for an operator.
+    /// A refund that may have reached the provider (a timeout, a dropped connection, a server error, or a
+    /// 409/422 that can mean it is already refunded) keeps its claim: asking again could refund twice.
+    /// </summary>
+    public static TheoryData<Exception> UnconfirmedRefunds => new()
+    {
+        new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout"),
+        new HttpRequestException(HttpRequestError.ResponseEnded, "dropped"),
+        new HttpRequestException("server error", null, HttpStatusCode.BadGateway),
+        new HttpRequestException("conflict", null, HttpStatusCode.Conflict),
+        new HttpRequestException("unprocessable", null, HttpStatusCode.UnprocessableEntity),
+    };
+
+    [Theory]
+    [MemberData(nameof(UnconfirmedRefunds))]
+    public async Task An_unconfirmed_refund_keeps_its_claim(Exception failure)
+    {
+        ArrangeDuplicatePayment();
+        _gateway.Setup(g => g.RefundPaymentAsync("pay_2", It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(failure);
+
+        await Assert.ThrowsAnyAsync<Exception>(() => Sync().SyncPaymentAsync("pay_2", CancellationToken.None));
+
+        _billing.Verify(b => b.ClaimDuplicateRefundAsync("dodo", "sub_second", "pay_2", true, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>A request that never reached the provider refunded nothing, so the claim is given back.</summary>
+    [Fact]
+    public async Task A_refund_that_never_connected_gives_the_claim_back()
+    {
+        ArrangeDuplicatePayment();
+        _gateway.Setup(g => g.RefundPaymentAsync("pay_2", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException(HttpRequestError.ConnectionError, "refused"));
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => Sync().SyncPaymentAsync("pay_2", CancellationToken.None));
+
+        _billing.Verify(b => b.ClaimDuplicateRefundAsync("dodo", "sub_second", "pay_2", true, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>
+    /// The refund runs on the host's token, not the webhook request's, so a provider hanging up on its own
+    /// delivery cannot cut it short and leave it unconfirmed.
     /// </summary>
     [Fact]
-    public async Task A_refund_that_gets_no_answer_keeps_its_claim()
+    public async Task The_refund_does_not_run_on_the_webhook_requests_token()
+    {
+        ArrangeDuplicatePayment();
+        using var request = new CancellationTokenSource();
+
+        await Sync().SyncPaymentAsync("pay_2", request.Token);
+
+        _gateway.Verify(g => g.RefundPaymentAsync("pay_2", It.IsAny<string>(), CancellationToken.None), Times.Once);
+    }
+
+    private void ArrangeDuplicatePayment()
     {
         _stored.Add(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(28)) with { SubscriptionId = "sub_first", CreatedAt = Now.UtcDateTime.AddMinutes(-2) });
         _stored.Add(Subscription(SubscriptionStatus.Cancelled, Now.UtcDateTime.AddDays(30)) with { SubscriptionId = "sub_second", DuplicateAt = Now.UtcDateTime, CreatedAt = Now.UtcDateTime });
         ProviderSays(new ProviderSubscription("sub_second", SubscriptionStatus.Cancelled, "prod_pro_m", "cus_1", TenantRef, Now.AddMonths(1), false));
         PaymentSays(new ProviderPayment("pay_2", true, "cus_1", TenantRef, "sub_second", [new PaymentLine("prod_pro_m", 1)], false, Now));
-        _gateway.Setup(g => g.RefundPaymentAsync("pay_2", It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout"));
-
-        await Assert.ThrowsAsync<TaskCanceledException>(() => Sync().SyncPaymentAsync("pay_2", CancellationToken.None));
-
-        _billing.Verify(b => b.ClaimDuplicateRefundAsync("dodo", "sub_second", "pay_2", true, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     /// <summary>
@@ -300,13 +342,13 @@ public sealed class BillingPaymentsTests
         ProviderSays(new ProviderSubscription("sub_second", SubscriptionStatus.Cancelled, "prod_pro_m", "cus_1", TenantRef, Now.AddMonths(1), false));
         PaymentSays(new ProviderPayment("pay_2", true, "cus_1", TenantRef, "sub_second", [new PaymentLine("prod_pro_m", 1)], false, Now));
         _gateway.Setup(g => g.RefundPaymentAsync("pay_2", It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new HttpRequestException("refused", null, HttpStatusCode.UnprocessableEntity));
+            .ThrowsAsync(new HttpRequestException("refused", null, HttpStatusCode.BadRequest));
         _billing.Setup(b => b.ClaimDuplicateRefundAsync("dodo", "sub_second", "pay_2", true, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("database down"));
 
         var thrown = await Assert.ThrowsAsync<HttpRequestException>(() => Sync().SyncPaymentAsync("pay_2", CancellationToken.None));
 
-        Assert.Equal(HttpStatusCode.UnprocessableEntity, thrown.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, thrown.StatusCode);
     }
 
     [Fact]
@@ -564,6 +606,45 @@ public sealed class BillingPaymentsTests
             .ReceiveAsync("dodo", new Dictionary<string, string> { ["webhook-signature"] = "v1,forged" }, "{}", CancellationToken.None);
 
         Assert.Equal(1, Interlocked.Read(ref refused));
+    }
+
+    /// <summary>
+    /// A request with no signature at all is a scanner on a public URL, not a rotated secret, so it is
+    /// counted apart and stays out of the alert's series.
+    /// </summary>
+    [Fact]
+    public async Task A_request_with_no_signature_is_counted_apart()
+    {
+        _gateway.Setup(g => g.ReadWebhook(It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<string>())).Returns((ProviderWebhook?)null);
+        var metrics = new AuthMetrics();
+        var outcomes = new List<string>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (ReferenceEquals(instrument, metrics.BillingWebhooks))
+            {
+                l.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
+        {
+            foreach (var tag in tags)
+            {
+                if (tag.Key == "outcome" && value > 0)
+                {
+                    lock (outcomes)
+                    {
+                        outcomes.Add((string)tag.Value!);
+                    }
+                }
+            }
+        });
+        listener.Start();
+
+        await new BillingWebhookService(_gateway.Object, _billing.Object, Sync(), metrics, NullLogger<BillingWebhookService>.Instance)
+            .ReceiveAsync("dodo", new Dictionary<string, string>(), "{}", CancellationToken.None);
+
+        Assert.Equal(["signature_missing"], outcomes);
     }
 
     [Fact]
@@ -985,7 +1066,7 @@ public sealed class BillingPaymentsTests
 
     private TenantBillingSync Sync() => new(
         _gateway.Object, _billing.Object, _plans.Object, _planService.Object, _audit.Object, _notifier.Object,
-        Options.Create(_options), new FixedClock(Now), NullLogger<TenantBillingSync>.Instance);
+        Options.Create(_options), new FixedClock(Now), new AuthMetrics(), NullLogger<TenantBillingSync>.Instance);
 
     private BillingWebhookService Webhooks() => new(_gateway.Object, _billing.Object, Sync(), new AuthMetrics(), NullLogger<BillingWebhookService>.Instance);
 
