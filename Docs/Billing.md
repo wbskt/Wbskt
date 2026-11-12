@@ -297,8 +297,11 @@ Two reads show a plan against what has been used, both behind `billing.read` (ev
 - **Credits, messages, clients and runs** on the management host, `GET /api/v1/workspaces/{workspaceRef}/usage`:
   this month's use pooled across the tenant's workspaces (`dbo.TenantWorkspaces`, as the limits are
   checked), this workspace's share and cap, and its credits per day from the ledger
-  (`dbo.WorkspaceUsage_GetSummary`, `dbo.WorkspaceCreditUsage_GetDaily`). Credits are counted as
-  `dbo.Run_Start` counts them, so a run is refused exactly when `used` reaches `limit` plus `topUp`.
+  (`dbo.WorkspaceUsage_GetSummary`, `dbo.WorkspaceCreditUsage_GetDaily`). `remaining` is what is left as
+  `dbo.Run_Start` works it out (the plan's remainder, never below zero, plus `topUp`, less what runs have
+  not posted), so a run is refused exactly when it reaches 0. `used`, `limit` and `topUp` alone do not add
+  up to it once a pack has been drawn on: what the month posted past the allowance was taken out of
+  `topUp` as it was posted, but stays in `used`.
   `topUpExpiresAt` and `topUpExpiring` say when the soonest-expiring credits bought run out and how many,
   and the workspace's `creditsReserved` is what its runs going still hold of their budgets, which
   `dbo.Run_Start` counts against the workspace's cap with what it has spent.

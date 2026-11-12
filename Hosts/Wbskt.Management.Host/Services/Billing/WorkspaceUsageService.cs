@@ -46,11 +46,21 @@ internal sealed class WorkspaceUsageService(IWorkspaceUsageProvider usage, IWork
                     plan.Limits.CreditsPerMonth,
                     summary.CreditGrantBalance,
                     summary.CreditGrantNextExpiresAt?.ToUtcOffset(),
-                    summary.CreditGrantNextExpiring),
+                    summary.CreditGrantNextExpiring,
+                    RemainingCredits(summary, plan.Credits.RunsRefusedAt)),
                 new MessageUsageAmount(summary.TenantMessages, plan.Limits.MessagesPerMonth, MessageAllowance.IsThrottled(plan.PlanCode, summary.TenantMessages, plan.Limits.MessagesPerMonth, _paidThrottleMultiple)),
                 new UsageCount(summary.TenantClients, plan.Limits.Clients),
                 new UsageCount(summary.TenantActiveRuns, plan.Limits.ActiveRuns)),
             new WorkspaceUsageShare(summary.WorkspaceCredits, summary.MonthlyCreditCap, summary.WorkspaceMessages, summary.WorkspaceClients, summary.WorkspaceActiveRuns, summary.WorkspaceCreditsReserved),
             days));
+    }
+
+    // Run_Start's sum: the plan's remainder (posted less what grants covered, never below zero) plus what
+    // the grants still hold, less what runs have not posted yet.
+    private static decimal RemainingCredits(WorkspaceUsageSummary summary, decimal runsRefusedAt)
+    {
+        decimal planLeft = Math.Max(0m, runsRefusedAt - (summary.TenantCreditsPosted - summary.TenantCreditsDrawn));
+        decimal unposted = summary.TenantCredits - summary.TenantCreditsPosted;
+        return Math.Max(0m, planLeft + summary.CreditGrantBalance - unposted);
     }
 }

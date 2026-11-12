@@ -2,7 +2,9 @@
 -- the plan: workflow credits since @MonthStart (the ledger plus running runs' unposted credits, as
 -- Run_Start counts them), client messages since @MonthStart (dbo.WorkspaceMessageUsage), registered
 -- clients and runs going, the workspace's own credit cap and what its runs going hold of it, the credits
--- the tenant's grants still hold, and which of those expire first: when, and how many.
+-- the tenant's grants still hold, and which of those expire first: when, and how many. Also the part of
+-- the month's credits already posted and what was drawn from grants as it was posted
+-- (dbo.TenantCreditMonths), so the caller can work out what is left as Run_Start does.
 CREATE PROCEDURE dbo.WorkspaceUsage_GetSummary
     @WorkspaceId INT,
     @TenantId    INT,
@@ -77,6 +79,14 @@ BEGIN
          WHERE g.TenantId = @TenantId
            AND g.RevokedAt IS NULL
            AND g.HeldAt IS NULL
-           AND g.ExpiresAt = @NextExpiresAt) AS CreditGrantNextExpiring;
+           AND g.ExpiresAt = @NextExpiresAt) AS CreditGrantNextExpiring,
+        (SELECT ISNULL(SUM(u.Credits), 0)
+         FROM dbo.WorkspaceCreditUsage u
+         JOIN @Workspaces w ON w.WorkspaceId = u.WorkspaceId
+         WHERE u.Day >= @MonthStart) AS TenantCreditsPosted,
+        ISNULL((SELECT Drawn
+                FROM dbo.TenantCreditMonths
+                WHERE TenantId = @TenantId
+                  AND MonthStart = @MonthStart), 0) AS TenantCreditsDrawn;
 END;
 GO
