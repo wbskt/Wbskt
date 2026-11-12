@@ -347,7 +347,16 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
         await UpsertAsync(cancelledRunning, $"sub_{Guid.NewGuid():N}", "cancelled", Now.AddDays(-5), periodEnd: Now.AddDays(10));
         await UpsertAsync(alreadyFree, $"sub_{Guid.NewGuid():N}", "expired", Now.AddDays(-5), plan: "Maker");
 
+        // Still active two days after its period ended: the renewal or the cancellation was never delivered.
+        int activeStale = await CreateTenantAsync("Pro");
+        int activeJustEnded = await CreateTenantAsync("Pro");
+        await UpsertAsync(activeStale, $"sub_{Guid.NewGuid():N}", "active", Now.AddDays(-32), periodEnd: Now.AddDays(-2));
+        await UpsertAsync(activeJustEnded, $"sub_{Guid.NewGuid():N}", "active", Now.AddDays(-30), periodEnd: Now.AddHours(-6));
+
         IReadOnlyCollection<int> listed = await GetToReviewAsync(Now, pastDueSince: Now.AddDays(-7));
+
+        Assert.Contains(activeStale, listed);
+        Assert.DoesNotContain(activeJustEnded, listed);
 
         Assert.Contains(overdue, listed);
         Assert.Contains(cancelledEnded, listed);

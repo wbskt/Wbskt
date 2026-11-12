@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -471,6 +472,42 @@ public sealed class BillingPaymentsTests
         Assert.Equal(ErrorType.Unauthorized, unsigned.Error.Type);
         Assert.Equal("BILLING_PROVIDER_NOT_FOUND", other.Error.Code);
         _billing.Verify(b => b.RecordWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>
+    /// A secret rotated on one side only refuses every delivery, and the provider gives up after about a
+    /// day, so each refusal is counted for the alert to see.
+    /// </summary>
+    [Fact]
+    public async Task A_refused_signature_is_counted()
+    {
+        _gateway.Setup(g => g.ReadWebhook(It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<string>())).Returns((ProviderWebhook?)null);
+        var metrics = new AuthMetrics();
+        long refused = 0;
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (ReferenceEquals(instrument, metrics.BillingWebhooks))
+            {
+                l.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
+        {
+            foreach (var tag in tags)
+            {
+                if (tag is { Key: "outcome", Value: "signature_invalid" })
+                {
+                    Interlocked.Add(ref refused, value);
+                }
+            }
+        });
+        listener.Start();
+
+        await new BillingWebhookService(_gateway.Object, _billing.Object, Sync(), metrics, NullLogger<BillingWebhookService>.Instance)
+            .ReceiveAsync("dodo", new Dictionary<string, string>(), "{}", CancellationToken.None);
+
+        Assert.Equal(1, Interlocked.Read(ref refused));
     }
 
     [Fact]

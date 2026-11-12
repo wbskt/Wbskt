@@ -407,8 +407,14 @@ exists, nothing is deleted: 503 `BILLING_SUBSCRIPTION_NOT_CANCELLED`, and the ca
   Once started, `PaymentGatewayCheck` asks the provider whether it accepts the API key and logs a
   Critical line if not (usually a key for the other mode).
 - Webhook outcomes are counted (`wbskt_auth_billing_webhooks_total{type,outcome}`: `done`, `set_aside`,
-  `failed`). `BillingWebhooksSetAside` fires on any webhook set aside in an hour (a payment that may have
-  reached no tenant), `BillingWebhooksFailing` on more than five failures in an hour.
+  `failed`, `signature_invalid`). `BillingWebhooksSetAside` fires on any webhook set aside in an hour (a
+  payment that may have reached no tenant), `BillingWebhooksFailing` on more than five failures in an
+  hour, and `BillingWebhookSignaturesRefused` (critical) on more than three refused signatures in 30
+  minutes: the provider stops redelivering after about a day, so a secret rotated on one side only has
+  to be fixed before then, and the refused deliveries replayed from its dashboard.
+- A subscription that still reads `active` a day after the period it paid for ended is read again from
+  the provider by the hourly review, so a renewal or cancellation whose webhook never arrived is
+  repaired. A first payment or a credit pack whose webhook never arrived is not yet (#747).
 - The webhook endpoint has its own per-IP limit (`billing-webhooks`, 600 a minute), generous for a
   provider's retry burst; a refused delivery is redelivered.
 
