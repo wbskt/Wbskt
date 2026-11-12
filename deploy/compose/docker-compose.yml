@@ -75,14 +75,15 @@ x-gateway: &gateway
   networks: [edge, backend]
   restart: unless-stopped
   mem_limit: ${GATEWAY_MEM_LIMIT:-512m}
+  memswap_limit: ${GATEWAY_MEM_LIMIT:-512m}
   logging: *default-logging
   stop_grace_period: 30s
 
-# Each container has a mem_limit, so a leak in one is killed and restarted on its own instead of
-# taking the VM's memory until the kernel kills the largest process, SQL Server. sql has none: its own
-# cap is SQL_MEMORY_LIMIT_MB. The defaults add up to about 5.6 GB beside SQL Server's ~2.3 GB, which
-# fits an 8 GB VM; HOST_MEM_LIMIT, GATEWAY_MEM_LIMIT (per replica) and PROMETHEUS_MEM_LIMIT are the
-# ones to raise or lower (see "Memory limits" in deploy/README.md).
+# Each container has a mem_limit, and a memswap_limit equal to it so swap does not double it, so a leak
+# in one stays in that container instead of taking the VM's memory until the kernel kills the largest
+# process, SQL Server. sql has none (its own cap is SQL_MEMORY_LIMIT_MB) and a low oom_score_adj, so a
+# VM-wide OOM picks something else. The Go services get a GOMEMLIMIT under their cap. The caps are
+# ceilings, not reservations; see "Memory limits" in deploy/README.md for the sums and the .env keys.
 services:
   traefik:
     # v3.1/v3.5 fail against recent Docker Engine releases (their vendored Docker client
@@ -140,7 +141,11 @@ services:
       backend:
         ipv4_address: 172.28.1.2
     restart: unless-stopped
-    mem_limit: 192m
+    environment:
+      # The Go runtime does not read the cgroup limit; without this its heap overshoots mem_limit.
+      GOMEMLIMIT: ${TRAEFIK_GOMEMLIMIT:-435MiB}
+    mem_limit: ${TRAEFIK_MEM_LIMIT:-512m}
+    memswap_limit: ${TRAEFIK_MEM_LIMIT:-512m}
     logging: *default-logging
 
   console:
@@ -173,6 +178,7 @@ services:
     networks: [edge]
     restart: unless-stopped
     mem_limit: 64m
+    memswap_limit: 64m
     logging: *default-logging
     labels:
       - traefik.enable=true
@@ -258,6 +264,7 @@ services:
     networks: [edge, backend]
     restart: unless-stopped
     mem_limit: ${HOST_MEM_LIMIT:-384m}
+    memswap_limit: ${HOST_MEM_LIMIT:-384m}
     logging: *default-logging
     labels:
       - traefik.enable=true
@@ -328,6 +335,7 @@ services:
     networks: [edge, backend]
     restart: unless-stopped
     mem_limit: ${HOST_MEM_LIMIT:-384m}
+    memswap_limit: ${HOST_MEM_LIMIT:-384m}
     logging: *default-logging
     deploy:
       replicas: ${MANAGEMENT_REPLICAS:-1}
@@ -380,6 +388,7 @@ services:
     networks: [edge, backend]
     restart: unless-stopped
     mem_limit: ${HOST_MEM_LIMIT:-384m}
+    memswap_limit: ${HOST_MEM_LIMIT:-384m}
     logging: *default-logging
     deploy:
       replicas: ${CLIENT_AUTH_REPLICAS:-1}
@@ -497,6 +506,7 @@ services:
     networks: [backend]
     restart: unless-stopped
     mem_limit: ${HOST_MEM_LIMIT:-384m}
+    memswap_limit: ${HOST_MEM_LIMIT:-384m}
     logging: *default-logging
     # Active/standby: one process holds the engine-leader lease and does all the work; any further
     # replica is a warm spare that takes over when the lease lapses.
@@ -541,14 +551,15 @@ services:
       start_period: 20s
     networks: [backend]
     restart: unless-stopped
-    mem_limit: 512m
+    mem_limit: 1g
+    memswap_limit: 1g
     logging: *default-logging
 
   redis:
     image: redis:7
     container_name: wbskt-redis
-    # maxmemory sits under mem_limit, so a full Redis refuses writes (noeviction, its default) instead
-    # of being killed with its keys.
+    # maxmemory sits under mem_limit, so a full Redis refuses writes instead of being killed with its
+    # keys. noeviction is explicit: an LRU policy would evict the TTL'd token revocations first.
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "192mb", "--maxmemory-policy", "noeviction"]
     volumes:
       - redis-data:/data
@@ -560,6 +571,7 @@ services:
     networks: [backend]
     restart: unless-stopped
     mem_limit: 256m
+    memswap_limit: 256m
     logging: *default-logging
 
   sql:
@@ -573,6 +585,8 @@ services:
       # edition" in deploy/README.md.
       MSSQL_PID: ${MSSQL_PID:-Express}
       MSSQL_MEMORY_LIMIT_MB: ${SQL_MEMORY_LIMIT_MB:-2048}
+    # The last process the kernel's OOM killer should pick: every host fails with it.
+    oom_score_adj: -800
     volumes:
       - sql-data:/var/opt/mssql
     # Loopback only, for a desktop SQL client over an SSH tunnel (ssh -L 1433:127.0.0.1:1433 <vm>).
@@ -606,7 +620,11 @@ services:
     # its own metrics on :8888 instead, and OtelCollectorDown fires when that stops answering.
     networks: [backend]
     restart: unless-stopped
+    environment:
+      # The Go runtime does not read the cgroup limit; without this its heap overshoots mem_limit.
+      GOMEMLIMIT: 217MiB
     mem_limit: 256m
+    memswap_limit: 256m
     logging: *default-logging
 
   prometheus:
@@ -630,6 +648,7 @@ services:
     networks: [backend]
     restart: unless-stopped
     mem_limit: ${PROMETHEUS_MEM_LIMIT:-512m}
+    memswap_limit: ${PROMETHEUS_MEM_LIMIT:-512m}
     logging: *default-logging
 
   alertmanager:
@@ -654,6 +673,7 @@ services:
     networks: [backend]
     restart: unless-stopped
     mem_limit: 64m
+    memswap_limit: 64m
     logging: *default-logging
 
   pushgateway:
@@ -673,6 +693,7 @@ services:
     networks: [backend]
     restart: unless-stopped
     mem_limit: 64m
+    memswap_limit: 64m
     logging: *default-logging
 
   # Host metrics: free space on every real filesystem (/, the image store, the SQL volume) for
@@ -691,6 +712,7 @@ services:
     networks: [backend]
     restart: unless-stopped
     mem_limit: 64m
+    memswap_limit: 64m
     logging: *default-logging
 
   # Per-container metrics, for ContainerRestarting: a host that crashes and is restarted by
@@ -716,7 +738,11 @@ services:
       - /dev/disk/:/dev/disk:ro
     networks: [backend]
     restart: unless-stopped
+    environment:
+      # The Go runtime does not read the cgroup limit; without this its heap overshoots mem_limit.
+      GOMEMLIMIT: 163MiB
     mem_limit: 192m
+    memswap_limit: 192m
     logging: *default-logging
 
   loki:
@@ -735,7 +761,11 @@ services:
       start_period: 60s
     networks: [backend]
     restart: unless-stopped
-    mem_limit: 384m
+    environment:
+      # The Go runtime does not read the cgroup limit; without this its heap overshoots mem_limit.
+      GOMEMLIMIT: 435MiB
+    mem_limit: 512m
+    memswap_limit: 512m
     logging: *default-logging
 
   tempo:
@@ -754,7 +784,11 @@ services:
       start_period: 60s
     networks: [backend]
     restart: unless-stopped
+    environment:
+      # The Go runtime does not read the cgroup limit; without this its heap overshoots mem_limit.
+      GOMEMLIMIT: 326MiB
     mem_limit: 384m
+    memswap_limit: 384m
     logging: *default-logging
 
   grafana:
@@ -764,6 +798,7 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required - see .env.example}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GOMEMLIMIT: 217MiB
     volumes:
       - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana-data:/var/lib/grafana
@@ -779,6 +814,7 @@ services:
     networks: [backend]
     restart: unless-stopped
     mem_limit: 256m
+    memswap_limit: 256m
     logging: *default-logging
 
   migrator:
@@ -789,6 +825,7 @@ services:
     container_name: wbskt-migrator
     # sqlpackage holds the whole model in memory while it plans a deploy.
     mem_limit: 1g
+    memswap_limit: 1g
     profiles: ["migrate"]
     environment:
       AUTH_DB_CONNECTION_STRING: Server=sql;Database=Wbskt.Database.Auth;User Id=sa;Password=${SQL_SA_PASSWORD:?SQL_SA_PASSWORD is required - see .env.example};TrustServerCertificate=True;Encrypt=True;

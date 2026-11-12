@@ -35,6 +35,16 @@ scrape_configs:
     static_configs:
       - targets: [rabbitmq:15692]
 
+  # The broker's own alarms, for RabbitMQMemoryAlarm: only the aggregated /metrics has them. Everything
+  # else there is dropped; the per-queue numbers come from the job above.
+  - job_name: rabbitmq-node
+    static_configs:
+      - targets: [rabbitmq:15692]
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: rabbitmq_alarms_.*|rabbitmq_process_resident_memory_bytes|rabbitmq_resident_memory_limit_bytes
+        action: keep
+
   # The VM itself: filesystem free space for the disk alerts.
   - job_name: node
     static_configs:

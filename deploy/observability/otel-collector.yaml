@@ -10,11 +10,12 @@ receivers:
         endpoint: 0.0.0.0:4318
 
 processors:
-  # Drops data rather than letting the collector be OOM-killed when a backend stalls.
+  # Drops data rather than letting the collector be OOM-killed when a backend stalls. Shares of the
+  # container's mem_limit, so it follows a change there.
   memory_limiter:
     check_interval: 1s
-    limit_mib: 200
-    spike_limit_mib: 50
+    limit_percentage: 80
+    spike_limit_percentage: 20
   batch: {}
 
 exporters:
