@@ -6,6 +6,7 @@ public enum RefreshRotationOutcome
     Rotated,
     Unknown,
     Replayed,
+    Revoked,
     Expired,
     SessionExpired,
     UserInactive,
