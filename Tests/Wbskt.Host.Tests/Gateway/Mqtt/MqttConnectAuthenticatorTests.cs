@@ -107,7 +107,8 @@ public sealed class MqttConnectAuthenticatorTests : IDisposable
             "upper" => ClientRefId.ToString("D").ToUpperInvariant(),
             "braces" => ClientRefId.ToString("B"),
             "padded" => " " + ClientRefId.ToString("D"),
-            _ => ClientRefId.ToString("N")
+            "no-dashes" => ClientRefId.ToString("N"),
+            _ => throw new ArgumentOutOfRangeException(nameof(spelling))
         };
 
         var login = await AuthenticateAsync(clientId: clientId);

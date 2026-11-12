@@ -35,9 +35,8 @@ public sealed class MqttConnectAuthenticator
         }
 
         // A CONNECT that cannot name a client is refused before its token costs a signature check. Only
-        // the usual form is taken: MQTTnet keys its sessions by the raw string, and the gateway finds a
-        // connection to disconnect (a revoke, a delete, a rotated secret) by the usual form, so an upper-case
-        // or braced id would leave a revoked client connected.
+        // the usual form is taken: MQTTnet keys sessions by the raw string, and a revoke disconnects by
+        // the usual form.
         if (!Guid.TryParse(request.ClientId, out var claimedId))
         {
             return MqttLogin.Refuse(MqttConnectReasonCode.ClientIdentifierNotValid);
@@ -45,7 +44,8 @@ public sealed class MqttConnectAuthenticator
 
         if (request.ClientId != claimedId.ToString("D"))
         {
-            _logger.LogWarning("Refusing an MQTT connection: its client id {MqttClientId} is not in the usual lower-case form.", request.ClientId);
+            // Logged by the parsed id, not the raw string: an unauthenticated caller can pad it at will.
+            _logger.LogInformation("Refusing an MQTT connection for {ClientRefId}: its client id is not in the usual lower-case form.", claimedId);
             return MqttLogin.Refuse(MqttConnectReasonCode.ClientIdentifierNotValid);
         }
 
