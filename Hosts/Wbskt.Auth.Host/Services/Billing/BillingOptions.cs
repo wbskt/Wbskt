@@ -47,6 +47,22 @@ public sealed class BillingOptions
     /// <summary>Where the provider sends the buyer back after checkout and from its portal, such as the console's billing page.</summary>
     public string? ReturnUrl { get; set; }
 
+    /// <summary>
+    /// The product that sells <paramref name="plan"/> billed <paramref name="interval"/>, or null when it is
+    /// not on sale: no product configured, or no price for it in <see cref="PlanPrices"/>.
+    /// </summary>
+    public string? FindOfferedPlanProduct(PlanCode plan, BillingInterval interval) =>
+        PlanPrices.UsdFor(plan, interval) is not null
+        && Plans.TryGetValue(plan, out Dictionary<BillingInterval, string>? intervals)
+        && intervals.TryGetValue(interval, out string? productId)
+        && !string.IsNullOrEmpty(productId)
+            ? productId
+            : null;
+
+    /// <summary>The credit pack named <paramref name="name"/>, or null when it is not on sale (<see cref="CreditPackOptions.IsOffered"/>).</summary>
+    public CreditPackOptions? FindOfferedCreditPack(string name) =>
+        CreditPacks.TryGetValue(name, out CreditPackOptions? pack) && pack.IsOffered ? pack : null;
+
     /// <summary>The plan and interval <paramref name="productId"/> sells; null when it is not one of <see cref="Plans"/>.</summary>
     public (PlanCode Plan, BillingInterval Interval)? FindPlan(string productId)
     {
@@ -77,4 +93,7 @@ public sealed class CreditPackOptions
 
     /// <summary>What the pack costs in USD, as its product is priced at the provider; checked at start.</summary>
     public decimal PriceUsd { get; set; }
+
+    /// <summary>On sale: a product, credits and a price. A pack with no price is not shown as free.</summary>
+    public bool IsOffered => !string.IsNullOrEmpty(ProductId) && Credits > 0 && PriceUsd > 0;
 }

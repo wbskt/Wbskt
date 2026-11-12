@@ -498,10 +498,11 @@ exists, nothing is deleted: 503 `BILLING_SUBSCRIPTION_NOT_CANCELLED`, and the ca
   Once started, `PaymentGatewayCheck` asks the provider whether it accepts the API key and logs a
   Critical line if not (usually a key for the other mode). It then reads every configured plan and pack
   product (`GET /products/{id}`) and logs a Critical line for each one whose price, currency (USD) or
-  billing interval differs from the catalogue (`PlanPrices`, and a pack's `PriceUsd`), or that does not
-  exist: a product id set to another plan's product, or a price changed in the dashboard, would
-  otherwise let a customer pay one price for another plan's limits. A plan the catalogue has no price
-  for is not offered.
+  billing interval differs from the catalogue (`PlanPrices`, and a pack's `PriceUsd`), that carries a
+  discount or a free trial, or that does not exist or cannot be read: a product id set to another plan's
+  product, or a price changed in the dashboard, would otherwise let a customer pay one price for another
+  plan's limits. The amounts are before tax. A plan the catalogue has no price for, or a pack with no
+  `PriceUsd`, is neither offered nor sold.
 - Webhook outcomes are counted (`wbskt_auth_billing_webhooks_total{type,outcome}`: `done`, `set_aside`,
   `failed`, `signature_invalid`, and `signature_missing` for a request with no signature at all, such as
   a scanner). `BillingWebhooksSetAside` fires on any webhook set aside in an hour (a
