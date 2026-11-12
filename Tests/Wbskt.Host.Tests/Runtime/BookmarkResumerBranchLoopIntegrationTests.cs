@@ -491,12 +491,33 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
             return Task.FromResult(removed > 0);
         }
 
+        public Task<bool> TryClaimWithWakeAsync(Guid refId, string wakeLocalJson, CancellationToken ct)
+        {
+            BookmarkRow? claimed = Bookmarks.Find(bookmark => bookmark.RefId == refId);
+            if (claimed is null)
+            {
+                return Task.FromResult(false);
+            }
+
+            Bookmarks.Remove(claimed);
+            BranchRow branch = Branches.Values.Single(row => row.RefId == claimed.BranchRefId);
+            Branches[branch.Id] = branch with { LocalJson = wakeLocalJson };
+            return Task.FromResult(true);
+        }
+
         public Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(DateTime nowUtc, int batchSize, CancellationToken ct)
         {
             var due = Bookmarks.Where(bookmark => bookmark.ExpiresAt <= nowUtc).Take(batchSize).ToArray();
             foreach (var bookmark in due)
             {
                 Bookmarks.Remove(bookmark);
+
+                // Like Bookmark_ClaimDue: a TTL on a wait that is not a timer stores its exit with the claim.
+                if (!string.IsNullOrEmpty(bookmark.TtlPort) && !string.Equals(bookmark.WakeConditionKind, "timer", StringComparison.OrdinalIgnoreCase))
+                {
+                    BranchRow branch = Branches.Values.Single(row => row.RefId == bookmark.BranchRefId);
+                    Branches[branch.Id] = branch with { PendingTakePort = bookmark.TtlPort };
+                }
             }
             return Task.FromResult<IReadOnlyCollection<BookmarkRow>>(due);
         }

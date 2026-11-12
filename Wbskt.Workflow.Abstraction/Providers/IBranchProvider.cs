@@ -20,6 +20,16 @@ public interface IBranchProvider
     /// </summary>
     Task<IReadOnlyCollection<BranchRow>> GetWaitingWithoutBookmarkAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
         => Task.FromResult<IReadOnlyCollection<BranchRow>>(Array.Empty<BranchRow>());
+
+    /// <summary>
+    /// Waiting branches of a live run whose bookmark a claim deleted to wake them, with the wake stored
+    /// on the branch by that claim, paged by Id after <paramref name="afterId"/>. A new leader resumes
+    /// these: the previous one may have stopped before dispatching them. Defaulted so the test doubles
+    /// that never recover need no stub.
+    /// </summary>
+    Task<IReadOnlyCollection<BranchRow>> GetWokenAsync(long afterId, int batchSize, CancellationToken ct)
+        => Task.FromResult<IReadOnlyCollection<BranchRow>>(Array.Empty<BranchRow>());
+
     Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct);
     Task<BranchRow> SetCompletedAsync(long branchId, CancellationToken ct);
     Task<BranchRow> SetFailedAsync(long branchId, string? lastOutputJson, CancellationToken ct);

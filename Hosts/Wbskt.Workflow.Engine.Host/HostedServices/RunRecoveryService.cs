@@ -9,7 +9,6 @@ public sealed class RunRecoveryService : IEngineStartupTracker
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IRunDispatcher _runDispatcher;
     private readonly ILogger<RunRecoveryService> _logger;
-    private readonly TimeProvider _clock;
     private readonly TaskCompletionSource _readyTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public Task Ready => _readyTcs.Task;
@@ -17,26 +16,62 @@ public sealed class RunRecoveryService : IEngineStartupTracker
     public RunRecoveryService(
         IServiceScopeFactory scopeFactory,
         IRunDispatcher runDispatcher,
-        ILogger<RunRecoveryService> logger,
-        TimeProvider? clock = null)
+        ILogger<RunRecoveryService> logger)
     {
         _scopeFactory = scopeFactory;
         _runDispatcher = runDispatcher;
         _logger = logger;
-        _clock = clock ?? TimeProvider.System;
+    }
+
+    /// <summary>The page size <see cref="FindWokenAsync"/> reads woken branches in.</summary>
+    internal const int WokenPageSize = 1_000;
+
+    /// <summary>
+    /// Every Waiting branch whose wake the previous leader claimed and stored but may not have dispatched
+    /// (a timer, a TTL, a signal, a command answer). Call it before this instance can claim, park or
+    /// dispatch anything itself, that is before the bus starts and the leadership gate opens: a branch
+    /// this instance woke would be in the same state and would then be run twice.
+    /// </summary>
+    public async Task<IReadOnlyCollection<BranchExecutionRequest>> FindWokenAsync(CancellationToken ct)
+    {
+        try
+        {
+            await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
+            var branchProvider = scope.ServiceProvider.GetRequiredService<IBranchProvider>();
+
+            var woken = new List<BranchExecutionRequest>();
+            long afterId = 0;
+            while (true)
+            {
+                IReadOnlyCollection<BranchRow> page = await branchProvider.GetWokenAsync(afterId, WokenPageSize, ct);
+                foreach (BranchRow branch in page)
+                {
+                    woken.Add(new BranchExecutionRequest(branch.RunId, branch.Id, BranchExecutionReason.Recovered));
+                    afterId = Math.Max(afterId, branch.Id);
+                }
+
+                if (page.Count < WokenPageSize)
+                {
+                    return woken;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _readyTcs.TrySetException(ex);
+            throw;
+        }
     }
 
     /// <summary>
-    /// The most woken-but-lost branches recovered in one start. More than this is a sign of something
-    /// else wrong; the rest are left to the orphan GC.
+    /// Re-dispatches the run's interrupted work on a new leader. Recovery only ever runs on a new leader
+    /// (see EngineLeadershipCoordinator) - the previous leader is either dead or self-fenced by
+    /// LeadershipState, so no other instance can be concurrently dispatching these same branches. Not an
+    /// IHostedService: EngineLeadershipCoordinator calls this directly, only once this instance becomes
+    /// leader (see Program.cs).
     /// </summary>
-    internal const int WakeRecoveryLimit = 10_000;
-
-    // Recovery only ever runs on a new leader (see EngineLeadershipCoordinator) - the previous
-    // leader is either dead or self-fenced by LeadershipState, so no other instance can be
-    // concurrently dispatching these same branches. Not an IHostedService: EngineLeadershipCoordinator
-    // calls this directly, only once this instance becomes leader (see Program.cs).
-    public async Task RecoverAsync(CancellationToken ct)
+    /// <param name="woken">The branches <see cref="FindWokenAsync"/> found before the gate opened.</param>
+    public async Task RecoverAsync(IReadOnlyCollection<BranchExecutionRequest> woken, CancellationToken ct)
     {
         try
         {
@@ -98,9 +133,15 @@ public sealed class RunRecoveryService : IEngineStartupTracker
                 await ReapplyStopsAsync(runProvider, runCancellationService, reappliedRunIds, ct);
             }
 
-            int woken = await RecoverLostWakesAsync(branchProvider, ct);
+            // Each woken branch carries its wake (a payload, a TTL port, or a passed deadline), so this
+            // does what the lost dispatch would have. One of a run that is stopping is ended by the
+            // branch loop's own stop check, as any branch of such a run is.
+            foreach (BranchExecutionRequest request in woken)
+            {
+                await _runDispatcher.DispatchAsync(request, ct);
+            }
 
-            _logger.LogInformation("Recovered {Count} running branches and {Woken} woken ones.", branches.Count, woken);
+            _logger.LogInformation("Recovered {Count} running branches and {Woken} Waiting branches whose wake was not dispatched.", branches.Count, woken.Count);
             _readyTcs.TrySetResult();
         }
         catch (Exception ex)
@@ -108,32 +149,6 @@ public sealed class RunRecoveryService : IEngineStartupTracker
             _readyTcs.TrySetException(ex);
             throw;
         }
-    }
-
-    /// <summary>
-    /// Resumes every Waiting branch of a running run that has no bookmark: one whose wake (a timer, a
-    /// signal, a command ack, a retry back-off) claimed its bookmark by deleting it and was then lost with
-    /// the previous leader's in-memory channel. Each parking executor resumes from its persisted state and
-    /// parks again when the wake was not its own, so a branch stranded mid-park is safe to resume too.
-    /// Runs after <see cref="ReapplyStopsAsync"/>, which has already ended the waiting branches of runs
-    /// that are stopping, so only running runs' branches are left to wake.
-    /// </summary>
-    private async Task<int> RecoverLostWakesAsync(IBranchProvider branchProvider, CancellationToken ct)
-    {
-        // No cutoff: this is a new leader, so no other instance is parking or waking a branch right now.
-        DateTime now = _clock.GetUtcNow().UtcDateTime.AddSeconds(1);
-        IReadOnlyCollection<BranchRow> waiting = await branchProvider.GetWaitingWithoutBookmarkAsync(now, WakeRecoveryLimit, ct);
-        foreach (BranchRow branch in waiting)
-        {
-            await _runDispatcher.DispatchAsync(new BranchExecutionRequest(branch.RunId, branch.Id, BranchExecutionReason.Recovered), ct);
-        }
-
-        if (waiting.Count >= WakeRecoveryLimit)
-        {
-            _logger.LogWarning("Recovery found at least {Limit} Waiting branches with no bookmark and resumed only those; the orphan GC handles the rest.", WakeRecoveryLimit);
-        }
-
-        return waiting.Count;
     }
 
     /// <summary>

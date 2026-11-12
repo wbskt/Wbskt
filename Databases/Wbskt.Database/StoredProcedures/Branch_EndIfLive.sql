@@ -18,6 +18,7 @@ BEGIN
         Status = @ToStatus,
         LastOutputJson = @LastOutputJson,
         PendingTakePort = NULL,
+        WokenAt = NULL,
         UpdatedAt = SYSUTCDATETIME()
     WHERE Id = @Id
       AND Status IN ('Active', 'Waiting');

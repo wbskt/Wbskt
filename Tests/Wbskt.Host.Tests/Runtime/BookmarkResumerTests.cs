@@ -176,9 +176,11 @@ public sealed class BookmarkResumerTests
         // Act
         await resumer.MatchInboundAsync(evt, hasRegistrations: true, CancellationToken.None);
 
-        // Assert
-        (long branchId, string localJson) = Assert.Single(branchProvider.PointerUpdates);
-        Assert.Equal(1001L, branchId);
+        // Assert: the wake is stored by the claim itself, not by a later branch write a stop could lose.
+        Assert.Empty(branchProvider.PointerUpdates);
+        (Guid claimedRefId, string localJson) = Assert.Single(bookmarkProvider.WakeClaims);
+        Assert.Equal(bookmark.RefId, claimedRefId);
+        Assert.Single(dispatcher.Requests);
         using JsonDocument doc = JsonDocument.Parse(localJson);
         JsonElement wake = doc.RootElement.GetProperty("__wake");
         Assert.Equal("approve", wake.GetProperty("signalName").GetString());
@@ -319,6 +321,20 @@ public sealed class BookmarkResumerTests
             operationLog?.Add("claim");
             ClaimedRefIds.Add(refId);
             return Task.FromResult(true);
+        }
+
+        public List<(Guid RefId, string LocalJson)> WakeClaims { get; } = [];
+
+        public async Task<bool> TryClaimWithWakeAsync(Guid refId, string wakeLocalJson, CancellationToken ct)
+        {
+            // Like Bookmark_ClaimByRefId: the wake is stored only by the claim that wins.
+            if (!await TryClaimAsync(refId, ct))
+            {
+                return false;
+            }
+
+            WakeClaims.Add((refId, wakeLocalJson));
+            return true;
         }
 
         public Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(DateTime nowUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();

@@ -98,29 +98,26 @@ internal sealed class BookmarkResumer : IBookmarkResumer
 
             foreach (var bookmark in bookmarks)
             {
-                // Single-row model: claim (delete) the bookmark before touching anything else. If a
-                // concurrent TTL expiry already claimed it, we lost the race and must not resume it.
-                if (!await _bookmarkProvider.TryClaimAsync(bookmark.RefId, ct))
+                // Read before the claim: while its bookmark exists the branch is parked and nothing else
+                // writes its local state, so the state read here is the one the claim replaces.
+                var branch = await _branchProvider.GetByRefIdAsync(bookmark.BranchRefId, ct);
+
+                // Single-row model: claiming (deleting) the bookmark decides the race with a concurrent
+                // TTL expiry or another matcher; a loser must not resume the branch. The winner's wake is
+                // stored by the claim itself: the payload under the reserved "__wake" key, tagged with
+                // the node the bookmark was parked by, so a stop before the dispatch below leaves a
+                // branch the next leader resumes with its payload (RunRecoveryService). The branch keeps
+                // its pointer and Waiting status; the re-executed node flips it to Active.
+                bool claimed = evt.Payload.Count > 0
+                    ? await _bookmarkProvider.TryClaimWithWakeAsync(bookmark.RefId, MergeWakePayload(branch.LocalJson, evt.Payload, bookmark.NodeId), ct)
+                    : await _bookmarkProvider.TryClaimAsync(bookmark.RefId, ct);
+                if (!claimed)
                 {
                     _logger?.LogDebug("Bookmark {BookmarkId} for event {EventId} already claimed (lost race with TTL/another matcher)", bookmark.Id, evt.InboundEventId);
                     continue;
                 }
 
                 _logger?.LogInformation("Event {EventId} matched bookmark {BookmarkId} for run {RunId}", evt.InboundEventId, bookmark.Id, bookmark.RunId);
-
-                var branch = await _branchProvider.GetByRefIdAsync(bookmark.BranchRefId, ct);
-
-                // Deliver the wake payload to the resumed branch under the reserved "__wake" key so the
-                // parked node (and downstream nodes) can read what woke them, tagged with the node the
-                // bookmark was parked by so a node can tell its own wake from one meant for another.
-                // The branch keeps its pointer and Waiting status; the re-executed node flips it to
-                // Active when it continues.
-                if (evt.Payload.Count > 0)
-                {
-                    _logger?.LogDebug("Merging wake payload into branch {BranchId} local state", branch.Id);
-                    string mergedLocalJson = MergeWakePayload(branch.LocalJson, evt.Payload, bookmark.NodeId);
-                    await _branchProvider.UpdatePointerAsync(branch.Id, branch.NodeId, branch.Status, mergedLocalJson, branch.LastOutputJson, ct);
-                }
 
                 // Dispatch is the last step - the branch is only resumed once the bookmark is
                 // irrevocably claimed and any wake payload is durably merged.

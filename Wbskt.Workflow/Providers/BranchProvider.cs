@@ -96,6 +96,20 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
         );
     }
 
+    public async Task<IReadOnlyCollection<BranchRow>> GetWokenAsync(long afterId, int batchSize, CancellationToken ct)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.Branch_GetWoken",
+            p =>
+            {
+                p.AddWithValue("@AfterId", afterId);
+                p.AddWithValue("@BatchSize", batchSize);
+            },
+            Map,
+            ct
+        );
+    }
+
     public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct)
     {
         return UpdateBranchAsync(branchId, currentNodeId, status, localJson, lastOutputJson, ct);

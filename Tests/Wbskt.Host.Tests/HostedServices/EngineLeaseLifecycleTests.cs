@@ -79,6 +79,8 @@ public sealed class EngineLeaseLifecycleTests
         bus.Setup(b => b.StartAsync(It.IsAny<CancellationToken>())).ReturnsAsync(busHandle.Object);
 
         var branches = new Mock<IBranchProvider>();
+        branches.Setup(b => b.GetWokenAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
         branches.Setup(b => b.GetRunningBranchesAsync(It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("database unreachable"));
 

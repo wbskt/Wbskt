@@ -23,28 +23,48 @@ public sealed class RunRecoveryServiceTests
         var service = new RunRecoveryService(WorkerTestServices.Scopes(branchProvider), runDispatcher, logger);
 
         // Act
-        await service.RecoverAsync(CancellationToken.None);
+        await service.RecoverAsync([], CancellationToken.None);
 
         // Assert
         Assert.Equal([(171L, 71L, BranchExecutionReason.Recovered), (172L, 72L, BranchExecutionReason.Recovered)], runDispatcher.Requests);
     }
 
     [Fact]
-    public async Task Start_resumes_waiting_branches_whose_wake_was_lost_after_the_running_ones()
+    public async Task Start_resumes_the_woken_branches_it_was_given_after_the_running_ones()
     {
         // Arrange
-        var branchProvider = new RecordingBranchProvider([CreateBranch(71, 171)], waiting: [CreateBranch(81, 181)]);
+        var branchProvider = new RecordingBranchProvider([CreateBranch(71, 171)]);
         var runDispatcher = new RecordingRunDispatcher();
         var logger = new RecordingLogger<RunRecoveryService>();
         var service = new RunRecoveryService(WorkerTestServices.Scopes(branchProvider), runDispatcher, logger);
 
         // Act
-        await service.RecoverAsync(CancellationToken.None);
+        await service.RecoverAsync([new BranchExecutionRequest(181, 81, BranchExecutionReason.Recovered)], CancellationToken.None);
 
         // Assert
         Assert.Equal([(171L, 71L, BranchExecutionReason.Recovered), (181L, 81L, BranchExecutionReason.Recovered)], runDispatcher.Requests);
-        Assert.Equal(RunRecoveryService.WakeRecoveryLimit, branchProvider.WaitingBatchSize);
-        Assert.Contains(logger.Messages, message => message.Contains("Recovered 1 running branches and 1 woken ones.", StringComparison.Ordinal));
+        Assert.Contains(logger.Messages, message => message.Contains("Recovered 1 running branches and 1 Waiting branches whose wake was not dispatched.", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Finding_woken_branches_reads_every_page_and_dispatches_nothing()
+    {
+        // Arrange
+        BranchRow[] woken = Enumerable.Range(1, RunRecoveryService.WokenPageSize + 5)
+            .Select(id => CreateBranch(id, 1000 + id))
+            .ToArray();
+        var branchProvider = new RecordingBranchProvider([], woken);
+        var runDispatcher = new RecordingRunDispatcher();
+        var service = new RunRecoveryService(WorkerTestServices.Scopes(branchProvider), runDispatcher, new RecordingLogger<RunRecoveryService>());
+
+        // Act
+        IReadOnlyCollection<BranchExecutionRequest> found = await service.FindWokenAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(woken.Select(branch => branch.Id), found.Select(request => request.BranchId));
+        Assert.All(found, request => Assert.Equal(BranchExecutionReason.Recovered, request.Reason));
+        Assert.Equal([0L, RunRecoveryService.WokenPageSize], branchProvider.WokenAfterIds);
+        Assert.Empty(runDispatcher.Requests);
     }
 
     [Fact]
@@ -57,10 +77,10 @@ public sealed class RunRecoveryServiceTests
         var service = new RunRecoveryService(WorkerTestServices.Scopes(branchProvider), runDispatcher, logger);
 
         // Act
-        await service.RecoverAsync(CancellationToken.None);
+        await service.RecoverAsync([], CancellationToken.None);
 
         // Assert
-        Assert.Contains(logger.Messages, message => message.Contains("Recovered 0 running branches and 0 woken ones.", StringComparison.Ordinal));
+        Assert.Contains(logger.Messages, message => message.Contains("Recovered 0 running branches and 0 Waiting branches whose wake was not dispatched.", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -75,7 +95,7 @@ public sealed class RunRecoveryServiceTests
         Assert.False(service.Ready.IsCompleted);
 
         // Act
-        await service.RecoverAsync(CancellationToken.None);
+        await service.RecoverAsync([], CancellationToken.None);
 
         // Assert
         Assert.True(service.Ready.IsCompleted);
@@ -102,7 +122,7 @@ public sealed class RunRecoveryServiceTests
         var service = new RunRecoveryService(WorkerTestServices.Scopes(branchProvider, runProvider, cancellationService), runDispatcher, logger);
 
         // Act
-        await service.RecoverAsync(CancellationToken.None);
+        await service.RecoverAsync([], CancellationToken.None);
 
         // Assert: a Cancelling run gets the cancellation re-applied, which is what clears its bookmarks
         // and waiting branches. A Failing run must not be turned into a cancelled one, but its failure
@@ -130,7 +150,7 @@ public sealed class RunRecoveryServiceTests
         var service = new RunRecoveryService(WorkerTestServices.Scopes(branchProvider, runProvider, cancellationService), runDispatcher, logger);
 
         // Act
-        await service.RecoverAsync(CancellationToken.None);
+        await service.RecoverAsync([], CancellationToken.None);
 
         // Assert: each stop re-applied once, by its own kind; a Running run is left alone.
         Assert.Equal([180L], cancellationService.ReappliedFailures);
@@ -180,14 +200,15 @@ public sealed class RunRecoveryServiceTests
         };
     }
 
-    private sealed class RecordingBranchProvider(IReadOnlyCollection<BranchRow> branches, IReadOnlyCollection<BranchRow>? waiting = null) : IBranchProvider
+    private sealed class RecordingBranchProvider(IReadOnlyCollection<BranchRow> branches, IReadOnlyCollection<BranchRow>? woken = null) : IBranchProvider
     {
-        public int? WaitingBatchSize { get; private set; }
+        public List<long> WokenAfterIds { get; } = [];
 
-        public Task<IReadOnlyCollection<BranchRow>> GetWaitingWithoutBookmarkAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
+        public Task<IReadOnlyCollection<BranchRow>> GetWokenAsync(long afterId, int batchSize, CancellationToken ct)
         {
-            WaitingBatchSize = batchSize;
-            return Task.FromResult(waiting ?? []);
+            WokenAfterIds.Add(afterId);
+            IReadOnlyCollection<BranchRow> page = (woken ?? []).Where(branch => branch.Id > afterId).OrderBy(branch => branch.Id).Take(batchSize).ToArray();
+            return Task.FromResult(page);
         }
 
         public Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct) => throw new NotSupportedException();

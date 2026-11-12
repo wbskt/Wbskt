@@ -104,6 +104,20 @@ internal sealed class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
         return result is long;
     }
 
+    public async Task<bool> TryClaimWithWakeAsync(Guid refId, string wakeLocalJson, CancellationToken ct)
+    {
+        var result = await ExecuteScalarAsync<object>(
+            "dbo.Bookmark_ClaimByRefId",
+            p =>
+            {
+                p.AddWithValue("@RefId", refId);
+                p.AddWithValue("@LocalJson", wakeLocalJson);
+            },
+            ct
+        );
+        return result is long;
+    }
+
     public async Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(DateTime nowUtc, int batchSize, CancellationToken ct)
     {
         return await ExecuteCollectionAsync(

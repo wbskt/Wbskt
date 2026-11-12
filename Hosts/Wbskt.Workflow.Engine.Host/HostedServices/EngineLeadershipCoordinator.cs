@@ -1,4 +1,5 @@
 using MassTransit;
+using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine;
 
 namespace Wbskt.Workflow.Engine.Host.HostedServices;
@@ -34,10 +35,14 @@ public sealed class EngineLeadershipCoordinator : BackgroundService
         _logger.LogInformation("Acquired engine leadership; starting the bus and recovering active runs.");
         try
         {
+            // Read before the bus starts and the gate opens, while nothing here can wake a branch yet:
+            // once the scheduler and consumers run, a branch they woke would look the same.
+            IReadOnlyCollection<BranchExecutionRequest> woken = await _runRecoveryService.FindWokenAsync(stoppingToken);
+
             _busHandle = await _busControl.StartAsync(stoppingToken);
             _leadershipState.SetBusStarted();
 
-            await _runRecoveryService.RecoverAsync(stoppingToken);
+            await _runRecoveryService.RecoverAsync(woken, stoppingToken);
         }
         catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
         {
