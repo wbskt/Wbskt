@@ -282,8 +282,8 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
      p = parent issue, s = o|c, a = areas, pr = priority, sz = size. "work" adds a state and a sentence to an issue number. -->
 <script type="application/json" id="roadmap-data">
 {
- "asOf": "2026-11-11",
- "headline": "M2 backend has 6 pieces of real work left: two wait on you (the SDK release keys and the deleted-client call), the never-ending-runs epic (#594), and the housekeeping epic (#618), now down to one M3 item. Drafts and test runs merged as PR #615 and PR #617, and run numbers as PR #612. Four issues stand between the backend and going public on 31 Dec; everything else is Post-launch.",
+ "asOf": "2026-11-12",
+ "headline": "M2 backend has 6 pieces of real work left: two wait on you (the SDK release keys and the deleted-client call), the never-ending-runs epic (#594), and the housekeeping epic (#618), now down to one M3 item. Drafts and test runs merged as PR #615 and PR #617, and run numbers as PR #612. The 11 Nov architecture review (#730) added 5 backend P1s to M2, starting with the red master pipeline (#735), and 45 P2s to M3 Go public; its small items are Post-launch.",
  "milestones": [
   {
    "name": "M1 Hardening",
@@ -298,7 +298,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "short": "M2",
    "due": "2026-11-30",
    "start": "2026-11-01",
-   "open": 30,
+   "open": 36,
    "closed": 177
   },
   {
@@ -306,7 +306,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "short": "M3",
    "due": "2026-12-31",
    "start": "2026-12-01",
-   "open": 16,
+   "open": 61,
    "closed": 10
   },
   {
@@ -314,11 +314,16 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "short": "Post",
    "due": null,
    "start": "2027-01-01",
-   "open": 51,
+   "open": 60,
    "closed": 10
   }
  ],
  "asks": [
+  {
+   "title": "Master is red and the last deploy failed",
+   "body": "Three jobs fail on master (a coverage action tag that no longer resolves, a vulnerable package in the management host, and an ssh timeout on the 10 Nov deploy), so nothing merges green or deploys until it is fixed (#735). The console deploy was also cancelled twice on 11 Nov (Wbskt.Console#177).",
+   "issue": 735
+  },
   {
    "title": "A call on deleted clients",
    "body": "Should deleting a client stop it enrolling again with the same PIN? Either a final CLIENT_DELETED login code or a warning in the delete dialog (#547).",
@@ -395,6 +400,14 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   }
  },
  "reviews": [
+  {
+   "date": "2026-11-11",
+   "title": "Architecture review",
+   "scope": "289 commits since 2 Nov in six repos, in ten lanes: billing, credits, tenants, both gateways, engine, database, client libraries, console and site, infra",
+   "result": "151 findings (6 P1, 59 P2, 86 P3) filed as 73 follow-ups: 59 here and 14 in Wbskt.Console",
+   "epic": 730,
+   "doc": "Docs/Reviews/2026-11-11.md"
+  },
   {
    "date": "2026-11-08",
    "title": "Drafts and test runs (PR #615 and #617)",
@@ -547,6 +560,66 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   }
  ],
  "issues": [
+  {"n":789,"t":"Architecture review (11 Nov): infra and CI small items","s":"o","m":"Post","p":730,"a":["ops"],"pr":"P3"},
+  {"n":788,"t":"Architecture review (11 Nov): database small items","s":"o","m":"Post","p":730,"a":["db"],"pr":"P3"},
+  {"n":787,"t":"Architecture review (11 Nov): workflow engine small items","s":"o","m":"Post","p":730,"a":["engine"],"pr":"P3"},
+  {"n":786,"t":"Architecture review (11 Nov): client library small items","s":"o","m":"Post","p":730,"a":["sdk"],"pr":"P3"},
+  {"n":785,"t":"Architecture review (11 Nov): gateway small items","s":"o","m":"Post","p":730,"a":["socket"],"pr":"P3"},
+  {"n":784,"t":"Architecture review (11 Nov): tenants and access small items","s":"o","m":"Post","p":730,"a":["auth"],"pr":"P3"},
+  {"n":783,"t":"Architecture review (11 Nov): billing small items","s":"o","m":"Post","p":730,"a":["auth"],"pr":"P3"},
+  {"n":782,"t":"Architecture review (11 Nov): credits and usage small items","s":"o","m":"Post","p":730,"a":["engine"],"pr":"P3"},
+  {"n":781,"t":"Architecture review (11 Nov): auth and management small items","s":"o","m":"Post","p":730,"a":["management"],"pr":"P3"},
+  {"n":780,"t":"Nightly stress run fails on the Free plan's client limit and reports to nobody","s":"o","m":"M3","p":730,"a":["ops"],"pr":"P2","sz":"S"},
+  {"n":779,"t":"Give containers memory limits so one leak cannot get SQL Server killed","s":"o","m":"M3","p":730,"a":["ops"],"pr":"P2","sz":"S"},
+  {"n":778,"t":"Count mail sent and failed, and stop logging recipient addresses","s":"o","m":"M3","p":730,"a":["ops"],"pr":"P2","sz":"S"},
+  {"n":777,"t":"Alert on failed periodic-job ticks and on unhealthy auth, management and gateway hosts","s":"o","m":"M3","p":730,"a":["ops"],"pr":"P2","sz":"S"},
+  {"n":776,"t":"Raise at least one alert from outside the VM it watches","s":"o","m":"M3","p":730,"a":["ops"],"pr":"P2","sz":"S"},
+  {"n":775,"t":"Traefik excludes /api/internal case-sensitively while the hosts route case-insensitively","s":"o","m":"M3","p":730,"a":["ops"],"pr":"P2","sz":"S"},
+  {"n":774,"t":"Routine run history is deleted at 30 days whatever the plan keeps","s":"o","m":"M3","p":730,"a":["db"],"pr":"P2","sz":"S"},
+  {"n":773,"t":"Sweep the readings of deleted workspaces","s":"o","m":"M3","p":730,"a":["db"],"pr":"P2","sz":"S"},
+  {"n":772,"t":"A freshly dropped designer step fails as a serializer 400, not a validation problem","s":"o","m":"M3","p":730,"a":["engine"],"pr":"P2","sz":"S"},
+  {"n":771,"t":"Run now refused by the plan answers 409 concurrency or 500, not the plan's refusal","s":"o","m":"M3","p":730,"a":["engine"],"pr":"P2","sz":"S"},
+  {"n":770,"t":"An event whose first delivery died mid-dispatch is dropped as a duplicate","s":"o","m":"M3","p":730,"a":["engine"],"pr":"P2","sz":"S"},
+  {"n":769,"t":"A sub-workflow step can wait forever on a child that already finished","s":"o","m":"M3","p":730,"a":["engine"],"pr":"P2","sz":"M"},
+  {"n":768,"t":"A wake in flight when the engine stops is lost and the branch fails BOOKMARK_LOST","s":"o","m":"M3","p":730,"a":["engine"],"pr":"P2","sz":"S"},
+  {"n":767,"t":"Arduino: the PlatformIO install line names a version that was never published","s":"o","m":"M3","p":730,"a":["sdk"],"pr":"P2","sz":"XS"},
+  {"n":766,"t":".NET: give the app a way to see why it is not connecting","s":"o","m":"M3","p":730,"a":["sdk"],"pr":"P2","sz":"S"},
+  {"n":765,"t":".NET: refuse a message over 64 KB before it blocks the buffer","s":"o","m":"M3","p":730,"a":["sdk"],"pr":"P2","sz":"XS"},
+  {"n":764,"t":".NET and Python keep credentials at the same path in two formats","s":"o","m":"M3","p":730,"a":["sdk"],"pr":"P2","sz":"S"},
+  {"n":763,"t":".NET: let message handlers be async without ending the process","s":"o","m":"M3","p":730,"a":["sdk"],"pr":"P2","sz":"S"},
+  {"n":762,"t":".NET: a throwing OnConnected or OnSuperseded handler leaves a dead connection","s":"o","m":"M3","p":730,"a":["sdk"],"pr":"P2","sz":"S"},
+  {"n":761,"t":"Apply a missed revoke, delete or secret rotation to connections already open","s":"o","m":"M3","p":730,"a":["socket"],"pr":"P2","sz":"S"},
+  {"n":760,"t":"Presence: clients are shown offline after a broker outage until they reconnect","s":"o","m":"M3","p":730,"a":["socket"],"pr":"P2","sz":"S"},
+  {"n":759,"t":"WebSocket gateway: send close code 1001 on shutdown","s":"o","m":"M3","p":730,"a":["socket"],"pr":"P2","sz":"S"},
+  {"n":758,"t":"MQTT: accept only the canonical client id so a revoked client can be disconnected","s":"o","m":"M3","p":730,"a":["socket"],"pr":"P2","sz":"XS"},
+  {"n":757,"t":"users.manage alone can hand out any role through an invitation or a group","s":"o","m":"M3","p":730,"a":["auth"],"pr":"P2","sz":"S"},
+  {"n":756,"t":"Permission test matches no route since /api/v1, and the auth host has no such test","s":"o","m":"M3","p":730,"a":["auth"],"pr":"P2","sz":"S"},
+  {"n":755,"t":"Account deletion cancels the subscription before it knows the deletion is allowed","s":"o","m":"M3","p":730,"a":["auth"],"pr":"P2","sz":"S"},
+  {"n":754,"t":"Ending one session or changing the password signs the user out everywhere","s":"o","m":"M3","p":730,"a":["auth"],"pr":"P2","sz":"S"},
+  {"n":753,"t":"Registration tells whether an email is registered through a taken username","s":"o","m":"M3","p":730,"a":["auth"],"pr":"P2","sz":"S"},
+  {"n":752,"t":"Cap the Free tenants one account can create","s":"o","m":"M3","p":730,"a":["auth"],"pr":"P2","sz":"S"},
+  {"n":751,"t":"Team at its 2x message headroom is past the single-VM database trigger","s":"o","m":"M3","p":730,"a":["auth"],"pr":"P2","sz":"S"},
+  {"n":750,"t":"Check Dodo product prices against the plan catalogue","s":"o","m":"M3","p":730,"a":["auth"],"pr":"P2","sz":"M"},
+  {"n":749,"t":"Subscription refund or chargeback drops the plan only when the payment lists the product","s":"o","m":"M3","p":730,"a":["auth"],"pr":"P2","sz":"S"},
+  {"n":748,"t":"One Dodo customer per payer email lets a billing portal open another tenant's subscriptions","s":"o","m":"M3","p":730,"a":["auth"],"pr":"P2","sz":"M"},
+  {"n":747,"t":"Read the provider back when a webhook is never delivered","s":"o","m":"M3","p":730,"a":["auth"],"pr":"P2","sz":"S"},
+  {"n":746,"t":"Duplicate-subscription refund claim is left behind by a timeout and never refunded","s":"o","m":"M3","p":730,"a":["auth"],"pr":"P2","sz":"S"},
+  {"n":745,"t":"Monthly credit allowance can be passed by the runs going at once","s":"o","m":"M3","p":730,"a":["engine"],"pr":"P2","sz":"L"},
+  {"n":744,"t":"Usage response: used, limit and topUp stop adding up once a pack is drawn","s":"o","m":"M3","p":730,"a":["engine"],"pr":"P2","sz":"S"},
+  {"n":743,"t":"Hold a spending cap that is set while runs are going","s":"o","m":"M3","p":730,"a":["engine"],"pr":"P2","sz":"M"},
+  {"n":742,"t":"Business overage report leaves out ended contracts and deleted workspaces","s":"o","m":"M3","p":730,"a":["engine"],"pr":"P2","sz":"M"},
+  {"n":741,"t":"Credit notices at 80% and 100% are lost when the broker is down or the engine stops","s":"o","m":"M3","p":730,"a":["engine"],"pr":"P2","sz":"M"},
+  {"n":740,"t":"Count an ended run's unposted credits against caps and the allowance","s":"o","m":"M3","p":730,"a":["engine"],"pr":"P2","sz":"M"},
+  {"n":739,"t":"Deleting a workspace takes its month's credits and messages off the tenant's meters","s":"o","m":"M3","p":730,"a":["engine"],"pr":"P2","sz":"M"},
+  {"n":738,"t":"Give SMTP sends a timeout so a stalled relay cannot stop the mail drains","s":"o","m":"M3","p":730,"a":["management"],"pr":"P2","sz":"XS"},
+  {"n":737,"t":"Presence repair stamped with the management clock overrides a newer connect","s":"o","m":"M3","p":730,"a":["management"],"pr":"P2","sz":"S"},
+  {"n":736,"t":"Strip interface-declared [SignalRPrivate] ids from the console feed","s":"o","m":"M3","p":730,"a":["management"],"pr":"P2","sz":"XS"},
+  {"n":735,"t":"Get the master pipeline green and deploying again: three red jobs since 10 Nov","s":"o","m":"M2","p":730,"a":["ops"],"pr":"P1","sz":"S"},
+  {"n":734,"t":"Python: quick start exits before connecting and registers a new client each run","s":"o","m":"M2","p":730,"a":["sdk"],"pr":"P1","sz":"XS"},
+  {"n":733,"t":"Python: sync client hangs for good when a handler calls send","s":"o","m":"M2","p":730,"a":["sdk"],"pr":"P1","sz":"S"},
+  {"n":732,"t":"MQTT: a reconnect over a held connection ends up connected with no session","s":"o","m":"M2","p":730,"a":["socket"],"pr":"P1","sz":"S"},
+  {"n":731,"t":"Let the caller choose the tenant when creating a workspace, and check a permission","s":"o","m":"M2","p":730,"a":["auth"],"pr":"P1","sz":"M"},
+  {"n":730,"t":"Architecture review (11 Nov): follow-ups","s":"o","m":"M2","p":null,"a":[],"epic":1,"sub":{"completed":0,"total":73}},
   {"n":728,"t":"Review brief: add lanes for credits, billing and pricing, tenants and access, and the client libraries","s":"c","m":"M2","p":618,"a":[],"x":"2026-11-11"},
   {"n":726,"t":"Move the databases from SQL Server to PostgreSQL, step by step after launch","s":"o","m":"Post","p":null,"a":["db"]},
   {"n":718,"t":"Credits: after an upgrade mid-month, packs are drawn before the plan's credits run out","s":"c","m":"M2","p":167,"a":["db"],"x":"2026-11-09"},
