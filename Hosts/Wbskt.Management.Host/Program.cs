@@ -1,11 +1,9 @@
-using System.Text.Json.Serialization.Metadata;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.EventBus.RabbitMQ;
-using Wbskt.Events;
 using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Billing;
@@ -292,14 +290,7 @@ public static class Program
             manager.FeatureProviders.Add(new HostRoleControllerFeatureProvider(role));
         });
         builder.Services.AddWbsktJson();
-        var signalRBuilder = builder.Services.AddSignalR().AddJsonProtocol(options =>
-        {
-            options.PayloadSerializerOptions.TypeInfoResolver = new DefaultJsonTypeInfoResolver
-            {
-                Modifiers = { IgnoreSignalRPrivateProperties }
-            };
-            WbsktJsonExtensions.Apply(options.PayloadSerializerOptions);
-        });
+        var signalRBuilder = builder.Services.AddSignalR().AddJsonProtocol(options => SignalRPayloadPrivacy.Apply(options.PayloadSerializerOptions));
 
         var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
         if (!string.IsNullOrWhiteSpace(redisConnectionString))
@@ -362,34 +353,5 @@ public static class Program
             client.Timeout = TimeSpan.FromSeconds(30);
         })
         .AddHttpMessageHandler<AuthInternalApiKeyHandler>();
-    }
-
-    private static void IgnoreSignalRPrivateProperties(JsonTypeInfo typeInfo)
-    {
-        // 1. Quick Exit: Only process objects that implement IEvent
-        if (typeInfo.Kind != JsonTypeInfoKind.Object || !typeof(IEvent).IsAssignableFrom(typeInfo.Type))
-        {
-            return;
-        }
-        
-        // 2. Scan properties
-        foreach (var propertyInfo in typeInfo.Properties)
-        {
-            // Check property itself
-            var hasPrivateAttribute = propertyInfo.AttributeProvider?.GetCustomAttributes(typeof(SignalRPrivateAttribute), false).Length > 0;
-            
-            // Check interfaces (only if not already found)
-            if (!hasPrivateAttribute)
-            {
-                hasPrivateAttribute = typeInfo.Type.GetInterfaces()
-                    .Select(i => i.GetProperty(propertyInfo.Name))
-                    .Any(p => p != null && p.GetCustomAttributes(typeof(SignalRPrivateAttribute), false).Length > 0);
-            }
-            
-            if (hasPrivateAttribute)
-            {
-                propertyInfo.ShouldSerialize = (_, _) => false;
-            }
-        }
     }
 }
