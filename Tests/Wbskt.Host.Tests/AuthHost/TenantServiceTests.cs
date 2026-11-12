@@ -197,6 +197,8 @@ public sealed class TenantServiceTests
     [Fact]
     public async Task An_invitation_naming_a_role_outside_the_tenant_is_refused()
     {
+        _accessControl.Setup(p => p.VerifyPermissionAsync(CallerId, TenantId, null, PermissionNames.RolesManage, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
         var result = await _service.CreateInvitationAsync(CallerId, TenantId, new CreateInvitationRequest("amal@example.test", RoleRef: Guid.NewGuid()));
 
         Assert.Equal("ROLE_NOT_FOUND", result.Error.Code);

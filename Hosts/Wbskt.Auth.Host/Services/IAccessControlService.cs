@@ -24,10 +24,10 @@ public interface IAccessControlService
 
     Task<Result<GroupResponse>> CreateGroupAsync(int tenantId, CreateGroupRequest request, CancellationToken cancellationToken = default);
     Task<Result> UpdateGroupAsync(int tenantId, Guid groupRef, UpdateGroupRequest request, CancellationToken cancellationToken = default);
-    Task<Result> DeleteGroupAsync(int tenantId, Guid groupRef, CancellationToken cancellationToken = default);
+    Task<Result> DeleteGroupAsync(int callerId, int tenantId, Guid groupRef, CancellationToken cancellationToken = default);
 
     Task<Result> AddUserToGroupAsync(int callerId, int tenantId, Guid userRef, Guid groupRef, CancellationToken cancellationToken = default);
-    Task<Result> RemoveUserFromGroupAsync(int tenantId, Guid userRef, Guid groupRef, CancellationToken cancellationToken = default);
+    Task<Result> RemoveUserFromGroupAsync(int callerId, int tenantId, Guid userRef, Guid groupRef, CancellationToken cancellationToken = default);
 
     Task<Result> GrantRolePermissionAsync(int tenantId, Guid roleRef, GrantRolePermissionRequest request, CancellationToken cancellationToken = default);
     Task<Result> RemoveRolePermissionAsync(int tenantId, Guid roleRef, string slug, CancellationToken cancellationToken = default);

@@ -188,12 +188,16 @@ public class ManagementController(ITenantService tenantService, IAccessControlSe
         return MapResult(await accessControlService.UpdateGroupAsync(tenantId, groupRef, request, cancellationToken));
     }
 
-    /// <summary>Deletes a group. Rejected if it still has child groups.</summary>
+    /// <summary>
+    /// Deletes a group. Rejected if it still has child groups. A group that carries roles, its own or a
+    /// parent's, takes them from its members as it goes, so it also needs <c>roles.manage</c> tenant-wide.
+    /// </summary>
     [HttpDelete("{tenantRef:guid}/groups/{groupRef:guid}")]
     [RequiresTenantPermission(PermissionNames.UsersManage)]
     public async Task<IActionResult> DeleteGroup([FromTenant] int tenantId, Guid groupRef, CancellationToken cancellationToken)
     {
-        return MapResult(await accessControlService.DeleteGroupAsync(tenantId, groupRef, cancellationToken));
+        var caller = CurrentUserId();
+        return caller.IsFailure ? MapError(caller.Error) : MapResult(await accessControlService.DeleteGroupAsync(caller.Value, tenantId, groupRef, cancellationToken));
     }
 
     /// <summary>Lists the roles assigned to a group.</summary>
@@ -285,12 +289,16 @@ public class ManagementController(ITenantService tenantService, IAccessControlSe
         return caller.IsFailure ? MapError(caller.Error) : MapResult(await accessControlService.AddUserToGroupAsync(caller.Value, tenantId, userRef, groupRef, cancellationToken));
     }
 
-    /// <summary>Removes a user from a group.</summary>
+    /// <summary>
+    /// Removes a user from a group. A group that carries roles, its own or a parent's, takes them away
+    /// (a deny set through it included), so removing from one also needs <c>roles.manage</c> tenant-wide.
+    /// </summary>
     [HttpDelete("{tenantRef:guid}/members/{userRef:guid}/groups/{groupRef:guid}")]
     [RequiresTenantPermission(PermissionNames.UsersManage)]
     public async Task<IActionResult> RemoveUserFromGroup([FromTenant] int tenantId, Guid userRef, Guid groupRef, CancellationToken cancellationToken)
     {
-        return MapResult(await accessControlService.RemoveUserFromGroupAsync(tenantId, userRef, groupRef, cancellationToken));
+        var caller = CurrentUserId();
+        return caller.IsFailure ? MapError(caller.Error) : MapResult(await accessControlService.RemoveUserFromGroupAsync(caller.Value, tenantId, userRef, groupRef, cancellationToken));
     }
 
     /// <summary>Assigns a role to a user. A null <c>workspaceRef</c> in the body means tenant-wide.</summary>

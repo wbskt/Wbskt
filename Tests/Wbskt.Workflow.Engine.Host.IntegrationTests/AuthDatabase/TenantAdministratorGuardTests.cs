@@ -222,10 +222,6 @@ public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
     }
 
     /// <summary>
-    /// Two administrators each removing the other at the same moment. Without the tenant row lock,
-    /// both read the other as still present and both commit, leaving none.
-    /// </summary>
-    /// <summary>
     /// <c>dbo.User_GetDeletionBlockers</c> names the tenants <c>dbo.User_Delete</c> would refuse over, so an
     /// account deletion can ask before it cancels anything: a shared tenant only this user administers,
     /// and nothing once another administrator is there or the tenant is theirs alone.
@@ -275,6 +271,10 @@ public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
         Assert.False(otherTenant);
     }
 
+    /// <summary>
+    /// Two administrators each removing the other at the same moment. Without the tenant row lock,
+    /// both read the other as still present and both commit, leaving none.
+    /// </summary>
     [SkippableFact]
     public async Task Concurrent_removals_cannot_both_succeed()
     {

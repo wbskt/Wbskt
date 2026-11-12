@@ -121,12 +121,18 @@ internal sealed class AccessControlService : IAccessControlService
             Error.Conflict("AUTH_GROUP_CONFLICT", "A group with that name already exists in this tenant."));
     }
 
-    public async Task<Result> DeleteGroupAsync(int tenantId, Guid groupRef, CancellationToken cancellationToken = default)
+    public async Task<Result> DeleteGroupAsync(int callerId, int tenantId, Guid groupRef, CancellationToken cancellationToken = default)
     {
         var resolved = await ResolveGroupAsync(tenantId, groupRef, cancellationToken);
         if (resolved.IsFailure)
         {
             return Result.Failure(resolved.Error);
+        }
+
+        // Deleting a group that carries roles takes them, denies included, from every member.
+        if (await MovesRolesUnallowedAsync(callerId, tenantId, resolved.Value.EntityId, cancellationToken))
+        {
+            return Result.Failure(RoleGrantGuard.RolesManageRequired);
         }
 
         return await GuardAsync("DeleteGroup", () => _accessControl.DeleteGroupAsync(resolved.Value.EntityId, resolved.Value.TenantId, cancellationToken));
@@ -154,8 +160,7 @@ internal sealed class AccessControlService : IAccessControlService
 
         // Joining a group that carries roles (its own or an ancestor's) grants them, so it needs what
         // assigning them needs.
-        if (await _accessControl.GroupCarriesRolesAsync(groupId, tenantId, cancellationToken)
-            && !await RoleGrantGuard.MayGrantRolesAsync(_accessControl, callerId, tenantId, cancellationToken))
+        if (await MovesRolesUnallowedAsync(callerId, tenantId, groupId, cancellationToken))
         {
             return Result.Failure(RoleGrantGuard.RolesManageRequired);
         }
@@ -167,7 +172,7 @@ internal sealed class AccessControlService : IAccessControlService
         });
     }
 
-    public async Task<Result> RemoveUserFromGroupAsync(int tenantId, Guid userRef, Guid groupRef, CancellationToken cancellationToken = default)
+    public async Task<Result> RemoveUserFromGroupAsync(int callerId, int tenantId, Guid userRef, Guid groupRef, CancellationToken cancellationToken = default)
     {
         var resolved = await ResolveUserAndGroupAsync(tenantId, userRef, groupRef, cancellationToken);
         if (resolved.IsFailure)
@@ -176,6 +181,14 @@ internal sealed class AccessControlService : IAccessControlService
         }
 
         var (_, userId, groupId) = resolved.Value;
+
+        // Leaving a group that carries roles takes them away, a deny the tenant set through it included,
+        // as removing the role would.
+        if (await MovesRolesUnallowedAsync(callerId, tenantId, groupId, cancellationToken))
+        {
+            return Result.Failure(RoleGrantGuard.RolesManageRequired);
+        }
+
         return await GuardAsync("RemoveUserFromGroup", async () =>
         {
             await _accessControl.RemoveUserGroupAsync(userId, groupId, tenantId, cancellationToken);
@@ -396,6 +409,17 @@ internal sealed class AccessControlService : IAccessControlService
     }
 
     // ----- Shared plumbing ---------------------------------------------------------------------
+
+    /// <summary>
+    /// True when changing who is in the group would grant or take away roles (it or a group above it
+    /// carries some) and the caller may not do that: it needs roles.manage tenant-wide, as assigning or
+    /// removing the role directly does.
+    /// </summary>
+    private async Task<bool> MovesRolesUnallowedAsync(int callerId, int tenantId, int groupId, CancellationToken cancellationToken)
+    {
+        return await _accessControl.GroupCarriesRolesAsync(groupId, tenantId, cancellationToken)
+            && !await RoleGrantGuard.MayGrantRolesAsync(_accessControl, callerId, tenantId, cancellationToken);
+    }
 
     // The tenant itself is resolved, and the caller's permission in it checked, by
     // TenantPermissionFilter before the action runs; these find the entity named inside it.
