@@ -311,7 +311,7 @@ All run on the leader only.
 | `ClientPresenceTicker` | 1 s | Resolves presence checks: Fire, Stale or Pending. Gives up after 10 minutes. |
 | `ClientHoldTicker` | 1 s | Fires `client-hold` triggers whose filter has held for the configured time. |
 | `RunReaper` | 5 min | Fails runs older than `RunStuckThreshold` (30 min) that are not terminal but have no active branch and no bookmark (`REAPER_TIMEOUT`), and finalizes them. |
-| `HistoryRetentionGc` | 1 h | Deletes Info history after 30 days and Warn/Error after 365 days, then deletes finished runs past their workspace plan's `RunHistoryDays` (and any past 365 days). |
+| `HistoryRetentionGc` | 1 h | Deletes finished runs, with their history, past their workspace plan's `RunHistoryDays` (and any past 365 days). |
 | `IdempotencyKeyGc` | 1 h | Deletes idempotency keys older than 24 h. |
 | `CreditUsagePoster` | 10 s | Moves what runs consumed since their last post into `dbo.WorkspaceCreditUsage`, the ledger the plan's monthly credits are counted against (`Docs/Billing.md`). |
 | `PendingTriggerEventBacklogReaper` | periodic | Drops queued trigger events older than 24 h. |

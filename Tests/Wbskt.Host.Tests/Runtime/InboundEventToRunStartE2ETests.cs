@@ -359,7 +359,6 @@ public sealed class InboundEventToRunStartE2ETests
         }
         public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, DateTime? elevatedCutoffUtc, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<int?> FindByRefIdVersionAsync(Guid refId, int version, CancellationToken ct) => Task.FromResult<int?>(_definition.WorkflowRefId == refId && _definition.Version == version ? 42 : null);
         public Task<WorkflowDefinitionRow> GetByIdAsync(int id, CancellationToken ct) => Task.FromResult(ToRow(id));

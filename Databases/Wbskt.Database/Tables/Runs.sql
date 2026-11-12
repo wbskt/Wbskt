@@ -88,7 +88,7 @@ CREATE INDEX IX_Runs_WorkflowDefinitionId_Active
     WHERE Status IN (N'Running', N'Failing', N'Cancelling');
 GO
 
--- Drives HistoryEvent_DeleteForRetiredRuns.
+-- Finds the runs ended since a moment (RunCredits_Post).
 CREATE INDEX IX_Runs_CompletedAt
     ON dbo.Runs (CompletedAt)
     WHERE CompletedAt IS NOT NULL;

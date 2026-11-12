@@ -491,7 +491,7 @@ Each run in either list also carries what a one-line row needs, read for the who
 - `failedAt`: for a Failed, PartiallyFailed or Failing run, `{ nodeId, name, kind, errorCode }` of
   its first failed step.
 - `endedAt`: for a Succeeded run, the last step it completed: its End step, or the last step of its
-  last branch. Null once that step's Info history has been retired.
+  last branch.
 - `currentStep`: for a live run, the step its most recently moved branch is on, with `attempt` and
   `maxAttempts` while it is being retried ("try 2 of 3").
 - `workflowName`: the workflow's name at the run's version.
