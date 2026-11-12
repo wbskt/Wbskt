@@ -30,6 +30,24 @@ public sealed class RunRecoveryServiceTests
     }
 
     [Fact]
+    public async Task Start_resumes_waiting_branches_whose_wake_was_lost_after_the_running_ones()
+    {
+        // Arrange
+        var branchProvider = new RecordingBranchProvider([CreateBranch(71, 171)], waiting: [CreateBranch(81, 181)]);
+        var runDispatcher = new RecordingRunDispatcher();
+        var logger = new RecordingLogger<RunRecoveryService>();
+        var service = new RunRecoveryService(WorkerTestServices.Scopes(branchProvider), runDispatcher, logger);
+
+        // Act
+        await service.RecoverAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal([(171L, 71L, BranchExecutionReason.Recovered), (181L, 81L, BranchExecutionReason.Recovered)], runDispatcher.Requests);
+        Assert.Equal(RunRecoveryService.WakeRecoveryLimit, branchProvider.WaitingBatchSize);
+        Assert.Contains(logger.Messages, message => message.Contains("Recovered 1 running branches and 1 woken ones.", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Start_logs_zero_recovery_when_none()
     {
         // Arrange
@@ -42,7 +60,7 @@ public sealed class RunRecoveryServiceTests
         await service.RecoverAsync(CancellationToken.None);
 
         // Assert
-        Assert.Contains(logger.Messages, message => message.Contains("Recovered 0 running branches.", StringComparison.Ordinal));
+        Assert.Contains(logger.Messages, message => message.Contains("Recovered 0 running branches and 0 woken ones.", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -162,8 +180,16 @@ public sealed class RunRecoveryServiceTests
         };
     }
 
-    private sealed class RecordingBranchProvider(IReadOnlyCollection<BranchRow> branches) : IBranchProvider
+    private sealed class RecordingBranchProvider(IReadOnlyCollection<BranchRow> branches, IReadOnlyCollection<BranchRow>? waiting = null) : IBranchProvider
     {
+        public int? WaitingBatchSize { get; private set; }
+
+        public Task<IReadOnlyCollection<BranchRow>> GetWaitingWithoutBookmarkAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
+        {
+            WaitingBatchSize = batchSize;
+            return Task.FromResult(waiting ?? []);
+        }
+
         public Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct) => throw new NotSupportedException();
         public Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct) => throw new NotSupportedException();
         public Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct) => throw new NotSupportedException();

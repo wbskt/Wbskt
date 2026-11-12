@@ -5,6 +5,7 @@ using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.HostedServices;
+using FluentAssertions;
 using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 using Wbskt.Workflow.Extensions;
 
@@ -140,6 +141,65 @@ public sealed class CrashRecoveryIntegrationTests(SqlEdgeFixture fixture)
             dispatched.RunId == createdRun.Id
             && dispatched.BranchId == createdBranch.Id
             && dispatched.Reason == Wbskt.Workflow.Abstraction.Runtime.BranchExecutionReason.Recovered);
+    }
+
+    [SkippableFact]
+    public async Task StartupRecovery_ResumesAWaitingBranchWhoseWakeWasClaimedButNeverRun()
+    {
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
+
+        var definitionProvider = ProviderFactory.WorkflowDefinition(fixture.ConnectionString);
+        var runProvider = ProviderFactory.Run(fixture.ConnectionString);
+        var branchProvider = ProviderFactory.Branch(fixture.ConnectionString);
+        var bookmarkProvider = ProviderFactory.Bookmark(fixture.ConnectionString);
+
+        WorkflowDefinitionRow wd = await definitionProvider.InsertAsync(new WorkflowDefinitionRow
+        {
+            Id = 0, RefId = Guid.NewGuid(), Version = 1, WorkspaceId = 1,
+            Name = $"IT-WD-WAKE-{Guid.NewGuid():N}", Description = null, IsEnabled = true,
+            DefinitionJson = """{"nodes":[],"edges":[]}""", PublishedBy = 1, CreatedAt = DateTime.UtcNow
+        }, CancellationToken.None);
+        RunRow run = await runProvider.CreateAsync(new RunRow
+        {
+            Id = 0, RefId = Guid.NewGuid(),
+            WorkflowDefinitionId = wd.Id, WorkflowRefId = wd.RefId, WorkflowVersion = wd.Version,
+            TriggerNodeId = Guid.NewGuid(), CorrelationKey = null, Status = "Running",
+            StartedAt = DateTime.UtcNow, CompletedAt = null, CancellationRequestedAt = null,
+            CancellationReason = null, CreditBudget = 0m, CreatedAt = DateTime.UtcNow
+        }, CancellationToken.None);
+
+        (BranchRow woken, BookmarkRow claimed) = await ParkAsync(branchProvider, bookmarkProvider, run.Id);
+        (BranchRow stillParked, _) = await ParkAsync(branchProvider, bookmarkProvider, run.Id);
+
+        // The timer claims the first branch's bookmark by deleting it, then the engine stops before the
+        // in-memory wake reaches the branch loop.
+        (await bookmarkProvider.TryClaimAsync(claimed.RefId, CancellationToken.None)).Should().BeTrue();
+
+        var dispatcher = new RecordingRunDispatcher();
+        var recovery = new RunRecoveryService(new MockServiceScopeFactory(branchProvider, runProvider, null), dispatcher, NullLogger<RunRecoveryService>.Instance);
+        await recovery.RecoverAsync(CancellationToken.None);
+
+        dispatcher.DispatchedBranches.Should().Contain(request =>
+            request.BranchId == woken.Id && request.RunId == run.Id && request.Reason == BranchExecutionReason.Recovered);
+        dispatcher.DispatchedBranches.Should().NotContain(request => request.BranchId == stillParked.Id);
+    }
+
+    private static async Task<(BranchRow Branch, BookmarkRow Bookmark)> ParkAsync(IBranchProvider branchProvider, IBookmarkProvider bookmarkProvider, int runId)
+    {
+        BranchRow branch = await branchProvider.CreateAsync(new BranchRow
+        {
+            Id = 0, RefId = Guid.NewGuid(), RunId = runId, ParentBranchId = null, ForkCohortId = null,
+            NodeId = Guid.NewGuid(), Status = "Waiting", PendingTakePort = null, LocalJson = "{}",
+            LastOutputJson = null, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow, RowVersion = []
+        }, CancellationToken.None);
+        BookmarkRow bookmark = await bookmarkProvider.CreateAsync(new BookmarkRow
+        {
+            Id = 0, RefId = Guid.NewGuid(), RunId = runId, BranchRefId = branch.RefId,
+            NodeId = branch.NodeId, WakeConditionKind = "timer", MatchKey = string.Empty,
+            WakeConditionJson = """{"kind":"timer","at":"2000-01-01T00:00:00Z"}""",
+            ExpiresAt = DateTime.UtcNow.AddMinutes(-1), TtlPort = null, CreatedAt = DateTime.UtcNow
+        }, CancellationToken.None);
+        return (branch, bookmark);
     }
 }
 

@@ -9,6 +9,7 @@ public sealed class RunRecoveryService : IEngineStartupTracker
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IRunDispatcher _runDispatcher;
     private readonly ILogger<RunRecoveryService> _logger;
+    private readonly TimeProvider _clock;
     private readonly TaskCompletionSource _readyTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public Task Ready => _readyTcs.Task;
@@ -16,12 +17,20 @@ public sealed class RunRecoveryService : IEngineStartupTracker
     public RunRecoveryService(
         IServiceScopeFactory scopeFactory,
         IRunDispatcher runDispatcher,
-        ILogger<RunRecoveryService> logger)
+        ILogger<RunRecoveryService> logger,
+        TimeProvider? clock = null)
     {
         _scopeFactory = scopeFactory;
         _runDispatcher = runDispatcher;
         _logger = logger;
+        _clock = clock ?? TimeProvider.System;
     }
+
+    /// <summary>
+    /// The most woken-but-lost branches recovered in one start. More than this is a sign of something
+    /// else wrong; the rest are left to the orphan GC.
+    /// </summary>
+    internal const int WakeRecoveryLimit = 10_000;
 
     // Recovery only ever runs on a new leader (see EngineLeadershipCoordinator) - the previous
     // leader is either dead or self-fenced by LeadershipState, so no other instance can be
@@ -89,7 +98,9 @@ public sealed class RunRecoveryService : IEngineStartupTracker
                 await ReapplyStopsAsync(runProvider, runCancellationService, reappliedRunIds, ct);
             }
 
-            _logger.LogInformation("Recovered {Count} running branches.", branches.Count);
+            int woken = await RecoverLostWakesAsync(branchProvider, ct);
+
+            _logger.LogInformation("Recovered {Count} running branches and {Woken} woken ones.", branches.Count, woken);
             _readyTcs.TrySetResult();
         }
         catch (Exception ex)
@@ -97,6 +108,32 @@ public sealed class RunRecoveryService : IEngineStartupTracker
             _readyTcs.TrySetException(ex);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Resumes every Waiting branch of a running run that has no bookmark: one whose wake (a timer, a
+    /// signal, a command ack, a retry back-off) claimed its bookmark by deleting it and was then lost with
+    /// the previous leader's in-memory channel. Each parking executor resumes from its persisted state and
+    /// parks again when the wake was not its own, so a branch stranded mid-park is safe to resume too.
+    /// Runs after <see cref="ReapplyStopsAsync"/>, which has already ended the waiting branches of runs
+    /// that are stopping, so only running runs' branches are left to wake.
+    /// </summary>
+    private async Task<int> RecoverLostWakesAsync(IBranchProvider branchProvider, CancellationToken ct)
+    {
+        // No cutoff: this is a new leader, so no other instance is parking or waking a branch right now.
+        DateTime now = _clock.GetUtcNow().UtcDateTime.AddSeconds(1);
+        IReadOnlyCollection<BranchRow> waiting = await branchProvider.GetWaitingWithoutBookmarkAsync(now, WakeRecoveryLimit, ct);
+        foreach (BranchRow branch in waiting)
+        {
+            await _runDispatcher.DispatchAsync(new BranchExecutionRequest(branch.RunId, branch.Id, BranchExecutionReason.Recovered), ct);
+        }
+
+        if (waiting.Count >= WakeRecoveryLimit)
+        {
+            _logger.LogWarning("Recovery found at least {Limit} Waiting branches with no bookmark and resumed only those; the orphan GC handles the rest.", WakeRecoveryLimit);
+        }
+
+        return waiting.Count;
     }
 
     /// <summary>
