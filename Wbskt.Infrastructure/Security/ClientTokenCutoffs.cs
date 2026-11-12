@@ -23,12 +23,21 @@ public interface IClientTokenCutoffs
     /// <c>null</c> when Redis could not say.
     /// </summary>
     Task<bool?> IsRevokedAsync(Guid clientRefId, DateTime issuedAt, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Which of <paramref name="tokens"/> are refused, read in batches, or <c>null</c> when Redis could
+    /// not say for all of them. For a host re-checking the connections it holds.
+    /// </summary>
+    Task<IReadOnlyCollection<Guid>?> FindRefusedAsync(IReadOnlyCollection<ClientToken> tokens, CancellationToken cancellationToken = default);
 }
+
+/// <summary>A client and when the token it holds was issued (UTC).</summary>
+public sealed record ClientToken(Guid ClientRefId, DateTime IssuedAt);
 
 /// <summary>
 /// Per-client cutoffs in Redis: a client token issued before its client's cutoff is refused. The
-/// management host writes one whenever a client loses access, before it answers; the socket host
-/// reads it when a client connects.
+/// management host writes one whenever a client loses access, before it answers; a gateway reads it
+/// when a client connects, and every minute for the connections it holds.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -37,7 +46,8 @@ public interface IClientTokenCutoffs
 /// some other way. The events that do that are kept in memory there, so a socket host that restarts,
 /// or misses one, would let a revoked client back in until its token ran out. The cutoff in Redis is
 /// what makes revocation hold regardless; the events stay as the fast path that also closes the live
-/// connection.
+/// connection, and a gateway's periodic re-check closes one whose event it missed, as long as it reads
+/// the cutoff before the key expires (<see cref="Retention"/>).
 /// </para>
 /// <para>
 /// One key per client, <c>wbskt:client-cutoff:&lt;clientRef&gt;</c>, holding unix seconds, and kept
@@ -76,8 +86,10 @@ public sealed class ClientTokenCutoffs : IClientTokenCutoffs
         return 1
         """;
 
-    // The connect path waits no longer than this for an answer before falling back.
+    // The connect path waits no longer than this for an answer before falling back; a batch read, as long.
     private static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(1);
+
+    private const int BatchSize = 500;
 
     private readonly IConnectionMultiplexer? _redis;
     private readonly ILogger<ClientTokenCutoffs> _logger;
@@ -123,6 +135,40 @@ public sealed class ClientTokenCutoffs : IClientTokenCutoffs
             _logger.LogWarning(ex, "Could not read the token cutoff for client {ClientRefId}; relying on this host's revocation list", clientRefId);
             return null;
         }
+    }
+
+    public async Task<IReadOnlyCollection<Guid>?> FindRefusedAsync(IReadOnlyCollection<ClientToken> tokens, CancellationToken cancellationToken = default)
+    {
+        if (_redis is not { IsConnected: true })
+        {
+            return null;
+        }
+
+        var refused = new List<Guid>();
+        try
+        {
+            // MGET, so the keys of one batch must share a slot on a cluster; Redis is a single node here.
+            foreach (var batch in tokens.Chunk(BatchSize))
+            {
+                var values = await _redis.GetDatabase()
+                    .StringGetAsync(batch.Select(t => (RedisKey)Key(t.ClientRefId)).ToArray())
+                    .WaitAsync(ReadTimeout, cancellationToken);
+                for (var i = 0; i < batch.Length; i++)
+                {
+                    if (!values[i].IsNull && long.TryParse(values[i].ToString(), out var cutoff) && ToUnixSeconds(batch[i].IssuedAt) < cutoff)
+                    {
+                        refused.Add(batch[i].ClientRefId);
+                    }
+                }
+            }
+        }
+        catch (Exception ex) when (ex is RedisException or TimeoutException)
+        {
+            _logger.LogWarning(ex, "Could not read the token cutoffs of {Count} held connections", tokens.Count);
+            return null;
+        }
+
+        return refused;
     }
 
     internal static string Key(Guid clientRefId) => $"{KeyPrefix}{clientRefId}";

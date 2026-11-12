@@ -4,6 +4,8 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Wbskt.Gateway.Core.HostedServices;
 using Wbskt.Gateway.Core.Infrastructure;
+using Wbskt.Gateway.Core.Telemetry;
+using Wbskt.Infrastructure.Security;
 
 namespace Wbskt.Host.Tests.Gateway;
 
@@ -11,25 +13,60 @@ public sealed class AccessRecheckTests
 {
     private static readonly DateTime IssuedAt = new(2026, 11, 12, 9, 0, 0, DateTimeKind.Utc);
     private readonly ConnectionManager _connections = new(NullLogger<ConnectionManager>.Instance);
-    private readonly Mock<IClientAccessGate> _gate = new();
+    private readonly RevocationCache _cache = new();
+    private readonly Mock<IClientTokenCutoffs> _cutoffs = new();
 
     [Fact]
-    public async Task A_connection_whose_token_the_cutoffs_now_refuse_is_closed_as_revoked()
+    public async Task A_connection_whose_token_a_cutoff_now_refuses_is_closed_as_revoked()
     {
         Guid revokedRef = Guid.NewGuid(), keptRef = Guid.NewGuid();
         var revoked = Hold(revokedRef);
         var kept = Hold(keptRef);
-        _gate.Setup(g => g.IsRefusedAsync(revokedRef, IssuedAt, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _cutoffs.Setup(c => c.FindRefusedAsync(It.IsAny<IReadOnlyCollection<ClientToken>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([revokedRef]);
 
         await Recheck().TickAsync(CancellationToken.None);
 
         Assert.Equal(DisconnectReason.Revoked, revoked.CloseRequest?.Reason);
         Assert.Null(kept.CloseRequest);
-        _gate.Verify(g => g.IsRefusedAsync(keptRef, IssuedAt, It.IsAny<CancellationToken>()), Times.Once);
+        _cutoffs.Verify(c => c.FindRefusedAsync(
+            It.Is<IReadOnlyCollection<ClientToken>>(t => t.Count == 2 && t.All(x => x.IssuedAt == IssuedAt)), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task A_connection_already_closing_or_closed_is_not_asked_about()
+    public async Task With_redis_unable_to_answer_only_this_hosts_list_decides()
+    {
+        Guid listedRef = Guid.NewGuid();
+        var listed = Hold(listedRef);
+        var other = Hold(Guid.NewGuid());
+        _cache.Revoke(listedRef);
+        _cutoffs.Setup(c => c.FindRefusedAsync(It.IsAny<IReadOnlyCollection<ClientToken>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyCollection<Guid>?)null);
+
+        await Recheck().TickAsync(CancellationToken.None);
+
+        Assert.Equal(DisconnectReason.Revoked, listed.CloseRequest?.Reason);
+        Assert.Null(other.CloseRequest);
+    }
+
+    [Fact]
+    public async Task A_token_issued_after_a_reinstatement_is_kept_and_an_older_one_closed()
+    {
+        Guid clientRef = Guid.NewGuid();
+        var older = Hold(clientRef, IssuedAt);
+        _cache.Reinstate(clientRef, IssuedAt.AddMinutes(5));
+        _cutoffs.Setup(c => c.FindRefusedAsync(It.IsAny<IReadOnlyCollection<ClientToken>>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+
+        await Recheck().TickAsync(CancellationToken.None);
+        Assert.Equal(DisconnectReason.Revoked, older.CloseRequest?.Reason);
+
+        var fresh = Hold(clientRef, IssuedAt.AddMinutes(5));
+        await Recheck().TickAsync(CancellationToken.None);
+        Assert.Null(fresh.CloseRequest);
+    }
+
+    [Fact]
+    public async Task A_connection_already_closing_or_closed_is_not_checked()
     {
         var closing = Hold(Guid.NewGuid());
         await closing.RequestCloseAsync(DisconnectReason.Superseded, "newer");
@@ -38,20 +75,31 @@ public sealed class AccessRecheckTests
 
         await Recheck().TickAsync(CancellationToken.None);
 
-        _gate.Verify(g => g.IsRefusedAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+        _cutoffs.Verify(c => c.FindRefusedAsync(It.IsAny<IReadOnlyCollection<ClientToken>>(), It.IsAny<CancellationToken>()), Times.Never);
         Assert.Equal(DisconnectReason.Superseded, closing.CloseRequest?.Reason);
     }
 
-    private FakeClientConnection Hold(Guid clientRefId)
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(-5, 1)]
+    [InlineData(5, 5)]
+    [InlineData(60, 1)]
+    public void An_interval_out_of_range_falls_back_to_the_default(int minutes, int expected)
     {
-        var connection = new FakeClientConnection { ClientId = 1, WorkspaceId = 2, TokenIssuedAtUtc = IssuedAt };
+        Assert.Equal(TimeSpan.FromMinutes(expected), new AccessRecheckOptions { Interval = TimeSpan.FromMinutes(minutes) }.EffectiveInterval);
+    }
+
+    private FakeClientConnection Hold(Guid clientRefId, DateTime? issuedAt = null)
+    {
+        var connection = new FakeClientConnection { ClientId = 1, WorkspaceId = 2, TokenIssuedAtUtc = issuedAt ?? IssuedAt };
         _connections.Register(clientRefId, connection);
         return connection;
     }
 
     private AccessRecheck Recheck() => new(
         _connections,
-        _gate.Object,
+        new ClientAccessGate(_cache, _cutoffs.Object, _connections),
+        new GatewayMetrics(GatewayTransport.WebSocket),
         Options.Create(new AccessRecheckOptions()),
         new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
         NullLogger<AccessRecheck>.Instance);

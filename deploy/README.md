@@ -459,6 +459,7 @@ alerts fire and reach nobody, and Alertmanager says so in its log.
 | `WorkflowDispatchBacklog` | over 500 branches queued in the engine for 10 minutes |
 | `DeadLetteredMessages` | any MassTransit `_error` or `_skipped` queue holds messages |
 | `SocketDisconnectRateHigh` | abnormal client disconnects exceed half the connected clients in 10 minutes |
+| `RevokeMissedByGateway` | a gateway missed a client revoke event and its access re-check closed the connection |
 | `BackupMissing` / `BackupNeverReported` | no successful backup for 26 hours |
 | `BackupFailed` | `backup.sh` failed (raised immediately by `scripts/alert.sh`) |
 | `DatabaseNearExpressLimit` | a database's data files pass 8 GiB of the Express edition's 10 GB (pushed nightly by `backup.sh`) |

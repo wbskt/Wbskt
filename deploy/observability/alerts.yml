@@ -201,6 +201,19 @@ groups:
             Look for a network or proxy problem in front of ws.<domain> (websocket) or mqtt.<domain>
             (mqtt), or a gateway host restarting.
 
+      - alert: RevokeMissedByGateway
+        # The gateway's access re-check closed a connection whose revoke, delete or secret rotation
+        # event never reached it: the client stayed connected until the re-check, up to a minute.
+        expr: sum by (transport) (increase(wbskt_socket_access_recheck_closed_total[15m])) > 0
+        labels:
+          severity: warn
+        annotations:
+          summary: "A {{ $labels.transport }} gateway missed {{ $value }} client revoke events"
+          description: >-
+            The gateway's broker connection dropped while a client lost access, so the event was
+            discarded with its auto-delete queue; the access re-check closed the connection instead.
+            Look at RabbitMQ connection churn for the gateway around that time.
+
       - alert: DeletedWorkspaceRetiredBySweep
         # Management's daily deleted workspace sweep found a workspace the auth host had deleted that
         # still had live policies, clients, workflows or runs, and retired it. Each one is a
