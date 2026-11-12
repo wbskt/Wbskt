@@ -20,16 +20,21 @@ public sealed record WorkspaceUsageResponse(
 /// <summary>Used against the plan's limit, across every workspace of the account.</summary>
 public sealed record AccountUsage(CreditUsageAmount Credits, MessageUsageAmount Messages, UsageCount Clients, UsageCount ActiveRuns);
 
-/// <param name="Used">Workflow credits spent this month.</param>
+/// <param name="Used">Workflow credits spent this month, posted or not.</param>
 /// <param name="Limit">The plan's monthly credits.</param>
 /// <param name="TopUp">
-/// Credits the account bought on top, still unspent and unexpired. A run is refused once
-/// <c>Used</c> reaches <c>Limit</c> plus <c>TopUp</c>; what a month spends past <c>Limit</c> comes out of
-/// <c>TopUp</c> when the month closes.
+/// Credits the account bought on top, still unspent and unexpired. What the month spends past
+/// <c>Limit</c> is taken out of it as it is posted, so <c>Used</c>, <c>Limit</c> and <c>TopUp</c> do not
+/// add up once a pack has been drawn on: read <c>Remaining</c> for what is left.
 /// </param>
 /// <param name="TopUpExpiresAt">When the soonest-expiring part of <c>TopUp</c> runs out; null with no top-up.</param>
 /// <param name="TopUpExpiring">How many of <c>TopUp</c>'s credits run out at <c>TopUpExpiresAt</c>.</param>
-public sealed record CreditUsageAmount(decimal Used, decimal Limit, decimal TopUp, DateTimeOffset? TopUpExpiresAt, decimal TopUpExpiring);
+/// <param name="Remaining">
+/// What new runs may still spend this month, worked out as a run start does: what the plan still covers
+/// (on Business, up to its overage multiple of <c>Limit</c>) plus <c>TopUp</c>, less what runs have not
+/// posted yet. A run is refused once it is 0.
+/// </param>
+public sealed record CreditUsageAmount(decimal Used, decimal Limit, decimal TopUp, DateTimeOffset? TopUpExpiresAt, decimal TopUpExpiring, decimal Remaining);
 
 /// <summary>Client messages both ways (sent by clients, and commands delivered to them) against the plan's monthly allowance.</summary>
 /// <param name="Throttled">

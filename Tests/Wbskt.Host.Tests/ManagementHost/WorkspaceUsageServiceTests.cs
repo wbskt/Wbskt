@@ -19,7 +19,7 @@ public sealed class WorkspaceUsageServiceTests
     public async Task Usage_is_the_plans_limits_against_the_accounts_totals_and_the_workspaces_share()
     {
         _usage.Setup(x => x.GetSummaryAsync(7, 3, new DateOnly(2026, 11, 1), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new WorkspaceUsageSummary(1500m, 400m, 900_000, 250_000, 60, 12, 5, 1, 1000m, 500m, 120m, new DateTime(2027, 1, 15, 0, 0, 0, DateTimeKind.Utc), 200m));
+            .ReturnsAsync(new WorkspaceUsageSummary(1500m, 400m, 900_000, 250_000, 60, 12, 5, 1, 1000m, 500m, 120m, new DateTime(2027, 1, 15, 0, 0, 0, DateTimeKind.Utc), 200m, TenantCreditsPosted: 1400m));
         _usage.Setup(x => x.GetDailyCreditsAsync(7, new DateOnly(2026, 10, 9), new DateOnly(2026, 11, 9), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new DailyCreditUsage(new DateOnly(2026, 11, 2), 400m)]);
         var service = new WorkspaceUsageService(_usage.Object, new FixedWorkspacePlans(PlanCode.Maker, tenantId: 3), new FixedClock(), Options.Create(new BillingOptions()));
@@ -30,12 +30,47 @@ public sealed class WorkspaceUsageServiceTests
         WorkspaceUsageResponse usage = result.Value;
         Assert.Equal(PlanCode.Maker, usage.Plan);
         Assert.Equal((new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 12, 1, 0, 0, 0, TimeSpan.Zero)), (usage.PeriodStart, usage.PeriodEnd));
-        Assert.Equal(new CreditUsageAmount(1500m, maker.CreditsPerMonth, 500m, new DateTimeOffset(2027, 1, 15, 0, 0, 0, TimeSpan.Zero), 200m), usage.Account.Credits);
+        Assert.Equal(new CreditUsageAmount(1500m, maker.CreditsPerMonth, 500m, new DateTimeOffset(2027, 1, 15, 0, 0, 0, TimeSpan.Zero), 200m, maker.CreditsPerMonth - 1400m + 500m - 100m), usage.Account.Credits);
         Assert.Equal(new MessageUsageAmount(900_000, maker.MessagesPerMonth, false), usage.Account.Messages);
         Assert.Equal(new UsageCount(60, maker.Clients), usage.Account.Clients);
         Assert.Equal(new UsageCount(5, maker.ActiveRuns), usage.Account.ActiveRuns);
         Assert.Equal(new WorkspaceUsageShare(400m, 1000m, 250_000, 12, 1, 120m), usage.Workspace);
         Assert.Single(usage.Days);
+    }
+
+    // Maker's 25,000 with 30,000 posted, 5,000 of it drawn from a 10,000 pack that now holds 5,000: the
+    // plan is used up and the pack's 5,000 are left, as Run_Start counts them.
+    [Theory]
+    [InlineData(PlanCode.Maker, 30_000, 30_000, 5_000, 5_000, 5_000)]
+
+    // The same with 1,000 a run has not posted yet: it comes out of what is left.
+    [InlineData(PlanCode.Maker, 31_000, 30_000, 5_000, 5_000, 4_000)]
+
+    // Nothing left is 0, never below.
+    [InlineData(PlanCode.Maker, 40_000, 35_000, 5_000, 0, 0)]
+    public async Task Remaining_is_what_a_run_start_would_find_left(PlanCode plan, double used, double posted, double drawn, double topUp, double remaining)
+    {
+        _usage.Setup(x => x.GetSummaryAsync(7, null, It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkspaceUsageSummary((decimal)used, 0, 0, 0, 0, 0, 0, 0, null, (decimal)topUp, TenantCreditsPosted: (decimal)posted, TenantCreditsDrawn: (decimal)drawn));
+        _usage.Setup(x => x.GetDailyCreditsAsync(7, It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        var service = new WorkspaceUsageService(_usage.Object, new FixedWorkspacePlans(plan), new FixedClock(), Options.Create(new BillingOptions()));
+
+        Result<WorkspaceUsageResponse> result = await service.GetAsync(7, null, null, CancellationToken.None);
+
+        Assert.Equal((decimal)remaining, result.Value.Account.Credits.Remaining);
+    }
+
+    [Fact]
+    public async Task Business_has_its_overage_left_past_the_allowance()
+    {
+        _usage.Setup(x => x.GetSummaryAsync(7, null, It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkspaceUsageSummary(0, 0, 0, 0, 0, 0, 0, 0, null, 0));
+        _usage.Setup(x => x.GetDailyCreditsAsync(7, It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        var service = new WorkspaceUsageService(_usage.Object, new FixedWorkspacePlans(PlanCode.Business), new FixedClock(), Options.Create(new BillingOptions()));
+
+        Result<WorkspaceUsageResponse> result = await service.GetAsync(7, null, null, CancellationToken.None);
+
+        Assert.Equal(PlanCatalog.BuiltIn[PlanCode.Business].CreditsPerMonth * BusinessContract.CreditOverageMultiple, result.Value.Account.Credits.Remaining);
     }
 
     [Fact]

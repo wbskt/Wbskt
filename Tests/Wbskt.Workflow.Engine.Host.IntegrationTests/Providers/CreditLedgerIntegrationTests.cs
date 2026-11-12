@@ -311,7 +311,7 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         var days = await usage.GetDailyCreditsAsync(mine, today.AddDays(-1), today, CancellationToken.None);
 
         // The workspace's run still going holds what is left of its 100 budget after spending 3.
-        summary.Should().Be(new Wbskt.Management.Host.Models.WorkspaceUsageSummary(7m, 3m, 0, 0, 0, 0, 2, 1, 50m, 0m, 97m, null, 0m));
+        summary.Should().Be(new Wbskt.Management.Host.Models.WorkspaceUsageSummary(7m, 3m, 0, 0, 0, 0, 2, 1, 50m, 0m, 97m, null, 0m, TenantCreditsPosted: 3m, TenantCreditsDrawn: 0m));
         days.Should().Equal(new Wbskt.Management.Models.DailyCreditUsage(today, 3m));
     }
 
