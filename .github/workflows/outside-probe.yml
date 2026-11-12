@@ -1,0 +1,67 @@
+# Probes the production endpoints from outside the VM, every 10 minutes. Prometheus and Alertmanager
+# run on the VM they watch, so an outage of the whole machine (stopped, offline, out of disk) sends
+# nothing; this, and the Watchdog alert's dead man's switch, are what notice it.
+#
+# Set the repository variable PROBE_DOMAIN to the stack's DOMAIN (example.com, not a URL) to turn it
+# on; without it the run does nothing. A failed probe opens the issue "Outside probe failing", which
+# notifies the repository's watchers; the next good probe closes it. GitHub can start a scheduled run
+# several minutes late, so expect to hear in 10 to 30 minutes, not at once.
+name: Outside probe
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: outside-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    if: ${{ vars.PROBE_DOMAIN != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe the public endpoints
+        env:
+          DOMAIN: ${{ vars.PROBE_DOMAIN }}
+        run: |
+          set -uo pipefail
+          # Readiness, so a host that is up but cannot reach SQL or the broker counts as down. Three
+          # tries a few seconds apart, so one dropped connection is not an outage.
+          urls=(
+            "https://auth.$DOMAIN/healthz/ready"
+            "https://api.$DOMAIN/healthz/ready"
+            "https://ws.$DOMAIN/healthz/ready"
+            "https://console.$DOMAIN/"
+          )
+          failed=0
+          for url in "${urls[@]}"; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 --retry 2 --retry-delay 5 --retry-all-errors "$url") || code="${code:-000}"
+            if [[ "$code" == 2* ]]; then
+              echo "ok    $code $url"
+            else
+              echo "::error::$url answered $code"
+              failed=1
+            fi
+          done
+          exit "$failed"
+
+  report:
+    needs: probe
+    # A run cancelled or skipped says nothing about the stack, so only a finished probe is reported.
+    if: ${{ always() && (needs.probe.result == 'success' || needs.probe.result == 'failure') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Open or close the outage issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/report-outside-probe.sh "${{ needs.probe.result }}"
