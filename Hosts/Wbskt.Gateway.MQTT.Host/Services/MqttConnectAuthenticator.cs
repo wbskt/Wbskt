@@ -34,8 +34,11 @@ public sealed class MqttConnectAuthenticator
             return MqttLogin.Refuse(MqttConnectReasonCode.UnsupportedProtocolVersion);
         }
 
-        // A CONNECT that cannot name a client is refused before its token costs a signature check.
-        if (!Guid.TryParse(request.ClientId, out var claimedId))
+        // A CONNECT that cannot name a client is refused before its token costs a signature check. Only
+        // the usual form is taken: MQTTnet keys its sessions by the raw string, and the gateway finds a
+        // connection to disconnect (a revoke, a delete, a rotated secret) by the usual form, so an upper-case
+        // or braced id would leave a revoked client connected.
+        if (!Guid.TryParseExact(request.ClientId, "D", out var claimedId) || request.ClientId != claimedId.ToString("D"))
         {
             return MqttLogin.Refuse(MqttConnectReasonCode.ClientIdentifierNotValid);
         }

@@ -20,7 +20,7 @@ namespace Wbskt.Host.Tests.Gateway.Mqtt;
 /// <summary>How a CONNECT is answered, without a server or a socket.</summary>
 public sealed class MqttConnectAuthenticatorTests : IDisposable
 {
-    private static readonly Guid ClientRefId = Guid.Parse("11111111-2222-3333-4444-555555555555");
+    private static readonly Guid ClientRefId = Guid.Parse("aaaaaaaa-2222-3333-4444-5555555555ee");
 
     private readonly Mock<IClientAccessGate> _gate = new();
     private readonly JwtSigningKeys _keys = new(ECDsa.Create(ECCurve.NamedCurves.nistP256).ExportPkcs8PrivateKeyPem(), [], false, NullLogger.Instance);
@@ -93,6 +93,25 @@ public sealed class MqttConnectAuthenticatorTests : IDisposable
         var login = await AuthenticateAsync();
 
         Assert.Equal(MqttConnectReasonCode.NotAuthorized, login.ReasonCode);
+    }
+
+    [Theory]
+    [InlineData("upper")]
+    [InlineData("braces")]
+    [InlineData("no-dashes")]
+    public async Task The_clients_own_ref_id_in_another_spelling_is_refused_so_a_revoke_can_find_its_connection(string spelling)
+    {
+        string clientId = spelling switch
+        {
+            "upper" => ClientRefId.ToString("D").ToUpperInvariant(),
+            "braces" => ClientRefId.ToString("B"),
+            _ => ClientRefId.ToString("N")
+        };
+
+        var login = await AuthenticateAsync(clientId: clientId);
+
+        Assert.Equal(MqttConnectReasonCode.ClientIdentifierNotValid, login.ReasonCode);
+        _gate.VerifyNoOtherCalls();
     }
 
     [Fact]

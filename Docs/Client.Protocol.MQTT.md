@@ -22,7 +22,7 @@ gateway ends a 3.1.1 client's connection (§4) the client sees only the connecti
 
 | CONNECT field | Value |
 |---|---|
-| Client id | The client's `clientRefId`, in its usual form (`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`). |
+| Client id | The client's `clientRefId`, in its usual form (`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`, lower case, no braces); any other spelling is refused with 0x85. |
 | User name | The client's `clientRefId` again. |
 | Password | The `accessToken` login returned (model §2). |
 | Clean session / clean start | Set. The gateway keeps no session between connections, whatever is asked. |
