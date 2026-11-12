@@ -50,6 +50,25 @@ public sealed class WbsktHostPipelineTests
         Assert.Contains("X-Total-Count", response.Headers.GetValues("Access-Control-Expose-Headers").Single());
     }
 
+    /// <summary>
+    /// #775: the guard sees the forwarded header before the forwarded-headers step, which would
+    /// consume it from this known proxy, and the route still answers a direct call.
+    /// </summary>
+    [Fact]
+    public async Task An_internal_route_answers_a_direct_call_but_not_a_forwarded_one()
+    {
+        await using var app = await StartAsync();
+        using var client = new HttpClient { BaseAddress = BaseAddress(app) };
+        using var forwarded = new HttpRequestMessage(HttpMethod.Get, "/API/Internal/ping");
+        forwarded.Headers.Add("X-Forwarded-For", "203.0.113.9");
+
+        using var direct = await client.GetAsync("/api/internal/ping");
+        using var refused = await client.SendAsync(forwarded);
+
+        Assert.Equal(HttpStatusCode.OK, direct.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, refused.StatusCode);
+    }
+
     private static async Task<WebApplication> StartAsync()
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Production });
@@ -75,6 +94,7 @@ public sealed class WbsktHostPipelineTests
         var app = builder.Build();
         app.UseWbsktPipeline();
         app.MapGet("/ip", (HttpContext context) => context.Connection.RemoteIpAddress!.ToString()).RequireRateLimiting(Policy);
+        app.MapGet("/api/internal/ping", () => "pong").AllowAnonymous();
         await app.StartAsync();
         return app;
     }
