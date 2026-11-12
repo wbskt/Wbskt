@@ -646,6 +646,8 @@ const ALERTS = [
  ['BillingWebhookSignaturesRefused','Billing','More than 2 payment webhooks whose signature does not hold up in two hours (secret rotated on one side)'],
  ['WorkspaceRunCeilingReached','Workflows','A workspace is refusing triggers at its active-run ceiling (5 min)'],
  ['EngineNotReporting','Workflows','No engine has reported metrics for 5 minutes'],
+ ['HostNotReporting','Hosts','auth, management, client-auth or a gateway has reported no metrics for 5 minutes (page, one per host)'],
+ ['PeriodicJobFailing','Hosts','A periodic job failed over 3 times in 30 minutes, or without one success in 6 hours (49 for daily jobs) (page)'],
  ['DeadLetteredMessages','Bus','Any MassTransit _error or _skipped queue holds messages'],
  ['CallbackQueueBacklog','Bus','Public callbacks waiting for the engine (5 min)'],
  ['CallbackQueueBytesBacklog','Bus','Bytes of public callbacks waiting for the engine (5 min)'],

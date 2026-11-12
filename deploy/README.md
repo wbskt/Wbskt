@@ -469,6 +469,8 @@ alerts fire and reach nobody, and Alertmanager says so in its log.
 | `NodeExporterDown` | Prometheus cannot scrape node-exporter, so nothing is watching disk space |
 | `ContainerRestarting` | a container restarted in place 3 or more times in 15 minutes |
 | `EngineNotReporting` | no engine has reported metrics for 5 minutes |
+| `HostNotReporting` | auth, management, client-auth or a gateway has reported no metrics for 5 minutes (one alert per host) |
+| `PeriodicJobFailing` | a periodic job failed more than 3 times in 30 minutes, or failed without once succeeding in 6 hours (49 for daily jobs) |
 | `DeletedWorkspaceRetiredBySweep` | management's daily deleted workspace sweep retired a workspace its delete event had missed |
 | `MailRelayDown` | the auth host gave up on two or more mails (including ones the relay refused) and sent none in 15 minutes, so nobody new can confirm an address (pages; it is mailed through that relay, so it needs `ALERT_WEBHOOK_URL` to reach anyone) |
 | `MailFailing` | the auth host gave up on an outgoing mail in 15 minutes, after its retries or because its queue was full, while other mail still went out |
