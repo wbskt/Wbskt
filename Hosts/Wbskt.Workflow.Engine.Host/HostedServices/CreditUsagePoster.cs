@@ -45,6 +45,7 @@ public sealed class CreditUsagePoster(
 
     private DateTime _lastNoticeCheck = DateTime.MinValue;
     private bool _noticesOwed;
+    private bool _postedSinceCheck;
     private int _noticeFailures;
 
     protected override string Name => "Credit usage poster";
@@ -67,8 +68,10 @@ public sealed class CreditUsagePoster(
             }
         }
 
+        // A post too soon after the last check is remembered, so a quiet tick after it still checks.
+        _postedSinceCheck |= posted;
         TimeSpan sinceCheck = nowUtc - _lastNoticeCheck;
-        if (_noticesOwed || sinceCheck >= NoticeCheckInterval || (posted && sinceCheck >= NoticeCheckAfterPost))
+        if (_noticesOwed || sinceCheck >= NoticeCheckInterval || (_postedSinceCheck && sinceCheck >= NoticeCheckAfterPost))
         {
             await AnnounceAsync(credits, services.GetRequiredService<IEventBus>(), nowUtc, ct);
         }
@@ -81,6 +84,7 @@ public sealed class CreditUsagePoster(
     {
         var monthStart = new DateOnly(nowUtc.Year, nowUtc.Month, 1);
         _lastNoticeCheck = nowUtc;
+        _postedSinceCheck = false;
 
         // Owed until a pass gets through every notice, so a failed read or mark is looked at again next tick.
         _noticesOwed = true;

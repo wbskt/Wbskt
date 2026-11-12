@@ -464,11 +464,14 @@ engine works out the credit notices owed from what the ledger holds against what
 `NotifiedMonthStart`, `TenantCreditMonths.NotifiedPercent`), and marks each threshold only once its event
 is published. A notice the broker refuses, one owed when the engine stopped between a post and the
 publish, and one reached only by credits `Run_DeleteRetired` posted are all found again: the poster
-looks on the tick after one that could not publish everything, within a minute of a tick that posted, and
-at least every 5 minutes; a notice still refused after ten checks in a row is logged as an error. Raising
-a cap clears what was announced against it, so the new cap's thresholds are announced as they are reached
-(the emails stay once a month). After the deploy that added these columns, a notice already sent this
-month is published once more and the auth host ignores it. A notice owed at the end of a month and still not published when the month turns is dropped. Not the in-memory mail queue sign-in mail uses: a billing notice is never asked
+looks on the tick after one that could not publish everything, within a minute of a post that moved
+credits (on a later tick if that one came too soon after the last look), and at least every 5 minutes; a
+notice still refused after ten checks in a row is logged as an error. Raising a cap clears what was
+announced against it, so the new cap's thresholds are announced as they are reached (the emails stay once
+a month); a plan upgrade does not, as the allowance's emails would not go out again anyway. After the
+deploy that added these columns, a notice already sent this month is published once more: the auth host
+sends no second email, but the console shows the toast again and the audit log has one more row. A
+notice owed at the end of a month and still not published when the month turns is dropped. Not the in-memory mail queue sign-in mail uses: a billing notice is never asked
 for again, so one lost there would never be sent. `BillingNoticeMailSender` (every minute) leases due
 emails to one auth instance at a time and hands them to the relay; one refused is tried again after 1
 minute, 5, 30, 2 hours and 12 hours, then given up and logged as an error. Sent ones are removed after 30

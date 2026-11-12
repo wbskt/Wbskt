@@ -79,10 +79,10 @@ public sealed class CreditUsagePosterTests
     }
 
     [Fact]
-    public async Task Notices_are_looked_for_a_minute_after_a_post_and_every_five_minutes_without_one()
+    public async Task Notices_are_looked_for_a_minute_after_a_post_even_on_a_quiet_tick_and_every_five_minutes()
     {
         WorkspaceCreditPost[] post = [new WorkspaceCreditPost(1, 1, 1m)];
-        var provider = new RecordingCreditUsageProvider([[], post, [], post, [], []]);
+        var provider = new RecordingCreditUsageProvider([[], post, [], [], [], []]);
         var clock = new SettableClock();
         CreditUsagePoster poster = Poster(provider, new RecordingEventBus(), isLeader: true, clock);
         var checks = new List<int>();
@@ -94,8 +94,8 @@ public sealed class CreditUsagePosterTests
             checks.Add(provider.NoticeChecks);
         }
 
-        // The first tick checks; a post 30 s later does not, one 70 s after the check does; a quiet tick
-        // checks again five minutes after the last check.
+        // The first tick checks; a post 30 s later is too soon and is remembered, so a quiet tick 70 s
+        // after the check looks; a quiet tick checks again five minutes after the last check.
         Assert.Equal([1, 1, 1, 2, 2, 3], checks);
     }
 
