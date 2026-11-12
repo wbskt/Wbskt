@@ -1,3 +1,4 @@
+using System.Data;
 using System.Text.Json;
 using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
@@ -71,7 +72,7 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
         {
             p.AddWithValue("@Provider", provider);
             p.AddWithValue("@SubscriptionId", subscriptionId);
-            p.AddWithValue("@Now", now);
+            p.Add("@Now", SqlDbType.DateTime2).Value = now;
         }, cancellationToken) == 1;
     }
 
@@ -83,7 +84,7 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
             p.AddWithValue("@SubscriptionId", subscriptionId);
             p.AddWithValue("@PaymentId", paymentId);
             p.AddWithValue("@Release", release);
-            p.AddWithValue("@Now", now);
+            p.Add("@Now", SqlDbType.DateTime2).Value = now;
         }, cancellationToken) == 1;
     }
 

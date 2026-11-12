@@ -31,7 +31,7 @@ internal sealed class TenantBillingSync(
     /// the tenant is paying for twice, and moves the tenant to the plan its deciding subscription pays for.
     /// </summary>
     public async Task<BillingSyncResult> SyncSubscriptionAsync(string subscriptionId, CancellationToken ct) =>
-        (await SyncStoredSubscriptionAsync(subscriptionId, reversedPaymentAt: null, ct)).Result;
+        (await SyncStoredSubscriptionAsync(subscriptionId, reversed: null, ct)).Result;
 
     /// <summary>
     /// Reads the payment: one for a subscription syncs that subscription (marking it refunded when the
@@ -49,14 +49,14 @@ internal sealed class TenantBillingSync(
 
         if (payment.SubscriptionId is { } subscriptionId)
         {
-            // The interval comes from the subscription's own product, not the payment's lines: a subscription
-            // payment may carry no product cart, and a refund must drop the plan all the same.
-            DateTime? reversedPaymentAt = payment.Reversed ? payment.CreatedAt.UtcDateTime : null;
-            (BillingSyncResult result, TenantSubscription? stored) = await SyncStoredSubscriptionAsync(subscriptionId, reversedPaymentAt, ct);
-            // A claim already on this payment is passed on too: the procedure takes it again only once it
-            // is stale, which is a refund the host never heard back about.
-            if (stored is { DuplicateAt: not null } && (stored.DuplicateRefundPaymentId is null || stored.DuplicateRefundPaymentId == payment.Id)
-                && payment is { Succeeded: true, Reversed: false })
+            // The period paid for comes from the plan the payment's lines name, and from the subscription's
+            // own product when it carries none: a subscription payment may have no product cart, and a
+            // refund must drop the plan all the same.
+            ReversedPayment? reversed = payment.Reversed
+                ? new ReversedPayment(payment.CreatedAt.UtcDateTime, payment.Lines.Select(l => options.Value.FindPlan(l.ProductId)).FirstOrDefault(o => o is not null)?.Interval)
+                : null;
+            (BillingSyncResult result, TenantSubscription? stored) = await SyncStoredSubscriptionAsync(subscriptionId, reversed, ct);
+            if (stored is { DuplicateAt: not null, DuplicateRefundPaymentId: null } && payment is { Succeeded: true, Reversed: false })
             {
                 await RefundDuplicateAsync(stored, payment, ct);
             }
@@ -107,10 +107,10 @@ internal sealed class TenantBillingSync(
     }
 
     /// <summary>
-    /// Reads the subscription and stores it. <paramref name="reversedPaymentAt"/>, when set, is a payment of
-    /// it that was refunded or lost to a chargeback, which marks the period it paid for refunded.
+    /// Reads the subscription and stores it. <paramref name="reversed"/>, when set, is a payment of it that
+    /// was refunded or lost to a chargeback, which marks the period it paid for refunded.
     /// </summary>
-    private async Task<(BillingSyncResult Result, TenantSubscription? Stored)> SyncStoredSubscriptionAsync(string subscriptionId, DateTime? reversedPaymentAt, CancellationToken ct)
+    private async Task<(BillingSyncResult Result, TenantSubscription? Stored)> SyncStoredSubscriptionAsync(string subscriptionId, ReversedPayment? reversed, CancellationToken ct)
     {
         ProviderSubscription? subscription = await gateway.FindSubscriptionAsync(subscriptionId, ct);
         if (subscription is null)
@@ -152,7 +152,7 @@ internal sealed class TenantBillingSync(
                 ScheduledAt = scheduled is null ? null : subscription.Scheduled!.EffectiveAt.UtcDateTime
             },
             now,
-            reversedPaymentAt is { } paidAt ? SubscriptionPlan.RefundedThrough(paidAt, offer.Interval) : null,
+            reversed is { } payment ? SubscriptionPlan.RefundedThrough(payment.PaidAt, payment.Interval ?? offer.Interval) : null,
             ct);
 
         await TellPaymentFailedAsync(saved, ct);
@@ -209,10 +209,12 @@ internal sealed class TenantBillingSync(
     }
 
     /// <summary>
-    /// Refunds the payment of a subscription cancelled as a duplicate, once: the claim is taken first and
-    /// given back if the refund fails in any way, a timeout or a cancelled request included, so a
-    /// redelivered webhook neither refunds twice nor never. A claim left by a host that stopped mid-call
-    /// is taken again once stale, and only while the provider still shows the payment unrefunded.
+    /// Refunds the payment of a subscription cancelled as a duplicate, once. The claim is taken first, so a
+    /// redelivered webhook does not ask again. It is given back only when the provider refused the request (a
+    /// 4xx), since then nothing was refunded. A timeout, a dropped connection, a server error or a cancelled
+    /// request may have
+    /// reached the provider, and asking again could refund twice, so the claim stays and an operator checks
+    /// the payment (the error names it).
     /// </summary>
     private async Task RefundDuplicateAsync(TenantSubscription duplicate, ProviderPayment payment, CancellationToken ct)
     {
@@ -226,10 +228,33 @@ internal sealed class TenantBillingSync(
             await gateway.RefundPaymentAsync(payment.Id, "Duplicate subscription: the account already had one.", ct);
             logger.LogWarning("Refunded payment {PaymentId} of duplicate subscription {SubscriptionId} of tenant {TenantId}.", payment.Id, duplicate.SubscriptionId, duplicate.TenantId);
         }
-        catch
+        catch (HttpRequestException refused) when (refused.StatusCode is { } status && (int)status is >= 400 and < 500)
+        {
+            await ReleaseRefundClaimAsync(duplicate, payment, refused);
+            throw;
+        }
+        catch (Exception unanswered)
+        {
+            logger.LogError(unanswered,
+                "The refund of payment {PaymentId} of duplicate subscription {SubscriptionId} of tenant {TenantId} got no answer. It may have gone through, so it is not asked for again: check the payment with the provider and refund it by hand if it was not.",
+                payment.Id, duplicate.SubscriptionId, duplicate.TenantId);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Gives back a refund claim after the provider refused the refund. A failure to give it back is logged,
+    /// so the refusal, not the release, is what the caller sees.
+    /// </summary>
+    private async Task ReleaseRefundClaimAsync(TenantSubscription duplicate, ProviderPayment payment, HttpRequestException refused)
+    {
+        try
         {
             await billing.ClaimDuplicateRefundAsync(duplicate.Provider, duplicate.SubscriptionId, payment.Id, release: true, clock.GetUtcNow().UtcDateTime, CancellationToken.None);
-            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Could not give back the refund claim on payment {PaymentId} after the provider refused it ({Status}).", payment.Id, refused.StatusCode);
         }
     }
 
@@ -370,3 +395,9 @@ public sealed record BillingSyncResult(string? Reason)
 
     public static BillingSyncResult SetAside(string reason) => new(reason);
 }
+
+/// <summary>
+/// A subscription payment refunded or lost to a chargeback: when it was paid, and the interval its lines
+/// name, when they name a plan.
+/// </summary>
+internal sealed record ReversedPayment(DateTime PaidAt, BillingInterval? Interval);

@@ -28,9 +28,8 @@ internal interface ITenantBillingProvider
 
     /// <summary>
     /// Claims the refund of a duplicate subscription's payment so it is asked for once, or gives the claim
-    /// back (<paramref name="release"/>) when the refund failed. A claim on the same payment that is 15
-    /// minutes old at <paramref name="now"/> is taken again, since its refund was never answered. False when
-    /// nothing changed.
+    /// back (<paramref name="release"/>) when the provider refused it. A claim is stamped with
+    /// <paramref name="now"/>. False when nothing changed.
     /// </summary>
     Task<bool> ClaimDuplicateRefundAsync(string provider, string subscriptionId, string paymentId, bool release, DateTime now, CancellationToken cancellationToken);
 

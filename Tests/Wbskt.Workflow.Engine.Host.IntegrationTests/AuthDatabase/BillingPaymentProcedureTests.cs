@@ -205,21 +205,19 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
         int claimedUnmarked = await ProcScalarAsync("dbo.TenantSubscription_ClaimDuplicateRefund", ("@Provider", "dodo"), ("@SubscriptionId", duplicate), ("@PaymentId", "pay_1"));
         int marked = await ProcScalarAsync("dbo.TenantSubscription_MarkDuplicate", ("@Provider", "dodo"), ("@SubscriptionId", duplicate), ("@Now", Now));
         int markedAgain = await ProcScalarAsync("dbo.TenantSubscription_MarkDuplicate", ("@Provider", "dodo"), ("@SubscriptionId", duplicate), ("@Now", Now.AddHours(1)));
-        int claimed = await ProcScalarAsync("dbo.TenantSubscription_ClaimDuplicateRefund", ("@Provider", "dodo"), ("@SubscriptionId", duplicate), ("@PaymentId", "pay_1"));
-        int claimedAgain = await ProcScalarAsync("dbo.TenantSubscription_ClaimDuplicateRefund", ("@Provider", "dodo"), ("@SubscriptionId", duplicate), ("@PaymentId", "pay_1"));
-        int released = await ProcScalarAsync("dbo.TenantSubscription_ClaimDuplicateRefund", ("@Provider", "dodo"), ("@SubscriptionId", duplicate), ("@PaymentId", "pay_1"), ("@Release", true));
-        int reclaimed = await ProcScalarAsync("dbo.TenantSubscription_ClaimDuplicateRefund", ("@Provider", "dodo"), ("@SubscriptionId", duplicate), ("@PaymentId", "pay_1"));
+        int claimed = await ProcScalarAsync("dbo.TenantSubscription_ClaimDuplicateRefund", ("@Provider", "dodo"), ("@SubscriptionId", duplicate), ("@PaymentId", "pay_1"), ("@Now", Now));
+        DateTime? claimedAt = await ScalarAsync<DateTime?>("SELECT DuplicateRefundClaimedAt FROM dbo.TenantSubscriptions WHERE SubscriptionId = @p0", duplicate);
 
-        // A claim whose refund was never answered (the host stopped mid-call) is taken again once stale,
-        // and only by the same payment.
-        DateTime later = DateTime.UtcNow.AddMinutes(16);
-        int otherPaymentWhileStale = await ProcScalarAsync("dbo.TenantSubscription_ClaimDuplicateRefund", ("@Provider", "dodo"), ("@SubscriptionId", duplicate), ("@PaymentId", "pay_9"), ("@Now", later));
-        int staleReclaimed = await ProcScalarAsync("dbo.TenantSubscription_ClaimDuplicateRefund", ("@Provider", "dodo"), ("@SubscriptionId", duplicate), ("@PaymentId", "pay_1"), ("@Now", later));
+        // Held however long ago it was taken: a refund that got no answer is never asked for twice.
+        int claimedAgain = await ProcScalarAsync("dbo.TenantSubscription_ClaimDuplicateRefund", ("@Provider", "dodo"), ("@SubscriptionId", duplicate), ("@PaymentId", "pay_1"), ("@Now", Now.AddDays(1)));
+        int released = await ProcScalarAsync("dbo.TenantSubscription_ClaimDuplicateRefund", ("@Provider", "dodo"), ("@SubscriptionId", duplicate), ("@PaymentId", "pay_1"), ("@Release", true));
+        DateTime? releasedAt = await ScalarAsync<DateTime?>("SELECT DuplicateRefundClaimedAt FROM dbo.TenantSubscriptions WHERE SubscriptionId = @p0", duplicate);
+        int reclaimed = await ProcScalarAsync("dbo.TenantSubscription_ClaimDuplicateRefund", ("@Provider", "dodo"), ("@SubscriptionId", duplicate), ("@PaymentId", "pay_1"), ("@Now", Now));
         await UpsertAsync(tenantId, duplicate, "cancelled", Now.AddHours(2));
 
         Assert.Equal((0, 1, 0), (claimedUnmarked, marked, markedAgain));
         Assert.Equal((1, 0, 1, 1), (claimed, claimedAgain, released, reclaimed));
-        Assert.Equal((0, 1), (otherPaymentWhileStale, staleReclaimed));
+        Assert.Equal((Now, (DateTime?)null), (claimedAt, releasedAt));
         Assert.Equal(Now, await ScalarAsync<DateTime>("SELECT DuplicateAt FROM dbo.TenantSubscriptions WHERE SubscriptionId = @p0", duplicate));
         Assert.Equal("pay_1", await ScalarAsync<string>("SELECT DuplicateRefundPaymentId FROM dbo.TenantSubscriptions WHERE SubscriptionId = @p0", duplicate));
         Assert.Null(await ScalarAsync<DateTime?>("SELECT DuplicateAt FROM dbo.TenantSubscriptions WHERE SubscriptionId = @p0", kept));
