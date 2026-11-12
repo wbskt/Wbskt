@@ -71,6 +71,43 @@ public sealed class AccessControlServiceTests
         _accessControl.Verify(p => p.InsertUserGroupAsync(MemberId, GroupId, TenantId, It.IsAny<CancellationToken>()), expectedCode is null ? Times.Once() : Times.Never());
     }
 
+    /// <summary>
+    /// Taking someone out of a group that carries roles removes them, a deny included, so it needs
+    /// roles.manage just as removing the role directly would.
+    /// </summary>
+    [Theory]
+    [InlineData(true, false, "PERMISSION_UNAUTHORIZED")]
+    [InlineData(true, true, null)]
+    [InlineData(false, false, null)]
+    public async Task Removing_from_a_group_that_carries_roles_needs_roles_manage(bool carriesRoles, bool mayGrantRoles, string? expectedCode)
+    {
+        const int callerId = 1;
+        _accessControl.Setup(p => p.GroupCarriesRolesAsync(GroupId, TenantId, It.IsAny<CancellationToken>())).ReturnsAsync(carriesRoles);
+        _accessControl.Setup(p => p.VerifyPermissionAsync(callerId, TenantId, null, PermissionNames.RolesManage, It.IsAny<CancellationToken>())).ReturnsAsync(mayGrantRoles);
+
+        var result = await _service.RemoveUserFromGroupAsync(callerId, TenantId, MemberRef, GroupRef);
+
+        Assert.Equal(expectedCode, result.IsFailure ? result.Error.Code : null);
+        _accessControl.Verify(p => p.RemoveUserGroupAsync(MemberId, GroupId, TenantId, It.IsAny<CancellationToken>()), expectedCode is null ? Times.Once() : Times.Never());
+    }
+
+    /// <summary>Deleting a group that carries roles takes them from every member at once.</summary>
+    [Theory]
+    [InlineData(true, false, "PERMISSION_UNAUTHORIZED")]
+    [InlineData(true, true, null)]
+    [InlineData(false, false, null)]
+    public async Task Deleting_a_group_that_carries_roles_needs_roles_manage(bool carriesRoles, bool mayGrantRoles, string? expectedCode)
+    {
+        const int callerId = 1;
+        _accessControl.Setup(p => p.GroupCarriesRolesAsync(GroupId, TenantId, It.IsAny<CancellationToken>())).ReturnsAsync(carriesRoles);
+        _accessControl.Setup(p => p.VerifyPermissionAsync(callerId, TenantId, null, PermissionNames.RolesManage, It.IsAny<CancellationToken>())).ReturnsAsync(mayGrantRoles);
+
+        var result = await _service.DeleteGroupAsync(callerId, TenantId, GroupRef);
+
+        Assert.Equal(expectedCode, result.IsFailure ? result.Error.Code : null);
+        _accessControl.Verify(p => p.DeleteGroupAsync(GroupId, TenantId, It.IsAny<CancellationToken>()), expectedCode is null ? Times.Once() : Times.Never());
+    }
+
     [Fact]
     public async Task A_role_name_already_taken_is_a_conflict()
     {

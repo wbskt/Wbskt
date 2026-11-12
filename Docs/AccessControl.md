@@ -206,12 +206,16 @@ These endpoints require a **tenant-wide** permission in the target tenant:
 `roles.read`/`roles.manage` for roles, permissions and assignments; `users.read`/`users.manage` for
 groups, membership and account state. The read/manage split exists so that a console which only
 displays the permission graph does not need the right to rewrite it.
-**Granting a role always needs `roles.manage`**, however it is granted. An invitation that names a
+
+**Moving roles through an invitation or a group needs `roles.manage`.** An invitation that names a
 `roleRef` grants it on acceptance, and adding someone to a group that carries roles (its own or any
-parent group's) grants them as well, so both need `roles.manage` tenant-wide on top of the
-`users.manage` their endpoints declare; without it they answer 403 `PERMISSION_UNAUTHORIZED`. Otherwise
-someone given `users.manage` to invite people could invite a second address of their own as `Admin`,
-or join the group that holds it, and end up with every permission.
+parent group's) grants them as well. Removing someone from such a group, or deleting it, takes the
+roles away, a deny included. Each of these needs `roles.manage` tenant-wide on top of the
+`users.manage` its endpoint declares; without it the answer is 403 `PERMISSION_UNAUTHORIZED`.
+Otherwise someone given `users.manage` to invite people could invite a second address of their own as
+`Admin`, or join the group that holds it, and end up with every permission. (Creating a workspace is
+the one grant without it: the creator gets `Admin` in that workspace, as below.)
+
 `POST /api/v1/workspaces/{ref}/members` requires `users.manage` **in that workspace**, and also adds the
 user to the workspace's tenant (`WorkspaceMember_Add`) — without that row they would pass the
 membership gate but resolve no roles, since every assignment is filtered by `TenantId`.

@@ -730,6 +730,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
 
         response.IsSuccessStatusCode.Should().BeFalse();
     }
+
     // ── Granting roles needs roles.manage ─────────────────────────────────────────────────
 
     /// <summary>
