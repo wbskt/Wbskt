@@ -135,7 +135,9 @@ internal sealed class BookmarkResumer : IBookmarkResumer
             // Release the claim so a redelivery of this event (or the next PendingTriggerEventDrainer
             // pass) isn't permanently dropped as a duplicate of a resume that never actually happened.
             string errorJson = JsonSerializer.Serialize(new { ex.Message }, EngineJson.Options);
-            await _idempotencyKeyProvider.MarkFailedAsync(claim.KeyValue, errorJson, ct);
+            // Not ct: a stopping host has cancelled it, and the write must still land or the claim stays
+            // Pending and every redelivery is dropped as a duplicate.
+            await _idempotencyKeyProvider.MarkFailedAsync(claim.KeyValue, errorJson, CancellationToken.None);
             throw;
         }
     }

@@ -66,8 +66,10 @@ Two visits to the same node in a loop get different keys; a replay of one visit 
 ### Token as claim
 
 Idempotency rows double as claims. `inbound-event:{id}` is claimed before bookmarks are matched,
-so a redelivered event wakes nothing twice. A claim marked Failed can be reclaimed, so a crash
-mid-dispatch does not lose the event. `Runs.TriggerStartKey`
+so a redelivered event wakes nothing twice. A claim marked Failed can be reclaimed, so an error
+mid-dispatch does not lose the event. A claim an engine left Pending when it stopped is marked
+Failed by the next leader before its bus starts (`IdempotencyKey_FailAbandonedClaims`), so the
+broker's redelivery reclaims it too. `Runs.TriggerStartKey`
 (`trigger-start:{registration}:{sha256(eventId)}`) is a unique column, so a redelivered event starts
 no second run.
 

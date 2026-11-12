@@ -86,6 +86,12 @@ internal sealed class IdempotencyKeyProvider : BaseSqlProvider, IIdempotencyKeyP
         );
     }
 
+    public async Task<int> FailAbandonedClaimsAsync(CancellationToken ct)
+    {
+        var result = await ExecuteScalarAsync<object>("dbo.IdempotencyKey_FailAbandonedClaims", _ => { }, ct);
+        return result is int count ? count : Convert.ToInt32(result ?? 0);
+    }
+
     public async Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
     {
         var result = await ExecuteScalarAsync<object>(

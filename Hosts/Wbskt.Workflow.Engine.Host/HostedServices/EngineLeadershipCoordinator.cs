@@ -39,6 +39,9 @@ public sealed class EngineLeadershipCoordinator : BackgroundService
             // once the scheduler and consumers run, a branch they woke would look the same.
             IReadOnlyCollection<BranchExecutionRequest> woken = await _runRecoveryService.CollectWokenAsync(stoppingToken);
 
+            // Also before the bus starts: a Pending event claim can then only be a stopped engine's.
+            await _runRecoveryService.ReleaseAbandonedClaimsAsync(stoppingToken);
+
             _busHandle = await _busControl.StartAsync(stoppingToken);
             _leadershipState.SetBusStarted();
 
