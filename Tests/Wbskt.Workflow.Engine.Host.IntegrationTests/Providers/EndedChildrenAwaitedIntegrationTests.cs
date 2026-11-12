@@ -1,7 +1,11 @@
+using System.Text.Json;
 using FluentAssertions;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Models.Bookmarks;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
+using Wbskt.Workflow.Runtime;
+using Wbskt.Workflow.Runtime.BranchResults;
 
 namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 
@@ -56,12 +60,17 @@ public sealed class EndedChildrenAwaitedIntegrationTests(SqlEdgeFixture fixture)
         }, CancellationToken.None);
     }
 
-    private static Task<BookmarkRow> ParkOnAsync(Wbskt.Workflow.Providers.BookmarkProvider bookmarkProvider, int parentRunId, Guid childRunRefId) =>
-        bookmarkProvider.CreateAsync(new BookmarkRow
+    // Built the way the engine parks a sub-workflow step, so the query is tested against the real kind and key.
+    private static Task<BookmarkRow> ParkOnAsync(Wbskt.Workflow.Providers.BookmarkProvider bookmarkProvider, int parentRunId, Guid childRunRefId)
+    {
+        var condition = new ChildRunCompletedWakeCondition(childRunRefId);
+        return bookmarkProvider.CreateAsync(new BookmarkRow
         {
             Id = 0, RefId = Guid.NewGuid(), RunId = parentRunId, BranchRefId = Guid.NewGuid(), NodeId = Guid.NewGuid(),
-            WakeConditionKind = "childRunCompleted", MatchKey = $"child-completed:{childRunRefId}",
-            WakeConditionJson = $$"""{"childRunId":"{{childRunRefId}}"}""", ExpiresAt = null, TtlPort = null,
-            CreatedAt = DateTime.UtcNow
+            WakeConditionKind = condition.Kind,
+            MatchKey = WaitForBookmarkResultHandler.GetWakeConditionMatchKey(condition),
+            WakeConditionJson = JsonSerializer.Serialize(condition, EngineJson.Options),
+            ExpiresAt = null, TtlPort = null, CreatedAt = DateTime.UtcNow
         }, CancellationToken.None);
+    }
 }

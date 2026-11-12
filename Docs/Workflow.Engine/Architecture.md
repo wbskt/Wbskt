@@ -306,7 +306,7 @@ All run on the leader only.
 | Worker | Every | Does |
 |---|---|---|
 | `BookmarkScheduler` | 1 s | Claims due bookmarks and resumes their branches (or sets the TTL port). |
-| `BookmarkOrphanGc` | 5 min | Deletes bookmarks whose branch is gone. Fails a `Waiting` branch with no bookmark (`BOOKMARK_LOST`) once two passes past `StrandedBranchThreshold` (5 min) saw it unchanged. |
+| `BookmarkOrphanGc` | 5 min | Deletes bookmarks whose branch is gone. Fails a `Waiting` branch with no bookmark (`BOOKMARK_LOST`) once two passes past `StrandedBranchThreshold` (5 min) saw it unchanged. Raises again the completion of a child run that ended at least `StrandedBranchThreshold` ago while a sub-workflow step is still parked on it. |
 | `ScheduledFireTicker` | 1 s | Leases due `ScheduledFires` rows (for `LeaseDurationSeconds`, 120 s), fires the `schedule` channel and advances the next fire time by the cron (Cronos). |
 | `ClientPresenceTicker` | 1 s | Resolves presence checks: Fire, Stale or Pending. Gives up after 10 minutes. |
 | `ClientHoldTicker` | 1 s | Fires `client-hold` triggers whose filter has held for the configured time. |
@@ -395,7 +395,7 @@ message rates a line each would fill Loki, so "how many messages matched nothing
 |---|---|---|
 | `BookmarkPollInterval` | 1 s | Timer wake resolution. |
 | `BookmarkOrphanGcInterval` | 5 min | Orphan and stranded-branch sweep. |
-| `StrandedBranchThreshold` | 5 min | How long a waiting branch may have no bookmark. |
+| `StrandedBranchThreshold` | 5 min | How long a waiting branch may have no bookmark, and how long after a child run ends its completion is raised again for a parent still parked on it. |
 | `ScheduleTickInterval`, presence and hold tick intervals | 1 s | Trigger tickers. |
 | `LeaseDurationSeconds` | 120 | Lease on due scheduled fires. |
 | `RunReaperInterval` / `RunStuckThreshold` | 5 min / 30 min | Stuck-run reaper. |

@@ -74,13 +74,13 @@ public sealed class BookmarkOrphanGc(
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                Logger.LogError(ex, "Orphan GC could not raise the completion of child run {ChildRunId}", child.Id);
+                Logger.LogError(ex, "Orphan GC could not re-raise the completion of child run {ChildRunId}", child.Id);
             }
         }
 
         if (raised > 0)
         {
-            Logger.LogWarning("Orphan GC raised the completion of {Count} child runs a parent was still waiting on", raised);
+            Logger.LogWarning("Orphan GC re-raised the completion of {Count} child runs a parent was still waiting on", raised);
         }
     }
 

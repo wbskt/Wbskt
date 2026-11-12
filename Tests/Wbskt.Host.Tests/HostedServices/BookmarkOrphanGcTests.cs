@@ -36,35 +36,96 @@ public sealed class BookmarkOrphanGcTests
     public async Task A_parent_still_waiting_on_an_ended_child_is_woken()
     {
         // Arrange
-        var child = new RunRow
-        {
-            Id = 7, RefId = Guid.NewGuid(), WorkflowDefinitionId = 1, WorkflowRefId = Guid.NewGuid(), WorkflowVersion = 1,
-            TriggerNodeId = Guid.NewGuid(), CorrelationKey = null, Status = RunStatus.Failed,
-            StartedAt = DateTime.UtcNow, CompletedAt = DateTime.UtcNow, CancellationRequestedAt = null,
-            CancellationReason = null, CreditBudget = 0m, CreatedAt = DateTime.UtcNow, OutputJson = """{"ok":false}"""
-        };
-        var runs = new EndedChildRunProvider([child]);
-        var hook = new RecordingCompletionHook();
-        var gc = new BookmarkOrphanGc(
-            TimeProvider.System,
-            new FixedLeadershipGate(true),
-            WorkerTestServices.Scopes(new RecordingBookmarkProvider(), new NoStrandedBranchProvider(), runs, hook),
-            NullLogger<BookmarkOrphanGc>.Instance,
-            WorkerTestServices.Options(new WorkflowEngineOptions { BookmarkOrphanGcInterval = TimeSpan.FromMilliseconds(20) }));
+        RunRow child = EndedChild(7, """{"ok":false}""");
+        var hook = new RecordingCompletionHook(expectedCalls: 1);
+        BookmarkOrphanGc gc = CreateGc(TimeProvider.System, new EndedChildRunProvider([child]), hook);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         // Act
         await gc.StartAsync(cts.Token);
-        await hook.Called.Task.WaitAsync(cts.Token);
+        await hook.Done.Task.WaitAsync(cts.Token);
         await gc.StopAsync(CancellationToken.None);
 
         // Assert
-        Assert.Equal((child.RefId, RunStatus.Failed, """{"ok":false}"""), hook.First);
+        Assert.Equal((child.RefId, RunStatus.Failed, """{"ok":false}"""), hook.Calls[0]);
+    }
+
+    [Fact]
+    public async Task A_child_whose_completion_cannot_be_raised_does_not_stop_the_next()
+    {
+        // Arrange
+        RunRow first = EndedChild(7, null);
+        RunRow second = EndedChild(8, null);
+        var hook = new RecordingCompletionHook(expectedCalls: 2, throwFor: first.RefId);
+        BookmarkOrphanGc gc = CreateGc(TimeProvider.System, new EndedChildRunProvider([first, second]), hook);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        // Act
+        await gc.StartAsync(cts.Token);
+        await hook.Done.Task.WaitAsync(cts.Token);
+        await gc.StopAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(second.RefId, hook.Calls[1].RunRefId);
+    }
+
+    [Fact]
+    public async Task Only_children_that_ended_a_stranded_threshold_ago_are_read()
+    {
+        // Arrange
+        var clock = new FixedClock(new DateTime(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc));
+        var runs = new EndedChildRunProvider([]);
+        BookmarkOrphanGc gc = CreateGc(clock, runs, new RecordingCompletionHook(expectedCalls: 1), TimeSpan.FromMinutes(7));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        // Act
+        await gc.StartAsync(cts.Token);
+        DateTime cutoff = await runs.Cutoff.Task.WaitAsync(cts.Token);
+        await gc.StopAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(new DateTime(2026, 5, 26, 12, 23, 0, DateTimeKind.Utc), cutoff);
+    }
+
+    private static BookmarkOrphanGc CreateGc(TimeProvider clock, IRunProvider runs, ISubWorkflowCompletionHook hook, TimeSpan? strandedThreshold = null)
+    {
+        var options = new WorkflowEngineOptions
+        {
+            BookmarkOrphanGcInterval = TimeSpan.FromMilliseconds(20),
+            StrandedBranchThreshold = strandedThreshold ?? new WorkflowEngineOptions().StrandedBranchThreshold
+        };
+
+        return new BookmarkOrphanGc(
+            clock,
+            new FixedLeadershipGate(true),
+            WorkerTestServices.Scopes(new RecordingBookmarkProvider(), new NoStrandedBranchProvider(), runs, hook),
+            NullLogger<BookmarkOrphanGc>.Instance,
+            WorkerTestServices.Options(options));
+    }
+
+    private static RunRow EndedChild(int id, string? outputJson) => new()
+    {
+        Id = id, RefId = Guid.NewGuid(), WorkflowDefinitionId = 1, WorkflowRefId = Guid.NewGuid(), WorkflowVersion = 1,
+        TriggerNodeId = Guid.NewGuid(), CorrelationKey = null, Status = RunStatus.Failed,
+        StartedAt = DateTime.UtcNow, CompletedAt = DateTime.UtcNow, CancellationRequestedAt = null,
+        CancellationReason = null, CreditBudget = 0m, CreatedAt = DateTime.UtcNow, OutputJson = outputJson
+    };
+
+    private sealed class FixedClock(DateTime utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(utcNow);
     }
 
     private sealed class EndedChildRunProvider(IReadOnlyCollection<RunRow> children) : IRunProvider
     {
-        public Task<IReadOnlyCollection<RunRow>> GetEndedChildrenAwaitedAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => Task.FromResult(children);
+        public TaskCompletionSource<DateTime> Cutoff { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<IReadOnlyCollection<RunRow>> GetEndedChildrenAwaitedAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
+        {
+            Cutoff.TrySetResult(cutoffUtc);
+            return Task.FromResult(children);
+        }
+
         public Task<RunRow> CreateAsync(RunRow row, CancellationToken ct) => throw new NotSupportedException();
         public Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<RunRow> GetByIdAsync(long runId, CancellationToken ct) => throw new NotSupportedException();
@@ -80,18 +141,32 @@ public sealed class BookmarkOrphanGcTests
         public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
     }
 
-    private sealed class RecordingCompletionHook : ISubWorkflowCompletionHook
+    private sealed class RecordingCompletionHook(int expectedCalls, Guid? throwFor = null) : ISubWorkflowCompletionHook
     {
-        public TaskCompletionSource Called { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly object _gate = new();
 
-        public (Guid RunRefId, string Status, string? OutputJson)? First { get; private set; }
+        public TaskCompletionSource Done { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public List<(Guid RunRefId, string Status, string? OutputJson)> Calls { get; } = [];
 
         public Task OnRunCompletedAsync(Guid runRefId, string terminalStatus, CancellationToken ct) => OnRunCompletedAsync(runRefId, terminalStatus, null, ct);
 
         public Task OnRunCompletedAsync(Guid runRefId, string terminalStatus, string? outputJson, CancellationToken ct)
         {
-            First ??= (runRefId, terminalStatus, outputJson);
-            Called.TrySetResult();
+            lock (_gate)
+            {
+                Calls.Add((runRefId, terminalStatus, outputJson));
+                if (Calls.Count >= expectedCalls)
+                {
+                    Done.TrySetResult();
+                }
+            }
+
+            if (runRefId == throwFor)
+            {
+                throw new InvalidOperationException("The hub is down.");
+            }
+
             return Task.CompletedTask;
         }
     }

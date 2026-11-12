@@ -58,6 +58,7 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
     }
 
     // A stale wake is not this child's result: keep waiting on the same child run rather than starting another.
+    // Re-parking on the same condition is also what lets the orphan GC's re-raised completion still match it.
     protected override ValueTask<WakeCondition?> KeepWaitingOnAsync(NodeContext ctx, string? waitingOn, DateTime? deadline, CancellationToken ct)
     {
         return ValueTask.FromResult<WakeCondition?>(Guid.TryParse(waitingOn, out Guid parkedOn) ? new ChildRunCompletedWakeCondition(parkedOn) : null);
