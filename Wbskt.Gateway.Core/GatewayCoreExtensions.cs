@@ -6,6 +6,7 @@ using Wbskt.Gateway.Core.Services;
 using Wbskt.Gateway.Core.Services.Inbound;
 using Wbskt.Gateway.Core.Telemetry;
 using Wbskt.Infrastructure.Security;
+using Wbskt.Infrastructure.Telemetry;
 
 namespace Wbskt.Gateway.Core;
 
@@ -23,6 +24,7 @@ public static class GatewayCoreExtensions
         services.AddSingleton(transport);
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<GatewayMetrics>();
+        services.AddSingleton<IWorkerTickMetrics>(sp => sp.GetRequiredService<GatewayMetrics>());
 
         services.AddSingleton<IConnectionManager, ConnectionManager>();
         services.AddSingleton<IRevocationCache, RevocationCache>();
