@@ -336,7 +336,7 @@ Credentials for outbound steps are stored as workspace **integrations**: `Telegr
 | Wait-for-HTTP token | ≥ 24 characters |
 | Queued trigger events | kept 24 h |
 | Open run with no live branch | failed after 30 min |
-| History | Info 30 days, Warn/Error 365 days |
+| History | Kept with its run: the plan's `RunHistoryDays`, at most 365 days |
 
 ## 16. Not supported yet
 

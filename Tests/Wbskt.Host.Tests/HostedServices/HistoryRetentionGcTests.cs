@@ -12,43 +12,24 @@ namespace Wbskt.Host.Tests.HostedServices;
 public sealed class HistoryRetentionGcTests
 {
     [Fact]
-    public async Task Tick_loops_until_caught_up()
-    {
-        // Arrange
-        var leadership = new FixedLeadershipGate(true);
-        var historyProvider = new RecordingHistoryEventProvider([5000, 100]);
-        var gc = new HistoryRetentionGc(new FixedClock(), leadership, WorkerTestServices.Scopes(historyProvider), NullLogger<HistoryRetentionGc>.Instance, WorkerTestServices.Options(), Catalog());
-
-        // Act
-        await gc.TickAsync(CancellationToken.None);
-
-        // Assert
-        Assert.Equal(2, historyProvider.DeleteCalls.Count);
-        Assert.All(historyProvider.DeleteCalls, call => Assert.Equal((new DateTime(2026, 4, 26, 12, 30, 0, DateTimeKind.Utc), 5000), call));
-    }
-
-    [Fact]
     public async Task Tick_skips_when_lease_not_held()
     {
-        // Arrange
         var leadership = new FixedLeadershipGate(false);
-        var historyProvider = new RecordingHistoryEventProvider([5000]);
-        var gc = new HistoryRetentionGc(new FixedClock(), leadership, WorkerTestServices.Scopes(historyProvider), NullLogger<HistoryRetentionGc>.Instance, WorkerTestServices.Options(), Catalog());
+        var runProvider = new RecordingRunRetentionProvider([HistoryRetentionGc.RunBatchSize]);
+        var gc = new HistoryRetentionGc(new FixedClock(), leadership, WorkerTestServices.Scopes(runProvider), NullLogger<HistoryRetentionGc>.Instance, WorkerTestServices.Options(), Catalog());
 
-        // Act
         await gc.TickAsync(CancellationToken.None);
 
-        // Assert
         Assert.Equal(1, leadership.Checks);
-        Assert.Empty(historyProvider.DeleteCalls);
+        Assert.Empty(runProvider.DeleteCalls);
     }
 
     [Fact]
-    public async Task Tick_then_deletes_runs_past_the_elevated_window_until_caught_up()
+    public async Task Tick_deletes_runs_past_the_elevated_window_until_caught_up()
     {
-        var historyProvider = new RecordingHistoryEventProvider([0]);
+        // #774: runs go with their history by plan; no pass prunes a kept run's history at a global window.
         var runProvider = new RecordingRunRetentionProvider([HistoryRetentionGc.RunBatchSize, 3]);
-        var gc = new HistoryRetentionGc(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(historyProvider, runProvider), NullLogger<HistoryRetentionGc>.Instance, WorkerTestServices.Options(new WorkflowEngineOptions { HistoryRetentionWindowElevated = TimeSpan.FromDays(365) }), Catalog());
+        var gc = new HistoryRetentionGc(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(runProvider), NullLogger<HistoryRetentionGc>.Instance, WorkerTestServices.Options(new WorkflowEngineOptions { HistoryRetentionWindowElevated = TimeSpan.FromDays(365) }), Catalog());
 
         await gc.TickAsync(CancellationToken.None);
 
@@ -65,7 +46,7 @@ public sealed class HistoryRetentionGcTests
         {
             Plans = new() { [PlanCode.Maker] = new PlanLimitOverrides { RunHistoryDays = 21 } }
         }));
-        var gc = new HistoryRetentionGc(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(new RecordingHistoryEventProvider([0]), runProvider), NullLogger<HistoryRetentionGc>.Instance, WorkerTestServices.Options(), catalog);
+        var gc = new HistoryRetentionGc(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(runProvider), NullLogger<HistoryRetentionGc>.Instance, WorkerTestServices.Options(), catalog);
 
         await gc.TickAsync(CancellationToken.None);
 
@@ -108,27 +89,6 @@ public sealed class HistoryRetentionGcTests
                 Checks++;
                 return isActive;
             }
-        }
-    }
-
-    private sealed class RecordingHistoryEventProvider : IHistoryEventProvider
-    {
-        private readonly Queue<int> _deletes;
-
-        public RecordingHistoryEventProvider(IReadOnlyCollection<int> deletes)
-        {
-            _deletes = new Queue<int>(deletes);
-        }
-
-        public List<(DateTime CutoffUtc, int BatchSize)> DeleteCalls { get; } = [];
-
-        public Task InsertBatchAsync(IReadOnlyCollection<Wbskt.Workflow.Abstraction.Entities.HistoryEventRow> events, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyCollection<Wbskt.Workflow.Abstraction.Entities.HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct) => throw new NotSupportedException();
-
-        public Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, DateTime? elevatedCutoffUtc, CancellationToken ct)
-        {
-            DeleteCalls.Add((cutoffUtc, batchSize));
-            return Task.FromResult(_deletes.Dequeue());
         }
     }
 }

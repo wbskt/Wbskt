@@ -2332,7 +2332,6 @@ public sealed class BranchLoopTests
         }
         public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, DateTime? elevatedCutoffUtc, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class RecordingJoinAggregatorProvider(JoinContributionResult result) : IJoinAggregatorProvider

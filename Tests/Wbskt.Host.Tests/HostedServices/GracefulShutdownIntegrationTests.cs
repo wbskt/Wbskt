@@ -89,10 +89,7 @@ public sealed class GracefulShutdownIntegrationTests
 
     private static IHistoryEventProvider CreateHistoryEventProvider()
     {
-        var mock = new Mock<IHistoryEventProvider>(MockBehavior.Strict);
-        mock.Setup(x => x.DeleteForRetiredRunsAsync(It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(0);
-        return mock.Object;
+        return new Mock<IHistoryEventProvider>(MockBehavior.Strict).Object;
     }
 
     private static IPendingTriggerEventProvider CreatePendingTriggerEventProvider()

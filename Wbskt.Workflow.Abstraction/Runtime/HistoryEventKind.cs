@@ -3,9 +3,8 @@ namespace Wbskt.Workflow.Abstraction.Runtime;
 /// <summary>
 /// The kinds of entry that make up a run's history, and how severe each one is.
 ///
-/// <para>Severity is not cosmetic: <c>HistoryEvent_DeleteForRetiredRuns</c> keeps Warn/Error entries
-/// far longer than Info ones, so getting it wrong either discards the record of a failure or retains
-/// routine chatter forever. It lives here rather than at each call site so the two cannot disagree.</para>
+/// <para>Severity tells a failure from routine progress when a run's history is read. It lives here
+/// rather than at each call site so the two cannot disagree.</para>
 /// </summary>
 public static class HistoryEventKind
 {

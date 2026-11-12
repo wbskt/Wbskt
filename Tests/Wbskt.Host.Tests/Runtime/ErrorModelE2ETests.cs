@@ -341,7 +341,6 @@ public sealed class ErrorModelE2ETests
             return Task.FromResult(events);
         }
 
-        public Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, DateTime? elevatedCutoffUtc, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class NoOpWorkflowDefinitionProvider : IWorkflowDefinitionProvider

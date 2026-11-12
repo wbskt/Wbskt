@@ -16,10 +16,8 @@ public sealed class HistoryRetentionGc(
     IOptions<WorkflowEngineOptions> options,
     PlanCatalog catalog) : LeaderPeriodicWorker(leadership, scopeFactory, logger)
 {
-    private const int BatchSize = 5000;
-    // Each run takes its branches and history with it, so a run batch is much heavier than a row batch.
+    // Each run takes its branches and history with it, so a batch is a hundred runs.
     internal const int RunBatchSize = 100;
-    private readonly TimeSpan _retentionWindow = options.Value.HistoryRetentionWindow;
     private readonly TimeSpan _elevatedRetentionWindow = options.Value.HistoryRetentionWindowElevated;
 
     protected override string Name => "History retention GC";
@@ -28,21 +26,12 @@ public sealed class HistoryRetentionGc(
 
     protected override async Task RunOnceAsync(IServiceProvider services, CancellationToken ct)
     {
-        var historyEventProvider = services.GetRequiredService<IHistoryEventProvider>();
         DateTime nowUtc = clock.GetUtcNow().UtcDateTime;
-        DateTime cutoffUtc = nowUtc - _retentionWindow;
         DateTime elevatedCutoffUtc = nowUtc - _elevatedRetentionWindow;
-        while (true)
-        {
-            int deleted = await historyEventProvider.DeleteForRetiredRunsAsync(cutoffUtc, BatchSize, elevatedCutoffUtc, ct);
-            if (deleted < BatchSize)
-            {
-                break;
-            }
-        }
 
         // A run goes, with all its history, once its workspace's plan stops keeping it, and in any case
-        // once even its Warn/Error history is past the elevated window.
+        // past the elevated window. History is never pruned apart from its run, so a run the plan still
+        // keeps is kept whole.
         IReadOnlyCollection<RunHistoryRetention> retention = Enum.GetValues<PlanCode>()
             .Select(plan => new RunHistoryRetention(plan, catalog.LimitsFor(plan).RunHistoryDays))
             .ToList();
