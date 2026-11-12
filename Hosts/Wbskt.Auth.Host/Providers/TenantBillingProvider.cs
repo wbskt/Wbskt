@@ -88,6 +88,16 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
         }, cancellationToken) == 1;
     }
 
+    public async Task<bool> ClaimReconcileAsync(string provider, DateTime now, TimeSpan every, CancellationToken cancellationToken)
+    {
+        return await ExecuteScalarAsync<int>("dbo.BillingReconcile_Claim", p =>
+        {
+            p.AddWithValue("@Provider", provider);
+            p.Add("@Now", SqlDbType.DateTime2).Value = now;
+            p.AddWithValue("@EveryMinutes", (int)every.TotalMinutes);
+        }, cancellationToken) == 1;
+    }
+
     public Task<IReadOnlyCollection<TenantSubscription>> GetLiveSubscriptionsOfSoleTenantsAsync(int userId, CancellationToken cancellationToken)
     {
         return ExecuteCollectionAsync("dbo.TenantSubscription_GetLiveBy_SoleMember", p => p.AddWithValue("@UserId", userId), MapSubscription, cancellationToken);

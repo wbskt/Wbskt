@@ -1125,27 +1125,92 @@ public sealed class BillingPaymentsTests
         var handler = new StubHandler(request => request.RequestUri!.Query.Contains("page_number=0") ? Json(Page(100, "subscription")) : Json(Page(1, "subscription")));
         var gateway = Dodo(handler);
 
-        IReadOnlyCollection<string> ids = await gateway.ListSubscriptionIdsAsync(new DateTimeOffset(2026, 11, 6, 12, 0, 0, TimeSpan.Zero), CancellationToken.None);
+        ProviderIdList listed = await gateway.ListSubscriptionIdsAsync(new DateTimeOffset(2026, 11, 6, 12, 0, 0, TimeSpan.Zero), CancellationToken.None);
 
-        Assert.Equal(101, ids.Count);
+        // The second page's one item shifted down from the first while it paged, so it is kept once.
+        Assert.Equal(100, listed.Ids.Count);
+        Assert.True(listed.Complete);
         Assert.Equal(2, handler.Requests.Count);
         Assert.Equal("/subscriptions", handler.Requests[0].RequestUri!.AbsolutePath);
         Assert.Equal("?created_at_gte=2026-11-06T12%3A00%3A00.000Z&page_size=100&page_number=1", handler.Requests[1].RequestUri!.Query);
     }
 
     [Fact]
+    public async Task Dodo_leaves_a_checkout_never_paid_for_out_of_the_subscriptions_listed()
+    {
+        var gateway = Dodo(new StubHandler(_ => Json("""{"items":[{"subscription_id":"sub_open","status":"pending"},{"subscription_id":"sub_paid","status":"active"}]}""")));
+
+        ProviderIdList listed = await gateway.ListSubscriptionIdsAsync(Now, CancellationToken.None);
+
+        Assert.Equal(["sub_paid"], listed.Ids);
+    }
+
+    [Fact]
+    public async Task Dodo_stops_listing_at_the_page_cap_and_says_the_list_is_cut_short()
+    {
+        int next = 0;
+        var gateway = Dodo(new StubHandler(_ => Json("{\"items\":[" + string.Join(",", Enumerable.Range(0, 100).Select(_ => $"{{\"payment_id\":\"pay_{next++}\"}}")) + "]}")));
+
+        ProviderIdList listed = await gateway.ListPaymentIdsAsync(Now, CancellationToken.None);
+
+        Assert.False(listed.Complete);
+        Assert.Equal(5000, listed.Ids.Count);
+    }
+
+    [Fact]
+    public async Task Dodo_refuses_a_list_answer_without_items_rather_than_reading_it_as_empty()
+    {
+        var gateway = Dodo(new StubHandler(_ => Json("""{"data":[]}""")));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => gateway.ListPaymentIdsAsync(Now, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task The_reconcile_reads_each_recent_subscription_and_payment_again_and_one_failing_stops_none_of_the_rest()
     {
-        _gateway.Setup(g => g.IsConfigured).Returns(true);
-        _gateway.Setup(g => g.ListSubscriptionIdsAsync(Now - _options.ReconcileWindow, It.IsAny<CancellationToken>())).ReturnsAsync(["sub_bad", "sub_gone"]);
-        _gateway.Setup(g => g.ListPaymentIdsAsync(Now - _options.ReconcileWindow, It.IsAny<CancellationToken>())).ReturnsAsync(["pay_1"]);
+        GivenReconcileDue();
+        _gateway.Setup(g => g.ListSubscriptionIdsAsync(Now - _options.ReconcileWindow, It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderIdList(["sub_bad", "sub_gone"], Complete: true));
+        _gateway.Setup(g => g.ListPaymentIdsAsync(Now - _options.ReconcileWindow, It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderIdList(["pay_1"], Complete: true));
         _gateway.Setup(g => g.FindSubscriptionAsync("sub_bad", It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("down"));
-
-        await new BillingReconcile(_gateway.Object, Sync(), Options.Create(_options), new FixedClock(Now), new AuthMetrics(), NullLogger<BillingReconcile>.Instance)
-            .RunAsync(CancellationToken.None);
+        var metrics = new AuthMetrics();
+        List<string> recorded = RecordReconciles(metrics, out MeterListener listener);
+        using (listener)
+        {
+            await Reconcile(metrics).RunAsync(CancellationToken.None);
+        }
 
         _gateway.Verify(g => g.FindSubscriptionAsync("sub_gone", It.IsAny<CancellationToken>()), Times.Once);
         _gateway.Verify(g => g.FindPaymentAsync("pay_1", It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(["subscription/failed", "subscription/set_aside", "payment/set_aside"], recorded);
+    }
+
+    [Fact]
+    public async Task A_list_the_provider_refuses_is_counted_and_the_other_kind_still_runs()
+    {
+        GivenReconcileDue();
+        _gateway.Setup(g => g.ListSubscriptionIdsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("401"));
+        _gateway.Setup(g => g.ListPaymentIdsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderIdList(["pay_1"], Complete: false));
+        var metrics = new AuthMetrics();
+        List<string> recorded = RecordReconciles(metrics, out MeterListener listener);
+        using (listener)
+        {
+            await Reconcile(metrics).RunAsync(CancellationToken.None);
+        }
+
+        _gateway.Verify(g => g.FindPaymentAsync("pay_1", It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(["subscription_list/failed", "payment_list/truncated", "payment/set_aside"], recorded);
+    }
+
+    [Fact]
+    public async Task The_reconcile_does_nothing_when_another_replica_or_an_earlier_start_already_ran_it()
+    {
+        _gateway.Setup(g => g.IsConfigured).Returns(true);
+        _gateway.Setup(g => g.Name).Returns("dodo");
+        _billing.Setup(b => b.ClaimReconcileAsync("dodo", Now.UtcDateTime, _options.ReconcileEvery, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        await Reconcile(new AuthMetrics()).RunAsync(CancellationToken.None);
+
+        _gateway.Verify(g => g.ListSubscriptionIdsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -1153,10 +1218,45 @@ public sealed class BillingPaymentsTests
     {
         _gateway.Setup(g => g.IsConfigured).Returns(false);
 
-        await new BillingReconcile(_gateway.Object, Sync(), Options.Create(_options), new FixedClock(Now), new AuthMetrics(), NullLogger<BillingReconcile>.Instance)
-            .RunAsync(CancellationToken.None);
+        await Reconcile(new AuthMetrics()).RunAsync(CancellationToken.None);
 
         _gateway.Verify(g => g.ListSubscriptionIdsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Never);
+        _billing.Verify(b => b.ClaimReconcileAsync(It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    private void GivenReconcileDue()
+    {
+        _options.ReconcilePause = TimeSpan.Zero;
+        _gateway.Setup(g => g.IsConfigured).Returns(true);
+        _gateway.Setup(g => g.Name).Returns("dodo");
+        _billing.Setup(b => b.ClaimReconcileAsync("dodo", Now.UtcDateTime, _options.ReconcileEvery, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+    }
+
+    private BillingReconcile Reconcile(AuthMetrics metrics) =>
+        new(_gateway.Object, Sync(), _billing.Object, Options.Create(_options), new FixedClock(Now), metrics, NullLogger<BillingReconcile>.Instance);
+
+    // Counts of one, in order: the zeroes each series starts at are not what the reconcile did.
+    private static List<string> RecordReconciles(AuthMetrics metrics, out MeterListener listener)
+    {
+        List<string> recorded = [];
+        listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, current) =>
+        {
+            if (ReferenceEquals(instrument, metrics.BillingReconciles))
+            {
+                current.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
+        {
+            if (value > 0)
+            {
+                Dictionary<string, object?> byKey = tags.ToArray().ToDictionary(t => t.Key, t => t.Value);
+                recorded.Add($"{byKey["kind"]}/{byKey["outcome"]}");
+            }
+        });
+        listener.Start();
+        return recorded;
     }
 
     // ----- Helpers -----------------------------------------------------------------------------------

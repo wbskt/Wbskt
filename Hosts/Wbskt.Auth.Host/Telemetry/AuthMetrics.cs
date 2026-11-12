@@ -9,6 +9,14 @@ public sealed class AuthMetrics : IWorkerTickMetrics, IDisposable
     public const string MeterName = "Wbskt.Auth";
     private readonly Meter _meter;
 
+    // Every series BillingReconcileFailing watches, so each starts at zero.
+    private static readonly (string Kind, string Outcome)[] ReconcileAlerted =
+    [
+        ("subscription", "failed"), ("payment", "failed"),
+        ("subscription_list", "failed"), ("payment_list", "failed"),
+        ("subscription_list", "truncated"), ("payment_list", "truncated")
+    ];
+
     public AuthMetrics()
     {
         _meter = new Meter(MeterName);
@@ -29,7 +37,10 @@ public sealed class AuthMetrics : IWorkerTickMetrics, IDisposable
         // first appears at 1 has no earlier sample, and increase() would miss it.
         RecordBillingRefund("unconfirmed", 0);
         BillingWebhooks.Add(0, new KeyValuePair<string, object?>("type", "unknown"), new KeyValuePair<string, object?>("outcome", "signature_invalid"));
-        BillingReconciles.Add(0, new KeyValuePair<string, object?>("kind", "payment"), new KeyValuePair<string, object?>("outcome", "failed"));
+        foreach ((string kind, string outcome) in ReconcileAlerted)
+        {
+            BillingReconciles.Add(0, new KeyValuePair<string, object?>("kind", kind), new KeyValuePair<string, object?>("outcome", outcome));
+        }
         
         PasswordHashDuration = _meter.CreateHistogram<double>("wbskt_auth_password_hash_duration_ms");
         WorkerTicks = _meter.CreateCounter<long>("wbskt_auth_worker_ticks_total");

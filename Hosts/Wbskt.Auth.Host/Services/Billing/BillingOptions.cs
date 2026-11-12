@@ -32,6 +32,12 @@ public sealed class BillingOptions
     /// </summary>
     public TimeSpan ReconcileWindow { get; set; } = TimeSpan.FromDays(3);
 
+    /// <summary>How often the reconcile runs, across every auth replica and restart (<c>dbo.BillingReconciles</c>).</summary>
+    public TimeSpan ReconcileEvery { get; set; } = TimeSpan.FromDays(1);
+
+    /// <summary>The pause between one item the reconcile reads and the next, to stay inside the provider's rate limit.</summary>
+    public TimeSpan ReconcilePause { get; set; } = TimeSpan.FromMilliseconds(250);
+
     /// <summary>
     /// How long a plan checkout stays open for reuse: another request for the same plan in that time gets
     /// the same page, so two tabs or two admins cannot each pay for a subscription.
