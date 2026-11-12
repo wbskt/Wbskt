@@ -116,6 +116,10 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
         (await DrawnAsync(sooner)).Should().Be(10m, "25 posted against an allowance of 10, the sooner grant first");
         (await DrawnAsync(later)).Should().Be(5m);
         (await MonthAsync(tenantId)).Should().Be((25m, 15m), "a second post with nothing new draws nothing");
+        var summary = await new Wbskt.Management.Host.Providers.WorkspaceUsageProvider(ProviderFactory.BuildConfiguration(fixture.ConnectionString))
+            .GetSummaryAsync(workspaceId, tenantId, new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1), CancellationToken.None);
+        (summary.TenantCredits, summary.TenantCreditsPosted, summary.TenantCreditsDrawn, summary.CreditGrantBalance)
+            .Should().Be((25m, 25m, 15m, 15m), "the usage response works out the same 15 left from these");
         long next = await StartAsync(wd, credits: new PlanCredits(10m, tenantId));
         (await ProviderFactory.Run(fixture.ConnectionString).GetByIdAsync(next, CancellationToken.None)).CreditBudget
             .Should().Be(15m, "the plan's 10 are covered and what the grants still hold is left");

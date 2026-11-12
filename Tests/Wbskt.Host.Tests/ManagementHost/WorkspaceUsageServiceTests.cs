@@ -41,19 +41,22 @@ public sealed class WorkspaceUsageServiceTests
     // Maker's 25,000 with 30,000 posted, 5,000 of it drawn from a 10,000 pack that now holds 5,000: the
     // plan is used up and the pack's 5,000 are left, as Run_Start counts them.
     [Theory]
-    [InlineData(PlanCode.Maker, 30_000, 30_000, 5_000, 5_000, 5_000)]
+    [InlineData(30_000, 30_000, 5_000, 5_000, 5_000)]
 
     // The same with 1,000 a run has not posted yet: it comes out of what is left.
-    [InlineData(PlanCode.Maker, 31_000, 30_000, 5_000, 5_000, 4_000)]
+    [InlineData(31_000, 30_000, 5_000, 5_000, 4_000)]
 
     // Nothing left is 0, never below.
-    [InlineData(PlanCode.Maker, 40_000, 35_000, 5_000, 0, 0)]
-    public async Task Remaining_is_what_a_run_start_would_find_left(PlanCode plan, double used, double posted, double drawn, double topUp, double remaining)
+    [InlineData(40_000, 35_000, 5_000, 0, 0)]
+
+    // Past the plan with nothing drawn (a downgrade) and a pack still live: the plan adds nothing, the pack is left.
+    [InlineData(30_000, 30_000, 0, 5_000, 5_000)]
+    public async Task Remaining_is_what_a_run_start_would_find_left(double used, double posted, double drawn, double topUp, double remaining)
     {
         _usage.Setup(x => x.GetSummaryAsync(7, null, It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new WorkspaceUsageSummary((decimal)used, 0, 0, 0, 0, 0, 0, 0, null, (decimal)topUp, TenantCreditsPosted: (decimal)posted, TenantCreditsDrawn: (decimal)drawn));
         _usage.Setup(x => x.GetDailyCreditsAsync(7, It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
-        var service = new WorkspaceUsageService(_usage.Object, new FixedWorkspacePlans(plan), new FixedClock(), Options.Create(new BillingOptions()));
+        var service = new WorkspaceUsageService(_usage.Object, new FixedWorkspacePlans(PlanCode.Maker), new FixedClock(), Options.Create(new BillingOptions()));
 
         Result<WorkspaceUsageResponse> result = await service.GetAsync(7, null, null, CancellationToken.None);
 
