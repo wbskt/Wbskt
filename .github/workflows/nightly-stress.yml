@@ -22,10 +22,6 @@ jobs:
   stress:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    permissions:
-      contents: read
-      # The last step opens or updates an issue when the run fails.
-      issues: write
     services:
       sqlserver:
         image: mcr.microsoft.com/mssql/server:2022-latest
@@ -129,7 +125,7 @@ jobs:
           fi
 
       # 200 clients register under a fresh policy, connect, and send telemetry for five minutes. The
-      # workspace's tenant is put on Team first: on Free (20 clients) registration refuses the other 180.
+      # workspace's tenant (the seeded admin's) is put on Team first: on Free (20 clients) registration refuses the other 180.
       # A plan change re-syncs every workspace of the tenant, so the step waits until the management
       # host reports Team for this one. The load tester runs until stopped, so `timeout` ends it; exit 124
       # is that, and is the expected outcome. It fails on a client that could not start, or on a host
@@ -143,6 +139,10 @@ jobs:
           management=https://localhost:7010
           token=$(curl -fsS -X POST "$auth/api/auth/login" -H 'Content-Type: application/json' \
             -d '{"email":"admin@wbskt.com","password":"Password123!"}' | jq -r .accessToken)
+          if [[ -z "$token" || "$token" == "null" ]]; then
+            echo "::error::the seeded admin could not sign in"
+            exit 1
+          fi
           echo "::add-mask::$token"
           created=$(curl -fsS -X POST "$auth/api/v1/workspaces" -H "Authorization: Bearer $token" \
             -H 'Content-Type: application/json' -d "{\"name\":\"nightly-load-$GITHUB_RUN_ID\"}")
@@ -152,7 +152,7 @@ jobs:
             echo "::error::creating the load tester's workspace returned no tenant: $created"
             exit 1
           fi
-          curl -fsS -o /dev/null -X PUT "$auth/api/internal/tenants/$tenant/plan" \
+          curl -sS --fail-with-body -X PUT "$auth/api/internal/tenants/$tenant/plan" \
             -H "X-Wbskt-Internal-Key: $Internal__ApiKey" -H 'Content-Type: application/json' -d '{"planCode":"Team"}'
           plan=""
           for _ in $(seq 1 60); do
@@ -216,9 +216,20 @@ jobs:
             TestResults/**/*.trx
           if-no-files-found: ignore
 
-      # A job that runs past its timeout-minutes ends cancelled, not failed, so that is reported too.
-      - name: Report the failure
-        if: (failure() || cancelled()) && github.event_name == 'schedule'
+  # Its own job, so a run that fails before any step of stress (a service container that never turns
+  # healthy, a runner lost) or runs past its timeout is reported too, and the heavy job needs no
+  # write access. A manual cancel of a scheduled run is reported as well; that is rare.
+  report:
+    needs: stress
+    if: always() && github.event_name == 'schedule' && needs.stress.result != 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Open or update the issue
         env:
           GH_TOKEN: ${{ github.token }}
-        run: .github/scripts/report-nightly-failure.sh "Nightly stress"
+        run: .github/scripts/report-nightly-failure.sh "Nightly stress" "${{ needs.stress.result }}"
