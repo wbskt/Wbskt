@@ -190,7 +190,7 @@ The most security-sensitive area, and entirely uncovered today.
 | `AUTH_RT_15` | − | Two concurrent refreshes with the same token | Exactly one 200; the other 401. Must not mint two live families |
 | `AUTH_RT_16` | + | Rotation is anonymous (no `Authorization` header) | **200** — the refresh token is the credential |
 | `AUTH_RT_17` | + | Access token issued before rotation stays valid until expiry | Documents that rotation does not retro-invalidate access tokens |
-| `AUTH_RT_18` | − | Log out on client A, then client A retries its refresh; check client B | B is **also** revoked. Logout marks the token revoked, and rotation cannot tell a deliberate logout from a stolen-token replay — both are "a retired token came back". A benign post-logout retry therefore signs out every client and raises a `RefreshTokenReplay` alert. Assert current behaviour; the false positive is a separate decision |
+| `AUTH_RT_18` | − | Log out on client A, then client A retries its refresh; check client B | A's retry is **401** `AUTH_TOKEN_INACTIVE` and B still refreshes (**200**). A token revoked on purpose (logout, a revoked session, a password change) has no successor, so `RefreshToken_Rotate` tells it from a replay of a token rotation retired (`AUTH_RT_04`), and changes nothing |
 
 
 ### 5a. Refresh cookie — `X-Refresh-Token-Transport: cookie`

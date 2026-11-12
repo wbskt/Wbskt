@@ -186,7 +186,7 @@ internal sealed class SignInService : ISignInService
             // One call, one transaction: the presented token is retired and its replacement stored
             // together or not at all. When these were separate calls, a failure after the revoke left
             // the client holding a dead token, and its next attempt read as a replay that ended every
-            // session the user had. The procedure also tells a replay (already retired when read)
+            // session the user had. The procedure also tells a replay (retired by rotation when read)
             // from a lost race (retired by a concurrent exchange in between); see RefreshToken_Rotate.
             // The user id and session are not needed here: the procedure stores the replacement under
             // whoever owns the presented token, in the same session, and refuses to extend a session
@@ -203,7 +203,7 @@ internal sealed class SignInService : ISignInService
 
                 case RefreshRotationOutcome.Replayed:
                 {
-                    // A token we already retired is being presented again. The legitimate client moved
+                    // A token rotation already retired is being presented again. The legitimate client moved
                     // on to its replacement, so whoever sent this either kept a copy or intercepted one.
                     // The procedure has already revoked every refresh token the user holds; this ends
                     // their access tokens too.
@@ -220,6 +220,14 @@ internal sealed class SignInService : ISignInService
 
                     return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_TOKEN_INACTIVE", "Token is no longer active."));
                 }
+
+                case RefreshRotationOutcome.Revoked:
+                    // Retired on purpose (sign-out, a revoked session, a password change), not by
+                    // rotation: a device that still holds it simply has not heard. Refused, and the
+                    // user's other sessions are left alone.
+                    _logger.LogInformation("Token refresh refused: the token for user ID {UserId} was revoked. IP: {IpAddress}", rotation.UserId, ipAddress);
+                    _metrics.RecordRefresh("token_revoked");
+                    return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_TOKEN_INACTIVE", "Token is no longer active."));
 
                 case RefreshRotationOutcome.Expired:
                     _logger.LogWarning("Token refresh failed: Provided token for user ID {UserId} has expired. IP: {IpAddress}", rotation.UserId, ipAddress);

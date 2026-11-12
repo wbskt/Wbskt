@@ -267,7 +267,7 @@ public sealed class TokenRotationTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task AUTH_RT_18_RefreshAfterLogout_AlsoRevokesSiblingSessions()
+    public async Task AUTH_RT_18_RefreshAfterLogout_LeavesSiblingSessionsAlone()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -277,16 +277,15 @@ public sealed class TokenRotationTests(ServicesFixture fixture)
 
         await fixture.LogoutAsync(clientOne.RefreshToken);
 
-        // Logout marks the token revoked, and the rotation path cannot tell a deliberate logout from
-        // a stolen-token replay — both are "a retired token came back". So one client retrying its
-        // refresh after signing out takes every other client down with it, and raises a
-        // RefreshTokenReplay security alert while doing it.
-        await fixture.RefreshAsync(clientOne.RefreshToken);
+        // A token revoked on purpose has no successor, so presenting it again is a device that has
+        // not heard, not a stolen copy of a token that rotation moved past (AUTH_RT_04). It is
+        // refused, and nothing else changes.
+        var retry = await fixture.RefreshAsync(clientOne.RefreshToken);
+        retry.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await ServicesFixture.ReadErrorCodeAsync(retry)).Should().Be("AUTH_TOKEN_INACTIVE");
 
-        var sibling = await fixture.RefreshAsync(clientTwo.RefreshToken);
-
-        sibling.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
-            "documents current behaviour: a benign post-logout retry is indistinguishable from theft");
+        (await fixture.RefreshAsync(clientTwo.RefreshToken)).StatusCode
+            .Should().Be(HttpStatusCode.OK, "a retry after signing out must not sign out the user's other devices");
     }
 
     [SkippableFact]

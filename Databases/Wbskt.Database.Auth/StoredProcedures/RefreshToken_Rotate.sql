@@ -6,8 +6,12 @@
 -- Returns one row. Outcome is one of:
 --   Rotated       the presented token is retired and @NewTokenHash is live; the user columns are set
 --   Unknown       no such token
---   Replayed      the token was already retired before this call looked at it. Treated as theft:
---                 every live token the user holds is revoked here, in the same call
+--   Replayed      the token was already retired by rotation before this call looked at it, so its
+--                 holder had moved on to the replacement. Treated as theft: every live token the
+--                 user holds is revoked here, in the same call
+--   Revoked       the token was retired deliberately (sign-out, a revoked session, a password
+--                 change), not by rotation. A device still holding it is not evidence of theft, so
+--                 nothing is changed
 --   Expired       the token was live but past its expiry
 --   SessionExpired the token was live, but its session started more than @SessionLifetimeSeconds
 --                 ago. Nothing is changed; the user signs in again
@@ -33,11 +37,12 @@ BEGIN
     SET XACT_ABORT ON;
 
     DECLARE @Now DATETIME2(3) = SYSUTCDATETIME();
-    DECLARE @Id INT, @UserId INT, @Expires DATETIME2(3), @Revoked DATETIME2(3);
+    DECLARE @Id INT, @UserId INT, @Expires DATETIME2(3), @Revoked DATETIME2(3), @ReplacedByTokenHash VARBINARY(32);
     DECLARE @SessionId UNIQUEIDENTIFIER, @SessionStarted DATETIME2(3), @SessionEnds DATETIME2(3);
     DECLARE @Outcome VARCHAR(20);
 
     SELECT @Id = Id, @UserId = UserId, @Expires = Expires, @Revoked = Revoked,
+           @ReplacedByTokenHash = ReplacedByTokenHash,
            @SessionId = SessionId, @SessionStarted = SessionStarted
     FROM dbo.RefreshTokens
     WHERE TokenHash = @TokenHash;
@@ -45,6 +50,10 @@ BEGIN
     IF @Id IS NULL
     BEGIN
         SET @Outcome = 'Unknown';
+    END
+    ELSE IF @Revoked IS NOT NULL AND @ReplacedByTokenHash IS NULL
+    BEGIN
+        SET @Outcome = 'Revoked';
     END
     ELSE IF @Revoked IS NOT NULL
     BEGIN

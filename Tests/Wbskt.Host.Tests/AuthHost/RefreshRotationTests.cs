@@ -111,6 +111,7 @@ public sealed class RefreshRotationTests
     [InlineData(RefreshRotationOutcome.SessionExpired, "AUTH_TOKEN_INACTIVE")]
     [InlineData(RefreshRotationOutcome.UserInactive, "AUTH_USER_INACTIVE")]
     [InlineData(RefreshRotationOutcome.Raced, "AUTH_TOKEN_INACTIVE")]
+    [InlineData(RefreshRotationOutcome.Revoked, "AUTH_TOKEN_INACTIVE")]
     public async Task Every_other_outcome_is_refused_without_ending_any_session(RefreshRotationOutcome outcome, string expectedCode)
     {
         var harness = new Harness();

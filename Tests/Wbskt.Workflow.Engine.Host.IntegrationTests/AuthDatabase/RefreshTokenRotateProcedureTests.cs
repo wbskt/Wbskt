@@ -8,7 +8,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.AuthDatabase;
 /// <summary>
 /// <c>dbo.RefreshToken_Rotate</c>: one call that retires a refresh token and stores its replacement.
 /// The properties that matter are that a rotation is all-or-nothing, that only a token already
-/// retired when it is read counts as a replay (and ends every session), and that two concurrent
+/// retired by rotation when it is read counts as a replay (and ends every session), and that two concurrent
 /// exchanges of one token produce exactly one replacement.
 /// </summary>
 [Collection("SqlEdge")]
@@ -65,6 +65,27 @@ public sealed class RefreshTokenRotateProcedureTests(AuthSqlFixture fixture)
         Assert.Null(replay.Username);
         Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.RefreshTokens WHERE UserId = @p0 AND Revoked IS NULL", userId));
         Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.RefreshTokens WHERE UserId = @p0 AND Revoked IS NULL", otherUserId));
+    }
+
+    /// <summary>
+    /// A token revoked on purpose (sign-out, a revoked session, a password change) has no successor.
+    /// The device still holding it has simply not heard, so it is refused and no other session ends.
+    /// </summary>
+    [SkippableFact]
+    public async Task Presenting_a_deliberately_revoked_token_changes_nothing()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int userId = await CreateUserAsync();
+        byte[] signedOut = await AddTokenAsync(userId);
+        await AddTokenAsync(userId);
+        await RevokeAsync(signedOut);
+
+        var result = await RotateAsync(signedOut, NewHash());
+
+        Assert.Equal("Revoked", result.Outcome);
+        Assert.Equal(userId, result.UserId);
+        Assert.Null(result.Username);
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.RefreshTokens WHERE UserId = @p0 AND Revoked IS NULL", userId));
     }
 
     [SkippableFact]
