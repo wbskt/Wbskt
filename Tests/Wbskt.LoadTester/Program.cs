@@ -8,13 +8,16 @@ Console.WriteLine("=================");
 
 if (args.Length < 2 || !int.TryParse(args[0], out var clientCount))
 {
-    Console.WriteLine("Usage: dotnet run -- <client_count> <policy_pin> [api_url] [socket_url]");
+    Console.WriteLine("Usage: dotnet run -- <client_count> <policy_pin> [api_url] [socket_url] [seconds]");
     return;
 }
 
 var policyPin = args[1];
 var baseApiUrl = args.Length > 2 ? args[2] : "https://localhost:7010";
 var baseSocketUrl = args.Length > 3 ? args[3] : "ws://localhost:5020";
+
+// Without a duration it runs until stopped; CI passes one so the run ends on its own rather than on a signal.
+TimeSpan? runFor = args.Length > 4 && int.TryParse(args[4], out var seconds) ? TimeSpan.FromSeconds(seconds) : null;
 
 var clients = new ConcurrentBag<IWbsktClient>();
 var connectedCount = 0;
@@ -77,13 +80,16 @@ await Task.WhenAll(tasks);
 stopwatch.Stop();
 Console.WriteLine($"Client spin-up process finished in {stopwatch.Elapsed.TotalSeconds:F2} seconds.");
 
-// Monitor loop
-while (true)
+var running = Stopwatch.StartNew();
+while (runFor is null || running.Elapsed < runFor)
 {
     Console.SetCursorPosition(0, Console.CursorTop);
     Console.Write($"Connected clients: {connectedCount}/{clientCount}    (Press Ctrl+C to exit)");
     await Task.Delay(1000);
 }
+
+Console.WriteLine();
+Console.WriteLine($"Load run finished after {running.Elapsed.TotalSeconds:F0} seconds with {connectedCount}/{clientCount} clients connected.");
 
 
 // A simple in-memory storage for the load test to avoid file contention
