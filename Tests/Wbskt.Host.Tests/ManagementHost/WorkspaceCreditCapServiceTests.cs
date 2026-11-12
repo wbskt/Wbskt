@@ -1,7 +1,7 @@
 using Moq;
 using Wbskt.EventBus.Abstractions;
-using Wbskt.Host.Tests.AuthHost;
 using Wbskt.Events.Billing;
+using Wbskt.Host.Tests.AuthHost;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services.Billing;
@@ -36,11 +36,13 @@ public sealed class WorkspaceCreditCapServiceTests
         Assert.True(result.Value.CapReached);
     }
 
-    [Fact]
-    public async Task A_cap_whose_lock_is_busy_is_a_503_to_try_again_and_announces_nothing()
+    [Theory]
+    [InlineData(50035)]
+    [InlineData(1205)]
+    public async Task A_cap_whose_lock_is_busy_or_lost_a_deadlock_is_a_503_to_try_again_and_announces_nothing(int number)
     {
         _caps.Setup(x => x.SetAsync(7, 100m, It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(SqlExceptions.WithNumber(50035, "busy"));
+            .ThrowsAsync(SqlExceptions.WithNumber(number, "busy"));
 
         Result<WorkspaceCreditCapResponse> result = await Service().SetAsync(7, new WorkspaceCreditCapRequest(100m), CancellationToken.None);
 
