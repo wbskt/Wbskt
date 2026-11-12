@@ -74,8 +74,14 @@ BEGIN
 
     DELETE FROM dbo.WorkflowDrafts WHERE WorkspaceId = @WorkspaceId;
 
-    -- Its copy of the tenant's plan: the workspace no longer counts towards the tenant's limits.
-    DELETE FROM dbo.WorkspaceAccounts WHERE WorkspaceId = @WorkspaceId;
+    -- Its copy of the tenant's plan is kept and marked: what the workspace spent this month still counts
+    -- against the tenant's credits and messages (dbo.TenantWorkspaces), and the retention sweeps still
+    -- find its history. Deleting it handed the month's usage back, so deleting a workspace and making
+    -- another reset the meters.
+    UPDATE dbo.WorkspaceAccounts
+    SET RetiredAt = SYSUTCDATETIME()
+    WHERE WorkspaceId = @WorkspaceId
+      AND RetiredAt IS NULL;
 
     COMMIT TRANSACTION;
 

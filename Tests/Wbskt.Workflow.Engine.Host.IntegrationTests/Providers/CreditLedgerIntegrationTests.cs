@@ -88,6 +88,33 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         other.Should().BePositive();
     }
 
+    /// <summary>
+    /// Deleting the workspace that spent the month's credits used to delete its account copy, so its
+    /// ledger rows dropped out of the tenant's sum and a new workspace started with the allowance again.
+    /// </summary>
+    [SkippableFact]
+    public async Task Credits_a_deleted_workspace_spent_still_count_against_the_tenant()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int tenantId = NewId();
+        int deleted = NewId();
+        int replacement = NewId();
+        await AddAccountAsync(deleted, tenantId);
+        await AddAccountAsync(replacement, tenantId);
+        WorkflowDefinitionRow deletedWd = await CreateDefinitionAsync(deleted);
+        WorkflowDefinitionRow replacementWd = await CreateDefinitionAsync(replacement);
+        long spent = await StartAsync(deletedWd, startCost: 1m);
+        await ChargeAsync(spent, 4m);
+        await PostAsync();
+
+        await RetireAsync(deleted);
+        Func<Task> refused = () => StartAsync(replacementWd, credits: new PlanCredits(5m, tenantId));
+
+        (await refused.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(PlanCreditLimitError);
+        (await ScalarAsync("SELECT CAST(COUNT(*) AS DECIMAL(18,4)) FROM dbo.WorkspaceAccounts WHERE WorkspaceId = @Id AND RetiredAt IS NOT NULL", deleted)).Should().Be(1m);
+    }
+
     [SkippableFact]
     public async Task Credits_a_running_run_has_not_posted_yet_still_count()
     {
@@ -277,6 +304,15 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@Id", id);
         return (decimal)(await command.ExecuteScalarAsync())!;
+    }
+
+    private async Task RetireAsync(int workspaceId)
+    {
+        await using var connection = new SqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new SqlCommand("dbo.Workspace_Retire", connection) { CommandType = System.Data.CommandType.StoredProcedure };
+        command.Parameters.AddWithValue("@WorkspaceId", workspaceId);
+        await using SqlDataReader reader = await command.ExecuteReaderAsync();
     }
 
     private async Task AddAccountAsync(int workspaceId, int tenantId)

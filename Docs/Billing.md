@@ -68,9 +68,12 @@ dbo.Tenants.PlanCode ──(copy)──────────►  dbo.Workspac
 - **Readers** use `IWorkspacePlans` (`AddWorkspacePlans`), which caches a plan for one minute. A
   workspace with no copy yet is on Free, the plan every tenant starts on. So a plan change reaches
   every host within about a minute of the event being handled.
-- Retiring a deleted workspace (`dbo.Workspace_Retire`) removes its copy. A sync page read just before
-  the delete can write the copy back; it is harmless, since the workspace holds no live clients or
-  runs to count, and costs one row.
+- Retiring a deleted workspace (`dbo.Workspace_Retire`) keeps its copy and marks it (`RetiredAt`). The
+  month it was part of still counts what it spent: the tenant's credits and messages are summed through
+  the copies, so removing it handed the month's usage back, and deleting a workspace and making another
+  reset both meters. The retention sweeps also go on reaching its readings and runs. It adds nothing to
+  the counts of clients and runs going, as it has none left. A sync that writes the copy again leaves
+  the mark alone.
 
 ## Enforcing the limits
 

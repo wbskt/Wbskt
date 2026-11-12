@@ -38,7 +38,8 @@ BEGIN
         c.ExpiresAt,
         (SELECT STRING_AGG(CAST(a.WorkspaceId AS NVARCHAR(12)), N',')
          FROM dbo.WorkspaceAccounts a
-         WHERE a.TenantId = c.TenantId) AS WorkspaceIds
+         WHERE a.TenantId = c.TenantId
+           AND a.RetiredAt IS NULL) AS WorkspaceIds
     FROM @Claimed c;
 END
 GO
