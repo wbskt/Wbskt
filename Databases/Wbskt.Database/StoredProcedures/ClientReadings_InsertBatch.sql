@@ -12,6 +12,8 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    -- The retired check is a locking read, not the row version: a report racing the retire waits for
+    -- it and is dropped, rather than landing after the queued clear has finished and dropped its row.
     INSERT INTO dbo.ClientReadings (ClientId, Name, SentAt, ReceivedAt, NumberValue, IsLate)
     SELECT @ClientId, Name, @SentAt, @ReceivedAt, NumberValue, @IsLate
     FROM @Readings
@@ -19,6 +21,6 @@ BEGIN
         SELECT 1
         FROM dbo.Clients c
         WHERE c.Id = @ClientId
-          AND NOT EXISTS (SELECT 1 FROM dbo.WorkspaceAccounts a WHERE a.WorkspaceId = c.WorkspaceId AND a.RetiredAt IS NOT NULL));
+          AND NOT EXISTS (SELECT 1 FROM dbo.WorkspaceAccounts a WITH (READCOMMITTEDLOCK) WHERE a.WorkspaceId = c.WorkspaceId AND a.RetiredAt IS NOT NULL));
 END
 GO

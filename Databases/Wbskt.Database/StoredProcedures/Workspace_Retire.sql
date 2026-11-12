@@ -4,8 +4,9 @@
 -- schedules and webhooks keep starting runs.
 --
 -- Rows are disabled or revoked rather than deleted, so the history (clients, definitions, runs)
--- stays readable for audit. The clients' readings are the exception: they are queued for clearing. Only the trigger and schedule registrations are deleted, exactly as
--- deprecating a single workflow does, and the workspace's integrations with their credentials.
+-- stays readable for audit. Only the trigger and schedule registrations are deleted, exactly as
+-- deprecating a single workflow does, and the workspace's integrations with their credentials. The
+-- clients' readings are queued for clearing.
 --
 -- Idempotent: the event that drives it can be delivered more than once. A client already revoked is
 -- not reported again, so the caller does not re-announce it.
