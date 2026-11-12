@@ -540,12 +540,51 @@ public sealed class RegistrationDisclosureTests
     public async Task A_username_that_is_taken_is_reported_plainly()
     {
         var harness = new ConflictHarness();
+        harness.WithUsernameTaken();
         harness.WithNoAccountOnThatAddress();
 
         var result = await harness.Registration.HandleRegistrationConflictAsync("taken", "fresh@example.test", new InvalidOperationException("unique index"), CancellationToken.None);
 
         Assert.True(result.IsFailure);
         Assert.Equal("AUTH_USERNAME_CONFLICT", result.Error.Code);
+        Assert.Empty(harness.Mailer.Sent);
+    }
+
+    /// <summary>
+    /// Someone holding a username registers it again with each address they want to test. Answering
+    /// by the address would tell them which are registered (204) and which are not (409), so a taken
+    /// username answers 409 whatever the address is, and nobody is mailed.
+    /// </summary>
+    [Fact]
+    public async Task A_taken_username_hides_whether_the_address_is_registered()
+    {
+        var harness = new ConflictHarness();
+        harness.WithUsernameTaken();
+        harness.WithExistingAccount();
+
+        var result = await harness.Registration.HandleRegistrationConflictAsync("taken", "taken@example.test", new InvalidOperationException("unique index"), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("AUTH_USERNAME_CONFLICT", result.Error.Code);
+        Assert.Empty(harness.Mailer.Sent);
+        harness.Accounts.Verify(p => p.GetByEmailAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>
+    /// The account that collided was deleted or renamed after the insert failed, so neither field is
+    /// held any more. There is nothing true to answer with, so the insert's fault reaches the caller.
+    /// </summary>
+    [Fact]
+    public async Task A_conflict_that_has_since_cleared_is_a_fault()
+    {
+        var harness = new ConflictHarness();
+        harness.WithNoAccountOnThatAddress();
+        var insertFault = new InvalidOperationException("unique index");
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Registration.HandleRegistrationConflictAsync("newname", "fresh@example.test", insertFault, CancellationToken.None));
+
+        Assert.Same(insertFault, thrown);
         Assert.Empty(harness.Mailer.Sent);
     }
 
@@ -595,6 +634,10 @@ public sealed class RegistrationDisclosureTests
         public void WithExistingAccount() =>
             Accounts.Setup(p => p.GetByEmailAsync("taken@example.test", It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new User { Id = 7, Username = "original", Email = "taken@example.test", IsActive = true, IsEmailVerified = true });
+
+        public void WithUsernameTaken() =>
+            Accounts.Setup(p => p.FindIdByUsernameAsync("taken", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(9);
 
         public void WithNoAccountOnThatAddress() =>
             Accounts.Setup(p => p.GetByEmailAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))

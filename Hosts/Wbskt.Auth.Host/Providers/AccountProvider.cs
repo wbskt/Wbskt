@@ -32,6 +32,14 @@ internal sealed class AccountProvider : BaseSqlProvider, IAccountProvider
         );
     }
 
+    public async Task<int?> FindIdByUsernameAsync(string username, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteScalarAsync<int?>("dbo.User_FindBy_Username", p =>
+        {
+            p.AddWithValue("@Username", username);
+        }, cancellationToken);
+    }
+
     public async Task<User> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
         return await ExecuteSingleAsync(
