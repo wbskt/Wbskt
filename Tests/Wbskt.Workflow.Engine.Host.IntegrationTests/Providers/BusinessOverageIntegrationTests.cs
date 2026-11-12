@@ -63,13 +63,14 @@ public sealed class BusinessOverageIntegrationTests(SqlEdgeFixture fixture)
         await AddAccountAsync(second, business, "Business", Contract, 100m);
         await AddAccountAsync(proWorkspace, pro, "Pro", null, 150_000m);
         await AddMessagesAsync(first, month, 600);
-        await AddMessagesAsync(second, month.AddDays(30), 900);
+        await AddMessagesAsync(second, month.AddMonths(1).AddDays(-1), 900);
         await AddMessagesAsync(second, month.AddMonths(1), 5_000);
         await AddMessagesAsync(proWorkspace, month, 999_999_999);
         await AddCreditMonthAsync(business, month, posted: 180m, drawn: 30m);
 
         Guid businessRef = await TenantRefAsync(first);
         Guid proRef = await TenantRefAsync(proWorkspace);
+        await Service(month.AddDays(3)).TrackAsync(CancellationToken.None);
 
         var report = await Service(ClosedAt(month)).GetAsync(month.Year, month.Month, CancellationToken.None);
 
@@ -100,7 +101,17 @@ public sealed class BusinessOverageIntegrationTests(SqlEdgeFixture fixture)
         await AddCreditMonthAsync(ended, month, posted: 160m, drawn: 0m);
         Guid endedRef = await TenantRefAsync(endedWorkspace);
 
-        // Seen on Business during the month; then a workspace is deleted and the contract ends.
+        // A contract that ended with the month before is still seen for a few minutes into this one.
+        int lagging = NewId();
+        int laggingWorkspace = NewId();
+        await AddAccountAsync(laggingWorkspace, lagging, "Business", Contract, 100m);
+        Guid laggingRef = await TenantRefAsync(laggingWorkspace);
+        await Service(month.ToDateTime(new TimeOnly(0, 30), DateTimeKind.Utc)).TrackAsync(CancellationToken.None);
+        await ExecuteAsync("UPDATE dbo.WorkspaceAccounts SET PlanCode = N'Team', LimitOverrides = NULL, PlanRevision = 2 WHERE WorkspaceId = @p0;", laggingWorkspace);
+
+        // Seen on Business during the month; then a workspace is deleted and the contract ends. (Tracking
+        // also records every other test's Business tenants against this month of its own, and closes the
+        // month before it, which no other test reports on.)
         await Service(month.AddDays(10)).TrackAsync(CancellationToken.None);
         await ExecuteAsync("UPDATE dbo.WorkspaceAccounts SET RetiredAt = SYSUTCDATETIME() WHERE WorkspaceId = @p0;", deletedWorkspace);
         await ExecuteAsync("UPDATE dbo.WorkspaceAccounts SET PlanCode = N'Free', LimitOverrides = NULL, PlanRevision = 2 WHERE WorkspaceId = @p0;", endedWorkspace);
@@ -118,6 +129,7 @@ public sealed class BusinessOverageIntegrationTests(SqlEdgeFixture fixture)
         (bill.MessagesPerMonth, bill.MessagesUsed, bill.ExtraMessages).Should().Be((1_000L, 1_500L, 500L), "the contract as last seen, and the deleted workspace's messages too");
         bill.ExtraCredits.Should().Be(60m);
         report.Value.Tenants.Should().NotContain(t => t.TenantRefId == laterRef);
+        report.Value.Tenants.Should().NotContain(t => t.TenantRefId == laggingRef, "it was seen on Business only while its move off it caught up");
         again.Value.Should().BeEquivalentTo(report.Value, "a closed month is read as it was closed");
     }
 
@@ -131,10 +143,10 @@ public sealed class BusinessOverageIntegrationTests(SqlEdgeFixture fixture)
         new FixedClock(new DateTimeOffset(now, TimeSpan.Zero)),
         Options.Create(new Wbskt.Management.Host.Models.BillingOptions()));
 
-    // A month of this test's own, so closing it touches no other test's.
+    // A month of this test's own, so closing it changes no other test's report.
     private static DateOnly NewMonth() => new(Random.Shared.Next(3000, 9000), Random.Shared.Next(1, 13), 1);
 
-    private static DateTime ClosedAt(DateOnly month) => month.AddMonths(1).ToDateTime(new TimeOnly(3, 0), DateTimeKind.Utc);
+    private static DateTime ClosedAt(DateOnly month) => month.AddMonths(1).AddDays(2).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
 
     private static int NewId() => Random.Shared.Next(1_000_000, int.MaxValue - 1);
 
