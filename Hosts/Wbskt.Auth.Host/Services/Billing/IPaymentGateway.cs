@@ -58,7 +58,12 @@ public interface IPaymentGateway
 /// A checkout for one product. <c>TenantRef</c> travels in the provider's metadata, so its webhooks can
 /// be traced back to the tenant; <c>ReturnUrl</c> is where the buyer lands after paying.
 /// </summary>
-public sealed record BillingCheckout(string ProductId, Guid TenantRef, string Email, string? Name, string? ReturnUrl);
+/// <summary>
+/// A checkout for <c>ProductId</c>. <c>CustomerId</c> is the customer the tenant already pays as; null makes
+/// a new customer from <c>Email</c> and <c>Name</c>, never one the provider finds by that email, so each
+/// tenant has its own customer and its portal shows nothing of another tenant's.
+/// </summary>
+public sealed record BillingCheckout(string ProductId, Guid TenantRef, string Email, string? Name, string? ReturnUrl, string? CustomerId = null);
 
 /// <summary>
 /// A subscription as the provider reports it. <c>TenantRef</c> is the tenant its checkout was for, from

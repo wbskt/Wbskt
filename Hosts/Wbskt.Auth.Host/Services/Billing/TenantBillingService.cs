@@ -99,10 +99,14 @@ internal sealed class TenantBillingService(
             return new BillingCheckoutResponse(open);
         }
 
+        // The tenant pays as its own customer once it has one. One it shares with another tenant (from a
+        // checkout before this) is not used again: the checkout makes the tenant a customer of its own.
         User buyer = await accounts.GetByIdAsync(userId, ct);
+        BillingCustomer? customer = await billing.FindCustomerAsync(tenantId, gateway.Name, ct);
+        string? customerId = customer is { Shared: false } ? customer.CustomerId : null;
         try
         {
-            string url = await gateway.CreateCheckoutAsync(new BillingCheckout(product.Value, tenant.TenantRefId, buyer.Email, buyer.Username, options.Value.ReturnUrl), ct);
+            string url = await gateway.CreateCheckoutAsync(new BillingCheckout(product.Value, tenant.TenantRefId, buyer.Email, buyer.Username, options.Value.ReturnUrl, customerId), ct);
             if (plan)
             {
                 await billing.RecordCheckoutAsync(tenantId, gateway.Name, product.Value, url, now, now + options.Value.CheckoutReuseWindow, ct);
@@ -242,14 +246,21 @@ internal sealed class TenantBillingService(
             return NotConfigured;
         }
 
-        if (await billing.FindCustomerIdAsync(tenantId, gateway.Name, ct) is not { } customerId)
+        if (await billing.FindCustomerAsync(tenantId, gateway.Name, ct) is not { } customer)
         {
             return Error.NotFound("BILLING_CUSTOMER_NOT_FOUND", "The tenant has not paid for anything yet, so it has no billing portal.");
         }
 
+        // A customer another tenant pays as too would open that tenant's subscriptions, invoices and card.
+        if (customer.Shared)
+        {
+            logger.LogWarning("Tenant {TenantId} pays {Provider} as customer {CustomerId}, which another tenant pays as too; its portal is refused.", tenantId, gateway.Name, customer.CustomerId);
+            return Error.Conflict("BILLING_CUSTOMER_SHARED", "The tenant pays as a customer another tenant pays as too, so its portal would show that tenant's billing. Contact support to separate them.");
+        }
+
         try
         {
-            return new BillingPortalResponse(await gateway.CreatePortalLinkAsync(customerId, options.Value.ReturnUrl, ct));
+            return new BillingPortalResponse(await gateway.CreatePortalLinkAsync(customer.CustomerId, options.Value.ReturnUrl, ct));
         }
         catch (HttpRequestException ex)
         {

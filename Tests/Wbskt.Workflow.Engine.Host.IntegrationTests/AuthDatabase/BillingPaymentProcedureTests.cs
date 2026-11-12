@@ -402,6 +402,23 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
     }
 
     [SkippableFact]
+    public async Task A_customer_another_tenant_paid_as_too_is_marked_shared()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        string merged = $"cus_{Guid.NewGuid():N}";
+        int first = await CreateTenantAsync();
+        int second = await CreateTenantAsync();
+        int own = await CreateTenantAsync();
+        await UpsertAsync(first, $"sub_{Guid.NewGuid():N}", "active", Now, customerId: merged);
+        await RecordPurchaseAsync(second, $"pay_{Guid.NewGuid():N}", "{}", customerId: merged);
+        await RecordPurchaseAsync(own, $"pay_{Guid.NewGuid():N}", "{}", customerId: $"cus_{Guid.NewGuid():N}");
+
+        Assert.Equal((merged, true), await FindCustomerSharedAsync(first));
+        Assert.Equal((merged, true), await FindCustomerSharedAsync(second));
+        Assert.False((await FindCustomerSharedAsync(own))!.Value.Shared);
+    }
+
+    [SkippableFact]
     public async Task Credit_purchases_page_by_id_with_their_refund_and_hold()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
@@ -554,12 +571,17 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
 
     private async Task<string?> FindCustomerAsync(int tenantId)
     {
+        return (await FindCustomerSharedAsync(tenantId))?.CustomerId;
+    }
+
+    private async Task<(string CustomerId, bool Shared)?> FindCustomerSharedAsync(int tenantId)
+    {
         await using var conn = await OpenAsync();
         await using var cmd = Procedure(conn, "dbo.TenantBillingCustomer_FindBy_TenantId");
         cmd.Parameters.AddWithValue("@TenantId", tenantId);
         cmd.Parameters.AddWithValue("@Provider", "dodo");
-        object? value = await cmd.ExecuteScalarAsync();
-        return value as string;
+        await using var reader = await cmd.ExecuteReaderAsync();
+        return await reader.ReadAsync() ? (reader.GetString(0), reader.GetBoolean(1)) : null;
     }
 
     private async Task<int> CreateTenantAsync(string plan = "Free", params int[] members)

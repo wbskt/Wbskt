@@ -7,9 +7,17 @@ namespace Wbskt.Auth.Host.Services.Billing;
 
 internal sealed record DodoCheckoutRequest(
     [property: JsonPropertyName("product_cart")] IReadOnlyList<DodoCartItem> ProductCart,
-    [property: JsonPropertyName("customer")] DodoCheckoutCustomer Customer,
+    [property: JsonPropertyName("customer")] object Customer,
     [property: JsonPropertyName("metadata")] IReadOnlyDictionary<string, string> Metadata,
-    [property: JsonPropertyName("return_url"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ReturnUrl);
+    [property: JsonPropertyName("return_url"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ReturnUrl,
+    [property: JsonPropertyName("feature_flags"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DodoCheckoutFeatureFlags? FeatureFlags);
+
+// Without it Dodo attaches the session to an existing customer with the same email, which may be
+// another tenant's.
+internal sealed record DodoCheckoutFeatureFlags(
+    [property: JsonPropertyName("always_create_new_customer")] bool AlwaysCreateNewCustomer);
+
+internal sealed record DodoExistingCustomer([property: JsonPropertyName("customer_id")] string CustomerId);
 
 internal sealed record DodoCartItem(
     [property: JsonPropertyName("product_id")] string ProductId,

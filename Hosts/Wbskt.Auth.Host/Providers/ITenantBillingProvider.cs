@@ -65,8 +65,8 @@ internal interface ITenantBillingProvider
     /// <summary>Records the plan checkout the tenant just opened, replacing the one before.</summary>
     Task RecordCheckoutAsync(int tenantId, string provider, string productId, string checkoutUrl, DateTime openedAt, DateTime expiresAt, CancellationToken cancellationToken);
 
-    /// <summary>The tenant's customer id with <paramref name="provider"/>, for its portal; null when it never paid.</summary>
-    Task<string?> FindCustomerIdAsync(int tenantId, string provider, CancellationToken cancellationToken);
+    /// <summary>The customer the tenant pays <paramref name="provider"/> as, for its portal and its next checkout; null when it never paid.</summary>
+    Task<BillingCustomer?> FindCustomerAsync(int tenantId, string provider, CancellationToken cancellationToken);
 
     /// <summary>
     /// Claims the notice <paramref name="kind"/> for <paramref name="periodKey"/> and queues <paramref name="mails"/>
