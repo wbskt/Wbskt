@@ -121,7 +121,7 @@ public sealed class BusinessOverageIntegrationTests(SqlEdgeFixture fixture)
     }
 
     private Task PostAsync() =>
-        ProviderFactory.CreditUsage(fixture.ConnectionString).PostAsync(DateOnly.FromDateTime(DateTime.UtcNow), DateTime.UtcNow.AddHours(-1), 500, CancellationToken.None);
+        ProviderFactory.CreditUsage(fixture.ConnectionString).PostAsync(DateOnly.FromDateTime(DateTime.UtcNow), 500, CancellationToken.None);
 
     private Task AddAccountAsync(int workspaceId, int tenantId, string plan, string? overrides, decimal creditsPerMonth) =>
         ExecuteAsync("""

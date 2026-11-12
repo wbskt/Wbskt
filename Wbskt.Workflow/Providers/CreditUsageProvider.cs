@@ -10,12 +10,11 @@ internal sealed class CreditUsageProvider : BaseSqlProvider, ICreditUsageProvide
 {
     public CreditUsageProvider(IConfiguration configuration) : base(configuration) { }
 
-    public async Task<IReadOnlyCollection<WorkspaceCreditPost>> PostAsync(DateOnly day, DateTime endedSinceUtc, int batchSize, CancellationToken ct)
+    public async Task<IReadOnlyCollection<WorkspaceCreditPost>> PostAsync(DateOnly day, int batchSize, CancellationToken ct)
     {
         return await ExecuteCollectionAsync("dbo.RunCredits_Post", p =>
         {
             p.Add("@Day", SqlDbType.Date).Value = day.ToDateTime(TimeOnly.MinValue);
-            p.Add("@EndedSince", SqlDbType.DateTime2).Value = endedSinceUtc;
             p.AddWithValue("@BatchSize", batchSize);
         }, r => new WorkspaceCreditPost(
             r.GetInt32(r.GetOrdinal("WorkspaceId")),

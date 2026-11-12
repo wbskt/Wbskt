@@ -137,9 +137,46 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
 
         await PostAsync();
 
-        (await ScalarAsync("SELECT CAST(COUNT(*) AS DECIMAL(18, 4)) FROM dbo.RunCounters WHERE RunId = @Id AND HasUnposted = 1", (int)ended)).Should().Be(0m);
+        (await UnpostedMarksAsync(ended)).Should().Be(0m);
         (await LedgerAsync(workspaceId)).Should().Be(3m);
         (await SetCapAsync(workspaceId, null)).Should().Be(3m, "the posted credits are not counted again as unposted");
+    }
+
+    [SkippableFact]
+    public async Task A_run_that_ended_long_before_the_post_is_still_posted()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        long ended = await StartAsync(wd, startCost: 1m);
+        await ChargeAsync(ended, 2m);
+        await ProviderFactory.Run(fixture.ConnectionString).SetTerminalAsync(ended, RunStatus.Succeeded.ToString(), DateTime.UtcNow.AddDays(-2), CancellationToken.None);
+
+        await PostAsync();
+
+        (await LedgerAsync(workspaceId)).Should().Be(3m);
+        (await UnpostedMarksAsync(ended)).Should().Be(0m);
+    }
+
+    [SkippableFact]
+    public async Task A_sub_workflows_own_charges_are_marked_and_posted()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        long root = await StartAsync(wd);
+        RunRow rootRun = await ProviderFactory.Run(fixture.ConnectionString).GetByIdAsync(root, CancellationToken.None);
+        long child = await StartAsync(wd, parentRunRefId: rootRun.RefId);
+        await ChargeAsync(child, 2m);
+
+        decimal markedBeforePost = await UnpostedMarksAsync(child);
+        await PostAsync();
+
+        markedBeforePost.Should().Be(1m);
+        (await UnpostedMarksAsync(child)).Should().Be(0m);
+        (await LedgerAsync(workspaceId)).Should().Be(2m);
     }
 
     [SkippableFact]
@@ -268,7 +305,7 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
 
     private static int NewId() => Random.Shared.Next(1_000_000, int.MaxValue - 1);
 
-    private async Task<long> StartAsync(WorkflowDefinitionRow wd, decimal startCost = 0m, PlanCredits? credits = null, decimal budget = 100m)
+    private async Task<long> StartAsync(WorkflowDefinitionRow wd, decimal startCost = 0m, PlanCredits? credits = null, decimal budget = 100m, Guid? parentRunRefId = null)
     {
         DateTime now = DateTime.UtcNow;
         Guid triggerNodeId = Guid.NewGuid();
@@ -287,7 +324,8 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
             CancellationReason = null,
             CreditBudget = budget,
             CreatedAt = now,
-            StartCost = startCost
+            StartCost = startCost,
+            ParentRunRefId = parentRunRefId
         };
         RunStartRow started = await ProviderFactory.Run(fixture.ConnectionString).StartAsync(
             run, BranchRow.New(Guid.NewGuid(), 0, triggerNodeId, """{"trigger":{}}""", now), null, wd.WorkspaceId, null, ActiveRunGuard.None, credits, CancellationToken.None);
@@ -301,13 +339,16 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
     }
 
     private Task<IReadOnlyCollection<WorkspaceCreditPost>> PostAsync() =>
-        ProviderFactory.CreditUsage(fixture.ConnectionString).PostAsync(DateOnly.FromDateTime(DateTime.UtcNow), DateTime.UtcNow.AddHours(-1), 500, CancellationToken.None);
+        ProviderFactory.CreditUsage(fixture.ConnectionString).PostAsync(DateOnly.FromDateTime(DateTime.UtcNow), 500, CancellationToken.None);
 
     private Task<decimal> LedgerAsync(int workspaceId) =>
         ScalarAsync("SELECT ISNULL(SUM(Credits), 0) FROM dbo.WorkspaceCreditUsage WHERE WorkspaceId = @Id", workspaceId);
 
     private Task<decimal> ConsumedAsync(int workflowDefinitionId) =>
         ScalarAsync("SELECT ISNULL(SUM(rc.CreditsConsumed), 0) FROM dbo.RunCounters rc JOIN dbo.Runs r ON r.Id = rc.RunId WHERE r.WorkflowDefinitionId = @Id", workflowDefinitionId);
+
+    private Task<decimal> UnpostedMarksAsync(long runId) =>
+        ScalarAsync("SELECT CAST(COUNT(*) AS DECIMAL(18, 4)) FROM dbo.RunCounters WHERE RunId = @Id AND HasUnposted = 1", (int)runId);
 
     private async Task<decimal> ScalarAsync(string sql, int id)
     {
