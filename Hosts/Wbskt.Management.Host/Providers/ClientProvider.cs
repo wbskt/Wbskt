@@ -254,7 +254,8 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
                 reader.GetInt32(reader.GetOrdinal("Id")),
                 reader.GetGuid(reader.GetOrdinal("RefId")),
                 reader.GetInt32(reader.GetOrdinal("WorkspaceId")),
-                reader.IsDBNull(reader.GetOrdinal("ConnectedHostId")) ? null : reader.GetString(reader.GetOrdinal("ConnectedHostId"))),
+                reader.IsDBNull(reader.GetOrdinal("ConnectedHostId")) ? null : reader.GetString(reader.GetOrdinal("ConnectedHostId")),
+                DateTime.SpecifyKind(reader.GetDateTime(reader.GetOrdinal("ChangedAt")), DateTimeKind.Utc)),
             cancellationToken);
     }
 
@@ -299,7 +300,8 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
                 reader.GetInt32(reader.GetOrdinal("Id")),
                 reader.GetGuid(reader.GetOrdinal("RefId")),
                 reader.GetInt32(reader.GetOrdinal("WorkspaceId")),
-                reader.GetBoolean(reader.GetOrdinal("Connected"))),
+                reader.GetBoolean(reader.GetOrdinal("Connected")),
+                DateTime.SpecifyKind(reader.GetDateTime(reader.GetOrdinal("ChangedAt")), DateTimeKind.Utc)),
             cancellationToken);
     }
 

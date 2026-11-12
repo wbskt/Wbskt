@@ -41,16 +41,16 @@ public sealed class SocketHostPresenceSnapshotHandler : IConsumer<SocketHostPres
         {
             try
             {
-                // Dated by the snapshot, on the host's clock, so a change the host saw after it still wins.
-                // Published by its own type: the bus routes on the static type.
+                // Dated as the database recorded the change, so presence and the engine's checks see the same
+                // moment. Published by its own type: the bus routes on the static type.
                 if (client.Connected)
                 {
-                    var connected = new ClientConnectedEvent(client.ClientRefId, client.ClientId, client.WorkspaceId, snapshot.HostId) { CreatedAtUtc = snapshot.TakenAtUtc };
+                    var connected = new ClientConnectedEvent(client.ClientRefId, client.ClientId, client.WorkspaceId, snapshot.HostId, IsRestored: true) { CreatedAtUtc = client.ChangedAt };
                     await _eventBus.PublishAsync(connected, context.CancellationToken);
                 }
                 else
                 {
-                    var disconnected = new ClientDisconnectedEvent(client.ClientRefId, client.ClientId, client.WorkspaceId, Reason, snapshot.HostId) { CreatedAtUtc = snapshot.TakenAtUtc };
+                    var disconnected = new ClientDisconnectedEvent(client.ClientRefId, client.ClientId, client.WorkspaceId, Reason, snapshot.HostId) { CreatedAtUtc = client.ChangedAt };
                     await _eventBus.PublishAsync(disconnected, context.CancellationToken);
                 }
             }
@@ -60,16 +60,16 @@ public sealed class SocketHostPresenceSnapshotHandler : IConsumer<SocketHostPres
             }
         }
 
-        int cleared = repaired.Count(c => !c.Connected);
-        if (cleared > 0)
+        int clearedCount = repaired.Count(c => !c.Connected);
+        if (clearedCount > 0)
         {
-            _logger.LogWarning("Marked {Count} clients offline: socket host {HostId} no longer held them, and their disconnects were lost.", cleared, snapshot.HostId);
+            _logger.LogWarning("Marked {Count} clients offline: socket host {HostId} no longer held them, and their disconnects were lost.", clearedCount, snapshot.HostId);
         }
 
-        int restored = repaired.Count - cleared;
-        if (restored > 0)
+        int restoredCount = repaired.Count - clearedCount;
+        if (restoredCount > 0)
         {
-            _logger.LogWarning("Marked {Count} clients online again: socket host {HostId} still held them after their presence expired.", restored, snapshot.HostId);
+            _logger.LogWarning("Marked {Count} clients online again: socket host {HostId} still held them after their presence expired.", restoredCount, snapshot.HostId);
         }
     }
 }

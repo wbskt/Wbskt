@@ -68,6 +68,18 @@ public sealed class ClientPresenceConsumerTests
         Assert.Equal((online, ClientRef, "online", ChangedAt, ChangedAt), insert);
     }
 
+    [Fact]
+    public async Task A_restored_connection_parks_no_online_check()
+    {
+        string online = ClientPresenceTriggerKey.Build(ClientRef, ClientPresenceState.Online, 0, Guid.NewGuid(), Guid.NewGuid());
+        var provider = new RecordingPresenceCheckProvider(online);
+        var consumer = new ClientConnectedConsumer(new ClientPresenceParker(provider));
+
+        await consumer.Consume(Context(new ClientConnectedEvent(ClientRef, 12, 34, "host-1", IsRestored: true) { CreatedAtUtc = ChangedAt }));
+
+        Assert.Empty(provider.Inserts);
+    }
+
     private static ConsumeContext<T> Context<T>(T message) where T : class
     {
         var context = new Mock<ConsumeContext<T>>();

@@ -63,7 +63,14 @@ public sealed class StalePresenceSweeper : PeriodicWorker
             // costs the announcement, so it is logged and the rest still go out.
             try
             {
-                await eventBus.PublishAsync(new ClientDisconnectedEvent(client.ClientRefId, client.ClientId, client.WorkspaceId, Reason, client.HostId ?? string.Empty), cancellationToken);
+                var disconnected = new ClientDisconnectedEvent(client.ClientRefId, client.ClientId, client.WorkspaceId, Reason, client.HostId ?? string.Empty);
+                if (client.ChangedAt is { } changedAt)
+                {
+                    // Dated as the database recorded it, so presence applies it as the same change.
+                    disconnected = disconnected with { CreatedAtUtc = changedAt };
+                }
+
+                await eventBus.PublishAsync(disconnected, cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
