@@ -33,6 +33,12 @@ internal interface ITenantBillingProvider
     /// </summary>
     Task<bool> ClaimDuplicateRefundAsync(string provider, string subscriptionId, string paymentId, bool release, DateTime now, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Takes the provider's reconcile when none started in the last <paramref name="every"/>, stamping
+    /// <paramref name="now"/>. False when another replica, or an earlier start, already has it.
+    /// </summary>
+    Task<bool> ClaimReconcileAsync(string provider, DateTime now, TimeSpan every, CancellationToken cancellationToken);
+
     /// <summary>The subscriptions that could still charge, of the tenants deleting <paramref name="userId"/>'s account deletes.</summary>
     Task<IReadOnlyCollection<TenantSubscription>> GetLiveSubscriptionsOfSoleTenantsAsync(int userId, CancellationToken cancellationToken);
 

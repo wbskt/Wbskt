@@ -87,15 +87,17 @@ groups:
 
       - alert: BillingReconcileFailing
         # The daily reconcile reads the provider's recent subscriptions and payments again in case their
-        # webhooks never arrived. One it could not read is tried again the next day, but only while it is
-        # inside the three-day window, so two bad days in a row lose it.
-        expr: sum(increase(wbskt_auth_billing_reconciles_total{outcome="failed"}[1d])) > 0
+        # webhooks never arrived. One it could not read, or a list it could not read or had to cut short,
+        # is tried again the next day, but only while it is inside the three-day window, so about three
+        # bad days in a row lose it.
+        expr: sum(increase(wbskt_auth_billing_reconciles_total{outcome=~"failed|truncated"}[1d])) > 0
         labels:
           severity: warn
         annotations:
-          summary: "{{ $value }} subscriptions or payments could not be reconciled in the last day"
+          summary: "{{ $value }} subscriptions, payments or lists could not be reconciled in the last day"
           description: >-
-            The auth host's "Could not reconcile" error log names each one and the provider's answer.
+            The auth host's "Could not reconcile" and "Could not list" error logs name each one and the
+            provider's answer; a truncated list logs "stopped" with the window it was reading.
             Fix the cause before the next day's run, or replay the events from the provider's dashboard.
 
       - alert: BillingWebhookSignaturesRefused

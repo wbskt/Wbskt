@@ -104,10 +104,11 @@ public sealed class DodoPaymentGateway(HttpClient http, IOptions<DodoOptions> op
             ReadDispute(p.Disputes));
     }
 
-    public async Task<IReadOnlyCollection<string>> ListSubscriptionIdsAsync(DateTimeOffset createdFrom, CancellationToken ct) =>
-        await ListIdsAsync("subscriptions", createdFrom, item => item.SubscriptionId, ct);
+    // A pending subscription is a checkout not paid for; storing one could let it decide the plan later.
+    public async Task<ProviderIdList> ListSubscriptionIdsAsync(DateTimeOffset createdFrom, CancellationToken ct) =>
+        await ListIdsAsync("subscriptions", createdFrom, item => item.Status == "pending" ? null : item.SubscriptionId, ct);
 
-    public async Task<IReadOnlyCollection<string>> ListPaymentIdsAsync(DateTimeOffset createdFrom, CancellationToken ct) =>
+    public async Task<ProviderIdList> ListPaymentIdsAsync(DateTimeOffset createdFrom, CancellationToken ct) =>
         await ListIdsAsync("payments", createdFrom, item => item.PaymentId, ct);
 
     public async Task<bool> AcceptsCredentialsAsync(CancellationToken ct)
@@ -221,24 +222,27 @@ public sealed class DodoPaymentGateway(HttpClient http, IOptions<DodoOptions> op
 
     // Dodo pages by number (from 0, at most 100 a page) and says nothing of a next page: a short page is
     // the last. The pages read are capped, so a window far longer than intended cannot run on for ever.
-    private async Task<IReadOnlyCollection<string>> ListIdsAsync(string path, DateTimeOffset createdFrom, Func<DodoListItem, string?> id, CancellationToken ct)
+    // Items made while it pages can shift one onto the next page, so ids are kept once.
+    private async Task<ProviderIdList> ListIdsAsync(string path, DateTimeOffset createdFrom, Func<DodoListItem, string?> id, CancellationToken ct)
     {
         string from = Uri.EscapeDataString(createdFrom.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", System.Globalization.CultureInfo.InvariantCulture));
-        var ids = new List<string>();
+        var ids = new HashSet<string>(StringComparer.Ordinal);
         for (int page = 0; page < MaxListPages; page++)
         {
             using HttpResponseMessage response = await http.GetAsync($"{path}?created_at_gte={from}&page_size={ListPageSize}&page_number={page}", ct);
             DodoList? body = await ReadAsync<DodoList>(response, $"list {path}", ct);
-            IReadOnlyList<DodoListItem> items = body?.Items ?? [];
-            ids.AddRange(items.Select(id).OfType<string>().Where(i => i.Length > 0));
+
+            // A page without items is not an empty list: the answer is not the one expected.
+            IReadOnlyList<DodoListItem> items = body?.Items ?? throw new InvalidOperationException($"Dodo's list of {path} had no items field.");
+            ids.UnionWith(items.Select(id).OfType<string>().Where(i => i.Length > 0));
             if (items.Count < ListPageSize)
             {
-                return ids;
+                return new ProviderIdList(ids, Complete: true);
             }
         }
 
         logger.LogWarning("Listed {Pages} pages of Dodo {Path} since {From} and stopped; the rest are not reconciled this time.", MaxListPages, path, createdFrom);
-        return ids;
+        return new ProviderIdList(ids, Complete: false);
     }
 
     private static async Task<T?> ReadAsync<T>(HttpResponseMessage response, string what, CancellationToken ct)

@@ -27,12 +27,13 @@ public interface IPaymentGateway
 
     /// <summary>
     /// The subscriptions made at or after <paramref name="createdFrom"/>, by id, for the reconcile that
-    /// reads each one again in case its webhooks were never delivered.
+    /// reads each one again in case its webhooks were never delivered. One never paid for (a checkout
+    /// left open) is left out.
     /// </summary>
-    Task<IReadOnlyCollection<string>> ListSubscriptionIdsAsync(DateTimeOffset createdFrom, CancellationToken ct);
+    Task<ProviderIdList> ListSubscriptionIdsAsync(DateTimeOffset createdFrom, CancellationToken ct);
 
     /// <summary>The payments made at or after <paramref name="createdFrom"/>, by id, for the same reconcile.</summary>
-    Task<IReadOnlyCollection<string>> ListPaymentIdsAsync(DateTimeOffset createdFrom, CancellationToken ct);
+    Task<ProviderIdList> ListPaymentIdsAsync(DateTimeOffset createdFrom, CancellationToken ct);
 
     /// <summary>
     /// Whether the provider accepts this deployment's credentials, by one harmless read. False when it
@@ -136,4 +137,10 @@ public enum PaymentDispute
 public sealed record PaymentLine(string ProductId, int Quantity);
 
 /// <summary>A verified webhook: its id (for idempotency), its type, and what it names.</summary>
+/// <summary>
+/// Ids the provider listed, each once. <c>Complete</c> is false when the list was cut short at the most
+/// pages read at once, so the rest were not.
+/// </summary>
+public sealed record ProviderIdList(IReadOnlyCollection<string> Ids, bool Complete);
+
 public sealed record ProviderWebhook(string EventId, string Type, string? SubscriptionId, string? PaymentId);

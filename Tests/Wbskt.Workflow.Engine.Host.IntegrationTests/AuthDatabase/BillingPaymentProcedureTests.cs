@@ -224,6 +224,23 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
     }
 
     [SkippableFact]
+    public async Task The_reconcile_is_taken_once_a_day_whoever_asks()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        string provider = $"p_{Guid.NewGuid():N}"[..30];
+
+        int first = await ProcScalarAsync("dbo.BillingReconcile_Claim", ("@Provider", provider), ("@Now", Now), ("@EveryMinutes", 1440));
+        int sameHour = await ProcScalarAsync("dbo.BillingReconcile_Claim", ("@Provider", provider), ("@Now", Now.AddHours(1)), ("@EveryMinutes", 1440));
+        int nextDay = await ProcScalarAsync("dbo.BillingReconcile_Claim", ("@Provider", provider), ("@Now", Now.AddDays(1)), ("@EveryMinutes", 1440));
+        int[] racing = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ =>
+            ProcScalarAsync("dbo.BillingReconcile_Claim", ("@Provider", provider), ("@Now", Now.AddDays(2)), ("@EveryMinutes", 1440))));
+
+        Assert.Equal((1, 0, 1), (first, sameHour, nextDay));
+        Assert.Equal(1, racing.Sum());
+        Assert.Equal(Now.AddDays(2), await ScalarAsync<DateTime>("SELECT LastStartedAt FROM dbo.BillingReconciles WHERE Provider = @p0", provider));
+    }
+
+    [SkippableFact]
     public async Task Deleting_an_account_cancels_only_the_live_subscriptions_of_tenants_it_is_alone_in()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);

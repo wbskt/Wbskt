@@ -70,7 +70,8 @@ internal sealed record DodoList([property: JsonPropertyName("items")] IReadOnlyL
 
 internal sealed record DodoListItem(
     [property: JsonPropertyName("subscription_id")] string? SubscriptionId,
-    [property: JsonPropertyName("payment_id")] string? PaymentId);
+    [property: JsonPropertyName("payment_id")] string? PaymentId,
+    [property: JsonPropertyName("status")] string? Status = null);
 
 internal sealed record DodoDispute(
     [property: JsonPropertyName("dispute_id")] string? DisputeId,
