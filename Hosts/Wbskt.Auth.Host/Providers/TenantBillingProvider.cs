@@ -75,7 +75,7 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
         }, cancellationToken) == 1;
     }
 
-    public async Task<bool> ClaimDuplicateRefundAsync(string provider, string subscriptionId, string paymentId, bool release, CancellationToken cancellationToken)
+    public async Task<bool> ClaimDuplicateRefundAsync(string provider, string subscriptionId, string paymentId, bool release, DateTime now, CancellationToken cancellationToken)
     {
         return await ExecuteScalarAsync<int>("dbo.TenantSubscription_ClaimDuplicateRefund", p =>
         {
@@ -83,6 +83,7 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
             p.AddWithValue("@SubscriptionId", subscriptionId);
             p.AddWithValue("@PaymentId", paymentId);
             p.AddWithValue("@Release", release);
+            p.AddWithValue("@Now", now);
         }, cancellationToken) == 1;
     }
 
