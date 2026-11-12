@@ -133,7 +133,8 @@ of what is left, so late in the month they hold less (at least the start cost;
 `dbo.RunCounters_TryCharge` takes the same lock and extends it by what the charge needs (at least another
 lease), up to the ceiling and what the tenant has left, or refuses the charge (`OutOfCredits`). It reads
 the tenant and its allowance from the plan copy as it is then (`dbo.PlanCreditsRefusedAt`), so a run
-going through an upgrade or a downgrade is held to the new plan. Runs going at once therefore never spend
+going through a downgrade is held to the smaller plan; an upgrade lets it extend against the larger
+allowance but never past the ceiling it started with. Runs going at once therefore never spend
 past the month's credits between them, and a run already going stops at its own budget or at what the
 tenant has left, whichever comes first. A run started before leasing came in holds none of the allowance
 and keeps its whole budget.

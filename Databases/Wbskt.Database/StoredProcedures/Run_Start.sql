@@ -103,6 +103,12 @@ BEGIN
                     THROW 50022, 'The workflow was deleted.', 1;
             END
 
+            -- The caller's tenant came from its own copy of the workspace's account; this database's
+            -- copy is the one the engine's other locks are named by (RunCounters_TryCharge reads it), so
+            -- it wins whenever it has arrived.
+            IF @WorkspaceId IS NOT NULL
+                SET @TenantId = COALESCE((SELECT TenantId FROM dbo.WorkspaceAccounts WHERE WorkspaceId = @WorkspaceId), @TenantId);
+
             -- The plan's limit on runs going at once (Running, Failing or Cancelling, as in
             -- IX_Runs_WorkflowRefId_CorrelationKey_Active), pooled across the tenant's workspaces
             -- (dbo.TenantWorkspaces). Counted under an application lock per tenant, so concurrent
@@ -159,6 +165,7 @@ BEGIN
                 IF @CreditsLeft < @CreditBudget
                     SET @CreditBudget = @CreditsLeft;
 
+                -- A start exempt from the runs limit (@MaxActiveRuns NULL) shares it twenty ways.
                 DECLARE @Lease DECIMAL(18,4) = @CreditAllowance / CASE WHEN @MaxActiveRuns > 20 THEN @MaxActiveRuns ELSE 20 END;
                 SET @RunCreditLease = @Lease;
                 IF @CreditsLeft / 20 < @Lease
