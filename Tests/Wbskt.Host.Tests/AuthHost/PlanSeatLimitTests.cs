@@ -11,6 +11,7 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.Infrastructure.Billing;
 using Wbskt.Models.Billing;
 using Wbskt.Infrastructure;
+using Wbskt.Primitives.Constants;
 
 namespace Wbskt.Host.Tests.AuthHost;
 
@@ -24,10 +25,18 @@ public sealed class PlanSeatLimitTests
     private const int CallerId = 1;
     private const int TenantId = 5;
     private static readonly Guid TenantRef = Guid.Parse("55555555-5555-5555-5555-555555555555");
+    private static readonly Tenant OwnTenant = new() { Id = 9, RefId = Guid.Parse("99999999-9999-9999-9999-999999999999"), Name = "Own" };
     private static readonly PlanLimits Limits = PlanCatalog.BuiltIn[PlanCode.Maker] with { Workspaces = 3, Members = 4 };
 
     private readonly Mock<ITenantProvider> _tenants = new();
     private readonly Mock<IWorkspaceProvider> _workspaces = new();
+    private readonly Mock<IAccessControlProvider> _access = new();
+
+    public PlanSeatLimitTests()
+    {
+        _access.Setup(p => p.VerifyPermissionAsync(CallerId, TenantId, null, PermissionNames.WorkspacesCreate, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+    }
 
     [Fact]
     public async Task A_tenants_limits_are_its_plans_with_its_overrides()
@@ -97,6 +106,85 @@ public sealed class PlanSeatLimitTests
     }
 
     [Fact]
+    public async Task A_named_tenant_is_used_when_the_caller_may_create_workspaces_there()
+    {
+        _tenants.Setup(p => p.GetTenantsForUserAsync(CallerId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([OwnTenant, new Tenant { Id = TenantId, RefId = TenantRef, Name = "Acme" }]);
+        _access.Setup(p => p.VerifyPermissionAsync(CallerId, OwnTenant.Id, null, PermissionNames.WorkspacesCreate, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var result = await Workspaces().CreateWorkspaceAsync(CallerId, new CreateWorkspaceRequest("lab", null, TenantRef));
+
+        Assert.True(result.IsSuccess);
+        _workspaces.Verify(p => p.CreateWorkspaceAsync("lab", string.Empty, CallerId, TenantId, 3, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_tenant_the_caller_is_not_in_is_a_403_like_every_tenant_route()
+    {
+        _tenants.Setup(p => p.GetTenantsForUserAsync(CallerId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new Tenant { Id = TenantId, RefId = TenantRef, Name = "Acme" }]);
+
+        var result = await Workspaces().CreateWorkspaceAsync(CallerId, new CreateWorkspaceRequest("lab", null, Guid.NewGuid()));
+
+        Assert.Equal("TENANT_NOT_FOUND", result.Error.Code);
+        Assert.Equal(ErrorType.Forbidden, result.Error.Type);
+        _workspaces.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task A_member_without_workspaces_create_cannot_spend_the_tenants_limit()
+    {
+        _tenants.Setup(p => p.GetTenantsForUserAsync(CallerId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([OwnTenant, new Tenant { Id = TenantId, RefId = TenantRef, Name = "Acme" }]);
+
+        var result = await Workspaces().CreateWorkspaceAsync(CallerId, new CreateWorkspaceRequest("lab", null, OwnTenant.RefId));
+
+        Assert.Equal("PERMISSION_UNAUTHORIZED", result.Error.Code);
+        Assert.Equal(ErrorType.Forbidden, result.Error.Type);
+        _workspaces.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task With_no_tenant_named_the_one_where_the_caller_may_create_is_used()
+    {
+        // An invited member is in the inviting tenant without the grant, and admin of their own.
+        _tenants.Setup(p => p.GetTenantsForUserAsync(CallerId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([OwnTenant, new Tenant { Id = TenantId, RefId = TenantRef, Name = "Acme" }]);
+
+        await Workspaces().CreateWorkspaceAsync(CallerId, new CreateWorkspaceRequest("lab", null));
+
+        _workspaces.Verify(p => p.CreateWorkspaceAsync("lab", string.Empty, CallerId, TenantId, 3, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task With_no_tenant_named_and_two_that_allow_it_the_caller_must_choose()
+    {
+        _tenants.Setup(p => p.GetTenantsForUserAsync(CallerId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([OwnTenant, new Tenant { Id = TenantId, RefId = TenantRef, Name = "Acme" }]);
+        _access.Setup(p => p.VerifyPermissionAsync(CallerId, OwnTenant.Id, null, PermissionNames.WorkspacesCreate, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var result = await Workspaces().CreateWorkspaceAsync(CallerId, new CreateWorkspaceRequest("lab", null));
+
+        Assert.Equal("TENANT_REQUIRED", result.Error.Code);
+        Assert.Equal(ErrorType.Validation, result.Error.Type);
+        _workspaces.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task With_no_tenant_where_the_caller_may_create_it_is_a_403()
+    {
+        _tenants.Setup(p => p.GetTenantsForUserAsync(CallerId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([OwnTenant]);
+
+        var result = await Workspaces().CreateWorkspaceAsync(CallerId, new CreateWorkspaceRequest("lab", null));
+
+        Assert.Equal("PERMISSION_UNAUTHORIZED", result.Error.Code);
+        _workspaces.VerifyNoOtherCalls();
+    }
+
+    [Fact]
     public async Task An_invitation_is_issued_under_the_plans_member_limit()
     {
         _tenants.Setup(p => p.CreateInvitationAsync(TenantId, "amal@example.test", null, It.IsAny<byte[]>(), It.IsAny<DateTime>(), CallerId, It.IsAny<IReadOnlyCollection<int>>(), 4, It.IsAny<CancellationToken>()))
@@ -137,7 +225,7 @@ public sealed class PlanSeatLimitTests
     }
 
     private WorkspaceService Workspaces(IEventBus? bus = null) => new(
-        _workspaces.Object, Mock.Of<IAccountProvider>(), _tenants.Object, Mock.Of<IAccessControlProvider>(),
+        _workspaces.Object, Mock.Of<IAccountProvider>(), _tenants.Object, _access.Object,
         bus ?? Mock.Of<IEventBus>(), NullLogger<WorkspaceService>.Instance, new AuthMetrics(), new FixedTenantLimits(Limits));
 
     private TenantService Tenants() => new(

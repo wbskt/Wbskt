@@ -260,6 +260,14 @@ BEGIN
 END
 GO
 
+-- workspaces.create is tenant-wide and not a default User grant: a workspace counts against the
+-- tenant's plan. Admin roles get it below.
+IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'workspaces.create')
+BEGIN
+    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('workspaces.create', 'Create workspaces in the tenant');
+END
+GO
+
 -- RolePermissions (every tenant's Admin gets ALL).
 --
 -- Set-based across all Admin roles on purpose. Roles are tenant-scoped, so once a second tenant

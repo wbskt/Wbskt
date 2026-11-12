@@ -251,6 +251,13 @@
           },
           "name": {
             "type": "string"
+          },
+          "tenantRefId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "required": [

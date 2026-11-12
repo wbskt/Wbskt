@@ -15,7 +15,11 @@ public record CreateWorkspaceRequest(
     string Name,
 
     [StringLength(500)]
-    string? Description);
+    string? Description,
+
+    // The tenant to create it in, as WorkspaceResponse.TenantRefId names it. Left out, the server picks
+    // the one tenant where the caller may create workspaces and refuses when there is more than one.
+    Guid? TenantRefId = null);
 
 public record AddMemberRequest(
     [Required]

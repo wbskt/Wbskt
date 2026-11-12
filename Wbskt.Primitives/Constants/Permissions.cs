@@ -49,6 +49,10 @@ public static class Permissions
     public static readonly PermissionSlug BillingRead = PermissionSlug.CreateInternal(PermissionNames.BillingRead);
     public static readonly PermissionSlug BillingManage = PermissionSlug.CreateInternal(PermissionNames.BillingManage);
 
+    // Tenant-wide: creating a workspace spends the tenant's workspace limit and credits, so it is a grant
+    // of its own rather than something any member can do. Admin roles get it.
+    public static readonly PermissionSlug WorkspacesCreate = PermissionSlug.CreateInternal(PermissionNames.WorkspacesCreate);
+
     // Authoring the definition — never a running instance of it.
     public static readonly PermissionSlug WorkflowsRead = PermissionSlug.CreateInternal(PermissionNames.WorkflowsRead);
     public static readonly PermissionSlug WorkflowsCreate = PermissionSlug.CreateInternal(PermissionNames.WorkflowsCreate);

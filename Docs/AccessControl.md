@@ -211,6 +211,8 @@ user to the workspace's tenant (`WorkspaceMember_Add`) — without that row they
 membership gate but resolve no roles, since every assignment is filtered by `TenantId`.
 Workspace owners automatically receive the tenant's `Admin` role scoped to the new workspace
 (`Workspace_Create`).
+Creating a workspace (`POST /api/v1/workspaces`) needs `workspaces.create` **tenant-wide** in the tenant
+it goes in, because a workspace counts against that tenant's plan. Only `Admin` roles hold it by default.
 
 The permission catalogue is **code-defined**: `Wbskt.Primitives/Constants/Permissions.cs` seeded by
 `Databases/Wbskt.Database.Auth/Scripts/Script.PostDeployment.sql`. There is deliberately no API to
