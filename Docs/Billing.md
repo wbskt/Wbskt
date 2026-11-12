@@ -84,6 +84,7 @@ dbo.Tenants.PlanCode ──(copy)──────────►  dbo.Workspac
 | (a start that waits too long for a lock) | `dbo.Run_Start` | 50035; retried, then a trigger's event is redelivered and a test run is **503** `WORKSPACE_BUSY` |
 | Workspaces | `dbo.Workspace_Create` (auth database) | 50030, **409** `PLAN_WORKSPACE_LIMIT_REACHED` |
 | Members | `dbo.TenantInvitation_Accept`, and `dbo.TenantInvitation_Create` up front | 50031, **409** `PLAN_MEMBER_LIMIT_REACHED` |
+| Free tenants an account has to itself (one; the seeded default tenant aside) | `dbo.Tenant_Create` | 50036, **409** `TENANT_FREE_LIMIT_REACHED` |
 
 Workspaces and members live in the auth database beside the plan, so the auth host reads the tenant's
 limits there (`ITenantLimits`) and the procedure counts under a lock on the tenant's row. A member is
