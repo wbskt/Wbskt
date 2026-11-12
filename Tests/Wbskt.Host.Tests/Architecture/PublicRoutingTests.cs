@@ -28,9 +28,11 @@ public sealed partial class PublicRoutingTests
     [InlineData("/API/internal/workspaces/resolve")]
     [InlineData("/Api/Internal/users/me")]
     [InlineData("/api/INTERNAL")]
+    [InlineData("/api/internal%2Fworkspaces/resolve")]
     public void No_public_router_reaches_an_internal_route(string internalPath)
     {
         var reaching = Routers.Values
+            // The services that serve internal routes: the auth host, and the management host in its two roles.
             .Where(r => r.Public && r.Service is "auth" or "management" or "client-auth")
             .Where(r => r.Admits(internalPath) && !r.Excludes(internalPath))
             .Select(r => r.Name);
