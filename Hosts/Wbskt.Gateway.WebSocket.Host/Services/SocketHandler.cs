@@ -72,7 +72,8 @@ internal sealed class SocketHandler : ISocketHandler
         {
             Socket = webSocket,
             ClientId = identity.ClientId,
-            WorkspaceId = identity.WorkspaceId
+            WorkspaceId = identity.WorkspaceId,
+            TokenIssuedAtUtc = identity.IssuedAtUtc
         };
 
         // Ends the receive loop when the client goes away, or a close someone asked for (see

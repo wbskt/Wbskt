@@ -62,5 +62,5 @@ public sealed class ConnectionManagerTests
         Assert.False(await manager.RequestCloseAsync(ClientRefId, DisconnectReason.Revoked, "x"));
     }
 
-    private static FakeClientConnection Connection() => new() { ClientId = 1, WorkspaceId = 2 };
+    private static FakeClientConnection Connection() => new() { ClientId = 1, WorkspaceId = 2, TokenIssuedAtUtc = DateTime.UtcNow };
 }

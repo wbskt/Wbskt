@@ -62,7 +62,7 @@ public sealed class ClientConnectionTests
         using var serverTcp = await listener.AcceptTcpClientAsync();
         using var serverSocket = System.Net.WebSockets.WebSocket.CreateFromStream(serverTcp.GetStream(), isServer: true, subProtocol: null, keepAliveInterval: Timeout.InfiniteTimeSpan);
         using var clientSocket = System.Net.WebSockets.WebSocket.CreateFromStream(clientTcp.GetStream(), isServer: false, subProtocol: null, keepAliveInterval: Timeout.InfiniteTimeSpan);
-        using var connection = new ClientConnection { Socket = serverSocket, ClientId = 1, WorkspaceId = 2 };
+        using var connection = new ClientConnection { Socket = serverSocket, ClientId = 1, WorkspaceId = 2, TokenIssuedAtUtc = DateTime.UtcNow };
         using var stopping = new CancellationTokenSource();
         using var closeOnStop = connection.CloseOnStop(stopping.Token);
 
@@ -99,7 +99,7 @@ public sealed class ClientConnectionTests
         var socket = new Mock<System.Net.WebSockets.WebSocket>();
         socket.SetupGet(x => x.State).Returns(WebSocketState.Open);
         socket.Setup(x => x.CloseOutputAsync(It.IsAny<WebSocketCloseStatus>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        return (new ClientConnection { Socket = socket.Object, ClientId = 1, WorkspaceId = 2 }, socket);
+        return (new ClientConnection { Socket = socket.Object, ClientId = 1, WorkspaceId = 2, TokenIssuedAtUtc = DateTime.UtcNow }, socket);
     }
 }
 

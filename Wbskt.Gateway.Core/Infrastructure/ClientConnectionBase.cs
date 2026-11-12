@@ -18,6 +18,7 @@ public abstract class ClientConnectionBase : IClientConnection
     public required int ClientId { get; init; }
     public required int WorkspaceId { get; init; }
     public DateTime EstablishedAtUtc { get; init; } = DateTime.UtcNow;
+    public required DateTime TokenIssuedAtUtc { get; init; }
 
     public abstract bool IsOpen { get; }
 
