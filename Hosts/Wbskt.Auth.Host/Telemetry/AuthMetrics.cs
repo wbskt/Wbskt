@@ -23,11 +23,13 @@ public sealed class AuthMetrics : IWorkerTickMetrics, IDisposable
         BreachChecks = _meter.CreateCounter<long>("wbskt_auth_breached_password_checks_total");
         BillingWebhooks = _meter.CreateCounter<long>("wbskt_auth_billing_webhooks_total");
         BillingRefunds = _meter.CreateCounter<long>("wbskt_auth_billing_refunds_total");
+        BillingReconciles = _meter.CreateCounter<long>("wbskt_auth_billing_reconciles_total");
 
         // The series the alerts watch start at zero, so the first one counted is an increase: a series that
         // first appears at 1 has no earlier sample, and increase() would miss it.
         RecordBillingRefund("unconfirmed", 0);
         BillingWebhooks.Add(0, new KeyValuePair<string, object?>("type", "unknown"), new KeyValuePair<string, object?>("outcome", "signature_invalid"));
+        BillingReconciles.Add(0, new KeyValuePair<string, object?>("kind", "payment"), new KeyValuePair<string, object?>("outcome", "failed"));
         
         PasswordHashDuration = _meter.CreateHistogram<double>("wbskt_auth_password_hash_duration_ms");
         WorkerTicks = _meter.CreateCounter<long>("wbskt_auth_worker_ticks_total");
@@ -58,11 +60,21 @@ public sealed class AuthMetrics : IWorkerTickMetrics, IDisposable
     /// </summary>
     public Counter<long> BillingRefunds { get; }
 
+    /// <summary>
+    /// Subscriptions and payments the daily reconcile read again from the provider, tagged <c>kind</c>
+    /// (subscription or payment) and <c>outcome</c>: done, set_aside (nothing here to act on) or failed (read
+    /// again next day while still in the window).
+    /// </summary>
+    public Counter<long> BillingReconciles { get; }
+
     /// <summary>Ticks of the periodic background workers, tagged <c>worker</c> and <c>outcome</c> (ok or failed).</summary>
     public Counter<long> WorkerTicks { get; }
 
     public void RecordBillingRefund(string outcome, long count = 1) =>
         BillingRefunds.Add(count, new KeyValuePair<string, object?>("outcome", outcome));
+
+    public void RecordBillingReconcile(string kind, string outcome) =>
+        BillingReconciles.Add(1, new KeyValuePair<string, object?>("kind", kind), new KeyValuePair<string, object?>("outcome", outcome));
 
     public void RecordBillingWebhook(string type, string outcome) =>
         BillingWebhooks.Add(1, new KeyValuePair<string, object?>("type", type), new KeyValuePair<string, object?>("outcome", outcome));

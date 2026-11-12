@@ -85,6 +85,19 @@ groups:
             it by hand if no refund is there. Its claim stays on dbo.TenantSubscriptions
             (DuplicateRefundPaymentId, DuplicateRefundClaimedAt), so the host will not ask again.
 
+      - alert: BillingReconcileFailing
+        # The daily reconcile reads the provider's recent subscriptions and payments again in case their
+        # webhooks never arrived. One it could not read is tried again the next day, but only while it is
+        # inside the three-day window, so two bad days in a row lose it.
+        expr: sum(increase(wbskt_auth_billing_reconciles_total{outcome="failed"}[1d])) > 0
+        labels:
+          severity: warn
+        annotations:
+          summary: "{{ $value }} subscriptions or payments could not be reconciled in the last day"
+          description: >-
+            The auth host's "Could not reconcile" error log names each one and the provider's answer.
+            Fix the cause before the next day's run, or replay the events from the provider's dashboard.
+
       - alert: BillingWebhookSignaturesRefused
         # Deliveries that carry a signature which does not hold up usually mean the signing secret was
         # rotated on one side only (a request with no signature is counted apart, as signature_missing).

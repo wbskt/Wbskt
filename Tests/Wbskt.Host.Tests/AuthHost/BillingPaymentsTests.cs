@@ -1117,6 +1117,48 @@ public sealed class BillingPaymentsTests
         Assert.Null(gateway.ReadWebhook(new Dictionary<string, string>(headers) { ["webhook-id"] = "evt_2" }, body));
     }
 
+    [Fact]
+    public async Task Dodo_lists_what_was_made_since_a_time_page_by_page_until_a_short_page()
+    {
+        string Page(int count, string prefix) =>
+            "{\"items\":[" + string.Join(",", Enumerable.Range(0, count).Select(i => $"{{\"{prefix}_id\":\"{prefix}_{i}\"}}")) + "]}";
+        var handler = new StubHandler(request => request.RequestUri!.Query.Contains("page_number=0") ? Json(Page(100, "subscription")) : Json(Page(1, "subscription")));
+        var gateway = Dodo(handler);
+
+        IReadOnlyCollection<string> ids = await gateway.ListSubscriptionIdsAsync(new DateTimeOffset(2026, 11, 6, 12, 0, 0, TimeSpan.Zero), CancellationToken.None);
+
+        Assert.Equal(101, ids.Count);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Equal("/subscriptions", handler.Requests[0].RequestUri!.AbsolutePath);
+        Assert.Equal("?created_at_gte=2026-11-06T12%3A00%3A00.000Z&page_size=100&page_number=1", handler.Requests[1].RequestUri!.Query);
+    }
+
+    [Fact]
+    public async Task The_reconcile_reads_each_recent_subscription_and_payment_again_and_one_failing_stops_none_of_the_rest()
+    {
+        _gateway.Setup(g => g.IsConfigured).Returns(true);
+        _gateway.Setup(g => g.ListSubscriptionIdsAsync(Now - _options.ReconcileWindow, It.IsAny<CancellationToken>())).ReturnsAsync(["sub_bad", "sub_gone"]);
+        _gateway.Setup(g => g.ListPaymentIdsAsync(Now - _options.ReconcileWindow, It.IsAny<CancellationToken>())).ReturnsAsync(["pay_1"]);
+        _gateway.Setup(g => g.FindSubscriptionAsync("sub_bad", It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("down"));
+
+        await new BillingReconcile(_gateway.Object, Sync(), Options.Create(_options), new FixedClock(Now), new AuthMetrics(), NullLogger<BillingReconcile>.Instance)
+            .RunAsync(CancellationToken.None);
+
+        _gateway.Verify(g => g.FindSubscriptionAsync("sub_gone", It.IsAny<CancellationToken>()), Times.Once);
+        _gateway.Verify(g => g.FindPaymentAsync("pay_1", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task The_reconcile_does_nothing_without_a_provider()
+    {
+        _gateway.Setup(g => g.IsConfigured).Returns(false);
+
+        await new BillingReconcile(_gateway.Object, Sync(), Options.Create(_options), new FixedClock(Now), new AuthMetrics(), NullLogger<BillingReconcile>.Instance)
+            .RunAsync(CancellationToken.None);
+
+        _gateway.Verify(g => g.ListSubscriptionIdsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     // ----- Helpers -----------------------------------------------------------------------------------
 
     private TenantBillingSync Sync() => new(

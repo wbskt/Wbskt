@@ -66,6 +66,12 @@ internal sealed record DodoPayment(
     [property: JsonPropertyName("created_at")] DateTimeOffset? CreatedAt,
     [property: JsonPropertyName("disputes")] IReadOnlyList<DodoDispute>? Disputes = null);
 
+internal sealed record DodoList([property: JsonPropertyName("items")] IReadOnlyList<DodoListItem>? Items);
+
+internal sealed record DodoListItem(
+    [property: JsonPropertyName("subscription_id")] string? SubscriptionId,
+    [property: JsonPropertyName("payment_id")] string? PaymentId);
+
 internal sealed record DodoDispute(
     [property: JsonPropertyName("dispute_id")] string? DisputeId,
     [property: JsonPropertyName("dispute_status")] string? DisputeStatus,

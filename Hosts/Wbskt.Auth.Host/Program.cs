@@ -89,6 +89,8 @@ public static class Program
         builder.Services.AddScoped<ITenantBillingService, TenantBillingService>();
         builder.Services.AddScoped<IBillingWebhookService, BillingWebhookService>();
         builder.Services.AddHostedService<SubscriptionReviewWorker>();
+        builder.Services.AddScoped<BillingReconcile>();
+        builder.Services.AddHostedService<BillingReconcileWorker>();
         builder.Services.AddScoped<IBillingNotifier, BillingNotifier>();
         builder.Services.AddHostedService<BillingNoticeWorker>();
         builder.Services.AddHostedService<BillingNoticeMailSender>();
