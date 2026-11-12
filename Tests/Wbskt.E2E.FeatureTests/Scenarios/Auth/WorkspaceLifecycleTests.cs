@@ -65,10 +65,13 @@ public sealed class WorkspaceLifecycleTests(ServicesFixture fixture)
         var owner = await fixture.CreateUserAsync();
         var tenantRef = await fixture.GetTenantRefAsync(owner.Token);
 
-        // Invited in, so they are a member of someone else's tenant rather than an admin of their
-        // own. Creating a workspace there hands them Admin *scoped to that workspace*.
-        var member = await fixture.CreateUserInTenantAsync(owner.Token, tenantRef);
-        var workspaceRef = await fixture.CreateWorkspaceAsync(member.Token);
+        // Invited in, so they are a member of someone else's tenant rather than an admin of it, and
+        // granted workspaces.create there tenant-wide. Creating a workspace there hands them Admin
+        // *scoped to that workspace*.
+        var member = await ArrangeMemberWhoMayCreateAsync(owner.Token, tenantRef);
+        var workspace = await fixture.Auth.As(member.Token).CreateWorkspaceAsync(new CreateWorkspaceRequest($"e2e-{Guid.NewGuid():N}", null, tenantRef));
+        workspace.TenantRefId.Should().Be(tenantRef);
+        var workspaceRef = workspace.RefId;
 
         (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceRef))
             .Should().Contain("roles.manage", "they administer this workspace");
@@ -397,5 +400,83 @@ public sealed class WorkspaceLifecycleTests(ServicesFixture fixture)
 
         registrationRefused.Should().BeTrue("the deleted workspace's policy is disabled");
         loginRefused.Should().BeTrue("the deleted workspace's clients are revoked");
+    }
+
+    // ── Choosing the tenant ───────────────────────────────────────────────────────────────
+
+    [SkippableFact]
+    public async Task WS_CRD_23_AnInvitedMember_CannotSpendTheInvitingTenantsLimit()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var owner = await fixture.CreateUserAsync();
+        var tenantRef = await fixture.GetTenantRefAsync(owner.Token);
+        var member = await fixture.CreateUserInTenantAsync(owner.Token, tenantRef);
+
+        var response = await fixture.Auth.As(member.Token).CreateWorkspaceRawAsync(new CreateWorkspaceRequest($"e2e-{Guid.NewGuid():N}", null, tenantRef));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("PERMISSION_UNAUTHORIZED");
+    }
+
+    [SkippableFact]
+    public async Task WS_CRD_24_WithNoTenantNamed_AnInvitedMembersWorkspaceIsInTheirOwnTenant()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var owner = await fixture.CreateUserAsync();
+        var tenantRef = await fixture.GetTenantRefAsync(owner.Token);
+        var member = await fixture.CreateUserInTenantAsync(owner.Token, tenantRef);
+        var ownTenant = (await fixture.GetTenantsAsync(member.Token)).Select(t => t.RefId).Single(r => r != tenantRef);
+
+        var workspace = await fixture.Auth.As(member.Token).CreateWorkspaceAsync(new CreateWorkspaceRequest($"e2e-{Guid.NewGuid():N}", null));
+
+        workspace.TenantRefId.Should().Be(ownTenant);
+    }
+
+    [SkippableFact]
+    public async Task WS_CRD_25_TwoTenantsThatAllowIt_AndNoneNamed_Returns400()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var owner = await fixture.CreateUserAsync();
+        var tenantRef = await fixture.GetTenantRefAsync(owner.Token);
+        var member = await ArrangeMemberWhoMayCreateAsync(owner.Token, tenantRef);
+
+        var response = await fixture.Auth.As(member.Token).CreateWorkspaceRawAsync(new CreateWorkspaceRequest($"e2e-{Guid.NewGuid():N}", null));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("TENANT_REQUIRED");
+    }
+
+    [SkippableFact]
+    public async Task WS_CRD_26_ATenantTheCallerIsNotIn_Returns403()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var outsider = await fixture.CreateUserAsync();
+        var owner = await fixture.CreateUserAsync();
+        var tenantRef = await fixture.GetTenantRefAsync(owner.Token);
+
+        var response = await fixture.Auth.As(outsider.Token).CreateWorkspaceRawAsync(new CreateWorkspaceRequest($"e2e-{Guid.NewGuid():N}", null, tenantRef));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("TENANT_NOT_FOUND");
+    }
+
+    /// <summary>An invited member granted workspaces.create tenant-wide in the inviting tenant.</summary>
+    private async Task<ServicesFixture.TestUser> ArrangeMemberWhoMayCreateAsync(string ownerToken, Guid tenantRef)
+    {
+        var member = await fixture.CreateUserInTenantAsync(ownerToken, tenantRef);
+        var memberRef = await fixture.FindTenantMemberRefAsync(ownerToken, tenantRef, member.Email);
+        memberRef.Should().NotBeNull();
+
+        var roleRef = await fixture.CreateRoleAsync(ownerToken, tenantRef);
+        (await fixture.Auth.As(ownerToken).GrantRolePermissionRawAsync(tenantRef, roleRef, new GrantRolePermissionRequest(Slug: "workspaces.create", IsDeny: false)))
+            .IsSuccessStatusCode.Should().BeTrue();
+        (await fixture.Auth.As(ownerToken).AssignMemberRoleRawAsync(tenantRef, memberRef!.Value, roleRef, new AssignmentScopeRequest(WorkspaceRef: null)))
+            .IsSuccessStatusCode.Should().BeTrue();
+
+        return member;
     }
 }

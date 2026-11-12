@@ -27,6 +27,7 @@ public static class PermissionNames
     public const string WorkflowsUpdate = "workflows.update";
     public const string WorkflowsExecute = "workflows.execute";
     public const string WorkspaceJoin = "workspace.join";
+    public const string WorkspacesCreate = "workspaces.create";
     public const string LogsRead = "logs.read";
     public const string IntegrationsRead = "integrations.read";
     public const string IntegrationsManage = "integrations.manage";

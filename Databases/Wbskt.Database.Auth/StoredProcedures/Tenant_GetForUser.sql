@@ -8,6 +8,7 @@ BEGIN
     FROM dbo.Tenants t
     INNER JOIN dbo.TenantMembers tm ON tm.TenantId = t.Id
     WHERE tm.UserId = @UserId
-      AND tm.IsSuspended = 0;
+      AND tm.IsSuspended = 0
+    ORDER BY t.Id;
 END
 GO

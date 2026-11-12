@@ -51,15 +51,13 @@ internal sealed class WorkspaceService : IWorkspaceService
     {
         _logger.LogInformation("Attempting to create workspace '{WorkspaceName}' for owner ID: {OwnerId}", request.Name, ownerId);
 
-        // TODO(arch): multi-tenant users will need an explicit tenant choice; today a user has exactly one tenant.
-        var tenants = await _tenants.GetTenantsForUserAsync(ownerId, cancellationToken);
-        var tenant = tenants.FirstOrDefault();
-        if (tenant is null)
+        var chosen = await ChooseTenantAsync(ownerId, request.TenantRefId, cancellationToken);
+        if (chosen.IsFailure)
         {
-            _logger.LogWarning("Workspace creation failed: User ID {OwnerId} does not belong to any tenant", ownerId);
-            return Result<WorkspaceResponse>.Failure(Error.Validation("TENANT_REQUIRED", "User does not belong to any tenant."));
+            return Result<WorkspaceResponse>.Failure(chosen.Error);
         }
 
+        var tenant = chosen.Value;
         var limits = await _limits.ForTenantAsync(tenant.Id, cancellationToken);
         Guid refId;
         try
@@ -201,6 +199,56 @@ internal sealed class WorkspaceService : IWorkspaceService
             _logger.LogWarning("Ownership transfer of workspace ID {WorkspaceId} refused: user {UserRef} is not in its tenant", workspaceId, newOwnerRef);
             return Result.Failure(Error.NotFound("USER_NOT_FOUND", "User not found."));
         }
+    }
+
+    /// <summary>
+    /// The tenant a new workspace goes in. A named tenant must be one the caller belongs to (403
+    /// TENANT_NOT_FOUND otherwise, as on every tenant route) and grant them workspaces.create tenant-wide.
+    /// With none named, it is the one tenant where they hold that permission; every invited user also has
+    /// a tenant of their own, so more than one is refused rather than guessed.
+    /// </summary>
+    private async Task<Result<Tenant>> ChooseTenantAsync(int callerId, Guid? tenantRef, CancellationToken cancellationToken)
+    {
+        var tenants = await _tenants.GetTenantsForUserAsync(callerId, cancellationToken);
+        if (tenantRef is { } named)
+        {
+            var tenant = tenants.FirstOrDefault(t => t.RefId == named);
+            if (tenant is null)
+            {
+                _logger.LogWarning("Workspace creation refused: user {UserId} is not a member of tenant {TenantRef}", callerId, named);
+                return Result<Tenant>.Failure(Error.Forbidden("TENANT_NOT_FOUND", "Tenant not found."));
+            }
+
+            if (!await _accessControl.VerifyPermissionAsync(callerId, tenant.Id, null, PermissionNames.WorkspacesCreate, cancellationToken))
+            {
+                _logger.LogWarning("Workspace creation refused: user {UserId} may not create workspaces in tenant {TenantRef}", callerId, named);
+                return Result<Tenant>.Failure(Error.Forbidden("PERMISSION_UNAUTHORIZED", $"user does not have permission(s) {PermissionNames.WorkspacesCreate}"));
+            }
+
+            return Result<Tenant>.Success(tenant);
+        }
+
+        var allowed = new List<Tenant>();
+        foreach (var tenant in tenants)
+        {
+            if (await _accessControl.VerifyPermissionAsync(callerId, tenant.Id, null, PermissionNames.WorkspacesCreate, cancellationToken))
+            {
+                allowed.Add(tenant);
+            }
+        }
+
+        if (allowed.Count == 1)
+        {
+            return Result<Tenant>.Success(allowed[0]);
+        }
+
+        if (allowed.Count == 0)
+        {
+            _logger.LogWarning("Workspace creation refused: user {UserId} may not create workspaces in any of their {Count} tenants", callerId, tenants.Count);
+            return Result<Tenant>.Failure(Error.Forbidden("PERMISSION_UNAUTHORIZED", $"user does not have permission(s) {PermissionNames.WorkspacesCreate}"));
+        }
+
+        return Result<Tenant>.Failure(Error.Validation("TENANT_REQUIRED", "You can create workspaces in more than one tenant; say which with tenantRefId."));
     }
 
     public async Task<Result> DeleteWorkspaceAsync(int callerId, int workspaceId, CancellationToken cancellationToken = default)
