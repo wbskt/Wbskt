@@ -130,7 +130,7 @@ BEGIN
             -- The plan's monthly credits, pooled like the runs above. What the plan itself has covered
             -- this calendar month (UTC) is the ledger less what was drawn from credit grants as it was
             -- posted (dbo.TenantCreditMonths); what is left is the plan's remainder (none once a downgrade
-            -- puts the month past it) plus what the grants still hold, less what the runs still going
+            -- puts the month past it) plus what the grants still hold, less what the runs
             -- consumed and have not posted yet, ended or not. Not locked: starts racing for the last credits are bounded
             -- instead by each run's budget, cut to what is left, so the plan's allowance is soft by at most
             -- those budgets. NULL is no limit.
