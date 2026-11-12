@@ -79,6 +79,12 @@ internal interface ITenantBillingProvider
     /// <summary>Records a leased billing email as sent, to retry at <paramref name="retryAt"/>, or given up.</summary>
     Task CompleteBillingNoticeMailAsync(long id, DateTime? sentAt, DateTime? retryAt, DateTime? gaveUpAt, string? error, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Hands back a mail leased until <paramref name="leaseUntil"/> that was never tried, due again at
+    /// <paramref name="now"/> with its attempt returned (<c>dbo.BillingNoticeMail_Release</c>).
+    /// </summary>
+    Task ReleaseBillingNoticeMailAsync(long id, DateTime leaseUntil, DateTime now, CancellationToken cancellationToken);
+
     /// <summary>Removes billing emails sent or given up before <paramref name="before"/>.</summary>
     Task PurgeBillingNoticeMailsAsync(DateTime before, CancellationToken cancellationToken);
 

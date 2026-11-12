@@ -260,6 +260,16 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
         }, cancellationToken);
     }
 
+    public Task ReleaseBillingNoticeMailAsync(long id, DateTime leaseUntil, DateTime now, CancellationToken cancellationToken)
+    {
+        return ExecuteNonQueryAsync("dbo.BillingNoticeMail_Release", p =>
+        {
+            p.AddWithValue("@Id", id);
+            p.AddWithValue("@LeaseUntil", leaseUntil);
+            p.AddWithValue("@Now", now);
+        }, cancellationToken);
+    }
+
     public Task PurgeBillingNoticeMailsAsync(DateTime before, CancellationToken cancellationToken)
     {
         return ExecuteNonQueryAsync("dbo.BillingNoticeMails_Purge", p => p.AddWithValue("@Before", before), cancellationToken);

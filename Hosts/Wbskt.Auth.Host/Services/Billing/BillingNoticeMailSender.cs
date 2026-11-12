@@ -20,8 +20,8 @@ public sealed class BillingNoticeMailSender(IServiceScopeFactory scopeFactory, T
 
     internal static readonly TimeSpan Lease = TimeSpan.FromMinutes(5);
 
-    // Longer than one send may take (EmailOptions.SendTimeout, 30 s by default), so a send started
-    // before it is left always finishes inside the lease.
+    // Longer than one send may take, so a send started before it is left always finishes inside the
+    // lease. The auth host refuses to start with an EmailOptions.SendTimeout that is not shorter.
     internal static readonly TimeSpan LeaseReserve = TimeSpan.FromMinutes(1);
 
     internal static readonly TimeSpan KeepFor = TimeSpan.FromDays(30);
@@ -46,18 +46,26 @@ public sealed class BillingNoticeMailSender(IServiceScopeFactory scopeFactory, T
         var billing = services.GetRequiredService<ITenantBillingProvider>();
         DateTime now = _clock.GetUtcNow().UtcDateTime;
         DateTime leaseUntil = now + Lease;
-        foreach (BillingNoticeMail mail in await billing.TakeBillingNoticeMailsAsync(now, leaseUntil, BatchSize, ct))
+        IReadOnlyCollection<BillingNoticeMail> batch = await billing.TakeBillingNoticeMailsAsync(now, leaseUntil, BatchSize, ct);
+        int sent = 0;
+        foreach (BillingNoticeMail mail in batch)
         {
             // A slow relay can use up the lease before the batch is done. Past the point where one more
-            // send could outlive it, the rest are left to their lease and taken again once it runs out,
-            // rather than risk another instance sending them at the same time.
+            // send could outlive it, the rest are handed back untried, so no other instance can send one
+            // at the same time and none of them loses the attempt the lease counted.
             if (_clock.GetUtcNow().UtcDateTime + LeaseReserve >= leaseUntil)
             {
-                Logger.LogWarning("The relay is slow: stopped this billing mail batch before its lease ran out; the rest are taken again later.");
+                Logger.LogWarning("The relay is slow: stopped this billing mail batch before its lease ran out and handed back {Count} mail(s).", batch.Count - sent);
+                foreach (BillingNoticeMail untried in batch.Skip(sent))
+                {
+                    await billing.ReleaseBillingNoticeMailAsync(untried.Id, leaseUntil, _clock.GetUtcNow().UtcDateTime, CancellationToken.None);
+                }
+
                 break;
             }
 
             await SendAsync(sender, billing, mail, ct);
+            sent++;
         }
 
         await billing.PurgeBillingNoticeMailsAsync(now - KeepFor, ct);

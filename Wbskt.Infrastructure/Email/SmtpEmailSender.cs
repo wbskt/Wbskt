@@ -59,9 +59,9 @@ public sealed class SmtpEmailSender : IEmailSender
         {
             await client.SendMailAsync(message, timeout.Token);
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
-            throw new TimeoutException($"The SMTP relay {_options.Host}:{_options.Port} did not take the message within {_options.SendTimeout.TotalSeconds:0} s.");
+            throw new TimeoutException($"The SMTP relay {_options.Host}:{_options.Port} did not take the message within {_options.SendTimeout}.", ex);
         }
     }
 }
