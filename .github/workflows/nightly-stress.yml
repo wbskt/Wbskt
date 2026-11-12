@@ -78,8 +78,11 @@ jobs:
       Billing__Plans__Free__ActiveRuns: "2000"
       E2E_STRESS_TESTS: "1"
       # The auth host's internal key, so the load tester's step can put its account on a plan with room
-      # (PUT /api/internal/tenants/{tenantRef}/plan). start-hosts.sh passes it through.
+      # (PUT /api/internal/tenants/{tenantRef}/plan), and the same key on the management host, which
+      # copies each workspace's plan from the auth host with it: setting one without the other fails
+      # that copy with a 401. The hosts started by start-hosts.sh inherit both.
       Internal__ApiKey: nightly-${{ github.run_id }}
+      Services__AuthInternalApiKey: nightly-${{ github.run_id }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -126,9 +129,9 @@ jobs:
           fi
 
       # 200 clients register under a fresh policy, connect, and send telemetry for five minutes. The
-      # account is put on Team first: on Free (20 clients) registration refuses the other 180. The
-      # workspace is made after that, so its copy of the plan arrives as Team; the step waits until the
-      # management host reports it. The load tester runs until stopped, so `timeout` ends it; exit 124
+      # workspace's tenant is put on Team first: on Free (20 clients) registration refuses the other 180.
+      # A plan change re-syncs every workspace of the tenant, so the step waits until the management
+      # host reports Team for this one. The load tester runs until stopped, so `timeout` ends it; exit 124
       # is that, and is the expected outcome. It fails on a client that could not start, or on a host
       # that went down under it.
       - name: Load tester
@@ -140,19 +143,26 @@ jobs:
           management=https://localhost:7010
           token=$(curl -fsS -X POST "$auth/api/auth/login" -H 'Content-Type: application/json' \
             -d '{"email":"admin@wbskt.com","password":"Password123!"}' | jq -r .accessToken)
-          tenant=$(curl -fsS "$auth/api/v1/tenants" -H "Authorization: Bearer $token" | jq -r '.[0].refId')
+          echo "::add-mask::$token"
+          created=$(curl -fsS -X POST "$auth/api/v1/workspaces" -H "Authorization: Bearer $token" \
+            -H 'Content-Type: application/json' -d "{\"name\":\"nightly-load-$GITHUB_RUN_ID\"}")
+          workspace=$(jq -r .refId <<<"$created")
+          tenant=$(jq -r .tenantRefId <<<"$created")
+          if [[ ! "$tenant" =~ ^[0-9a-f-]{36}$ ]]; then
+            echo "::error::creating the load tester's workspace returned no tenant: $created"
+            exit 1
+          fi
           curl -fsS -o /dev/null -X PUT "$auth/api/internal/tenants/$tenant/plan" \
             -H "X-Wbskt-Internal-Key: $Internal__ApiKey" -H 'Content-Type: application/json' -d '{"planCode":"Team"}'
-          workspace=$(curl -fsS -X POST "$auth/api/v1/workspaces" -H "Authorization: Bearer $token" \
-            -H 'Content-Type: application/json' -d "{\"name\":\"nightly-load-$GITHUB_RUN_ID\"}" | jq -r .refId)
           plan=""
           for _ in $(seq 1 60); do
-            plan=$(curl -fsS "$management/api/v1/workspaces/$workspace/usage" -H "Authorization: Bearer $token" | jq -r .plan || true)
+            plan=$(curl -fs "$management/api/v1/workspaces/$workspace/usage" -H "Authorization: Bearer $token" | jq -r .plan || true)
             [[ "$plan" == "Team" ]] && break
             sleep 2
           done
           if [[ "$plan" != "Team" ]]; then
             echo "::error::the management host still has the load tester's workspace on ${plan:-no plan}, not Team"
+            curl -sS "$management/api/v1/workspaces/$workspace/usage" -H "Authorization: Bearer $token" || true
             exit 1
           fi
           pin=$(curl -fsS -X POST "$management/api/v1/workspaces/$workspace/registration-policies" \
@@ -206,8 +216,9 @@ jobs:
             TestResults/**/*.trx
           if-no-files-found: ignore
 
+      # A job that runs past its timeout-minutes ends cancelled, not failed, so that is reported too.
       - name: Report the failure
-        if: failure() && github.event_name == 'schedule'
+        if: (failure() || cancelled()) && github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ github.token }}
         run: .github/scripts/report-nightly-failure.sh "Nightly stress"

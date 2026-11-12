@@ -5,13 +5,14 @@
 #
 #   .github/scripts/report-nightly-failure.sh "<workflow name>"
 #
-# Needs GH_TOKEN with issues: write, and the GITHUB_* variables Actions sets.
+# Needs GH_TOKEN with issues: write, and the GITHUB_* variables Actions sets. The workflow name goes
+# into a search and a jq string as it is, so it must not contain a double quote or a backslash.
 set -euo pipefail
 
-workflow="$1"
+workflow="${1:?usage: report-nightly-failure.sh <workflow name>}"
 title="Nightly run failing: $workflow"
 run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-body="The $workflow run on $(date -u +%Y-%m-%d) failed at ${GITHUB_SHA:0:7}: $run_url"
+body="The $workflow run on $(date -u +%Y-%m-%d) failed or timed out at ${GITHUB_SHA:0:7}: $run_url"
 
 existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" \
   --json number,title --jq "map(select(.title == \"$title\")) | first | .number // empty")
