@@ -15,9 +15,10 @@ namespace Wbskt.Infrastructure.Middlewares;
 /// <remarks>
 /// <para>
 /// A request is internal when its path starts with the prefix in any letter case, or when routing has
-/// already picked an internal endpoint for it. The second covers a path a rewrite earlier in the
-/// pipeline (<see cref="UnversionedApiAliasMiddleware"/>) changed: every host routes before
-/// <c>UseWbsktPipeline</c>, so the endpoint is known here whatever the spelling was.
+/// already picked an internal endpoint for it (every host routes before <c>UseWbsktPipeline</c>). Kestrel
+/// decodes and normalises the path first, so <c>/api/%69nternal</c> and <c>/api/./internal</c> are seen
+/// as the prefix; the endpoint check is defence in depth for a path routing matches and the prefix
+/// check does not.
 /// </para>
 /// <para>
 /// Runs before <c>UseForwardedHeaders</c>, which removes the forwarded values it applies, and before the
@@ -46,9 +47,10 @@ public sealed class InternalRouteGuardMiddleware
     {
         if (IsProxiedInternalRequest(context))
         {
+            string forwardedFor = context.Request.Headers[ForwardedHeadersDefaults.XForwardedForHeaderName].ToString();
             _logger.LogWarning(
-                "Refused {Path}: an internal route reached through a proxy (X-Forwarded-For {ForwardedFor}). A public router rule no longer excludes it.",
-                context.Request.Path.Value, context.Request.Headers[ForwardedHeadersDefaults.XForwardedForHeaderName].ToString());
+                "Refused {Path} from {IpAddress}: an internal route reached through a proxy, possibly a public router rule that no longer excludes it.",
+                context.Request.Path.Value, forwardedFor.Length > 100 ? forwardedFor[..100] : forwardedFor);
             return Problems.WriteAsync(context, StatusCodes.Status404NotFound, Problems.CodeFor(StatusCodes.Status404NotFound), detail: null);
         }
 
