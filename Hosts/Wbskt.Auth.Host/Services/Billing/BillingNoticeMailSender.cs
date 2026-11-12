@@ -20,6 +20,10 @@ public sealed class BillingNoticeMailSender(IServiceScopeFactory scopeFactory, T
 
     internal static readonly TimeSpan Lease = TimeSpan.FromMinutes(5);
 
+    // Longer than one send may take (EmailOptions.SendTimeout, 30 s by default), so a send started
+    // before it is left always finishes inside the lease.
+    internal static readonly TimeSpan LeaseReserve = TimeSpan.FromMinutes(1);
+
     internal static readonly TimeSpan KeepFor = TimeSpan.FromDays(30);
 
     // After the 1st, 2nd, ... failed attempt; the 6th failure gives up, about a day after the first.
@@ -41,8 +45,18 @@ public sealed class BillingNoticeMailSender(IServiceScopeFactory scopeFactory, T
 
         var billing = services.GetRequiredService<ITenantBillingProvider>();
         DateTime now = _clock.GetUtcNow().UtcDateTime;
-        foreach (BillingNoticeMail mail in await billing.TakeBillingNoticeMailsAsync(now, now + Lease, BatchSize, ct))
+        DateTime leaseUntil = now + Lease;
+        foreach (BillingNoticeMail mail in await billing.TakeBillingNoticeMailsAsync(now, leaseUntil, BatchSize, ct))
         {
+            // A slow relay can use up the lease before the batch is done. Past the point where one more
+            // send could outlive it, the rest are left to their lease and taken again once it runs out,
+            // rather than risk another instance sending them at the same time.
+            if (_clock.GetUtcNow().UtcDateTime + LeaseReserve >= leaseUntil)
+            {
+                Logger.LogWarning("The relay is slow: stopped this billing mail batch before its lease ran out; the rest are taken again later.");
+                break;
+            }
+
             await SendAsync(sender, billing, mail, ct);
         }
 

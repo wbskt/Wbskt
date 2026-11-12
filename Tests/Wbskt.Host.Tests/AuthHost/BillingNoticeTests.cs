@@ -210,6 +210,25 @@ public sealed class BillingNoticeTests
     }
 
     [Fact]
+    public async Task A_slow_relay_stops_the_batch_before_the_lease_runs_out()
+    {
+        var taken = Enumerable.Range(1, 10)
+            .Select(id => new BillingNoticeMail(id, TenantId, BillingNoticeKind.PaymentFailed, $"t{id}@example.com", "s", "<p>b</p>", 1))
+            .ToArray();
+        _billing.Setup(b => b.TakeBillingNoticeMailsAsync(Now, Now + BillingNoticeMailSender.Lease, BillingNoticeMailSender.BatchSize, It.IsAny<CancellationToken>())).ReturnsAsync(taken);
+        var clock = new SteppingClock();
+
+        // Each send takes a minute of the five-minute lease.
+        _mailer.Setup(m => m.SendAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), EmailBodyFormat.Html, It.IsAny<CancellationToken>()))
+            .Callback(() => clock.Elapsed += TimeSpan.FromMinutes(1))
+            .Returns(Task.CompletedTask);
+
+        await MailSender(clock).TickAsync(CancellationToken.None);
+
+        _mailer.Verify(m => m.SendAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), EmailBodyFormat.Html, It.IsAny<CancellationToken>()), Times.Exactly(4));
+    }
+
+    [Fact]
     public async Task Without_a_relay_nothing_is_taken_so_nothing_uses_up_its_attempts()
     {
         _mailer.SetupGet(m => m.IsConfigured).Returns(false);
@@ -261,13 +280,13 @@ public sealed class BillingNoticeTests
         return new BillingNoticeWorker(services.GetRequiredService<IServiceScopeFactory>(), new FixedClock(), NullLogger<BillingNoticeWorker>.Instance);
     }
 
-    private BillingNoticeMailSender MailSender()
+    private BillingNoticeMailSender MailSender(TimeProvider? clock = null)
     {
         var services = new ServiceCollection()
             .AddSingleton(_billing.Object)
             .AddSingleton(_mailer.Object)
             .BuildServiceProvider();
-        return new BillingNoticeMailSender(services.GetRequiredService<IServiceScopeFactory>(), new FixedClock(), NullLogger<BillingNoticeMailSender>.Instance);
+        return new BillingNoticeMailSender(services.GetRequiredService<IServiceScopeFactory>(), clock ?? new FixedClock(), NullLogger<BillingNoticeMailSender>.Instance);
     }
 
     private static ConsumeContext<T> Context<T>(T message) where T : class
@@ -281,5 +300,12 @@ public sealed class BillingNoticeTests
     private sealed class FixedClock : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => new(Now, TimeSpan.Zero);
+    }
+
+    private sealed class SteppingClock : TimeProvider
+    {
+        public TimeSpan Elapsed { get; set; }
+
+        public override DateTimeOffset GetUtcNow() => new(Now + Elapsed, TimeSpan.Zero);
     }
 }
