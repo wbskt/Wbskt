@@ -150,8 +150,12 @@ public sealed class ClientSessions
         }
         finally
         {
-            // A close someone asked for is the real reason, whatever the loop saw as it ended.
-            reason = connection.CloseRequest?.Reason ?? reason;
+            // A close someone asked for is the real reason, whatever the loop saw as it ended, except that
+            // a client closing to update as the host stops is still updating, so its triggers wait.
+            if (connection.CloseRequest is { } requested && !(reason == DisconnectReason.Updating && requested.Reason == DisconnectReason.ServerStopping))
+            {
+                reason = requested.Reason;
+            }
             await stopAnnouncing.CancelAsync();
             await announcing;
             _connections.Unregister(clientRefId, connection);

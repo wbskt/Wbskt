@@ -197,6 +197,20 @@ public sealed class ClientSessionTests
     }
 
     [Fact]
+    public async Task A_client_closing_to_update_as_the_host_stops_is_still_announced_as_updating()
+    {
+        var connection = Connection();
+
+        await Sessions().RunAsync(Admitted, connection, async _ =>
+        {
+            await connection.RequestCloseAsync(DisconnectReason.ServerStopping, DisconnectReason.ServerStopping.Describe());
+            return DisconnectReason.Updating;
+        });
+
+        _bus.Verify(x => x.PublishAsync(It.Is<ClientDisconnectedEvent>(e => e.IsUpdating), CancellationToken.None), Times.Once);
+    }
+
+    [Fact]
     public async Task A_loop_cancelled_otherwise_ends_as_aborted()
     {
         var connection = Connection();

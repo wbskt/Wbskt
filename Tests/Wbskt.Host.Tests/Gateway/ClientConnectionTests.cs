@@ -66,13 +66,20 @@ public sealed class ClientConnectionTests
         using var stopping = new CancellationTokenSource();
         using var closeOnStop = connection.CloseOnStop(stopping.Token);
 
+        // The receive loop's read is pending, on a token the stop is not linked into, as in SocketHandler.
+        using var receiving = CancellationTokenSource.CreateLinkedTokenSource(connection.Closing);
+        var pending = serverSocket.ReceiveAsync(new byte[64], receiving.Token);
+
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await stopping.CancelAsync();
         var received = await clientSocket.ReceiveAsync(new byte[64], timeout.Token);
+        await clientSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "bye", timeout.Token);
 
         Assert.Equal(WebSocketMessageType.Close, received.MessageType);
         Assert.Equal(WebSocketCloseStatus.EndpointUnavailable, clientSocket.CloseStatus);
         Assert.Equal(DisconnectReason.ServerStopping, connection.CloseRequest?.Reason);
+        Assert.Equal(WebSocketMessageType.Close, (await pending.WaitAsync(timeout.Token)).MessageType);
+        Assert.Equal(WebSocketState.Closed, serverSocket.State);
     }
 
     [Fact]

@@ -28,7 +28,7 @@ public sealed class ClientConnection : ClientConnectionBase, IDisposable
 
     /// <summary>
     /// Asks for a close with 1001 (<see cref="DisconnectReason.ServerStopping"/>) once <paramref name="stopping"/>
-    /// is cancelled, so a client can tell a deploy from a fault. Dispose it when the connection ends.
+    /// is cancelled, so a client can tell a deploy from a fault. Dispose it when the receive loop ends.
     /// </summary>
     public CancellationTokenRegistration CloseOnStop(CancellationToken stopping) =>
         stopping.Register(() => _ = RequestCloseAsync(DisconnectReason.ServerStopping, DisconnectReason.ServerStopping.Describe()));
