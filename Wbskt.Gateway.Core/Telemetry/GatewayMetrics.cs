@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using Wbskt.Gateway.Core.Infrastructure;
+using Wbskt.Infrastructure.Telemetry;
 
 namespace Wbskt.Gateway.Core.Telemetry;
 
@@ -12,7 +14,7 @@ namespace Wbskt.Gateway.Core.Telemetry;
 /// The instruments keep the <c>wbskt_socket_*</c> names they had in the socket host, so the alert
 /// rules and dashboards built on them carry on unchanged.
 /// </remarks>
-public sealed class GatewayMetrics : IDisposable
+public sealed class GatewayMetrics : IWorkerTickMetrics, IDisposable
 {
     public const string MeterName = "Wbskt.Gateway";
 
@@ -23,6 +25,7 @@ public sealed class GatewayMetrics : IDisposable
     private readonly Counter<long> _disconnects;
     private readonly Counter<long> _dropped;
     private readonly Counter<long> _recheckClosed;
+    private readonly Counter<long> _workerTicks;
 
     public GatewayMetrics(GatewayTransport transport)
     {
@@ -32,6 +35,7 @@ public sealed class GatewayMetrics : IDisposable
         _disconnects = _meter.CreateCounter<long>("wbskt_socket_disconnects_total");
         _dropped = _meter.CreateCounter<long>("wbskt_socket_messages_dropped_total");
         _recheckClosed = _meter.CreateCounter<long>("wbskt_socket_access_recheck_closed_total");
+        _workerTicks = _meter.CreateCounter<long>("wbskt_gateway_worker_ticks_total");
 
         // A series first seen at 1 has no earlier sample, so increase() reads 0 and the alert misses the
         // first (often the only) close; start it at zero.
@@ -64,6 +68,9 @@ public sealed class GatewayMetrics : IDisposable
     {
         _recheckClosed.Add(1, _transport);
     }
+
+    public void RecordWorkerTick(string worker, string outcome) =>
+        _workerTicks.Add(1, new TagList { { "worker", worker }, { "outcome", outcome } });
 
     public void Dispose() => _meter.Dispose();
 }

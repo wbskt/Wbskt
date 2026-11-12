@@ -312,12 +312,85 @@ groups:
             trim readings retention and move off Express. See "SQL Server edition" in deploy/README.md.
 
       - alert: EngineNotReporting
-        expr: absent(wbskt_workflow_dispatcher_queue_depth)
+        # Held back while the collector is down: OtelCollectorDown is the one cause then.
+        expr: |
+          absent(wbskt_workflow_dispatcher_queue_depth)
+          unless on () absent(up{job="otel-collector"} == 1)
         for: 5m
         labels:
           severity: page
         annotations:
-          summary: "No workflow engine has reported metrics for 5 minutes"
+          summary: "No workflow engine has reported metrics for about 10 minutes"
+
+      - alert: HostNotReporting
+        # A host that stopped or lost its exporter sends nothing, and nothing else would say so: only the
+        # engine had a rule. target_info comes with every push (job = OTEL_SERVICE_NAME), and
+        # dotnet_process_cpu_count from the runtime meter, so either is there while the host is up. One
+        # alert per service, firing once every replica of it is gone. OTLP series get no staleness marker,
+        # so a series lingers for the 5m lookback before for: starts: about 10 minutes in all. Held back
+        # while the collector is down, as EngineNotReporting is.
+        expr: |
+          (
+            absent({__name__=~"target_info|dotnet_process_cpu_count", job="wbskt-auth"})
+            or absent({__name__=~"target_info|dotnet_process_cpu_count", job="wbskt-management"})
+            or absent({__name__=~"target_info|dotnet_process_cpu_count", job="wbskt-client-auth"})
+            or absent({__name__=~"target_info|dotnet_process_cpu_count", job="wbskt-gateway-ws"})
+            or absent({__name__=~"target_info|dotnet_process_cpu_count", job="wbskt-gateway-mqtt"})
+          )
+          unless on () absent(up{job="otel-collector"} == 1)
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $labels.job }} has reported no metrics for about 10 minutes"
+          description: >-
+            On the VM, docker compose ps and docker compose logs --tail 200 for that service (the job
+            without its wbskt- prefix, such as auth or gateway-ws) show whether it is down or only its
+            telemetry is.
+
+      - alert: PeriodicJobFailing
+        # A periodic job (credit posting, reconciles, retention, the deleted-workspace sweep, the
+        # gateways' access recheck) logs a failed tick and carries on, so one that fails every time stays
+        # quiet. Per container, so a healthy replica cannot hide a failing one. Any of:
+        # - it has failed every tick since its container started. Read off the raw counters, because a
+        #   series that first appears at 1 is a step increase() cannot see: a daily job's only tick
+        #   after a deploy, or a new engine leader's first.
+        # - most of its last 15 minutes' ticks failed, and more than three (the jobs that run every few
+        #   seconds or minutes).
+        # - it failed and has not once succeeded in 6 hours (hourly jobs) or 49 hours (daily ones).
+        # Containers that stopped pushing drop out through target_info, so a deploy or an engine failover
+        # clears the alert instead of a dead container's failure holding it. A standby engine records no
+        # ticks.
+        expr: |
+          (
+            (
+              sum by (job, instance, worker) ({__name__=~"wbskt_(auth|management|workflow|gateway)_worker_ticks_total", outcome="failed"}) > 0
+              unless on (job, instance, worker) sum by (job, instance, worker) ({__name__=~"wbskt_(auth|management|workflow|gateway)_worker_ticks_total", outcome="ok"}) > 0
+            )
+            or (
+              sum by (job, instance, worker) (increase({__name__=~"wbskt_(auth|management|workflow|gateway)_worker_ticks_total", outcome="failed"}[15m]))
+                / sum by (job, instance, worker) (increase({__name__=~"wbskt_(auth|management|workflow|gateway)_worker_ticks_total"}[15m])) > 0.5
+              and sum by (job, instance, worker) (increase({__name__=~"wbskt_(auth|management|workflow|gateway)_worker_ticks_total", outcome="failed"}[15m])) > 3
+            )
+            or (
+              sum by (job, instance, worker) (increase({__name__=~"wbskt_(auth|management|workflow|gateway)_worker_ticks_total", outcome="failed"}[6h])) > 0
+              unless on (job, instance, worker) sum by (job, instance, worker) (increase({__name__=~"wbskt_(auth|management|workflow|gateway)_worker_ticks_total", outcome="ok"}[6h])) > 0
+            )
+            or (
+              sum by (job, instance, worker) (increase({__name__=~"wbskt_(auth|management|workflow|gateway)_worker_ticks_total", outcome="failed"}[49h])) > 0
+              unless on (job, instance, worker) sum by (job, instance, worker) (increase({__name__=~"wbskt_(auth|management|workflow|gateway)_worker_ticks_total", outcome="ok"}[49h])) > 0
+            )
+          )
+          and on (job, instance) group by (job, instance) (target_info)
+        for: 10m
+        labels:
+          severity: warn
+        annotations:
+          summary: "{{ $labels.worker }} on {{ $labels.job }} keeps failing"
+          description: >-
+            Its error lines name the failure: docker compose logs for that service (the job without its
+            wbskt- prefix), or Loki with {service_name="{{ $labels.job }}"} |= "{{ $labels.worker }}".
+            The job runs again on its own once the cause is fixed.
 
       - alert: DiskAlmostFull
         # Every real filesystem on the VM: /, and the image store or SQL volume if they are separate.
