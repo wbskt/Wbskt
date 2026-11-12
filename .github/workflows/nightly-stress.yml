@@ -130,9 +130,9 @@ jobs:
       # 200 clients register under a fresh policy, connect, and send telemetry for five minutes. The
       # workspace's tenant (the seeded admin's) is put on Team first: on Free (20 clients) registration refuses the other 180.
       # A plan change re-syncs every workspace of the tenant, so the step waits until the management
-      # host reports Team for this one. The load tester runs until stopped, so `timeout` ends it; exit 124
-      # is that, and is the expected outcome. It fails on a client that could not start, or on a host
-      # that went down under it.
+      # host reports Team for this one. The load tester stops itself after 300 seconds and exits 0;
+      # `timeout` is only the backstop for a tester that hangs (it once outlived a SIGINT). It fails on a
+      # client that could not start, or on a host that went down under it.
       - name: Load tester
         if: ${{ !cancelled() }}
         timeout-minutes: 12
@@ -178,12 +178,16 @@ jobs:
 
           dotnet build Tests/Wbskt.LoadTester/Wbskt.LoadTester.csproj --nologo -v q
           status=0
-          timeout --signal=INT --kill-after=30 300 \
-            dotnet Tests/Wbskt.LoadTester/bin/Debug/net10.0/Wbskt.LoadTester.dll 200 "$pin" "$management" ws://localhost:5020 \
+          timeout --kill-after=30 420 \
+            dotnet Tests/Wbskt.LoadTester/bin/Debug/net10.0/Wbskt.LoadTester.dll 200 "$pin" "$management" ws://localhost:5020 300 \
             > load-output.txt 2>&1 || status=$?
           tail -n 50 load-output.txt
-          if [[ "$status" -ne 124 ]]; then
-            echo "::error::the load tester exited with $status before its time was up"
+          if [[ "$status" -eq 124 || "$status" -eq 137 ]]; then
+            echo "::error::the load tester did not stop after its 300 seconds and was killed (exit $status)"
+            exit 1
+          fi
+          if [[ "$status" -ne 0 ]]; then
+            echo "::error::the load tester exited with $status"
             exit 1
           fi
           if ! grep -q 'Client spin-up process finished' load-output.txt; then
