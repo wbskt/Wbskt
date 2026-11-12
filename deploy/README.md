@@ -468,6 +468,8 @@ alerts fire and reach nobody, and Alertmanager says so in its log.
 | `DiskFillingFast` | at the last 6 hours' rate a filesystem under 40% free fills within 24 hours |
 | `NodeExporterDown` | Prometheus cannot scrape node-exporter, so nothing is watching disk space |
 | `ContainerRestarting` | a container restarted in place 3 or more times in 15 minutes |
+| `ContainerNearMemoryLimit` | a container above 90% of its `mem_limit` for 10 minutes (warn) |
+| `RabbitMQMemoryAlarm` | RabbitMQ's memory alarm is on, so it blocks every publish (page) |
 | `EngineNotReporting` | no engine has reported metrics for 5 minutes |
 | `DeletedWorkspaceRetiredBySweep` | management's daily deleted workspace sweep retired a workspace its delete event had missed |
 
@@ -659,30 +661,50 @@ See [Mail relay: required before production](#mail-relay-required-before-product
 
 ## Memory limits
 
-Every container except `sql` has a `mem_limit`. A container that leaks, or Loki, Tempo or Prometheus
-growing under a burst of telemetry, is killed and restarted on its own (`docker inspect` shows
-`OOMKilled`, and `ContainerRestarting` pages if it keeps happening) instead of taking the VM's memory
-until the kernel's OOM killer picks the largest process, which is SQL Server. SQL Server's own cap is
-`SQL_MEMORY_LIMIT_MB`.
+Every container except `sql` has a `mem_limit`, and a `memswap_limit` equal to it so swap does not
+quietly double it. A container that leaks, or Loki, Tempo or Prometheus growing under a burst of
+telemetry, stays inside its own cap instead of taking the VM's memory until the kernel's OOM killer
+picks the largest process, which is SQL Server. `sql` has `oom_score_adj: -800`, so a VM-wide OOM picks
+something else first; SQL Server's own cap is `SQL_MEMORY_LIMIT_MB`.
+
+What hitting a cap looks like depends on the container:
+
+- **A .NET host** (auth, management, client-auth, engine, the gateways) caps its GC heap at 75% of the
+  limit, so a managed leak throws `OutOfMemoryException` in `docker logs` while the process keeps
+  running and failing requests. `ContainerNearMemoryLimit` warns once a container sits over 90% of its
+  limit for 10 minutes; restart it, and raise its limit if it was simply too small.
+- **Anything else** is killed and restarted (`docker inspect` shows `OOMKilled`). `ContainerRestarting`
+  pages at 3 restarts in 15 minutes, so a single kill an hour shows only in the near-limit warning.
+- **RabbitMQ** raises its memory alarm at 60% of its limit and then blocks every publisher, client
+  traffic included. `RabbitMQMemoryAlarm` pages on it.
+- **Redis** refuses writes at `maxmemory 192mb`; every caller logs that and falls back.
+- The Go services (Traefik, Loki, Tempo, the collector, Grafana, cAdvisor) get a `GOMEMLIMIT` under
+  their cap, since the Go runtime does not read the cgroup limit. Prometheus 3 sets its own.
 
 | Containers | Limit |
 |---|---|
 | auth, management, client-auth, engine (each replica) | `HOST_MEM_LIMIT`, default `384m` |
 | gateway-ws, gateway-mqtt (each replica) | `GATEWAY_MEM_LIMIT`, default `512m` |
+| traefik | `TRAEFIK_MEM_LIMIT`, default `512m` (`TRAEFIK_GOMEMLIMIT` 435MiB) |
 | prometheus | `PROMETHEUS_MEM_LIMIT`, default `512m` |
-| rabbitmq | 512m (RabbitMQ blocks publishers at 60% of it) |
-| loki, tempo | 384m each |
-| redis | 256m, with `maxmemory 192mb` so a full Redis refuses writes instead of being killed |
+| rabbitmq | 1g (alarm at about 600 MB) |
+| loki | 512m |
+| tempo | 384m |
+| redis | 256m, with `maxmemory 192mb` |
 | otel-collector, grafana | 256m each |
-| traefik, cadvisor | 192m each |
+| cadvisor | 192m |
 | console, alertmanager, pushgateway, node-exporter | 64m each |
-| migrator (one-shot) | 1g |
+| migrator (one-shot, during a deploy) | 1g |
 
-With one replica of everything the limits add up to about 5.6 GB, and SQL Server takes about
-2.3 GB beside them, so the whole stack fits an 8 GB VM without swap. Each extra replica adds its
-limit. On a smaller VM, lower `HOST_MEM_LIMIT` and keep swap on; on a busier one, raise
-`GATEWAY_MEM_LIMIT` first, since the gateways hold every open client connection. A change takes
-effect when the container is recreated (`docker compose up -d <service>`).
+The caps are ceilings, not reservations. With one replica of everything they add up to 6,720 MiB
+(about 6.6 GiB, 7.6 GiB while the migrator runs), and SQL Server takes about 2.3 GiB beside them, so
+an 8 GB VM is oversubscribed only if every container reaches its cap at once; `oom_score_adj` keeps
+SQL Server out of the way if that happens. Idle, the stack uses far less. Each extra replica adds its
+limit. On a smaller VM, lower `HOST_MEM_LIMIT` and keep swap on. On a busier one, raise
+`GATEWAY_MEM_LIMIT` and `TRAEFIK_MEM_LIMIT` together (and `TRAEFIK_GOMEMLIMIT` to about 85% of the
+latter): Traefik terminates TLS for the same client connections the gateways hold. Check real use with
+`docker stats` after a change. A change takes effect when the container is recreated
+(`docker compose up -d <service>`).
 
 ## SQL placement
 
