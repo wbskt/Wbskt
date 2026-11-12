@@ -42,6 +42,12 @@ public sealed class ConnectionSupersededHandler : IConsumer<ClientConnectedEvent
     public async Task Consume(ConsumeContext<ClientConnectedEvent> context)
     {
         var message = context.Message;
+        if (message.IsRestored)
+        {
+            // Another host still holding an older connection: it is not newer than ours.
+            return;
+        }
+
         if (message.HostId == _busInstanceId.Value)
         {
             // Our own connect event, echoed back to us; nothing to supersede.
