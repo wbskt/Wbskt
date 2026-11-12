@@ -123,9 +123,8 @@ public static class WbsktHost
     /// headers as they arrived), forwarded headers (so everything after sees the real client address),
     /// exception handling, Problem Details for bare error statuses, CORS, the rate limiter (before
     /// authentication, so a flood is refused before a token is validated), authentication, the identity
-    /// middleware, the
-    /// per-user budget (after authentication, since it partitions on the user), and authorization. A
-    /// step whose services the host did not register is skipped.
+    /// middleware, the per-user budget (after authentication, since it partitions on the user), and
+    /// authorization. A step whose services the host did not register is skipped.
     /// </summary>
     public static WebApplication UseWbsktPipeline(this WebApplication app)
     {

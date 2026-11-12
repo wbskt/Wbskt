@@ -29,14 +29,11 @@ public sealed class InternalRouteGuardMiddlewareTests
         Assert.False(InternalRouteGuardMiddleware.IsProxiedInternalRequest(Context(path, header)));
     }
 
-    /// <summary>
-    /// A rewrite before the guard can change the path (the unversioned alias turns /api/Internal into
-    /// /api/v1/Internal), so what routing picked decides as well.
-    /// </summary>
+    /// <summary>Defence in depth: what routing picked decides as well as the path.</summary>
     [Fact]
     public void A_forwarded_request_routed_to_an_internal_endpoint_is_refused_whatever_its_path()
     {
-        var context = Context("/api/v1/Internal/users/me", "X-Forwarded-For");
+        var context = Context("/some/other/spelling", "X-Forwarded-For");
         context.SetEndpoint(new RouteEndpoint(_ => Task.CompletedTask, RoutePatternFactory.Parse("api/internal/users/me"), 0, null, null));
 
         Assert.True(InternalRouteGuardMiddleware.IsProxiedInternalRequest(context));

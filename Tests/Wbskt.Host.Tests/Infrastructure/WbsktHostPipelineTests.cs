@@ -60,12 +60,15 @@ public sealed class WbsktHostPipelineTests
     {
         await using var app = await StartAsync();
         using var client = new HttpClient { BaseAddress = BaseAddress(app) };
-        using var direct = await client.GetAsync("/api/internal/ping");
-        using var directMixedCase = await client.GetAsync("/API/Internal/ping");
+        // Each spelling reaches the route when called directly, so a 404 below is the guard's.
+        string[] spellings = ["/api/internal/ping", "/API/Internal/ping", "/api/%69nternal/ping", "/api/./internal/ping"];
+        foreach (string path in spellings)
+        {
+            using var direct = await client.GetAsync(path);
+            Assert.Equal(HttpStatusCode.OK, direct.StatusCode);
+        }
 
-        Assert.Equal(HttpStatusCode.OK, direct.StatusCode);
-        Assert.Equal(HttpStatusCode.OK, directMixedCase.StatusCode);
-        foreach (string path in new[] { "/api/internal/ping", "/API/Internal/ping", "/api/Internal/ping" })
+        foreach (string path in spellings)
         {
             using var forwarded = new HttpRequestMessage(HttpMethod.Get, path);
             forwarded.Headers.Add("X-Forwarded-For", "203.0.113.9");

@@ -58,9 +58,11 @@ public sealed class InternalUserTests(ServicesFixture fixture)
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
         var user = await fixture.CreateUserAsync();
 
-        using var response = await fixture.GetForwardedAsync(ServicesFixture.AuthUrl(path), user.Token, "203.0.113.9");
+        using var direct = await fixture.SendAsync(HttpMethod.Get, ServicesFixture.AuthUrl(path), user.Token);
+        using var forwarded = await fixture.GetForwardedAsync(ServicesFixture.AuthUrl(path), user.Token, "203.0.113.9");
 
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        direct.StatusCode.Should().Be(HttpStatusCode.OK, "the spelling reaches the route, so the 404 below is the guard's");
+        forwarded.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     private async Task<int> CurrentUserIdAsync(string token)
