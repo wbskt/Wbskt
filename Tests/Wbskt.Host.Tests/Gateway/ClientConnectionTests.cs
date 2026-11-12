@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using System.Net.WebSockets;
 using Moq;
 using Wbskt.Gateway.Core.Infrastructure;
@@ -53,10 +55,10 @@ public sealed class ClientConnectionTests
     [Fact]
     public async Task A_stopping_host_sends_the_client_a_1001_close_it_can_read()
     {
-        using var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
-        using var clientTcp = new System.Net.Sockets.TcpClient();
-        await clientTcp.ConnectAsync(System.Net.IPAddress.Loopback, ((System.Net.IPEndPoint)listener.LocalEndpoint).Port);
+        using var clientTcp = new TcpClient();
+        await clientTcp.ConnectAsync(IPAddress.Loopback, ((IPEndPoint)listener.LocalEndpoint).Port);
         using var serverTcp = await listener.AcceptTcpClientAsync();
         using var serverSocket = System.Net.WebSockets.WebSocket.CreateFromStream(serverTcp.GetStream(), isServer: true, subProtocol: null, keepAliveInterval: Timeout.InfiniteTimeSpan);
         using var clientSocket = System.Net.WebSockets.WebSocket.CreateFromStream(clientTcp.GetStream(), isServer: false, subProtocol: null, keepAliveInterval: Timeout.InfiniteTimeSpan);
@@ -64,8 +66,9 @@ public sealed class ClientConnectionTests
         using var stopping = new CancellationTokenSource();
         using var closeOnStop = connection.CloseOnStop(stopping.Token);
 
-        stopping.Cancel();
-        var received = await clientSocket.ReceiveAsync(new byte[64], new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await stopping.CancelAsync();
+        var received = await clientSocket.ReceiveAsync(new byte[64], timeout.Token);
 
         Assert.Equal(WebSocketMessageType.Close, received.MessageType);
         Assert.Equal(WebSocketCloseStatus.EndpointUnavailable, clientSocket.CloseStatus);

@@ -81,7 +81,6 @@ internal sealed class SocketHandler : ISocketHandler
         // connection rather than 1001. Stopping asks for the close instead, and the client's answer (or the
         // close grace) ends the loop.
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, connection.Closing);
-        using var closeOnStop = connection.CloseOnStop(_appLifetime.ApplicationStopping);
 
         await _sessions.RunAsync(
             admission,
@@ -109,6 +108,8 @@ internal sealed class SocketHandler : ISocketHandler
 
     private async Task<DisconnectReason> ReceiveLoopAsync(Guid clientRefId, ClientConnection connection, ClientInbox inbox, CancellationToken cancellationToken)
     {
+        // Held only while frames are read, so a stop after the loop ends does not close a socket already closing.
+        using var closeOnStop = connection.CloseOnStop(_appLifetime.ApplicationStopping);
         try
         {
             return await ReadFramesAsync(clientRefId, connection, inbox, cancellationToken);
