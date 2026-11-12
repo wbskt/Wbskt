@@ -113,6 +113,16 @@ DROP PROCEDURE IF EXISTS dbo.DeviceTraffic_DeleteBefore;
 GO
 /*
 --------------------------------------------------------------------------------------
+Pre-Deployment Script: drop HistoryEvent_DeleteForRetiredRuns
+--------------------------------------------------------------------------------------
+HistoryRetentionGc no longer deletes routine history apart from its run (#774), so nothing calls it
+and DropObjectsNotInSource is off: dropped here as Client_Verify is. An engine still on the previous
+image fails one retention tick on it and recovers on the new image.
+*/
+DROP PROCEDURE IF EXISTS dbo.HistoryEvent_DeleteForRetiredRuns;
+GO
+/*
+--------------------------------------------------------------------------------------
 Pre-Deployment Script: one ScheduledFires row per (WorkflowDefinitionId, TriggerNodeId)
 --------------------------------------------------------------------------------------
 The table gains UQ_ScheduledFires_WorkflowDefinitionId_TriggerNodeId. Registering the same version

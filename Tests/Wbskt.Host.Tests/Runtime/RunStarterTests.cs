@@ -532,7 +532,6 @@ public sealed class RunStarterTests
             return Task.CompletedTask;
         }
         public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct) => throw new NotSupportedException();
-
     }
 
     private sealed class RecordingWorkflowDefinitionProvider : IWorkflowDefinitionProvider
