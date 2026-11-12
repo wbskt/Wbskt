@@ -11,9 +11,10 @@ public sealed record LogicGateConfig
     ///
     /// Must evaluate to a boolean; anything else fails the node with LOGIC_CONDITION_NOT_BOOL.
     /// The converter still accepts the legacy bare-string form on read - see
-    /// <see cref="LogicConditionJsonConverter"/>.
+    /// <see cref="LogicConditionJsonConverter"/>. Null until one is added; the validator lists it as
+    /// LOGIC_CONDITION_MISSING.
     /// </summary>
     [JsonPropertyName("condition")]
     [JsonConverter(typeof(LogicConditionJsonConverter))]
-    public required WorkflowExpression Condition { get; init; }
+    public WorkflowExpression? Condition { get; init; }
 }

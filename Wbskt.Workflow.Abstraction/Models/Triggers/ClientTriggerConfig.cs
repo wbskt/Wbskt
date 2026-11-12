@@ -8,11 +8,13 @@ public sealed record ClientTriggerConfig
 {
     public const int MaxHoldSeconds = 24 * 60 * 60;
 
+    // Empty rather than required, so a trigger not filled in yet is listed by the validator
+    // (TRIGGER_CLIENT_REQUIRED, TRIGGER_MESSAGE_TYPE_REQUIRED) instead of failing the request.
     [JsonPropertyName("clientRef")]
-    public required string ClientRef { get; init; }
+    public string ClientRef { get; init; } = string.Empty;
 
     [JsonPropertyName("type")]
-    public required string Type { get; init; }
+    public string Type { get; init; } = string.Empty;
 
     [JsonPropertyName("correlationKey")]
     public string? CorrelationKey { get; init; } = null;
