@@ -135,6 +135,16 @@ public sealed record ProviderWebhook(string EventId, string Type, string? Subscr
 /// <summary>
 /// A product as the provider prices it: the amount in the currency's main unit (before tax), the currency,
 /// for a subscription how often it charges (<c>Interval</c> null when it is neither monthly nor yearly),
-/// and whether it takes less than that amount at first: a discount, or a free trial.
+/// whether it takes less than that amount at first (a discount, or a free trial), and whether the amount is
+/// not what is charged: a minimum the buyer may pay over (<c>BuyerSetsAmount</c>), or a fixed fee with
+/// metered usage on top (<c>UsageBased</c>).
 /// </summary>
-public sealed record ProviderProduct(decimal Amount, string Currency, bool Recurring, BillingInterval? Interval, bool Discounted = false, int TrialDays = 0);
+public sealed record ProviderProduct(
+    decimal Amount,
+    string Currency,
+    bool Recurring,
+    BillingInterval? Interval,
+    bool Discounted = false,
+    int TrialDays = 0,
+    bool BuyerSetsAmount = false,
+    bool UsageBased = false);

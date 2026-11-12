@@ -39,8 +39,14 @@ public sealed class BillingOptions
     /// not on sale: no product configured, or no price for it in <see cref="PlanPrices"/>.
     /// </summary>
     public string? FindOfferedPlanProduct(PlanCode plan, BillingInterval interval) =>
-        PlanPrices.UsdFor(plan, interval) is not null
-        && Plans.TryGetValue(plan, out Dictionary<BillingInterval, string>? intervals)
+        PlanPrices.UsdFor(plan, interval) is not null ? FindPlanProduct(plan, interval) : null;
+
+    /// <summary>
+    /// The product configured for <paramref name="plan"/> billed <paramref name="interval"/>, on sale or not:
+    /// for putting back a change the provider already holds, not for selling.
+    /// </summary>
+    public string? FindPlanProduct(PlanCode plan, BillingInterval interval) =>
+        Plans.TryGetValue(plan, out Dictionary<BillingInterval, string>? intervals)
         && intervals.TryGetValue(interval, out string? productId)
         && !string.IsNullOrEmpty(productId)
             ? productId
