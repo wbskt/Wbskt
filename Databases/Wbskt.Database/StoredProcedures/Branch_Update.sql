@@ -15,6 +15,7 @@ BEGIN
         LocalJson = COALESCE(@LocalJson, LocalJson),
         LastOutputJson = @LastOutputJson,
         PendingTakePort = NULL,
+        WokenAt = NULL,
         UpdatedAt = SYSUTCDATETIME()
     WHERE Id = @Id;
 

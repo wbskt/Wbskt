@@ -31,9 +31,10 @@ public sealed class BookmarkSchedulerTests
     }
 
     [Fact]
-    public async Task Tick_sets_PendingTakePort_when_TtlPort_present_on_a_non_timer_bookmark()
+    public async Task Tick_leaves_a_ttl_exit_to_the_claim_and_only_dispatches()
     {
-        // Arrange: a signal/http wait that timed out via its TTL must jump to the timeout edge.
+        // Arrange: a signal/http wait that timed out via its TTL. Bookmark_ClaimDue sets its timeout edge
+        // on the branch in the claim's own transaction, so the scheduler writes nothing.
         var bookmark = CreateBookmark(33, 201, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1"), Guid.Parse("33333333-3333-3333-3333-333333333333"), wakeConditionKind: "signal", ttlPort: "timeout");
         var provider = new RecordingBookmarkProvider([bookmark]);
         var branchProvider = new RecordingBranchProvider((bookmark.BranchRefId, 201));
@@ -44,8 +45,8 @@ public sealed class BookmarkSchedulerTests
         await scheduler.TickAsync(CancellationToken.None);
 
         // Assert
-        BranchRow updated = Assert.Single(branchProvider.Upserted);
-        Assert.Equal("timeout", updated.PendingTakePort);
+        Assert.Empty(branchProvider.Upserted);
+        Assert.Single(dispatcher.Requests);
     }
 
     [Fact]

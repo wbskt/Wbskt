@@ -152,4 +152,84 @@ public sealed class BookmarkClaimIntegrationTests(SqlEdgeFixture fixture)
         results.Count(claimed => claimed).Should().Be(1, "exactly one concurrent claimant should win the race");
         results.Count(claimed => !claimed).Should().Be(callerCount - 1);
     }
+
+    private async Task<BranchRow> SeedWaitingBranchAsync(int runId)
+    {
+        return await ProviderFactory.Branch(fixture.ConnectionString).CreateAsync(new BranchRow
+        {
+            Id = 0, RefId = Guid.NewGuid(), RunId = runId, ParentBranchId = null, ForkCohortId = null,
+            NodeId = Guid.NewGuid(), Status = "Waiting", PendingTakePort = null, LocalJson = "{}",
+            LastOutputJson = null, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow, RowVersion = []
+        }, CancellationToken.None);
+    }
+
+    private static BookmarkRow BookmarkFor(BranchRow branch, string kind, string? ttlPort) => new()
+    {
+        Id = 0, RefId = Guid.NewGuid(), RunId = branch.RunId, BranchRefId = branch.RefId,
+        NodeId = branch.NodeId, WakeConditionKind = kind, MatchKey = $"it:{Guid.NewGuid():N}",
+        WakeConditionJson = "{}", ExpiresAt = DateTime.UtcNow.AddMinutes(-1), TtlPort = ttlPort, CreatedAt = DateTime.UtcNow
+    };
+
+    private async Task<IReadOnlyCollection<long>> WokenIdsAsync()
+    {
+        var branchProvider = ProviderFactory.Branch(fixture.ConnectionString);
+        var ids = new List<long>();
+        long afterId = 0;
+        while (true)
+        {
+            IReadOnlyCollection<BranchRow> page = await branchProvider.GetWokenAsync(afterId, 500, CancellationToken.None);
+            ids.AddRange(page.Select(branch => branch.Id));
+            if (page.Count < 500)
+            {
+                return ids;
+            }
+
+            afterId = page.Max(branch => branch.Id);
+        }
+    }
+
+    [SkippableFact]
+    public async Task ClaimDue_stores_the_ttl_exit_and_marks_the_branch_woken_in_the_claim()
+    {
+        // wbskt/Wbskt#768: the scheduler used to write the TTL port after the claim, so a stop between
+        // the two lost the timeout and the step ran its wait again; a timer's claim left nothing behind.
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
+
+        int runId = await SeedRunAsync();
+        BranchRow signalWait = await SeedWaitingBranchAsync(runId);
+        BranchRow timerWait = await SeedWaitingBranchAsync(runId);
+        var bookmarkProvider = ProviderFactory.Bookmark(fixture.ConnectionString);
+        await bookmarkProvider.CreateAsync(BookmarkFor(signalWait, "signal", "timeout"), CancellationToken.None);
+        await bookmarkProvider.CreateAsync(BookmarkFor(timerWait, "timer", null), CancellationToken.None);
+
+        await bookmarkProvider.ClaimDueAsync(DateTime.UtcNow, 1000, CancellationToken.None);
+
+        var branchProvider = ProviderFactory.Branch(fixture.ConnectionString);
+        (await branchProvider.GetByIdAsync(signalWait.Id, CancellationToken.None)).PendingTakePort.Should().Be("timeout");
+        (await branchProvider.GetByIdAsync(timerWait.Id, CancellationToken.None)).PendingTakePort.Should().BeNull();
+        (await WokenIdsAsync()).Should().Contain([signalWait.Id, timerWait.Id]);
+
+        // The next write that moves the branch clears the mark, so a later park is not taken for a wake.
+        await branchProvider.UpdatePointerAsync(timerWait.Id, timerWait.NodeId, "Active", "{}", null, CancellationToken.None);
+        (await WokenIdsAsync()).Should().NotContain(timerWait.Id);
+    }
+
+    [SkippableFact]
+    public async Task TryClaimWithWake_stores_the_wake_only_for_the_winner()
+    {
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
+
+        int runId = await SeedRunAsync();
+        BranchRow branch = await SeedWaitingBranchAsync(runId);
+        var bookmarkProvider = ProviderFactory.Bookmark(fixture.ConnectionString);
+        BookmarkRow bookmark = await bookmarkProvider.CreateAsync(BookmarkFor(branch, "signal", "timeout"), CancellationToken.None);
+
+        (await bookmarkProvider.TryClaimWithWakeAsync(bookmark.RefId, """{"__wake":{"n":1}}""", CancellationToken.None)).Should().BeTrue();
+        (await bookmarkProvider.TryClaimWithWakeAsync(bookmark.RefId, """{"__wake":{"n":2}}""", CancellationToken.None)).Should().BeFalse();
+
+        BranchRow stored = await ProviderFactory.Branch(fixture.ConnectionString).GetByIdAsync(branch.Id, CancellationToken.None);
+        stored.LocalJson.Should().Be("""{"__wake":{"n":1}}""");
+        stored.PendingTakePort.Should().BeNull("the signal won the race, not the TTL");
+        (await WokenIdsAsync()).Should().Contain(branch.Id);
+    }
 }

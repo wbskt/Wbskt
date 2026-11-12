@@ -88,15 +88,17 @@ public sealed class BookmarkCompanionTimerTests
         var bookmark = CreateBookmark(78, Guid.Parse("22222222-2222-2222-2222-222222222222"), 42, branchRefId, "inbound", "mqtt:client-1", expiresAt: new DateTime(2026, 5, 26, 12, 35, 0, DateTimeKind.Utc), ttlPort: "timeout");
         var bookmarkProvider = new RecordingBookmarkProvider(bookmark) { DueBookmarks = [bookmark] };
         var branchProvider = new RecordingBranchProvider(Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), branchRefId, 1001);
-        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(branchProvider, bookmarkProvider), new RecordingRunDispatcher(), NullLogger<BookmarkScheduler>.Instance, WorkerTestServices.Options());
+        var dispatcher = new RecordingRunDispatcher();
+        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(branchProvider, bookmarkProvider), dispatcher, NullLogger<BookmarkScheduler>.Instance, WorkerTestServices.Options());
 
         // Act
         await scheduler.TickAsync(CancellationToken.None);
 
-        // Assert: the TTL claim removed the row (claim-by-delete) and took the TtlPort edge.
+        // Assert: the TTL claim removed the row (claim-by-delete) and the branch was dispatched. The
+        // TtlPort edge is set on the branch by Bookmark_ClaimDue itself, in the claim's transaction
+        // (BookmarkClaimIntegrationTests), so the scheduler writes nothing to the branch.
         Assert.Empty(bookmarkProvider.Bookmarks);
-        BranchRow branch = await branchProvider.GetByRefIdAsync(branchRefId, CancellationToken.None);
-        Assert.Equal("timeout", branch.PendingTakePort);
+        Assert.Single(dispatcher.Requests);
     }
 
     [Fact]

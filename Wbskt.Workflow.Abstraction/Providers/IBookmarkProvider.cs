@@ -14,7 +14,22 @@ public interface IBookmarkProvider
     /// <summary>Atomically claims (deletes) the bookmark by RefId. Returns false if it was already claimed/gone - the caller lost the race.</summary>
     Task<bool> TryClaimAsync(Guid refId, CancellationToken ct);
 
-    /// <summary>Atomically claims (deletes) up to <paramref name="batchSize"/> due bookmarks and returns the claimed rows.</summary>
+    /// <summary>
+    /// <see cref="TryClaimAsync(Guid, CancellationToken)"/>, and when this call wins, stores
+    /// <paramref name="wakeLocalJson"/> (the branch's local state with the wake merged in) on the
+    /// bookmark's branch in the same transaction, so a wake that is claimed is never lost before it is
+    /// stored. A loser writes nothing.
+    /// </summary>
+    /// <remarks>The default throws: a double that never resumes on an inbound event needs no stub, and
+    /// one that does must store the wake rather than drop it.</remarks>
+    Task<bool> TryClaimWithWakeAsync(Guid refId, string wakeLocalJson, CancellationToken ct)
+        => throw new NotSupportedException("This bookmark provider does not store a wake with its claim.");
+
+    /// <summary>
+    /// Atomically claims (deletes) up to <paramref name="batchSize"/> due bookmarks and returns the claimed
+    /// rows. In the same transaction each claimed branch is marked woken, and a TTL on a wait that is not a
+    /// timer sets the branch's <see cref="Entities.BranchRow.PendingTakePort"/> to the bookmark's TTL port.
+    /// </summary>
     Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(DateTime nowUtc, int batchSize, CancellationToken ct);
 
     Task DeleteAsync(Guid refId, CancellationToken ct);

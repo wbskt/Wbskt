@@ -20,6 +20,7 @@ BEGIN
         NodeId                = @NodeId,
         Status                = @Status,
         PendingTakePort       = @PendingTakePort,
+        WokenAt               = NULL,
         LocalJson             = @LocalJson,
         LastOutputJson        = @LastOutputJson,
         UpdatedAt             = SYSUTCDATETIME()

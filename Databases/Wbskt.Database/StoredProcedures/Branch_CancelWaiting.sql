@@ -6,6 +6,7 @@ BEGIN
     UPDATE dbo.Branches
     SET
         Status = 'Cancelled',
+        WokenAt = NULL,
         UpdatedAt = SYSUTCDATETIME()
     WHERE RunId = @RunId
       AND Status = 'Waiting';

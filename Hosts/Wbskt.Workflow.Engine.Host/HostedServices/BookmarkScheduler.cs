@@ -27,6 +27,9 @@ public sealed class BookmarkScheduler(
         var bookmarkProvider = services.GetRequiredService<IBookmarkProvider>();
         // Claim-by-delete: rows returned here are already removed from the table, no separate
         // delete step needed (and no lease/host-id bookkeeping - the DELETE itself is the claim).
+        // The claim also stored each wake on its branch: a TTL on a signal, http, child or command
+        // wait set PendingTakePort, the timeout edge the branch loop takes without running the node,
+        // and a timer (a Delay, a retry back-off) needs nothing, as its node finds its deadline passed.
         IReadOnlyCollection<Abstraction.Entities.BookmarkRow> claimedBookmarks =
             await bookmarkProvider.ClaimDueAsync(clock.GetUtcNow().UtcDateTime, _batchSize, ct);
 
@@ -40,16 +43,6 @@ public sealed class BookmarkScheduler(
             try
             {
                 var branch = await branchProvider.GetByRefIdAsync(bookmark.BranchRefId, ct);
-
-                // A TtlPort on a non-timer bookmark means the primary wait (signal/http/child) timed
-                // out via its TTL rather than being matched - take the timeout edge. A pure timer
-                // wait (a Delay node) has no take-port; it just resumes at its own node.
-                bool isTtlFiring = !string.IsNullOrEmpty(bookmark.TtlPort) && !string.Equals(bookmark.WakeConditionKind, "timer", StringComparison.OrdinalIgnoreCase);
-                if (isTtlFiring)
-                {
-                    branch = branch with { PendingTakePort = bookmark.TtlPort };
-                    await branchProvider.UpsertAsync(branch, ct);
-                }
 
                 Logger.LogInformation("Resuming bookmark {BookmarkId} (Timer Due) for run {RunId} on branch {BranchId}", bookmark.Id, bookmark.RunId, branch.Id);
                 await runDispatcher.DispatchAsync(new BranchExecutionRequest(bookmark.RunId, branch.Id, BranchExecutionReason.BookmarkResumed), ct);

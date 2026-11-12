@@ -10,8 +10,8 @@ BEGIN
     -- ActiveBranchCount above zero, so the run never finalizes. Every wait parks this way - a Delay
     -- parks on a timer bookmark like any other - so "Waiting with no bookmark" is the stranded state
     -- for all of them, and the same state follows a wake whose claim deleted the bookmark but whose
-    -- dispatch was lost. The cutoff is the grace period that keeps a branch mid-park out of this list;
-    -- the caller still re-checks each row before acting on it.
+    -- dispatch was lost (WokenAt set; a new leader resumes those through Branch_GetWoken first). The
+    -- cutoff is the grace period that keeps a branch mid-park, or woken and queued, out of this list.
     SELECT TOP (@BatchSize)
         br.Id,
         br.RefId,
