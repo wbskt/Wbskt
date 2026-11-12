@@ -4,7 +4,7 @@
 -- schedules and webhooks keep starting runs.
 --
 -- Rows are disabled or revoked rather than deleted, so the history (clients, definitions, runs)
--- stays readable for audit. Only the trigger and schedule registrations are deleted, exactly as
+-- stays readable for audit. The clients' readings are the exception: they are queued for clearing. Only the trigger and schedule registrations are deleted, exactly as
 -- deprecating a single workflow does, and the workspace's integrations with their credentials.
 --
 -- Idempotent: the event that drives it can be delivered more than once. A client already revoked is
@@ -82,6 +82,14 @@ BEGIN
     SET RetiredAt = SYSUTCDATETIME()
     WHERE WorkspaceId = @WorkspaceId
       AND RetiredAt IS NULL;
+
+    -- Its clients' readings are cleared outright, in batches (dbo.ClientReadings_Compact), as a deleted
+    -- client's are: nobody can read them any more, and the plan's days would keep them for up to two years.
+    INSERT INTO dbo.DeletedClientReadings (ClientId)
+    SELECT C.Id
+    FROM dbo.Clients C
+    WHERE C.WorkspaceId = @WorkspaceId
+      AND NOT EXISTS (SELECT 1 FROM dbo.DeletedClientReadings D WHERE D.ClientId = C.Id);
 
     COMMIT TRANSACTION;
 

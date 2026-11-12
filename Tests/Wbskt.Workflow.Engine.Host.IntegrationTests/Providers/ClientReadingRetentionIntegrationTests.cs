@@ -149,6 +149,30 @@ public sealed class ClientReadingRetentionIntegrationTests(SqlEdgeFixture fixtur
         Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.DeletedClientReadings WHERE ClientId = @p0", client));
     }
 
+    [SkippableFact]
+    public async Task A_deleted_workspaces_readings_are_cleared_and_nothing_lands_after()
+    {
+        // #773: its clients are revoked, not deleted, and its account copy is kept for the meters, so
+        // without the queue the plan's days would keep the readings for up to two years.
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int workspaceId = Random.Shared.Next(1_000_000, int.MaxValue - 1);
+        int client = await CreateClientAsync(plan: "Business", workspaceId);
+        int neighbour = await CreateClientAsync(plan: "Business");
+        await ReadAsync(client, Now.AddDays(-40), 1);
+        await CompactAsync();
+        await ReadAsync(client, Now.AddHours(-1), 2);
+        await ReadAsync(neighbour, Now.AddHours(-1), 2);
+
+        await RetireAsync(workspaceId);
+        await ReadAsync(client, Now, 3);
+        await CompactAsync();
+
+        Assert.Equal(0, await CountAsync("dbo.ClientReadings", client));
+        Assert.Equal(0, await CountAsync("dbo.ClientReadingsHourly", client));
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.DeletedClientReadings WHERE ClientId = @p0", client));
+        Assert.Equal(1, await CountAsync("dbo.ClientReadings", neighbour));
+    }
+
     private Task<ReadingCompaction> CompactAsync() => Provider().CompactAsync(Now, Retention, BatchSize);
 
     private Task ReadAsync(int clientId, DateTime sentAt, double value, DateTime? receivedAt = null) =>
@@ -188,6 +212,15 @@ public sealed class ClientReadingRetentionIntegrationTests(SqlEdgeFixture fixtur
             INSERT INTO dbo.Clients (WorkspaceId, PolicyId, Name, SecretHash, Status)
             OUTPUT INSERTED.Id VALUES (@p0, @p1, 'readings-retention', 0x00, 1);
             """, workspaceId, policyId);
+    }
+
+    private async Task RetireAsync(int workspaceId)
+    {
+        await using var conn = new SqlConnection(fixture.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = new SqlCommand("dbo.Workspace_Retire", conn) { CommandType = System.Data.CommandType.StoredProcedure };
+        cmd.Parameters.AddWithValue("@WorkspaceId", workspaceId);
+        await cmd.ExecuteNonQueryAsync();
     }
 
     private Task<int> CountAsync(string table, int clientId) =>
