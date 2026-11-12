@@ -543,7 +543,11 @@ jobs:
           count=$(jq '[.projects[] | select(has("frameworks"))] | length' vuln.json)
           if [[ "$count" -gt 0 ]]; then
             echo "::error::vulnerable NuGet packages found in ${count} project(s)"
-            jq -r '.projects[] | select(has("frameworks")) | .path' vuln.json
+            # One line per finding, so the log names what to bump and not only where it is used.
+            jq -r '.projects[] | select(has("frameworks")) | .path as $project
+              | .frameworks[] | ((.topLevelPackages // []) + (.transitivePackages // []))[]
+              | .id as $id | .resolvedVersion as $version | (.vulnerabilities // [])[]
+              | "\($id) \($version) \(.severity) \(.advisoryurl)  in \($project)"' vuln.json | sort -u
             exit 1
           fi
           echo "no vulnerable packages"
