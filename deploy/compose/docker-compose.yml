@@ -253,8 +253,9 @@ services:
     labels:
       - traefik.enable=true
       # /api/internal is host-to-host only (management calls auth on http://auth:8080), so no
-      # public router may match it.
-      - traefik.http.routers.auth.rule=Host(`auth.${DOMAIN}`) && !PathPrefix(`/api/internal`)
+      # public router may match it. Case-insensitive, because the hosts route /API/Internal there
+      # too; the hosts also refuse a forwarded request for it (InternalRouteGuardMiddleware).
+      - traefik.http.routers.auth.rule=Host(`auth.${DOMAIN}`) && !PathRegexp(`(?i)^/api/internal(/|$$)`)
       - traefik.http.routers.auth.entrypoints=websecure
       - traefik.http.routers.auth.tls.certresolver=letsencrypt
       - traefik.http.routers.auth.service=auth
@@ -322,7 +323,7 @@ services:
       replicas: ${MANAGEMENT_REPLICAS:-1}
     labels:
       - traefik.enable=true
-      - traefik.http.routers.management.rule=Host(`api.${DOMAIN}`) && !PathPrefix(`/api/internal`)
+      - traefik.http.routers.management.rule=Host(`api.${DOMAIN}`) && !PathRegexp(`(?i)^/api/internal(/|$$)`)
       - traefik.http.routers.management.entrypoints=websecure
       - traefik.http.routers.management.tls.certresolver=letsencrypt
       - traefik.http.services.management.loadbalancer.server.port=8080

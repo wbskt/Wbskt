@@ -19,17 +19,33 @@ public sealed partial class PublicRoutingTests
 
     private static readonly IReadOnlyDictionary<string, Router> Routers = ReadRouters();
 
-    [Fact]
-    public void No_public_router_reaches_an_internal_route()
+    /// <summary>
+    /// The hosts match routes ignoring case, so a router has to exclude every spelling of the prefix,
+    /// not only the lower-case one (#775).
+    /// </summary>
+    [Theory]
+    [InlineData("/api/internal/workspaces/resolve")]
+    [InlineData("/API/internal/workspaces/resolve")]
+    [InlineData("/Api/Internal/users/me")]
+    [InlineData("/api/INTERNAL")]
+    public void No_public_router_reaches_an_internal_route(string internalPath)
     {
-        string internalPath = "/" + InternalRoutes.ResolveWorkspace;
-
         var reaching = Routers.Values
             .Where(r => r.Public && r.Service is "auth" or "management" or "client-auth")
-            .Where(r => !r.Rule.Contains($"!PathPrefix(`/{InternalRoutes.Prefix}`)", StringComparison.Ordinal) && r.Admits(internalPath))
+            .Where(r => r.Admits(internalPath) && !r.Excludes(internalPath))
             .Select(r => r.Name);
 
         Assert.Empty(reaching);
+    }
+
+    [Theory]
+    [InlineData("/api/v1/workspaces")]
+    [InlineData("/api/internals")]
+    [InlineData("/api/v1/internal")]
+    public void The_internal_exclusion_takes_only_the_internal_prefix(string path)
+    {
+        Assert.False(Routers["management"].Excludes(path));
+        Assert.False(Routers["auth"].Excludes(path));
     }
 
     [Fact]
@@ -102,7 +118,7 @@ public sealed partial class PublicRoutingTests
         /// <summary>
         /// Whether the rule's path constraints let <paramref name="path"/> through. Only the positive
         /// PathPrefix and PathRegexp matchers are read, OR'd together; a rule without any admits every
-        /// path. Negations are checked by the tests that care about them.
+        /// path. Negations are read by <see cref="Excludes"/>.
         /// </summary>
         public bool Admits(string path)
         {
@@ -115,6 +131,11 @@ public sealed partial class PublicRoutingTests
 
             return prefixes.Any(p => path.StartsWith(p, StringComparison.Ordinal)) || regexes.Any(r => Regex.IsMatch(path, r));
         }
+
+        /// <summary>Whether one of the rule's negated PathPrefix or PathRegexp matchers turns <paramref name="path"/> away.</summary>
+        public bool Excludes(string path) =>
+            NegatedPathPrefix().Matches(Rule).Any(m => path.StartsWith(m.Groups["value"].Value, StringComparison.Ordinal))
+            || NegatedPathRegexp().Matches(Rule).Any(m => Regex.IsMatch(path, m.Groups["value"].Value));
     }
 
     private static IReadOnlyDictionary<string, Router> ReadRouters()
@@ -180,8 +201,14 @@ public sealed partial class PublicRoutingTests
     [GeneratedRegex(@"(?<!!)PathPrefix\(`(?<value>[^`]*)`\)")]
     private static partial Regex PositivePathPrefix();
 
-    [GeneratedRegex(@"PathRegexp\(`(?<value>[^`]*)`\)")]
+    [GeneratedRegex(@"(?<!!)PathRegexp\(`(?<value>[^`]*)`\)")]
     private static partial Regex PathRegexp();
+
+    [GeneratedRegex(@"!PathPrefix\(`(?<value>[^`]*)`\)")]
+    private static partial Regex NegatedPathPrefix();
+
+    [GeneratedRegex(@"!PathRegexp\(`(?<value>[^`]*)`\)")]
+    private static partial Regex NegatedPathRegexp();
 
     [GeneratedRegex(@"\{[^}]*\}")]
     private static partial Regex RouteParameter();

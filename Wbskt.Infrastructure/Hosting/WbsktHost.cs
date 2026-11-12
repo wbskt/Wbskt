@@ -119,7 +119,8 @@ public static class WbsktHost
     }
 
     /// <summary>
-    /// The middleware every host runs, in one order: forwarded headers (so everything after sees the
+    /// The middleware every host runs, in one order: the internal route guard (which needs the forwarded
+    /// headers as they arrived), forwarded headers (so everything after sees the
     /// real client address), exception handling, Problem Details for bare error statuses, CORS, the rate limiter (before authentication, so a
     /// flood is refused before a token is validated), authentication, the identity middleware, the
     /// per-user budget (after authentication, since it partitions on the user), and authorization. A
@@ -127,6 +128,8 @@ public static class WbsktHost
     /// </summary>
     public static WebApplication UseWbsktPipeline(this WebApplication app)
     {
+        app.UseMiddleware<InternalRouteGuardMiddleware>();
+
         // Not IConfigureOptions<ForwardedHeadersOptions>: the web host always registers one of those.
         if (app.Services.GetService<ForwardedHeadersRegistered>() is not null)
         {
