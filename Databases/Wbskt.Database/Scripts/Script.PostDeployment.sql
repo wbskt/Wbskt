@@ -130,3 +130,13 @@ BEGIN
     EXEC (N'GRANT EXECUTE ON SCHEMA::dbo TO [wbskt_engine]');
 END
 GO
+
+-- 4. Mark the counters that held unposted credits before RunCounters.HasUnposted existed.
+-- The column arrives as 0 on every row, and Run_Start and dbo.WorkspaceCreditsSpent read unposted
+-- credits through it alone, so without this a run that consumed credits before the deploy would not
+-- count against the caps until its next charge or the next post. A no-op once those are posted.
+UPDATE dbo.RunCounters
+    SET HasUnposted = 1
+    WHERE HasUnposted = 0
+        AND CreditsConsumed <> PostedCredits;
+GO

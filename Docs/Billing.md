@@ -118,7 +118,8 @@ outlives the runs.
 `dbo.Run_Start` works out what the tenant has left of its credits for the calendar month (UTC): the plan's
 `CreditsPerMonth` less what the plan itself has covered (the ledger less what was drawn from grants as it
 was posted, `dbo.TenantCreditMonths`), never below zero, plus what the tenant's grants still hold, less
-what its running runs consumed and have not posted yet. It refuses the start (50033) when nothing is
+what its runs consumed and have not posted yet, ended or not (`RunCounters.HasUnposted`, set by each charge
+and cleared by the post), so a run that ends between two posts still counts. It refuses the start (50033) when nothing is
 left, and otherwise cuts the new run's budget to what is. The check takes no lock: starts racing for the
 last credits can overrun by at most the budgets they were given, which together are bounded by what was
 left times the runs going at once. A run already going is never stopped for the month's credits; it stops

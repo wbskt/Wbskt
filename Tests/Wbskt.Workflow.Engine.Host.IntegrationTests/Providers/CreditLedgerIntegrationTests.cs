@@ -131,6 +131,45 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
+    public async Task Credits_an_ended_run_has_not_posted_yet_still_count_against_the_plan_and_the_cap()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        long ended = await StartAsync(wd, startCost: 1m);
+        await ChargeAsync(ended, 4m);
+        await ProviderFactory.Run(fixture.ConnectionString).SetTerminalAsync(ended, RunStatus.Succeeded.ToString(), DateTime.UtcNow, CancellationToken.None);
+
+        Func<Task> overPlan = () => StartAsync(wd, credits: new PlanCredits(5m, null));
+        (await overPlan.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(PlanCreditLimitError);
+
+        decimal spent = await SetCapAsync(workspaceId, 5m);
+        Func<Task> overCap = () => StartAsync(wd, credits: new PlanCredits(1000m, null));
+        (await overCap.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(WorkspaceCreditCapError);
+
+        spent.Should().Be(5m);
+    }
+
+    [SkippableFact]
+    public async Task A_post_clears_an_ended_runs_unposted_mark_and_counts_its_credits_once()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        long ended = await StartAsync(wd, startCost: 1m);
+        await ChargeAsync(ended, 2m);
+        await ProviderFactory.Run(fixture.ConnectionString).SetTerminalAsync(ended, RunStatus.Succeeded.ToString(), DateTime.UtcNow, CancellationToken.None);
+
+        await PostAsync();
+
+        (await ScalarAsync("SELECT CAST(COUNT(*) AS DECIMAL(18, 4)) FROM dbo.RunCounters WHERE RunId = @Id AND HasUnposted = 1", (int)ended)).Should().Be(0m);
+        (await LedgerAsync(workspaceId)).Should().Be(3m);
+        (await SetCapAsync(workspaceId, null)).Should().Be(3m, "the posted credits are not counted again as unposted");
+    }
+
+    [SkippableFact]
     public async Task A_run_started_near_the_end_of_the_credits_gets_only_what_is_left_as_its_budget()
     {
         Skip.IfNot(fixture.IsAvailable, SkipReason);

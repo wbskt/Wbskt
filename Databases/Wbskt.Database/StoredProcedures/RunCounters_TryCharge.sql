@@ -16,6 +16,7 @@ BEGIN
     -- budgets and leases.
     UPDATE rc WITH (ROWLOCK)
     SET rc.CreditsConsumed = rc.CreditsConsumed + @Cost,
+        rc.HasUnposted = CASE WHEN @Cost <> 0 THEN 1 ELSE rc.HasUnposted END,
         rc.UpdatedAt = SYSUTCDATETIME()
     OUTPUT inserted.CreditsConsumed + inserted.ChildCreditsConsumed, COALESCE(inserted.BudgetCeiling, r.CreditBudget) INTO @Charged (Spent, Budget)
     FROM dbo.RunCounters rc
@@ -105,6 +106,7 @@ BEGIN
 
         UPDATE rc WITH (ROWLOCK)
         SET rc.CreditsConsumed = rc.CreditsConsumed + CASE WHEN @BudgetRunId IS NULL THEN @Cost ELSE 0 END,
+            rc.HasUnposted = CASE WHEN @BudgetRunId IS NULL AND @Cost <> 0 THEN 1 ELSE rc.HasUnposted END,
             rc.ChildCreditsConsumed = rc.ChildCreditsConsumed + CASE WHEN @BudgetRunId IS NULL THEN 0 ELSE @Cost END,
             rc.UpdatedAt = SYSUTCDATETIME()
         OUTPUT inserted.CreditsConsumed + inserted.ChildCreditsConsumed, COALESCE(inserted.BudgetCeiling, r.CreditBudget) INTO @Charged (Spent, Budget)
@@ -117,6 +119,7 @@ BEGIN
         BEGIN
             UPDATE dbo.RunCounters WITH (ROWLOCK)
             SET CreditsConsumed = CreditsConsumed + @Cost,
+                HasUnposted = CASE WHEN @Cost <> 0 THEN 1 ELSE HasUnposted END,
                 UpdatedAt = SYSUTCDATETIME()
             WHERE RunId = @RunId;
         END
