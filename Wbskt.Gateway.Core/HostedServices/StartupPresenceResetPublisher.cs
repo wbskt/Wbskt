@@ -25,11 +25,14 @@ internal sealed class StartupPresenceResetPublisher : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Made once, before the first attempt: its time is the start the management host clears presence
+        // up to, and a retry must not move it past clients that have reconnected since.
+        var started = new SocketHostStartedEvent(_hostId);
         for (var attempt = 1; attempt <= MaxAttempts && !stoppingToken.IsCancellationRequested; attempt++)
         {
             try
             {
-                await _eventBus.PublishAsync(new SocketHostStartedEvent(_hostId), stoppingToken);
+                await _eventBus.PublishAsync(started, stoppingToken);
                 _logger.LogInformation("Published SocketHostStartedEvent (presence reset for host {HostId}).", _hostId);
                 return;
             }

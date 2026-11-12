@@ -70,9 +70,10 @@ public interface IClientProvider : IReferenceProvider
     Task<IReadOnlyCollection<ExpiredPresence>> ExpirePresenceAsync(TimeSpan staleAfter, CancellationToken cancellationToken = default);
     /// <summary>
     /// Clears the presence of every client <paramref name="hostId"/> held before it restarted under the
-    /// same id, and returns them. The heartbeat lease cannot clear these: the restarted host renews it.
+    /// same id at <paramref name="startedAtUtc"/> (the host's own clock), and returns them. A client that
+    /// connected to it since is left alone. The heartbeat lease cannot clear these: the restarted host renews it.
     /// </summary>
-    Task<IReadOnlyCollection<ExpiredPresence>> ResetPresenceByHostAsync(string hostId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<ExpiredPresence>> ResetPresenceByHostAsync(string hostId, DateTime startedAtUtc, CancellationToken cancellationToken = default);
     /// <summary>
     /// Clears the presence of clients on <paramref name="hostId"/> that connected more than
     /// <paramref name="margin"/> before <paramref name="takenAtUtc"/> but are not in the host's own

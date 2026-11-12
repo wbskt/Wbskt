@@ -33,7 +33,11 @@ public sealed class SocketHostStartedHandler : IConsumer<SocketHostStartedEvent>
     public async Task Consume(ConsumeContext<SocketHostStartedEvent> context)
     {
         string hostId = context.Message.HostId;
-        var cleared = await _clientProvider.ResetPresenceByHostAsync(hostId, context.CancellationToken);
+
+        // Everything is dated by the host's start, on the host's clock, not by when this runs: a client
+        // that reconnected in between, at a later time on that clock, keeps its presence either way round.
+        var startedAt = context.Message.CreatedAtUtc;
+        var cleared = await _clientProvider.ResetPresenceByHostAsync(hostId, startedAt, context.CancellationToken);
         if (cleared.Count == 0)
         {
             return;
@@ -46,7 +50,8 @@ public sealed class SocketHostStartedHandler : IConsumer<SocketHostStartedEvent>
             // costs the announcement, so it is logged and the rest still go out.
             try
             {
-                await _eventBus.PublishAsync(new ClientDisconnectedEvent(client.ClientRefId, client.ClientId, client.WorkspaceId, Reason, hostId), context.CancellationToken);
+                var disconnected = new ClientDisconnectedEvent(client.ClientRefId, client.ClientId, client.WorkspaceId, Reason, hostId) { CreatedAtUtc = startedAt };
+                await _eventBus.PublishAsync(disconnected, context.CancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

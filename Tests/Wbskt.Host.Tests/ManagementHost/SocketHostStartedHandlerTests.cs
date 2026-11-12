@@ -12,21 +12,24 @@ namespace Wbskt.Host.Tests.ManagementHost;
 
 public sealed class SocketHostStartedHandlerTests
 {
+    // The host's own start, earlier than this test's clock: the repair and its announcements carry it.
+    private static readonly DateTime StartedAt = new(2026, 11, 12, 6, 0, 0, DateTimeKind.Utc);
+
     [Fact]
     public async Task Clears_only_the_restarted_host_and_announces_each_client_as_disconnected()
     {
         var first = new ExpiredPresence(1, Guid.NewGuid(), 7, "socket-1");
         var second = new ExpiredPresence(2, Guid.NewGuid(), 8, "socket-1");
         var provider = new Mock<IClientProvider>();
-        provider.Setup(p => p.ResetPresenceByHostAsync("socket-1", It.IsAny<CancellationToken>()))
+        provider.Setup(p => p.ResetPresenceByHostAsync("socket-1", StartedAt, It.IsAny<CancellationToken>()))
             .ReturnsAsync([first, second]);
         var bus = new Mock<IEventBus>();
 
         await CreateHandler(provider.Object, bus.Object).Consume(Context("socket-1"));
 
-        provider.Verify(p => p.ResetPresenceByHostAsync("socket-1", It.IsAny<CancellationToken>()), Times.Once);
+        provider.Verify(p => p.ResetPresenceByHostAsync("socket-1", StartedAt, It.IsAny<CancellationToken>()), Times.Once);
         bus.Verify(b => b.PublishAsync(
-            It.Is<ClientDisconnectedEvent>(e => e.ClientRefId == first.ClientRefId && e.ClientId == 1 && e.WorkspaceId == 7 && e.HostId == "socket-1" && e.Reason == SocketHostStartedHandler.Reason),
+            It.Is<ClientDisconnectedEvent>(e => e.ClientRefId == first.ClientRefId && e.ClientId == 1 && e.WorkspaceId == 7 && e.HostId == "socket-1" && e.Reason == SocketHostStartedHandler.Reason && e.CreatedAtUtc == StartedAt),
             It.IsAny<CancellationToken>()), Times.Once);
         bus.Verify(b => b.PublishAsync(It.Is<ClientDisconnectedEvent>(e => e.ClientRefId == second.ClientRefId), It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -35,7 +38,7 @@ public sealed class SocketHostStartedHandlerTests
     public async Task A_host_on_a_fresh_id_announces_nothing()
     {
         var provider = new Mock<IClientProvider>();
-        provider.Setup(p => p.ResetPresenceByHostAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        provider.Setup(p => p.ResetPresenceByHostAsync(It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
         var bus = new Mock<IEventBus>();
 
         await CreateHandler(provider.Object, bus.Object).Consume(Context("socket-new"));
@@ -47,7 +50,7 @@ public sealed class SocketHostStartedHandlerTests
     public async Task A_failed_announcement_does_not_stop_the_others()
     {
         var provider = new Mock<IClientProvider>();
-        provider.Setup(p => p.ResetPresenceByHostAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        provider.Setup(p => p.ResetPresenceByHostAsync(It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new ExpiredPresence(1, Guid.NewGuid(), 7, "h"), new ExpiredPresence(2, Guid.NewGuid(), 7, "h")]);
         var bus = new Mock<IEventBus>();
         bus.SetupSequence(b => b.PublishAsync(It.IsAny<ClientDisconnectedEvent>(), It.IsAny<CancellationToken>()))
@@ -67,7 +70,7 @@ public sealed class SocketHostStartedHandlerTests
     private static ConsumeContext<SocketHostStartedEvent> Context(string hostId)
     {
         var ctx = new Mock<ConsumeContext<SocketHostStartedEvent>>();
-        ctx.SetupGet(x => x.Message).Returns(new SocketHostStartedEvent(hostId));
+        ctx.SetupGet(x => x.Message).Returns(new SocketHostStartedEvent(hostId) { CreatedAtUtc = StartedAt });
         ctx.SetupGet(x => x.CancellationToken).Returns(CancellationToken.None);
         return ctx.Object;
     }
