@@ -46,7 +46,7 @@ public sealed class RunCeilingWarningE2ETests(ServicesFixture fixture)
                 else
                 {
                     // #771: the refusal names the plan's limit, not a concurrency policy.
-                    response.StatusCode.Should().Be(System.Net.HttpStatusCode.Conflict);
+                    response.StatusCode.Should().Be(HttpStatusCode.Conflict);
                     (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("PLAN_RUN_LIMIT_REACHED");
                 }
             }

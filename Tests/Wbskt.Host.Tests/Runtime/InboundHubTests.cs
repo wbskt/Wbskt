@@ -113,6 +113,22 @@ public sealed class InboundHubTests
         Assert.Equal(1, counts.Get("client", "Failed"));
     }
 
+    [Fact]
+    public async Task Handle_counts_a_busy_start_as_busy_and_rethrows_it()
+    {
+        // Contention, not a fault: counted Busy and logged below Error, still rethrown for redelivery.
+        using var metrics = new WorkflowMetrics();
+        using var counts = new InboundEventCounts(metrics);
+        var logger = new RecordingLogger();
+        var hub = new InboundHub(new ThrowingTriggerDispatcher(new RunStartBusyException(3)), new FixedClock(), logger, metrics: metrics);
+
+        await Assert.ThrowsAsync<RunStartBusyException>(() => hub.HandleAsync(new InboundEvent("client", [], "evt-1", new Dictionary<string, System.Text.Json.JsonElement>(), DateTime.UtcNow), CancellationToken.None));
+
+        Assert.Equal(1, counts.Get("client", "Busy"));
+        Assert.Equal(0, counts.Get("client", "Failed"));
+        Assert.DoesNotContain(logger.Levels, level => level >= LogLevel.Error);
+    }
+
     private sealed class InboundEventCounts : IDisposable
     {
         private readonly MeterListener _listener = new();
@@ -156,11 +172,11 @@ public sealed class InboundHubTests
         }
     }
 
-    private sealed class ThrowingTriggerDispatcher : ITriggerDispatcher
+    private sealed class ThrowingTriggerDispatcher(Exception? exception = null) : ITriggerDispatcher
     {
         public Task<TriggerDispatchResult> DispatchAsync(InboundEvent evt, CancellationToken ct)
         {
-            throw new InvalidOperationException("boom");
+            throw exception ?? new InvalidOperationException("boom");
         }
     }
 

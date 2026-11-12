@@ -12,7 +12,8 @@ public interface ITriggerDispatcher
 /// </summary>
 /// <param name="Outcome">
 /// A summary of <paramref name="Registrations"/>, by precedence: <c>StartedRun</c> if any registration
-/// started a run, else <c>Queued</c>, else <c>Dropped</c>, else <c>NoRegistration</c>. A summary of a
+/// started a run, else <c>Queued</c>, <c>Dropped</c>, <c>Refused</c>, <c>Filtered</c> or <c>SecretMismatch</c>,
+/// in that order, else <c>NoRegistration</c>. A summary of a
 /// fan-out is necessarily lossy - read <paramref name="Registrations"/> for what each one actually did.
 /// </param>
 /// <param name="RunId">
