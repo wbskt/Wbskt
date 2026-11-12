@@ -627,6 +627,8 @@ admin unless stated.
 | `MEM_35` | − | Suspend without `users.manage` | **403** |
 | `MEM_36` | − | Suspend an unknown `userRef` | **403** `USER_NOT_FOUND` |
 | `MEM_37` | − | An administrator suspends themselves | **400** `AUTH_CANNOT_SUSPEND_SELF`. The database also refuses any suspension that leaves the tenant with no administrator (50008). `MEM_37b`: the old `/active` route is gone |
+| `MEM_38` | − | A member with tenant-wide `users.manage` but not `roles.manage` adds themselves to a group that carries roles | **403** `PERMISSION_UNAUTHORIZED`; a group with no roles still answers **204** |
+| `MEM_39` | − | The same member invites an address with a `roleRef` | **403** `PERMISSION_UNAUTHORIZED`; without a `roleRef` the invitation is issued |
 
 ---
 

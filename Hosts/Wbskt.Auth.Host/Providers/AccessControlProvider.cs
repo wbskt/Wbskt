@@ -341,6 +341,15 @@ internal sealed class AccessControlProvider : BaseSqlProvider, IAccessControlPro
         );
     }
 
+    public async Task<bool> GroupCarriesRolesAsync(int groupId, int tenantId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteScalarAsync<bool>("dbo.GroupRole_Verify", p =>
+        {
+            p.AddWithValue("@GroupId", groupId);
+            p.AddWithValue("@TenantId", tenantId);
+        }, cancellationToken);
+    }
+
     public async Task<IReadOnlyCollection<RoleAssignmentResponse>> GetGroupRolesAsync(int groupId, int tenantId, CancellationToken cancellationToken = default)
     {
         return await ExecuteCollectionAsync(

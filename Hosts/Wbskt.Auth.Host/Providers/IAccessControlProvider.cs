@@ -49,5 +49,11 @@ internal interface IAccessControlProvider
     Task<IReadOnlyCollection<UserPermissionAssignmentResponse>> GetUserPermissionsAsync(int userId, int tenantId, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<GroupMembershipResponse>> GetUserGroupsAsync(int userId, int tenantId, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<RoleAssignmentResponse>> GetGroupRolesAsync(int groupId, int tenantId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Whether a member of the group would hold a role through it or a group above it
+    /// (<c>dbo.GroupRole_Verify</c>).
+    /// </summary>
+    Task<bool> GroupCarriesRolesAsync(int groupId, int tenantId, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<RolePermissionAssignmentResponse>> GetRolePermissionsAsync(int roleId, CancellationToken cancellationToken = default);
 }

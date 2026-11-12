@@ -250,6 +250,31 @@ public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
         Assert.Null(afterAnother);
     }
 
+    /// <summary>
+    /// <c>dbo.GroupRole_Verify</c>: a group carries roles when it or any group above it has one, since
+    /// members inherit their ancestors' roles. Adding to such a group needs roles.manage.
+    /// </summary>
+    [SkippableFact]
+    public async Task A_group_carries_the_roles_of_every_group_above_it()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var (tenantId, _, adminRoleId) = await CreateTenantAsync();
+        int top = await ScalarAsync<int>("INSERT INTO dbo.Groups (TenantId, Name) OUTPUT INSERTED.Id VALUES (@p0, N'top');", tenantId);
+        int middle = await ScalarAsync<int>("INSERT INTO dbo.Groups (TenantId, Name, ParentGroupId) OUTPUT INSERTED.Id VALUES (@p0, N'middle', @p1);", tenantId, top);
+        int leaf = await ScalarAsync<int>("INSERT INTO dbo.Groups (TenantId, Name, ParentGroupId) OUTPUT INSERTED.Id VALUES (@p0, N'leaf', @p1);", tenantId, middle);
+
+        bool before = await ProcScalarAsync<bool>("dbo.GroupRole_Verify", ("@GroupId", leaf), ("@TenantId", tenantId));
+        await ExecSqlAsync("INSERT INTO dbo.GroupRoles (GroupId, RoleId, TenantId) VALUES (@p0, @p1, @p2);", top, adminRoleId, tenantId);
+        bool leafAfter = await ProcScalarAsync<bool>("dbo.GroupRole_Verify", ("@GroupId", leaf), ("@TenantId", tenantId));
+        bool topAfter = await ProcScalarAsync<bool>("dbo.GroupRole_Verify", ("@GroupId", top), ("@TenantId", tenantId));
+        bool otherTenant = await ProcScalarAsync<bool>("dbo.GroupRole_Verify", ("@GroupId", leaf), ("@TenantId", tenantId + 100000));
+
+        Assert.False(before);
+        Assert.True(leafAfter);
+        Assert.True(topAfter);
+        Assert.False(otherTenant);
+    }
+
     [SkippableFact]
     public async Task Concurrent_removals_cannot_both_succeed()
     {

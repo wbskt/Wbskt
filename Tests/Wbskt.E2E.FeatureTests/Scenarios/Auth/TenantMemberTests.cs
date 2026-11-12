@@ -730,4 +730,61 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
 
         response.IsSuccessStatusCode.Should().BeFalse();
     }
+    // ── Granting roles needs roles.manage ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// A team lead given users.read and users.manage, tenant-wide, to bring people in. Nothing here
+    /// lets them assign roles.
+    /// </summary>
+    private async Task<(ServicesFixture.TestUser Lead, Guid LeadRef)> ArrangeLeadAsync(ServicesFixture.TestUser admin, Guid tenantRef)
+    {
+        var (lead, leadRef, _) = await ArrangeMemberAsync(admin, tenantRef);
+        var roleRef = await CreateRoleWithPermissionAsync(admin.Token, tenantRef, "users.manage");
+        await fixture.Auth.As(admin.Token).GrantRolePermissionRawAsync(tenantRef, roleRef, new GrantRolePermissionRequest(Slug: "users.read", IsDeny: false));
+        (await fixture.Auth.As(admin.Token).AssignMemberRoleRawAsync(tenantRef, leadRef, roleRef, new AssignmentScopeRequest(WorkspaceRef: (Guid?)null)))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        return (lead, leadRef);
+    }
+
+    [SkippableFact]
+    public async Task MEM_38_AddingToAGroupThatCarriesRoles_NeedsRolesManage()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var (lead, leadRef) = await ArrangeLeadAsync(admin, tenantRef);
+        var plain = await fixture.CreateGroupAsync(admin.Token, tenantRef);
+        var privileged = await fixture.CreateGroupAsync(admin.Token, tenantRef);
+        var roleRef = await CreateRoleWithPermissionAsync(admin.Token, tenantRef, "roles.manage");
+        await fixture.Auth.As(admin.Token).AssignGroupRoleRawAsync(tenantRef, privileged, roleRef, new AssignmentScopeRequest(WorkspaceRef: (Guid?)null));
+
+        // Joining the group would hand the lead its roles, which they may not assign.
+        var refused = await fixture.Auth.As(lead.Token).AddMemberToGroupRawAsync(tenantRef, leadRef, privileged);
+        var allowed = await fixture.Auth.As(lead.Token).AddMemberToGroupRawAsync(tenantRef, leadRef, plain);
+
+        refused.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await ServicesFixture.ReadErrorCodeAsync(refused)).Should().Be("PERMISSION_UNAUTHORIZED");
+        allowed.StatusCode.Should().Be(HttpStatusCode.NoContent, "a group with no roles grants nothing, so users.manage is enough");
+    }
+
+    [SkippableFact]
+    public async Task MEM_39_AnInvitationNamingARole_NeedsRolesManage()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var (lead, _) = await ArrangeLeadAsync(admin, tenantRef);
+        var roleRef = await CreateRoleWithPermissionAsync(admin.Token, tenantRef, "roles.manage");
+        var (_, secondAddress, _) = ServicesFixture.NewCredentials();
+
+        // Accepting grants the role, so this would let the lead give a second address of their own
+        // whatever role they liked.
+        var withRole = await fixture.Auth.As(lead.Token).CreateInvitationRawAsync(tenantRef, new CreateInvitationRequest(secondAddress, roleRef));
+        var withoutRole = await fixture.Auth.As(lead.Token).CreateInvitationRawAsync(tenantRef, new CreateInvitationRequest(secondAddress));
+
+        withRole.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await ServicesFixture.ReadErrorCodeAsync(withRole)).Should().Be("PERMISSION_UNAUTHORIZED");
+        withoutRole.IsSuccessStatusCode.Should().BeTrue("inviting without a role needs only users.manage");
+    }
 }
