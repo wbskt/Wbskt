@@ -23,14 +23,42 @@ BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
 
+    SET @RefId = NEWID();
+
+    BEGIN TRANSACTION;
+
+    -- Two creates from the same account are counted one after the other. An application lock rather than
+    -- a lock on the Users row: User_Delete locks TenantMembers before Users, and taking them the other way
+    -- round here could deadlock the two.
+    DECLARE @Resource NVARCHAR(255) = CONCAT(N'Tenant_Create:', @OwnerUserId);
+    EXEC sp_getapplock @Resource = @Resource, @LockMode = N'Exclusive', @LockOwner = N'Transaction';
+
     IF NOT EXISTS (SELECT 1 FROM dbo.Users WHERE Id = @OwnerUserId)
     BEGIN
         THROW 50010, 'Owner user does not exist.', 1;
     END
 
-    SET @RefId = NEWID();
-
-    BEGIN TRANSACTION;
+    -- One unpaid tenant per account: each Free tenant brings its own workspace and allowance, so
+    -- without a cap one sign-up could create as many as it liked. A Free tenant counts while the owner
+    -- is its only member, suspended members aside, as the seat count has it; one that pays, or that
+    -- others have joined, does not. The seeded default tenant (Id 1) is the operator's own and does not
+    -- count. A tenant upgraded, used to create another and then let lapse to Free does count again,
+    -- which leaves one more Free tenant per billing cycle paid: an accepted gap.
+    IF EXISTS (
+        SELECT 1
+        FROM dbo.TenantMembers tm
+        INNER JOIN dbo.Tenants t ON t.Id = tm.TenantId
+        WHERE tm.UserId = @OwnerUserId
+          AND t.Id <> 1
+          AND t.PlanCode = N'Free'
+          AND NOT EXISTS (
+              SELECT 1
+              FROM dbo.TenantMembers other
+              WHERE other.TenantId = tm.TenantId
+                AND other.UserId <> @OwnerUserId))
+    BEGIN
+        THROW 50036, 'You already have a Free tenant to yourself. Upgrade it to a paid plan before creating another.', 1;
+    END
 
     INSERT INTO dbo.Tenants (RefId, Name, Description)
     VALUES (@RefId, @Name, @Description);

@@ -77,6 +77,7 @@ public sealed class AuthFaultTests
     [InlineData(50029, "AUTH_OPERATION_REJECTED")]
     [InlineData(50030, "PLAN_WORKSPACE_LIMIT_REACHED")]
     [InlineData(50031, "PLAN_MEMBER_LIMIT_REACHED")]
+    [InlineData(50036, "TENANT_FREE_LIMIT_REACHED")]
     public void Each_guard_has_its_error(int number, string code)
     {
         Assert.True(SqlGuardErrors.TryTranslate(SqlExceptions.WithNumber(number, "guard"), null, out var error));
