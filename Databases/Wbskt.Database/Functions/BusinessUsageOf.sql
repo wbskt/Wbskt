@@ -3,7 +3,7 @@
 -- any tenant on Business now whose plan copy has not changed since before the month ended (one the
 -- tracker missed, or a month before it ran). Client messages are summed from the message meter
 -- (dbo.WorkspaceMessageUsage) across every workspace the tenant has had, deleted ones included (their
--- copies are kept, see dbo.WorkspaceAccounts), and credits are what the month posted with the part drawn
+-- copies are kept until every month they used is closed, see dbo.WorkspaceAccount_DeleteRetired), and credits are what the month posted with the part drawn
 -- from credit packs (dbo.TenantCreditMonths).
 CREATE FUNCTION dbo.BusinessUsageOf (@MonthStart DATE)
 RETURNS TABLE

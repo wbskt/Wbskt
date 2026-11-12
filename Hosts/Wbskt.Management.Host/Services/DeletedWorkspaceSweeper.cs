@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.Options;
 using Wbskt.Infrastructure.Hosting;
 using Wbskt.Management.Host.Models;
@@ -60,30 +61,59 @@ public sealed class DeletedWorkspaceSweeper : PeriodicWorker
         _grace = options.Value.GracePeriod < TimeSpan.Zero ? TimeSpan.Zero : options.Value.GracePeriod;
     }
 
+    internal const int PruneBatchSize = 500;
+
     protected override string Name => "Deleted workspace sweep";
 
     protected override TimeSpan Interval { get; }
 
     protected override async Task RunOnceAsync(IServiceProvider services, CancellationToken ct)
     {
+        // The prune needs nothing from the auth host, so it runs when the sweep fails too. Its own
+        // failure is logged here, so it cannot take the place of the sweep's, which fails the tick.
+        Exception? sweepFailure = null;
         try
         {
             await SweepAsync(services, ct);
         }
-        finally
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            sweepFailure = ex;
+        }
+
+        ct.ThrowIfCancellationRequested();
+        try
         {
             await PruneAccountsAsync(services, ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested && sweepFailure is not null)
+        {
+            Logger.LogError(ex, "Pruning the account copies of deleted workspaces failed.");
+        }
+
+        if (sweepFailure is not null)
+        {
+            ExceptionDispatchInfo.Throw(sweepFailure);
         }
     }
 
     /// <summary>
-    /// Deletes the account copies of deleted workspaces that no meter or retention sweep reads any more.
-    /// Returns how many went.
+    /// Deletes the account copies of deleted workspaces that no meter or retention sweep reads any more,
+    /// <see cref="PruneBatchSize"/> at a time. Returns how many went.
     /// </summary>
     internal async Task<int> PruneAccountsAsync(IServiceProvider services, CancellationToken cancellationToken)
     {
         var provider = services.GetRequiredService<IWorkspaceRetirementProvider>();
-        int pruned = await provider.DeleteRetiredAccountsAsync(_timeProvider.GetUtcNow().UtcDateTime, cancellationToken);
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        int pruned = 0;
+        int batch;
+        do
+        {
+            batch = await provider.DeleteRetiredAccountsAsync(now, PruneBatchSize, cancellationToken);
+            pruned += batch;
+        }
+        while (batch == PruneBatchSize);
+
         if (pruned > 0)
         {
             Logger.LogInformation("Deleted the account copies of {Count} deleted workspace(s) that nothing reads any more.", pruned);

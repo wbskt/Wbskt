@@ -78,7 +78,7 @@ BEGIN
     -- Its copy of the tenant's plan is kept and marked: what the workspace spent this month still counts
     -- against the tenant's credits and messages (dbo.TenantWorkspaces), and the retention sweeps still
     -- find its history. Deleting it handed the month's usage back, so deleting a workspace and making
-    -- another reset the meters.
+    -- another reset the meters. dbo.WorkspaceAccount_DeleteRetired prunes it once nothing reads it.
     UPDATE dbo.WorkspaceAccounts
     SET RetiredAt = SYSUTCDATETIME()
     WHERE WorkspaceId = @WorkspaceId
