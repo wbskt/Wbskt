@@ -21,5 +21,5 @@ public interface IWorkspaceRetirementProvider
     /// Deletes the account copies of deleted workspaces that no meter or retention sweep reads any more
     /// (<c>dbo.WorkspaceAccount_DeleteRetired</c>). Returns how many went.
     /// </summary>
-    Task<int> DeleteRetiredAccountsAsync(DateTime nowUtc, CancellationToken cancellationToken = default);
+    Task<int> DeleteRetiredAccountsAsync(DateTime nowUtc, int batchSize, CancellationToken cancellationToken = default);
 }

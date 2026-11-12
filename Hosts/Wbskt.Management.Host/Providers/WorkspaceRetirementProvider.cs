@@ -1,3 +1,4 @@
+using System.Data;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
 
@@ -36,11 +37,15 @@ internal sealed class WorkspaceRetirementProvider : BaseSqlProvider, IWorkspaceR
             cancellationToken);
     }
 
-    public async Task<int> DeleteRetiredAccountsAsync(DateTime nowUtc, CancellationToken cancellationToken = default)
+    public async Task<int> DeleteRetiredAccountsAsync(DateTime nowUtc, int batchSize, CancellationToken cancellationToken = default)
     {
         return await ExecuteScalarAsync<int>(
             "dbo.WorkspaceAccount_DeleteRetired",
-            p => p.AddWithValue("@Now", nowUtc),
+            p =>
+            {
+                p.Add("@Now", SqlDbType.DateTime2).Value = nowUtc;
+                p.AddWithValue("@BatchSize", batchSize);
+            },
             cancellationToken);
     }
 }

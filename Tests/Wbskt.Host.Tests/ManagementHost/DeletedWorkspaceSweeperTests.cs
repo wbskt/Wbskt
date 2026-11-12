@@ -113,7 +113,44 @@ public sealed class DeletedWorkspaceSweeperTests : IDisposable
 
         await Assert.ThrowsAsync<HttpRequestException>(() => Sweeper().TickAsync(CancellationToken.None));
 
-        _provider.Verify(p => p.DeleteRetiredAccountsAsync(Now.UtcDateTime, It.IsAny<CancellationToken>()), Times.Once);
+        _provider.Verify(p => p.DeleteRetiredAccountsAsync(Now.UtcDateTime, DeletedWorkspaceSweeper.PruneBatchSize, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_tick_prunes_batch_after_batch_until_one_comes_back_short()
+    {
+        _auth.Setup(a => a.GetDeletedBetweenAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        _provider.SetupSequence(p => p.DeleteRetiredAccountsAsync(It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DeletedWorkspaceSweeper.PruneBatchSize)
+            .ReturnsAsync(3);
+
+        await Sweeper().TickAsync(CancellationToken.None);
+
+        _provider.Verify(p => p.DeleteRetiredAccountsAsync(Now.UtcDateTime, DeletedWorkspaceSweeper.PruneBatchSize, It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task A_prune_that_fails_after_a_failed_sweep_leaves_the_sweep_failure_to_fail_the_tick()
+    {
+        // The tick logs only the exception it ends with; the auth host being down is the one to see.
+        _auth.Setup(a => a.GetDeletedBetweenAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("auth down"));
+        _provider.Setup(p => p.DeleteRetiredAccountsAsync(It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TimeoutException("database busy"));
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => Sweeper().TickAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task A_prune_that_fails_after_a_good_sweep_fails_the_tick()
+    {
+        _auth.Setup(a => a.GetDeletedBetweenAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        _provider.Setup(p => p.DeleteRetiredAccountsAsync(It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TimeoutException("database busy"));
+
+        await Assert.ThrowsAsync<TimeoutException>(() => Sweeper().TickAsync(CancellationToken.None));
     }
 
     [Fact]

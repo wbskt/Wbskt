@@ -1,7 +1,8 @@
 -- The workspaces whose usage counts against the same plan limits as @WorkspaceId: every workspace of
 -- @TenantId (from dbo.WorkspaceAccounts), and @WorkspaceId itself even before its copy has arrived.
 -- With @TenantId NULL (no copy yet, treated as Free) it is @WorkspaceId alone. A deleted workspace's copy
--- is kept (RetiredAt), so what it spent still counts; it has nothing running and no live clients, so it
+-- is kept (RetiredAt) until dbo.WorkspaceAccount_DeleteRetired prunes it, after any month a meter
+-- reads, so what it spent still counts; it has nothing running and no live clients, so it
 -- adds nothing to the counts of those.
 CREATE FUNCTION dbo.TenantWorkspaces (@WorkspaceId INT, @TenantId INT)
 RETURNS TABLE

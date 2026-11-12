@@ -124,8 +124,8 @@ public sealed class WorkspaceRetirementIntegrationTests(SqlEdgeFixture fixture)
 
     /// <summary>
     /// #803: a deleted workspace's account copy goes once nothing reads it: it was retired before last
-    /// month, the tenant's month no longer sums its usage, and no run or reading is left for the
-    /// retention sweeps to find through it. Any one of those keeps it.
+    /// month, the tenant's month no longer sums its usage, every month it sent messages in is closed, and
+    /// no run or reading is left for the retention sweeps to find through it. Any one of those keeps it.
     /// </summary>
     [SkippableFact]
     public async Task A_retired_account_copy_is_pruned_once_nothing_reads_it()
@@ -133,19 +133,30 @@ public sealed class WorkspaceRetirementIntegrationTests(SqlEdgeFixture fixture)
         Skip.IfNot(fixture.IsAvailable, Skipped);
         var now = new DateTime(2026, 11, 12, 9, 0, 0, DateTimeKind.Utc);
         var longAgo = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
+        await ExecAsync("""
+            IF NOT EXISTS (SELECT 1 FROM dbo.BusinessMonths WHERE MonthStart = '2019-04-01')
+                INSERT INTO dbo.BusinessMonths (MonthStart, TrackedFrom, ClosedAt) VALUES ('2019-04-01', '2019-04-01', '2019-05-01');
+            """);
 
         int unread = await CreateAccountAsync(longAgo);
-        int recentlyRetired = await CreateAccountAsync(new DateTime(2026, 10, 15, 0, 0, 0, DateTimeKind.Utc));
+        int justBeforeLastMonth = await CreateAccountAsync(new DateTime(2026, 9, 30, 23, 59, 59, DateTimeKind.Utc));
+        int atLastMonth = await CreateAccountAsync(new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc));
         int live = await CreateAccountAsync(retiredAt: null);
 
         int creditsLastMonth = await CreateAccountAsync(longAgo);
         await ExecAsync("INSERT INTO dbo.WorkspaceCreditUsage (WorkspaceId, Day, Credits) VALUES (@p0, '2026-10-31', 1)", creditsLastMonth);
 
+        int creditsBeforeThat = await CreateAccountAsync(longAgo);
+        await ExecAsync("INSERT INTO dbo.WorkspaceCreditUsage (WorkspaceId, Day, Credits) VALUES (@p0, '2026-09-30', 1)", creditsBeforeThat);
+
         int messagesLastMonth = await CreateAccountAsync(longAgo);
         await ExecAsync("INSERT INTO dbo.WorkspaceMessageUsage (WorkspaceId, Day, Inbound, Outbound) VALUES (@p0, '2026-10-01', 1, 0)", messagesLastMonth);
 
-        int usageBeforeThat = await CreateAccountAsync(longAgo);
-        await ExecAsync("INSERT INTO dbo.WorkspaceCreditUsage (WorkspaceId, Day, Credits) VALUES (@p0, '2026-09-30', 1)", usageBeforeThat);
+        int messagesInAClosedMonth = await CreateAccountAsync(longAgo);
+        await ExecAsync("INSERT INTO dbo.WorkspaceMessageUsage (WorkspaceId, Day, Inbound, Outbound) VALUES (@p0, '2019-04-10', 1, 0)", messagesInAClosedMonth);
+
+        int messagesInAnUnclosedMonth = await CreateAccountAsync(longAgo);
+        await ExecAsync("INSERT INTO dbo.WorkspaceMessageUsage (WorkspaceId, Day, Inbound, Outbound) VALUES (@p0, '2019-03-10', 1, 0)", messagesInAnUnclosedMonth);
 
         int withRun = await CreateAccountAsync(longAgo);
         int definitionId = await InsertAsync<int>("""
@@ -173,18 +184,43 @@ public sealed class WorkspaceRetirementIntegrationTests(SqlEdgeFixture fixture)
             VALUES (@p0, 't', '2026-08-01', 1, 1, 1, 1);
             """, hourlyClient);
 
-        int pruned = await Provider().DeleteRetiredAccountsAsync(now);
+        while (await Provider().DeleteRetiredAccountsAsync(now, batchSize: 1000) > 0)
+        {
+        }
 
-        Assert.True(pruned >= 2);
         Assert.False(await AccountExistsAsync(unread));
-        Assert.False(await AccountExistsAsync(usageBeforeThat));
-        Assert.True(await AccountExistsAsync(recentlyRetired));
+        Assert.False(await AccountExistsAsync(justBeforeLastMonth));
+        Assert.False(await AccountExistsAsync(creditsBeforeThat));
+        Assert.False(await AccountExistsAsync(messagesInAClosedMonth));
+        Assert.True(await AccountExistsAsync(atLastMonth));
         Assert.True(await AccountExistsAsync(live));
         Assert.True(await AccountExistsAsync(creditsLastMonth));
         Assert.True(await AccountExistsAsync(messagesLastMonth));
+        Assert.True(await AccountExistsAsync(messagesInAnUnclosedMonth));
         Assert.True(await AccountExistsAsync(withRun));
         Assert.True(await AccountExistsAsync(withReadings));
         Assert.True(await AccountExistsAsync(withHourly));
+    }
+
+    /// <summary>
+    /// A pruned copy no longer marks its workspace deleted, so a late report from one of its clients is
+    /// kept out by the client's status instead: a retire revokes every client the workspace had.
+    /// </summary>
+    [SkippableFact]
+    public async Task A_report_from_a_retired_workspace_is_dropped_after_its_copy_is_pruned()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var ws = await SeedWorkspaceAsync();
+        await Provider().RetireAsync(ws.WorkspaceId);
+        await ExecAsync("DELETE FROM dbo.WorkspaceAccounts WHERE WorkspaceId = @p0", ws.WorkspaceId);
+
+        await ExecAsync("""
+            DECLARE @r dbo.ClientReadingTableType;
+            INSERT INTO @r (Name, NumberValue) VALUES (N't', 1);
+            EXEC dbo.ClientReadings_InsertBatch @ClientId = @p0, @SentAt = '2026-11-01', @ReceivedAt = '2026-11-01', @IsLate = 0, @Readings = @r;
+            """, ws.RegisteredClientId);
+
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.ClientReadings WHERE ClientId = @p0", ws.RegisteredClientId));
     }
 
     // ---------------------------------------------------------------- helpers
