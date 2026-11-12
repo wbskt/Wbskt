@@ -226,6 +226,7 @@ public sealed class EngineCorrectnessIntegrationTests(SqlEdgeFixture fixture)
     /// <summary>
     /// #774: a run its plan still keeps is kept whole, routine history included. The engine's retention
     /// worker now only runs <c>dbo.Run_DeleteRetired</c>; it used to delete Info history at 30 days first.
+    /// This pins the procedure's side of that contract; <c>HistoryRetentionGcTests</c> guards the worker.
     /// </summary>
     [SkippableFact]
     public async Task A_run_the_plan_still_keeps_keeps_its_routine_history()
