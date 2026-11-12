@@ -34,13 +34,15 @@ public sealed class AccountSecurityTests(ServicesFixture fixture)
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var fresh = await ServicesFixture.ReadSessionAsync(response);
 
-        // The only session left is the one the change returned. The old refresh tokens are checked
-        // through this list, not by presenting them: a revoked refresh token reads as a replay and
-        // ends every session the user has, the new one included.
+        // The only session left is the one the change returned. An old refresh token was revoked
+        // on purpose, not rotated, so presenting it is refused without ending the new session.
         var remaining = await ListSessionsAsync(fresh.AccessToken);
         remaining.Should().ContainSingle();
         (await fixture.Auth.As(here.AccessToken).GetSessionsRawAsync()).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         (await fixture.Auth.As(elsewhere.AccessToken).GetSessionsRawAsync()).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var stale = await fixture.RefreshAsync(elsewhere.RefreshToken);
+        stale.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await ServicesFixture.ReadErrorCodeAsync(stale)).Should().Be("AUTH_TOKEN_INACTIVE");
         (await fixture.RefreshAsync(fresh.RefreshToken)).StatusCode.Should().Be(HttpStatusCode.OK);
 
         (await fixture.LoginRawAsync(user.Email, user.Password)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -99,11 +101,11 @@ public sealed class AccountSecurityTests(ServicesFixture fixture)
         var after = await ListSessionsAsync(second.AccessToken);
         after.Select(s => s.Id).Should().NotContain(target.Id);
         after.Should().HaveCount(before.Count - 1);
-        (await fixture.RefreshAsync(second.RefreshToken)).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        // Presenting the ended session's token is refused, and is treated as a replay that ends
-        // the rest, so it goes last.
+        // Presenting the ended session's token is refused, but it was revoked, not rotated, so the
+        // session that ended it carries on.
         (await fixture.RefreshAsync(first.RefreshToken)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await fixture.RefreshAsync(second.RefreshToken)).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [SkippableFact]

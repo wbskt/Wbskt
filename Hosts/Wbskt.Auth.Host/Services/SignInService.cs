@@ -225,7 +225,7 @@ internal sealed class SignInService : ISignInService
                     // Retired on purpose (sign-out, a revoked session, a password change), not by
                     // rotation: a device that still holds it simply has not heard. Refused, and the
                     // user's other sessions are left alone.
-                    _logger.LogInformation("Token refresh refused: the token for user ID {UserId} was revoked. IP: {IpAddress}", rotation.UserId, ipAddress);
+                    _logger.LogWarning("Token refresh refused: the token for user ID {UserId} was revoked. IP: {IpAddress}", rotation.UserId, ipAddress);
                     _metrics.RecordRefresh("token_revoked");
                     return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_TOKEN_INACTIVE", "Token is no longer active."));
 

@@ -190,7 +190,7 @@ The most security-sensitive area, and entirely uncovered today.
 | `AUTH_RT_15` | − | Two concurrent refreshes with the same token | Exactly one 200; the other 401. Must not mint two live families |
 | `AUTH_RT_16` | + | Rotation is anonymous (no `Authorization` header) | **200** — the refresh token is the credential |
 | `AUTH_RT_17` | + | Access token issued before rotation stays valid until expiry | Documents that rotation does not retro-invalidate access tokens |
-| `AUTH_RT_18` | − | Log out on client A, then client A retries its refresh; check client B | A's retry is **401** `AUTH_TOKEN_INACTIVE` and B still refreshes (**200**). A token revoked on purpose (logout, a revoked session, a password change) has no successor, so `RefreshToken_Rotate` tells it from a replay of a token rotation retired (`AUTH_RT_04`), and changes nothing |
+| `AUTH_RT_18` | − | Log out on client A, then client A retries its refresh; check client B | A's retry is **401** `AUTH_TOKEN_INACTIVE` and B still refreshes (**200**). A token revoked on purpose (logout, a revoked session, a password change) has no successor, so `RefreshToken_Rotate` tells it from a replay of a token rotation retired (`AUTH_RT_04`), and changes nothing. The trade-off: a revoked token that was stolen before the revocation is refused but no longer ends the thief's other sessions, which a rotated one still does; the refusal is logged as a warning |
 
 
 ### 5a. Refresh cookie — `X-Refresh-Token-Transport: cookie`
@@ -229,10 +229,10 @@ The most security-sensitive area, and entirely uncovered today.
 
 | ID | ± | Scenario | Expected |
 |---|---|---|---|
-| `AUTH_PW_01` | + | Change password with the right current password | **200** with a new pair; the new session is the only one listed, the earlier access tokens are **401**, the new pair works, and only the new password signs in |
+| `AUTH_PW_01` | + | Change password with the right current password | **200** with a new pair; the new session is the only one listed, the earlier access tokens are **401**, an earlier refresh token is **401** `AUTH_TOKEN_INACTIVE` without ending the new session, the new pair works, and only the new password signs in |
 | `AUTH_PW_02` | − | Wrong current password | **400** `AUTH_CURRENT_PASSWORD_INVALID`; the session and the old password still work |
 | `AUTH_PW_03` | − | No token | **401** |
-| `AUTH_SES_01` | + | Two sign-ins, list, end the older | Both listed; after `DELETE` the ended one is gone and its refresh token fails, the other still refreshes |
+| `AUTH_SES_01` | + | Two sign-ins, list, end the older | Both listed; after `DELETE` the ended one is gone and its refresh token fails, and the other still refreshes after that |
 | `AUTH_SES_02` | − | End another user's session by id | **404**; the owner's session is untouched |
 | `AUTH_SES_03` | + | List, refresh, list again | The session keeps its id and sign-in time; `isCurrent` marks it both times |
 | `AUTH_SES_04` | − | End one session from another | Its access token gets **401** on the auth host at once and on the management host shortly after; the other session's token still works |
