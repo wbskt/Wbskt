@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Concurrent;
+using System.Net;
 using Microsoft.Extensions.Options;
 using MQTTnet;
 using MQTTnet.Protocol;
@@ -30,6 +31,7 @@ public sealed class MqttGateway : IHostedService
     private readonly ILogger<MqttGateway> _logger;
     private readonly MqttServer _server;
     private readonly ConcurrentDictionary<MqttConnection, Task> _running = new();
+    private readonly ConcurrentDictionary<EndPoint, MqttConnection> _accepted = new();
 
     public MqttGateway(
         ClientSessions sessions,
@@ -95,18 +97,25 @@ public sealed class MqttGateway : IHostedService
             return;
         }
 
-        args.SessionItems[MqttConnection.SessionItemKey] = new MqttConnection(_server, login.Admission, _options.InboxCapacity)
+        var connection = new MqttConnection(_server, login.Admission, _options.InboxCapacity)
         {
             Guard = Listener.GuardOf(args.ChannelAdapter)
         };
+        args.SessionItems[MqttConnection.SessionItemKey] = connection;
+        _accepted[args.RemoteEndPoint] = connection;
     }
 
     private async Task StartSessionAsync(ClientConnectedEventArgs args)
     {
-        if (ConnectionOf(args.SessionItems) is not { } connection)
+        // The connection built for this CONNECT, taken by its TCP endpoint rather than from the session's
+        // items: a CONNECT without a clean session that takes over a held connection reuses that
+        // connection's MQTTnet session, items and all, so the items still name the old, ended connection.
+        if (!_accepted.TryRemove(args.RemoteEndPoint, out var connection))
         {
             return;
         }
+
+        args.SessionItems[MqttConnection.SessionItemKey] = connection;
 
         // Subscribed before the session registers the client, so nothing sent to it is lost.
         await _server.SubscribeAsync(args.ClientId, [new MqttTopicFilterBuilder().WithTopic(connection.DownTopic).WithAtMostOnceQoS().Build()]);
@@ -127,6 +136,10 @@ public sealed class MqttGateway : IHostedService
 
     private Task EndConnectionAsync(ClientDisconnectedEventArgs args)
     {
+        // A connection that ends before its session starts (the CONNACK could not be sent) never reaches
+        // StartSessionAsync. A takeover reports the old client's endpoint, so it never drops the new one's.
+        _accepted.TryRemove(args.RemoteEndPoint, out _);
+
         if (ConnectionOf(args.SessionItems) is not { } connection)
         {
             return Task.CompletedTask;

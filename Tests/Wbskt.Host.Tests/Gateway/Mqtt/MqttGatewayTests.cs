@@ -198,6 +198,28 @@ public sealed class MqttGatewayTests : IAsyncLifetime
         Assert.Empty(Published<ClientDisconnectedEvent>());
     }
 
+    [Theory]
+    [InlineData(MqttProtocolVersion.V500)]
+    [InlineData(MqttProtocolVersion.V311)]
+    public async Task A_reconnect_without_a_clean_session_over_a_held_connection_runs_on_the_new_connection(MqttProtocolVersion version)
+    {
+        // MQTTnet reuses the held connection's session, and with it the items the gateway keeps its
+        // connection in; the new connection must still be the one the session runs on.
+        await ConnectAsync(version: version, cleanSession: false);
+        await WaitUntilAsync(() => _connections.GetConnection(ClientRefId) is not null);
+        var first = _connections.GetConnection(ClientRefId);
+        var received = new TaskCompletionSource<MqttApplicationMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var fresh = await ConnectAsync(message => received.TrySetResult(message), version, cleanSession: false);
+        await WaitUntilAsync(() => _connections.GetConnection(ClientRefId) is { } current && !ReferenceEquals(current, first));
+        await fresh.PublishStringAsync(MqttBinding.UpTopic(ClientRefId), Message);
+
+        await WaitUntilAsync(() => Published<ClientMessageReceivedEvent>().Any(e => e.ClientRefId == ClientRefId && e.Type == "temperature"));
+        await _connections.GetConnection(ClientRefId)!.SendAsync(new ProtocolMessage("cmd.relay", new { on = true }), CancellationToken.None);
+        Assert.Equal(MqttBinding.DownTopic(ClientRefId), (await received.Task.WaitAsync(Patience)).Topic);
+        Assert.Empty(Published<ClientDisconnectedEvent>());
+    }
+
     [Fact]
     public async Task A_packet_over_the_limit_ends_the_session_as_too_big()
     {
@@ -273,15 +295,15 @@ public sealed class MqttGatewayTests : IAsyncLifetime
     private string Token() =>
         new JwtService(_keys, JwtIssuers.Management).GenerateToken(ClientClaims.For(ClientRefId, "sensor", Guid.NewGuid(), 42, 7), JwtAudiences.Socket, TimeSpan.FromMinutes(15));
 
-    private MqttClientOptions ClientOptions(string? token, string? clientId, MqttProtocolVersion version) => new MqttClientOptionsBuilder()
+    private MqttClientOptions ClientOptions(string? token, string? clientId, MqttProtocolVersion version, bool cleanSession = true) => new MqttClientOptionsBuilder()
         .WithTcpServer("127.0.0.1", _gateway.Listener.Port)
         .WithClientId(clientId ?? ClientRefId.ToString())
         .WithCredentials(ClientRefId.ToString(), token ?? Token())
         .WithProtocolVersion(version)
-        .WithCleanSession()
+        .WithCleanSession(cleanSession)
         .Build();
 
-    private async Task<IMqttClient> ConnectAsync(Action<MqttApplicationMessage>? onMessage = null, MqttProtocolVersion version = MqttProtocolVersion.V500)
+    private async Task<IMqttClient> ConnectAsync(Action<MqttApplicationMessage>? onMessage = null, MqttProtocolVersion version = MqttProtocolVersion.V500, bool cleanSession = true)
     {
         var client = new MqttClientFactory().CreateMqttClient();
         _clients.Add(client);
@@ -294,7 +316,7 @@ public sealed class MqttGatewayTests : IAsyncLifetime
             };
         }
 
-        await client.ConnectAsync(ClientOptions(null, null, version));
+        await client.ConnectAsync(ClientOptions(null, null, version, cleanSession));
         return client;
     }
 
