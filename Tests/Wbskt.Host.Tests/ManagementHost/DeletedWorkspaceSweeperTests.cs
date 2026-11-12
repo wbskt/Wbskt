@@ -105,6 +105,18 @@ public sealed class DeletedWorkspaceSweeperTests : IDisposable
     }
 
     [Fact]
+    public async Task Each_tick_prunes_the_account_copies_nothing_reads_even_when_the_auth_host_is_down()
+    {
+        // #803: the copies are this database's own business, so an unreachable auth host does not hold them up.
+        _auth.Setup(a => a.GetDeletedBetweenAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("auth down"));
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => Sweeper().TickAsync(CancellationToken.None));
+
+        _provider.Verify(p => p.DeleteRetiredAccountsAsync(Now.UtcDateTime, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task A_workspace_it_retires_is_announced_as_the_delete_event_would_announce_it()
     {
         Deleted(7);
