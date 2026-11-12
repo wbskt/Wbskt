@@ -40,7 +40,7 @@ internal sealed class BillingWebhookService(
             result = webhook switch
             {
                 { PaymentId: { } paymentId } => await sync.SyncPaymentAsync(paymentId, ct),
-                { SubscriptionId: { } subscriptionId } => await sync.SyncSubscriptionAsync(subscriptionId, refundedThrough: null, ct),
+                { SubscriptionId: { } subscriptionId } => await sync.SyncSubscriptionAsync(subscriptionId, ct),
                 _ => BillingSyncResult.SetAside($"A {webhook.Type} event names no subscription or payment.")
             };
         }

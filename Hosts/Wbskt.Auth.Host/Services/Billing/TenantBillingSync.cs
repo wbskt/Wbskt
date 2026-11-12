@@ -29,10 +29,9 @@ internal sealed class TenantBillingSync(
     /// <summary>
     /// Reads the subscription, stores it against the tenant its checkout was for, cancels any subscription
     /// the tenant is paying for twice, and moves the tenant to the plan its deciding subscription pays for.
-    /// <paramref name="refundedThrough"/> marks a payment of it refunded.
     /// </summary>
-    public async Task<BillingSyncResult> SyncSubscriptionAsync(string subscriptionId, DateTime? refundedThrough, CancellationToken ct) =>
-        (await SyncStoredSubscriptionAsync(subscriptionId, refundedThrough, ct)).Result;
+    public async Task<BillingSyncResult> SyncSubscriptionAsync(string subscriptionId, CancellationToken ct) =>
+        (await SyncStoredSubscriptionAsync(subscriptionId, reversedPaymentAt: null, ct)).Result;
 
     /// <summary>
     /// Reads the payment: one for a subscription syncs that subscription (marking it refunded when the
@@ -50,13 +49,10 @@ internal sealed class TenantBillingSync(
 
         if (payment.SubscriptionId is { } subscriptionId)
         {
-            DateTime? refundedThrough = null;
-            if (payment.Reversed && payment.Lines.Select(l => options.Value.FindPlan(l.ProductId)).FirstOrDefault(p => p is not null) is { } offer)
-            {
-                refundedThrough = SubscriptionPlan.RefundedThrough(payment.CreatedAt.UtcDateTime, offer.Interval);
-            }
-
-            (BillingSyncResult result, TenantSubscription? stored) = await SyncStoredSubscriptionAsync(subscriptionId, refundedThrough, ct);
+            // The interval comes from the subscription's own product, not the payment's lines: a subscription
+            // payment may carry no product cart, and a refund must drop the plan all the same.
+            DateTime? reversedPaymentAt = payment.Reversed ? payment.CreatedAt.UtcDateTime : null;
+            (BillingSyncResult result, TenantSubscription? stored) = await SyncStoredSubscriptionAsync(subscriptionId, reversedPaymentAt, ct);
             // A claim already on this payment is passed on too: the procedure takes it again only once it
             // is stale, which is a refund the host never heard back about.
             if (stored is { DuplicateAt: not null } && (stored.DuplicateRefundPaymentId is null || stored.DuplicateRefundPaymentId == payment.Id)
@@ -102,7 +98,7 @@ internal sealed class TenantBillingSync(
             return;
         }
 
-        BillingSyncResult result = await SyncSubscriptionAsync(deciding.SubscriptionId, refundedThrough: null, ct);
+        BillingSyncResult result = await SyncSubscriptionAsync(deciding.SubscriptionId, ct);
         if (result.Reason is not null && await plans.FindByIdAsync(tenantId, ct) is { } reread)
         {
             logger.LogWarning("Reviewing tenant {TenantId}'s subscription from its stored copy: {Reason}", tenantId, result.Reason);
@@ -110,7 +106,11 @@ internal sealed class TenantBillingSync(
         }
     }
 
-    private async Task<(BillingSyncResult Result, TenantSubscription? Stored)> SyncStoredSubscriptionAsync(string subscriptionId, DateTime? refundedThrough, CancellationToken ct)
+    /// <summary>
+    /// Reads the subscription and stores it. <paramref name="reversedPaymentAt"/>, when set, is a payment of
+    /// it that was refunded or lost to a chargeback, which marks the period it paid for refunded.
+    /// </summary>
+    private async Task<(BillingSyncResult Result, TenantSubscription? Stored)> SyncStoredSubscriptionAsync(string subscriptionId, DateTime? reversedPaymentAt, CancellationToken ct)
     {
         ProviderSubscription? subscription = await gateway.FindSubscriptionAsync(subscriptionId, ct);
         if (subscription is null)
@@ -152,7 +152,7 @@ internal sealed class TenantBillingSync(
                 ScheduledAt = scheduled is null ? null : subscription.Scheduled!.EffectiveAt.UtcDateTime
             },
             now,
-            refundedThrough,
+            reversedPaymentAt is { } paidAt ? SubscriptionPlan.RefundedThrough(paidAt, offer.Interval) : null,
             ct);
 
         await TellPaymentFailedAsync(saved, ct);
