@@ -9,7 +9,9 @@ namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 /// through the inbound hub: no trigger listens on it, and dispatching it only wrote an idempotency
 /// claim per connect. Presence triggers fire from the parked checks instead. A restored connection
 /// (<see cref="ClientConnectedEvent.IsRestored"/>) parks nothing: the client never went offline. The
-/// sweep's offline check does not fire either: the client shows connected, so it waits and is given up.
+/// sweep's offline check does not fire either if the restore lands before it is due: the client shows
+/// connected, so it waits and is given up. An outage longer than a trigger's grace fires that offline
+/// check with no "came online" after it (#821).
 /// </summary>
 public sealed class ClientConnectedConsumer(ClientPresenceParker parker) : IConsumer<ClientConnectedEvent>
 {
