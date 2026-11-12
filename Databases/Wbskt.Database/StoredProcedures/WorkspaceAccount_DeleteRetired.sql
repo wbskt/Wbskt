@@ -6,8 +6,10 @@
 -- longer. A copy goes when all of these hold:
 --   - its workspace used no credits or messages this month or last, the months the meters read
 --     (the RetiredAt bound says the same for a workspace that never used any);
---   - every month it sent messages in has been closed (dbo.BusinessMonths), since a month not closed
---     yet is summed live through the copies (dbo.BusinessUsageOf) for the Business invoice;
+--   - no month it sent messages in is still summed live through the copies for the Business invoice
+--     (dbo.BusinessUsageOf): one not closed (dbo.BusinessMonths) in which its tenant was tracked on
+--     Business, or any month not closed while its tenant is on Business now, which is how a month
+--     the tracker never saw is worked out. Other tenants' months are never read for the invoice;
 --   - no run of it is left (dbo.Run_DeleteRetired reads the copy for the plan's days);
 --   - none of its clients has readings left (dbo.ClientReadings_Compact clears a retired workspace's).
 -- dbo.ClientReadings_InsertBatch no longer needs the copy once it is gone: a deleted workspace's clients
@@ -31,11 +33,19 @@ BEGIN
       AND NOT EXISTS (SELECT 1
                       FROM dbo.WorkspaceMessageUsage m
                       WHERE m.WorkspaceId = a.WorkspaceId
-                        AND (m.Day >= @PreviousMonthStart
-                             OR NOT EXISTS (SELECT 1
-                                            FROM dbo.BusinessMonths b
-                                            WHERE b.MonthStart = DATEFROMPARTS(YEAR(m.Day), MONTH(m.Day), 1)
-                                              AND b.ClosedAt IS NOT NULL)))
+                        AND m.Day >= @PreviousMonthStart)
+      AND NOT EXISTS (SELECT 1
+                      FROM dbo.WorkspaceMessageUsage m
+                      WHERE m.WorkspaceId = a.WorkspaceId
+                        AND NOT EXISTS (SELECT 1
+                                        FROM dbo.BusinessMonths b
+                                        WHERE b.MonthStart = DATEFROMPARTS(YEAR(m.Day), MONTH(m.Day), 1)
+                                          AND b.ClosedAt IS NOT NULL)
+                        AND (EXISTS (SELECT 1
+                                     FROM dbo.BusinessTenantMonths t
+                                     WHERE t.MonthStart = DATEFROMPARTS(YEAR(m.Day), MONTH(m.Day), 1)
+                                       AND t.TenantId = a.TenantId)
+                             OR EXISTS (SELECT 1 FROM dbo.BusinessTenantsNow() n WHERE n.TenantId = a.TenantId)))
       AND NOT EXISTS (SELECT 1
                       FROM dbo.WorkflowDefinitions d
                       JOIN dbo.Runs r ON r.WorkflowDefinitionId = d.Id

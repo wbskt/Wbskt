@@ -134,8 +134,8 @@ public sealed class WorkspaceRetirementIntegrationTests(SqlEdgeFixture fixture)
         var now = new DateTime(2026, 11, 12, 9, 0, 0, DateTimeKind.Utc);
         var longAgo = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
         await ExecAsync("""
-            IF NOT EXISTS (SELECT 1 FROM dbo.BusinessMonths WHERE MonthStart = '2019-04-01')
-                INSERT INTO dbo.BusinessMonths (MonthStart, TrackedFrom, ClosedAt) VALUES ('2019-04-01', '2019-04-01', '2019-05-01');
+            IF NOT EXISTS (SELECT 1 FROM dbo.BusinessMonths WHERE MonthStart = '2019-05-01')
+                INSERT INTO dbo.BusinessMonths (MonthStart, TrackedFrom, ClosedAt) VALUES ('2019-05-01', '2019-05-01', NULL);
             """);
 
         int unread = await CreateAccountAsync(longAgo);
@@ -152,11 +152,22 @@ public sealed class WorkspaceRetirementIntegrationTests(SqlEdgeFixture fixture)
         int messagesLastMonth = await CreateAccountAsync(longAgo);
         await ExecAsync("INSERT INTO dbo.WorkspaceMessageUsage (WorkspaceId, Day, Inbound, Outbound) VALUES (@p0, '2026-10-01', 1, 0)", messagesLastMonth);
 
-        int messagesInAClosedMonth = await CreateAccountAsync(longAgo);
-        await ExecAsync("INSERT INTO dbo.WorkspaceMessageUsage (WorkspaceId, Day, Inbound, Outbound) VALUES (@p0, '2019-04-10', 1, 0)", messagesInAClosedMonth);
+        // A month not closed is summed live for the Business invoice, but only for tenants on Business.
+        int oldMessagesNotBusiness = await CreateAccountAsync(longAgo);
+        await ExecAsync("INSERT INTO dbo.WorkspaceMessageUsage (WorkspaceId, Day, Inbound, Outbound) VALUES (@p0, '2019-03-10', 1, 0)", oldMessagesNotBusiness);
 
-        int messagesInAnUnclosedMonth = await CreateAccountAsync(longAgo);
-        await ExecAsync("INSERT INTO dbo.WorkspaceMessageUsage (WorkspaceId, Day, Inbound, Outbound) VALUES (@p0, '2019-03-10', 1, 0)", messagesInAnUnclosedMonth);
+        int openMonthTrackedOnBusiness = await CreateAccountAsync(longAgo);
+        await ExecAsync("""
+            INSERT INTO dbo.WorkspaceMessageUsage (WorkspaceId, Day, Inbound, Outbound) VALUES (@p0, '2019-05-10', 1, 0);
+            INSERT INTO dbo.BusinessTenantMonths (MonthStart, TenantId, TenantRefId) VALUES ('2019-05-01', @p0, NEWID());
+            """, openMonthTrackedOnBusiness);
+
+        int tenantOnBusinessNow = await CreateAccountAsync(longAgo);
+        await ExecAsync("""
+            INSERT INTO dbo.WorkspaceMessageUsage (WorkspaceId, Day, Inbound, Outbound) VALUES (@p0, '2019-03-10', 1, 0);
+            INSERT INTO dbo.WorkspaceAccounts (WorkspaceId, TenantId, TenantRefId, PlanCode, PlanRevision)
+            VALUES (@p0 - 1, @p0, NEWID(), N'Business', 1);
+            """, tenantOnBusinessNow);
 
         int withRun = await CreateAccountAsync(longAgo);
         int definitionId = await InsertAsync<int>("""
@@ -184,6 +195,7 @@ public sealed class WorkspaceRetirementIntegrationTests(SqlEdgeFixture fixture)
             VALUES (@p0, 't', '2026-08-01', 1, 1, 1, 1);
             """, hourlyClient);
 
+        Assert.Equal(1, await Provider().DeleteRetiredAccountsAsync(now, batchSize: 1));
         while (await Provider().DeleteRetiredAccountsAsync(now, batchSize: 1000) > 0)
         {
         }
@@ -191,12 +203,13 @@ public sealed class WorkspaceRetirementIntegrationTests(SqlEdgeFixture fixture)
         Assert.False(await AccountExistsAsync(unread));
         Assert.False(await AccountExistsAsync(justBeforeLastMonth));
         Assert.False(await AccountExistsAsync(creditsBeforeThat));
-        Assert.False(await AccountExistsAsync(messagesInAClosedMonth));
+        Assert.False(await AccountExistsAsync(oldMessagesNotBusiness));
         Assert.True(await AccountExistsAsync(atLastMonth));
         Assert.True(await AccountExistsAsync(live));
         Assert.True(await AccountExistsAsync(creditsLastMonth));
         Assert.True(await AccountExistsAsync(messagesLastMonth));
-        Assert.True(await AccountExistsAsync(messagesInAnUnclosedMonth));
+        Assert.True(await AccountExistsAsync(openMonthTrackedOnBusiness));
+        Assert.True(await AccountExistsAsync(tenantOnBusinessNow));
         Assert.True(await AccountExistsAsync(withRun));
         Assert.True(await AccountExistsAsync(withReadings));
         Assert.True(await AccountExistsAsync(withHourly));
