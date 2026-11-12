@@ -328,6 +328,7 @@ public sealed class TenantLifecycleTests(ServicesFixture fixture)
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
         var user = await fixture.CreateUserAsync();
+        await fixture.CreateUserInTenantAsync(user.Token, await fixture.GetTenantRefAsync(user.Token));
 
         var response = await fixture.Auth.As(user.Token).CreateTenantRawAsync(new CreateTenantRequest(Name: $"e2e-tenant-{Guid.NewGuid():N}", Description: "Created by E2E."));
 
@@ -338,11 +339,28 @@ public sealed class TenantLifecycleTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
+    public async Task TEN_21_ASecondFreeTenantToYourself_IsRefused()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var user = await fixture.CreateUserAsync();
+
+        // Sign-up already made a Free tenant only this user is in. Each one brings its own workspace and
+        // allowance, so one account gets one.
+        var response = await fixture.Auth.As(user.Token).CreateTenantRawAsync(new CreateTenantRequest(Name: $"e2e-tenant-{Guid.NewGuid():N}", Description: null));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("TENANT_FREE_LIMIT_REACHED");
+        (await fixture.GetTenantsAsync(user.Token)).Should().ContainSingle();
+    }
+
+    [SkippableFact]
     public async Task TEN_18_TenantNamesNeedNotBeUnique()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
         var user = await fixture.CreateUserAsync();
+        await fixture.CreateUserInTenantAsync(user.Token, await fixture.GetTenantRefAsync(user.Token));
         var name = $"e2e-shared-name-{Guid.NewGuid():N}";
 
         var first = await fixture.SendAsync(

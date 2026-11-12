@@ -657,7 +657,7 @@ Exercised through `POST /api/internal/workspaces/resolve`. Order per `Permission
 **No longer blocked.** Tenants are self-serve, so two registrations give two isolated tenants with no
 seeding required — `ServicesFixture.CreateUserAsync()` twice is the whole arrangement.
 
-Largely covered already by `Scenarios/Auth/TenantLifecycleTests.cs` (`TEN_01`–`TEN_20`), which owns
+Largely covered already by `Scenarios/Auth/TenantLifecycleTests.cs` (`TEN_01`–`TEN_21`), which owns
 the tenant and invitation surface. The rows below that it does not reach are the *addressability*
 cases — using a reference from tenant B under tenant A's route — and they remain worth writing.
 
@@ -696,7 +696,7 @@ to already belong to the workspace's tenant, so the cross-boundary capture it de
 5. **§10 workspace CRUD** — ✅ implemented in `Scenarios/Auth/WorkspaceLifecycleTests.cs`, including
    `WS_CRD_04`, the workspace-admin vs tenant-admin boundary.
 6. **§11 workspace membership** — ✅ implemented in `Scenarios/Auth/WorkspaceMembershipTests.cs`.
-7. **Tenants and invitations** — ✅ `Scenarios/Auth/TenantLifecycleTests.cs` (`TEN_01`–`TEN_20`),
+7. **Tenants and invitations** — ✅ `Scenarios/Auth/TenantLifecycleTests.cs` (`TEN_01`–`TEN_21`),
    which also absorbs most of §12.1 and §15.
 8. **§3, §4, §6** — broad but shallow; cheap now that the fixture helpers exist. Note `§4` needs
    revising first: login no longer validates the identifier's format, so `AUTH_LOG_10` is stale.

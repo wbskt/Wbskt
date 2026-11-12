@@ -262,6 +262,29 @@ public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
         }
     }
 
+    /// <summary>
+    /// <c>dbo.Tenant_Create</c> gives an account one Free tenant to itself. Each brings its own workspace
+    /// and allowance, so a second is refused (50036) until the first pays or someone else is in it.
+    /// </summary>
+    [SkippableFact]
+    public async Task An_account_gets_one_Free_tenant_to_itself()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var (first, ownerId, _) = await CreateTenantAsync();
+
+        Exception? whileAlone = await AttemptAsync(() => CreateTenantForAsync(ownerId));
+        int joiner = await AddMemberAsync(first, null);
+        int whileShared = await CreateTenantForAsync(ownerId);
+        Exception? secondAlone = await AttemptAsync(() => CreateTenantForAsync(ownerId));
+        await ExecSqlAsync("UPDATE dbo.Tenants SET PlanCode = N'Maker' WHERE Id = @p0;", whileShared);
+        int afterUpgrade = await CreateTenantForAsync(ownerId);
+
+        Assert.Equal(50036, Assert.IsType<SqlException>(whileAlone).Number);
+        Assert.Equal(50036, Assert.IsType<SqlException>(secondAlone).Number);
+        Assert.NotEqual(whileShared, afterUpgrade);
+        Assert.True(joiner > 0);
+    }
+
     private async Task<bool> IsAdministratorAsync(int tenantId, int userId) =>
         await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Tenant_Administrators(@p0) WHERE UserId = @p1", tenantId, userId) == 1;
 

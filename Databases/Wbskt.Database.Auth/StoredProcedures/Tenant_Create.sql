@@ -23,14 +23,33 @@ BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
 
-    IF NOT EXISTS (SELECT 1 FROM dbo.Users WHERE Id = @OwnerUserId)
+    SET @RefId = NEWID();
+
+    BEGIN TRANSACTION;
+
+    -- The owner's row is locked so two creates from the same account are counted one after the other.
+    IF NOT EXISTS (SELECT 1 FROM dbo.Users WITH (UPDLOCK, HOLDLOCK) WHERE Id = @OwnerUserId)
     BEGIN
         THROW 50010, 'Owner user does not exist.', 1;
     END
 
-    SET @RefId = NEWID();
-
-    BEGIN TRANSACTION;
+    -- One unpaid tenant per account: each Free tenant brings its own workspace and allowance, so
+    -- without a cap one sign-up could create as many as it liked. A Free tenant counts while the owner
+    -- is its only member; one that pays, or that others have joined, does not.
+    IF EXISTS (
+        SELECT 1
+        FROM dbo.TenantMembers tm
+        INNER JOIN dbo.Tenants t ON t.Id = tm.TenantId
+        WHERE tm.UserId = @OwnerUserId
+          AND t.PlanCode = N'Free'
+          AND NOT EXISTS (
+              SELECT 1
+              FROM dbo.TenantMembers other
+              WHERE other.TenantId = tm.TenantId
+                AND other.UserId <> @OwnerUserId))
+    BEGIN
+        THROW 50036, 'You already have a Free tenant to yourself. Upgrade it to a paid plan before creating another.', 1;
+    END
 
     INSERT INTO dbo.Tenants (RefId, Name, Description)
     VALUES (@RefId, @Name, @Description);
