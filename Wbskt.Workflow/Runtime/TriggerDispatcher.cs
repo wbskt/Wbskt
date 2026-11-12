@@ -103,7 +103,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
                 // Otherwise this claim stays 'Pending' forever - a later redelivery of the same
                 // event would then wait on a claim nobody will ever complete.
                 _logger?.LogDebug("Marking idempotency claim key {ClaimKey} as succeeded", bookmarkMatch.ClaimKey);
-                await _idempotencyKeyProvider.MarkSucceededAsync(bookmarkMatch.ClaimKey, "{}", ct);
+                await _idempotencyKeyProvider.MarkClaimSucceededAsync(bookmarkMatch.ClaimKey, bookmarkMatch.ClaimToken, "{}", ct);
             }
             return new TriggerDispatchResult(TriggerDispatchOutcome.NoRegistration, null, null, defaultCorrelation);
         }
@@ -172,11 +172,11 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
                 try
                 {
                     (dispatch, branchToDispatch) = await StartForRegistrationAsync(registration, normalizedEvent, correlationValue, startKey, registrationClaim.Reclaimed, ct);
-                    await _idempotencyKeyProvider.MarkSucceededAsync(startKey, JsonSerializer.Serialize(dispatch, EngineJson.Options), ct);
+                    await _idempotencyKeyProvider.MarkClaimSucceededAsync(startKey, registrationClaim.Token, JsonSerializer.Serialize(dispatch, EngineJson.Options), ct);
                 }
                 catch
                 {
-                    await _idempotencyKeyProvider.MarkFailedAsync(startKey, "{\"error\":\"dispatch failed\"}", CancellationToken.None);
+                    await _idempotencyKeyProvider.MarkClaimFailedAsync(startKey, registrationClaim.Token, "{\"error\":\"dispatch failed\"}", CancellationToken.None);
                     throw;
                 }
 
@@ -192,14 +192,14 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         }
         catch when (bookmarkMatch.ClaimKey != null)
         {
-            await _idempotencyKeyProvider.MarkFailedAsync(bookmarkMatch.ClaimKey, "{\"error\":\"dispatch failed\"}", CancellationToken.None);
+            await _idempotencyKeyProvider.MarkClaimFailedAsync(bookmarkMatch.ClaimKey, bookmarkMatch.ClaimToken, "{\"error\":\"dispatch failed\"}", CancellationToken.None);
             throw;
         }
 
         if (bookmarkMatch.ClaimKey != null)
         {
             _logger?.LogDebug("Marking idempotency claim key {ClaimKey} as succeeded", bookmarkMatch.ClaimKey);
-            await _idempotencyKeyProvider.MarkSucceededAsync(bookmarkMatch.ClaimKey, "{}", ct);
+            await _idempotencyKeyProvider.MarkClaimSucceededAsync(bookmarkMatch.ClaimKey, bookmarkMatch.ClaimToken, "{}", ct);
         }
 
         RecordOutcomes(resolvedEvent, registrations, perRegistration);
@@ -410,7 +410,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         IdempotencyKeyRow claim = await _idempotencyKeyProvider.UpsertPendingAsync(startKey, 0, claimToken, Guid.Empty, 0, ct);
         if (claim.BranchRefId == claimToken)
         {
-            return new RegistrationClaim(true, false, null);
+            return new RegistrationClaim(true, false, null, claimToken);
         }
 
         if (string.Equals(claim.Status, IdempotencyKeyStatus.Succeeded, StringComparison.Ordinal))
@@ -418,21 +418,21 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             TriggerRegistrationDispatch? settled = claim.ResultJson is null
                 ? null
                 : JsonSerializer.Deserialize<TriggerRegistrationDispatch>(claim.ResultJson, EngineJson.Options);
-            return new RegistrationClaim(false, false, settled);
+            return new RegistrationClaim(false, false, settled, claimToken);
         }
 
         if (string.Equals(claim.Status, IdempotencyKeyStatus.Failed, StringComparison.Ordinal))
         {
             claim = await _idempotencyKeyProvider.ReclaimFailedAsync(startKey, claimToken, ct);
-            return new RegistrationClaim(claim.BranchRefId == claimToken, true, null);
+            return new RegistrationClaim(claim.BranchRefId == claimToken, true, null, claimToken);
         }
 
         // Pending under another token: an attempt that is still going, or one that crashed before it
         // could settle. Either way this attempt must not start the registration a second time.
-        return new RegistrationClaim(false, false, null);
+        return new RegistrationClaim(false, false, null, claimToken);
     }
 
-    private sealed record RegistrationClaim(bool Owned, bool Reclaimed, TriggerRegistrationDispatch? Settled);
+    private sealed record RegistrationClaim(bool Owned, bool Reclaimed, TriggerRegistrationDispatch? Settled, Guid Token);
 
     /// <summary>
     /// Constant-time comparison against the registration's secret. A registration without one is open,

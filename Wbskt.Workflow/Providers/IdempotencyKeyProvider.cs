@@ -86,6 +86,42 @@ internal sealed class IdempotencyKeyProvider : BaseSqlProvider, IIdempotencyKeyP
         );
     }
 
+    public Task<IdempotencyKeyRow> MarkClaimSucceededAsync(string keyValue, Guid claimToken, string resultJson, CancellationToken ct) =>
+        ExecuteSingleAsync(
+            "dbo.IdempotencyKey_MarkSucceeded",
+            p =>
+            {
+                p.AddWithValue("@KeyValue", keyValue);
+                p.AddWithValue("@ResultJson", resultJson);
+                p.AddWithValue("@ClaimToken", claimToken);
+            },
+            Map,
+            new InvalidOperationException("IdempotencyKey_MarkSucceeded did not return a row."),
+            ct);
+
+    public Task<IdempotencyKeyRow> MarkClaimFailedAsync(string keyValue, Guid claimToken, string errorJson, CancellationToken ct) =>
+        ExecuteSingleAsync(
+            "dbo.IdempotencyKey_MarkFailed",
+            p =>
+            {
+                p.AddWithValue("@KeyValue", keyValue);
+                p.AddWithValue("@ErrorJson", errorJson);
+                p.AddWithValue("@ClaimToken", claimToken);
+            },
+            Map,
+            new InvalidOperationException("IdempotencyKey_MarkFailed did not return a row."),
+            ct);
+
+    public Task MarkResumedAsync(string keyValue, Guid claimToken, CancellationToken ct) =>
+        ExecuteNonQueryAsync(
+            "dbo.IdempotencyKey_MarkResumed",
+            p =>
+            {
+                p.AddWithValue("@KeyValue", keyValue);
+                p.AddWithValue("@ClaimToken", claimToken);
+            },
+            ct);
+
     public async Task<int> FailAbandonedClaimsAsync(CancellationToken ct)
     {
         var result = await ExecuteScalarAsync<object>("dbo.IdempotencyKey_FailAbandonedClaims", _ => { }, ct);

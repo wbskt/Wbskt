@@ -92,9 +92,22 @@ internal sealed class BookmarkResumer : IBookmarkResumer
         {
             if (bookmarks.Count == 0)
             {
+                // A redelivery after a stop finds the bookmarks the first delivery already claimed gone.
+                // Its claim says the event was a wake, so it settles as one rather than starting trigger
+                // runs the first delivery would never have started.
+                if (string.Equals(claim.ResultJson, IdempotencyClaimResults.Resumed, StringComparison.Ordinal))
+                {
+                    await _idempotencyKeyProvider.MarkClaimSucceededAsync(claim.KeyValue, claimToken, "{}", ct);
+                    _logger?.LogInformation("Event {EventId} already woke its waiting branches before a stop", evt.InboundEventId);
+                    return new BookmarkMatchResult(true, null, false);
+                }
+
                 _logger?.LogDebug("No matching bookmark found for event {EventId} using match keys", evt.InboundEventId);
-                return new BookmarkMatchResult(false, null, false, claim.KeyValue);
+                return new BookmarkMatchResult(false, null, false, claim.KeyValue, claimToken);
             }
+
+            // Before any bookmark is claimed, so a stop after a claim never leaves a claim that hides it.
+            await _idempotencyKeyProvider.MarkResumedAsync(claim.KeyValue, claimToken, ct);
 
             foreach (var bookmark in bookmarks)
             {
@@ -125,19 +138,19 @@ internal sealed class BookmarkResumer : IBookmarkResumer
             }
 
             // We mark the idempotency key as succeeded now that all resumes have been dispatched
-            await _idempotencyKeyProvider.MarkSucceededAsync(claim.KeyValue, "{}", ct);
+            await _idempotencyKeyProvider.MarkClaimSucceededAsync(claim.KeyValue, claimToken, "{}", ct);
 
             return new BookmarkMatchResult(true, bookmarks.First().Id, false);
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Failed to resume bookmark for event {EventId}", evt.InboundEventId);
-            // Release the claim so a redelivery of this event (or the next PendingTriggerEventDrainer
-            // pass) isn't permanently dropped as a duplicate of a resume that never actually happened.
+
+            // Release the claim so a redelivery of this event (or the next PendingTriggerEventDrainer pass)
+            // isn't dropped as a duplicate of a resume that never happened. Not ct: a stopping host has
+            // cancelled it, and the write must still land or the claim stays Pending.
             string errorJson = JsonSerializer.Serialize(new { ex.Message }, EngineJson.Options);
-            // Not ct: a stopping host has cancelled it, and the write must still land or the claim stays
-            // Pending and every redelivery is dropped as a duplicate.
-            await _idempotencyKeyProvider.MarkFailedAsync(claim.KeyValue, errorJson, CancellationToken.None);
+            await _idempotencyKeyProvider.MarkClaimFailedAsync(claim.KeyValue, claimToken, errorJson, CancellationToken.None);
             throw;
         }
     }
