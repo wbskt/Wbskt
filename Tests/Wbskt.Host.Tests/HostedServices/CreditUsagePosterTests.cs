@@ -23,7 +23,6 @@ public sealed class CreditUsagePosterTests
 
         await poster.TickAsync(CancellationToken.None);
 
-        // Runs that ended within the last hour (the default window) are still read.
         Assert.Equal(2, provider.Calls.Count);
         Assert.All(provider.Calls, call => Assert.Equal((new DateOnly(2026, 5, 26), CreditUsagePoster.BatchSize), call));
     }

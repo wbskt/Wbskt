@@ -1,5 +1,5 @@
 -- What a workspace and its tenant (dbo.TenantWorkspaces, as the plan limits count them) have used of
--- the plan: workflow credits since @MonthStart (the ledger plus running runs' unposted credits, as
+-- the plan: workflow credits since @MonthStart (the ledger plus runs' unposted credits, ended or not, as
 -- Run_Start counts them), client messages since @MonthStart (dbo.WorkspaceMessageUsage), registered
 -- clients and runs going, the workspace's own credit cap and what its runs going hold of it, the credits
 -- the tenant's grants still hold, and which of those expire first: when, and how many.

@@ -15,7 +15,10 @@
 -- Run_DeleteRetired).
 CREATE PROCEDURE dbo.RunCredits_Post
     @Day        DATE,
-    @BatchSize  INT
+    @BatchSize  INT,
+    -- Unused. Kept for one release for an engine that still passes it while the migrator runs ahead of
+    -- it (#740); remove in the release after.
+    @EndedSince DATETIME2(3) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;

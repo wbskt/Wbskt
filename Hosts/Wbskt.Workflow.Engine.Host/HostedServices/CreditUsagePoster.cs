@@ -11,7 +11,7 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 /// <summary>
 /// Moves the credits runs consume into the ledger their plan's monthly allowance and their workspace's
 /// cap are counted against (<c>dbo.WorkspaceCreditUsage</c>), off the hot path: a step's charge only
-/// touches its run's own counter. Run_Start adds what the runs still going have not posted yet, so the
+/// touches its run's own counter. Run_Start adds what runs have not posted yet, ended or not, so the
 /// lag here never lets a start through on credits already spent. Warns when a post carries a workspace
 /// to 80% or 100% of its cap (<see cref="WorkspaceCreditCapReachedEvent"/>), and a tenant to 80% or 100% of its
 /// plan's monthly credits (<see cref="TenantCreditAllowanceReachedEvent"/>). Runs on the active engine only.
