@@ -99,4 +99,5 @@ internal sealed record DodoPrice(
     [property: JsonPropertyName("payment_frequency_interval")] string? PaymentFrequencyInterval,
     [property: JsonPropertyName("discount")] decimal? Discount = null,
     [property: JsonPropertyName("discount_bps")] int? DiscountBps = null,
-    [property: JsonPropertyName("trial_period_days")] int? TrialPeriodDays = null);
+    [property: JsonPropertyName("trial_period_days")] int? TrialPeriodDays = null,
+    [property: JsonPropertyName("pay_what_you_want")] bool? PayWhatYouWant = null);

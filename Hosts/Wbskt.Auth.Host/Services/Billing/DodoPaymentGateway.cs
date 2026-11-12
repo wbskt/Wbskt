@@ -130,15 +130,17 @@ public sealed class DodoPaymentGateway(HttpClient http, IOptions<DodoOptions> op
             _ => null
         };
 
-        // A usage-based price is checked on its fixed fee only. The amount is read as two decimal places,
-        // which every currency the plans are priced in has; another currency is a mismatch either way.
+        // The amount is read as two decimal places, which every currency the plans are priced in has;
+        // another currency is a mismatch either way.
         return new ProviderProduct(
             minor / 100m,
             price.Currency ?? "",
             product.IsRecurring,
             product.IsRecurring ? interval : null,
             Discounted: price.Discount is > 0 || price.DiscountBps is > 0,
-            TrialDays: price.TrialPeriodDays ?? 0);
+            TrialDays: price.TrialPeriodDays ?? 0,
+            BuyerSetsAmount: price.PayWhatYouWant == true,
+            UsageBased: price.Type == "usage_based_price");
     }
 
     public async Task<bool> AcceptsCredentialsAsync(CancellationToken ct)

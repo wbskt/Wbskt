@@ -1321,6 +1321,7 @@ public sealed class BillingPaymentsTests
             "/products/prod_12m" => Json("""{"product_id":"prod_12m","is_recurring":true,"price":{"type":"recurring_price","price":24000,"currency":"USD","payment_frequency_count":12,"payment_frequency_interval":"month","discount_bps":1000,"trial_period_days":14}}"""),
             "/products/prod_usage" => Json("""{"product_id":"prod_usage","is_recurring":true,"price":{"type":"usage_based_price","fixed_price":2400,"currency":"USD","payment_frequency_count":1,"payment_frequency_interval":"Month"}}"""),
             "/products/prod_bad" => new HttpResponseMessage(HttpStatusCode.UnprocessableEntity),
+            "/products/prod_pwyw" => Json("""{"product_id":"prod_pwyw","is_recurring":false,"price":{"type":"one_time_price","price":500,"currency":"USD","pay_what_you_want":true}}"""),
             _ => new HttpResponseMessage(HttpStatusCode.NotFound)
         }));
 
@@ -1328,7 +1329,8 @@ public sealed class BillingPaymentsTests
         Assert.Equal(new ProviderProduct(15m, "USD", true, null), await gateway.FindProductAsync("prod_q", CancellationToken.None));
         Assert.Equal(new ProviderProduct(5m, "EUR", false, null), await gateway.FindProductAsync("prod_pack", CancellationToken.None));
         Assert.Equal(new ProviderProduct(240m, "USD", true, BillingInterval.Yearly, Discounted: true, TrialDays: 14), await gateway.FindProductAsync("prod_12m", CancellationToken.None));
-        Assert.Equal(new ProviderProduct(24m, "USD", true, BillingInterval.Monthly), await gateway.FindProductAsync("prod_usage", CancellationToken.None));
+        Assert.Equal(new ProviderProduct(24m, "USD", true, BillingInterval.Monthly, UsageBased: true), await gateway.FindProductAsync("prod_usage", CancellationToken.None));
+        Assert.Equal(new ProviderProduct(5m, "USD", false, null, BuyerSetsAmount: true), await gateway.FindProductAsync("prod_pwyw", CancellationToken.None));
         await Assert.ThrowsAsync<HttpRequestException>(() => gateway.FindProductAsync("prod_bad", CancellationToken.None));
         Assert.Null(await gateway.FindProductAsync("prod_gone", CancellationToken.None));
     }
@@ -1354,7 +1356,7 @@ public sealed class BillingPaymentsTests
         _gateway.Setup(g => g.FindProductAsync("prod_ok", It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderProduct(5m, "USD", true, BillingInterval.Monthly));
         _gateway.Setup(g => g.FindProductAsync("prod_monthly_as_yearly", It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderProduct(50m, "USD", true, BillingInterval.Monthly));
         _gateway.Setup(g => g.FindProductAsync("prod_maker", It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderProduct(5m, "USD", true, BillingInterval.Monthly));
-        _gateway.Setup(g => g.FindProductAsync("prod_pack", It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderProduct(5m, "usd", false, null));
+        _gateway.Setup(g => g.FindProductAsync("prod_pack", It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderProduct(5m, "usd", false, null, BuyerSetsAmount: true));
         _gateway.Setup(g => g.FindProductAsync("prod_gone", It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("Dodo refused to read a product: 422."));
         _gateway.Setup(g => g.FindProductAsync("prod_trial", It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderProduct(99m, "USD", true, BillingInterval.Monthly, Discounted: true, TrialDays: 30));
 
@@ -1368,6 +1370,7 @@ public sealed class BillingPaymentsTests
                 "Team Monthly (prod_trial) has a 30-day free trial, which the plan catalogue does not give.",
                 "Team Yearly (prod_gone) could not be read: Dodo refused to read a product: 422.",
                 "Business Yearly (prod_business) is configured, but the catalogue has no price for it, so it is not offered.",
+                "credit pack Pack10k (prod_pack) lets the buyer choose the amount, so 5 usd is only the least it sells for.",
                 "credit pack Unpriced (prod_unpriced) has no PriceUsd configured, so it shows as free."
             ],
             problems);
