@@ -175,16 +175,19 @@ BEGIN
                 -- cap is held exactly: what the workspace spent this month plus what its runs still going
                 -- may yet spend (each root run's unspent budget, which its sub-workflow children share) is
                 -- reserved against it, under a lock per workspace so two starts cannot both take the same
-                -- remainder. A run's charges never pass its budget, so the workspace never passes its cap (but for a
-                -- charge landing as dbo.WorkspaceCreditCap_Set cuts a going run's budget, one per run).
+                -- remainder. A run's charges never pass its budget, so the workspace never passes its cap,
+                -- but for charges already under way when dbo.WorkspaceCreditCap_Set cuts a going run's
+                -- budget (see there).
                 -- The budget is leased: the run gets a twentieth of the cap (or its start cost, if more)
                 -- and RunCounters_TryCharge extends it as it is spent, up to @BudgetCeiling, so one run
                 -- going does not hold the whole cap away from the next.
                 DECLARE @BudgetCeiling DECIMAL(18,4);
                 -- Read with HOLDLOCK and held to the commit, so a cap being set (WorkspaceCreditCap_Set
                 -- writes the row before it cuts the runs going) waits for this start or is seen by it,
-                -- and this run is never left out of the cut.
-                DECLARE @Cap DECIMAL(18,4) = (SELECT MonthlyCreditCap FROM dbo.WorkspaceCreditCaps WITH (HOLDLOCK) WHERE WorkspaceId = @WorkspaceId);
+                -- and this run is never left out of the cut. The set holds the row while it waits up to
+                -- two seconds for the cap's lock and then cuts the runs going.
+                DECLARE @Cap DECIMAL(18,4) =
+                    (SELECT MonthlyCreditCap FROM dbo.WorkspaceCreditCaps WITH (HOLDLOCK) WHERE WorkspaceId = @WorkspaceId);
                 IF @Cap IS NOT NULL
                 BEGIN
                     DECLARE @CapResource NVARCHAR(255) = CONCAT(N'credit-cap:', @WorkspaceId);

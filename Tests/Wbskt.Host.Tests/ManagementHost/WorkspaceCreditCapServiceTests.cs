@@ -39,6 +39,7 @@ public sealed class WorkspaceCreditCapServiceTests
     [Theory]
     [InlineData(50035)]
     [InlineData(1205)]
+    [InlineData(1222)]
     public async Task A_cap_whose_lock_is_busy_or_lost_a_deadlock_is_a_503_to_try_again_and_announces_nothing(int number)
     {
         _caps.Setup(x => x.SetAsync(7, 100m, It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
