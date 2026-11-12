@@ -84,8 +84,21 @@ internal sealed class ClientAccessGate : IClientAccessGate
 
     public async Task<AccessRecheckResult> RecheckAsync(IReadOnlyCollection<ClientToken> tokens, CancellationToken cancellationToken = default)
     {
-        var here = tokens.Where(t => _cache.IsRevoked(t.ClientRefId, t.IssuedAt)).Select(t => t.ClientRefId).ToList();
-        var rest = tokens.Where(t => !here.Contains(t.ClientRefId)).ToList();
+        var here = new List<Guid>();
+        var rest = new List<ClientToken>();
+        foreach (var token in tokens)
+        {
+            if (_cache.IsRevoked(token.ClientRefId, token.IssuedAt))
+            {
+                here.Add(token.ClientRefId);
+            }
+            else
+            {
+                rest.Add(token);
+            }
+        }
+
+        // Every token refused here: Redis had nothing left to answer.
         if (rest.Count == 0)
         {
             return new AccessRecheckResult(here, [], CutoffsRead: true);

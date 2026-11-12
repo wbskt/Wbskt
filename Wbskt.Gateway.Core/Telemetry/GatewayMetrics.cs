@@ -32,6 +32,10 @@ public sealed class GatewayMetrics : IDisposable
         _disconnects = _meter.CreateCounter<long>("wbskt_socket_disconnects_total");
         _dropped = _meter.CreateCounter<long>("wbskt_socket_messages_dropped_total");
         _recheckClosed = _meter.CreateCounter<long>("wbskt_socket_access_recheck_closed_total");
+
+        // A series first seen at 1 has no earlier sample, so increase() reads 0 and the alert misses the
+        // first (often the only) close; start it at zero.
+        _recheckClosed.Add(0, _transport);
     }
 
     public void Connected()
