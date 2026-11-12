@@ -35,4 +35,12 @@ internal sealed class WorkspaceRetirementProvider : BaseSqlProvider, IWorkspaceR
             p => p.AddWithValue("@WorkspaceId", workspaceId),
             cancellationToken);
     }
+
+    public async Task<int> DeleteRetiredAccountsAsync(DateTime nowUtc, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteScalarAsync<int>(
+            "dbo.WorkspaceAccount_DeleteRetired",
+            p => p.AddWithValue("@Now", nowUtc),
+            cancellationToken);
+    }
 }

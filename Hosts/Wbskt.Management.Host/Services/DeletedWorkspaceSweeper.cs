@@ -13,7 +13,9 @@ namespace Wbskt.Management.Host.Services;
 /// the same <see cref="WorkspaceRetirer"/> the event's handler uses, any that still have live
 /// policies, clients, workflows or runs here. Each one it retires is counted
 /// (<c>wbskt_management_workspaces_retired_by_sweep_total</c>): an event that was lost, before the
-/// outbox existed, or whose handler ran out of retries.
+/// outbox existed, or whose handler ran out of retries. Then it deletes the account copies of deleted
+/// workspaces that nothing reads any more (<c>dbo.WorkspaceAccount_DeleteRetired</c>), whether or not
+/// the auth host answered.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -64,7 +66,30 @@ public sealed class DeletedWorkspaceSweeper : PeriodicWorker
 
     protected override async Task RunOnceAsync(IServiceProvider services, CancellationToken ct)
     {
-        await SweepAsync(services, ct);
+        try
+        {
+            await SweepAsync(services, ct);
+        }
+        finally
+        {
+            await PruneAccountsAsync(services, ct);
+        }
+    }
+
+    /// <summary>
+    /// Deletes the account copies of deleted workspaces that no meter or retention sweep reads any more.
+    /// Returns how many went.
+    /// </summary>
+    internal async Task<int> PruneAccountsAsync(IServiceProvider services, CancellationToken cancellationToken)
+    {
+        var provider = services.GetRequiredService<IWorkspaceRetirementProvider>();
+        int pruned = await provider.DeleteRetiredAccountsAsync(_timeProvider.GetUtcNow().UtcDateTime, cancellationToken);
+        if (pruned > 0)
+        {
+            Logger.LogInformation("Deleted the account copies of {Count} deleted workspace(s) that nothing reads any more.", pruned);
+        }
+
+        return pruned;
     }
 
     /// <summary>One sweep in a scope of its own; see <see cref="SweepAsync(IServiceProvider, CancellationToken)"/>.</summary>

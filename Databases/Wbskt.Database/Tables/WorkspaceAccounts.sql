@@ -17,9 +17,10 @@
 -- RetentionGraceDays later), and the retention sweeps keep the longer of the two until then, so data a
 -- customer who pays again the next day still wants is not deleted the night they lapse.
 --
--- RetiredAt is when the workspace was deleted (dbo.Workspace_Retire). The row is kept, not deleted: the
--- tenant's month is summed through it, so deleting it would hand back the credits and messages the
--- workspace spent, and the retention sweeps would never reach its readings and runs.
+-- RetiredAt is when the workspace was deleted (dbo.Workspace_Retire). The row is kept while anything
+-- reads it: the tenant's month is summed through it, so deleting it early would hand back the credits
+-- and messages the workspace spent, and the retention sweeps reach its readings and runs through it.
+-- dbo.WorkspaceAccount_DeleteRetired prunes it once none of that is left.
 CREATE TABLE dbo.WorkspaceAccounts
 (
     WorkspaceId    INT              NOT NULL,
