@@ -239,7 +239,7 @@ role or user belonging to another tenant reads as nonexistent.
 | Endpoint | Permission | What it does |
 |---|---|---|
 | `GET /` | none | Lists the caller's tenants. The entry point for everything below. |
-| `POST /` | none | Creates a tenant the caller administers. Self-serve, hence ungated. |
+| `POST /` | none | Creates a tenant the caller administers. Self-serve, hence ungated, but an account may have one Free tenant to itself: while the caller is the only member of a Free tenant (the one sign-up made, say; the seeded default tenant aside), another is 409 `TENANT_FREE_LIMIT_REACHED`. Upgrading that tenant lifts the cap (so does another member joining it, where its limits allow one). |
 | `PUT {tenantRef}` | `users.manage` | Renames a tenant or changes its description. |
 | `GET {tenantRef}/usage` | `billing.read` | The tenant's plan, its limits (with any negotiated overrides applied) and its seats: `{ plan, limits, workspaces: { used, limit }, members: { used, limit } }`. A member counts suspended or not; a pending invitation does not. Credits, messages, clients and runs are pooled on the management host and read from a workspace's `…/usage`. |
 

@@ -33,6 +33,10 @@ internal static class SqlGuardErrors
         "ACCOUNT_SOLE_ADMINISTRATOR",
         $"Nobody else administers {string.Join(", ", tenants)}. Make another member an administrator, or remove the other members, before deleting your account.");
 
+    public static readonly Error FreeTenantLimitReached = Error.Conflict(
+        "TENANT_FREE_LIMIT_REACHED",
+        "You already have a Free tenant to yourself. Upgrade it to a paid plan before creating another.");
+
     public static bool TryTranslate(Exception ex, Error? conflictError, out Error error)
     {
         error = ex switch
@@ -56,6 +60,9 @@ internal static class SqlGuardErrors
             // The tenant's plan has no room for another workspace or member.
             SqlException { Number: 50030 } => PlanWorkspaceLimitReached,
             SqlException { Number: 50031 } => PlanMemberLimitReached,
+
+            // The caller already has a Free tenant to themselves (dbo.Tenant_Create).
+            SqlException { Number: 50036 } => FreeTenantLimitReached,
 
             // Deleting an account: its owner is a tenant's only administrator (the message names the
             // tenants), or its tenants changed between reading and deleting.
