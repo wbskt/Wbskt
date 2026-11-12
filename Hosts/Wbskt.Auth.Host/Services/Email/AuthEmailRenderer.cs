@@ -33,6 +33,8 @@ internal static class AuthEmailRenderer
     private const string OnAccent = "#ffffff";
     private const string Wordmark = "#ecebe7";
 
+    // No web font is loaded: a stylesheet fetched from a third party on every open would tell it who
+    // read the mail and when. Inter applies where it is installed; elsewhere the system UI face does.
     private const string Sans = "Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
     private const string Mono = "'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace";
 
@@ -118,7 +120,6 @@ internal static class AuthEmailRenderer
                     <meta name="supported-color-schemes" content="dark">
                     <title>{{Encode(Subject(content.Subject))}}</title>
                     <!--[if mso]><noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript><![endif]-->
-                    <!--[if !mso]><!--><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet"><!--<![endif]-->
                     <style>
                       :root { color-scheme: dark; supported-color-schemes: dark; }
                       body { margin: 0; padding: 0; width: 100% !important; background-color: {{Canvas}}; }
