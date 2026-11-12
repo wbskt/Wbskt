@@ -31,6 +31,9 @@ internal static class ProviderFactory
     public static RunProvider Run(string connectionString)
         => new(BuildConfiguration(connectionString));
 
+    public static IdempotencyKeyProvider IdempotencyKey(string connectionString)
+        => new(BuildConfiguration(connectionString));
+
     public static RunCountersProvider RunCounters(string connectionString)
         => new(BuildConfiguration(connectionString));
 

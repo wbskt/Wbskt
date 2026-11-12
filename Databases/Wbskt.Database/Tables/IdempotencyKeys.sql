@@ -27,3 +27,10 @@ GO
 CREATE INDEX IX_IdempotencyKeys_CreatedAt
     ON dbo.IdempotencyKeys (CreatedAt);
 GO
+
+-- IdempotencyKey_FailAbandonedClaims looks only at Pending rows, which are few at any moment, so a
+-- new leader's sweep seeks them rather than scanning a day of settled ones.
+CREATE INDEX IX_IdempotencyKeys_Pending
+    ON dbo.IdempotencyKeys (KeyValue)
+    WHERE Status = N'Pending';
+GO

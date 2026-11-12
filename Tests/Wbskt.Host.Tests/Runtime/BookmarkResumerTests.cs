@@ -260,6 +260,21 @@ public sealed class BookmarkResumerTests
         Assert.Equal("inbound-event:event-1", idempotency.MarkFailedCalls[0].KeyValue);
     }
 
+    [Fact]
+    public async Task MatchInbound_marks_claim_failed_even_when_the_host_is_stopping()
+    {
+        // #770: a stopping host cancels the consumer's token mid-resume. Marking the claim Failed with that
+        // token threw before the write, leaving it Pending, so every redelivery was dropped as a duplicate.
+        var bookmark = CreateBookmark(77, 42, Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Guid.Parse("11111111-1111-1111-1111-111111111111"));
+        var idempotency = RecordingIdempotencyKeyProvider.NewClaim();
+        using var stopping = new CancellationTokenSource();
+        var resumer = new BookmarkResumer(new RecordingBookmarkProvider(bookmark), idempotency, new RecordingBranchProvider((bookmark.BranchRefId, 1001)), new CancellingRunDispatcher(stopping));
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => resumer.MatchInboundAsync(CreateInboundEvent(), hasRegistrations: true, stopping.Token));
+
+        Assert.Equal("inbound-event:event-1", Assert.Single(idempotency.MarkFailedCalls).KeyValue);
+    }
+
     private static InboundEvent CreateInboundEvent()
     {
         return new InboundEvent(
@@ -475,6 +490,8 @@ public sealed class BookmarkResumerTests
 
         public Task<IdempotencyKeyRow> MarkFailedAsync(string keyValue, string errorJson, CancellationToken ct)
         {
+            // A real provider's command throws on a cancelled token before it writes anything.
+            ct.ThrowIfCancellationRequested();
             MarkFailedCalls.Add((keyValue, errorJson));
             return Task.FromResult<IdempotencyKeyRow>(null!);
         }
@@ -537,6 +554,16 @@ public sealed class BookmarkResumerTests
         {
             operationLog?.Add("dispatch");
             Requests.Add((request.RunId, request.BranchId, request.Reason));
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class CancellingRunDispatcher(CancellationTokenSource stopping) : IRunDispatcher
+    {
+        public ValueTask DispatchAsync(BranchExecutionRequest request, CancellationToken ct)
+        {
+            stopping.Cancel();
+            ct.ThrowIfCancellationRequested();
             return ValueTask.CompletedTask;
         }
     }

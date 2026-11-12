@@ -83,6 +83,8 @@ public sealed class EngineLeaseLifecycleTests
             .ReturnsAsync([]);
         branches.Setup(b => b.GetRunningBranchesAsync(It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("database unreachable"));
+        var claims = new Mock<IIdempotencyKeyProvider>();
+        claims.Setup(c => c.FailAbandonedClaimsAsync(It.IsAny<CancellationToken>())).ReturnsAsync(0);
 
         using IHost host = new HostBuilder()
             .ConfigureLogging(logging => logging.ClearProviders().AddProvider(logs))
@@ -94,6 +96,7 @@ public sealed class EngineLeaseLifecycleTests
                 services.AddSingleton<ILeaseProvider>(lease);
                 services.AddSingleton(bus.Object);
                 services.AddSingleton(branches.Object);
+                services.AddSingleton(claims.Object);
                 services.AddSingleton(Mock.Of<IRunDispatcher>());
                 services.AddSingleton<RunRecoveryService>();
                 services.AddSingleton(WorkerTestServices.Options(new WorkflowEngineOptions { LeaderElectionRenewInterval = TimeSpan.FromMilliseconds(50) }));
@@ -119,11 +122,11 @@ public sealed class EngineLeaseLifecycleTests
     }
 
     [Fact]
-    public async Task A_new_leader_reads_the_woken_branches_before_it_starts_the_bus_or_opens_the_gate()
+    public async Task A_new_leader_reads_the_woken_branches_and_releases_abandoned_claims_before_it_starts_the_bus()
     {
         // wbskt/Wbskt#768: once the bus runs and the gate is open, the scheduler and consumers wake branches
         // of their own, which look the same as the ones the previous leader woke and lost; read then, they
-        // would be run twice.
+        // would be run twice. #770: the same holds for the event claims a stopped engine left Pending.
         var steps = new ConcurrentQueue<string>();
         var state = new LeadershipState();
         var lease = new RecordingLeaseProvider(acquire: true, events: new ConcurrentQueue<string>());
@@ -145,6 +148,10 @@ public sealed class EngineLeaseLifecycleTests
             .Callback(() => steps.Enqueue(state.BusStarted ? "woken-read-after-gate" : "woken-read"))
             .ReturnsAsync([woken]);
         branches.Setup(b => b.GetRunningBranchesAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        var claims = new Mock<IIdempotencyKeyProvider>();
+        claims.Setup(c => c.FailAbandonedClaimsAsync(It.IsAny<CancellationToken>()))
+            .Callback(() => steps.Enqueue(state.BusStarted ? "claims-released-after-gate" : "claims-released"))
+            .ReturnsAsync(2);
 
         var dispatcher = new Mock<IRunDispatcher>();
         dispatcher.Setup(d => d.DispatchAsync(It.IsAny<BranchExecutionRequest>(), It.IsAny<CancellationToken>()))
@@ -164,6 +171,7 @@ public sealed class EngineLeaseLifecycleTests
                 services.AddSingleton<ILeaseProvider>(lease);
                 services.AddSingleton(bus.Object);
                 services.AddSingleton(branches.Object);
+                services.AddSingleton(claims.Object);
                 services.AddSingleton(dispatcher.Object);
                 services.AddSingleton<RunRecoveryService>();
                 services.AddSingleton(WorkerTestServices.Options(new WorkflowEngineOptions { LeaderElectionRenewInterval = TimeSpan.FromMilliseconds(50) }));
@@ -177,7 +185,7 @@ public sealed class EngineLeaseLifecycleTests
         await recovered.Task.WaitAsync(timeout.Token);
         await host.StopAsync(timeout.Token);
 
-        Assert.Equal(["woken-read", "bus-started", "dispatch-81"], steps);
+        Assert.Equal(["woken-read", "claims-released", "bus-started", "dispatch-81"], steps);
     }
 
     private static LeaderElectionService CreateElectionService(ILeaseProvider lease, LeadershipState state) =>

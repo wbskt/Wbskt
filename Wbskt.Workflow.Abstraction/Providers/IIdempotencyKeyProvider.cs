@@ -17,6 +17,13 @@ public interface IIdempotencyKeyProvider
     /// </summary>
     Task<IdempotencyKeyRow> ReclaimFailedAsync(string keyValue, Guid newBranchRefId, CancellationToken ct);
 
+    /// <summary>
+    /// Marks every Pending inbound-event and trigger-start claim Failed, so a redelivery of its event can
+    /// reclaim it. Only a new leader calls it, before its bus starts, when any such claim was left by an
+    /// engine that stopped mid-dispatch. Returns the number marked.
+    /// </summary>
+    Task<int> FailAbandonedClaimsAsync(CancellationToken ct) => throw new NotSupportedException();
+
     /// <summary>Deletes up to <paramref name="batchSize"/> idempotency rows created before the cutoff. Returns the count deleted.</summary>
     Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct);
 }

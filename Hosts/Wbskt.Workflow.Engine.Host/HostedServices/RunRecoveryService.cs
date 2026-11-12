@@ -27,6 +27,30 @@ public sealed class RunRecoveryService : IEngineStartupTracker
     internal const int WokenPageSize = 1_000;
 
     /// <summary>
+    /// Marks Failed the inbound-event and trigger-start claims a stopped engine left Pending, so the
+    /// broker's redelivery of each event reclaims it rather than dropping it as a duplicate. Call it
+    /// before the bus starts, when no claim can be this instance's own.
+    /// </summary>
+    public async Task ReleaseAbandonedClaimsAsync(CancellationToken ct)
+    {
+        try
+        {
+            await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
+            var idempotencyKeyProvider = scope.ServiceProvider.GetRequiredService<IIdempotencyKeyProvider>();
+            int released = await idempotencyKeyProvider.FailAbandonedClaimsAsync(ct);
+            if (released > 0)
+            {
+                _logger.LogWarning("Released {Count} event claims a stopped engine left mid-dispatch; their redeliveries will be handled.", released);
+            }
+        }
+        catch (Exception ex)
+        {
+            _readyTcs.TrySetException(ex);
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Every Waiting branch whose wake the previous leader claimed and stored but may not have dispatched
     /// (a timer, a TTL, a signal, a command answer). Call it before this instance can claim, park or
     /// dispatch anything itself, that is before the bus starts and the leadership gate opens: a branch
