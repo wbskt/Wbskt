@@ -742,6 +742,21 @@ public sealed class BillingPaymentsTests
         Assert.Equal(ErrorType.Unavailable, down.Error.Type);
     }
 
+    [Theory]
+    [InlineData(null, false, null)]
+    [InlineData("cus_own", false, "cus_own")]
+    [InlineData("cus_shared", true, null)]
+    public async Task A_checkout_pays_as_the_tenants_own_customer_and_never_as_one_another_tenant_shares(string? stored, bool shared, string? sent)
+    {
+        _accounts.Setup(a => a.GetByIdAsync(4, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = 4, Email = "a@example.com", Username = "ann" });
+        _gateway.Setup(g => g.CreateCheckoutAsync(It.IsAny<BillingCheckout>(), It.IsAny<CancellationToken>())).ReturnsAsync("https://pay/1");
+        _billing.Setup(b => b.FindCustomerAsync(9, "dodo", It.IsAny<CancellationToken>())).ReturnsAsync(stored is null ? null : new BillingCustomer(stored, shared));
+
+        await Billing().CheckoutAsync(9, 4, new BillingCheckoutRequest(CreditPack: "Boost"), CancellationToken.None);
+
+        _gateway.Verify(g => g.CreateCheckoutAsync(It.Is<BillingCheckout>(c => c.CustomerId == sent), It.IsAny<CancellationToken>()));
+    }
+
     [Fact]
     public async Task A_plan_checkout_still_open_is_handed_out_again_and_a_new_one_is_kept_for_reuse()
     {
@@ -920,6 +935,17 @@ public sealed class BillingPaymentsTests
         Assert.Equal("BILLING_CUSTOMER_NOT_FOUND", none.Error.Code);
     }
 
+    [Fact]
+    public async Task The_portal_of_a_customer_another_tenant_pays_as_too_is_refused()
+    {
+        _billing.Setup(b => b.FindCustomerAsync(9, "dodo", It.IsAny<CancellationToken>())).ReturnsAsync(new BillingCustomer("cus_shared", Shared: true));
+
+        var shared = await Billing().PortalAsync(9, CancellationToken.None);
+
+        Assert.Equal((ErrorType.Conflict, "BILLING_CUSTOMER_SHARED"), (shared.Error.Type, shared.Error.Code));
+        _gateway.Verify(g => g.CreatePortalLinkAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     // ----- Dodo's JSON -------------------------------------------------------------------------------
 
     [Fact]
@@ -1041,7 +1067,22 @@ public sealed class BillingPaymentsTests
         Assert.Equal("prod_maker_m", sent.RootElement.GetProperty("product_cart")[0].GetProperty("product_id").GetString());
         Assert.Equal(TenantRef.ToString(), sent.RootElement.GetProperty("metadata").GetProperty("tenant_ref").GetString());
         Assert.Equal("a@example.com", sent.RootElement.GetProperty("customer").GetProperty("email").GetString());
+        Assert.True(sent.RootElement.GetProperty("feature_flags").GetProperty("always_create_new_customer").GetBoolean());
         Assert.Equal("https://console.example", sent.RootElement.GetProperty("return_url").GetString());
+    }
+
+    [Fact]
+    public async Task A_dodo_checkout_for_a_tenant_with_a_customer_attaches_that_customer()
+    {
+        var handler = new StubHandler(_ => Json("""{"session_id":"cks_1","checkout_url":"https://test.checkout.dodopayments.com/cks_1"}"""));
+
+        await Dodo(handler).CreateCheckoutAsync(new BillingCheckout("prod_boost", TenantRef, "a@example.com", "ann", null, "cus_own"), CancellationToken.None);
+
+        using JsonDocument sent = JsonDocument.Parse(handler.Bodies[0]);
+        JsonElement customer = sent.RootElement.GetProperty("customer");
+        Assert.Equal("cus_own", customer.GetProperty("customer_id").GetString());
+        Assert.False(customer.TryGetProperty("email", out _));
+        Assert.False(sent.RootElement.TryGetProperty("feature_flags", out _));
     }
 
     [Fact]

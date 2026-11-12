@@ -28,3 +28,8 @@ GO
 CREATE NONCLUSTERED INDEX IX_TenantCreditPurchases_TenantId
     ON dbo.TenantCreditPurchases (TenantId, PurchasedAt DESC) INCLUDE (CustomerId);
 GO
+
+-- Finds another tenant paying as the same customer (dbo.TenantBillingCustomer_FindBy_TenantId).
+CREATE NONCLUSTERED INDEX IX_TenantCreditPurchases_CustomerId
+    ON dbo.TenantCreditPurchases (Provider, CustomerId) INCLUDE (TenantId);
+GO

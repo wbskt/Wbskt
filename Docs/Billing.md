@@ -346,8 +346,14 @@ $0.50 per 1,000 a pack costs more per credit than any plan (Maker gives 5,000 a 
 
 - **Buying.** `POST /api/v1/tenants/{tenantRef}/billing/checkout` (`billing.manage`) names a plan and
   interval or a credit pack, and answers the provider's checkout page. The checkout carries the tenant's
-  reference in the provider's metadata (`tenant_ref`) and is paid by the signed-in user's email. A tenant
-  whose subscription is still billing changes its plan (below) or cancels it in the provider's portal
+  reference in the provider's metadata (`tenant_ref`) and is paid by the signed-in user's email. Each
+  tenant is its own customer with the provider: a tenant's first checkout always makes a new customer
+  (`always_create_new_customer`), never one the provider finds by the payer's email, and later ones attach
+  the customer it paid as (`dbo.TenantBillingCustomer_FindBy_TenantId`). Otherwise one person paying for
+  two tenants would be one customer, and a billing admin of either would see and cancel the other's
+  subscriptions in the portal. A customer two tenants already share, from checkouts before this, is not
+  attached again, and its portal is refused (409 `BILLING_CUSTOMER_SHARED`) until support separates them.
+  A tenant whose subscription is still billing changes its plan (below) or cancels it in the provider's portal
   (`POST …/billing/portal`) rather than starting a second one (409 `BILLING_SUBSCRIPTION_ACTIVE`). So does
   a subscription cancelled at the end of a period still paid for: a second one would bill for the same
   days, so the customer revokes the cancellation in the portal and changes plan, or checks out once it ends.

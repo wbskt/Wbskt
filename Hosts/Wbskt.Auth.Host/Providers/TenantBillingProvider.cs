@@ -212,13 +212,13 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
         }, cancellationToken);
     }
 
-    public Task<string?> FindCustomerIdAsync(int tenantId, string provider, CancellationToken cancellationToken)
+    public Task<BillingCustomer?> FindCustomerAsync(int tenantId, string provider, CancellationToken cancellationToken)
     {
-        return ExecuteScalarAsync<string>("dbo.TenantBillingCustomer_FindBy_TenantId", p =>
+        return ExecuteFindAsync("dbo.TenantBillingCustomer_FindBy_TenantId", p =>
         {
             p.AddWithValue("@TenantId", tenantId);
             p.AddWithValue("@Provider", provider);
-        }, cancellationToken);
+        }, r => new BillingCustomer(r.GetString(r.GetOrdinal("CustomerId")), r.GetBoolean(r.GetOrdinal("Shared"))), cancellationToken);
     }
 
     public async Task<bool> RecordBillingNoticeAsync(int tenantId, BillingNoticeKind kind, string periodKey, IReadOnlyCollection<OutboundMail> mails, CancellationToken cancellationToken)
