@@ -32,7 +32,7 @@ public sealed record AccountUsage(CreditUsageAmount Credits, MessageUsageAmount 
 /// <param name="Remaining">
 /// What new runs may still spend this month, worked out as a run start does: what the plan still covers
 /// (on Business, up to its overage multiple of <c>Limit</c>) plus <c>TopUp</c>, less what runs have not
-/// posted yet. A run is refused once it is 0.
+/// posted yet. The account refuses new runs once it is 0; a workspace's own cap may refuse them sooner.
 /// </param>
 public sealed record CreditUsageAmount(decimal Used, decimal Limit, decimal TopUp, DateTimeOffset? TopUpExpiresAt, decimal TopUpExpiring, decimal Remaining);
 
