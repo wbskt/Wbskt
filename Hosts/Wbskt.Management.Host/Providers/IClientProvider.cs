@@ -75,11 +75,12 @@ public interface IClientProvider : IReferenceProvider
     /// </summary>
     Task<IReadOnlyCollection<ExpiredPresence>> ResetPresenceByHostAsync(string hostId, DateTime startedAtUtc, CancellationToken cancellationToken = default);
     /// <summary>
-    /// Clears the presence of clients on <paramref name="hostId"/> that connected more than
-    /// <paramref name="margin"/> before <paramref name="takenAtUtc"/> but are not in the host's own
-    /// list of <paramref name="connectedRefIds"/>, and returns them.
+    /// Repairs presence from <paramref name="hostId"/>'s own list of <paramref name="connectedRefIds"/>,
+    /// taken at <paramref name="takenAtUtc"/>: clears clients the database has on the host that are not
+    /// in it, and sets back online clients in it that the database shows offline, each only when its last
+    /// presence change is more than <paramref name="margin"/> older than the list. Returns them.
     /// </summary>
-    Task<IReadOnlyCollection<ExpiredPresence>> ReconcilePresenceByHostAsync(string hostId, IReadOnlyCollection<Guid> connectedRefIds, DateTime takenAtUtc, TimeSpan margin, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<PresenceRepair>> ReconcilePresenceByHostAsync(string hostId, IReadOnlyCollection<Guid> connectedRefIds, DateTime takenAtUtc, TimeSpan margin, CancellationToken cancellationToken = default);
     Task<ClientDetail?> FindDetailByRefIdAsync(Guid refId, CancellationToken cancellationToken = default);
     Task UpdateNameAsync(int id, string name, CancellationToken cancellationToken = default);
     Task UpdateRttAsync(int id, int lastRttMs, DateTime measuredAt, CancellationToken cancellationToken = default);

@@ -3,6 +3,9 @@ namespace Wbskt.Management.Host.Models;
 /// <summary>A client whose presence was cleared because the socket host holding it went silent.</summary>
 public sealed record ExpiredPresence(int ClientId, Guid ClientRefId, int WorkspaceId, string? HostId);
 
+/// <summary>A client whose presence a live socket host's snapshot repaired: set back online (<c>Connected</c>) or cleared.</summary>
+public sealed record PresenceRepair(int ClientId, Guid ClientRefId, int WorkspaceId, bool Connected);
+
 /// <summary>How the management host decides a socket host has gone (see <c>StalePresenceSweeper</c>).</summary>
 public sealed class PresenceOptions
 {

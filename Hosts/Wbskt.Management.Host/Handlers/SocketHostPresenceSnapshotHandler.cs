@@ -7,9 +7,12 @@ using Wbskt.Management.Host.Providers;
 namespace Wbskt.Management.Host.Handlers;
 
 /// <summary>
-/// Repairs presence a live socket host lost: a client the database has on that host which connected
-/// before the host's snapshot but isn't in it is cleared and announced as disconnected, so offline
-/// triggers fire and sends queue instead of going to a host that no longer has the client.
+/// Repairs presence from a live socket host's snapshot, both ways. A client the database has on that host
+/// which connected before the snapshot but isn't in it is cleared and announced as disconnected, so
+/// offline triggers fire and sends queue instead of going to a host that no longer has the client. A client
+/// in it that the database shows offline (the stale-presence sweep cleared it while the host's heartbeats
+/// could not reach the broker) is set back online and announced as connected, which also delivers the
+/// commands that queued meanwhile.
 /// </summary>
 public sealed class SocketHostPresenceSnapshotHandler : IConsumer<SocketHostPresenceSnapshot>
 {
@@ -33,24 +36,40 @@ public sealed class SocketHostPresenceSnapshotHandler : IConsumer<SocketHostPres
     public async Task Consume(ConsumeContext<SocketHostPresenceSnapshot> context)
     {
         var snapshot = context.Message;
-        var cleared = await _clients.ReconcilePresenceByHostAsync(snapshot.HostId, snapshot.ClientRefIds, snapshot.TakenAtUtc, Margin, context.CancellationToken);
-        foreach (var client in cleared)
+        var repaired = await _clients.ReconcilePresenceByHostAsync(snapshot.HostId, snapshot.ClientRefIds, snapshot.TakenAtUtc, Margin, context.CancellationToken);
+        foreach (var client in repaired)
         {
             try
             {
-                // Dated by the snapshot, on the host's clock, so a reconnect the host saw after it still wins.
-                var disconnected = new ClientDisconnectedEvent(client.ClientRefId, client.ClientId, client.WorkspaceId, Reason, snapshot.HostId) { CreatedAtUtc = snapshot.TakenAtUtc };
-                await _eventBus.PublishAsync(disconnected, context.CancellationToken);
+                // Dated by the snapshot, on the host's clock, so a change the host saw after it still wins.
+                // Published by its own type: the bus routes on the static type.
+                if (client.Connected)
+                {
+                    var connected = new ClientConnectedEvent(client.ClientRefId, client.ClientId, client.WorkspaceId, snapshot.HostId) { CreatedAtUtc = snapshot.TakenAtUtc };
+                    await _eventBus.PublishAsync(connected, context.CancellationToken);
+                }
+                else
+                {
+                    var disconnected = new ClientDisconnectedEvent(client.ClientRefId, client.ClientId, client.WorkspaceId, Reason, snapshot.HostId) { CreatedAtUtc = snapshot.TakenAtUtc };
+                    await _eventBus.PublishAsync(disconnected, context.CancellationToken);
+                }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.LogWarning(ex, "Client {ClientRefId} was marked offline, but its disconnect could not be announced.", client.ClientRefId);
+                _logger.LogWarning(ex, "Client {ClientRefId}'s presence was repaired, but the change could not be announced.", client.ClientRefId);
             }
         }
 
-        if (cleared.Count > 0)
+        int cleared = repaired.Count(c => !c.Connected);
+        if (cleared > 0)
         {
-            _logger.LogWarning("Marked {Count} clients offline: socket host {HostId} no longer held them, and their disconnects were lost.", cleared.Count, snapshot.HostId);
+            _logger.LogWarning("Marked {Count} clients offline: socket host {HostId} no longer held them, and their disconnects were lost.", cleared, snapshot.HostId);
+        }
+
+        int restored = repaired.Count - cleared;
+        if (restored > 0)
+        {
+            _logger.LogWarning("Marked {Count} clients online again: socket host {HostId} still held them after their presence expired.", restored, snapshot.HostId);
         }
     }
 }
