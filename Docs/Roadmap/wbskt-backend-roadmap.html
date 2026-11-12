@@ -306,7 +306,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "short": "M3",
    "due": "2026-12-31",
    "start": "2026-12-01",
-   "open": 61,
+   "open": 60,
    "closed": 10
   },
   {
@@ -314,7 +314,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "short": "Post",
    "due": null,
    "start": "2027-01-01",
-   "open": 60,
+   "open": 61,
    "closed": 10
   }
  ],
@@ -404,7 +404,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "date": "2026-11-11",
    "title": "Architecture review",
    "scope": "289 commits since 2 Nov in six repos, in ten lanes: billing, credits, tenants, both gateways, engine, database, client libraries, console and site, infra",
-   "result": "151 findings (6 P1, 59 P2, 86 P3) filed as 73 follow-ups: 59 here and 14 in Wbskt.Console",
+   "result": "151 findings (6 P1, 59 P2, 86 P3) filed as 73 follow-ups: 59 here and 14 in Wbskt.Console. Checked against the code on 12 Nov: no false positives; #742 moved to P3 and Post-launch (no Business contract before the two-VM setup), one console item folded into Console#108, and #739, #742 and #773 share one cause",
    "epic": 730,
    "doc": "Docs/Reviews/2026-11-11.md"
   },
@@ -607,7 +607,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":745,"t":"Monthly credit allowance can be passed by the runs going at once","s":"o","m":"M3","p":730,"a":["engine"],"pr":"P2","sz":"L"},
   {"n":744,"t":"Usage response: used, limit and topUp stop adding up once a pack is drawn","s":"o","m":"M3","p":730,"a":["engine"],"pr":"P2","sz":"S"},
   {"n":743,"t":"Hold a spending cap that is set while runs are going","s":"o","m":"M3","p":730,"a":["engine"],"pr":"P2","sz":"M"},
-  {"n":742,"t":"Business overage report leaves out ended contracts and deleted workspaces","s":"o","m":"M3","p":730,"a":["engine"],"pr":"P2","sz":"M"},
+  {"n":742,"t":"Business overage report leaves out ended contracts and deleted workspaces","s":"o","m":"Post","p":730,"a":["engine"],"pr":"P3","sz":"M"},
   {"n":741,"t":"Credit notices at 80% and 100% are lost when the broker is down or the engine stops","s":"o","m":"M3","p":730,"a":["engine"],"pr":"P2","sz":"M"},
   {"n":740,"t":"Count an ended run's unposted credits against caps and the allowance","s":"o","m":"M3","p":730,"a":["engine"],"pr":"P2","sz":"M"},
   {"n":739,"t":"Deleting a workspace takes its month's credits and messages off the tenant's meters","s":"o","m":"M3","p":730,"a":["engine"],"pr":"P2","sz":"M"},
