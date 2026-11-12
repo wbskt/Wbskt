@@ -235,9 +235,27 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
         int[] racing = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ =>
             ProcScalarAsync("dbo.BillingReconcile_Claim", ("@Provider", provider), ("@Now", Now.AddDays(2)), ("@EveryMinutes", 1440))));
 
+        await ProcScalarAsync("dbo.BillingReconcile_Release", ("@Provider", provider), ("@StartedAt", Now.AddDays(1)));
+        DateTime keptAfterStaleRelease = await ScalarAsync<DateTime>("SELECT LastStartedAt FROM dbo.BillingReconciles WHERE Provider = @p0", provider);
+        await ProcScalarAsync("dbo.BillingReconcile_Release", ("@Provider", provider), ("@StartedAt", Now.AddDays(2)));
+        int afterRelease = await ProcScalarAsync("dbo.BillingReconcile_Claim", ("@Provider", provider), ("@Now", Now.AddDays(2).AddHours(1)), ("@EveryMinutes", 1440));
+
         Assert.Equal((1, 0, 1), (first, sameHour, nextDay));
         Assert.Equal(1, racing.Sum());
-        Assert.Equal(Now.AddDays(2), await ScalarAsync<DateTime>("SELECT LastStartedAt FROM dbo.BillingReconciles WHERE Provider = @p0", provider));
+        Assert.Equal(Now.AddDays(2), keptAfterStaleRelease);
+        Assert.Equal(1, afterRelease);
+    }
+
+    [SkippableFact]
+    public async Task Replicas_racing_on_the_first_claim_take_it_once()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        string provider = $"p_{Guid.NewGuid():N}"[..30];
+
+        int[] racing = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ =>
+            ProcScalarAsync("dbo.BillingReconcile_Claim", ("@Provider", provider), ("@Now", Now), ("@EveryMinutes", 1440))));
+
+        Assert.Equal(1, racing.Sum());
     }
 
     [SkippableFact]

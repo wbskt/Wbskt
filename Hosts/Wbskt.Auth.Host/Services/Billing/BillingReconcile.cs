@@ -36,10 +36,19 @@ internal sealed class BillingReconcile(
         }
 
         DateTimeOffset from = now - options.Value.ReconcileWindow;
-
-        // Subscriptions first, so a payment read after its subscription finds it stored.
-        await ReconcileAsync("subscription", () => gateway.ListSubscriptionIdsAsync(from, ct), id => sync.SyncSubscriptionAsync(id, ct), ct);
-        await ReconcileAsync("payment", () => gateway.ListPaymentIdsAsync(from, ct), id => sync.SyncPaymentAsync(id, ct), ct);
+        try
+        {
+            // Subscriptions first, so a payment read after its subscription finds it stored.
+            await ReconcileAsync("subscription", () => gateway.ListSubscriptionIdsAsync(from, ct), id => sync.SyncSubscriptionAsync(id, ct), ct);
+            await ReconcileAsync("payment", () => gateway.ListPaymentIdsAsync(from, ct), id => sync.SyncPaymentAsync(id, ct), ct);
+        }
+        catch
+        {
+            // A run stopped partway (the host shutting down in a deploy) gives the day back, so the next
+            // hourly ask on any replica runs it again rather than waiting a day.
+            await billing.ReleaseReconcileAsync(gateway.Name, now.UtcDateTime, CancellationToken.None);
+            throw;
+        }
     }
 
     private async Task ReconcileAsync(string kind, Func<Task<ProviderIdList>> list, Func<string, Task<BillingSyncResult>> read, CancellationToken ct)
@@ -49,10 +58,10 @@ internal sealed class BillingReconcile(
         {
             listed = await list();
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            // A list the provider refused (a rotated key, a rate limit, an outage) leaves this kind for the
-            // next run; the other kind still goes ahead.
+            // A list the provider refused or timed out on (a rotated key, a rate limit, an outage) leaves
+            // this kind for the next run; the other kind still goes ahead.
             metrics.RecordBillingReconcile($"{kind}_list", "failed");
             logger.LogError(ex, "Could not list {Provider} {Kind}s to reconcile.", gateway.Name, kind);
             return;
@@ -63,21 +72,27 @@ internal sealed class BillingReconcile(
             metrics.RecordBillingReconcile($"{kind}_list", "truncated");
         }
 
+        bool first = true;
         foreach (string id in listed.Ids)
         {
-            await SyncOneAsync(kind, id, () => read(id));
-            await Task.Delay(options.Value.ReconcilePause, clock, ct);
+            if (!first)
+            {
+                await Task.Delay(options.Value.ReconcilePause, clock, ct);
+            }
+
+            first = false;
+            await SyncOneAsync(kind, id, () => read(id), ct);
         }
     }
 
-    private async Task SyncOneAsync(string kind, string id, Func<Task<BillingSyncResult>> read)
+    private async Task SyncOneAsync(string kind, string id, Func<Task<BillingSyncResult>> read, CancellationToken ct)
     {
         try
         {
             BillingSyncResult result = await read();
             metrics.RecordBillingReconcile(kind, result.Reason is null ? "done" : "set_aside");
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!ct.IsCancellationRequested)
         {
             // One the provider or the database refused is read again by the next reconcile, while it is
             // still in the window; the rest go on.

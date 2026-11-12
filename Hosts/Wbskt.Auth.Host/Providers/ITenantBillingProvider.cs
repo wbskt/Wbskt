@@ -39,6 +39,9 @@ internal interface ITenantBillingProvider
     /// </summary>
     Task<bool> ClaimReconcileAsync(string provider, DateTime now, TimeSpan every, CancellationToken cancellationToken);
 
+    /// <summary>Gives back the claim taken at <paramref name="startedAt"/>, so a run stopped partway is run again soon.</summary>
+    Task ReleaseReconcileAsync(string provider, DateTime startedAt, CancellationToken cancellationToken);
+
     /// <summary>The subscriptions that could still charge, of the tenants deleting <paramref name="userId"/>'s account deletes.</summary>
     Task<IReadOnlyCollection<TenantSubscription>> GetLiveSubscriptionsOfSoleTenantsAsync(int userId, CancellationToken cancellationToken);
 

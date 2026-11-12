@@ -98,6 +98,15 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
         }, cancellationToken) == 1;
     }
 
+    public async Task ReleaseReconcileAsync(string provider, DateTime startedAt, CancellationToken cancellationToken)
+    {
+        await ExecuteNonQueryAsync("dbo.BillingReconcile_Release", p =>
+        {
+            p.AddWithValue("@Provider", provider);
+            p.Add("@StartedAt", SqlDbType.DateTime2).Value = startedAt;
+        }, cancellationToken);
+    }
+
     public Task<IReadOnlyCollection<TenantSubscription>> GetLiveSubscriptionsOfSoleTenantsAsync(int userId, CancellationToken cancellationToken)
     {
         return ExecuteCollectionAsync("dbo.TenantSubscription_GetLiveBy_SoleMember", p => p.AddWithValue("@UserId", userId), MapSubscription, cancellationToken);

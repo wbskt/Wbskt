@@ -74,7 +74,8 @@ public sealed class AuthMetrics : IWorkerTickMetrics, IDisposable
     /// <summary>
     /// Subscriptions and payments the daily reconcile read again from the provider, tagged <c>kind</c>
     /// (subscription or payment) and <c>outcome</c>: done, set_aside (nothing here to act on) or failed (read
-    /// again next day while still in the window).
+    /// again next day while still in the window). Its lists are counted as kind subscription_list or
+    /// payment_list: failed when the provider refused one, truncated when one was cut short.
     /// </summary>
     public Counter<long> BillingReconciles { get; }
 

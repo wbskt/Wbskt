@@ -1202,6 +1202,42 @@ public sealed class BillingPaymentsTests
     }
 
     [Fact]
+    public async Task A_provider_timeout_is_counted_as_a_failure_and_the_rest_still_run()
+    {
+        GivenReconcileDue();
+        _gateway.Setup(g => g.ListSubscriptionIdsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ThrowsAsync(new TaskCanceledException("timeout"));
+        _gateway.Setup(g => g.ListPaymentIdsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderIdList(["pay_slow", "pay_1"], Complete: true));
+        _gateway.Setup(g => g.FindPaymentAsync("pay_slow", It.IsAny<CancellationToken>())).ThrowsAsync(new TaskCanceledException("timeout"));
+        var metrics = new AuthMetrics();
+        List<string> recorded = RecordReconciles(metrics, out MeterListener listener);
+        using (listener)
+        {
+            await Reconcile(metrics).RunAsync(CancellationToken.None);
+        }
+
+        _gateway.Verify(g => g.FindPaymentAsync("pay_1", It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(["subscription_list/failed", "payment/failed", "payment/set_aside"], recorded);
+    }
+
+    [Fact]
+    public async Task A_run_stopped_partway_gives_its_claim_back()
+    {
+        GivenReconcileDue();
+        using var stopping = new CancellationTokenSource();
+        _gateway.Setup(g => g.ListSubscriptionIdsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .Returns(() =>
+            {
+                stopping.Cancel();
+                return Task.FromException<ProviderIdList>(new OperationCanceledException(stopping.Token));
+            });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Reconcile(new AuthMetrics()).RunAsync(stopping.Token));
+
+        _billing.Verify(b => b.ReleaseReconcileAsync("dodo", Now.UtcDateTime, CancellationToken.None), Times.Once);
+        _gateway.Verify(g => g.ListPaymentIdsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task The_reconcile_does_nothing_when_another_replica_or_an_earlier_start_already_ran_it()
     {
         _gateway.Setup(g => g.IsConfigured).Returns(true);
