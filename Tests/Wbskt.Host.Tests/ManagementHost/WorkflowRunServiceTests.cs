@@ -69,6 +69,23 @@ public sealed class WorkflowRunServiceTests
         _bus.VerifyNoOtherCalls();
     }
 
+    [Theory]
+    [InlineData(StartRunOutcome.PlanRunLimitReached, "PLAN_RUN_LIMIT_REACHED", ErrorType.Conflict)]
+    [InlineData(StartRunOutcome.PlanCreditLimitReached, "PLAN_CREDIT_LIMIT_REACHED", ErrorType.Conflict)]
+    [InlineData(StartRunOutcome.WorkspaceCreditCapReached, "WORKSPACE_CREDIT_CAP_REACHED", ErrorType.Conflict)]
+    [InlineData(StartRunOutcome.Busy, "WORKSPACE_BUSY", ErrorType.Unavailable)]
+    public async Task A_run_the_plan_refused_names_the_limit_as_the_test_run_does(StartRunOutcome outcome, string code, ErrorType type)
+    {
+        WorkflowIs("Published");
+        EngineAnswers(outcome);
+
+        var result = await Service.StartManualAsync(WorkspaceId, WorkflowRef, new StartRunRequest("manual", null), CancellationToken.None);
+
+        result.Error.Code.Should().Be(code);
+        result.Error.Type.Should().Be(type);
+        _bus.VerifyNoOtherCalls();
+    }
+
     [Fact]
     public async Task A_deprecated_workflow_is_a_409_and_the_engine_is_not_asked()
     {

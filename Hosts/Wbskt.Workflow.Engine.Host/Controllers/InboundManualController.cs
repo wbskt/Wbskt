@@ -20,7 +20,18 @@ public sealed class InboundManualController(IInboundHub hub) : ControllerBase
         InboundEvent evt = ManualChannel.Event(workflowRefId, payload, idempotencyKey, default);
 
         // A workflow may carry more than one manual trigger, so the event can start more than one run.
-        TriggerDispatchResult result = await hub.HandleAsync(evt, ct);
+        TriggerDispatchResult result;
+        try
+        {
+            result = await hub.HandleAsync(evt, ct);
+        }
+        catch (RunStartBusyException)
+        {
+            // The workspace's start lock stayed taken through every retry. Nothing was decided and the
+            // claims were released, so the caller is told to send it again rather than shown a 500.
+            return new InboundResponse(InboundOutcome.Busy, null, []);
+        }
+
         return InboundDispatchProjection.ToResponse(result);
     }
 }

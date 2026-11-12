@@ -129,24 +129,16 @@ public sealed class WorkflowTestRunService : IWorkflowTestRunService
                         : "A test run of this workflow is still going. Cancel it to start another."));
 
             case EngineTestRunOutcome.WorkspaceFull:
-                return Result<StartTestRunResponse>.Failure(Error.Conflict(
-                    "PLAN_RUN_LIMIT_REACHED",
-                    "The plan is at its limit of runs going at once. Try again when one finishes."));
+                return Result<StartTestRunResponse>.Failure(RunStartErrors.PlanRunLimitReached);
 
             case EngineTestRunOutcome.CreditsSpent:
-                return Result<StartTestRunResponse>.Failure(Error.Conflict(
-                    "PLAN_CREDIT_LIMIT_REACHED",
-                    "The plan has used its workflow credits for this month. Runs start again on the 1st, or after an upgrade."));
+                return Result<StartTestRunResponse>.Failure(RunStartErrors.PlanCreditLimitReached);
 
             case EngineTestRunOutcome.WorkspaceCreditCapReached:
-                return Result<StartTestRunResponse>.Failure(Error.Conflict(
-                    "WORKSPACE_CREDIT_CAP_REACHED",
-                    "This workspace has used its monthly credit cap. Runs start again on the 1st, or when the cap is raised."));
+                return Result<StartTestRunResponse>.Failure(RunStartErrors.WorkspaceCreditCapReached);
 
             case EngineTestRunOutcome.Busy:
-                return Result<StartTestRunResponse>.Failure(Error.Unavailable(
-                    "WORKSPACE_BUSY",
-                    "Too many runs are starting in this workspace at once. Try again in a moment."));
+                return Result<StartTestRunResponse>.Failure(RunStartErrors.WorkspaceBusy);
 
             default:
                 throw new InvalidOperationException($"Unrecognised engine outcome '{response.Outcome}' for a test run of workflow '{workflowRefId}'.");
