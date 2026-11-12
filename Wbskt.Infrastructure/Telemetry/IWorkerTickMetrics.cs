@@ -6,5 +6,6 @@ namespace Wbskt.Infrastructure.Telemetry;
 /// </summary>
 public interface IWorkerTickMetrics
 {
-    void RecordWorkerTick(string worker, string outcome);
+    /// <summary>Adds <paramref name="count"/> ticks; zero creates the series without counting a tick.</summary>
+    void RecordWorkerTick(string worker, string outcome, long count);
 }

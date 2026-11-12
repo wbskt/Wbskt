@@ -55,8 +55,8 @@ public sealed class ManagementMetrics : IWorkerTickMetrics, IDisposable
     private static KeyValuePair<string, object?> Outcome(Result result) =>
         new("outcome", result.IsSuccess ? "success" : result.Error.Code);
 
-    public void RecordWorkerTick(string worker, string outcome) =>
-        WorkerTicks.Add(1, new TagList { { "worker", worker }, { "outcome", outcome } });
+    public void RecordWorkerTick(string worker, string outcome, long count) =>
+        WorkerTicks.Add(count, new TagList { { "worker", worker }, { "outcome", outcome } });
 
     public void RecordWorkspaceRetiredBySweep() => WorkspacesRetiredBySweep.Add(1);
 

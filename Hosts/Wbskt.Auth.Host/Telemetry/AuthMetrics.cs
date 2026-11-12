@@ -144,8 +144,8 @@ public sealed class AuthMetrics : IWorkerTickMetrics, IDisposable
     public void RecordPasswordHash(double durationMs) => 
         PasswordHashDuration.Record(durationMs);
 
-    public void RecordWorkerTick(string worker, string outcome) =>
-        WorkerTicks.Add(1, new TagList { { "worker", worker }, { "outcome", outcome } });
+    public void RecordWorkerTick(string worker, string outcome, long count) =>
+        WorkerTicks.Add(count, new TagList { { "worker", worker }, { "outcome", outcome } });
 
     public void Dispose() => _meter.Dispose();
 }

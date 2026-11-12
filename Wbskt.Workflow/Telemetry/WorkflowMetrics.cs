@@ -150,9 +150,9 @@ public sealed class WorkflowMetrics : IWorkerTickMetrics, IDisposable
             new KeyValuePair<string, object?>("workspace_id", workspaceId));
     }
 
-    public void RecordWorkerTick(string worker, string outcome)
+    public void RecordWorkerTick(string worker, string outcome, long count)
     {
-        WorkerTicks.Add(1, new TagList { { "worker", worker }, { "outcome", outcome } });
+        WorkerTicks.Add(count, new TagList { { "worker", worker }, { "outcome", outcome } });
     }
 
     public void RecordInboundEvent(string channel, string outcome)

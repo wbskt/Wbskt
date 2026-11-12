@@ -15,6 +15,9 @@ namespace Wbskt.Infrastructure.Hosting;
 /// <param name="timeProvider">The clock the interval is measured on; the system clock when omitted.</param>
 public abstract class PeriodicWorker(IWorkGate gate, IServiceScopeFactory scopeFactory, ILogger logger, TimeProvider? timeProvider = null) : BackgroundService
 {
+    private const string OkOutcome = "ok";
+    private const string FailedOutcome = "failed";
+
     protected ILogger Logger { get; } = logger;
 
     protected IServiceScopeFactory ScopeFactory { get; } = scopeFactory;
@@ -48,11 +51,11 @@ public abstract class PeriodicWorker(IWorkGate gate, IServiceScopeFactory scopeF
 
         await using AsyncServiceScope scope = ScopeFactory.CreateAsyncScope();
         IWorkerTickMetrics? metrics = scope.ServiceProvider.GetService<IWorkerTickMetrics>();
-        string? outcome = "failed";
+        string? outcome = FailedOutcome;
         try
         {
             await RunOnceAsync(scope.ServiceProvider, ct);
-            outcome = "ok";
+            outcome = OkOutcome;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -63,9 +66,22 @@ public abstract class PeriodicWorker(IWorkGate gate, IServiceScopeFactory scopeF
         {
             if (outcome is not null)
             {
-                metrics?.RecordWorkerTick(Name, outcome);
+                metrics?.RecordWorkerTick(Name, outcome, 1);
             }
         }
+    }
+
+    /// <summary>
+    /// Records both outcomes at zero. A counter series that first appears at 1 has no earlier sample, so
+    /// increase() never sees that step and PeriodicJobFailing would miss a job's first failure (for a
+    /// daily job, every failure, since each deploy starts new series).
+    /// </summary>
+    public async Task StartTickSeriesAsync()
+    {
+        await using AsyncServiceScope scope = ScopeFactory.CreateAsyncScope();
+        IWorkerTickMetrics? metrics = scope.ServiceProvider.GetService<IWorkerTickMetrics>();
+        metrics?.RecordWorkerTick(Name, OkOutcome, 0);
+        metrics?.RecordWorkerTick(Name, FailedOutcome, 0);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -76,6 +92,7 @@ public abstract class PeriodicWorker(IWorkGate gate, IServiceScopeFactory scopeF
         }
 
         Logger.LogInformation("{Worker} is starting.", Name);
+        await StartTickSeriesAsync();
         using var timer = new PeriodicTimer(Interval, timeProvider ?? TimeProvider.System);
         try
         {

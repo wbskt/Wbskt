@@ -77,6 +77,34 @@ public sealed class LeaderPeriodicWorkerTests
         Assert.Contains(("Counting worker", "failed"), recorded);
     }
 
+    [Fact]
+    public async Task Both_outcomes_start_at_zero_so_the_first_failure_is_visible()
+    {
+        using var metrics = new WorkflowMetrics();
+        var services = new ServiceCollection();
+        services.AddSingleton<IWorkerTickMetrics>(metrics);
+        IServiceScopeFactory scopes = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+        var recorded = new List<(string Outcome, long Value)>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Name == "wbskt_workflow_worker_ticks_total" && instrument.Meter.Name == WorkflowMetrics.MeterName)
+            {
+                l.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
+        {
+            var byKey = tags.ToArray().ToDictionary(t => t.Key, t => (string)t.Value!);
+            recorded.Add((byKey["outcome"], value));
+        });
+        listener.Start();
+
+        await new CountingWorker(new FixedLeadershipGate(false), scopes).StartTickSeriesAsync();
+
+        Assert.Equal(new[] { ("ok", 0L), ("failed", 0L) }, recorded);
+    }
+
     private sealed class ScopedMarker;
 
     private sealed class CountingWorker(ILeadershipGate leadership, IServiceScopeFactory scopes, bool fail = false)
