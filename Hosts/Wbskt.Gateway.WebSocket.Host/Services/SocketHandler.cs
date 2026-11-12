@@ -75,12 +75,13 @@ internal sealed class SocketHandler : ISocketHandler
             WorkspaceId = identity.WorkspaceId
         };
 
-        // Ends the receive loop when the client goes away, the host stops, or a close someone asked
-        // for (see ClientConnection.CloseAsync) is not answered in time.
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(
-            context.RequestAborted,
-            _appLifetime.ApplicationStopping,
-            connection.Closing);
+        // Ends the receive loop when the client goes away, or a close someone asked for (see
+        // ClientConnection.CloseAsync) is not answered in time. The host stopping is not linked in: a
+        // cancelled receive aborts the socket before a Close can be sent, so the client would see a dropped
+        // connection rather than 1001. Stopping asks for the close instead, and the client's answer (or the
+        // close grace) ends the loop.
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, connection.Closing);
+        using var closeOnStop = connection.CloseOnStop(_appLifetime.ApplicationStopping);
 
         await _sessions.RunAsync(
             admission,
