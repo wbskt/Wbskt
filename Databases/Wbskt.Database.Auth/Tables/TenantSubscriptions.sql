@@ -32,6 +32,9 @@ CREATE TABLE dbo.TenantSubscriptions
     ScheduledAt              DATETIME2(3)  NULL,
     UpdatedAt                DATETIME2(3)  NOT NULL CONSTRAINT DF_TenantSubscriptions_UpdatedAt DEFAULT SYSUTCDATETIME(),
     CreatedAt                DATETIME2(3)  NOT NULL CONSTRAINT DF_TenantSubscriptions_CreatedAt DEFAULT SYSUTCDATETIME(),
+    -- When DuplicateRefundPaymentId was claimed. A claim whose refund never finished (the host stopped
+    -- between the claim and the provider's answer) can be taken again once it is this old.
+    DuplicateRefundClaimedAt DATETIME2(3)  NULL,
     CONSTRAINT PK_TenantSubscriptions PRIMARY KEY (Provider, SubscriptionId),
     CONSTRAINT FK_TenantSubscriptions_Tenants FOREIGN KEY (TenantId) REFERENCES dbo.Tenants (Id) ON DELETE CASCADE
 );

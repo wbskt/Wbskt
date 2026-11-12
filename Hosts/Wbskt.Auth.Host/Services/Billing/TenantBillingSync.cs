@@ -57,7 +57,10 @@ internal sealed class TenantBillingSync(
             }
 
             (BillingSyncResult result, TenantSubscription? stored) = await SyncStoredSubscriptionAsync(subscriptionId, refundedThrough, ct);
-            if (stored is { DuplicateAt: not null, DuplicateRefundPaymentId: null } && payment is { Succeeded: true, Reversed: false })
+            // A claim already on this payment is passed on too: the procedure takes it again only once it
+            // is stale, which is a refund the host never heard back about.
+            if (stored is { DuplicateAt: not null } && (stored.DuplicateRefundPaymentId is null || stored.DuplicateRefundPaymentId == payment.Id)
+                && payment is { Succeeded: true, Reversed: false })
             {
                 await RefundDuplicateAsync(stored, payment, ct);
             }
@@ -207,11 +210,13 @@ internal sealed class TenantBillingSync(
 
     /// <summary>
     /// Refunds the payment of a subscription cancelled as a duplicate, once: the claim is taken first and
-    /// given back if the provider refuses, so a redelivered webhook neither refunds twice nor never.
+    /// given back if the refund fails in any way, a timeout or a cancelled request included, so a
+    /// redelivered webhook neither refunds twice nor never. A claim left by a host that stopped mid-call
+    /// is taken again once stale, and only while the provider still shows the payment unrefunded.
     /// </summary>
     private async Task RefundDuplicateAsync(TenantSubscription duplicate, ProviderPayment payment, CancellationToken ct)
     {
-        if (!await billing.ClaimDuplicateRefundAsync(duplicate.Provider, duplicate.SubscriptionId, payment.Id, release: false, ct))
+        if (!await billing.ClaimDuplicateRefundAsync(duplicate.Provider, duplicate.SubscriptionId, payment.Id, release: false, clock.GetUtcNow().UtcDateTime, ct))
         {
             return;
         }
@@ -221,9 +226,9 @@ internal sealed class TenantBillingSync(
             await gateway.RefundPaymentAsync(payment.Id, "Duplicate subscription: the account already had one.", ct);
             logger.LogWarning("Refunded payment {PaymentId} of duplicate subscription {SubscriptionId} of tenant {TenantId}.", payment.Id, duplicate.SubscriptionId, duplicate.TenantId);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch
         {
-            await billing.ClaimDuplicateRefundAsync(duplicate.Provider, duplicate.SubscriptionId, payment.Id, release: true, CancellationToken.None);
+            await billing.ClaimDuplicateRefundAsync(duplicate.Provider, duplicate.SubscriptionId, payment.Id, release: true, clock.GetUtcNow().UtcDateTime, CancellationToken.None);
             throw;
         }
     }

@@ -71,7 +71,7 @@ public sealed class BillingPaymentsTests
                 return saved;
             });
         _billing.Setup(b => b.GetSubscriptionsAsync(9, It.IsAny<CancellationToken>())).ReturnsAsync(() => _stored.ToList());
-        _billing.Setup(b => b.ClaimDuplicateRefundAsync("dodo", It.IsAny<string>(), It.IsAny<string>(), false, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _billing.Setup(b => b.ClaimDuplicateRefundAsync("dodo", It.IsAny<string>(), It.IsAny<string>(), false, It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
         _planService.Setup(p => p.SetAsync(TenantRef, It.IsAny<SetTenantPlanRequest>(), It.IsAny<PlanSource>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid _, SetTenantPlanRequest r, PlanSource source, CancellationToken _) => new TenantPlanResponse(TenantRef, r.PlanCode, r.LimitOverrides, 2, Now, source));
     }
@@ -245,9 +245,46 @@ public sealed class BillingPaymentsTests
         await Assert.ThrowsAsync<HttpRequestException>(() => Sync().SyncPaymentAsync("pay_2", CancellationToken.None));
         await Sync().SyncPaymentAsync("pay_2", CancellationToken.None);
 
-        _billing.Verify(b => b.ClaimDuplicateRefundAsync("dodo", "sub_second", "pay_2", true, It.IsAny<CancellationToken>()), Times.Once);
+        _billing.Verify(b => b.ClaimDuplicateRefundAsync("dodo", "sub_second", "pay_2", true, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
         _gateway.Verify(g => g.RefundPaymentAsync("pay_2", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
         _gateway.Verify(g => g.CancelSubscriptionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>
+    /// A refund call that times out throws a cancellation, which used to keep the claim, so every
+    /// redelivery skipped the refund and the customer was never paid back.
+    /// </summary>
+    [Fact]
+    public async Task A_refund_that_times_out_gives_the_claim_back()
+    {
+        _stored.Add(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(28)) with { SubscriptionId = "sub_first", CreatedAt = Now.UtcDateTime.AddMinutes(-2) });
+        _stored.Add(Subscription(SubscriptionStatus.Cancelled, Now.UtcDateTime.AddDays(30)) with { SubscriptionId = "sub_second", DuplicateAt = Now.UtcDateTime, CreatedAt = Now.UtcDateTime });
+        ProviderSays(new ProviderSubscription("sub_second", SubscriptionStatus.Cancelled, "prod_pro_m", "cus_1", TenantRef, Now.AddMonths(1), false));
+        PaymentSays(new ProviderPayment("pay_2", true, "cus_1", TenantRef, "sub_second", [new PaymentLine("prod_pro_m", 1)], false, Now));
+        _gateway.Setup(g => g.RefundPaymentAsync("pay_2", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout"));
+
+        await Assert.ThrowsAsync<TaskCanceledException>(() => Sync().SyncPaymentAsync("pay_2", CancellationToken.None));
+
+        _billing.Verify(b => b.ClaimDuplicateRefundAsync("dodo", "sub_second", "pay_2", true, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>
+    /// A host that stopped between the claim and the provider's answer leaves the claim on the payment.
+    /// The next delivery passes it to the procedure again, which takes it once it is stale.
+    /// </summary>
+    [Fact]
+    public async Task A_claim_left_on_the_same_payment_is_offered_again()
+    {
+        _stored.Add(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(28)) with { SubscriptionId = "sub_first", CreatedAt = Now.UtcDateTime.AddMinutes(-2) });
+        _stored.Add(Subscription(SubscriptionStatus.Cancelled, Now.UtcDateTime.AddDays(30)) with { SubscriptionId = "sub_second", DuplicateAt = Now.UtcDateTime, DuplicateRefundPaymentId = "pay_2", CreatedAt = Now.UtcDateTime });
+        ProviderSays(new ProviderSubscription("sub_second", SubscriptionStatus.Cancelled, "prod_pro_m", "cus_1", TenantRef, Now.AddMonths(1), false));
+        PaymentSays(new ProviderPayment("pay_2", true, "cus_1", TenantRef, "sub_second", [new PaymentLine("prod_pro_m", 1)], false, Now));
+
+        await Sync().SyncPaymentAsync("pay_2", CancellationToken.None);
+
+        _billing.Verify(b => b.ClaimDuplicateRefundAsync("dodo", "sub_second", "pay_2", false, Now.UtcDateTime, It.IsAny<CancellationToken>()), Times.Once);
+        _gateway.Verify(g => g.RefundPaymentAsync("pay_2", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
