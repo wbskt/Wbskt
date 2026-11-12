@@ -44,8 +44,8 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
         (await grants.InsertAsync(tenantId, 3m, DateTime.UtcNow, DateTime.UtcNow.AddMonths(12), "test", payment, CancellationToken.None)).Should().BeFalse("a replay adds nothing");
 
         long topped = await StartAsync(wd, credits: credits);
-        RunRow run = await ProviderFactory.Run(fixture.ConnectionString).GetByIdAsync(topped, CancellationToken.None);
-        run.CreditBudget.Should().Be(3m, "the budget is cut to the plan's credits plus the grant, less what was spent");
+        ChargeCounter counters = new(ProviderFactory.RunCounters(fixture.ConnectionString));
+        (await counters.TryAsync(topped, 0m)).Should().Be((0m, 3m), "the budget is cut to the plan's credits plus the grant, less what was spent");
 
         (await grants.RevokeAsync("test", payment, DateTime.UtcNow, CancellationToken.None)).Should().BeTrue();
         (await grants.RevokeAsync("test", payment, DateTime.UtcNow, CancellationToken.None)).Should().BeFalse();
@@ -121,8 +121,8 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
         (summary.TenantCredits, summary.TenantCreditsPosted, summary.TenantCreditsDrawn, summary.CreditGrantBalance)
             .Should().Be((25m, 25m, 15m, 15m), "the usage response works out the same 15 left from these");
         long next = await StartAsync(wd, credits: new PlanCredits(10m, tenantId));
-        (await ProviderFactory.Run(fixture.ConnectionString).GetByIdAsync(next, CancellationToken.None)).CreditBudget
-            .Should().Be(15m, "the plan's 10 are covered and what the grants still hold is left");
+        (await new ChargeCounter(ProviderFactory.RunCounters(fixture.ConnectionString)).TryAsync(next, 0m))
+            .Should().Be((0m, 15m), "the plan's 10 are covered and what the grants still hold is left");
     }
 
     [SkippableFact]
@@ -232,6 +232,40 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
         (await counters.TryAsync(third, 5m)).Should().Be((10m, 10m), "the third run takes the last of the cap");
         Func<Task> fourth = () => StartAsync(wd, credits: credits, budget: 1_000m);
         (await fourth.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(WorkspaceCreditCapError);
+    }
+
+    [SkippableFact]
+    public async Task Runs_going_at_once_lease_the_months_credits_and_never_spend_past_them_between_them()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int tenantId = NewId();
+        int workspaceId = NewId();
+        int siblingId = NewId();
+        await AddAccountAsync(workspaceId, tenantId, creditsPerMonth: 100m);
+        await AddAccountAsync(siblingId, tenantId, creditsPerMonth: 100m);
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        WorkflowDefinitionRow siblingWd = await CreateDefinitionAsync(siblingId);
+        var credits = new PlanCredits(100m, tenantId);
+        var runs = ProviderFactory.Run(fixture.ConnectionString);
+        ChargeCounter counters = new(ProviderFactory.RunCounters(fixture.ConnectionString));
+
+        long first = await StartAsync(wd, credits: credits, budget: 1_000m);
+        long second = await StartAsync(siblingWd, credits: credits, budget: 1_000m);
+
+        (await runs.GetByIdAsync(first, CancellationToken.None)).CreditBudget.Should().Be(5m, "a run leases a twentieth of the allowance");
+        (await runs.GetByIdAsync(second, CancellationToken.None)).CreditBudget.Should().Be(5m);
+        (await counters.TryAsync(second, 0m)).Should().Be((0m, 95m), "the first run's lease is held from what the second may reach");
+        var summary = await new Wbskt.Management.Host.Providers.WorkspaceUsageProvider(ProviderFactory.BuildConfiguration(fixture.ConnectionString))
+            .GetSummaryAsync(workspaceId, tenantId, new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1), CancellationToken.None);
+        summary.TenantCreditsReserved.Should().Be(10m, "both leases are held across the tenant's workspaces");
+
+        (await counters.TryAsync(first, 60m)).Should().Be((60m, 100m), "the lease grows by what the charge needs");
+        (await counters.TryAsync(second, 40m)).Should().Be((40m, 95m), "the second run takes the 40 the first left");
+        (await counters.TryAsync(second, 1m)).Should().BeNull("the month's 100 are spent between them");
+        (await counters.TryAsync(first, 1m)).Should().BeNull();
+        Func<Task> third = () => StartAsync(wd, credits: credits, budget: 1_000m);
+        (await third.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(PlanCreditLimitError);
     }
 
     [SkippableFact]

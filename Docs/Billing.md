@@ -120,10 +120,19 @@ outlives the runs.
 was posted, `dbo.TenantCreditMonths`), never below zero, plus what the tenant's grants still hold, less
 what its runs consumed and have not posted yet, ended or not (`RunCounters.HasUnposted`, set by each charge
 and cleared by the post), so a run that ends between two posts still counts. It refuses the start (50033) when nothing is
-left, and otherwise cuts the new run's budget to what is. The check takes no lock: starts racing for the
-last credits can overrun by at most the budgets they were given, which together are bounded by what was
-left times the runs going at once. A run already going is never stopped for the month's credits; it stops
-only at its own budget (`OutOfCredits`).
+left, and otherwise cuts the new run's budget to what is. What is left is held exactly, as a workspace cap
+is (below): the start works it out under an application lock per tenant
+(`plan-limit:credits:tenant:{tenantId}`, `dbo.TenantCreditsLeft`), less the unspent budget of each root run
+going in the tenant's workspaces (`dbo.TenantCreditsReserved`), so two starts cannot both take the same
+remainder. So that one run does not hold the whole remainder away from the next, the cut budget is the
+run's ceiling and the run is given a lease of it: a twentieth of the allowance (or of what is left, if
+more; at least the start cost). When a charge would pass the lease, `dbo.RunCounters_TryCharge` takes the
+same lock and extends it by what the charge needs (at least another lease), up to the ceiling and what the
+tenant has left, or refuses the charge (`OutOfCredits`). The run keeps the allowance and tenant it started
+under (`RunCounters.CreditAllowance`, `TenantId`) for those extensions. Runs going at once therefore never
+spend past the month's credits between them, and a run already going stops at its own budget or at what
+the tenant has left, whichever comes first. A run started before leasing came in holds none of the
+allowance and keeps its whole budget.
 
 **Business runs past its credits.** On Business the engine passes `dbo.Run_Start` twice the plan's
 `CreditsPerMonth` (`PlanCredits.RunsRefusedAt`, `BusinessContract.CreditOverageMultiple`), so a
@@ -172,11 +181,11 @@ old cap once the new one is in. Lowering a cap below what was already spent refu
 and the response says so (`capReached`). As it posts, `CreditUsagePoster` raises
 `WorkspaceCreditCapReachedEvent` when a post carries a workspace across 80% and then 100% of its cap.
 
-**Busy.** The locks a start can wait on (the tenant's run limit and a workspace's cap) give up after five
+**Busy.** The locks a start can wait on (the tenant's run limit, its credits and a workspace's cap) give up after five
 seconds with 50035 rather than hold an inbound request and a pooled connection. A start also reads a
 workspace's cap row under a shared lock, which waits while a cap is being set; the set holds that row
 while it waits up to two seconds for the cap's lock and then cuts the runs going. (A lease extension, which is not on an inbound
-request, waits up to 30 seconds for the cap's lock before it fails its step with 50035. Setting a cap
+request, waits up to 30 seconds for each of the tenant's credits lock and the cap's lock, in that order, before it fails its step with 50035. Setting a cap
 answers **503** `WORKSPACE_CREDIT_CAP_BUSY` with `Retry-After` when the cap's lock is not free within two
 seconds, a row it needs is not free within five (1222), or it loses a deadlock, which it is set up to
 lose rather than the engine.) `RunStarter` tries again twice (after 50 ms, then 200 ms), then throws
@@ -310,7 +319,7 @@ Two reads show a plan against what has been used, both behind `billing.read` (ev
   checked), this workspace's share and cap, and its credits per day from the ledger
   (`dbo.WorkspaceUsage_GetSummary`, `dbo.WorkspaceCreditUsage_GetDaily`). `remaining` is what is left as
   `dbo.Run_Start` works it out (the plan's remainder, never below zero, plus `topUp`, less what runs have
-  not posted), so the account refuses new runs once it reaches 0 (a workspace's own cap may refuse
+  not posted and what the runs going still hold of their budgets), so the account refuses new runs once it reaches 0 (a workspace's own cap may refuse
   them sooner). `used`, `limit` and `topUp` alone do not add
   up to it once a pack has been drawn on: what the month posted past the allowance was taken out of
   `topUp` as it was posted, but stays in `used`.

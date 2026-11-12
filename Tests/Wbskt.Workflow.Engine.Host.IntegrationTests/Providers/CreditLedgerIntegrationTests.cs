@@ -207,7 +207,7 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
-    public async Task A_run_started_near_the_end_of_the_credits_gets_only_what_is_left_as_its_budget()
+    public async Task A_run_started_near_the_end_of_the_credits_can_spend_only_what_is_left()
     {
         Skip.IfNot(fixture.IsAvailable, SkipReason);
 
@@ -219,8 +219,11 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
 
         long second = await StartAsync(wd, credits: new PlanCredits(5m, null));
 
+        var counters = ProviderFactory.RunCounters(fixture.ConnectionString);
         RunRow run = await ProviderFactory.Run(fixture.ConnectionString).GetByIdAsync(second, CancellationToken.None);
-        run.CreditBudget.Should().Be(3m);
+        run.CreditBudget.Should().Be(0.25m, "a run leases a twentieth of the allowance at a time");
+        (await counters.TryChargeAsync((int)second, 3m, CancellationToken.None)).Should().Be(new CreditCharge(3m, 3m), "the lease grows up to the 3 that were left");
+        (await counters.TryChargeAsync((int)second, 0.01m, CancellationToken.None)).Should().BeNull();
     }
 
     [SkippableFact]
@@ -266,7 +269,8 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         (await runs.GetByIdAsync(capped, CancellationToken.None)).CreditBudget.Should().Be(0.2m, "a capped run leases a twentieth of the cap at a time");
         (await counters.TryChargeAsync((int)capped, 3m, CancellationToken.None)).Should().Be(new CreditCharge(3m, 3m), "the lease grows up to what the cap left");
         (await counters.TryChargeAsync((int)capped, 0.01m, CancellationToken.None)).Should().BeNull();
-        (await runs.GetByIdAsync(uncapped, CancellationToken.None)).CreditBudget.Should().Be(100m);
+        (await runs.GetByIdAsync(uncapped, CancellationToken.None)).CreditBudget.Should().Be(50m, "without the cap it leases a twentieth of the allowance");
+        (await counters.TryChargeAsync((int)uncapped, 0m, CancellationToken.None)).Should().Be(new CreditCharge(0m, 100m), "and may grow to its whole budget");
         first.Should().BePositive();
     }
 

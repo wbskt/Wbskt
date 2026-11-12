@@ -51,10 +51,13 @@ public sealed class WorkspaceUsageServiceTests
 
     // Past the plan with nothing drawn (a downgrade) and a pack still live: the plan adds nothing, the pack is left.
     [InlineData(30_000, 30_000, 0, 5_000, 5_000)]
-    public async Task Remaining_is_what_a_run_start_would_find_left(double used, double posted, double drawn, double topUp, double remaining)
+
+    // The first case with 1,500 held by the budgets of runs going: those come out of what is left too.
+    [InlineData(30_000, 30_000, 5_000, 5_000, 3_500, 1_500)]
+    public async Task Remaining_is_what_a_run_start_would_find_left(double used, double posted, double drawn, double topUp, double remaining, double reserved = 0)
     {
         _usage.Setup(x => x.GetSummaryAsync(7, null, It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new WorkspaceUsageSummary((decimal)used, 0, 0, 0, 0, 0, 0, 0, null, (decimal)topUp, TenantCreditsPosted: (decimal)posted, TenantCreditsDrawn: (decimal)drawn));
+            .ReturnsAsync(new WorkspaceUsageSummary((decimal)used, 0, 0, 0, 0, 0, 0, 0, null, (decimal)topUp, TenantCreditsPosted: (decimal)posted, TenantCreditsDrawn: (decimal)drawn, TenantCreditsReserved: (decimal)reserved));
         _usage.Setup(x => x.GetDailyCreditsAsync(7, It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
         var service = new WorkspaceUsageService(_usage.Object, new FixedWorkspacePlans(PlanCode.Maker), new FixedClock(), Options.Create(new BillingOptions()));
 
