@@ -25,7 +25,19 @@ public interface IClientAccessGate
     /// connection, refuses the token. No round trip, so it is safe to ask on every connect.
     /// </summary>
     bool IsRefusedHere(Guid clientRefId, DateTime issuedAt);
+
+    /// <summary>
+    /// Which of the held <paramref name="tokens"/> are refused: by this host's list, and by the cutoffs in
+    /// Redis when it can answer (<see cref="AccessRecheckResult.CutoffsRead"/>).
+    /// </summary>
+    Task<AccessRecheckResult> RecheckAsync(IReadOnlyCollection<ClientToken> tokens, CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// The tokens a re-check refused, split by who refused them: this host's list (its event arrived, and
+/// the revoke is closing the connection already) or only the cutoffs in Redis (the event was missed).
+/// </summary>
+public sealed record AccessRecheckResult(IReadOnlyCollection<Guid> RefusedHere, IReadOnlyCollection<Guid> RefusedByCutoffs, bool CutoffsRead);
 
 /// <summary>
 /// This host's own list (filled by events, lost on restart) answers first; the cutoffs the management
@@ -69,4 +81,17 @@ internal sealed class ClientAccessGate : IClientAccessGate
     }
 
     public bool IsRefusedHere(Guid clientRefId, DateTime issuedAt) => _cache.IsRevoked(clientRefId, issuedAt);
+
+    public async Task<AccessRecheckResult> RecheckAsync(IReadOnlyCollection<ClientToken> tokens, CancellationToken cancellationToken = default)
+    {
+        var here = tokens.Where(t => _cache.IsRevoked(t.ClientRefId, t.IssuedAt)).Select(t => t.ClientRefId).ToList();
+        var rest = tokens.Where(t => !here.Contains(t.ClientRefId)).ToList();
+        if (rest.Count == 0)
+        {
+            return new AccessRecheckResult(here, [], CutoffsRead: true);
+        }
+
+        var byCutoffs = await _cutoffs.FindRefusedAsync(rest, cancellationToken);
+        return new AccessRecheckResult(here, byCutoffs ?? [], CutoffsRead: byCutoffs != null);
+    }
 }

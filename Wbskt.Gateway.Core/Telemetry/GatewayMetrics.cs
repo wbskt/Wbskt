@@ -22,6 +22,7 @@ public sealed class GatewayMetrics : IDisposable
     private readonly Counter<long> _connects;
     private readonly Counter<long> _disconnects;
     private readonly Counter<long> _dropped;
+    private readonly Counter<long> _recheckClosed;
 
     public GatewayMetrics(GatewayTransport transport)
     {
@@ -30,6 +31,7 @@ public sealed class GatewayMetrics : IDisposable
         _connects = _meter.CreateCounter<long>("wbskt_socket_connects_total");
         _disconnects = _meter.CreateCounter<long>("wbskt_socket_disconnects_total");
         _dropped = _meter.CreateCounter<long>("wbskt_socket_messages_dropped_total");
+        _recheckClosed = _meter.CreateCounter<long>("wbskt_socket_access_recheck_closed_total");
     }
 
     public void Connected()
@@ -48,6 +50,15 @@ public sealed class GatewayMetrics : IDisposable
     public void Dropped(string reason)
     {
         _dropped.Add(1, _transport, new KeyValuePair<string, object?>("reason", reason));
+    }
+
+    /// <summary>
+    /// The access re-check closed a connection whose revoke event this host never received: a sign that
+    /// events are being lost while its broker connection drops.
+    /// </summary>
+    public void AccessRecheckClosed()
+    {
+        _recheckClosed.Add(1, _transport);
     }
 
     public void Dispose() => _meter.Dispose();
