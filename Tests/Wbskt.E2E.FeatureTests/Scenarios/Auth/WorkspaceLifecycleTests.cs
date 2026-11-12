@@ -215,7 +215,7 @@ public sealed class WorkspaceLifecycleTests(ServicesFixture fixture)
         var user = await fixture.CreateUserAsync();
         var workspaceRef = await fixture.CreateWorkspaceAsync(user.Token);
 
-        var response = await fixture.Auth.As(user.Token).UpdateWorkspaceRawAsync(workspaceRef, new CreateWorkspaceRequest(Name: "renamed by a scenario", Description: "and re-described"));
+        var response = await fixture.Auth.As(user.Token).UpdateWorkspaceRawAsync(workspaceRef, new UpdateWorkspaceRequest(Name: "renamed by a scenario", Description: "and re-described"));
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
     }

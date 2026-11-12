@@ -368,6 +368,7 @@ The cross-service contract. Every workspace-scoped management-host request passe
 | `WS_CRD_19` | − | Delete twice | Second call **403** `WORKSPACE_NOT_FOUND` (the ref no longer resolves) |
 | `WS_CRD_20` | + | Delete removes it from *other* members' lists too | Member B no longer sees it |
 | `WS_CRD_21` | + | `createdAt` is populated and plausible | Within a few minutes of now. Note `CreateWorkspaceAsync` returns `DateTime.UtcNow` rather than the stored value, so a strict equality check against the list endpoint will flake |
+| `WS_CRD_22` | + | Deleting a workspace stops its policies and clients | Registration with its PIN and login with a client's secret are both refused within 30 s |
 | `WS_CRD_23` | − | An invited member creates in the inviting tenant without `workspaces.create` | **403** `PERMISSION_UNAUTHORIZED` |
 | `WS_CRD_24` | + | An invited member names no tenant | **200**; the workspace is in their own tenant |
 | `WS_CRD_25` | − | A caller who may create in two tenants names neither | **400** `TENANT_REQUIRED` |

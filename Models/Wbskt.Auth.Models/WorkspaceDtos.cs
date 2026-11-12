@@ -21,6 +21,15 @@ public record CreateWorkspaceRequest(
     // the one tenant where the caller may create workspaces and refuses when there is more than one.
     Guid? TenantRefId = null);
 
+/// <summary>A workspace's new name and description. A workspace never moves tenant, so there is no tenant here.</summary>
+public record UpdateWorkspaceRequest(
+    [Required]
+    [StringLength(100, MinimumLength = 1)]
+    string Name,
+
+    [StringLength(500)]
+    string? Description);
+
 public record AddMemberRequest(
     [Required]
     [EmailAddress]

@@ -180,11 +180,11 @@ public sealed class WbsktAuthClient : WbsktApiClient
         SendRawAsync(HttpMethod.Get, $"/api/v1/workspaces/{workspaceRef}/permissions", null, cancellationToken);
 
     /// <summary>Renames a workspace or changes its description. <c>PUT /api/workspaces/{workspaceRef}</c>.</summary>
-    public Task UpdateWorkspaceAsync(Guid workspaceRef, CreateWorkspaceRequest request, CancellationToken cancellationToken = default) =>
+    public Task UpdateWorkspaceAsync(Guid workspaceRef, UpdateWorkspaceRequest request, CancellationToken cancellationToken = default) =>
         ReceiveAsync(UpdateWorkspaceRawAsync(workspaceRef, request, cancellationToken), cancellationToken);
 
     /// <summary><see cref="UpdateWorkspaceAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
-    public Task<HttpResponseMessage> UpdateWorkspaceRawAsync(Guid workspaceRef, CreateWorkspaceRequest request, CancellationToken cancellationToken = default) =>
+    public Task<HttpResponseMessage> UpdateWorkspaceRawAsync(Guid workspaceRef, UpdateWorkspaceRequest request, CancellationToken cancellationToken = default) =>
         SendRawAsync(HttpMethod.Put, $"/api/v1/workspaces/{workspaceRef}", request, cancellationToken);
 
     /// <summary>Deletes a workspace. <c>DELETE /api/workspaces/{workspaceRef}</c>.</summary>
