@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Data.SqlClient;
 using System.Text.Json;
 using Moq;
 using Wbskt.Workflow.Abstraction.Entities;
@@ -16,6 +17,7 @@ using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
 using Wbskt.Workflow.NodeExecutors.Controls;
 using Wbskt.Workflow.NodeExecutors.Triggers;
+using Wbskt.Host.Tests.AuthHost;
 
 namespace Wbskt.Host.Tests.Runtime;
 
@@ -382,6 +384,35 @@ public sealed class RetryExecutorTests
             retryParkThreshold: TimeSpan.FromSeconds(5));
     }
 
+    [Fact]
+    public async Task A_charge_that_finds_its_credits_lock_busy_is_tried_again_before_the_step_fails()
+    {
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.FromSeconds(1), Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] });
+        var executor = new RecordingExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+        var clock = new InstantTimeProvider();
+        var counters = new BusyCounters(busyTimes: 2);
+
+        NodeExecutionResult result = await RetryExecutor.RunWithRetryAsync(
+            node, CreateContext(), executor, new TestNodeExecutionServices(), clock, CancellationToken.None, counters, new DefaultCreditCostCalculator());
+
+        Assert.IsType<NodeExecutionResult.Terminal>(result);
+        Assert.Equal(3, counters.Calls);
+        Assert.Equal(RunStarter.BusyBackoff, clock.Delays);
+    }
+
+    [Fact]
+    public async Task A_charge_still_busy_after_its_tries_fails_the_step()
+    {
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.FromSeconds(1), Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] });
+        var executor = new RecordingExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+
+        Func<Task> run = () => RetryExecutor.RunWithRetryAsync(
+            node, CreateContext(), executor, new TestNodeExecutionServices(), new InstantTimeProvider(), CancellationToken.None, new BusyCounters(busyTimes: 3), new DefaultCreditCostCalculator());
+
+        SqlException busy = await Assert.ThrowsAsync<SqlException>(run);
+        Assert.Equal(50035, busy.Number);
+    }
+
     private static Task<NodeExecutionResult> RunAsync(BaseNode node, INodeExecutor executor, TimeProvider clock, RetryNotification? onRetry = null, TimeSpan? retryParkThreshold = null, int firstAttempt = 1)
     {
         return RetryExecutor.RunWithRetryAsync(
@@ -396,6 +427,30 @@ public sealed class RetryExecutorTests
             onRetry: onRetry,
             firstAttempt: firstAttempt,
             retryParkThreshold: retryParkThreshold);
+    }
+
+    private sealed class BusyCounters(int busyTimes) : IRunCountersProvider
+    {
+        public int Calls { get; private set; }
+
+        public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct) => new UnlimitedRunCountersProvider().GetByRunIdAsync(runId, ct);
+
+        public Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => Task.FromResult(0);
+
+        public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => Task.FromResult(0);
+
+        public Task<CreditCharge?> TryChargeAsync(int runId, decimal cost, CancellationToken ct)
+        {
+            Calls++;
+            if (Calls <= busyTimes)
+            {
+                throw SqlExceptions.WithNumber(50035, "busy");
+            }
+
+            return Task.FromResult<CreditCharge?>(new CreditCharge(cost, 100m));
+        }
+
+        public Task<long> SumActiveBranchesAsync(CancellationToken ct) => Task.FromResult(0L);
     }
 
     /// <summary>

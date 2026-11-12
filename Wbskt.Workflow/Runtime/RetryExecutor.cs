@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Data.SqlClient;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Exceptions;
@@ -37,10 +38,30 @@ internal static class RetryExecutor
 
     private const decimal CreditBudgetWarnRatio = 0.8m;
 
+    private const int ChargeBusyError = 50035; // THROW in dbo.RunCounters_TryCharge
+
     /// <summary>
     /// The attempt a retry park left on the branch, or null when the branch is not parked for a retry
     /// (the key is absent, or holds something other than an attempt number).
     /// </summary>
+    // A charge past a leased budget waits for its tenant's credits lock (and a cap's) and gives up with
+    // 50035 when it is held too long; tried again as a run start is (RunStarter.BusyBackoff) before the
+    // step fails.
+    private static async Task<CreditCharge?> ChargeAsync(IRunCountersProvider counters, int runId, decimal cost, TimeProvider clock, CancellationToken ct)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return await counters.TryChargeAsync(runId, cost, ct);
+            }
+            catch (SqlException ex) when (ex.Number == ChargeBusyError && attempt < RunStarter.BusyBackoff.Length)
+            {
+                await Task.Delay(RunStarter.BusyBackoff[attempt], clock, ct);
+            }
+        }
+    }
+
     internal static int? ReadParkedAttempt(IReadOnlyDictionary<string, JsonElement> localState)
     {
         return localState.TryGetValue(RetryAttemptKey, out JsonElement value)
@@ -167,7 +188,7 @@ internal static class RetryExecutor
                 // Atomic budget-checked charge (2.2): the SP re-validates the budget under the
                 // same row lock as the increment, so this is a single round-trip with no
                 // check-then-act race between concurrent branches on the same run.
-                CreditCharge? charge = await runCountersProvider.TryChargeAsync((int)context.RunId, cost, ct);
+                CreditCharge? charge = await ChargeAsync(runCountersProvider, (int)context.RunId, cost, clock, ct);
                 if (charge is null)
                 {
                     var outOfCreditsResult = new NodeExecutionResult.Fail("OUT_OF_CREDITS", "Credit budget exhausted.", false, null) { Warnings = chargeWarnings.ToArray() };
