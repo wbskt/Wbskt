@@ -587,10 +587,10 @@ const OPTIONAL_DRIFT = new Set(['ACME_CASERVER','BACKUP_ALLOW_LOCAL_ONLY','MIGRA
 
 const ROUTES = [
  ['console','Host(console.DOMAIN)','default','console:80',''],
- ['auth','Host(auth.DOMAIN) && !PathRegexp((?i)^/api/internal(/|$))','default','auth:8080','Sign-in and the refresh cookie stay here.'],
+ ['auth','Host(auth.DOMAIN) && !PathRegexp((?i)^/api/internal([/%]|$))','default','auth:8080','Sign-in and the refresh cookie stay here.'],
  ['auth-api','Host(api.DOMAIN) && (/api[/v1]/tenants | /api[/v1]/invitations | /api[/v1]/workspaces[/{id}[/members|owner|permissions]] | /api/callbacks/billing)','900','auth:8080','Workspace admin moved to the one API host (#304). Unversioned paths are deprecated aliases (#491, removal #500). Payment provider webhooks (/api/callbacks/billing/{provider}, #631).'],
  ['client-auth','Host(api.DOMAIN) && (/api[/v1]/client-auth | /api[/v1]/client-registrations)','1000','client-auth:8080','Falls through to management while client-auth is unhealthy.'],
- ['management','Host(api.DOMAIN) && !PathRegexp((?i)^/api/internal(/|$))','default (rule length)','management:8080','Sticky cookie for SignalR across replicas. Public API is /api/v1; /api/x is rewritten to /api/v1/x with Deprecation: true.'],
+ ['management','Host(api.DOMAIN) && !PathRegexp((?i)^/api/internal([/%]|$))','default (rule length)','management:8080','Sticky cookie for SignalR across replicas. Public API is /api/v1; /api/x is rewritten to /api/v1/x with Deprecation: true.'],
  ['gateway-ws','Host(ws.DOMAIN)','default','gateway-ws:8080','WebSocket upgrade pins the connection.'],
  ['gateway-mqtt (TCP)','HostSNI(mqtt.DOMAIN)','mqtts :8883','gateway-mqtt:1883','TLS ends at Traefik; plain MQTT inside. The entrypoint has no read or write timeout, so idle clients stay connected.'],
  ['gateway-mqtt-plain (TCP)','HostSNI(*)','mqtt :1883','gateway-mqtt:1883','Plain MQTT for boards without TLS: the access token crosses the network in clear text. No timeouts, as on mqtts.'],

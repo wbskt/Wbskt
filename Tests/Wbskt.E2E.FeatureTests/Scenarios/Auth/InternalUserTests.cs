@@ -46,6 +46,23 @@ public sealed class InternalUserTests(ServicesFixture fixture)
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
+    /// <summary>
+    /// #775: a request that came through a proxy is refused in any letter case, even with a valid
+    /// token, in case a public router ever lets one through.
+    /// </summary>
+    [SkippableTheory]
+    [InlineData(CurrentUser)]
+    [InlineData("/API/Internal/users/me")]
+    public async Task AUTH_INT_03_CurrentUser_ThroughAProxy_Is404(string path)
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+        var user = await fixture.CreateUserAsync();
+
+        using var response = await fixture.GetForwardedAsync(ServicesFixture.AuthUrl(path), user.Token, "203.0.113.9");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
     private async Task<int> CurrentUserIdAsync(string token)
     {
         using var response = await fixture.SendAsync(HttpMethod.Get, ServicesFixture.AuthUrl(CurrentUser), token);

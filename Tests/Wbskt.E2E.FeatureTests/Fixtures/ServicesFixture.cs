@@ -242,6 +242,16 @@ public sealed class ServicesFixture : IDisposable
     public Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, string? token = null, object? body = null) =>
         Auth.As(token).SendRawAsync(method, url, body);
 
+    /// <summary>Sends a GET as Traefik would pass it on, with an <c>X-Forwarded-For</c> header.</summary>
+    public async Task<HttpResponseMessage> GetForwardedAsync(string url, string token, string forwardedFor)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        req.Headers.Add("X-Forwarded-For", forwardedFor);
+
+        return await _http.SendAsync(req);
+    }
+
     /// <summary>
     /// Sends a JSON request whose body is empty. This is what "no body" looks like from a JSON client:
     /// the content type is declared, so model binding runs and rejects it with a 400. A request with

@@ -11,6 +11,7 @@ using Moq;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Hosting;
+using Wbskt.Infrastructure.Middlewares;
 
 namespace Wbskt.Host.Tests.Infrastructure;
 
@@ -59,14 +60,18 @@ public sealed class WbsktHostPipelineTests
     {
         await using var app = await StartAsync();
         using var client = new HttpClient { BaseAddress = BaseAddress(app) };
-        using var forwarded = new HttpRequestMessage(HttpMethod.Get, "/API/Internal/ping");
-        forwarded.Headers.Add("X-Forwarded-For", "203.0.113.9");
-
         using var direct = await client.GetAsync("/api/internal/ping");
-        using var refused = await client.SendAsync(forwarded);
+        using var directMixedCase = await client.GetAsync("/API/Internal/ping");
 
         Assert.Equal(HttpStatusCode.OK, direct.StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, refused.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, directMixedCase.StatusCode);
+        foreach (string path in new[] { "/api/internal/ping", "/API/Internal/ping", "/api/Internal/ping" })
+        {
+            using var forwarded = new HttpRequestMessage(HttpMethod.Get, path);
+            forwarded.Headers.Add("X-Forwarded-For", "203.0.113.9");
+            using var refused = await client.SendAsync(forwarded);
+            Assert.Equal(HttpStatusCode.NotFound, refused.StatusCode);
+        }
     }
 
     private static async Task<WebApplication> StartAsync()
@@ -92,6 +97,9 @@ public sealed class WbsktHostPipelineTests
         builder.Services.AddAuthorization();
 
         var app = builder.Build();
+
+        // As the auth and management hosts do: the alias rewrite and routing come first.
+        app.UseUnversionedApiAliases();
         app.UseWbsktPipeline();
         app.MapGet("/ip", (HttpContext context) => context.Connection.RemoteIpAddress!.ToString()).RequireRateLimiting(Policy);
         app.MapGet("/api/internal/ping", () => "pong").AllowAnonymous();
