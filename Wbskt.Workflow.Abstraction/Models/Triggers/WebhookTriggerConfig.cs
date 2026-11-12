@@ -6,8 +6,9 @@ namespace Wbskt.Workflow.Abstraction.Models.Triggers;
 
 public sealed record WebhookTriggerConfig
 {
+    // Empty rather than required: the validator lists it as WEBHOOK_PATH_MISSING.
     [JsonPropertyName("path")]
-    public required string Path { get; init; }
+    public string Path { get; init; } = string.Empty;
 
     [JsonPropertyName("correlationKey")]
     public string? CorrelationKey { get; init; } = null;

@@ -436,6 +436,18 @@ public sealed partial class WorkflowValidator
                 case ClientTriggerNode client:
                     if (client.Config is { } clientConfig)
                     {
+                        // A hold key is built from the parsed GUID, as presence keys are; a plain message
+                        // trigger matches the client reference as the socket host sends it.
+                        ValidateTriggerClient(node.NodeId, "Client trigger", clientConfig.ClientRef, needsClientId: clientConfig.HoldSeconds > 0, issues);
+                        if (string.IsNullOrWhiteSpace(clientConfig.Type))
+                        {
+                            issues.Add(new ValidationIssue(
+                                ValidationSeverity.Error,
+                                "TRIGGER_MESSAGE_TYPE_REQUIRED",
+                                $"Client trigger '{node.NodeId}' needs a message type, or '*' for any.",
+                                node.NodeId, "config.type"));
+                        }
+
                         ValidateClientHold(node.NodeId, clientConfig, issues);
                     }
                     WarnOnCorrelation(node.NodeId, client.Config?.CorrelationKey, issues);
@@ -444,14 +456,7 @@ public sealed partial class WorkflowValidator
                 case ClientPresenceTriggerNode presence:
                     // The key is built from the parsed GUID, and the socket host reports presence by
                     // GUID, so anything else would publish a trigger that can never fire.
-                    if (!Guid.TryParse(presence.Config?.ClientRef, out _))
-                    {
-                        issues.Add(new ValidationIssue(
-                            ValidationSeverity.Error,
-                            "INVALID_CLIENT_REF",
-                            $"Presence trigger '{node.NodeId}' needs a client id, but has '{presence.Config?.ClientRef}'.",
-                            node.NodeId, "config.clientRef"));
-                    }
+                    ValidateTriggerClient(node.NodeId, "Presence trigger", presence.Config?.ClientRef, needsClientId: true, issues);
                     if (presence.Config is { } config
                         && (config.ForSeconds < 0 || config.ForSeconds > ClientPresenceTriggerConfig.MaxForSeconds))
                     {
@@ -465,6 +470,15 @@ public sealed partial class WorkflowValidator
                     break;
 
                 case WebhookTriggerNode webhook:
+                    if (webhook.Config is { } webhookConfig && string.IsNullOrWhiteSpace(webhookConfig.Path))
+                    {
+                        issues.Add(new ValidationIssue(
+                            ValidationSeverity.Error,
+                            "WEBHOOK_PATH_MISSING",
+                            $"Webhook trigger '{node.NodeId}' needs a path to be called on.",
+                            node.NodeId, "config.path"));
+                    }
+
                     WarnOnCorrelation(node.NodeId, webhook.Config?.CorrelationKey, issues);
                     break;
 
@@ -563,14 +577,24 @@ public sealed partial class WorkflowValidator
                 $"Client trigger '{nodeId}' has holdSeconds {config.HoldSeconds} on any message type; a hold time needs one message type, because every other type would reset it.",
                 nodeId, "config.type"));
         }
+    }
 
-        // The hold key is built from the parsed GUID, as presence keys are.
-        if (!Guid.TryParse(config.ClientRef, out _))
+    private static void ValidateTriggerClient(Guid nodeId, string trigger, string? clientRef, bool needsClientId, List<ValidationIssue> issues)
+    {
+        if (string.IsNullOrWhiteSpace(clientRef))
+        {
+            issues.Add(new ValidationIssue(
+                ValidationSeverity.Error,
+                "TRIGGER_CLIENT_REQUIRED",
+                $"{trigger} '{nodeId}' needs a client to listen to.",
+                nodeId, "config.clientRef"));
+        }
+        else if (needsClientId && !Guid.TryParse(clientRef, out _))
         {
             issues.Add(new ValidationIssue(
                 ValidationSeverity.Error,
                 "INVALID_CLIENT_REF",
-                $"Client trigger '{nodeId}' has a hold time and needs a client id, but has '{config.ClientRef}'.",
+                $"{trigger} '{nodeId}' needs a client id, but has '{clientRef}'.",
                 nodeId, "config.clientRef"));
         }
     }

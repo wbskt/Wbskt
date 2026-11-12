@@ -8,8 +8,9 @@ public sealed record ClientPresenceTriggerConfig
     public const int DefaultForSeconds = 60;
     public const int MaxForSeconds = 24 * 60 * 60;
 
+    // Empty rather than required: the validator lists it as TRIGGER_CLIENT_REQUIRED.
     [JsonPropertyName("clientRef")]
-    public required string ClientRef { get; init; }
+    public string ClientRef { get; init; } = string.Empty;
 
     [JsonPropertyName("state")]
     [JsonConverter(typeof(JsonStringEnumConverter))]
