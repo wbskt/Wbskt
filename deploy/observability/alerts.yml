@@ -71,6 +71,20 @@ groups:
             Check the auth host's logs for the provider's status codes and dbo.BillingWebhookEvents
             for the rows left unprocessed.
 
+      - alert: BillingWebhookSignaturesRefused
+        # Every delivery refused for its signature usually means the signing secret was rotated on one
+        # side only. The provider stops redelivering after about a day, and events lost then are not
+        # sent again, so this pages well before that.
+        expr: sum(increase(wbskt_auth_billing_webhooks_total{outcome="signature_invalid"}[30m])) > 3
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $value }} payment webhooks were refused for their signature in 30 minutes"
+          description: >-
+            Compare Billing:Dodo:WebhookSecret on the auth host with the webhook's secret in the
+            provider's dashboard. Once fixed, replay the refused deliveries from the dashboard; the
+            hourly subscription review re-reads only subscriptions that stayed active past their period.
+
       - alert: CreditGrantsRepaired
         # The hourly reconcile wrote a credit grant change an event should have: a pack paid for whose
         # credits never arrived, or a refund or chargeback that was not applied. Repaired now, but the

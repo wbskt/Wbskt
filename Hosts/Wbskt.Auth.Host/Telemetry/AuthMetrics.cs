@@ -41,7 +41,8 @@ public sealed class AuthMetrics : IWorkerTickMetrics, IDisposable
     /// <summary>
     /// Payment webhooks acted on, tagged <c>type</c> (the provider's event type) and <c>outcome</c>: done,
     /// set_aside (nothing here to act on, which for a paying customer means a tenant left on the wrong
-    /// plan) or failed (delivered again by the provider).
+    /// plan), failed (delivered again by the provider) or signature_invalid (refused unread, so its type is
+    /// <c>unknown</c>).
     /// </summary>
     public Counter<long> BillingWebhooks { get; }
 
