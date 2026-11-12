@@ -16,6 +16,10 @@
 -- plan), the days it had are kept in the Held* columns until RetentionHeldUntil (Billing:
 -- RetentionGraceDays later), and the retention sweeps keep the longer of the two until then, so data a
 -- customer who pays again the next day still wants is not deleted the night they lapse.
+--
+-- RetiredAt is when the workspace was deleted (dbo.Workspace_Retire). The row is kept, not deleted: the
+-- tenant's month is summed through it, so deleting it would hand back the credits and messages the
+-- workspace spent, and the retention sweeps would never reach its readings and runs.
 CREATE TABLE dbo.WorkspaceAccounts
 (
     WorkspaceId    INT              NOT NULL,
@@ -34,6 +38,7 @@ CREATE TABLE dbo.WorkspaceAccounts
     RetentionHeldUntil     DATETIME2(3) NULL,
     UpdatedAt      DATETIME2(3)     NOT NULL CONSTRAINT DF_WorkspaceAccounts_UpdatedAt DEFAULT SYSUTCDATETIME(),
     CreatedAt      DATETIME2(3)     NOT NULL CONSTRAINT DF_WorkspaceAccounts_CreatedAt DEFAULT SYSUTCDATETIME(),
+    RetiredAt      DATETIME2(3)     NULL,
     CONSTRAINT PK_WorkspaceAccounts PRIMARY KEY CLUSTERED (WorkspaceId),
     CONSTRAINT CK_WorkspaceAccounts_PlanCode CHECK (PlanCode = N'Free' OR PlanCode = N'Maker' OR PlanCode = N'Pro' OR PlanCode = N'Team' OR PlanCode = N'Business')
 );
