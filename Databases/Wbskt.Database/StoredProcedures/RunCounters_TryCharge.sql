@@ -82,6 +82,11 @@ BEGIN
             JOIN dbo.Runs r WITH (UPDLOCK) ON r.Id = rc.RunId
             WHERE rc.RunId = @Root;
 
+            -- A charge that landed as WorkspaceCreditCap_Set cut the budget can leave it below what was
+            -- spent. That excess is already in @CapLeft as spent, so it is not asked of the cap again.
+            IF @Spent > @Budget
+                SET @Budget = @Spent;
+
             DECLARE @Need DECIMAL(18,4) = @Spent + @Cost - @Budget;
             IF @Need > 0 AND @Budget < @Ceiling
             BEGIN
@@ -99,7 +104,7 @@ BEGIN
                 -- nothing of the cap held by a run that cannot use it.
                 IF @Extend >= @Need
                     UPDATE dbo.Runs
-                    SET CreditBudget = CreditBudget + @Extend
+                    SET CreditBudget = @Budget + @Extend
                     WHERE Id = @Root;
             END
         END
