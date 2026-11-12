@@ -1,5 +1,6 @@
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
+using Wbskt.Infrastructure.Billing;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Models.Billing;
 using Wbskt.Workflow.Abstraction.Entities;
@@ -254,11 +255,11 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
         long second = await StartAsync(siblingWd, credits: credits, budget: 1_000m);
 
         (await runs.GetByIdAsync(first, CancellationToken.None)).CreditBudget.Should().Be(5m, "a run leases a twentieth of the allowance");
-        (await runs.GetByIdAsync(second, CancellationToken.None)).CreditBudget.Should().Be(5m);
+        (await runs.GetByIdAsync(second, CancellationToken.None)).CreditBudget.Should().Be(4.75m, "or a twentieth of the 95 left, if less");
         (await counters.TryAsync(second, 0m)).Should().Be((0m, 95m), "the first run's lease is held from what the second may reach");
         var summary = await new Wbskt.Management.Host.Providers.WorkspaceUsageProvider(ProviderFactory.BuildConfiguration(fixture.ConnectionString))
             .GetSummaryAsync(workspaceId, tenantId, new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1), CancellationToken.None);
-        summary.TenantCreditsReserved.Should().Be(10m, "both leases are held across the tenant's workspaces");
+        summary.TenantCreditsReserved.Should().Be(9.75m, "both leases are held across the tenant's workspaces");
 
         (await counters.TryAsync(first, 60m)).Should().Be((60m, 100m), "the lease grows by what the charge needs");
         (await counters.TryAsync(second, 40m)).Should().Be((40m, 95m), "the second run takes the 40 the first left");
@@ -266,6 +267,87 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
         (await counters.TryAsync(first, 1m)).Should().BeNull();
         Func<Task> third = () => StartAsync(wd, credits: credits, budget: 1_000m);
         (await third.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(PlanCreditLimitError);
+    }
+
+    [SkippableFact]
+    public async Task Runs_parked_on_their_leases_leave_the_allowance_to_the_runs_the_plan_lets_start()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int tenantId = NewId();
+        int workspaceId = NewId();
+        await AddAccountAsync(workspaceId, tenantId, creditsPerMonth: 2_000m);
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        var credits = new PlanCredits(2_000m, tenantId);
+        var runsGoing = new PlanCeiling(200, tenantId);
+
+        var started = new List<long>();
+        for (int i = 0; i < 30; i++)
+        {
+            started.Add(await StartAsync(wd, credits: credits, budget: 10_000m, ceiling: runsGoing));
+        }
+
+        var runs = ProviderFactory.Run(fixture.ConnectionString);
+        (await runs.GetByIdAsync(started[^1], CancellationToken.None)).CreditBudget.Should().Be(10m, "the allowance shared among the 200 runs the plan lets go at once");
+        var summary = await new Wbskt.Management.Host.Providers.WorkspaceUsageProvider(ProviderFactory.BuildConfiguration(fixture.ConnectionString))
+            .GetSummaryAsync(workspaceId, tenantId, new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1), CancellationToken.None);
+        summary.TenantCreditsReserved.Should().Be(300m, "thirty runs parked with nothing spent hold a little each, not the whole month");
+    }
+
+    [SkippableFact]
+    public async Task A_sub_workflow_child_extends_its_leased_roots_budget_from_what_the_tenant_has_left()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int tenantId = NewId();
+        int workspaceId = NewId();
+        await AddAccountAsync(workspaceId, tenantId, creditsPerMonth: 100m);
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        var runs = ProviderFactory.Run(fixture.ConnectionString);
+        long parent = await StartAsync(wd, credits: new PlanCredits(100m, tenantId), budget: 1_000m);
+        long child = await StartAsync(wd, budget: 1_000m, parentRunRefId: (await runs.GetByIdAsync(parent, CancellationToken.None)).RefId);
+        ChargeCounter counters = new(ProviderFactory.RunCounters(fixture.ConnectionString));
+
+        (await counters.TryAsync(child, 30m)).Should().Be((30m, 100m), "the root's lease of 5 grows by what the child's charge needs");
+        (await runs.GetByIdAsync(parent, CancellationToken.None)).CreditBudget.Should().Be(30m);
+        (await counters.TryAsync(child, 71m)).Should().BeNull("the tenant has 70 left");
+    }
+
+    [SkippableFact]
+    public async Task A_lease_is_extended_against_the_plan_the_tenant_is_on_now()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int tenantId = NewId();
+        int workspaceId = NewId();
+        await AddAccountAsync(workspaceId, tenantId, creditsPerMonth: 100m);
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        long run = await StartAsync(wd, credits: new PlanCredits(100m, tenantId), budget: 1_000m);
+        ChargeCounter counters = new(ProviderFactory.RunCounters(fixture.ConnectionString));
+
+        await ExecAsync("UPDATE dbo.WorkspaceAccounts SET CreditsPerMonth = 10 WHERE WorkspaceId = @One", workspaceId, workspaceId);
+
+        (await counters.TryAsync(run, 20m)).Should().BeNull("after the downgrade the month allows 10, not the 100 the run started under");
+        (await counters.TryAsync(run, 10m)).Should().Be((10m, 100m));
+    }
+
+    [SkippableTheory]
+    [InlineData(PlanCode.Free)]
+    [InlineData(PlanCode.Maker)]
+    [InlineData(PlanCode.Pro)]
+    [InlineData(PlanCode.Team)]
+    [InlineData(PlanCode.Business)]
+    public async Task The_databases_plan_credits_refuse_runs_where_the_plan_does(PlanCode plan)
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        decimal expected = new WorkspacePlan(1, 1, plan, PlanCatalog.BuiltIn[plan] with { CreditsPerMonth = 1_000m }).Credits.RunsRefusedAt;
+        await using var connection = new SqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new SqlCommand("SELECT dbo.PlanCreditsRefusedAt(@Plan, 1000)", connection);
+        command.Parameters.AddWithValue("@Plan", plan.ToString());
+
+        ((decimal)(await command.ExecuteScalarAsync())!).Should().Be(expected);
     }
 
     [SkippableFact]
@@ -374,7 +456,7 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
 
     private static int NewId() => Random.Shared.Next(1_000_000, int.MaxValue - 1);
 
-    private async Task<long> StartAsync(WorkflowDefinitionRow wd, decimal startCost = 0m, PlanCredits? credits = null, decimal budget = 100m, Guid? parentRunRefId = null)
+    private async Task<long> StartAsync(WorkflowDefinitionRow wd, decimal startCost = 0m, PlanCredits? credits = null, decimal budget = 100m, Guid? parentRunRefId = null, PlanCeiling? ceiling = null)
     {
         DateTime now = DateTime.UtcNow;
         Guid triggerNodeId = Guid.NewGuid();
@@ -397,7 +479,7 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
             ParentRunRefId = parentRunRefId
         };
         RunStartRow started = await ProviderFactory.Run(fixture.ConnectionString).StartAsync(
-            run, BranchRow.New(Guid.NewGuid(), 0, triggerNodeId, """{"trigger":{}}""", now), null, wd.WorkspaceId, null, ActiveRunGuard.None, credits, CancellationToken.None);
+            run, BranchRow.New(Guid.NewGuid(), 0, triggerNodeId, """{"trigger":{}}""", now), null, wd.WorkspaceId, ceiling, ActiveRunGuard.None, credits, CancellationToken.None);
         return started.Run.Id;
     }
 

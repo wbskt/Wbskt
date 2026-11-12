@@ -221,7 +221,7 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
 
         var counters = ProviderFactory.RunCounters(fixture.ConnectionString);
         RunRow run = await ProviderFactory.Run(fixture.ConnectionString).GetByIdAsync(second, CancellationToken.None);
-        run.CreditBudget.Should().Be(0.25m, "a run leases a twentieth of the allowance at a time");
+        run.CreditBudget.Should().Be(0.15m, "late in the month a run leases a twentieth of what is left");
         (await counters.TryChargeAsync((int)second, 3m, CancellationToken.None)).Should().Be(new CreditCharge(3m, 3m), "the lease grows up to the 3 that were left");
         (await counters.TryChargeAsync((int)second, 0.01m, CancellationToken.None)).Should().BeNull();
     }
@@ -269,7 +269,7 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         (await runs.GetByIdAsync(capped, CancellationToken.None)).CreditBudget.Should().Be(0.2m, "a capped run leases a twentieth of the cap at a time");
         (await counters.TryChargeAsync((int)capped, 3m, CancellationToken.None)).Should().Be(new CreditCharge(3m, 3m), "the lease grows up to what the cap left");
         (await counters.TryChargeAsync((int)capped, 0.01m, CancellationToken.None)).Should().BeNull();
-        (await runs.GetByIdAsync(uncapped, CancellationToken.None)).CreditBudget.Should().Be(50m, "without the cap it leases a twentieth of the allowance");
+        (await runs.GetByIdAsync(uncapped, CancellationToken.None)).CreditBudget.Should().Be(49.8m, "without the cap it leases a twentieth of the 996 the plan has left");
         (await counters.TryChargeAsync((int)uncapped, 0m, CancellationToken.None)).Should().Be(new CreditCharge(0m, 100m), "and may grow to its whole budget");
         first.Should().BePositive();
     }

@@ -22,8 +22,8 @@ CREATE PROCEDURE dbo.Run_Start
     @StartCost            DECIMAL(18,4) = 0,
     -- The plan's workflow credits a calendar month (UTC), pooled across @TenantId's workspaces (50033),
     -- and with it the workspace's own cap (50034). On Business this is a multiple of the allowance
-    -- (PlanCredits.RunsRefusedAt), since its runs carry on past it and the overage is invoiced. NULL for a sub-workflow child, which spends from its
-    -- parent's budget instead.
+    -- (PlanCredits.RunsRefusedAt), since its runs carry on past it and the overage is invoiced. NULL
+    -- for a sub-workflow child, which spends from its parent's budget instead.
     @CreditAllowance      DECIMAL(18,4) = NULL
 AS
 BEGIN
@@ -132,12 +132,16 @@ BEGIN
             -- the same remainder. What is left (dbo.TenantCreditsLeft) is what the plan has not covered
             -- this calendar month (UTC), plus what credit grants still hold, less what runs have spent and
             -- not posted and what the runs going hold of their budgets. The run's budget is cut to that
-            -- and becomes its ceiling, and the run is given a lease of a twentieth of the allowance (or of
-            -- what is left, if more), which RunCounters_TryCharge extends as it is spent: one run going
-            -- does not hold the whole remainder away from the next, and runs going at once never spend
-            -- past it between them. NULL is no limit.
+            -- and becomes its ceiling, and the run is given a lease of it, which RunCounters_TryCharge
+            -- extends as it is spent: one run going does not hold the whole remainder away from the next,
+            -- and runs going at once never spend past it between them. A lease is the allowance shared
+            -- among as many runs as the plan lets go at once (at least twenty), so runs parked for days
+            -- cannot hold it all while the plan would let more start, and no more than a twentieth of what
+            -- is left, so late in the month they hold less of it. It is never less than the start cost.
+            -- NULL is no limit.
             DECLARE @BudgetCeiling DECIMAL(18,4);
             DECLARE @RunCreditAllowance DECIMAL(18,4);
+            DECLARE @RunCreditLease DECIMAL(18,4);
             IF @CreditAllowance IS NOT NULL AND @WorkspaceId IS NOT NULL
             BEGIN
                 DECLARE @CreditsResource NVARCHAR(255) = dbo.PlanLimitLockResource(N'credits', @WorkspaceId, @TenantId);
@@ -149,13 +153,16 @@ BEGIN
                 DECLARE @CreditsLeft DECIMAL(18,4) =
                     (SELECT Credits FROM dbo.TenantCreditsLeft(@WorkspaceId, @TenantId, @CreditAllowance, @StartedAt));
 
-                IF @CreditsLeft <= 0
+                IF @CreditsLeft <= 0 OR @CreditsLeft < @StartCost
                     THROW 50033, 'The plan has used its workflow credits for this month.', 1;
 
                 IF @CreditsLeft < @CreditBudget
                     SET @CreditBudget = @CreditsLeft;
 
-                DECLARE @Lease DECIMAL(18,4) = CASE WHEN @CreditsLeft > @CreditAllowance THEN @CreditsLeft ELSE @CreditAllowance END / 20;
+                DECLARE @Lease DECIMAL(18,4) = @CreditAllowance / CASE WHEN @MaxActiveRuns > 20 THEN @MaxActiveRuns ELSE 20 END;
+                SET @RunCreditLease = @Lease;
+                IF @CreditsLeft / 20 < @Lease
+                    SET @Lease = @CreditsLeft / 20;
 
                 -- The workspace's own cap, if its owner set one (dbo.WorkspaceCreditCaps), checked after the
                 -- tenant's allowance, so the error names the limit that is actually spent when both are. It
@@ -243,9 +250,8 @@ BEGIN
 
             SET @RunId = SCOPE_IDENTITY();
 
-            INSERT INTO dbo.RunCounters (RunId, ActiveBranchCount, CreditsConsumed, BudgetRunId, BudgetCeiling, HasUnposted, CreditAllowance, TenantId)
-            VALUES (@RunId, 1, @StartCost, @BudgetRunId, @BudgetCeiling, CASE WHEN @StartCost <> 0 THEN 1 ELSE 0 END, @RunCreditAllowance,
-                    CASE WHEN @RunCreditAllowance IS NULL THEN NULL ELSE @TenantId END);
+            INSERT INTO dbo.RunCounters (RunId, ActiveBranchCount, CreditsConsumed, BudgetRunId, BudgetCeiling, HasUnposted, CreditAllowance, CreditLease)
+            VALUES (@RunId, 1, @StartCost, @BudgetRunId, @BudgetCeiling, CASE WHEN @StartCost <> 0 THEN 1 ELSE 0 END, @RunCreditAllowance, @RunCreditLease);
 
             INSERT INTO dbo.Branches (RefId, RunId, NodeId, Status, LocalJson)
             VALUES (@BranchRefId, @RunId, @TriggerNodeId, N'Active', @BranchLocalJson);
