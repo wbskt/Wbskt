@@ -8,6 +8,7 @@ using Wbskt.Auth.Models;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Auth;
 using Wbskt.Infrastructure;
+using Wbskt.Primitives.Constants;
 using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Host.Tests.AuthHost;
@@ -51,6 +52,40 @@ public sealed class TenantServiceTests
         var result = await _service.GetTenantsForUserAsync(CallerId);
 
         Assert.Equal(new TenantResponse(acme, "Acme"), Assert.Single(result.Value));
+    }
+
+    // ---------------------------------------------------------------- invitations
+
+    /// <summary>
+    /// Accepting an invitation grants its role, so someone who may invite but not assign roles cannot
+    /// use an invitation to hand out Admin, to a second address of their own or anyone else.
+    /// </summary>
+    [Fact]
+    public async Task An_invitation_naming_a_role_needs_roles_manage()
+    {
+        var adminRef = Guid.NewGuid();
+        _accessControl.Setup(p => p.FindRoleIdByRefIdAsync(adminRef, TenantId, It.IsAny<CancellationToken>())).ReturnsAsync(3);
+        _accessControl.Setup(p => p.VerifyPermissionAsync(CallerId, TenantId, null, PermissionNames.RolesManage, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var withRole = await _service.CreateInvitationAsync(CallerId, TenantId, new CreateInvitationRequest("lead+2@example.test", adminRef));
+
+        Assert.Equal("PERMISSION_UNAUTHORIZED", withRole.Error.Code);
+        Assert.Equal(ErrorType.Forbidden, withRole.Error.Type);
+        _tenants.Verify(p => p.CreateInvitationAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task An_invitation_naming_a_role_is_issued_by_someone_who_may_assign_it()
+    {
+        var adminRef = Guid.NewGuid();
+        _accessControl.Setup(p => p.FindRoleIdByRefIdAsync(adminRef, TenantId, It.IsAny<CancellationToken>())).ReturnsAsync(3);
+        _accessControl.Setup(p => p.VerifyPermissionAsync(CallerId, TenantId, null, PermissionNames.RolesManage, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _tenants.Setup(p => p.CreateInvitationAsync(TenantId, "new@example.test", 3, It.IsAny<byte[]>(), It.IsAny<DateTime>(), CallerId, It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CreatedInvitation(Guid.NewGuid(), "Acme"));
+
+        var result = await _service.CreateInvitationAsync(CallerId, TenantId, new CreateInvitationRequest("new@example.test", adminRef));
+
+        Assert.True(result.IsSuccess);
     }
 
     // ---------------------------------------------------------------- members

@@ -81,7 +81,8 @@ public class ManagementController(ITenantService tenantService, IAccessControlSe
     }
 
     /// <summary>
-    /// Invites an address to the tenant, optionally with a role granted on acceptance. The response
+    /// Invites an address to the tenant, optionally with a role granted on acceptance. Naming a role also
+    /// needs <c>roles.manage</c> tenant-wide (403 <c>PERMISSION_UNAUTHORIZED</c> without it). The response
     /// carries the raw token once; it is stored only as a hash and cannot be retrieved again.
     /// </summary>
     [HttpPost("{tenantRef:guid}/invitations")]
@@ -272,12 +273,16 @@ public class ManagementController(ITenantService tenantService, IAccessControlSe
         return MapResult(await accessControlService.GetUserGroupsAsync(tenantId, userRef, cancellationToken));
     }
 
-    /// <summary>Adds a user to a group.</summary>
+    /// <summary>
+    /// Adds a user to a group. A group that carries roles, its own or a parent's, grants them, so adding
+    /// to one also needs <c>roles.manage</c> tenant-wide (403 <c>PERMISSION_UNAUTHORIZED</c> without it).
+    /// </summary>
     [HttpPost("{tenantRef:guid}/members/{userRef:guid}/groups/{groupRef:guid}")]
     [RequiresTenantPermission(PermissionNames.UsersManage)]
     public async Task<IActionResult> AddUserToGroup([FromTenant] int tenantId, Guid userRef, Guid groupRef, CancellationToken cancellationToken)
     {
-        return MapResult(await accessControlService.AddUserToGroupAsync(tenantId, userRef, groupRef, cancellationToken));
+        var caller = CurrentUserId();
+        return caller.IsFailure ? MapError(caller.Error) : MapResult(await accessControlService.AddUserToGroupAsync(caller.Value, tenantId, userRef, groupRef, cancellationToken));
     }
 
     /// <summary>Removes a user from a group.</summary>

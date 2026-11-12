@@ -142,7 +142,7 @@ internal sealed class AccessControlService : IAccessControlService
 
     // ----- Group membership --------------------------------------------------------------------
 
-    public async Task<Result> AddUserToGroupAsync(int tenantId, Guid userRef, Guid groupRef, CancellationToken cancellationToken = default)
+    public async Task<Result> AddUserToGroupAsync(int callerId, int tenantId, Guid userRef, Guid groupRef, CancellationToken cancellationToken = default)
     {
         var resolved = await ResolveUserAndGroupAsync(tenantId, userRef, groupRef, cancellationToken);
         if (resolved.IsFailure)
@@ -151,6 +151,15 @@ internal sealed class AccessControlService : IAccessControlService
         }
 
         var (_, userId, groupId) = resolved.Value;
+
+        // Joining a group that carries roles (its own or an ancestor's) grants them, so it needs what
+        // assigning them needs.
+        if (await _accessControl.GroupCarriesRolesAsync(groupId, tenantId, cancellationToken)
+            && !await RoleGrantGuard.MayGrantRolesAsync(_accessControl, callerId, tenantId, cancellationToken))
+        {
+            return Result.Failure(RoleGrantGuard.RolesManageRequired);
+        }
+
         return await GuardAsync("AddUserToGroup", async () =>
         {
             await _accessControl.InsertUserGroupAsync(userId, groupId, tenantId, cancellationToken);

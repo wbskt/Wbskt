@@ -261,7 +261,7 @@ not in the API docs): 204 once stored and acted on (or set aside), 401 `BILLING_
 | Endpoint | Permission | What it does |
 |---|---|---|
 | `GET {tenantRef}/invitations` | `users.read` | Lists outstanding invitations. |
-| `POST {tenantRef}/invitations` | `users.manage` | Issues one against an email address and mails the invitee a link. Optional `roleRef` (granted tenant-wide) and `workspaceRefs` (up to 50 workspaces of this tenant the invitee joins on acceptance; one outside it is 403 `WORKSPACE_NOT_FOUND`). Still returns the raw token **once**, so an administrator can deliver it by hand when mail is not an option. The listing returns each invitation's `workspaceRefs`. 409 `PLAN_MEMBER_LIMIT_REACHED` when the tenant already has as many members as its plan allows. |
+| `POST {tenantRef}/invitations` | `users.manage`, and `roles.manage` with a `roleRef` | Issues one against an email address and mails the invitee a link. Optional `roleRef` (granted tenant-wide, so it also needs `roles.manage`; 403 `PERMISSION_UNAUTHORIZED` without it) and `workspaceRefs` (up to 50 workspaces of this tenant the invitee joins on acceptance; one outside it is 403 `WORKSPACE_NOT_FOUND`). Still returns the raw token **once**, so an administrator can deliver it by hand when mail is not an option. The listing returns each invitation's `workspaceRefs`. 409 `PLAN_MEMBER_LIMIT_REACHED` when the tenant already has as many members as its plan allows. |
 | `DELETE {tenantRef}/invitations/{invitationRef}` | `users.manage` | Revokes an unredeemed invitation. |
 
 **Roles and their permissions**
@@ -296,7 +296,7 @@ not in the API docs): 204 once stored and acted on (or set aside), 401 `BILLING_
 | `GET {tenantRef}/members/{userRef}/roles` | `roles.read` | The member's role assignments and their scopes. |
 | `GET {tenantRef}/members/{userRef}/permissions` | `roles.read` | Direct user-level permission overrides. |
 | `GET {tenantRef}/members/{userRef}/groups` | `users.read` | Group memberships. |
-| `POST` / `DELETE {tenantRef}/members/{userRef}/groups/{groupRef}` | `users.manage` | Adds or removes a group membership. |
+| `POST` / `DELETE {tenantRef}/members/{userRef}/groups/{groupRef}` | `users.manage`, and `roles.manage` to add to a group that carries roles | Adds or removes a group membership. A group that carries roles, its own or a parent's, grants them, so adding to one also needs `roles.manage` (403 `PERMISSION_UNAUTHORIZED` without it). |
 | `POST` / `DELETE {tenantRef}/members/{userRef}/roles/{roleRef}` | `roles.manage` | Assigns or removes a role, scoped tenant-wide or to one workspace. |
 | `POST {tenantRef}/members/{userRef}/permissions` | `roles.manage` | Grants or denies a slug directly on the user. A user-level entry outranks anything role-derived. |
 | `DELETE {tenantRef}/members/{userRef}/permissions/{permissionSlug}` | `roles.manage` | **Deletes the override, does not deny it.** Denying would leave the override in place; deleting returns the decision to the user's roles. Without this an accidental grant could never be undone through the API. |

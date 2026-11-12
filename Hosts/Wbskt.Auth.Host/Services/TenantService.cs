@@ -195,6 +195,12 @@ internal sealed class TenantService : ITenantService
             }
 
             roleId = resolvedRoleId;
+
+            // Accepting grants the role, so naming one needs what assigning it needs.
+            if (!await RoleGrantGuard.MayGrantRolesAsync(_accessControl, callerId, tenantId, cancellationToken))
+            {
+                return Result<CreatedInvitationResponse>.Failure(RoleGrantGuard.RolesManageRequired);
+            }
         }
 
         var workspaceIds = new List<int>();
