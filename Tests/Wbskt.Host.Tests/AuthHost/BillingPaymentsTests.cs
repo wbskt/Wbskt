@@ -150,7 +150,7 @@ public sealed class BillingPaymentsTests
     {
         ProviderSays(new ProviderSubscription("sub_1", SubscriptionStatus.Active, "prod_maker_y", "cus_1", TenantRef, Now.AddYears(1), false));
 
-        var result = await Sync().SyncSubscriptionAsync("sub_1", refundedThrough: null, CancellationToken.None);
+        var result = await Sync().SyncSubscriptionAsync("sub_1", CancellationToken.None);
 
         Assert.Null(result.Reason);
         _billing.Verify(b => b.UpsertSubscriptionAsync(
@@ -166,7 +166,7 @@ public sealed class BillingPaymentsTests
     {
         ProviderSays(new ProviderSubscription("sub_1", SubscriptionStatus.PastDue, "prod_pro_m", "cus_1", TenantRef, Now.AddDays(3), false));
 
-        await Sync().SyncSubscriptionAsync("sub_1", refundedThrough: null, CancellationToken.None);
+        await Sync().SyncSubscriptionAsync("sub_1", CancellationToken.None);
 
         _notifier.Verify(n => n.NotifyAsync(9, It.Is<BillingNotice>(notice =>
             notice.Kind == BillingNoticeKind.PaymentFailed
@@ -174,7 +174,7 @@ public sealed class BillingPaymentsTests
             && notice.Paragraphs.Any(p => p.Contains("keeps Pro until " + Now.UtcDateTime.AddDays(7).ToString("d MMMM yyyy")))), It.IsAny<CancellationToken>()), Times.Once);
 
         ProviderSays(new ProviderSubscription("sub_1", SubscriptionStatus.Active, "prod_pro_m", "cus_1", TenantRef, Now.AddMonths(1), false));
-        await Sync().SyncSubscriptionAsync("sub_1", refundedThrough: null, CancellationToken.None);
+        await Sync().SyncSubscriptionAsync("sub_1", CancellationToken.None);
 
         _notifier.Verify(n => n.NotifyAsync(It.IsAny<int>(), It.IsAny<BillingNotice>(), It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -185,7 +185,7 @@ public sealed class BillingPaymentsTests
         _notifier.Setup(n => n.NotifyAsync(It.IsAny<int>(), It.IsAny<BillingNotice>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("relay"));
         ProviderSays(new ProviderSubscription("sub_1", SubscriptionStatus.PastDue, "prod_pro_m", "cus_1", TenantRef, Now.AddDays(3), false));
 
-        var result = await Sync().SyncSubscriptionAsync("sub_1", refundedThrough: null, CancellationToken.None);
+        var result = await Sync().SyncSubscriptionAsync("sub_1", CancellationToken.None);
 
         Assert.Null(result.Reason);
     }
@@ -198,7 +198,7 @@ public sealed class BillingPaymentsTests
             .ReturnsAsync(Error.Conflict("TENANT_PLAN_CHANGED", "changed"))
             .ReturnsAsync(new TenantPlanResponse(TenantRef, PlanCode.Pro, null, 3, Now));
 
-        await Sync().SyncSubscriptionAsync("sub_1", refundedThrough: null, CancellationToken.None);
+        await Sync().SyncSubscriptionAsync("sub_1", CancellationToken.None);
 
         _planService.Verify(p => p.SetAsync(TenantRef, It.Is<SetTenantPlanRequest>(r => r.PlanCode == PlanCode.Pro), It.IsAny<PlanSource>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
@@ -209,7 +209,7 @@ public sealed class BillingPaymentsTests
         _stored.Add(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(20)) with { SubscriptionId = "sub_new", CreatedAt = Now.UtcDateTime.AddDays(-3) });
         ProviderSays(new ProviderSubscription("sub_old", SubscriptionStatus.Cancelled, "prod_maker_m", "cus_1", TenantRef, Now.AddDays(-1), true));
 
-        var result = await Sync().SyncSubscriptionAsync("sub_old", refundedThrough: null, CancellationToken.None);
+        var result = await Sync().SyncSubscriptionAsync("sub_old", CancellationToken.None);
 
         Assert.Null(result.Reason);
         Assert.Equal(2, _stored.Count);
@@ -223,7 +223,7 @@ public sealed class BillingPaymentsTests
         _stored.Add(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(28)) with { SubscriptionId = "sub_first", PlanCode = PlanCode.Maker, CreatedAt = Now.UtcDateTime.AddMinutes(-2) });
         ProviderSays(new ProviderSubscription("sub_second", SubscriptionStatus.Active, "prod_pro_m", "cus_1", TenantRef, Now.AddMonths(1), false));
 
-        await Sync().SyncSubscriptionAsync("sub_second", refundedThrough: null, CancellationToken.None);
+        await Sync().SyncSubscriptionAsync("sub_second", CancellationToken.None);
 
         _billing.Verify(b => b.MarkDuplicateSubscriptionAsync("dodo", "sub_second", Now.UtcDateTime, It.IsAny<CancellationToken>()));
         _gateway.Verify(g => g.CancelSubscriptionAsync("sub_second", It.IsAny<CancellationToken>()));
@@ -294,7 +294,7 @@ public sealed class BillingPaymentsTests
         Tenant = Tenant with { PlanCode = PlanCode.Business, Source = PlanSource.Operator, EndsAt = Now.UtcDateTime.AddDays(1) };
         ProviderSays(new ProviderSubscription("sub_1", SubscriptionStatus.Active, "prod_maker_m", "cus_1", TenantRef, Now.AddMonths(1), false));
 
-        await Sync().SyncSubscriptionAsync("sub_1", refundedThrough: null, CancellationToken.None);
+        await Sync().SyncSubscriptionAsync("sub_1", CancellationToken.None);
 
         VerifyPlanNotSet();
     }
@@ -305,7 +305,7 @@ public sealed class BillingPaymentsTests
         Tenant = Tenant with { PlanCode = PlanCode.Business, Source = PlanSource.Operator, EndsAt = Now.UtcDateTime.AddDays(-1) };
         ProviderSays(new ProviderSubscription("sub_1", SubscriptionStatus.Active, "prod_maker_m", "cus_1", TenantRef, Now.AddMonths(1), false));
 
-        await Sync().SyncSubscriptionAsync("sub_1", refundedThrough: null, CancellationToken.None);
+        await Sync().SyncSubscriptionAsync("sub_1", CancellationToken.None);
 
         _planService.Verify(p => p.SetAsync(TenantRef, It.Is<SetTenantPlanRequest>(r => r.PlanCode == PlanCode.Maker && r.LimitOverrides == null), PlanSource.Subscription, It.IsAny<CancellationToken>()));
     }
@@ -345,7 +345,7 @@ public sealed class BillingPaymentsTests
     {
         ProviderSays(new ProviderSubscription("sub_1", SubscriptionStatus.Active, productId, "cus_1", hasTenant ? TenantRef : null, Now.AddMonths(1), false));
 
-        var result = await Sync().SyncSubscriptionAsync("sub_1", refundedThrough: null, CancellationToken.None);
+        var result = await Sync().SyncSubscriptionAsync("sub_1", CancellationToken.None);
 
         Assert.NotNull(result.Reason);
         VerifyPlanNotSet();
@@ -444,6 +444,24 @@ public sealed class BillingPaymentsTests
         await Sync().SyncPaymentAsync("pay_2", CancellationToken.None);
 
         DateTime expected = SubscriptionPlan.RefundedThrough(Now.UtcDateTime.AddDays(-3), BillingInterval.Monthly);
+        _billing.Verify(b => b.UpsertSubscriptionAsync(It.IsAny<TenantSubscription>(), It.IsAny<DateTime>(), expected, It.IsAny<CancellationToken>()));
+        _planService.Verify(p => p.SetAsync(TenantRef, It.Is<SetTenantPlanRequest>(r => r.PlanCode == PlanCode.Free), It.IsAny<PlanSource>(), It.IsAny<CancellationToken>()));
+    }
+
+    /// <summary>
+    /// A subscription payment may come back with no product cart. Its refund still drops the plan, and the
+    /// period it covered comes from the subscription's own product, here a yearly one.
+    /// </summary>
+    [Fact]
+    public async Task A_refunded_subscription_payment_with_no_lines_still_marks_its_period()
+    {
+        Tenant = Tenant with { PlanCode = PlanCode.Maker };
+        PaymentSays(new ProviderPayment("pay_3", true, "cus_1", TenantRef, "sub_1", [], true, Now.AddDays(-3)));
+        ProviderSays(new ProviderSubscription("sub_1", SubscriptionStatus.Active, "prod_maker_y", "cus_1", TenantRef, Now.AddDays(360), false));
+
+        await Sync().SyncPaymentAsync("pay_3", CancellationToken.None);
+
+        DateTime expected = SubscriptionPlan.RefundedThrough(Now.UtcDateTime.AddDays(-3), BillingInterval.Yearly);
         _billing.Verify(b => b.UpsertSubscriptionAsync(It.IsAny<TenantSubscription>(), It.IsAny<DateTime>(), expected, It.IsAny<CancellationToken>()));
         _planService.Verify(p => p.SetAsync(TenantRef, It.Is<SetTenantPlanRequest>(r => r.PlanCode == PlanCode.Free), It.IsAny<PlanSource>(), It.IsAny<CancellationToken>()));
     }

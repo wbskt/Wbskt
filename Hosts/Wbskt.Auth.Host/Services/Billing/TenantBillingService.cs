@@ -177,7 +177,7 @@ internal sealed class TenantBillingService(
         // read that fails here is left to the webhook rather than answered as a failure to be retried.
         try
         {
-            await sync.SyncSubscriptionAsync(current.SubscriptionId, refundedThrough: null, ct);
+            await sync.SyncSubscriptionAsync(current.SubscriptionId, ct);
         }
         catch (HttpRequestException ex)
         {
