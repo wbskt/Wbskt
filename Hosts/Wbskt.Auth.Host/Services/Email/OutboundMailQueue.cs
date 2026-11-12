@@ -39,5 +39,8 @@ internal sealed class OutboundMailQueue
     /// </summary>
     public bool TryWrite(OutboundMail mail) => _channel.Writer.TryWrite(mail);
 
+    /// <summary>How many messages wait for the dispatcher.</summary>
+    public int Count => _channel.Reader.Count;
+
     public IAsyncEnumerable<OutboundMail> ReadAllAsync(CancellationToken ct) => _channel.Reader.ReadAllAsync(ct);
 }

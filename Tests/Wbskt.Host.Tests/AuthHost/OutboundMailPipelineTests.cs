@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using System.Diagnostics.Metrics;
 using Wbskt.Auth.Host.Services.Email;
+using Wbskt.Auth.Host.Telemetry;
 using Wbskt.Infrastructure.Email;
 
 namespace Wbskt.Host.Tests.AuthHost;
@@ -96,9 +98,10 @@ public sealed class OutboundMailPipelineTests
         await sender.WaitForNextAsync();
 
         var line = await logger.WaitForAsync(m => m.Contains("accepted by the relay"));
-        Assert.Contains("someone@example.test", line);
+        Assert.Contains(EmailFingerprint.Of("someone@example.test"), line);
         Assert.Contains("Reset your password", line);
         Assert.DoesNotContain(logger.Messages, m => m.Contains("the-raw-token"));
+        Assert.DoesNotContain(logger.Messages, m => m.Contains("someone@example.test"));
     }
 
     [Fact]
@@ -131,6 +134,42 @@ public sealed class OutboundMailPipelineTests
         // behind it. Give the dispatcher room to make a fourth attempt if it were going to.
         await Task.Delay(150);
         Assert.Equal(3, sender.Attempts);
+    }
+
+    /// <summary>
+    /// #778: a relay that refuses mail must show on a dashboard and raise MailFailing, not only leave
+    /// an error line in the logs. Each attempt that fails is counted, and the message given up on.
+    /// </summary>
+    [Fact]
+    public async Task Mail_given_up_on_is_counted_as_dropped_and_each_failed_attempt_as_failed()
+    {
+        var sender = new ScriptedSender(failures: 3, () => new IOException("relay is down"));
+        await using var harness = new DispatcherHarness(sender);
+        var outcomes = RecordMailOutcomes(harness.Metrics);
+
+        await harness.StartAsync();
+        harness.Queue.TryWrite(Message("first@example.test"));
+        harness.Queue.TryWrite(Message("second@example.test"));
+        await sender.WaitForNextAsync();
+        await WaitForAsync(() => outcomes.Count >= 4);
+
+        Assert.Equal(["dropped", "failed", "failed", "sent"], outcomes.Order());
+    }
+
+    [Fact]
+    public async Task A_full_queue_counts_the_refused_message_as_dropped()
+    {
+        var queue = new OutboundMailQueue();
+        var metrics = new AuthMetrics();
+        var outcomes = RecordMailOutcomes(metrics);
+        var mailer = NewMailer(queue, configured: true, metrics);
+        while (queue.TryWrite(Message()))
+        {
+        }
+
+        await mailer.QueuePasswordResetAsync("someone@example.test", "someone", "tok", DateTime.UtcNow.AddHours(1), CancellationToken.None);
+
+        Assert.Equal(["dropped"], outcomes);
     }
 
     /// <summary>
@@ -224,11 +263,45 @@ public sealed class OutboundMailPipelineTests
 
     // ---------------------------------------------------------------- support
 
-    private static QueuedAuthMailer NewMailer(OutboundMailQueue queue, bool configured) =>
+    private static QueuedAuthMailer NewMailer(OutboundMailQueue queue, bool configured, AuthMetrics? metrics = null) =>
         new(queue,
             new ScriptedSender { Configured = configured },
             Options.Create(new AuthEmailOptions { ConsoleBaseUrl = "https://console.example.test" }),
-            NullLogger<QueuedAuthMailer>.Instance);
+            NullLogger<QueuedAuthMailer>.Instance,
+            metrics ?? new AuthMetrics());
+
+    /// <summary>The outcome of every mail <paramref name="metrics"/> counts from now on, skipping the zero it starts dropped at.</summary>
+    private static System.Collections.Concurrent.ConcurrentQueue<string> RecordMailOutcomes(AuthMetrics metrics)
+    {
+        var outcomes = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        var listener = new MeterListener
+        {
+            InstrumentPublished = (instrument, l) =>
+            {
+                if (ReferenceEquals(instrument, metrics.Mail))
+                {
+                    l.EnableMeasurementEvents(instrument);
+                }
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
+        {
+            for (int i = 0; i < value; i++)
+            {
+                outcomes.Enqueue((string)tags[0].Value!);
+            }
+        });
+        listener.Start();
+        return outcomes;
+    }
+
+    private static async Task WaitForAsync(Func<bool> condition)
+    {
+        for (int i = 0; i < 200 && !condition(); i++)
+        {
+            await Task.Delay(10);
+        }
+    }
 
     private static bool TryDrain(OutboundMailQueue queue, out OutboundMail? mail)
     {
@@ -288,10 +361,13 @@ public sealed class OutboundMailPipelineTests
                 Queue,
                 sender,
                 logger ?? NullLogger<OutboundMailDispatcher>.Instance,
+                Metrics,
                 retryDelays: [TimeSpan.Zero, TimeSpan.Zero]);
         }
 
         public OutboundMailQueue Queue { get; }
+
+        public AuthMetrics Metrics { get; } = new();
 
         public Task StartAsync() => _dispatcher.StartAsync(CancellationToken.None);
 
