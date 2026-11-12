@@ -24,12 +24,14 @@ public sealed class DodoPaymentGateway(HttpClient http, IOptions<DodoOptions> op
 
     public async Task<string> CreateCheckoutAsync(BillingCheckout checkout, CancellationToken ct)
     {
+        // Attached to the tenant's own customer, or a new one: never left to Dodo to match by email.
+        string? customerId = checkout.CustomerId is { Length: > 0 } id ? id : null;
         var request = new DodoCheckoutRequest(
             [new DodoCartItem(checkout.ProductId, 1)],
-            checkout.CustomerId is { } customerId ? new DodoExistingCustomer(customerId) : new DodoCheckoutCustomer(checkout.Email, checkout.Name),
+            customerId is not null ? new DodoExistingCustomer(customerId) : new DodoCheckoutCustomer(checkout.Email, checkout.Name),
             new Dictionary<string, string> { [TenantRefKey] = checkout.TenantRef.ToString() },
             checkout.ReturnUrl,
-            checkout.CustomerId is null ? new DodoCheckoutFeatureFlags(AlwaysCreateNewCustomer: true) : null);
+            customerId is not null ? null : new DodoCheckoutFeatureFlags(AlwaysCreateNewCustomer: true));
 
         using HttpResponseMessage response = await http.PostAsJsonAsync("checkouts", request, Json, ct);
         DodoCheckoutResponse? body = await ReadAsync<DodoCheckoutResponse>(response, "create a checkout", ct);

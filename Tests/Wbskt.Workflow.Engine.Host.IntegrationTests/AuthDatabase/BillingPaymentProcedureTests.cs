@@ -419,6 +419,25 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
     }
 
     [SkippableFact]
+    public async Task A_customer_of_its_own_wins_over_an_older_shared_one_and_an_empty_id_is_none()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        string merged = $"cus_{Guid.NewGuid():N}";
+        string own = $"cus_{Guid.NewGuid():N}";
+        int tenantId = await CreateTenantAsync();
+        int other = await CreateTenantAsync();
+        int emptyOnly = await CreateTenantAsync();
+        await UpsertAsync(tenantId, $"sub_{Guid.NewGuid():N}", "active", Now, customerId: merged);
+        await RecordPurchaseAsync(other, $"pay_{Guid.NewGuid():N}", "{}", customerId: merged);
+        await RecordPurchaseAsync(tenantId, $"pay_{Guid.NewGuid():N}", "{}", customerId: own);
+        await RecordPurchaseAsync(emptyOnly, $"pay_{Guid.NewGuid():N}", "{}", customerId: "");
+        await RecordPurchaseAsync(other, $"pay_{Guid.NewGuid():N}", "{}", customerId: "");
+
+        Assert.Equal((own, false), await FindCustomerSharedAsync(tenantId));
+        Assert.Null(await FindCustomerSharedAsync(emptyOnly));
+    }
+
+    [SkippableFact]
     public async Task Credit_purchases_page_by_id_with_their_refund_and_hold()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);

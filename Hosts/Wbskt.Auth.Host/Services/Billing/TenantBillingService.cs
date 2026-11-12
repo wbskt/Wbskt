@@ -104,6 +104,11 @@ internal sealed class TenantBillingService(
         User buyer = await accounts.GetByIdAsync(userId, ct);
         BillingCustomer? customer = await billing.FindCustomerAsync(tenantId, gateway.Name, ct);
         string? customerId = customer is { Shared: false } ? customer.CustomerId : null;
+        if (customer is { Shared: true })
+        {
+            logger.LogInformation("Tenant {TenantId} pays {Provider} as customer {CustomerId}, which another tenant pays as too; its checkout makes it a customer of its own.", tenantId, gateway.Name, customer.CustomerId);
+        }
+
         try
         {
             string url = await gateway.CreateCheckoutAsync(new BillingCheckout(product.Value, tenant.TenantRefId, buyer.Email, buyer.Username, options.Value.ReturnUrl, customerId), ct);
