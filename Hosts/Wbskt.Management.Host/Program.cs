@@ -124,6 +124,7 @@ public static class Program
             builder.Services.AddHostedService<WorkspaceAccountSyncWorker>();
             builder.Services.AddHostedService<MessageAllowanceWorker>();
             builder.Services.AddHostedService<CreditGrantReconcileWorker>();
+            builder.Services.AddHostedService<BusinessUsageWorker>();
         }
         builder.Services.AddScoped<IMessageTemplateProvider, MessageTemplateProvider>();
         builder.Services.AddScoped<IMessageTemplateService, MessageTemplateService>();

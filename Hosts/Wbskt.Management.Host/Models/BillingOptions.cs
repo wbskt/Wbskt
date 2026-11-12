@@ -26,6 +26,19 @@ public sealed class BillingOptions
     public TimeSpan CreditGrantReconcileInterval { get; set; } = TimeSpan.FromHours(1);
 
     /// <summary>
+    /// How often the tenants on Business now are recorded against the month (<c>BusinessUsageWorker</c>),
+    /// so the month's overage report still lists one whose contract ends before the month is closed.
+    /// </summary>
+    public TimeSpan BusinessUsageInterval { get; set; } = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// How long after a month ends its Business usage is closed and kept for the overage report, so the
+    /// message meter and the credit poster have written the month's last day first. Until then the report
+    /// works the month out as it stands.
+    /// </summary>
+    public TimeSpan BusinessMonthCloseDelay { get; set; } = TimeSpan.FromHours(2);
+
+    /// <summary>
     /// How many times its monthly message allowance a Maker, Pro or Team account may carry before its clients
     /// are held to Free's one message a minute until the 1st. Paid plans are never charged for overage, so
     /// this only stops one account from loading the hosts without end. Must be more than 1 (checked at

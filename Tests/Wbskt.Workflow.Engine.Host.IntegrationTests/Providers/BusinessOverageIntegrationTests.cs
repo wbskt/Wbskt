@@ -15,7 +15,8 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 /// <summary>
 /// Business runs past its monthly credits (#701): dbo.Run_Start holds a Business account to twice its
 /// credits, and dbo.BusinessUsage_GetBy_Month reads what each Business tenant used in a month for the
-/// overage invoice, leaving out what its credit packs paid for.
+/// overage invoice, leaving out what its credit packs paid for. Months are closed once (#742), so each test
+/// reports on a month of its own, far in the future, with the clock set to just after it.
 /// </summary>
 [Collection("SqlEdge")]
 public sealed class BusinessOverageIntegrationTests(SqlEdgeFixture fixture)
@@ -51,7 +52,7 @@ public sealed class BusinessOverageIntegrationTests(SqlEdgeFixture fixture)
     {
         Skip.IfNot(fixture.IsAvailable, SkipReason);
 
-        var month = new DateOnly(2026, 10, 1);
+        DateOnly month = NewMonth();
         int business = NewId();
         int pro = NewId();
         int first = NewId();
@@ -70,8 +71,9 @@ public sealed class BusinessOverageIntegrationTests(SqlEdgeFixture fixture)
         Guid businessRef = await TenantRefAsync(first);
         Guid proRef = await TenantRefAsync(proWorkspace);
 
-        var report = await Service().GetAsync(2026, 10, CancellationToken.None);
+        var report = await Service(ClosedAt(month)).GetAsync(month.Year, month.Month, CancellationToken.None);
 
+        report.Value.Closed.Should().BeTrue();
         var bill = report.Value.Tenants.Should().ContainSingle(t => t.TenantRefId == businessRef).Subject;
         (bill.MessagesUsed, bill.ExtraMessages).Should().Be((1_500L, 500L));
         (bill.CreditsUsed, bill.CreditsFromPacks, bill.ExtraCredits).Should().Be((180m, 30m, 50m));
@@ -79,12 +81,60 @@ public sealed class BusinessOverageIntegrationTests(SqlEdgeFixture fixture)
         report.Value.Tenants.Should().NotContain(t => t.TenantRefId == proRef);
     }
 
-    private BusinessOverageService Service() => new(
+    [SkippableFact]
+    public async Task A_contract_that_ends_in_the_month_is_billed_for_it_and_a_closed_month_does_not_change()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        DateOnly month = NewMonth();
+        int ended = NewId();
+        int endedWorkspace = NewId();
+        int deletedWorkspace = NewId();
+        int later = NewId();
+        int laterWorkspace = NewId();
+        const string Contract = """{"messagesPerMonth":1000,"creditsPerMonth":100}""";
+        await AddAccountAsync(endedWorkspace, ended, "Business", Contract, 100m);
+        await AddAccountAsync(deletedWorkspace, ended, "Business", Contract, 100m);
+        await AddMessagesAsync(endedWorkspace, month, 700);
+        await AddMessagesAsync(deletedWorkspace, month.AddDays(1), 800);
+        await AddCreditMonthAsync(ended, month, posted: 160m, drawn: 0m);
+        Guid endedRef = await TenantRefAsync(endedWorkspace);
+
+        // Seen on Business during the month; then a workspace is deleted and the contract ends.
+        await Service(month.AddDays(10)).TrackAsync(CancellationToken.None);
+        await ExecuteAsync("UPDATE dbo.WorkspaceAccounts SET RetiredAt = SYSUTCDATETIME() WHERE WorkspaceId = @p0;", deletedWorkspace);
+        await ExecuteAsync("UPDATE dbo.WorkspaceAccounts SET PlanCode = N'Free', LimitOverrides = NULL, PlanRevision = 2 WHERE WorkspaceId = @p0;", endedWorkspace);
+
+        // A tenant whose copy moved to Business only after the month ended is not in it.
+        await AddAccountAsync(laterWorkspace, later, "Business", null, 100m);
+        await ExecuteAsync("UPDATE dbo.WorkspaceAccounts SET UpdatedAt = @p1 WHERE WorkspaceId = @p0;", laterWorkspace, month.AddMonths(1).AddDays(1).ToDateTime(TimeOnly.MinValue));
+        Guid laterRef = await TenantRefAsync(laterWorkspace);
+
+        var report = await Service(ClosedAt(month)).GetAsync(month.Year, month.Month, CancellationToken.None);
+        await AddMessagesAsync(endedWorkspace, month.AddDays(2), 50_000);
+        var again = await Service(ClosedAt(month).AddDays(5)).GetAsync(month.Year, month.Month, CancellationToken.None);
+
+        var bill = report.Value.Tenants.Should().ContainSingle(t => t.TenantRefId == endedRef).Subject;
+        (bill.MessagesPerMonth, bill.MessagesUsed, bill.ExtraMessages).Should().Be((1_000L, 1_500L, 500L), "the contract as last seen, and the deleted workspace's messages too");
+        bill.ExtraCredits.Should().Be(60m);
+        report.Value.Tenants.Should().NotContain(t => t.TenantRefId == laterRef);
+        again.Value.Should().BeEquivalentTo(report.Value, "a closed month is read as it was closed");
+    }
+
+    private BusinessOverageService Service(DateOnly day) => Service(day.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+
+    private BusinessOverageService Service(DateTime now) => new(
         new BusinessUsageProvider(new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:DefaultConnection"] = fixture.ConnectionString })
             .Build()),
         new PlanCatalog(Options.Create(new PlanCatalogOptions())),
-        new FixedClock(new DateTimeOffset(2026, 11, 9, 0, 0, 0, TimeSpan.Zero)));
+        new FixedClock(new DateTimeOffset(now, TimeSpan.Zero)),
+        Options.Create(new Wbskt.Management.Host.Models.BillingOptions()));
+
+    // A month of this test's own, so closing it touches no other test's.
+    private static DateOnly NewMonth() => new(Random.Shared.Next(3000, 9000), Random.Shared.Next(1, 13), 1);
+
+    private static DateTime ClosedAt(DateOnly month) => month.AddMonths(1).ToDateTime(new TimeOnly(3, 0), DateTimeKind.Utc);
 
     private static int NewId() => Random.Shared.Next(1_000_000, int.MaxValue - 1);
 
