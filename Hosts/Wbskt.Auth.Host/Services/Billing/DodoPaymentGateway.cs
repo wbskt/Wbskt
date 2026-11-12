@@ -101,6 +101,29 @@ public sealed class DodoPaymentGateway(HttpClient http, IOptions<DodoOptions> op
             ReadDispute(p.Disputes));
     }
 
+    public async Task<ProviderProduct?> FindProductAsync(string productId, CancellationToken ct)
+    {
+        using HttpResponseMessage response = await http.GetAsync($"products/{Uri.EscapeDataString(productId)}", ct);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        DodoProduct product = await ReadAsync<DodoProduct>(response, "read a product", ct)
+            ?? throw new InvalidOperationException("Dodo answered a product with no body.");
+        DodoPrice price = product.Price ?? throw new InvalidOperationException($"Dodo's product {productId} has no price.");
+        long minor = price.Price ?? price.FixedPrice ?? throw new InvalidOperationException($"Dodo's product {productId} has no amount.");
+        BillingInterval? interval = (price.PaymentFrequencyCount, price.PaymentFrequencyInterval) switch
+        {
+            (1, "Month") => BillingInterval.Monthly,
+            (1, "Year") or (12, "Month") => BillingInterval.Yearly,
+            _ => null
+        };
+
+        // Every currency the plans are priced in has two decimal places.
+        return new ProviderProduct(minor / 100m, price.Currency ?? "", product.IsRecurring, product.IsRecurring ? interval : null);
+    }
+
     public async Task<bool> AcceptsCredentialsAsync(CancellationToken ct)
     {
         using HttpResponseMessage response = await http.GetAsync("customers?page_size=1", ct);

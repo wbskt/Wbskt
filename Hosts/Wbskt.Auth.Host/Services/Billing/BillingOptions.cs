@@ -41,7 +41,7 @@ public sealed class BillingOptions
         {
             foreach ((BillingInterval interval, string product) in intervals)
             {
-                if (product == productId)
+                if (!string.IsNullOrEmpty(product) && product == productId)
                 {
                     return (plan, interval);
                 }
@@ -53,7 +53,7 @@ public sealed class BillingOptions
 
     /// <summary>The credit pack <paramref name="productId"/> sells; null when it is not one of <see cref="CreditPacks"/>.</summary>
     public CreditPackOptions? FindCreditPack(string productId) =>
-        CreditPacks.Values.FirstOrDefault(p => p.ProductId == productId);
+        CreditPacks.Values.FirstOrDefault(p => !string.IsNullOrEmpty(p.ProductId) && p.ProductId == productId);
 }
 
 public sealed class CreditPackOptions
@@ -61,4 +61,7 @@ public sealed class CreditPackOptions
     public string ProductId { get; set; } = "";
 
     public decimal Credits { get; set; }
+
+    /// <summary>What the pack costs in USD, as its product is priced at the provider; checked at start.</summary>
+    public decimal PriceUsd { get; set; }
 }

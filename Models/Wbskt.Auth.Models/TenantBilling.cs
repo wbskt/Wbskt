@@ -49,6 +49,8 @@ public sealed record TenantSubscriptionResponse(
 /// </summary>
 public sealed record ChangePlanRequest(PlanCode Plan, BillingInterval Interval);
 
-public sealed record PlanOffer(PlanCode Plan, BillingInterval Interval);
+/// <summary>A plan on sale, with what it costs for the interval in USD.</summary>
+public sealed record PlanOffer(PlanCode Plan, BillingInterval Interval, decimal AmountUsd);
 
-public sealed record CreditPackOffer(string Name, decimal Credits);
+/// <summary>A credit pack on sale, with what it costs in USD.</summary>
+public sealed record CreditPackOffer(string Name, decimal Credits, decimal AmountUsd);

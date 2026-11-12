@@ -76,3 +76,17 @@ internal sealed record DodoSubscriptionUpdate([property: JsonPropertyName("statu
 internal sealed record DodoRefundRequest(
     [property: JsonPropertyName("payment_id")] string PaymentId,
     [property: JsonPropertyName("reason")] string Reason);
+
+internal sealed record DodoProduct(
+    [property: JsonPropertyName("product_id")] string? ProductId,
+    [property: JsonPropertyName("is_recurring")] bool IsRecurring,
+    [property: JsonPropertyName("price")] DodoPrice? Price);
+
+// "price" is in the currency's lowest unit (cents for USD); a usage-based price puts it in "fixed_price".
+internal sealed record DodoPrice(
+    [property: JsonPropertyName("type")] string? Type,
+    [property: JsonPropertyName("price")] long? Price,
+    [property: JsonPropertyName("fixed_price")] long? FixedPrice,
+    [property: JsonPropertyName("currency")] string? Currency,
+    [property: JsonPropertyName("payment_frequency_count")] int? PaymentFrequencyCount,
+    [property: JsonPropertyName("payment_frequency_interval")] string? PaymentFrequencyInterval);

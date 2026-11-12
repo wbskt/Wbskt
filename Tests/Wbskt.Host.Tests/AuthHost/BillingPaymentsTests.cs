@@ -45,7 +45,7 @@ public sealed class BillingPaymentsTests
             [PlanCode.Maker] = new() { [BillingInterval.Monthly] = "prod_maker_m", [BillingInterval.Yearly] = "prod_maker_y" },
             [PlanCode.Pro] = new() { [BillingInterval.Monthly] = "prod_pro_m" }
         },
-        CreditPacks = new() { ["Boost"] = new CreditPackOptions { ProductId = "prod_boost", Credits = 500m } }
+        CreditPacks = new() { ["Boost"] = new CreditPackOptions { ProductId = "prod_boost", Credits = 500m, PriceUsd = 5m } }
     };
 
     public BillingPaymentsTests()
@@ -797,9 +797,9 @@ public sealed class BillingPaymentsTests
         var read = await Billing().GetAsync(9, CancellationToken.None);
 
         Assert.Equal(
-            [new PlanOffer(PlanCode.Maker, BillingInterval.Monthly), new PlanOffer(PlanCode.Maker, BillingInterval.Yearly), new PlanOffer(PlanCode.Pro, BillingInterval.Monthly)],
+            [new PlanOffer(PlanCode.Maker, BillingInterval.Monthly, 5m), new PlanOffer(PlanCode.Maker, BillingInterval.Yearly, 50m), new PlanOffer(PlanCode.Pro, BillingInterval.Monthly, 24m)],
             read.Value.Plans);
-        Assert.Equal([new CreditPackOffer("Boost", 500m)], read.Value.CreditPacks);
+        Assert.Equal([new CreditPackOffer("Boost", 500m, 5m)], read.Value.CreditPacks);
         Assert.Equal(SubscriptionStatus.PastDue, read.Value.Subscription!.Status);
         Assert.Equal(Now, read.Value.Subscription.PastDueSince);
     }
@@ -1115,6 +1115,72 @@ public sealed class BillingPaymentsTests
         Assert.Equal(new ProviderWebhook("evt_1", "payment.succeeded", "sub_1", "pay_1"), gateway.ReadWebhook(headers, body));
         Assert.Null(gateway.ReadWebhook(headers, body.Replace("pay_1", "pay_2")));
         Assert.Null(gateway.ReadWebhook(new Dictionary<string, string>(headers) { ["webhook-id"] = "evt_2" }, body));
+    }
+
+    [Fact]
+    public async Task Dodo_reads_a_products_price_in_dollars_and_its_billing_interval()
+    {
+        var gateway = Dodo(new StubHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/products/prod_y" => Json("""{"product_id":"prod_y","is_recurring":true,"price":{"type":"recurring_price","price":5000,"currency":"USD","payment_frequency_count":1,"payment_frequency_interval":"Year"}}"""),
+            "/products/prod_q" => Json("""{"product_id":"prod_q","is_recurring":true,"price":{"type":"recurring_price","price":1500,"currency":"USD","payment_frequency_count":3,"payment_frequency_interval":"Month"}}"""),
+            "/products/prod_pack" => Json("""{"product_id":"prod_pack","is_recurring":false,"price":{"type":"one_time_price","price":500,"currency":"EUR"}}"""),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound)
+        }));
+
+        Assert.Equal(new ProviderProduct(50m, "USD", true, BillingInterval.Yearly), await gateway.FindProductAsync("prod_y", CancellationToken.None));
+        Assert.Equal(new ProviderProduct(15m, "USD", true, null), await gateway.FindProductAsync("prod_q", CancellationToken.None));
+        Assert.Equal(new ProviderProduct(5m, "EUR", false, null), await gateway.FindProductAsync("prod_pack", CancellationToken.None));
+        Assert.Null(await gateway.FindProductAsync("prod_gone", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task The_start_check_names_each_product_priced_otherwise_than_the_catalogue()
+    {
+        var options = new BillingOptions
+        {
+            Plans = new()
+            {
+                [PlanCode.Maker] = new() { [BillingInterval.Monthly] = "prod_ok", [BillingInterval.Yearly] = "prod_monthly_as_yearly" },
+                [PlanCode.Pro] = new() { [BillingInterval.Monthly] = "prod_maker", [BillingInterval.Yearly] = "" },
+                [PlanCode.Team] = new() { [BillingInterval.Monthly] = "prod_gone" },
+                [PlanCode.Business] = new() { [BillingInterval.Yearly] = "prod_business" }
+            },
+            CreditPacks = new()
+            {
+                ["Pack10k"] = new CreditPackOptions { ProductId = "prod_pack", Credits = 10_000m, PriceUsd = 5m },
+                ["Unpriced"] = new CreditPackOptions { ProductId = "prod_unpriced", Credits = 1m }
+            }
+        };
+        _gateway.Setup(g => g.FindProductAsync("prod_ok", It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderProduct(5m, "USD", true, BillingInterval.Monthly));
+        _gateway.Setup(g => g.FindProductAsync("prod_monthly_as_yearly", It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderProduct(50m, "USD", true, BillingInterval.Monthly));
+        _gateway.Setup(g => g.FindProductAsync("prod_maker", It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderProduct(5m, "USD", true, BillingInterval.Monthly));
+        _gateway.Setup(g => g.FindProductAsync("prod_pack", It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderProduct(5m, "usd", false, null));
+
+        IReadOnlyCollection<string> problems = await PaymentGatewayCheck.FindPriceProblemsAsync(_gateway.Object, options, CancellationToken.None);
+
+        Assert.Equal(
+            [
+                "Maker Yearly (prod_monthly_as_yearly) is billed Monthly, not Yearly.",
+                "Pro Monthly (prod_maker) costs 5 USD, not 24 USD.",
+                "Team Monthly (prod_gone) does not exist at the provider.",
+                "Business Yearly (prod_business) is configured, but the catalogue has no price for it, so it is not offered.",
+                "credit pack Unpriced (prod_unpriced) has no PriceUsd configured, so it shows as free."
+            ],
+            problems);
+    }
+
+    [Fact]
+    public void An_empty_product_id_finds_no_plan_and_no_pack()
+    {
+        var options = new BillingOptions
+        {
+            Plans = new() { [PlanCode.Maker] = new() { [BillingInterval.Monthly] = "" } },
+            CreditPacks = new() { ["Pack10k"] = new CreditPackOptions { ProductId = "", Credits = 10_000m } }
+        };
+
+        Assert.Null(options.FindPlan(""));
+        Assert.Null(options.FindCreditPack(""));
     }
 
     // ----- Helpers -----------------------------------------------------------------------------------
