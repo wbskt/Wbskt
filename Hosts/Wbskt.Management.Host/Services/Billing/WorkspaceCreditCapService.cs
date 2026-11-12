@@ -14,6 +14,7 @@ internal sealed class WorkspaceCreditCapService(IWorkspaceCreditCapProvider caps
 
     private const int CapBusyError = 50035; // THROW in dbo.WorkspaceCreditCap_Set
     private const int DeadlockVictim = 1205;
+    private const int LockTimeout = 1222;
 
     public async Task<Result<WorkspaceCreditCapResponse>> SetAsync(int workspaceId, WorkspaceCreditCapRequest request, CancellationToken ct)
     {
@@ -30,7 +31,7 @@ internal sealed class WorkspaceCreditCapService(IWorkspaceCreditCapProvider caps
         {
             spent = await caps.SetAsync(workspaceId, request.MonthlyCreditCap, monthStart, ct);
         }
-        catch (SqlException ex) when (ex.Number is CapBusyError or DeadlockVictim)
+        catch (SqlException ex) when (ex.Number is CapBusyError or DeadlockVictim or LockTimeout)
         {
             return Result<WorkspaceCreditCapResponse>.Failure(Error.Unavailable(
                 "WORKSPACE_CREDIT_CAP_BUSY", "The workspace's runs are busy with its credit cap; try again."));
