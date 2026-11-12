@@ -34,6 +34,12 @@ public sealed class ClientPresenceHandler : IConsumer<ClientConnectedEvent>, ICo
     public async Task Consume(ConsumeContext<ClientDisconnectedEvent> context)
     {
         var message = context.Message;
+        if (message.IsExpiry)
+        {
+            // The sweep recorded it already; written again, its time would outrank real changes still on their way.
+            return;
+        }
+
         DateTime? updatingUntil = message.IsUpdating ? message.CreatedAtUtc + OtaTiming.UpdateWindow : null;
         await _clientProvider.UpdatePresenceAsync(message.ClientId, false, message.CreatedAtUtc, message.HostId, updatingUntil, context.CancellationToken);
     }

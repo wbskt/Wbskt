@@ -32,7 +32,8 @@ public sealed class SocketHostPresenceIntegrationTests(SqlEdgeFixture fixture)
         (int deadClient, Guid deadRef) = await CreateClientAsync(workspaceId);
         (int liveClient, _) = await CreateClientAsync(workspaceId);
         (int newClient, _) = await CreateClientAsync(workspaceId);
-        await PresenceAsync(deadClient, DateTime.UtcNow.AddMinutes(-10), deadHost);
+        var lastSeenConnect = DateTime.UtcNow.AddMinutes(-10);
+        await PresenceAsync(deadClient, lastSeenConnect, deadHost);
         await PresenceAsync(liveClient, DateTime.UtcNow.AddMinutes(-10), liveHost);
         // Connected moments ago on a host whose first heartbeat has not been recorded yet.
         await PresenceAsync(newClient, DateTime.UtcNow.AddSeconds(-5), newHost);
@@ -47,6 +48,9 @@ public sealed class SocketHostPresenceIntegrationTests(SqlEdgeFixture fixture)
         Assert.Equal(deadRef, only.ClientRefId);
         Assert.Equal(deadHost, only.HostId);
         Assert.NotNull(only.ChangedAt);
+
+        // The last change a host saw stays recorded: an inferred expiry does not outrank one still on its way.
+        Assert.Equal(lastSeenConnect, await LastActivityAsync(deadClient), TimeSpan.FromMilliseconds(1));
         Assert.False(await IsConnectedAsync(deadClient));
         Assert.True(await IsConnectedAsync(liveClient));
         Assert.True(await IsConnectedAsync(newClient));
@@ -157,39 +161,36 @@ public sealed class SocketHostPresenceIntegrationTests(SqlEdgeFixture fixture)
         string host = $"live-{Guid.NewGuid():N}";
         string otherHost = $"other-{Guid.NewGuid():N}";
         var takenAt = DateTime.UtcNow;
-        var expiredAt = takenAt.AddMinutes(-3);
+        var connectedAt = takenAt.AddMinutes(-10);
 
         // Expired by the sweep while the host's heartbeats could not get through.
         (int expired, Guid expiredRef) = await CreateClientAsync(workspaceId);
-        await PresenceAsync(expired, takenAt.AddMinutes(-10), host);
-        await ExpireAsync(expired, expiredAt);
+        await PresenceAsync(expired, connectedAt, host);
+        await ExpireAsync(expired);
 
         // Revoked in the same outage: the host's own access re-check closes it, it is not shown online.
         (int revoked, Guid revokedRef) = await CreateClientAsync(workspaceId);
-        await PresenceAsync(revoked, takenAt.AddMinutes(-10), host);
-        await ExpireAsync(revoked, expiredAt);
+        await PresenceAsync(revoked, connectedAt, host);
+        await ExpireAsync(revoked);
         await SetStatusAsync(revoked, 2);
 
         // Disconnected while the snapshot was being taken: its own disconnect decides.
         (int justLeft, Guid justLeftRef) = await CreateClientAsync(workspaceId);
-        await PresenceAsync(justLeft, takenAt.AddMinutes(-10), host);
+        await PresenceAsync(justLeft, connectedAt, host);
         await clients.UpdatePresenceAsync(justLeft, false, takenAt.AddSeconds(-5), host);
 
         var repaired = await clients.ReconcilePresenceByHostAsync(host, [expiredRef, revokedRef, justLeftRef], takenAt, TimeSpan.FromMinutes(1));
 
+        // Dated just after the last change a host saw, so the console's uptime runs from about the real connect.
         var only = Assert.Single(repaired);
         Assert.Equal((expired, expiredRef, true), (only.ClientId, only.ClientRefId, only.Connected));
-        Assert.Equal(expiredAt.AddMilliseconds(1), only.ChangedAt, TimeSpan.FromMilliseconds(1));
+        Assert.Equal(connectedAt.AddMilliseconds(1), only.ChangedAt, TimeSpan.FromMilliseconds(1));
         Assert.True(await IsConnectedAsync(expired));
         Assert.False(await IsConnectedAsync(revoked));
         Assert.False(await IsConnectedAsync(justLeft));
 
-        // The sweep's own disconnect, arriving late, is the change the restore already follows.
-        await clients.UpdatePresenceAsync(expired, false, expiredAt, host);
-        Assert.True(await IsConnectedAsync(expired));
-
-        // A connect on another host dated after the expiry, still on its way, wins over the restore.
-        await clients.UpdatePresenceAsync(expired, true, expiredAt.AddSeconds(1), otherHost);
+        // A connect on another host from during the outage, still on its way, wins over the restore.
+        await clients.UpdatePresenceAsync(expired, true, takenAt.AddMinutes(-5), otherHost);
         Assert.Equal(otherHost, await ConnectedHostAsync(expired));
         Assert.Empty(await clients.ReconcilePresenceByHostAsync(host, [], takenAt.AddSeconds(2), TimeSpan.FromMinutes(1)));
     }
@@ -243,13 +244,20 @@ public sealed class SocketHostPresenceIntegrationTests(SqlEdgeFixture fixture)
     }
 
     // As Client_ExpirePresence leaves a client it expires, without needing its host to be silent.
-    private async Task ExpireAsync(int clientId, DateTime expiredAt)
+    private async Task ExpireAsync(int clientId)
     {
         await using var conn = await OpenAsync();
-        await using var cmd = new SqlCommand("UPDATE dbo.Clients SET IsConnected = 0, ConnectedAt = NULL, ConnectedHostId = NULL, LastActivityAt = @At WHERE Id = @Id", conn);
+        await using var cmd = new SqlCommand("UPDATE dbo.Clients SET IsConnected = 0, ConnectedAt = NULL, ConnectedHostId = NULL WHERE Id = @Id", conn);
         cmd.Parameters.AddWithValue("@Id", clientId);
-        cmd.Parameters.Add("@At", SqlDbType.DateTime2).Value = expiredAt;
         await cmd.ExecuteNonQueryAsync();
+    }
+
+    private async Task<DateTime> LastActivityAsync(int clientId)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = new SqlCommand("SELECT LastActivityAt FROM dbo.Clients WHERE Id = @Id", conn);
+        cmd.Parameters.AddWithValue("@Id", clientId);
+        return (DateTime)(await cmd.ExecuteScalarAsync())!;
     }
 
     private async Task SetStatusAsync(int clientId, byte status)

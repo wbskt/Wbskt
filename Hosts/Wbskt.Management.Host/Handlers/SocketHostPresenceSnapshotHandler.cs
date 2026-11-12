@@ -23,12 +23,14 @@ public sealed class SocketHostPresenceSnapshotHandler : IConsumer<SocketHostPres
     internal static readonly TimeSpan Margin = TimeSpan.FromMinutes(1);
 
     private readonly IClientProvider _clients;
+    private readonly ISocketHostProvider _hosts;
     private readonly IEventBus _eventBus;
     private readonly ILogger<SocketHostPresenceSnapshotHandler> _logger;
 
-    public SocketHostPresenceSnapshotHandler(IClientProvider clients, IEventBus eventBus, ILogger<SocketHostPresenceSnapshotHandler> logger)
+    public SocketHostPresenceSnapshotHandler(IClientProvider clients, ISocketHostProvider hosts, IEventBus eventBus, ILogger<SocketHostPresenceSnapshotHandler> logger)
     {
         _clients = clients;
+        _hosts = hosts;
         _eventBus = eventBus;
         _logger = logger;
     }
@@ -36,6 +38,10 @@ public sealed class SocketHostPresenceSnapshotHandler : IConsumer<SocketHostPres
     public async Task Consume(ConsumeContext<SocketHostPresenceSnapshot> context)
     {
         var snapshot = context.Message;
+
+        // A snapshot is proof of life: without the beat recorded first, the sweep could expire a client
+        // this sets back online before the host's heartbeat, a separate message, is handled.
+        await _hosts.RecordHeartbeatAsync(snapshot.HostId, context.CancellationToken);
         var repaired = await _clients.ReconcilePresenceByHostAsync(snapshot.HostId, snapshot.ClientRefIds, snapshot.TakenAtUtc, Margin, context.CancellationToken);
         foreach (var client in repaired)
         {
