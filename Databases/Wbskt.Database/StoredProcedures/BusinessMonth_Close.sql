@@ -24,7 +24,7 @@ BEGIN
 
     DECLARE @Resource NVARCHAR(255) = dbo.BusinessMonthLockResource(@MonthStart);
     DECLARE @LockResult INT;
-    EXEC @LockResult = sp_getapplock @Resource = @Resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 30000;
+    EXEC @LockResult = sp_getapplock @Resource = @Resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 10000;
     IF @LockResult < 0
         THROW 50035, 'The month''s Business usage is busy; try again.', 1;
 
