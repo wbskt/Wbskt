@@ -107,7 +107,7 @@ public sealed class GuardedTcpServerAdapter : IMqttServerAdapter
             socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, 3);
 
             guard = new PacketSizeGuardStream(new NetworkStream(socket, ownsSocket: true), _maxPacketBytes);
-            var channel = new MqttTcpChannel(guard, socket.RemoteEndPoint!, socket.LocalEndPoint!, null);
+            var channel = new MqttTcpChannel(guard, localEndPoint: socket.LocalEndPoint!, remoteEndPoint: socket.RemoteEndPoint!, clientCertificate: null);
             adapter = new MqttChannelAdapter(channel, new MqttPacketFormatterAdapter(new MqttBufferWriter(4096, 65535)), logger);
             _guards[adapter] = guard;
             if (ClientHandler is { } handler)
