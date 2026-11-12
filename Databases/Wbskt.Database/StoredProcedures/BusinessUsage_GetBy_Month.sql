@@ -8,7 +8,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    IF EXISTS (SELECT 1 FROM dbo.BusinessMonthCloses WHERE MonthStart = @MonthStart)
+    IF EXISTS (SELECT 1 FROM dbo.BusinessMonths WHERE MonthStart = @MonthStart AND ClosedAt IS NOT NULL)
     BEGIN
         SELECT
             TenantRefId,

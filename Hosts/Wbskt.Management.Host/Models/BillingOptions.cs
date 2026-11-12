@@ -32,11 +32,12 @@ public sealed class BillingOptions
     public TimeSpan BusinessUsageInterval { get; set; } = TimeSpan.FromMinutes(15);
 
     /// <summary>
-    /// How long after a month ends its Business usage is closed and kept for the overage report, so the
-    /// message meter and the credit poster have written the month's last day first. Until then the report
-    /// works the month out as it stands.
+    /// How long after a month ends its Business usage is closed and kept for the overage report. Client
+    /// messages are counted on the day they were sent, so ones the meter takes in late (after an outage or a
+    /// backlog) still land in the month until it closes; after that they are left off its invoice. Until
+    /// then the report works the month out as it stands.
     /// </summary>
-    public TimeSpan BusinessMonthCloseDelay { get; set; } = TimeSpan.FromHours(2);
+    public TimeSpan BusinessMonthCloseDelay { get; set; } = TimeSpan.FromDays(1);
 
     /// <summary>
     /// How many times its monthly message allowance a Maker, Pro or Team account may carry before its clients

@@ -1,3 +1,4 @@
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Billing;
@@ -18,6 +19,8 @@ namespace Wbskt.Management.Host.Services.Billing;
 /// </summary>
 internal sealed class BusinessOverageService(IBusinessUsageProvider usage, PlanCatalog catalog, TimeProvider clock, IOptions<BillingOptions> options) : IBusinessOverageService
 {
+    private const int MonthBusyError = 50035; // THROW in dbo.BusinessMonth_Close
+
     private readonly TimeSpan _closeDelay = options.Value.BusinessMonthCloseDelay;
 
     public async Task<Result<BusinessOverageReport>> GetAsync(int year, int month, CancellationToken ct)
@@ -29,10 +32,17 @@ internal sealed class BusinessOverageService(IBusinessUsageProvider usage, PlanC
         }
 
         var monthStart = new DateOnly(year, month, 1);
-        bool closed = IsDue(monthStart, now);
-        if (closed)
+        bool closed = false;
+        if (IsDue(monthStart, now))
         {
-            await usage.CloseAsync(monthStart, now, ct);
+            try
+            {
+                closed = await usage.CloseAsync(monthStart, now, ct);
+            }
+            catch (SqlException ex) when (ex.Number == MonthBusyError)
+            {
+                return Result<BusinessOverageReport>.Failure(Error.Unavailable("BILLING_MONTH_BUSY", "The month is being closed; try again."));
+            }
         }
 
         IReadOnlyCollection<BusinessUsage> tenants = await usage.GetByMonthAsync(monthStart, ct);

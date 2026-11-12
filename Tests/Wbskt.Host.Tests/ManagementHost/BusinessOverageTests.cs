@@ -1,6 +1,7 @@
 using System.Reflection;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
+using Wbskt.Host.Tests.AuthHost;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Authorization;
 using Wbskt.Infrastructure.Billing;
@@ -71,12 +72,12 @@ public sealed class BusinessOverageTests
 
     [Theory]
 
-    // Two hours after November ends (the default delay) October and November are both closed.
-    [InlineData(2026, 12, 1, 2, 2026, 11, true)]
+    // A day after November ends (the default delay) October and November are both closed.
+    [InlineData(2026, 12, 2, 0, 2026, 11, true)]
 
     // Just before then November is still worked out as it stands; October was closed long ago.
-    [InlineData(2026, 12, 1, 1, 2026, 11, false)]
-    [InlineData(2026, 12, 1, 1, 2026, 10, true)]
+    [InlineData(2026, 12, 1, 23, 2026, 11, false)]
+    [InlineData(2026, 12, 1, 23, 2026, 10, true)]
     public async Task A_past_month_is_closed_once_its_meters_have_caught_up(int year, int month, int day, int hour, int askedYear, int askedMonth, bool closed)
     {
         Result<BusinessOverageReport> report = await Service(new DateTimeOffset(year, month, day, hour, 0, 0, TimeSpan.Zero)).GetAsync(askedYear, askedMonth, CancellationToken.None);
@@ -85,12 +86,32 @@ public sealed class BusinessOverageTests
         Assert.Equal(closed ? new DateOnly(askedYear, askedMonth, 1) : null, _usage.MonthClosed);
     }
 
-    [Theory]
-    [InlineData(1, true)]
-    [InlineData(0, false)]
-    public async Task Tracking_records_this_month_and_closes_the_last_once_it_is_due(int hoursPastDelay, bool closes)
+    [Fact]
+    public async Task A_month_that_was_never_tracked_is_not_closed()
     {
-        DateTimeOffset now = new DateTimeOffset(2026, 12, 1, 1, 59, 0, TimeSpan.Zero).AddHours(hoursPastDelay);
+        _usage.Tracked = false;
+
+        Result<BusinessOverageReport> report = await Service().GetAsync(2026, 9, CancellationToken.None);
+
+        Assert.False(report.Value.Closed);
+    }
+
+    [Fact]
+    public async Task A_month_being_closed_elsewhere_is_answered_busy()
+    {
+        _usage.CloseError = SqlExceptions.WithNumber(50035, "busy");
+
+        Result<BusinessOverageReport> report = await Service().GetAsync(2026, 9, CancellationToken.None);
+
+        Assert.Equal(("BILLING_MONTH_BUSY", ErrorType.Unavailable), (report.Error.Code, report.Error.Type));
+    }
+
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(-1, false)]
+    public async Task Tracking_records_this_month_and_closes_the_last_once_it_is_due(int minutesFromDue, bool closes)
+    {
+        DateTimeOffset now = new DateTimeOffset(2026, 12, 2, 0, 0, 0, TimeSpan.Zero).AddMinutes(minutesFromDue);
 
         await Service(now).TrackAsync(CancellationToken.None);
 
@@ -117,10 +138,19 @@ public sealed class BusinessOverageTests
             return Task.CompletedTask;
         }
 
-        public Task CloseAsync(DateOnly monthStart, DateTime now, CancellationToken ct)
+        public bool Tracked { get; set; } = true;
+
+        public Exception? CloseError { get; set; }
+
+        public Task<bool> CloseAsync(DateOnly monthStart, DateTime now, CancellationToken ct)
         {
+            if (CloseError is not null)
+            {
+                throw CloseError;
+            }
+
             MonthClosed = monthStart;
-            return Task.CompletedTask;
+            return Task.FromResult(Tracked);
         }
 
         public Task<IReadOnlyCollection<BusinessUsage>> GetByMonthAsync(DateOnly monthStart, CancellationToken ct)

@@ -31,9 +31,9 @@ internal sealed class BusinessUsageProvider : BaseSqlProvider, IBusinessUsagePro
             ct);
     }
 
-    public async Task CloseAsync(DateOnly monthStart, DateTime now, CancellationToken ct)
+    public async Task<bool> CloseAsync(DateOnly monthStart, DateTime now, CancellationToken ct)
     {
-        await ExecuteNonQueryAsync(
+        return await ExecuteScalarAsync<bool>(
             "dbo.BusinessMonth_Close",
             p =>
             {
