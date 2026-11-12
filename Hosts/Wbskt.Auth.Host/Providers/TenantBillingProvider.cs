@@ -218,7 +218,17 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
         {
             p.AddWithValue("@TenantId", tenantId);
             p.AddWithValue("@Provider", provider);
-        }, r => new BillingCustomer(r.GetString(r.GetOrdinal("CustomerId")), r.GetBoolean(r.GetOrdinal("Shared"))), cancellationToken);
+        }, r => new BillingCustomer(r.GetString(r.GetOrdinal("CustomerId")), r.GetBoolean(r.GetOrdinal("Shared")), r.GetBoolean(r.GetOrdinal("LiveShared"))), cancellationToken);
+    }
+
+    public async Task<bool> IsCustomerSharedAsync(string provider, string customerId, int tenantId, CancellationToken cancellationToken)
+    {
+        return await ExecuteScalarAsync<bool>("dbo.TenantBillingCustomer_IsShared", p =>
+        {
+            p.AddWithValue("@Provider", provider);
+            p.AddWithValue("@CustomerId", customerId);
+            p.AddWithValue("@TenantId", tenantId);
+        }, cancellationToken);
     }
 
     public async Task<bool> RecordBillingNoticeAsync(int tenantId, BillingNoticeKind kind, string periodKey, IReadOnlyCollection<OutboundMail> mails, CancellationToken cancellationToken)

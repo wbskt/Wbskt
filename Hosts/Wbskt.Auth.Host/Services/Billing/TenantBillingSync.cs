@@ -159,7 +159,10 @@ internal sealed class TenantBillingSync(
             ct);
 
         await TellPaymentFailedAsync(saved, ct);
-        await WarnIfSharedAsync(tenant.TenantId, saved.CustomerId, ct);
+        if (saved.CreatedAt == now)
+        {
+            await WarnIfSharedAsync(tenant.TenantId, saved.CustomerId, ct);
+        }
 
         IReadOnlyCollection<TenantSubscription> all = await CancelDuplicatesAsync(tenant, await billing.GetSubscriptionsAsync(tenant.TenantId, ct), now, ct);
         await ApplyAsync(tenant, SubscriptionPlan.Deciding(all), now, ct);
@@ -167,13 +170,13 @@ internal sealed class TenantBillingSync(
     }
 
     /// <summary>
-    /// A payment recorded under a customer another tenant pays as too. Checkouts make each tenant a customer
+    /// A new subscription or credit pack recorded under a customer another tenant pays as too. Checkouts make each tenant a customer
     /// of its own, so this means the provider matched one by email after all (or a checkout opened before
     /// that was paid); the tenant's portal is refused until support separates them.
     /// </summary>
     private async Task WarnIfSharedAsync(int tenantId, string customerId, CancellationToken ct)
     {
-        if (await billing.FindCustomerAsync(tenantId, gateway.Name, ct) is { Shared: true } customer && customer.CustomerId == customerId)
+        if (await billing.IsCustomerSharedAsync(gateway.Name, customerId, tenantId, ct))
         {
             logger.LogWarning("Tenant {TenantId} paid {Provider} as customer {CustomerId}, which another tenant pays as too.", tenantId, gateway.Name, customerId);
         }

@@ -68,6 +68,9 @@ internal interface ITenantBillingProvider
     /// <summary>The customer the tenant pays <paramref name="provider"/> as, for its portal and its next checkout; null when it never paid.</summary>
     Task<BillingCustomer?> FindCustomerAsync(int tenantId, string provider, CancellationToken cancellationToken);
 
+    /// <summary>Whether a tenant other than <paramref name="tenantId"/> has paid <paramref name="provider"/> as <paramref name="customerId"/>.</summary>
+    Task<bool> IsCustomerSharedAsync(string provider, string customerId, int tenantId, CancellationToken cancellationToken);
+
     /// <summary>
     /// Claims the notice <paramref name="kind"/> for <paramref name="periodKey"/> and queues <paramref name="mails"/>
     /// with it, in one transaction: true the first time only, and nothing is queued after.

@@ -935,14 +935,16 @@ public sealed class BillingPaymentsTests
         Assert.Equal("BILLING_CUSTOMER_NOT_FOUND", none.Error.Code);
     }
 
-    [Fact]
-    public async Task The_portal_of_a_customer_another_tenant_pays_as_too_is_refused()
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task The_portal_of_a_customer_another_tenant_pays_as_too_or_beside_a_live_subscription_under_one_is_refused(bool shared, bool liveShared)
     {
-        _billing.Setup(b => b.FindCustomerAsync(9, "dodo", It.IsAny<CancellationToken>())).ReturnsAsync(new BillingCustomer("cus_shared", Shared: true));
+        _billing.Setup(b => b.FindCustomerAsync(9, "dodo", It.IsAny<CancellationToken>())).ReturnsAsync(new BillingCustomer("cus_x", shared, liveShared));
 
-        var shared = await Billing().PortalAsync(9, CancellationToken.None);
+        var refused = await Billing().PortalAsync(9, CancellationToken.None);
 
-        Assert.Equal((ErrorType.Conflict, "BILLING_CUSTOMER_SHARED"), (shared.Error.Type, shared.Error.Code));
+        Assert.Equal((ErrorType.Conflict, "BILLING_CUSTOMER_SHARED"), (refused.Error.Type, refused.Error.Code));
         _gateway.Verify(g => g.CreatePortalLinkAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 

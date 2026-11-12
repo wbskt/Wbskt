@@ -419,7 +419,7 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
     }
 
     [SkippableFact]
-    public async Task A_customer_of_its_own_wins_over_an_older_shared_one_and_an_empty_id_is_none()
+    public async Task A_customer_of_its_own_wins_over_a_shared_one_that_still_bars_the_portal_and_an_empty_id_is_none()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
         string merged = $"cus_{Guid.NewGuid():N}";
@@ -434,7 +434,12 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
         await RecordPurchaseAsync(other, $"pay_{Guid.NewGuid():N}", "{}", customerId: "");
 
         Assert.Equal((own, false), await FindCustomerSharedAsync(tenantId));
+        Assert.True(await LiveSharedAsync(tenantId), "its live subscription is under the shared customer");
+        Assert.False(await LiveSharedAsync(other), "the other tenant has no subscription");
         Assert.Null(await FindCustomerSharedAsync(emptyOnly));
+        Assert.True(await IsSharedAsync(merged, tenantId));
+        Assert.False(await IsSharedAsync(own, tenantId));
+        Assert.False(await IsSharedAsync("", emptyOnly), "an empty id is no customer");
     }
 
     [SkippableFact]
@@ -591,6 +596,26 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
     private async Task<string?> FindCustomerAsync(int tenantId)
     {
         return (await FindCustomerSharedAsync(tenantId))?.CustomerId;
+    }
+
+    private async Task<bool> LiveSharedAsync(int tenantId)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = Procedure(conn, "dbo.TenantBillingCustomer_FindBy_TenantId");
+        cmd.Parameters.AddWithValue("@TenantId", tenantId);
+        cmd.Parameters.AddWithValue("@Provider", "dodo");
+        await using var reader = await cmd.ExecuteReaderAsync();
+        return await reader.ReadAsync() && reader.GetBoolean(reader.GetOrdinal("LiveShared"));
+    }
+
+    private async Task<bool> IsSharedAsync(string customerId, int tenantId)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = Procedure(conn, "dbo.TenantBillingCustomer_IsShared");
+        cmd.Parameters.AddWithValue("@Provider", "dodo");
+        cmd.Parameters.AddWithValue("@CustomerId", customerId);
+        cmd.Parameters.AddWithValue("@TenantId", tenantId);
+        return (bool)(await cmd.ExecuteScalarAsync())!;
     }
 
     private async Task<(string CustomerId, bool Shared)?> FindCustomerSharedAsync(int tenantId)

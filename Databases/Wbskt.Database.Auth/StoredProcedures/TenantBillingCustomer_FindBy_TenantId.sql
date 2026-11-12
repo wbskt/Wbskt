@@ -4,7 +4,9 @@
 -- subscriptions and card. A customer the tenant pays as alone comes first, so once a checkout has given
 -- a tenant a customer of its own it keeps using that one; then a live subscription's (the newest
 -- created, not the last synced); then the newest of the rest. An empty id (a payment the provider sent
--- without its customer) is no customer.
+-- without its customer) is no customer. LiveShared is 1 when a live subscription of the tenant's is
+-- under a shared customer, even if the customer returned is one of its own: the portal of the one it
+-- returns would not show that subscription, so the portal is refused for it too.
 CREATE PROCEDURE dbo.TenantBillingCustomer_FindBy_TenantId
     @TenantId INT,
     @Provider NVARCHAR(40)
@@ -45,7 +47,8 @@ BEGIN
     )
     SELECT TOP (1)
         CustomerId,
-        CAST(Shared AS BIT) AS Shared
+        CAST(Shared AS BIT) AS Shared,
+        CAST(MAX(CASE WHEN Rank = 0 AND Shared = 1 THEN 1 ELSE 0 END) OVER () AS BIT) AS LiveShared
     FROM Marked
     ORDER BY Shared, Rank, At DESC;
 END
