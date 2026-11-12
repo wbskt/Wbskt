@@ -161,8 +161,9 @@ jobs:
             live-output.txt
           if-no-files-found: ignore
 
+      # A job that runs past its timeout-minutes ends cancelled, not failed, so that is reported too.
       - name: Report the failure
-        if: failure() && github.event_name == 'schedule'
+        if: (failure() || cancelled()) && github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ github.token }}
         run: .github/scripts/report-nightly-failure.sh "Nightly conformance"
