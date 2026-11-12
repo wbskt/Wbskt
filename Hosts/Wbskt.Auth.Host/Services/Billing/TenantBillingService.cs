@@ -224,7 +224,7 @@ internal sealed class TenantBillingService(
         }
         catch (HttpRequestException)
         {
-            if (options.Value.FindOfferedPlanProduct(scheduledPlan, scheduledInterval) is { } scheduledProduct)
+            if (options.Value.FindPlanProduct(scheduledPlan, scheduledInterval) is { } scheduledProduct)
             {
                 await RescheduleAsync(current, scheduledProduct);
             }

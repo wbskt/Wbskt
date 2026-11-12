@@ -128,6 +128,16 @@ public sealed class PaymentGatewayCheck(
             yield return $"{what} has a discount, so it sells for less than {expected} {Currency}.";
         }
 
+        if (product.BuyerSetsAmount)
+        {
+            yield return $"{what} lets the buyer choose the amount, so {product.Amount} {product.Currency} is only the least it sells for.";
+        }
+
+        if (product.UsageBased)
+        {
+            yield return $"{what} charges metered usage on top of its fixed fee.";
+        }
+
         if (product.TrialDays > 0)
         {
             yield return $"{what} has a {product.TrialDays}-day free trial, which the plan catalogue does not give.";
