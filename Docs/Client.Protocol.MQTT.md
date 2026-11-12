@@ -36,7 +36,7 @@ The gateway answers CONNACK with:
 | 0x00 Success | Connected. | Send `capabilities` (model §4.2). |
 | 0x86 Bad user name or password | The token did not validate (expired, signed by another key, not a client token), or the user name is not the token's client. | Drop the token and log in again (model §2). |
 | 0x87 Not authorized | The client lost access after this token was issued: revoked, deleted, or its secret rotated. | Keep the token and retry on the reconnect schedule (model §5); once it expires, login reports what happened. |
-| 0x85 Client identifier not valid | The client id is not the token's client. | A client bug, not something to retry. |
+| 0x85 Client identifier not valid | The client id is not the token's client, or is not in the usual lower-case form. | A client bug, not something to retry. |
 | 0x84 Unsupported protocol version | MQTT 3.1 or another version this gateway does not speak. | Use 3.1.1 or 5. |
 | 0x88 Server unavailable, or no answer | The gateway cannot check tokens right now, or is restarting. | Keep the token and retry on the reconnect schedule. |
 
@@ -49,7 +49,7 @@ On MQTT 3.1.1 the same refusals arrive as the 3.1.1 return codes (4 for 0x86, 5 
 | `wbskt/v1/{clientRefId}/up` | client → gateway | The client publishes every message (model §4) here, and may publish nowhere else. |
 | `wbskt/v1/{clientRefId}/down` | gateway → client | The gateway sends every message here. It subscribes the client itself as it connects, so a client need not subscribe; one that does may subscribe to this topic and no other. |
 
-`MqttBinding` in `Wbskt.Protocol` builds both. Each PUBLISH carries one message: one JSON object in
+Topics are case-sensitive and use the same lower-case `clientRefId`; a PUBLISH to any other spelling is dropped. `MqttBinding` in `Wbskt.Protocol` builds both. Each PUBLISH carries one message: one JSON object in
 UTF-8, at most 64 KB. A packet over 64 KB plus 1 KB of MQTT framing ends the connection at once,
 before the gateway reads it.
 
