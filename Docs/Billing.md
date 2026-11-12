@@ -160,7 +160,10 @@ cap (or its start cost, if more) at a time (`dbo.RunCounters.BudgetCeiling`). Wh
 lease, `dbo.RunCounters_TryCharge` takes the same lock and extends it by what the charge needs (at least
 another twentieth), up to the ceiling and what the cap still has free, or refuses the charge
 (`OutOfCredits`) and takes nothing. A run cannot charge past its budget, so the workspace cannot pass its
-cap, however many runs it starts at once. With the cap removed, a lease extends straight to its ceiling. Lowering a cap below what was already spent refuses new runs at
+cap, however many runs it starts at once. With the cap removed, a lease extends straight to its ceiling. Setting a cap brings the workspace's runs already going under it too
+(`dbo.WorkspaceCreditCap_Set`, under the same lock): each one's budget is cut to what it has spent, one started with no cap keeps
+its whole budget as its ceiling, and its next charge is extended from what the cap has left, so a run looping when the owner sets
+a cap stops at the cap rather than at its own budget. Lowering a cap below what was already spent refuses new runs at
 once, and the response says so (`capReached`). As it posts, `CreditUsagePoster` raises
 `WorkspaceCreditCapReachedEvent` when a post carries a workspace across 80% and then 100% of its cap.
 
