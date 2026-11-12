@@ -343,7 +343,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
                 _refusalReporter?.Report(new RunRefusal(ex.WorkspaceId, registration.WorkflowDefinitionId, registration.WorkflowRefId, normalizedEvent.ChannelKind, ex.Limit, normalizedEvent.ReceivedAt));
                 // Settled like a drop: the claim records it, so a redelivered event is not refused twice
                 // or, worse, started late once the workspace has room.
-                return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Refused, null, correlationValue), null);
+                return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Refused, null, correlationValue, RefusalReason: RunRefusalReason.ActiveRunLimit), null);
             }
             catch (PlanCreditLimitException ex)
             {
@@ -353,7 +353,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
                 {
                     Reason = RunRefusalReason.CreditLimit
                 });
-                return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Refused, null, correlationValue), null);
+                return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Refused, null, correlationValue, RefusalReason: RunRefusalReason.CreditLimit), null);
             }
             catch (WorkspaceCreditCapException ex)
             {
@@ -361,7 +361,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
                 {
                     Reason = RunRefusalReason.WorkspaceCreditCap
                 });
-                return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Refused, null, correlationValue), null);
+                return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Refused, null, correlationValue, RefusalReason: RunRefusalReason.WorkspaceCreditCap), null);
             }
             catch (ActiveRunConflictException) when (attempt < MaxStartAttempts)
             {

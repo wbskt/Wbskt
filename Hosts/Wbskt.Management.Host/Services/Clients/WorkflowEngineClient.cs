@@ -35,11 +35,23 @@ internal sealed class WorkflowEngineClient : IWorkflowEngineClient
             InboundOutcome.Queued => StartRunOutcome.Queued,
             InboundOutcome.Dropped => StartRunOutcome.Dropped,
             InboundOutcome.NoRegistration => StartRunOutcome.NoManualTrigger,
+            InboundOutcome.Refused => ToRefusal(engineResponse),
+            InboundOutcome.Busy => StartRunOutcome.Busy,
             _ => engineResponse?.RunRefId is null ? StartRunOutcome.NoManualTrigger : StartRunOutcome.Started
         };
 
         return new StartRunResponse(engineResponse?.RunRefId ?? Guid.Empty, outcome);
     }
+
+    // A manual trigger is always AllowParallel, so a refusal is the plan's and names its limit; a
+    // response from an engine that does not send the reason yet reads as the run limit.
+    private static StartRunOutcome ToRefusal(InboundResponse response) =>
+        response.Registrations.FirstOrDefault(r => r.Outcome == InboundOutcome.Refused)?.RefusalReason switch
+        {
+            InboundRefusalReason.CreditLimit => StartRunOutcome.PlanCreditLimitReached,
+            InboundRefusalReason.WorkspaceCreditCap => StartRunOutcome.WorkspaceCreditCapReached,
+            _ => StartRunOutcome.PlanRunLimitReached
+        };
 
     public async Task<EngineTestRunResponse> StartTestRunAsync(EngineTestRunRequest request, CancellationToken ct)
     {

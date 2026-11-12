@@ -64,6 +64,18 @@ public sealed class WorkflowRunService : IWorkflowRunService
                     "RUN_DROPPED_BY_CONCURRENCY_POLICY",
                     $"Workflow '{workflowRefId}' already has an active run and its concurrency policy discarded this request."));
 
+            case StartRunOutcome.PlanRunLimitReached:
+                return Result<StartRunResponse>.Failure(RunStartErrors.PlanRunLimitReached);
+
+            case StartRunOutcome.PlanCreditLimitReached:
+                return Result<StartRunResponse>.Failure(RunStartErrors.PlanCreditLimitReached);
+
+            case StartRunOutcome.WorkspaceCreditCapReached:
+                return Result<StartRunResponse>.Failure(RunStartErrors.WorkspaceCreditCapReached);
+
+            case StartRunOutcome.Busy:
+                return Result<StartRunResponse>.Failure(RunStartErrors.WorkspaceBusy);
+
             case StartRunOutcome.NoManualTrigger:
                 return Result<StartRunResponse>.Failure(Error.Conflict(
                     "WORKFLOW_HAS_NO_MANUAL_TRIGGER",

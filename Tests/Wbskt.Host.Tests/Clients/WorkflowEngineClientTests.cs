@@ -55,6 +55,7 @@ public sealed class WorkflowEngineClientTests
     [InlineData(InboundOutcome.Queued, StartRunOutcome.Queued)]
     [InlineData(InboundOutcome.Dropped, StartRunOutcome.Dropped)]
     [InlineData(InboundOutcome.Idempotent, StartRunOutcome.Duplicate)]
+    [InlineData(InboundOutcome.Busy, StartRunOutcome.Busy)]
     public async Task StartManualRunAsync_reports_non_start_outcomes_instead_of_throwing(InboundOutcome engineOutcome, StartRunOutcome expected)
     {
         // These are all normal results - a concurrency policy did its job, or a retry was
@@ -64,6 +65,23 @@ public sealed class WorkflowEngineClientTests
         var client = new WorkflowEngineClient(BuildClient(handler));
 
         StartRunResponse response = await client.StartManualRunAsync(workflowRefId, new StartRunRequest("node", null), CancellationToken.None);
+
+        Assert.Equal(expected, response.Outcome);
+    }
+
+    [Theory]
+    [InlineData(InboundRefusalReason.ActiveRunLimit, StartRunOutcome.PlanRunLimitReached)]
+    [InlineData(InboundRefusalReason.CreditLimit, StartRunOutcome.PlanCreditLimitReached)]
+    [InlineData(InboundRefusalReason.WorkspaceCreditCap, StartRunOutcome.WorkspaceCreditCapReached)]
+    public async Task StartManualRunAsync_reports_which_plan_limit_refused_the_run(InboundRefusalReason reason, StartRunOutcome expected)
+    {
+        // #771: a plan refusal used to arrive as Dropped and be told as a concurrency-policy discard.
+        string body = JsonSerializer.Serialize(
+            new InboundResponse(InboundOutcome.Refused, null, [new InboundRegistrationOutcome(Guid.NewGuid(), InboundOutcome.Refused, null, "", reason)]),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var client = new WorkflowEngineClient(BuildClient(new StubHttpHandler(HttpStatusCode.OK, body)));
+
+        StartRunResponse response = await client.StartManualRunAsync(Guid.NewGuid(), new StartRunRequest("node", null), CancellationToken.None);
 
         Assert.Equal(expected, response.Outcome);
     }

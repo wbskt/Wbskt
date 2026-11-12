@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Moq;
+using Wbskt.Models.Billing;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Contracts;
 using Wbskt.Workflow.Engine.Host.Controllers;
@@ -114,7 +115,8 @@ public sealed class InboundManualControllerTests
             [
                 new TriggerRegistrationDispatch(7, workflowRefId, TriggerDispatchOutcome.StartedRun, 42, "ok", firstRunRefId),
                 new TriggerRegistrationDispatch(8, workflowRefId, TriggerDispatchOutcome.StartedRun, 43, "ok", secondRunRefId),
-                new TriggerRegistrationDispatch(9, workflowRefId, TriggerDispatchOutcome.Dropped, null, "ok")
+                new TriggerRegistrationDispatch(9, workflowRefId, TriggerDispatchOutcome.Dropped, null, "ok"),
+                new TriggerRegistrationDispatch(10, workflowRefId, TriggerDispatchOutcome.Refused, null, "ok", RefusalReason: RunRefusalReason.CreditLimit)
             ], firstRunRefId));
         var controller = new InboundManualController(hub.Object);
         JsonElement payload = JsonSerializer.SerializeToElement(new { value = 1 });
@@ -123,8 +125,23 @@ public sealed class InboundManualControllerTests
 
         Assert.Equal(firstRunRefId, response.RunRefId);
         Assert.Equal(
-            [(InboundOutcome.StartedRun, (Guid?)firstRunRefId), (InboundOutcome.StartedRun, secondRunRefId), (InboundOutcome.Dropped, null)],
-            response.Registrations.Select(r => (r.Outcome, r.RunRefId)));
+            [(InboundOutcome.StartedRun, (Guid?)firstRunRefId, (InboundRefusalReason?)null), (InboundOutcome.StartedRun, secondRunRefId, null), (InboundOutcome.Dropped, null, null), (InboundOutcome.Refused, null, InboundRefusalReason.CreditLimit)],
+            response.Registrations.Select(r => (r.Outcome, r.RunRefId, r.RefusalReason)));
+    }
+
+    [Fact]
+    public async Task Post_reports_a_busy_workspace_instead_of_failing()
+    {
+        // #771: the workspace's start lock stayed taken through every retry. That was a 500.
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new RunStartBusyException(3));
+        var controller = new InboundManualController(hub.Object);
+
+        InboundResponse response = await controller.Post(Guid.NewGuid(), JsonSerializer.SerializeToElement(new { }), null, CancellationToken.None);
+
+        Assert.Equal(InboundOutcome.Busy, response.Outcome);
+        Assert.Null(response.RunRefId);
     }
 
     [Fact]

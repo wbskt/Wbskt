@@ -8,8 +8,8 @@ namespace Wbskt.Workflow.Engine.Contracts;
 /// </summary>
 /// <param name="Outcome">
 /// A summary of <paramref name="Registrations"/>: <see cref="InboundOutcome.StartedRun"/> if any started a run,
-/// else the first of Queued, Dropped, Filtered and SecretMismatch, else what happened before any
-/// registration was reached (a resumed wait, a duplicate, no registration).
+/// else the first of Queued, Dropped, Refused, Filtered and SecretMismatch, else what happened before any
+/// registration was reached (a resumed wait, a duplicate, no registration, a busy workspace).
 /// </param>
 /// <param name="RunRefId">The first run started, for callers that expect one.</param>
 /// <param name="Registrations">
@@ -24,7 +24,8 @@ public sealed record InboundResponse(InboundOutcome Outcome, Guid? RunRefId, IRe
 }
 
 /// <summary>What one matched trigger registration did with the call.</summary>
-public sealed record InboundRegistrationOutcome(Guid WorkflowRefId, InboundOutcome Outcome, Guid? RunRefId, string CorrelationKey);
+/// <param name="RefusalReason">Which plan limit refused the start, when <paramref name="Outcome"/> is <see cref="InboundOutcome.Refused"/>.</param>
+public sealed record InboundRegistrationOutcome(Guid WorkflowRefId, InboundOutcome Outcome, Guid? RunRefId, string CorrelationKey, InboundRefusalReason? RefusalReason = null);
 
 [JsonConverter(typeof(JsonStringEnumConverter<InboundOutcome>))]
 public enum InboundOutcome
@@ -43,5 +44,28 @@ public enum InboundOutcome
     Filtered,
 
     /// <summary>The registration matched, but the caller did not present its webhook secret.</summary>
-    SecretMismatch
+    SecretMismatch,
+
+    /// <summary>The plan refused the start; the registration's <c>RefusalReason</c> says which limit.</summary>
+    Refused,
+
+    /// <summary>
+    /// Too many runs were starting in the workspace at once and nothing was decided. The same call can
+    /// simply be sent again.
+    /// </summary>
+    Busy
+}
+
+/// <summary>Which plan limit refused a start.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<InboundRefusalReason>))]
+public enum InboundRefusalReason
+{
+    /// <summary>The plan already has its limit of runs going at once, across the tenant's workspaces.</summary>
+    ActiveRunLimit,
+
+    /// <summary>The plan has spent its workflow credits for the month.</summary>
+    CreditLimit,
+
+    /// <summary>The workspace has spent its own monthly credit cap.</summary>
+    WorkspaceCreditCap
 }

@@ -26,7 +26,19 @@ public enum StartRunOutcome
     Dropped,
 
     /// <summary>The workflow has no manual trigger, so it cannot be started this way.</summary>
-    NoManualTrigger
+    NoManualTrigger,
+
+    /// <summary>The plan already has its limit of runs going at once, across the tenant's workspaces.</summary>
+    PlanRunLimitReached,
+
+    /// <summary>The plan has spent its workflow credits for the month.</summary>
+    PlanCreditLimitReached,
+
+    /// <summary>The workspace has spent its own monthly credit cap.</summary>
+    WorkspaceCreditCapReached,
+
+    /// <summary>Too many runs were starting in the workspace at once; nothing was decided, so it can be sent again.</summary>
+    Busy
 }
 
 public record StartRunResponse(Guid RunRefId, StartRunOutcome Outcome = StartRunOutcome.Started);

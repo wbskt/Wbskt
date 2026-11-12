@@ -1,3 +1,4 @@
+using Wbskt.Models.Billing;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Contracts;
 
@@ -15,7 +16,7 @@ internal static class InboundDispatchProjection
         ToOutcome(result.Outcome),
         result.RunRefId,
         result.Registrations
-            .Select(r => new InboundRegistrationOutcome(r.WorkflowRefId, ToOutcome(r.Outcome), r.RunRefId, r.CorrelationKey))
+            .Select(r => new InboundRegistrationOutcome(r.WorkflowRefId, ToOutcome(r.Outcome), r.RunRefId, r.CorrelationKey, ToReason(r.RefusalReason)))
             .ToArray());
 
     private static InboundOutcome ToOutcome(TriggerDispatchOutcome outcome) => outcome switch
@@ -29,9 +30,16 @@ internal static class InboundDispatchProjection
         TriggerDispatchOutcome.Idempotent => InboundOutcome.Idempotent,
         TriggerDispatchOutcome.Filtered => InboundOutcome.Filtered,
         TriggerDispatchOutcome.SecretMismatch => InboundOutcome.SecretMismatch,
-        // The public contract has no separate outcome for it: to a caller it is a trigger that
-        // started nothing, which is what Dropped already says.
-        TriggerDispatchOutcome.Refused => InboundOutcome.Dropped,
+        TriggerDispatchOutcome.Refused => InboundOutcome.Refused,
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "No inbound outcome for this dispatch outcome.")
+    };
+
+    private static InboundRefusalReason? ToReason(RunRefusalReason? reason) => reason switch
+    {
+        null => null,
+        RunRefusalReason.ActiveRunLimit => InboundRefusalReason.ActiveRunLimit,
+        RunRefusalReason.CreditLimit => InboundRefusalReason.CreditLimit,
+        RunRefusalReason.WorkspaceCreditCap => InboundRefusalReason.WorkspaceCreditCap,
+        _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, "No inbound refusal reason for this refusal.")
     };
 }

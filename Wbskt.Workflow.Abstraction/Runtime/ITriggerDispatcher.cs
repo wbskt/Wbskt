@@ -1,3 +1,5 @@
+using Wbskt.Models.Billing;
+
 namespace Wbskt.Workflow.Abstraction.Runtime;
 
 public interface ITriggerDispatcher
@@ -39,13 +41,15 @@ public sealed record TriggerDispatchResult(
 }
 
 /// <summary>What one trigger registration did with the event.</summary>
+/// <param name="RefusalReason">Why the plan refused the start, when <paramref name="Outcome"/> is <see cref="TriggerDispatchOutcome.Refused"/>.</param>
 public sealed record TriggerRegistrationDispatch(
     long RegistrationId,
     Guid WorkflowRefId,
     TriggerDispatchOutcome Outcome,
     long? RunId,
     string CorrelationKey,
-    Guid? RunRefId = null);
+    Guid? RunRefId = null,
+    RunRefusalReason? RefusalReason = null);
 
 public enum TriggerDispatchOutcome
 {
@@ -61,8 +65,8 @@ public enum TriggerDispatchOutcome
     Filtered,
 
     /// <summary>
-    /// No run started: the workflow's plan already has as many runs going, across its tenant's
-    /// workspaces, as it allows (<c>PlanLimits.ActiveRuns</c>).
+    /// No run started: the plan refused it. The registration's <c>RefusalReason</c> says which limit:
+    /// runs going at once across the tenant, the month's credits, or the workspace's credit cap.
     /// </summary>
     Refused,
 
