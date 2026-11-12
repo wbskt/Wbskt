@@ -7,7 +7,7 @@ an item on one of those two checklists:
 
 | Checklist | Scenarios |
 |---|---|
-| Message model | registering once, pending approval, registering again, reusing the token, `Retry-After`, `capabilities` first, ping and pong, command acks, expired commands, plain messages, a throwing handler and malformed frames, `sentAt` and the offline backlog, pacing a large backlog under the message budget, reserved types |
+| Message model | registering once, pending approval, registering again, reusing the token, `Retry-After`, `capabilities` first, ping and pong, command acks, expired commands, plain messages, a throwing handler and malformed frames, `sentAt` and the offline backlog, pacing a large backlog under the message budget, reserved types, a message over 64 KB |
 | Firmware updates (optional) | listing `ota`, rejecting while off, an expired update, plain `http`, accepted → downloading → installed |
 | WebSocket binding | the subprotocol and bearer token, renewing after a 401 on the upgrade, keeping the token while the gateway is down or the client is revoked (403 `CLIENT_REVOKED`), reconnecting after each close code (1000, 1001, 1008, 1009, 4001–4003), a second connection superseding the first |
 
@@ -82,7 +82,7 @@ may log there.
 | `{"event":"connected"}` / `{"event":"disconnected"}` | The socket opened or closed. |
 | `{"event":"message","type":"…","payload":…,"commandId":"…"\|null}` | The SDK handed a message to the app. |
 | `{"event":"sent","type":"…"}` | `send` or `state` returned. After `send-many`, once, with `"count":N`. |
-| `{"event":"rejected","type":"…","reason":"…"}` | The SDK refused to send the message, for example for a reserved type. |
+| `{"event":"rejected","type":"…","reason":"…"}` | The SDK refused to send the message, for example for a reserved type or a message over 64 KB. |
 
 An SDK that takes firmware updates (protocol §4.4) is also run through `test_ota.py`; for any other,
 those scenarios are skipped, since its client doesn't list `ota` in its capabilities. Its harness

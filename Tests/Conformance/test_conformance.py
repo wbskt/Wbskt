@@ -321,6 +321,21 @@ async def test_paces_a_large_offline_backlog_under_the_gateway_budget(api, socke
     await harness.expect("connected", timeout=10.0)
 
 
+async def test_refuses_to_send_a_message_over_64_kb(api, socket_server, client):
+    harness = await client()
+    await harness.expect("connected")
+    await socket_server.next_of("capabilities")
+
+    # Two strings, not one: ArduinoJson's default build caps a single string at 64 KB.
+    await harness.command("send", type="photo", payload={"a": "x" * 35 * 1024, "b": "x" * 35 * 1024})
+    await harness.expect("rejected", type="photo")
+    await harness.command("send", type="marker", payload=None)
+    frame = await socket_server.next_of("marker")
+
+    assert frame["type"] == "marker"
+    assert not socket_server.close_codes
+
+
 @pytest.mark.parametrize("message_type", ["sys.custom", "SYS.ping", "capabilities", "State.Report"])
 async def test_refuses_to_send_a_reserved_type(api, socket_server, client, message_type):
     harness = await client()
