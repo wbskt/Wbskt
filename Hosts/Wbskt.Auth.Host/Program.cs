@@ -101,7 +101,16 @@ public static class Program
         // AuthEmailOptions half describes what the messages say and where their links point. The
         // relay is this host's own: sharing WorkflowEngine:Email would mean a workflow author's
         // misconfiguration could take password resets down with it.
-        builder.Services.AddSingleton(Options.Create(builder.Configuration.GetSection("Auth:Email").Get<EmailOptions>() ?? new EmailOptions()));
+        EmailOptions relay = builder.Configuration.GetSection("Auth:Email").Get<EmailOptions>() ?? new EmailOptions();
+
+        // A send that can outlast the billing mail sender's lease reserve could still be running when
+        // another instance takes the same mail.
+        if (relay.SendTimeout <= TimeSpan.Zero || relay.SendTimeout >= BillingNoticeMailSender.LeaseReserve)
+        {
+            throw new InvalidOperationException($"Auth:Email:SendTimeout must be above zero and below {BillingNoticeMailSender.LeaseReserve}; it is {relay.SendTimeout}.");
+        }
+
+        builder.Services.AddSingleton(Options.Create(relay));
         builder.Services.AddSingleton(Options.Create(builder.Configuration.GetSection("Auth:Email").Get<AuthEmailOptions>() ?? new AuthEmailOptions()));
         builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
         builder.Services.AddSingleton<OutboundMailQueue>();

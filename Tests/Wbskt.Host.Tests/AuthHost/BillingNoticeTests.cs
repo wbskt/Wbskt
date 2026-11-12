@@ -226,6 +226,15 @@ public sealed class BillingNoticeTests
         await MailSender(clock).TickAsync(CancellationToken.None);
 
         _mailer.Verify(m => m.SendAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), EmailBodyFormat.Html, It.IsAny<CancellationToken>()), Times.Exactly(4));
+
+        // The six never tried are handed back under the lease they were taken with, so none of them
+        // loses an attempt to the slow relay.
+        foreach (long id in Enumerable.Range(5, 6))
+        {
+            _billing.Verify(b => b.ReleaseBillingNoticeMailAsync(id, Now + BillingNoticeMailSender.Lease, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        _billing.Verify(b => b.ReleaseBillingNoticeMailAsync(It.IsInRange(1L, 4L, Moq.Range.Inclusive), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

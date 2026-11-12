@@ -109,6 +109,30 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
         Assert.DoesNotContain(afterSent, m => m.Id == id);
     }
 
+    /// <summary>
+    /// A batch stopped for a slow relay hands back the mails it never tried: due again at once with the
+    /// attempt returned. A release under a lease that is no longer this sender's changes nothing.
+    /// </summary>
+    [SkippableFact]
+    public async Task A_released_billing_email_is_due_again_with_its_attempt_returned()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int tenantId = await CreateTenantAsync();
+        await ClaimNoticeAsync(tenantId, "PaymentFailed", $"sub_{Guid.NewGuid():N}");
+        long id = await ScalarAsync<long>("SELECT Id FROM dbo.BillingNoticeMails WHERE TenantId = @p0", tenantId);
+        DateTime far = DateTime.UtcNow.AddYears(2).AddTicks(1234);
+        DateTime lease = far.AddMinutes(5);
+
+        await TakeMailsAsync(far, lease);
+        await ProcScalarAsync("dbo.BillingNoticeMail_Release", ("@Id", id), ("@LeaseUntil", lease.AddSeconds(1)), ("@Now", far.AddMinutes(1)));
+        var stillLeased = await TakeMailsAsync(far.AddMinutes(1), far.AddMinutes(6));
+        await ProcScalarAsync("dbo.BillingNoticeMail_Release", ("@Id", id), ("@LeaseUntil", lease), ("@Now", far.AddMinutes(1)));
+        var again = await TakeMailsAsync(far.AddMinutes(1), far.AddMinutes(6));
+
+        Assert.DoesNotContain(stillLeased, m => m.Id == id);
+        Assert.Equal(1, again.Single(m => m.Id == id).Attempts);
+    }
+
     [SkippableFact]
     public async Task Billing_contacts_are_the_members_with_a_confirmed_address_who_are_not_suspended()
     {
