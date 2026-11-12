@@ -52,7 +52,7 @@ public sealed class RunRecoveryServiceTests
     {
         // Like a failed recovery: the inbound hub waits on Ready, so it must not open on claims left wedged.
         var claims = new Mock<IIdempotencyKeyProvider>();
-        claims.Setup(c => c.FailAbandonedClaimsAsync(It.IsAny<CancellationToken>()))
+        claims.Setup(c => c.ReleaseAbandonedClaimsAsync(It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("database unreachable"));
         var service = new RunRecoveryService(WorkerTestServices.Scopes(claims.Object), new RecordingRunDispatcher(), new RecordingLogger<RunRecoveryService>());
 

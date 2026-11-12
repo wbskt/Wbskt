@@ -27,9 +27,10 @@ public sealed class RunRecoveryService : IEngineStartupTracker
     internal const int WokenPageSize = 1_000;
 
     /// <summary>
-    /// Marks Failed the inbound-event and trigger-start claims a stopped engine left Pending, so the
-    /// broker's redelivery of each event reclaims it rather than dropping it as a duplicate. Call it
-    /// before the bus starts, when no claim can be this instance's own.
+    /// Releases the inbound-event and trigger-start claims a stopped engine left Pending, so the broker's
+    /// redelivery of each event reclaims it rather than dropping it as a duplicate, and settles the trigger
+    /// starts whose run exists, which recovery runs. Call it before the bus starts, when no claim can be
+    /// this instance's own.
     /// </summary>
     public async Task ReleaseAbandonedClaimsAsync(CancellationToken ct)
     {
@@ -37,7 +38,7 @@ public sealed class RunRecoveryService : IEngineStartupTracker
         {
             await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
             var idempotencyKeyProvider = scope.ServiceProvider.GetRequiredService<IIdempotencyKeyProvider>();
-            int released = await idempotencyKeyProvider.FailAbandonedClaimsAsync(ct);
+            int released = await idempotencyKeyProvider.ReleaseAbandonedClaimsAsync(ct);
             if (released > 0)
             {
                 _logger.LogWarning("Released {Count} event claims a stopped engine left mid-dispatch; their redeliveries will be handled.", released);

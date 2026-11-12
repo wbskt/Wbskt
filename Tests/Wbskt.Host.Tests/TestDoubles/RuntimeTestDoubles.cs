@@ -49,6 +49,23 @@ internal sealed class InMemoryIdempotencyKeyProvider : IIdempotencyKeyProvider
         Task.FromResult(_rows.AddOrUpdate(keyValue, _ => throw new KeyNotFoundException(keyValue), (_, row) =>
             row.Status == "Failed" ? row with { Status = "Pending", BranchRefId = newBranchRefId, ErrorJson = null, CompletedAt = null } : row));
 
+    public Task<IdempotencyKeyRow> MarkClaimSucceededAsync(string keyValue, Guid claimToken, string resultJson, CancellationToken ct) =>
+        Task.FromResult(_rows.AddOrUpdate(keyValue, _ => throw new KeyNotFoundException(keyValue), (_, row) =>
+            row.BranchRefId == claimToken ? row with { Status = "Succeeded", ResultJson = resultJson, CompletedAt = DateTime.UtcNow } : row));
+
+    public Task<IdempotencyKeyRow> MarkClaimFailedAsync(string keyValue, Guid claimToken, string errorJson, CancellationToken ct) =>
+        Task.FromResult(_rows.AddOrUpdate(keyValue, _ => throw new KeyNotFoundException(keyValue), (_, row) =>
+            row.BranchRefId == claimToken ? row with { Status = "Failed", ErrorJson = errorJson, CompletedAt = DateTime.UtcNow } : row));
+
+    public Task MarkResumedAsync(string keyValue, Guid claimToken, CancellationToken ct)
+    {
+        _rows.AddOrUpdate(keyValue, _ => throw new KeyNotFoundException(keyValue), (_, row) =>
+            row.BranchRefId == claimToken && row.Status == "Pending" ? row with { ResultJson = IdempotencyClaimResults.Resumed } : row);
+        return Task.CompletedTask;
+    }
+
+    public Task<int> ReleaseAbandonedClaimsAsync(CancellationToken ct) => throw new NotSupportedException();
+
     public Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => Task.FromResult(0);
 }
 

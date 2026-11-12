@@ -122,9 +122,9 @@ internal sealed class IdempotencyKeyProvider : BaseSqlProvider, IIdempotencyKeyP
             },
             ct);
 
-    public async Task<int> FailAbandonedClaimsAsync(CancellationToken ct)
+    public async Task<int> ReleaseAbandonedClaimsAsync(CancellationToken ct)
     {
-        var result = await ExecuteScalarAsync<object>("dbo.IdempotencyKey_FailAbandonedClaims", _ => { }, ct);
+        var result = await ExecuteScalarAsync<object>("dbo.IdempotencyKey_ReleaseAbandonedClaims", _ => { }, ct);
         return result is int count ? count : Convert.ToInt32(result ?? 0);
     }
 

@@ -7,7 +7,7 @@ using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 
 /// <summary>
-/// IdempotencyKey_FailAbandonedClaims (#770): a new leader marks the event claims a stopped engine left
+/// IdempotencyKey_ReleaseAbandonedClaims (#770): a new leader marks the event claims a stopped engine left
 /// Pending as Failed, so the broker's redelivery reclaims them instead of dropping them as duplicates.
 /// </summary>
 [Collection("SqlEdge")]
@@ -32,7 +32,7 @@ public sealed class AbandonedClaimIntegrationTests(SqlEdgeFixture fixture)
         await keys.MarkSucceededAsync(settled, "{}", CancellationToken.None);
 
         // The sweep takes every Pending event claim in the shared test database, not only these.
-        int released = await keys.FailAbandonedClaimsAsync(CancellationToken.None);
+        int released = await keys.ReleaseAbandonedClaimsAsync(CancellationToken.None);
 
         released.Should().BeGreaterOrEqualTo(2);
         (await keys.GetByKeyAsync(inbound, CancellationToken.None)).Status.Should().Be("Failed");
@@ -47,8 +47,10 @@ public sealed class AbandonedClaimIntegrationTests(SqlEdgeFixture fixture)
         reclaimed.Status.Should().Be("Pending");
     }
 
-    [SkippableFact]
-    public async Task A_trigger_start_whose_run_exists_is_settled_rather_than_released()
+    [SkippableTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_trigger_start_whose_run_exists_is_settled_rather_than_released(bool stoppedEngineMarkedItFailed)
     {
         // #833 review: released, the redelivery would reclaim it, find the run and hand its root branch,
         // which recovery already runs, to the pump a second time.
@@ -67,7 +69,12 @@ public sealed class AbandonedClaimIntegrationTests(SqlEdgeFixture fixture)
             await command.ExecuteNonQueryAsync();
         }
 
-        await keys.FailAbandonedClaimsAsync(CancellationToken.None);
+        if (stoppedEngineMarkedItFailed)
+        {
+            await keys.MarkFailedAsync(startKey, "{}", CancellationToken.None);
+        }
+
+        await keys.ReleaseAbandonedClaimsAsync(CancellationToken.None);
 
         (await keys.GetByKeyAsync(startKey, CancellationToken.None)).Status.Should().Be("Succeeded");
     }

@@ -84,7 +84,7 @@ public sealed class EngineLeaseLifecycleTests
         branches.Setup(b => b.GetRunningBranchesAsync(It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("database unreachable"));
         var claims = new Mock<IIdempotencyKeyProvider>();
-        claims.Setup(c => c.FailAbandonedClaimsAsync(It.IsAny<CancellationToken>())).ReturnsAsync(0);
+        claims.Setup(c => c.ReleaseAbandonedClaimsAsync(It.IsAny<CancellationToken>())).ReturnsAsync(0);
 
         using IHost host = new HostBuilder()
             .ConfigureLogging(logging => logging.ClearProviders().AddProvider(logs))
@@ -149,7 +149,7 @@ public sealed class EngineLeaseLifecycleTests
             .ReturnsAsync([woken]);
         branches.Setup(b => b.GetRunningBranchesAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
         var claims = new Mock<IIdempotencyKeyProvider>();
-        claims.Setup(c => c.FailAbandonedClaimsAsync(It.IsAny<CancellationToken>()))
+        claims.Setup(c => c.ReleaseAbandonedClaimsAsync(It.IsAny<CancellationToken>()))
             .Callback(() => steps.Enqueue(state.BusStarted ? "claims-released-after-gate" : "claims-released"))
             .ReturnsAsync(2);
 
