@@ -8,7 +8,9 @@ namespace Wbskt.Gateway.Core.HostedServices;
 // Tells the management host this instance is alive, on a fixed interval. Presence is a lease on it:
 // the clients this host holds stay "online" only while the beats keep arriving (see
 // StalePresenceSweeper in the management host). The first beat goes out at once. Every few minutes it
-// also sends the clients it holds, so the management host can clear presence whose disconnect was lost.
+// also sends the clients it holds, so the management host can clear presence whose disconnect was lost,
+// and once more as soon as a beat gets through after one that did not, so clients expired while the
+// broker was out of reach are set back online.
 internal sealed class HeartbeatPublisher : BackgroundService
 {
     private readonly IPublishEndpoint _publishEndpoint;
@@ -36,6 +38,7 @@ internal sealed class HeartbeatPublisher : BackgroundService
         using var timer = new PeriodicTimer(_interval);
         // The first snapshot waits one interval: connections are still arriving after a start.
         var nextSnapshot = _time.GetUtcNow() + _snapshotInterval;
+        bool beatFailed = false;
         try
         {
             do
@@ -49,10 +52,20 @@ internal sealed class HeartbeatPublisher : BackgroundService
                 try
                 {
                     await _publishEndpoint.Publish(new SocketHostHeartbeat(_hostId), stoppingToken);
+
+                    // Beats that could not get through may have let the management host expire this host's
+                    // clients; a snapshot at once sets the ones still held back online.
+                    if (beatFailed)
+                    {
+                        beatFailed = false;
+                        nextSnapshot = _time.GetUtcNow() + _snapshotInterval;
+                        await PublishSnapshotAsync(stoppingToken);
+                    }
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     // The next beat retries; a few missed ones are within the management host's margin.
+                    beatFailed = true;
                     _logger.LogWarning("Could not publish the socket host heartbeat: {Message}", ex.Message);
                 }
             }

@@ -275,7 +275,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             cancellationToken);
     }
 
-    public async Task<IReadOnlyCollection<ExpiredPresence>> ReconcilePresenceByHostAsync(string hostId, IReadOnlyCollection<Guid> connectedRefIds, DateTime takenAtUtc, TimeSpan margin, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyCollection<PresenceRepair>> ReconcilePresenceByHostAsync(string hostId, IReadOnlyCollection<Guid> connectedRefIds, DateTime takenAtUtc, TimeSpan margin, CancellationToken cancellationToken = default)
     {
         using var table = new DataTable();
         table.Columns.Add("RefId", typeof(Guid));
@@ -295,11 +295,11 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
                 parameter.SqlDbType = SqlDbType.Structured;
                 parameter.TypeName = "dbo.RefIdTableType";
             },
-            reader => new ExpiredPresence(
+            reader => new PresenceRepair(
                 reader.GetInt32(reader.GetOrdinal("Id")),
                 reader.GetGuid(reader.GetOrdinal("RefId")),
                 reader.GetInt32(reader.GetOrdinal("WorkspaceId")),
-                reader.IsDBNull(reader.GetOrdinal("ConnectedHostId")) ? null : reader.GetString(reader.GetOrdinal("ConnectedHostId"))),
+                reader.GetBoolean(reader.GetOrdinal("Connected"))),
             cancellationToken);
     }
 
