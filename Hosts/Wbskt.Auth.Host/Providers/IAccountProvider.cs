@@ -12,6 +12,9 @@ namespace Wbskt.Auth.Host.Providers;
 internal interface IAccountProvider : IReferenceProvider
 {
     Task<User> GetByEmailAsync(string email, CancellationToken cancellationToken = default);
+
+    /// <summary>The id of the account holding <paramref name="username"/>, or null when none does.</summary>
+    Task<int?> FindIdByUsernameAsync(string username, CancellationToken cancellationToken = default);
     Task<User> GetByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<int> InsertUserAsync(User user, CancellationToken cancellationToken = default);
 

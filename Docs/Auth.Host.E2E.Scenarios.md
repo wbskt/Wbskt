@@ -142,6 +142,7 @@ Highest priority: these encode defects that shipped, so they must fail against t
 | `AUTH_REG_26` | − | A solved challenge used for a second registration | First **204**, second **400** `SIGNUP_CHALLENGE_INVALID` |
 | `AUTH_REG_27` | − | A challenge sent with a solution that does not meet its difficulty | **400** `SIGNUP_CHALLENGE_INVALID` |
 | `AUTH_REG_28` | + | `GET /api/auth/register/challenge` anonymously | **200**, `challenge` starting `v1.`, `difficulty` > 0, `expiresAt` within ten minutes |
+| `AUTH_REG_29` | − | A taken username sent with an address that is also registered (another account's) | **409** `AUTH_USERNAME_CONFLICT`, the same as with an unregistered address, so a held username cannot probe addresses |
 
 ---
 

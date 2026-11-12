@@ -90,6 +90,26 @@ public sealed class RegistrationTests(ServicesFixture fixture)
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("AUTH_USERNAME_CONFLICT");
     }
 
+    /// <summary>
+    /// The username decides before the address. Otherwise someone holding a username could send it
+    /// with each address they want to test and read 204 for a registered one, 409 for the rest.
+    /// </summary>
+    [SkippableFact]
+    public async Task AUTH_REG_29_TakenUsernameWithARegisteredAddress_Returns409()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (prober, proberEmail, password) = ServicesFixture.NewCredentials();
+        (await fixture.RegisterAsync(prober, proberEmail, password)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+        var (target, targetEmail, _) = ServicesFixture.NewCredentials();
+        (await fixture.RegisterAsync(target, targetEmail, password)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var response = await fixture.RegisterAsync(prober, targetEmail, password);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("AUTH_USERNAME_CONFLICT");
+    }
+
     // ── Password bounds ───────────────────────────────────────────────────────────────────
 
     [SkippableFact]

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using System.Runtime.ExceptionServices;
 using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
@@ -21,6 +22,8 @@ internal sealed class RegistrationService : IRegistrationService
     /// "no such token" from "wrong address" would turn it into an oracle for probing invitations.
     /// </summary>
     private static readonly Error InvalidInvitation = SqlGuardErrors.InvalidInvitation;
+
+    private static readonly Error UsernameConflict = Error.Conflict("AUTH_USERNAME_CONFLICT", "That username is already taken.");
 
     private static readonly Error InvalidVerificationToken =
         Error.Validation("VERIFICATION_TOKEN_INVALID", "This confirmation link is not valid. It may have expired or already been used. Request a new one.");
@@ -285,10 +288,13 @@ internal sealed class RegistrationService : IRegistrationService
     /// Answers a uniqueness conflict on registration without saying which address is taken.
     /// </summary>
     /// <remarks>
-    /// An address that already has an account gets the same 204 a successful registration gets, and
-    /// the fact that it is taken is delivered to the address itself rather than to whoever submitted
-    /// the form. A username collision is reported plainly: it says nothing about any address, and
-    /// answering 204 there would leave someone stuck retrying a name that will never be accepted.
+    /// The username decides first. A taken username is reported plainly (409) whatever the address is:
+    /// it says nothing about any address, and answering 204 there would leave someone stuck retrying a
+    /// name that will never be accepted. Only when the username is free does the address decide: one
+    /// that already has an account gets the same 204 a successful registration gets, and the fact that
+    /// it is taken is delivered to the address itself rather than to whoever submitted the form.
+    /// Asking the address first would let anyone holding a username probe addresses with it: a
+    /// registered one answered 204 and an unregistered one 409.
     /// </remarks>
     /// <remarks>
     /// Internal rather than private only so the suite can exercise it directly: the alternative is
@@ -303,11 +309,16 @@ internal sealed class RegistrationService : IRegistrationService
         User? existing;
         try
         {
+            if (await _accounts.FindIdByUsernameAsync(username, cancellationToken) is not null)
+            {
+                _metrics.RecordRegistration("conflict");
+                return Result.Failure(UsernameConflict);
+            }
+
             existing = await _accounts.GetByEmailAsync(email, cancellationToken);
         }
         catch (SecurityException)
         {
-            // No account on this address, so the collision was on the username.
             existing = null;
         }
         catch (Exception lookupEx) when (lookupEx is not OperationCanceledException)
@@ -321,8 +332,11 @@ internal sealed class RegistrationService : IRegistrationService
 
         if (existing is null)
         {
-            _metrics.RecordRegistration("conflict");
-            return Result.Failure(Error.Conflict("AUTH_USERNAME_CONFLICT", "That username is already taken."));
+            // Neither the username nor the address is held now: the account that collided was deleted
+            // or renamed after the insert failed. Nothing is known to answer with, so it is the fault the
+            // insert raised, and a retry will succeed.
+            _metrics.RecordRegistration("error");
+            ExceptionDispatchInfo.Throw(ex);
         }
 
         try
