@@ -226,6 +226,48 @@ public sealed class BookmarkResumerTests
     }
 
     [Fact]
+    public async Task MatchInbound_marks_the_claim_resumed_before_it_claims_a_bookmark()
+    {
+        var bookmark = CreateBookmark(77, 42, Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Guid.Parse("11111111-1111-1111-1111-111111111111"));
+        var idempotency = RecordingIdempotencyKeyProvider.NewClaim();
+        var resumer = new BookmarkResumer(new RecordingBookmarkProvider(bookmark), idempotency, new RecordingBranchProvider((bookmark.BranchRefId, 1001)), new RecordingRunDispatcher());
+
+        await resumer.MatchInboundAsync(CreateInboundEvent(), hasRegistrations: true, CancellationToken.None);
+
+        Assert.Equal(["inbound-event:event-1"], idempotency.MarkResumedCalls);
+    }
+
+    [Fact]
+    public async Task MatchInbound_does_not_mark_an_event_with_no_bookmark_as_resumed()
+    {
+        var idempotency = RecordingIdempotencyKeyProvider.NewClaim();
+        var resumer = new BookmarkResumer(new RecordingBookmarkProvider(), idempotency, new RecordingBranchProvider(), new RecordingRunDispatcher());
+
+        BookmarkMatchResult result = await resumer.MatchInboundAsync(CreateInboundEvent(), hasRegistrations: true, CancellationToken.None);
+
+        Assert.False(result.Matched);
+        Assert.Equal("inbound-event:event-1", result.ClaimKey);
+        Assert.Empty(idempotency.MarkResumedCalls);
+    }
+
+    [Fact]
+    public async Task MatchInbound_settles_a_redelivered_wake_whose_bookmarks_are_gone_instead_of_starting_triggers()
+    {
+        // #833 review: the first delivery claimed the bookmarks and stopped before settling. The new leader
+        // released its claim, so the redelivery reclaims it and finds no bookmark. It must not be taken
+        // for an event that only starts trigger runs.
+        var idempotency = RecordingIdempotencyKeyProvider.FailedClaim_ReclaimSucceeds(IdempotencyClaimResults.Resumed);
+        var dispatcher = new RecordingRunDispatcher();
+        var resumer = new BookmarkResumer(new RecordingBookmarkProvider(), idempotency, new RecordingBranchProvider(), dispatcher);
+
+        BookmarkMatchResult result = await resumer.MatchInboundAsync(CreateInboundEvent(), hasRegistrations: true, CancellationToken.None);
+
+        Assert.True(result.Matched);
+        Assert.Null(result.ClaimKey);
+        Assert.Empty(dispatcher.Requests);
+    }
+
+    [Fact]
     public async Task MatchInbound_drops_as_idempotent_when_reclaim_loses_race()
     {
         // Arrange: two callers race to reclaim the same stale 'Failed' claim; only one can win.
@@ -373,6 +415,13 @@ public sealed class BookmarkResumerTests
         public string? LastKeyValue { get; private set; }
         public List<(string KeyValue, string ErrorJson)> MarkFailedCalls { get; } = [];
         public List<(string KeyValue, Guid NewBranchRefId)> ReclaimCalls { get; } = [];
+        public List<string> MarkResumedCalls { get; } = [];
+
+        public Task MarkResumedAsync(string keyValue, Guid claimToken, CancellationToken ct)
+        {
+            MarkResumedCalls.Add(keyValue);
+            return Task.CompletedTask;
+        }
 
         public static RecordingIdempotencyKeyProvider NewClaim()
         {
@@ -411,7 +460,7 @@ public sealed class BookmarkResumerTests
         }
 
         /// <summary>A stale 'Failed' claim from a crashed prior resume, which this caller successfully reclaims.</summary>
-        public static RecordingIdempotencyKeyProvider FailedClaim_ReclaimSucceeds()
+        public static RecordingIdempotencyKeyProvider FailedClaim_ReclaimSucceeds(string? resultJson = null)
         {
             return new RecordingIdempotencyKeyProvider(
                 (key, _, _, _, _) => new IdempotencyKeyRow
@@ -437,7 +486,7 @@ public sealed class BookmarkResumerTests
                     NodeId = Guid.Empty,
                     Attempt = 0,
                     Status = "Pending",
-                    ResultJson = null,
+                    ResultJson = resultJson,
                     ErrorJson = null,
                     CreatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
                     CompletedAt = null

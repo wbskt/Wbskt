@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Moq;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -44,6 +45,20 @@ public sealed class RunRecoveryServiceTests
         // Assert
         Assert.Equal([(171L, 71L, BranchExecutionReason.Recovered), (181L, 81L, BranchExecutionReason.Recovered)], runDispatcher.Requests);
         Assert.Contains(logger.Messages, message => message.Contains("Recovered 1 running branches and 1 Waiting branches whose wake may not have been dispatched.", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_release_of_abandoned_claims_that_fails_faults_startup()
+    {
+        // Like a failed recovery: the inbound hub waits on Ready, so it must not open on claims left wedged.
+        var claims = new Mock<IIdempotencyKeyProvider>();
+        claims.Setup(c => c.FailAbandonedClaimsAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("database unreachable"));
+        var service = new RunRecoveryService(WorkerTestServices.Scopes(claims.Object), new RecordingRunDispatcher(), new RecordingLogger<RunRecoveryService>());
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ReleaseAbandonedClaimsAsync(CancellationToken.None));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.Ready);
     }
 
     [Fact]

@@ -18,9 +18,28 @@ public interface IIdempotencyKeyProvider
     Task<IdempotencyKeyRow> ReclaimFailedAsync(string keyValue, Guid newBranchRefId, CancellationToken ct);
 
     /// <summary>
-    /// Marks every Pending inbound-event and trigger-start claim Failed, so a redelivery of its event can
+    /// Settles an event claim as Succeeded, only while <paramref name="claimToken"/> still holds it: an
+    /// engine whose claim was released and taken over by a redelivery must not overwrite the new holder's.
+    /// </summary>
+    Task<IdempotencyKeyRow> MarkClaimSucceededAsync(string keyValue, Guid claimToken, string resultJson, CancellationToken ct) =>
+        MarkSucceededAsync(keyValue, resultJson, ct);
+
+    /// <summary>Settles an event claim as Failed, only while <paramref name="claimToken"/> still holds it.</summary>
+    Task<IdempotencyKeyRow> MarkClaimFailedAsync(string keyValue, Guid claimToken, string errorJson, CancellationToken ct) =>
+        MarkFailedAsync(keyValue, errorJson, ct);
+
+    /// <summary>
+    /// Records on a Pending inbound-event claim that the event had waiting branches to wake
+    /// (<see cref="IdempotencyClaimResults.Resumed"/>), so a redelivery that reclaims it after a stop does
+    /// not take it for an event that only starts trigger runs.
+    /// </summary>
+    Task MarkResumedAsync(string keyValue, Guid claimToken, CancellationToken ct) => Task.CompletedTask;
+
+    /// <summary>
+    /// Settles every Pending trigger-start claim whose run exists, and marks every other Pending
+    /// inbound-event and trigger-start claim Failed, so a redelivery of its event can
     /// reclaim it. Only a new leader calls it, before its bus starts, when any such claim was left by an
-    /// engine that stopped mid-dispatch. Returns the number marked.
+    /// engine that stopped mid-dispatch. Returns the number changed.
     /// </summary>
     Task<int> FailAbandonedClaimsAsync(CancellationToken ct) => throw new NotSupportedException();
 

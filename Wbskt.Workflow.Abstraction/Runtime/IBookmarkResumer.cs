@@ -13,4 +13,6 @@ public interface IBookmarkResumer
     Task<BookmarkMatchResult> MatchInboundAsync(InboundEvent evt, bool hasRegistrations, CancellationToken ct);
 }
 
-public sealed record BookmarkMatchResult(bool Matched, long? BookmarkId, bool Idempotent, string? ClaimKey = null);
+/// <param name="ClaimKey">The event's claim, still Pending, for the caller to settle when the event was not a wake.</param>
+/// <param name="ClaimToken">The token <paramref name="ClaimKey"/> is held under; the caller settles it with this token.</param>
+public sealed record BookmarkMatchResult(bool Matched, long? BookmarkId, bool Idempotent, string? ClaimKey = null, Guid ClaimToken = default);
