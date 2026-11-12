@@ -537,6 +537,8 @@ services:
       - rabbitmq-data:/var/lib/rabbitmq
       # Adds rabbitmq_prometheus (port 15692, backend network only) for the dead-letter alert.
       - ../observability/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      # Sizes the memory alarm from mem_limit below rather than the VM's RAM (see the file).
+      - ../observability/rabbitmq/memory.conf:/etc/rabbitmq/conf.d/90-memory.conf:ro
       - ../observability/rabbitmq/healthcheck.sh:/usr/local/bin/wbskt-healthcheck.sh:ro
     # Loopback only, for the management UI over an SSH tunnel (ssh -L 15672:127.0.0.1:15672 <vm>).
     # AMQP (5672) and metrics (15692) stay on the backend network.
@@ -558,9 +560,9 @@ services:
   redis:
     image: redis:7
     container_name: wbskt-redis
-    # maxmemory sits under mem_limit, so a full Redis refuses writes instead of being killed with its
-    # keys. noeviction is explicit: an LRU policy would evict the TTL'd token revocations first.
-    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "192mb", "--maxmemory-policy", "noeviction"]
+    # maxmemory sits well under mem_limit (an AOF rewrite forks, and copy-on-write needs the room), so
+    # a full Redis refuses writes instead of being killed with its keys. noeviction is explicit: an LRU policy would evict the TTL'd token revocations first.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "noeviction"]
     volumes:
       - redis-data:/data
     healthcheck:
@@ -798,6 +800,7 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required - see .env.example}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
+      # The Go runtime does not read the cgroup limit; without this its heap overshoots mem_limit.
       GOMEMLIMIT: 217MiB
     volumes:
       - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro

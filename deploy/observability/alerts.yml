@@ -347,13 +347,14 @@ groups:
             container stopped by its memory limit shows OOMKilled in docker inspect.
 
       - alert: ContainerNearMemoryLimit
-        # A container has used over 90% of its mem_limit for 10 minutes. A .NET host there throws
+        # A .NET host has used over 90% of its mem_limit for 10 minutes. There it throws
         # OutOfMemoryException inside the process (its GC heap is capped at 75% of the limit) rather
-        # than being killed, so it can fail requests for hours without ever restarting.
+        # than being killed, so it can fail requests for hours without ever restarting. Only the hosts:
+        # Prometheus, Loki and Tempo sit near their caps on reclaimable page cache, which this counts.
         expr: |
           max by (container_label_com_docker_compose_service, name) (
-            container_memory_working_set_bytes{name!=""}
-            / (container_spec_memory_limit_bytes{name!=""} > 0)
+            container_memory_working_set_bytes{container_label_com_docker_compose_service=~"auth|management|client-auth|engine|gateway-ws|gateway-mqtt"}
+            / (container_spec_memory_limit_bytes{container_label_com_docker_compose_service=~"auth|management|client-auth|engine|gateway-ws|gateway-mqtt"} > 0)
           ) > 0.9
         for: 10m
         labels:
@@ -366,8 +367,8 @@ groups:
 
       - alert: RabbitMQMemoryAlarm
         # RabbitMQ blocks every publishing connection while its memory alarm is on: client traffic
-        # through the gateways, every host's events and the outbox. Its threshold is 60% of its
-        # mem_limit.
+        # through the gateways, every host's events and the outbox. Its threshold is 60% of the 1 GiB
+        # deploy/observability/rabbitmq/memory.conf gives it, about 600 MiB.
         expr: max(rabbitmq_alarms_memory_used_watermark) > 0
         for: 1m
         labels:

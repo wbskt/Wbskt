@@ -674,12 +674,16 @@ What hitting a cap looks like depends on the container:
   running and failing requests. `ContainerNearMemoryLimit` warns once a container sits over 90% of its
   limit for 10 minutes; restart it, and raise its limit if it was simply too small.
 - **Anything else** is killed and restarted (`docker inspect` shows `OOMKilled`). `ContainerRestarting`
-  pages at 3 restarts in 15 minutes, so a single kill an hour shows only in the near-limit warning.
-- **RabbitMQ** raises its memory alarm at 60% of its limit and then blocks every publisher, client
+  pages at 3 restarts in 15 minutes, so an occasional kill shows only in `docker inspect` and the
+  container's restart count.
+- **RabbitMQ** raises its memory alarm at 60% of 1 GiB (`deploy/observability/rabbitmq/memory.conf`,
+  since RabbitMQ reads the VM's RAM, not the cap) and then blocks every publisher, client
   traffic included. `RabbitMQMemoryAlarm` pages on it.
-- **Redis** refuses writes at `maxmemory 192mb`; every caller logs that and falls back.
-- The Go services (Traefik, Loki, Tempo, the collector, Grafana, cAdvisor) get a `GOMEMLIMIT` under
-  their cap, since the Go runtime does not read the cgroup limit. Prometheus 3 sets its own.
+- **Redis** refuses writes at `maxmemory 128mb`, leaving room under its cap for an AOF rewrite; every
+  caller logs that and falls back.
+- The larger Go services (Traefik, Loki, Tempo, the collector, Grafana, cAdvisor) get a `GOMEMLIMIT`
+  under their cap, since the Go runtime does not read the cgroup limit. Prometheus 3 sets its own;
+  Alertmanager, the Pushgateway and node-exporter are small enough to go without.
 
 | Containers | Limit |
 |---|---|
@@ -687,10 +691,10 @@ What hitting a cap looks like depends on the container:
 | gateway-ws, gateway-mqtt (each replica) | `GATEWAY_MEM_LIMIT`, default `512m` |
 | traefik | `TRAEFIK_MEM_LIMIT`, default `512m` (`TRAEFIK_GOMEMLIMIT` 435MiB) |
 | prometheus | `PROMETHEUS_MEM_LIMIT`, default `512m` |
-| rabbitmq | 1g (alarm at about 600 MB) |
+| rabbitmq | 1g (alarm at about 600 MiB; keep `memory.conf` equal to the cap) |
 | loki | 512m |
 | tempo | 384m |
-| redis | 256m, with `maxmemory 192mb` |
+| redis | 256m, with `maxmemory 128mb` |
 | otel-collector, grafana | 256m each |
 | cadvisor | 192m |
 | console, alertmanager, pushgateway, node-exporter | 64m each |
