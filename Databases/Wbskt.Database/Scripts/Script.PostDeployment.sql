@@ -143,6 +143,6 @@ UPDATE dbo.RunCounters
 GO
 
 -- 5. Queue the readings of workspaces deleted before dbo.Workspace_Retire queued them itself
--- (dbo.DeletedClientReadings_QueueRetired explains which). A no-op once they are queued or cleared.
-EXEC dbo.DeletedClientReadings_QueueRetired;
+-- (dbo.DeletedClientReadings_InsertRetired explains which). A no-op once they are queued or cleared.
+EXEC dbo.DeletedClientReadings_InsertRetired;
 GO

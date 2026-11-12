@@ -3,7 +3,7 @@
 -- whose account copy was kept with RetiredAt (#739). A workspace deleted before that lost its copy, so
 -- nothing here can tell it from a live one; the auth host's list of deleted workspaces is needed for it.
 -- Run by the post-deployment script; returns how many clients it queued.
-CREATE PROCEDURE dbo.DeletedClientReadings_QueueRetired
+CREATE PROCEDURE dbo.DeletedClientReadings_InsertRetired
 AS
 BEGIN
     SET NOCOUNT ON;

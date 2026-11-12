@@ -186,14 +186,14 @@ public sealed class ClientReadingRetentionIntegrationTests(SqlEdgeFixture fixtur
         await ReadAsync(client, Now.AddHours(-1), 1);
         await ScalarAsync<int>("UPDATE dbo.WorkspaceAccounts SET RetiredAt = @p1 WHERE WorkspaceId = @p0; SELECT 0;", workspaceId, Now.AddDays(-3));
 
-        int queued = await ScalarAsync<int>("EXEC dbo.DeletedClientReadings_QueueRetired;");
+        int queued = await ScalarAsync<int>("EXEC dbo.DeletedClientReadings_InsertRetired;");
 
         Assert.True(queued >= 1);
         Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.DeletedClientReadings WHERE ClientId = @p0", client));
 
         // A client with nothing to clear is not queued, and a second run queues nothing new.
         Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.DeletedClientReadings WHERE ClientId = @p0", silent));
-        await ScalarAsync<int>("EXEC dbo.DeletedClientReadings_QueueRetired;");
+        await ScalarAsync<int>("EXEC dbo.DeletedClientReadings_InsertRetired;");
         Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.DeletedClientReadings WHERE ClientId = @p0", client));
     }
 
