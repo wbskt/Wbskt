@@ -8,6 +8,11 @@ CREATE TABLE dbo.WorkspaceCreditCaps
     MonthlyCreditCap DECIMAL(18,4) NOT NULL,
     UpdatedAt        DATETIME2(3)  NOT NULL CONSTRAINT DF_WorkspaceCreditCaps_UpdatedAt DEFAULT SYSUTCDATETIME(),
     CreatedAt        DATETIME2(3)  NOT NULL CONSTRAINT DF_WorkspaceCreditCaps_CreatedAt DEFAULT SYSUTCDATETIME(),
+    -- The highest share of the cap (0, 80 or 100) the workspace has been told it reached in the month
+    -- starting NotifiedMonthStart; another month counts as 0. Raised by WorkspaceCreditCap_MarkNotified
+    -- only after the notice is published (see CreditNotices_GetDue).
+    NotifiedMonthStart DATE        NULL,
+    NotifiedPercent  INT           NOT NULL CONSTRAINT DF_WorkspaceCreditCaps_NotifiedPercent DEFAULT 0,
     CONSTRAINT PK_WorkspaceCreditCaps PRIMARY KEY (WorkspaceId),
     CONSTRAINT CK_WorkspaceCreditCaps_MonthlyCreditCap CHECK (MonthlyCreditCap >= 0)
 );

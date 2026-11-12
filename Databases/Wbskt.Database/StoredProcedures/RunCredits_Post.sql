@@ -1,11 +1,8 @@
 -- Moves the credits runs consumed since they last posted into dbo.WorkspaceCreditUsage, on @Day, for
--- up to @BatchSize runs. Returns a row per workspace that posted: how many runs and credits it moved,
--- what its ledger now holds for @Day's month, and its credit cap (dbo.WorkspaceCreditCaps, NULL for
--- none), so the caller can tell which caps it just carried a workspace across; and its tenant, the plan's
--- monthly allowance and what the tenant has posted this month with it (dbo.TenantCreditMonths), so the
--- caller can tell when the tenant crossed its allowance. Credits Run_DeleteRetired posts are not seen
--- here, so a crossing made only by them is not reported. Off the hot path: RunCounters_TryCharge only
--- adds to a run's own counter, and the engine calls this every few seconds (CreditUsagePoster).
+-- up to @BatchSize runs. Returns a row per workspace that posted: how many runs and credits it moved.
+-- The 80% and 100% notices are worked out afterwards from what the ledger holds (CreditNotices_GetDue),
+-- not from this post's step. Off the hot path: RunCounters_TryCharge only adds to a run's own counter,
+-- and the engine calls this every few seconds (CreditUsagePoster).
 -- Reads every counter marked as holding unposted credits (HasUnposted, set by each charge and the start
 -- cost), however long ago its run ended, through IX_RunCounters_Unposted. A run's
 -- PostedCredits moves in the same statement that reads its delta, so a retry never posts twice.
@@ -90,9 +87,9 @@ BEGIN
     IF EXISTS (SELECT 1 FROM @Posts)
         EXEC dbo.TenantCreditGrants_Draw @Posts = @Posts, @MonthStart = @MonthStart, @At = @Now;
 
-    -- Read before the commit, while the ledger rows just written are still held, so two posts that
-    -- meet on a workspace each see their own step across a cap.
-
+    -- SpentThisMonth to TenantSpentThisMonth are read by no engine from #741 on. They stay for one
+    -- release so an engine still on the earlier reader (the migrator runs before the engine is replaced,
+    -- or a rollback keeps this schema) still posts; remove them in the release after.
     SELECT
         w.WorkspaceId,
         w.Runs,

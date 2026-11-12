@@ -4,6 +4,7 @@ using Wbskt.Events.Billing;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Workflow.Engine.Host.HostedServices;
@@ -11,10 +12,12 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 /// <summary>
 /// Moves the credits runs consume into the ledger their plan's monthly allowance and their workspace's
 /// cap are counted against (<c>dbo.WorkspaceCreditUsage</c>), off the hot path: a step's charge only
-/// touches its run's own counter. Run_Start adds what runs have not posted yet, ended or not, so the
-/// lag here never lets a start through on credits already spent. Warns when a post carries a workspace
-/// to 80% or 100% of its cap (<see cref="WorkspaceCreditCapReachedEvent"/>), and a tenant to 80% or 100% of its
-/// plan's monthly credits (<see cref="TenantCreditAllowanceReachedEvent"/>). Runs on the active engine only.
+/// touches its run's own counter. Run_Start adds what runs have not posted yet, ended or not, so the lag here never
+/// lets a start through on credits already spent. Then announces each workspace that reached 80% or 100%
+/// of its cap (<see cref="WorkspaceCreditCapReachedEvent"/>) and each tenant that reached 80% or 100% of
+/// its plan's monthly credits (<see cref="TenantCreditAllowanceReachedEvent"/>), from what the ledger holds
+/// and what was already announced (<c>dbo.CreditNotices_GetDue</c>), marking each only once it is
+/// published. Runs on the active engine only.
 /// </summary>
 public sealed class CreditUsagePoster(
     TimeProvider clock,
@@ -28,11 +31,21 @@ public sealed class CreditUsagePoster(
     // Runs that keep charging would keep a full batch posting forever; the next tick picks up the rest.
     internal const int MaxBatchesPerTick = 20;
 
-    internal static readonly TimeSpan[] WarningRetryDelays = [TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5)];
+    // Notices are looked for after one that could not be published, at most once a minute after ticks
+    // that posted, and at least every five minutes, which also finds those owed for credits
+    // Run_DeleteRetired posted. The check reads every capped workspace and this month's tenants, so it
+    // does not run on every ten-second tick.
+    internal static readonly TimeSpan NoticeCheckAfterPost = TimeSpan.FromMinutes(1);
+    internal static readonly TimeSpan NoticeCheckInterval = TimeSpan.FromMinutes(5);
 
-    private bool _brokerDown;
+    // A notice still refused after this many checks in a row is logged as an error rather than a warning.
+    internal const int NoticeFailuresBeforeError = 10;
 
     private readonly ILogger<CreditUsagePoster> _logger = logger;
+
+    private DateTime _lastNoticeCheck = DateTime.MinValue;
+    private bool _noticesOwed;
+    private int _noticeFailures;
 
     protected override string Name => "Credit usage poster";
 
@@ -41,71 +54,67 @@ public sealed class CreditUsagePoster(
     protected override async Task RunOnceAsync(IServiceProvider services, CancellationToken ct)
     {
         var credits = services.GetRequiredService<ICreditUsageProvider>();
-        var eventBus = services.GetRequiredService<IEventBus>();
         DateTime nowUtc = clock.GetUtcNow().UtcDateTime;
+        bool posted = false;
         for (int batch = 0; batch < MaxBatchesPerTick; batch++)
         {
-            IReadOnlyCollection<WorkspaceCreditPost> posted = await credits.PostAsync(DateOnly.FromDateTime(nowUtc), BatchSize, ct);
-            await WarnAsync(eventBus, posted, ct);
+            IReadOnlyCollection<WorkspaceCreditPost> moved = await credits.PostAsync(DateOnly.FromDateTime(nowUtc), BatchSize, ct);
+            posted |= moved.Any(post => post.Credits > 0);
 
-            if (posted.Sum(post => post.Runs) < BatchSize)
+            if (moved.Sum(post => post.Runs) < BatchSize)
             {
-                return;
+                break;
             }
+        }
+
+        TimeSpan sinceCheck = nowUtc - _lastNoticeCheck;
+        if (_noticesOwed || sinceCheck >= NoticeCheckInterval || (posted && sinceCheck >= NoticeCheckAfterPost))
+        {
+            await AnnounceAsync(credits, services.GetRequiredService<IEventBus>(), nowUtc, ct);
         }
     }
 
-    // The crossing is worked out from this post's step, so it cannot be found again later: a warning is
-    // tried a few times before it is given up and logged; once one is given up the broker is taken to be
-    // down, and each is tried once until one goes through, so a long outage does not hold up the posting.
-    // The auth host sends each notice once.
-    private async Task WarnAsync(IEventBus eventBus, IReadOnlyCollection<WorkspaceCreditPost> posted, CancellationToken ct)
+    // A notice is marked only after it is published, so one the broker refuses stays owed and is tried
+    // again on the next tick. The auth host sends each notice once a month, so a publish whose mark is
+    // lost only repeats an event it ignores.
+    private async Task AnnounceAsync(ICreditUsageProvider credits, IEventBus eventBus, DateTime nowUtc, CancellationToken ct)
     {
-        foreach (WorkspaceCreditPost post in posted)
-        {
-            foreach (int percent in post.CapThresholdsCrossed())
-            {
-                await PublishAsync(
-                    eventBus,
-                    new WorkspaceCreditCapReachedEvent(post.WorkspaceId, percent, post.MonthlyCreditCap!.Value, post.SpentThisMonth),
-                    $"workspace {post.WorkspaceId} reached {percent}% of its credit cap",
-                    ct);
-            }
-        }
+        var monthStart = new DateOnly(nowUtc.Year, nowUtc.Month, 1);
+        _lastNoticeCheck = nowUtc;
 
-        foreach (TenantAllowanceCrossing crossed in WorkspaceCreditPost.AllowanceThresholdsCrossed(posted))
+        // Owed until a pass gets through every notice, so a failed read or mark is looked at again next tick.
+        _noticesOwed = true;
+        foreach (CreditNotice notice in await credits.GetDueNoticesAsync(monthStart, ct))
         {
-            await PublishAsync(
-                eventBus,
-                new TenantCreditAllowanceReachedEvent(crossed.WorkspaceId, crossed.TenantId, crossed.Percent, crossed.Allowance, crossed.Spent),
-                $"tenant {crossed.TenantId} reached {crossed.Percent}% of its monthly credits",
-                ct);
-        }
-    }
-
-    private async Task PublishAsync<TEvent>(IEventBus eventBus, TEvent warning, string what, CancellationToken ct)
-        where TEvent : IEvent
-    {
-        for (int attempt = 0; ; attempt++)
-        {
-            try
+            foreach (int percent in notice.Owed())
             {
-                await eventBus.PublishAsync(warning, ct);
-                _brokerDown = false;
-                return;
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                if (attempt == WarningRetryDelays.Length || _brokerDown)
+                try
                 {
-                    _brokerDown = true;
-                    _logger.LogError(ex, "Could not publish that {What}; the warning is lost", what);
+                    await eventBus.PublishAsync(EventFor(notice, percent), ct);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _noticeFailures++;
+                    _logger.Log(
+                        _noticeFailures >= NoticeFailuresBeforeError ? LogLevel.Error : LogLevel.Warning,
+                        ex,
+                        "Could not publish the {Percent}% credit {Kind} notice for workspace {WorkspaceId} ({Failures} checks in a row); it is tried again on the next tick",
+                        percent, notice.Kind, notice.WorkspaceId, _noticeFailures);
                     return;
                 }
 
-                _logger.LogWarning(ex, "Could not publish that {What}; trying again", what);
-                await Task.Delay(WarningRetryDelays[attempt], clock, ct);
+                await credits.MarkNotifiedAsync(notice, monthStart, percent, ct);
             }
         }
+
+        _noticesOwed = false;
+        _noticeFailures = 0;
     }
+
+    private static IEvent EventFor(CreditNotice notice, int percent) => notice switch
+    {
+        { Kind: CreditNoticeKind.Cap } => new WorkspaceCreditCapReachedEvent(notice.WorkspaceId, percent, notice.Limit, notice.Spent),
+        { Kind: CreditNoticeKind.Allowance, TenantId: { } tenantId } => new TenantCreditAllowanceReachedEvent(notice.WorkspaceId, tenantId, percent, notice.Limit, notice.Spent),
+        _ => throw new InvalidOperationException($"A {notice.Kind} credit notice for workspace {notice.WorkspaceId} has no tenant.")
+    };
 }

@@ -12,7 +12,17 @@ CREATE TABLE dbo.TenantCreditMonths
     Drawn      DECIMAL(18,4) NOT NULL CONSTRAINT DF_TenantCreditMonths_Drawn DEFAULT 0,
     UpdatedAt  DATETIME2(3)  NOT NULL CONSTRAINT DF_TenantCreditMonths_UpdatedAt DEFAULT SYSUTCDATETIME(),
     CreatedAt  DATETIME2(3)  NOT NULL CONSTRAINT DF_TenantCreditMonths_CreatedAt DEFAULT SYSUTCDATETIME(),
+    -- The highest share of the plan's allowance (0, 80 or 100) the tenant has been told it reached this
+    -- month. Raised by TenantCreditMonth_MarkNotified only after the notice is published, so a notice the
+    -- broker refused, or one owed when the engine stopped, is still found by CreditNotices_GetDue.
+    NotifiedPercent INT      NOT NULL CONSTRAINT DF_TenantCreditMonths_NotifiedPercent DEFAULT 0,
     CONSTRAINT PK_TenantCreditMonths PRIMARY KEY (TenantId, MonthStart),
     CONSTRAINT CK_TenantCreditMonths_Drawn CHECK (Drawn >= 0 AND Drawn <= Posted)
 );
+GO
+
+-- CreditNotices_GetDue reads one month's rows every few minutes; the key leads with TenantId.
+CREATE NONCLUSTERED INDEX IX_TenantCreditMonths_MonthStart
+    ON dbo.TenantCreditMonths (MonthStart)
+    INCLUDE (Posted, NotifiedPercent);
 GO
