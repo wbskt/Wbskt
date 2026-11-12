@@ -74,9 +74,15 @@ x-gateway: &gateway
       condition: service_healthy
   networks: [edge, backend]
   restart: unless-stopped
+  mem_limit: ${GATEWAY_MEM_LIMIT:-512m}
   logging: *default-logging
   stop_grace_period: 30s
 
+# Each container has a mem_limit, so a leak in one is killed and restarted on its own instead of
+# taking the VM's memory until the kernel kills the largest process, SQL Server. sql has none: its own
+# cap is SQL_MEMORY_LIMIT_MB. The defaults add up to about 5.6 GB beside SQL Server's ~2.3 GB, which
+# fits an 8 GB VM; HOST_MEM_LIMIT, GATEWAY_MEM_LIMIT (per replica) and PROMETHEUS_MEM_LIMIT are the
+# ones to raise or lower (see "Memory limits" in deploy/README.md).
 services:
   traefik:
     # v3.1/v3.5 fail against recent Docker Engine releases (their vendored Docker client
@@ -134,6 +140,7 @@ services:
       backend:
         ipv4_address: 172.28.1.2
     restart: unless-stopped
+    mem_limit: 192m
     logging: *default-logging
 
   console:
@@ -165,6 +172,7 @@ services:
       retries: 5
     networks: [edge]
     restart: unless-stopped
+    mem_limit: 64m
     logging: *default-logging
     labels:
       - traefik.enable=true
@@ -249,6 +257,7 @@ services:
         condition: service_healthy
     networks: [edge, backend]
     restart: unless-stopped
+    mem_limit: ${HOST_MEM_LIMIT:-384m}
     logging: *default-logging
     labels:
       - traefik.enable=true
@@ -318,6 +327,7 @@ services:
         condition: service_healthy
     networks: [edge, backend]
     restart: unless-stopped
+    mem_limit: ${HOST_MEM_LIMIT:-384m}
     logging: *default-logging
     deploy:
       replicas: ${MANAGEMENT_REPLICAS:-1}
@@ -369,6 +379,7 @@ services:
         condition: service_healthy
     networks: [edge, backend]
     restart: unless-stopped
+    mem_limit: ${HOST_MEM_LIMIT:-384m}
     logging: *default-logging
     deploy:
       replicas: ${CLIENT_AUTH_REPLICAS:-1}
@@ -485,6 +496,7 @@ services:
         condition: service_healthy
     networks: [backend]
     restart: unless-stopped
+    mem_limit: ${HOST_MEM_LIMIT:-384m}
     logging: *default-logging
     # Active/standby: one process holds the engine-leader lease and does all the work; any further
     # replica is a warm spare that takes over when the lease lapses.
@@ -529,12 +541,15 @@ services:
       start_period: 20s
     networks: [backend]
     restart: unless-stopped
+    mem_limit: 512m
     logging: *default-logging
 
   redis:
     image: redis:7
     container_name: wbskt-redis
-    command: ["redis-server", "--appendonly", "yes"]
+    # maxmemory sits under mem_limit, so a full Redis refuses writes (noeviction, its default) instead
+    # of being killed with its keys.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "192mb", "--maxmemory-policy", "noeviction"]
     volumes:
       - redis-data:/data
     healthcheck:
@@ -544,6 +559,7 @@ services:
       retries: 5
     networks: [backend]
     restart: unless-stopped
+    mem_limit: 256m
     logging: *default-logging
 
   sql:
@@ -590,6 +606,7 @@ services:
     # its own metrics on :8888 instead, and OtelCollectorDown fires when that stops answering.
     networks: [backend]
     restart: unless-stopped
+    mem_limit: 256m
     logging: *default-logging
 
   prometheus:
@@ -612,6 +629,7 @@ services:
       start_period: 30s
     networks: [backend]
     restart: unless-stopped
+    mem_limit: ${PROMETHEUS_MEM_LIMIT:-512m}
     logging: *default-logging
 
   alertmanager:
@@ -635,6 +653,7 @@ services:
       - "127.0.0.1:9093:9093"
     networks: [backend]
     restart: unless-stopped
+    mem_limit: 64m
     logging: *default-logging
 
   pushgateway:
@@ -653,6 +672,7 @@ services:
       - "127.0.0.1:9091:9091"
     networks: [backend]
     restart: unless-stopped
+    mem_limit: 64m
     logging: *default-logging
 
   # Host metrics: free space on every real filesystem (/, the image store, the SQL volume) for
@@ -670,6 +690,7 @@ services:
       - /:/host:ro,rslave
     networks: [backend]
     restart: unless-stopped
+    mem_limit: 64m
     logging: *default-logging
 
   # Per-container metrics, for ContainerRestarting: a host that crashes and is restarted by
@@ -695,6 +716,7 @@ services:
       - /dev/disk/:/dev/disk:ro
     networks: [backend]
     restart: unless-stopped
+    mem_limit: 192m
     logging: *default-logging
 
   loki:
@@ -713,6 +735,7 @@ services:
       start_period: 60s
     networks: [backend]
     restart: unless-stopped
+    mem_limit: 384m
     logging: *default-logging
 
   tempo:
@@ -731,6 +754,7 @@ services:
       start_period: 60s
     networks: [backend]
     restart: unless-stopped
+    mem_limit: 384m
     logging: *default-logging
 
   grafana:
@@ -754,6 +778,7 @@ services:
       start_period: 60s
     networks: [backend]
     restart: unless-stopped
+    mem_limit: 256m
     logging: *default-logging
 
   migrator:
@@ -762,6 +787,8 @@ services:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.migrator
     container_name: wbskt-migrator
+    # sqlpackage holds the whole model in memory while it plans a deploy.
+    mem_limit: 1g
     profiles: ["migrate"]
     environment:
       AUTH_DB_CONNECTION_STRING: Server=sql;Database=Wbskt.Database.Auth;User Id=sa;Password=${SQL_SA_PASSWORD:?SQL_SA_PASSWORD is required - see .env.example};TrustServerCertificate=True;Encrypt=True;

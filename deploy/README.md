@@ -434,8 +434,8 @@ down for well under a minute and the hosts reconnect on their own, but do it at 
 docker compose up -d --no-deps sql rabbitmq
 ```
 
-The stack adds nine containers and roughly 1.2 GB of memory at idle. On a 4 GB VM, add swap first
-(see Fresh install).
+The stack adds nine containers and roughly 1.2 GB of memory at idle (their caps are under Memory limits).
+On a 4 GB VM, add swap first (see Fresh install).
 
 ### Dashboards
 
@@ -658,6 +658,33 @@ unconfirmed address, and confirming one requires mail the auth host can only sen
 With none configured it logs an error at startup saying so, and accounts created in the meantime
 stay unusable until their owner asks for a fresh link through `POST /api/auth/resend-verification`.
 See [Mail relay: required before production](#mail-relay-required-before-production).
+
+## Memory limits
+
+Every container except `sql` has a `mem_limit`. A container that leaks, or Loki, Tempo or Prometheus
+growing under a burst of telemetry, is killed and restarted on its own (`docker inspect` shows
+`OOMKilled`, and `ContainerRestarting` pages if it keeps happening) instead of taking the VM's memory
+until the kernel's OOM killer picks the largest process, which is SQL Server. SQL Server's own cap is
+`SQL_MEMORY_LIMIT_MB`.
+
+| Containers | Limit |
+|---|---|
+| auth, management, client-auth, engine (each replica) | `HOST_MEM_LIMIT`, default `384m` |
+| gateway-ws, gateway-mqtt (each replica) | `GATEWAY_MEM_LIMIT`, default `512m` |
+| prometheus | `PROMETHEUS_MEM_LIMIT`, default `512m` |
+| rabbitmq | 512m (RabbitMQ blocks publishers at 60% of it) |
+| loki, tempo | 384m each |
+| redis | 256m, with `maxmemory 192mb` so a full Redis refuses writes instead of being killed |
+| otel-collector, grafana | 256m each |
+| traefik, cadvisor | 192m each |
+| console, alertmanager, pushgateway, node-exporter | 64m each |
+| migrator (one-shot) | 1g |
+
+With one replica of everything the limits add up to about 5.6 GB, and SQL Server takes about
+2.3 GB beside them, so the whole stack fits an 8 GB VM without swap. Each extra replica adds its
+limit. On a smaller VM, lower `HOST_MEM_LIMIT` and keep swap on; on a busier one, raise
+`GATEWAY_MEM_LIMIT` first, since the gateways hold every open client connection. A change takes
+effect when the container is recreated (`docker compose up -d <service>`).
 
 ## SQL placement
 
