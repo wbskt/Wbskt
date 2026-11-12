@@ -292,6 +292,14 @@
       },
       "CreditPackOffer": {
         "properties": {
+          "amountUsd": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
           "credits": {
             "format": "double",
             "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
@@ -306,7 +314,8 @@
         },
         "required": [
           "name",
-          "credits"
+          "credits",
+          "amountUsd"
         ],
         "type": "object"
       },
@@ -763,6 +772,14 @@
       },
       "PlanOffer": {
         "properties": {
+          "amountUsd": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
           "interval": {
             "$ref": "#/components/schemas/BillingInterval"
           },
@@ -772,7 +789,8 @@
         },
         "required": [
           "plan",
-          "interval"
+          "interval",
+          "amountUsd"
         ],
         "type": "object"
       },

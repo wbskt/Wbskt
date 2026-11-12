@@ -66,10 +66,14 @@ internal sealed class TenantBillingService(
                 subscription.ScheduledInterval,
                 subscription.ScheduledAt?.ToUtcOffset()),
             gateway.IsConfigured
-                ? offers.Plans.SelectMany(p => p.Value.Where(i => !string.IsNullOrEmpty(i.Value)).Select(i => new PlanOffer(p.Key, i.Key))).OrderBy(o => o.Plan).ThenBy(o => o.Interval).ToList()
+                ? offers.Plans
+                    .SelectMany(p => p.Value
+                        .Where(i => !string.IsNullOrEmpty(i.Value) && PlanPrices.UsdFor(p.Key, i.Key) is not null)
+                        .Select(i => new PlanOffer(p.Key, i.Key, PlanPrices.UsdFor(p.Key, i.Key) ?? 0m)))
+                    .OrderBy(o => o.Plan).ThenBy(o => o.Interval).ToList()
                 : [],
             gateway.IsConfigured
-                ? offers.CreditPacks.Where(p => !string.IsNullOrEmpty(p.Value.ProductId) && p.Value.Credits > 0).Select(p => new CreditPackOffer(p.Key, p.Value.Credits)).OrderBy(o => o.Credits).ToList()
+                ? offers.CreditPacks.Where(p => !string.IsNullOrEmpty(p.Value.ProductId) && p.Value.Credits > 0).Select(p => new CreditPackOffer(p.Key, p.Value.Credits, p.Value.PriceUsd)).OrderBy(o => o.Credits).ToList()
                 : []);
     }
 
