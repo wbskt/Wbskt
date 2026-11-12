@@ -86,11 +86,13 @@ BEGIN
 
     -- Its clients' readings are cleared outright, in batches (dbo.ClientReadings_Compact), as a deleted
     -- client's are: nobody can read them any more, and the plan's days would keep them for up to two years.
+    -- The check locks the key, so a Client_Delete queuing one of them at the same moment waits rather
+    -- than failing this whole retire on the primary key.
     INSERT INTO dbo.DeletedClientReadings (ClientId)
     SELECT C.Id
     FROM dbo.Clients C
     WHERE C.WorkspaceId = @WorkspaceId
-      AND NOT EXISTS (SELECT 1 FROM dbo.DeletedClientReadings D WHERE D.ClientId = C.Id);
+      AND NOT EXISTS (SELECT 1 FROM dbo.DeletedClientReadings D WITH (UPDLOCK, HOLDLOCK) WHERE D.ClientId = C.Id);
 
     COMMIT TRANSACTION;
 
