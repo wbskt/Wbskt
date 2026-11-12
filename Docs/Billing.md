@@ -370,8 +370,12 @@ $0.50 per 1,000 a pack costs more per credit than any plan (Maker gives 5,000 a 
   copy, so an operator's plan still ends on time.
 - **A second subscription paid for anyway** (two checkouts paid at once) is a duplicate: it is marked
   (`dbo.TenantSubscription_MarkDuplicate`), cancelled with the provider, and its payment refunded in full
-  once (`dbo.TenantSubscription_ClaimDuplicateRefund`; a refused refund releases the claim, so the next
-  event asks again). The tenant keeps the plan of its first subscription.
+  once (`dbo.TenantSubscription_ClaimDuplicateRefund`). A refund the provider answered with a refusal
+  gives the claim back, so the next event asks again. A refund that got no answer (a timeout, a dropped
+  connection, the host stopping) may still have gone through, so its claim is kept and never asked for
+  twice: the error log names the payment, and an operator checks it in the provider's dashboard and
+  refunds by hand if needed (`DuplicateRefundClaimedAt` says when it was claimed). The tenant keeps the
+  plan of its first subscription.
 - **Chargebacks.** A payment whose dispute is open puts a credit pack on hold (see Credits); a lost
   dispute counts as a full refund, for a pack and for a subscription payment. A won or withdrawn dispute
   changes nothing.
@@ -385,7 +389,8 @@ $0.50 per 1,000 a pack costs more per credit than any plan (Maker gives 5,000 a 
   refund revokes the grant. Partial refunds are not offered: one would change nothing here, and the
   tenant would keep every credit of the pack.
 - **Refunds of a subscription payment** withhold the paid plan until the subscription has been paid past
-  the refunded period. A partial refund changes nothing.
+  the refunded period, a month or a year by the plan the payment's lines name, or by the subscription's
+  own product when the payment carries none. A partial refund changes nothing.
 - **Reading.** `GET /api/v1/tenants/{tenantRef}/billing` (`billing.read`) answers the plan, the
   subscription (status, period end, whether it ends there, when it fell past due) and what is on offer.
   Offers are empty while payments are off.
@@ -407,10 +412,11 @@ exists, nothing is deleted: 503 `BILLING_SUBSCRIPTION_NOT_CANCELLED`, and the ca
   Once started, `PaymentGatewayCheck` asks the provider whether it accepts the API key and logs a
   Critical line if not (usually a key for the other mode).
 - Webhook outcomes are counted (`wbskt_auth_billing_webhooks_total{type,outcome}`: `done`, `set_aside`,
-  `failed`, `signature_invalid`). `BillingWebhooksSetAside` fires on any webhook set aside in an hour (a
+  `failed`, `signature_invalid`, and `signature_missing` for a request with no signature at all, such as
+  a scanner). `BillingWebhooksSetAside` fires on any webhook set aside in an hour (a
   payment that may have reached no tenant), `BillingWebhooksFailing` on more than five failures in an
-  hour, and `BillingWebhookSignaturesRefused` (critical) on more than three refused signatures in 30
-  minutes: the provider stops redelivering after about a day, so a secret rotated on one side only has
+  hour, and `BillingWebhookSignaturesRefused` (critical) on more than two signatures that do not
+  hold up in two hours: the provider stops redelivering after about a day, so a secret rotated on one side only has
   to be fixed before then, and the refused deliveries replayed from its dashboard.
 - A subscription that still reads `active` a day after the period it paid for ended is read again from
   the provider by the hourly review, so a renewal or cancellation whose webhook never arrived is

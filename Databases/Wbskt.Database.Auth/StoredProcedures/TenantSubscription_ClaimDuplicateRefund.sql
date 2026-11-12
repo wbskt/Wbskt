@@ -1,15 +1,14 @@
 -- Claims the refund of a duplicate subscription's payment, so it is asked for once: sets
 -- DuplicateRefundPaymentId when the subscription is marked a duplicate and nothing was claimed yet, or
--- clears it again (@Release = 1) when the refund failed. A claim on the same payment older than
--- @StaleAfterSeconds is taken again: its refund was never answered (the host stopped mid-call), and the
--- caller asks only while the provider still shows the payment as not refunded. Returns 1 when it changed.
+-- clears it again (@Release = 1) when the provider refused the refund. DuplicateRefundClaimedAt records
+-- when it was claimed: a claim whose refund got no answer is kept, so it is never asked for twice, and an
+-- operator finds it by that time. Returns 1 when it changed.
 CREATE PROCEDURE dbo.TenantSubscription_ClaimDuplicateRefund
     @Provider          NVARCHAR(40),
     @SubscriptionId    NVARCHAR(200),
     @PaymentId         NVARCHAR(200),
     @Release           BIT = 0,
-    @Now               DATETIME2(3) = NULL,
-    @StaleAfterSeconds INT = 900
+    @Now               DATETIME2(3) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -30,9 +29,7 @@ BEGIN
             DuplicateRefundClaimedAt = @Now
         WHERE Provider = @Provider AND SubscriptionId = @SubscriptionId
           AND DuplicateAt IS NOT NULL
-          AND (DuplicateRefundPaymentId IS NULL
-               OR (DuplicateRefundPaymentId = @PaymentId
-                   AND (DuplicateRefundClaimedAt IS NULL OR DuplicateRefundClaimedAt <= DATEADD(SECOND, -@StaleAfterSeconds, @Now))));
+          AND DuplicateRefundPaymentId IS NULL;
     END
 
     SELECT @@ROWCOUNT;

@@ -240,7 +240,7 @@ public sealed class BillingPaymentsTests
         ProviderSays(new ProviderSubscription("sub_second", SubscriptionStatus.Cancelled, "prod_pro_m", "cus_1", TenantRef, Now.AddMonths(1), false));
         PaymentSays(new ProviderPayment("pay_2", true, "cus_1", TenantRef, "sub_second", [new PaymentLine("prod_pro_m", 1)], false, Now));
         _gateway.SetupSequence(g => g.RefundPaymentAsync("pay_2", It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new HttpRequestException("down"))
+            .ThrowsAsync(new HttpRequestException("refused", null, HttpStatusCode.UnprocessableEntity))
             .Returns(Task.CompletedTask);
 
         await Assert.ThrowsAsync<HttpRequestException>(() => Sync().SyncPaymentAsync("pay_2", CancellationToken.None));
@@ -252,11 +252,11 @@ public sealed class BillingPaymentsTests
     }
 
     /// <summary>
-    /// A refund call that times out throws a cancellation, which used to keep the claim, so every
-    /// redelivery skipped the refund and the customer was never paid back.
+    /// A refund call that times out may still have reached the provider. Asking again on the next delivery
+    /// could refund twice, so the claim is kept and the error is left for an operator.
     /// </summary>
     [Fact]
-    public async Task A_refund_that_times_out_gives_the_claim_back()
+    public async Task A_refund_that_gets_no_answer_keeps_its_claim()
     {
         _stored.Add(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(28)) with { SubscriptionId = "sub_first", CreatedAt = Now.UtcDateTime.AddMinutes(-2) });
         _stored.Add(Subscription(SubscriptionStatus.Cancelled, Now.UtcDateTime.AddDays(30)) with { SubscriptionId = "sub_second", DuplicateAt = Now.UtcDateTime, CreatedAt = Now.UtcDateTime });
@@ -267,15 +267,15 @@ public sealed class BillingPaymentsTests
 
         await Assert.ThrowsAsync<TaskCanceledException>(() => Sync().SyncPaymentAsync("pay_2", CancellationToken.None));
 
-        _billing.Verify(b => b.ClaimDuplicateRefundAsync("dodo", "sub_second", "pay_2", true, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+        _billing.Verify(b => b.ClaimDuplicateRefundAsync("dodo", "sub_second", "pay_2", true, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     /// <summary>
-    /// A host that stopped between the claim and the provider's answer leaves the claim on the payment.
-    /// The next delivery passes it to the procedure again, which takes it once it is stale.
+    /// A claim already on the payment is a refund asked for before, answered or not, so a later delivery
+    /// does not ask again.
     /// </summary>
     [Fact]
-    public async Task A_claim_left_on_the_same_payment_is_offered_again()
+    public async Task A_claim_already_on_the_payment_is_not_refunded_again()
     {
         _stored.Add(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(28)) with { SubscriptionId = "sub_first", CreatedAt = Now.UtcDateTime.AddMinutes(-2) });
         _stored.Add(Subscription(SubscriptionStatus.Cancelled, Now.UtcDateTime.AddDays(30)) with { SubscriptionId = "sub_second", DuplicateAt = Now.UtcDateTime, DuplicateRefundPaymentId = "pay_2", CreatedAt = Now.UtcDateTime });
@@ -284,8 +284,29 @@ public sealed class BillingPaymentsTests
 
         await Sync().SyncPaymentAsync("pay_2", CancellationToken.None);
 
-        _billing.Verify(b => b.ClaimDuplicateRefundAsync("dodo", "sub_second", "pay_2", false, Now.UtcDateTime, It.IsAny<CancellationToken>()), Times.Once);
-        _gateway.Verify(g => g.RefundPaymentAsync("pay_2", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _billing.Verify(b => b.ClaimDuplicateRefundAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+        _gateway.Verify(g => g.RefundPaymentAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>
+    /// The provider refused, and giving the claim back failed too. The refusal is what surfaces, so the
+    /// webhook is retried for the reason that matters.
+    /// </summary>
+    [Fact]
+    public async Task A_failed_release_does_not_hide_the_refusal()
+    {
+        _stored.Add(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(28)) with { SubscriptionId = "sub_first", CreatedAt = Now.UtcDateTime.AddMinutes(-2) });
+        _stored.Add(Subscription(SubscriptionStatus.Cancelled, Now.UtcDateTime.AddDays(30)) with { SubscriptionId = "sub_second", DuplicateAt = Now.UtcDateTime, CreatedAt = Now.UtcDateTime });
+        ProviderSays(new ProviderSubscription("sub_second", SubscriptionStatus.Cancelled, "prod_pro_m", "cus_1", TenantRef, Now.AddMonths(1), false));
+        PaymentSays(new ProviderPayment("pay_2", true, "cus_1", TenantRef, "sub_second", [new PaymentLine("prod_pro_m", 1)], false, Now));
+        _gateway.Setup(g => g.RefundPaymentAsync("pay_2", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("refused", null, HttpStatusCode.UnprocessableEntity));
+        _billing.Setup(b => b.ClaimDuplicateRefundAsync("dodo", "sub_second", "pay_2", true, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("database down"));
+
+        var thrown = await Assert.ThrowsAsync<HttpRequestException>(() => Sync().SyncPaymentAsync("pay_2", CancellationToken.None));
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, thrown.StatusCode);
     }
 
     [Fact]
@@ -466,6 +487,23 @@ public sealed class BillingPaymentsTests
         _planService.Verify(p => p.SetAsync(TenantRef, It.Is<SetTenantPlanRequest>(r => r.PlanCode == PlanCode.Free), It.IsAny<PlanSource>(), It.IsAny<CancellationToken>()));
     }
 
+    /// <summary>
+    /// The payment paid for a month, and the subscription has since moved to a yearly product. The refunded
+    /// period is the month the payment's lines name, not a year.
+    /// </summary>
+    [Fact]
+    public async Task A_refunded_payment_marks_the_period_its_own_plan_paid_for()
+    {
+        Tenant = Tenant with { PlanCode = PlanCode.Maker };
+        PaymentSays(new ProviderPayment("pay_4", true, "cus_1", TenantRef, "sub_1", [new PaymentLine("prod_maker_m", 1)], true, Now.AddDays(-3)));
+        ProviderSays(new ProviderSubscription("sub_1", SubscriptionStatus.Active, "prod_maker_y", "cus_1", TenantRef, Now.AddDays(360), false));
+
+        await Sync().SyncPaymentAsync("pay_4", CancellationToken.None);
+
+        DateTime expected = SubscriptionPlan.RefundedThrough(Now.UtcDateTime.AddDays(-3), BillingInterval.Monthly);
+        _billing.Verify(b => b.UpsertSubscriptionAsync(It.IsAny<TenantSubscription>(), It.IsAny<DateTime>(), expected, It.IsAny<CancellationToken>()));
+    }
+
     [Fact]
     public async Task A_review_falls_back_to_the_stored_copy_when_the_provider_no_longer_knows_the_subscription()
     {
@@ -523,7 +561,7 @@ public sealed class BillingPaymentsTests
         listener.Start();
 
         await new BillingWebhookService(_gateway.Object, _billing.Object, Sync(), metrics, NullLogger<BillingWebhookService>.Instance)
-            .ReceiveAsync("dodo", new Dictionary<string, string>(), "{}", CancellationToken.None);
+            .ReceiveAsync("dodo", new Dictionary<string, string> { ["webhook-signature"] = "v1,forged" }, "{}", CancellationToken.None);
 
         Assert.Equal(1, Interlocked.Read(ref refused));
     }
