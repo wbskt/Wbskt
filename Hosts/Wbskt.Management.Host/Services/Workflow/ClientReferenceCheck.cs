@@ -14,9 +14,9 @@ namespace Wbskt.Management.Host.Services.Workflow;
 /// or a trigger listens for is one of the workspace's, and is registered. A missing one is an error:
 /// every command to it fails and its triggers never fire. One that is pending, revoked or rejected is a
 /// warning, since its status can change back. It looks only at references that are client ids:
-/// <see cref="WorkflowValidator"/> requires one where a key is built from it (a presence trigger, a held
-/// client trigger), and a plain client trigger may name the client as the socket host sends it. This runs
-/// after the validator on publish and draft validation.
+/// <see cref="WorkflowValidator"/> requires one for a send step and where a key is built from it (a
+/// presence trigger, a held client trigger), and a plain client trigger may name the client as the
+/// socket host sends it. This runs after the validator on publish and draft validation.
 /// </summary>
 public sealed class ClientReferenceCheck(IClientProvider clients)
 {

@@ -438,7 +438,7 @@ public sealed partial class WorkflowValidator
                     {
                         // A hold key is built from the parsed GUID, as presence keys are; a plain message
                         // trigger matches the client reference as the socket host sends it.
-                        ValidateTriggerClient(node.NodeId, "Client trigger", clientConfig.ClientRef, needsClientId: clientConfig.HoldSeconds > 0, issues);
+                        ValidateTriggerClient(node.NodeId, "Client trigger", clientConfig.ClientRef, needsClientId: clientConfig.HoldSeconds is > 0 and <= ClientTriggerConfig.MaxHoldSeconds, issues);
                         if (string.IsNullOrWhiteSpace(clientConfig.Type))
                         {
                             issues.Add(new ValidationIssue(
