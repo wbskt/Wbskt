@@ -41,7 +41,7 @@ public sealed class RunRecoveryService : IEngineStartupTracker
             int released = await idempotencyKeyProvider.ReleaseAbandonedClaimsAsync(ct);
             if (released > 0)
             {
-                _logger.LogWarning("Released {Count} event claims a stopped engine left mid-dispatch; their redeliveries will be handled.", released);
+                _logger.LogWarning("Released {Count} event claims a stopped engine left mid-dispatch, for their redeliveries to reclaim; any trigger start among them whose run exists was then settled for recovery.", released);
             }
         }
         catch (Exception ex)

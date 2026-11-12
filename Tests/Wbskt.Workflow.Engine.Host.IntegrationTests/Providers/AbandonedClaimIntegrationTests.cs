@@ -8,7 +8,8 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 
 /// <summary>
 /// IdempotencyKey_ReleaseAbandonedClaims (#770): a new leader marks the event claims a stopped engine left
-/// Pending as Failed, so the broker's redelivery reclaims them instead of dropping them as duplicates.
+/// Pending as Failed, so the broker's redelivery reclaims them instead of dropping them as duplicates, and
+/// settles the trigger starts whose run exists, since its recovery runs them.
 /// </summary>
 [Collection("SqlEdge")]
 public sealed class AbandonedClaimIntegrationTests(SqlEdgeFixture fixture)
@@ -24,7 +25,9 @@ public sealed class AbandonedClaimIntegrationTests(SqlEdgeFixture fixture)
         string triggerStart = $"trigger-start:1:{suffix}";
         string action = $"action:1:{suffix}";
         string settled = $"inbound-event:settled-{suffix}";
-        foreach (string key in new[] { inbound, triggerStart, action, settled })
+        Guid abandonedToken = Guid.NewGuid();
+        await keys.UpsertPendingAsync(inbound, 0, abandonedToken, Guid.Empty, 0, CancellationToken.None);
+        foreach (string key in new[] { triggerStart, action, settled })
         {
             await keys.UpsertPendingAsync(key, 0, Guid.NewGuid(), Guid.Empty, 0, CancellationToken.None);
         }
@@ -39,6 +42,11 @@ public sealed class AbandonedClaimIntegrationTests(SqlEdgeFixture fixture)
         (await keys.GetByKeyAsync(triggerStart, CancellationToken.None)).Status.Should().Be("Failed");
         (await keys.GetByKeyAsync(action, CancellationToken.None)).Status.Should().Be("Pending");
         (await keys.GetByKeyAsync(settled, CancellationToken.None)).Status.Should().Be("Succeeded");
+
+        // An overlapping old leader still finishing the claim no longer holds it, so its settle misses.
+        IdempotencyKeyRow late = await keys.MarkClaimSucceededAsync(inbound, abandonedToken, "{}", CancellationToken.None);
+        late.Status.Should().Be("Failed");
+        late.BranchRefId.Should().NotBe(abandonedToken);
 
         // The redelivery's own claim then takes the released one over.
         Guid redelivery = Guid.NewGuid();

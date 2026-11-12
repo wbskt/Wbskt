@@ -548,14 +548,36 @@ public sealed class TriggerDispatcherTests
         var idempotency = new InMemoryIdempotencyKeyProvider();
         string startKey = "trigger-start:5:" + EventHash("evt-1");
         idempotency.TakeOverBeforeSettle.Add(startKey);
+        var runDispatcher = new RecordingRunDispatcher([]);
         var dispatcher = CreateDispatcher(
             bookmarkResumer: new RecordingBookmarkResumer(new BookmarkMatchResult(false, null, false, "inbound-event:evt-1")),
             triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel)),
+            runDispatcher: runDispatcher,
             idempotency: idempotency);
 
         await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
 
         Assert.Equal(IdempotencyKeyStatus.Pending, idempotency.Find(startKey)!.Status);
+
+        // The new holder's recovery or redelivery hands the run's branch over; this attempt must not too.
+        Assert.Empty(runDispatcher.Requests);
+    }
+
+    [Fact]
+    public async Task A_start_whose_request_is_cancelled_after_its_run_was_written_still_settles()
+    {
+        // Left unsettled, the start's claim would be reclaimed by the redelivery, which finds the run and
+        // hands its branch to the pump a second time.
+        var idempotency = new InMemoryIdempotencyKeyProvider { HonourCancellation = true };
+        string startKey = "trigger-start:5:" + EventHash("evt-1");
+        var dispatcher = CreateDispatcher(
+            bookmarkResumer: new RecordingBookmarkResumer(new BookmarkMatchResult(false, null, false, "inbound-event:evt-1")),
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel)),
+            idempotency: idempotency);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => dispatcher.DispatchAsync(CreateInboundEvent(), new CancellationToken(canceled: true)));
+
+        Assert.Equal(IdempotencyKeyStatus.Succeeded, idempotency.Find(startKey)!.Status);
     }
 
     [Fact]
@@ -995,6 +1017,9 @@ public sealed class TriggerDispatcherTests
         /// <summary>Every token-guarded settle, with the token it carried.</summary>
         public List<(string KeyValue, Guid ClaimToken)> ClaimSettles { get; } = [];
 
+        /// <summary>Settles throw on a cancelled token before writing, as the real provider's commands do.</summary>
+        public bool HonourCancellation { get; init; }
+
         /// <summary>Keys another holder reclaims just before this attempt's settle, as a redelivery after a release would.</summary>
         public HashSet<string> TakeOverBeforeSettle { get; } = [];
 
@@ -1074,6 +1099,11 @@ public sealed class TriggerDispatcherTests
 
         public Task<IdempotencyKeyRow> MarkClaimSucceededAsync(string keyValue, Guid claimToken, string resultJson, CancellationToken ct)
         {
+            if (HonourCancellation)
+            {
+                ct.ThrowIfCancellationRequested();
+            }
+
             lock (_gate)
             {
                 ClaimSettles.Add((keyValue, claimToken));
