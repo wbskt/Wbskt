@@ -23,32 +23,45 @@ jobs:
   probe:
     if: ${{ vars.PROBE_DOMAIN != '' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Well above the slowest probe: a host that drops packets costs each URL about 2 minutes of
+    # connect timeouts and retries, and the URLs are probed side by side.
+    timeout-minutes: 10
+    outputs:
+      failed: ${{ steps.probe.outputs.failed }}
     steps:
       - name: Probe the public endpoints
+        id: probe
         env:
           DOMAIN: ${{ vars.PROBE_DOMAIN }}
         run: |
           set -uo pipefail
-          # Readiness, so a host that is up but cannot reach SQL or the broker counts as down. Three
-          # tries a few seconds apart, so one dropped connection is not an outage.
+          # Readiness, so a host that is up but cannot reach SQL or the broker counts as down. Five
+          # tries over about a minute, any error included (--fail makes Traefik's 404 for a host with
+          # no healthy replica one), so a deploy's restart of a single replica is ridden out.
           urls=(
             "https://auth.$DOMAIN/healthz/ready"
             "https://api.$DOMAIN/healthz/ready"
             "https://ws.$DOMAIN/healthz/ready"
             "https://console.$DOMAIN/"
           )
-          failed=0
-          for url in "${urls[@]}"; do
-            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 --retry 2 --retry-delay 5 --retry-all-errors "$url") || code="${code:-000}"
+          dir=$(mktemp -d)
+          for i in "${!urls[@]}"; do
+            curl -sS --fail -o /dev/null -w '%{http_code}' --connect-timeout 10 --max-time 15 \
+              --retry 4 --retry-delay 15 --retry-all-errors "${urls[$i]}" > "$dir/$i" 2>/dev/null &
+          done
+          wait
+          failed=()
+          for i in "${!urls[@]}"; do
+            code=$(cat "$dir/$i")
             if [[ "$code" == 2* ]]; then
-              echo "ok    $code $url"
+              echo "ok    $code ${urls[$i]}"
             else
-              echo "::error::$url answered $code"
-              failed=1
+              echo "::error::${urls[$i]} answered ${code:-nothing}"
+              failed+=("${urls[$i]} (${code:-no answer})")
             fi
           done
-          exit "$failed"
+          echo "failed=${failed[*]}" >> "$GITHUB_OUTPUT"
+          [[ ${#failed[@]} -eq 0 ]]
 
   report:
     needs: probe
@@ -64,4 +77,5 @@ jobs:
       - name: Open or close the outage issue
         env:
           GH_TOKEN: ${{ github.token }}
+          FAILED: ${{ needs.probe.outputs.failed }}
         run: .github/scripts/report-outside-probe.sh "${{ needs.probe.result }}"

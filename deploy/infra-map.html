@@ -1051,7 +1051,7 @@ function buildPipeline() {
     <div class="stages">
       <div class="stage"><b>03:00 nightly-stress.yml</b><span>hosts from source; the thousand-run concurrency scenario and the load tester holding 200 clients, its account put on Team first through the internal plan route</span></div>
       <div class="stage"><b>03:30 nightly-conformance.yml</b><span>same hosts; the conformance suite's live scenarios through the .NET harness from wbskt/Wbskt.DotNet master, checking the fake still matches the gateway; fails if they skip</span></div>
-      <div class="stage"><b>every 10 min outside-probe.yml</b><span>from outside the VM: readiness of auth., api. and ws.&lt;PROBE_DOMAIN&gt; and the console; a failure opens the issue “Outside probe failing”, the next pass closes it. Off until the PROBE_DOMAIN repository variable is set</span></div>
+      <div class="stage"><b>every 10 min outside-probe.yml</b><span>from outside the VM: readiness of auth., api. and ws.&lt;PROBE_DOMAIN&gt; and the console; retried for about a minute; a failure opens (or reopens) the issue “Outside probe failing”, the next pass closes it. Off until the PROBE_DOMAIN repository variable is set</span></div>
       <div class="stage"><b>On a failed scheduled run</b><span>report-nightly-failure.sh opens the issue “Nightly run failing: &lt;workflow&gt;”, or comments on the one already open</span></div>
     </div></div>
   <div class="twocol">
