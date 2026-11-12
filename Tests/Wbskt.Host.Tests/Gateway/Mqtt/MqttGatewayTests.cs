@@ -215,9 +215,32 @@ public sealed class MqttGatewayTests : IAsyncLifetime
         await fresh.PublishStringAsync(MqttBinding.UpTopic(ClientRefId), Message);
 
         await WaitUntilAsync(() => Published<ClientMessageReceivedEvent>().Any(e => e.ClientRefId == ClientRefId && e.Type == "temperature"));
-        await _connections.GetConnection(ClientRefId)!.SendAsync(new ProtocolMessage("cmd.relay", new { on = true }), CancellationToken.None);
+        var current = _connections.GetConnection(ClientRefId)!;
+        await current.SendAsync(new ProtocolMessage("cmd.relay", new { on = true }), CancellationToken.None);
         Assert.Equal(MqttBinding.DownTopic(ClientRefId), (await received.Task.WaitAsync(Patience)).Topic);
+        await WaitUntilAsync(() => !first!.IsOpen);
+        await Task.Delay(200);
         Assert.Empty(Published<ClientDisconnectedEvent>());
+
+        // And the new connection is the one its disconnect ends.
+        await fresh.DisconnectAsync();
+        await WaitUntilAsync(() => !current.IsOpen);
+        await WaitUntilAsync(() => Published<ClientDisconnectedEvent>().Any());
+        await Task.Delay(200);
+        Assert.Single(Published<ClientDisconnectedEvent>());
+    }
+
+    [Fact]
+    public async Task Clients_connecting_at_once_each_get_their_own_session()
+    {
+        // Each connection is handed to its session by its TCP endpoint, so every client must have its own.
+        var refIds = Enumerable.Range(0, 8).Select(i => Guid.Parse($"{i:x8}-2222-3333-4444-555555555555")).ToList();
+
+        var clients = await Task.WhenAll(refIds.Select(refId => ConnectAsync(refId: refId)));
+        await Task.WhenAll(clients.Select((client, i) => client.PublishStringAsync(MqttBinding.UpTopic(refIds[i]), Message)));
+
+        await WaitUntilAsync(() => refIds.All(refId => Published<ClientMessageReceivedEvent>().Any(e => e.ClientRefId == refId)));
+        Assert.All(refIds, refId => Assert.NotNull(_connections.GetConnection(refId)));
     }
 
     [Fact]
@@ -292,18 +315,18 @@ public sealed class MqttGatewayTests : IAsyncLifetime
         await WaitUntilAsync(() => Published<ClientMessageReceivedEvent>().Any(e => e.ClientRefId == ClientRefId));
     }
 
-    private string Token() =>
-        new JwtService(_keys, JwtIssuers.Management).GenerateToken(ClientClaims.For(ClientRefId, "sensor", Guid.NewGuid(), 42, 7), JwtAudiences.Socket, TimeSpan.FromMinutes(15));
+    private string Token(Guid? refId = null) =>
+        new JwtService(_keys, JwtIssuers.Management).GenerateToken(ClientClaims.For(refId ?? ClientRefId, "sensor", Guid.NewGuid(), 42, 7), JwtAudiences.Socket, TimeSpan.FromMinutes(15));
 
-    private MqttClientOptions ClientOptions(string? token, string? clientId, MqttProtocolVersion version, bool cleanSession = true) => new MqttClientOptionsBuilder()
+    private MqttClientOptions ClientOptions(string? token, string? clientId, MqttProtocolVersion version, bool cleanSession = true, Guid? refId = null) => new MqttClientOptionsBuilder()
         .WithTcpServer("127.0.0.1", _gateway.Listener.Port)
-        .WithClientId(clientId ?? ClientRefId.ToString())
-        .WithCredentials(ClientRefId.ToString(), token ?? Token())
+        .WithClientId(clientId ?? (refId ?? ClientRefId).ToString())
+        .WithCredentials((refId ?? ClientRefId).ToString(), token ?? Token(refId))
         .WithProtocolVersion(version)
         .WithCleanSession(cleanSession)
         .Build();
 
-    private async Task<IMqttClient> ConnectAsync(Action<MqttApplicationMessage>? onMessage = null, MqttProtocolVersion version = MqttProtocolVersion.V500, bool cleanSession = true)
+    private async Task<IMqttClient> ConnectAsync(Action<MqttApplicationMessage>? onMessage = null, MqttProtocolVersion version = MqttProtocolVersion.V500, bool cleanSession = true, Guid? refId = null)
     {
         var client = new MqttClientFactory().CreateMqttClient();
         _clients.Add(client);
@@ -316,7 +339,7 @@ public sealed class MqttGatewayTests : IAsyncLifetime
             };
         }
 
-        await client.ConnectAsync(ClientOptions(null, null, version, cleanSession));
+        await client.ConnectAsync(ClientOptions(null, null, version, cleanSession, refId));
         return client;
     }
 
