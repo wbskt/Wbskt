@@ -139,12 +139,46 @@ public sealed class SocketHostPresenceIntegrationTests(SqlEdgeFixture fixture)
         var only = Assert.Single(cleared);
         Assert.Equal(lostClient, only.ClientId);
         Assert.Equal(lostRef, only.ClientRefId);
-        Assert.Equal(host, only.HostId);
+        Assert.False(only.Connected);
         Assert.False(await IsConnectedAsync(lostClient));
         Assert.True(await IsConnectedAsync(heldClient));
         Assert.True(await IsConnectedAsync(justConnected));
         Assert.True(await IsConnectedAsync(elsewhere));
         Assert.Empty(await clients.ReconcilePresenceByHostAsync(host, [heldRef], takenAt, TimeSpan.FromMinutes(1)));
+    }
+
+    [SkippableFact]
+    public async Task A_live_hosts_snapshot_sets_back_online_the_clients_it_still_holds_after_they_expired()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var clients = new ClientProvider(ProviderFactory.BuildConfiguration(fixture.ConnectionString));
+        int workspaceId = Random.Shared.Next(1_000_000, int.MaxValue);
+        string host = $"live-{Guid.NewGuid():N}";
+        var takenAt = DateTime.UtcNow;
+
+        // Expired by the sweep while the host's heartbeats could not get through.
+        (int expired, Guid expiredRef) = await CreateClientAsync(workspaceId);
+        await PresenceAsync(expired, takenAt.AddMinutes(-10), host);
+        await MarkOfflineAsync(expired);
+
+        // Disconnected while the snapshot was being taken: its own disconnect decides.
+        (int justLeft, Guid justLeftRef) = await CreateClientAsync(workspaceId);
+        await PresenceAsync(justLeft, takenAt.AddMinutes(-10), host);
+        await clients.UpdatePresenceAsync(justLeft, false, takenAt.AddSeconds(-5), host);
+
+        var repaired = await clients.ReconcilePresenceByHostAsync(host, [expiredRef, justLeftRef], takenAt, TimeSpan.FromMinutes(1));
+
+        var only = Assert.Single(repaired);
+        Assert.Equal((expired, expiredRef, true), (only.ClientId, only.ClientRefId, only.Connected));
+        Assert.True(await IsConnectedAsync(expired));
+        Assert.False(await IsConnectedAsync(justLeft));
+
+        // A disconnect the host saw after the snapshot still wins; one from before it is stale.
+        await clients.UpdatePresenceAsync(expired, false, takenAt.AddMinutes(-2), host);
+        Assert.True(await IsConnectedAsync(expired));
+        await clients.UpdatePresenceAsync(expired, false, takenAt.AddSeconds(1), host);
+        Assert.False(await IsConnectedAsync(expired));
+        Assert.Empty(await clients.ReconcilePresenceByHostAsync(host, [], takenAt.AddSeconds(2), TimeSpan.FromMinutes(1)));
     }
 
     [SkippableFact]
@@ -192,6 +226,14 @@ public sealed class SocketHostPresenceIntegrationTests(SqlEdgeFixture fixture)
         cmd.Parameters.AddWithValue("@IsConnected", true);
         cmd.Parameters.Add("@LastActivityAt", SqlDbType.DateTime2).Value = connectedAt;
         cmd.Parameters.AddWithValue("@HostId", hostId);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private async Task MarkOfflineAsync(int clientId)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = new SqlCommand("UPDATE dbo.Clients SET IsConnected = 0, ConnectedAt = NULL, ConnectedHostId = NULL WHERE Id = @Id", conn);
+        cmd.Parameters.AddWithValue("@Id", clientId);
         await cmd.ExecuteNonQueryAsync();
     }
 

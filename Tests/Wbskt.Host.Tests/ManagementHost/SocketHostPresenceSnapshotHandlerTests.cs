@@ -17,7 +17,7 @@ public sealed class SocketHostPresenceSnapshotHandlerTests
     {
         var held = Guid.NewGuid();
         var takenAt = new DateTime(2026, 11, 2, 12, 0, 0, DateTimeKind.Utc);
-        var lost = new ExpiredPresence(4, Guid.NewGuid(), 9, "socket-a");
+        var lost = new PresenceRepair(4, Guid.NewGuid(), 9, Connected: false);
         var provider = new Mock<IClientProvider>();
         provider.Setup(p => p.ReconcilePresenceByHostAsync("socket-a", It.Is<IReadOnlyCollection<Guid>>(r => r.Single() == held), takenAt,
                 SocketHostPresenceSnapshotHandler.Margin, It.IsAny<CancellationToken>()))
@@ -32,5 +32,26 @@ public sealed class SocketHostPresenceSnapshotHandlerTests
             It.Is<ClientDisconnectedEvent>(e => e.ClientRefId == lost.ClientRefId && e.ClientId == 4 && e.WorkspaceId == 9 && e.HostId == "socket-a"
                 && e.Reason == SocketHostPresenceSnapshotHandler.Reason && e.CreatedAtUtc == takenAt),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Clients_the_live_host_still_holds_after_they_expired_are_announced_connected_again()
+    {
+        var takenAt = new DateTime(2026, 11, 2, 12, 0, 0, DateTimeKind.Utc);
+        var restored = new PresenceRepair(5, Guid.NewGuid(), 9, Connected: true);
+        var provider = new Mock<IClientProvider>();
+        provider.Setup(p => p.ReconcilePresenceByHostAsync("socket-a", It.IsAny<IReadOnlyCollection<Guid>>(), takenAt,
+                SocketHostPresenceSnapshotHandler.Margin, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([restored]);
+        var bus = new Mock<IEventBus>();
+        var context = new Mock<ConsumeContext<SocketHostPresenceSnapshot>>();
+        context.SetupGet(c => c.Message).Returns(new SocketHostPresenceSnapshot("socket-a", [restored.ClientRefId], takenAt));
+
+        await new SocketHostPresenceSnapshotHandler(provider.Object, bus.Object, NullLogger<SocketHostPresenceSnapshotHandler>.Instance).Consume(context.Object);
+
+        bus.Verify(b => b.PublishAsync(
+            It.Is<ClientConnectedEvent>(e => e.ClientRefId == restored.ClientRefId && e.ClientId == 5 && e.WorkspaceId == 9 && e.HostId == "socket-a" && e.CreatedAtUtc == takenAt),
+            It.IsAny<CancellationToken>()), Times.Once);
+        bus.Verify(b => b.PublishAsync(It.IsAny<ClientDisconnectedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }
