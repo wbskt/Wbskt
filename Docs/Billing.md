@@ -82,11 +82,11 @@ dbo.Tenants.PlanCode ──(copy)──────────►  dbo.Workspac
 | Limit | Checked in | Refused with |
 |---|---|---|
 | Clients | `dbo.Client_Create` (registration) and `dbo.Client_UpdateStatuses` (approval) | 50025, **409** `PLAN_CLIENT_LIMIT_REACHED` |
-| Runs going at once | `dbo.Run_Start` | 50026; a trigger's dispatch reads `Refused`, a test run is **409** `PLAN_RUN_LIMIT_REACHED` |
+| Runs going at once | `dbo.Run_Start` | 50026; a trigger's dispatch reads `Refused`, a test run or a manual run is **409** `PLAN_RUN_LIMIT_REACHED` |
 | Messages a month | `MessageAllowanceMonitor`, then each socket host | Free at 1×, Maker, Pro and Team at 2×, Business never: each client held to one message a minute until the 1st (see Messages) |
-| Workflow credits a month | `dbo.Run_Start` | 50033; a trigger's dispatch reads `Refused`, a test run is **409** `PLAN_CREDIT_LIMIT_REACHED` |
-| A workspace's credit cap | `dbo.Run_Start` | 50034; a trigger's dispatch reads `Refused`, a test run is **409** `WORKSPACE_CREDIT_CAP_REACHED` |
-| (a start that waits too long for a lock) | `dbo.Run_Start` | 50035; retried, then a trigger's event is redelivered and a test run is **503** `WORKSPACE_BUSY` |
+| Workflow credits a month | `dbo.Run_Start` | 50033; a trigger's dispatch reads `Refused`, a test run or a manual run is **409** `PLAN_CREDIT_LIMIT_REACHED` |
+| A workspace's credit cap | `dbo.Run_Start` | 50034; a trigger's dispatch reads `Refused`, a test run or a manual run is **409** `WORKSPACE_CREDIT_CAP_REACHED` |
+| (a start that waits too long for a lock) | `dbo.Run_Start` | 50035; retried, then a trigger's event is redelivered and a test run or a manual run is **503** `WORKSPACE_BUSY` |
 | Workspaces | `dbo.Workspace_Create` (auth database) | 50030, **409** `PLAN_WORKSPACE_LIMIT_REACHED` |
 | Members | `dbo.TenantInvitation_Accept`, and `dbo.TenantInvitation_Create` up front | 50031, **409** `PLAN_MEMBER_LIMIT_REACHED` |
 | Free tenants an account has to itself (one; the seeded default tenant aside) | `dbo.Tenant_Create` | 50036, **409** `TENANT_FREE_LIMIT_REACHED` |
@@ -214,7 +214,7 @@ answers **503** `WORKSPACE_CREDIT_CAP_BUSY` with `Retry-After` when the cap's lo
 seconds, a row it needs is not free within five (1222), or it loses a deadlock, which it is set up to
 lose rather than the engine.) `RunStarter` tries again twice (after 50 ms, then 200 ms), then throws
 `RunStartBusyException`: a trigger's event goes back to the queue to be redelivered, and a test run
-answers **503** `WORKSPACE_BUSY` with `Retry-After`. A busy start is never read as a full plan. Each one counts on `wbskt_workflow_run_starts_busy_total`
+or a manual run answers **503** `WORKSPACE_BUSY` with `Retry-After`. A busy start is never read as a full plan. Each one counts on `wbskt_workflow_run_starts_busy_total`
 (`outcome` is `retried` or `gave_up`).
 
 A refused trigger is reported once per workflow and limit per minute as `WorkflowTriggerRefusedEvent`,

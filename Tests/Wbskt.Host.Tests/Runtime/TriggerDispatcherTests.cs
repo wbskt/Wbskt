@@ -623,6 +623,7 @@ public sealed class TriggerDispatcherTests
         TriggerDispatchResult result = await dispatcher.DispatchAsync(evt, CancellationToken.None);
 
         Assert.Equal(TriggerDispatchOutcome.Refused, result.Outcome);
+        Assert.Equal(RunRefusalReason.CreditLimit, Assert.Single(result.Registrations).RefusalReason);
         RunRefusal refusal = Assert.Single(reporter.Refusals);
         Assert.Equal(new RunRefusal(1, registration.WorkflowDefinitionId, registration.WorkflowRefId, "client", 2000, evt.ReceivedAt) { Reason = RunRefusalReason.CreditLimit }, refusal);
     }
@@ -640,6 +641,7 @@ public sealed class TriggerDispatcherTests
         TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
 
         Assert.Equal(TriggerDispatchOutcome.Refused, result.Outcome);
+        Assert.Equal(RunRefusalReason.WorkspaceCreditCap, Assert.Single(result.Registrations).RefusalReason);
         Assert.Equal(RunRefusalReason.WorkspaceCreditCap, Assert.Single(reporter.Refusals).Reason);
     }
 
@@ -676,6 +678,7 @@ public sealed class TriggerDispatcherTests
         TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
 
         Assert.Equal(TriggerDispatchOutcome.Refused, result.Outcome);
+        Assert.Equal(RunRefusalReason.ActiveRunLimit, Assert.Single(result.Registrations).RefusalReason);
         Assert.Null(result.RunId);
         Assert.Empty(runDispatcher.Requests);
     }
