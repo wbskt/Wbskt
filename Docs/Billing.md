@@ -370,12 +370,15 @@ $0.50 per 1,000 a pack costs more per credit than any plan (Maker gives 5,000 a 
   copy, so an operator's plan still ends on time.
 - **A second subscription paid for anyway** (two checkouts paid at once) is a duplicate: it is marked
   (`dbo.TenantSubscription_MarkDuplicate`), cancelled with the provider, and its payment refunded in full
-  once (`dbo.TenantSubscription_ClaimDuplicateRefund`). A refund the provider answered with a refusal
-  gives the claim back, so the next event asks again. A refund that got no answer (a timeout, a dropped
-  connection, the host stopping) may still have gone through, so its claim is kept and never asked for
-  twice: the error log names the payment, and an operator checks it in the provider's dashboard and
-  refunds by hand if needed (`DuplicateRefundClaimedAt` says when it was claimed). The tenant keeps the
-  plan of its first subscription.
+  once (`dbo.TenantSubscription_ClaimDuplicateRefund`). A refund the provider certainly did not make
+  (never reached, or refused with a 4xx other than 409 or 422) gives the claim back, so the next event
+  asks again. Any other outcome (a timeout, a dropped connection, a 5xx, a 409 or 422 that may mean the
+  payment is already refunded) may have gone through, so its claim is kept and it is never asked for
+  twice: it is counted (`wbskt_auth_billing_refunds_total{outcome="unconfirmed"}`),
+  `BillingRefundUnconfirmed` fires, the error log names the payment, and an operator checks it in the
+  provider's dashboard and refunds by hand if needed (`DuplicateRefundClaimedAt` says when it was
+  claimed). The refund call runs on the host's own token, so the provider hanging up on its webhook
+  delivery does not cut it short. The tenant keeps the plan of its first subscription.
 - **Chargebacks.** A payment whose dispute is open puts a credit pack on hold (see Credits); a lost
   dispute counts as a full refund, for a pack and for a subscription payment. A won or withdrawn dispute
   changes nothing.
