@@ -667,6 +667,14 @@
               "string"
             ]
           },
+          "remaining": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
           "topUp": {
             "format": "double",
             "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
@@ -700,7 +708,8 @@
           "limit",
           "topUp",
           "topUpExpiresAt",
-          "topUpExpiring"
+          "topUpExpiring",
+          "remaining"
         ],
         "type": "object"
       },
