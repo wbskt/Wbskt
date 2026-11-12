@@ -25,6 +25,7 @@ BEGIN
     UPDATE br
     SET
         WokenAt = SYSUTCDATETIME(),
+        UpdatedAt = SYSUTCDATETIME(),
         LocalJson = COALESCE(@LocalJson, br.LocalJson)
     FROM dbo.Branches br WITH (ROWLOCK)
     INNER JOIN @Claimed c ON c.BranchRefId = br.RefId

@@ -17,7 +17,7 @@ CREATE TABLE dbo.Branches
     -- changes on every write and so tells two visits of the same node apart in the idempotency keys
     -- RetryExecutor gives side-effecting actions. Keep it even though no procedure compares it.
     RowVersion            ROWVERSION       NOT NULL,
-    -- When a claim deleted this branch's bookmark to wake it: set in the same statement as the claim
+    -- When a claim deleted this branch's bookmark to wake it: set in the same transaction as the claim
     -- (with the wake payload or the TTL port it carries), cleared by the next write that moves the
     -- branch. A Waiting branch with WokenAt set has a wake that was decided and stored but may not
     -- have been dispatched; recovery resumes exactly those (Branch_GetWoken).

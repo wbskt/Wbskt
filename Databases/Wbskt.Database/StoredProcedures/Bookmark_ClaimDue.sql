@@ -39,6 +39,7 @@ BEGIN
     UPDATE br
     SET
         WokenAt = SYSUTCDATETIME(),
+        UpdatedAt = SYSUTCDATETIME(),
         PendingTakePort = CASE
             WHEN c.TtlPort IS NOT NULL AND c.TtlPort <> N'' AND c.WakeConditionKind <> N'timer' THEN c.TtlPort
             ELSE br.PendingTakePort

@@ -94,7 +94,7 @@ public sealed class LostWakeRecoveryIntegrationTests(SqlEdgeFixture fixture)
         // the bookmark insert: nothing says the signal came, so recovery must not run the node on.
         await services.GetRequiredService<IBookmarkProvider>().DeleteAllByRunIdAsync((int)runId, CancellationToken.None);
 
-        IReadOnlyCollection<BranchExecutionRequest> woken = await Recovery(services).FindWokenAsync(CancellationToken.None);
+        IReadOnlyCollection<BranchExecutionRequest> woken = await Recovery(services).CollectWokenAsync(CancellationToken.None);
 
         woken.Should().NotContain(request => request.BranchId == branchId);
     }
@@ -115,15 +115,17 @@ public sealed class LostWakeRecoveryIntegrationTests(SqlEdgeFixture fixture)
 
     private static async Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(IServiceProvider services)
     {
-        await Task.Delay(TimeSpan.FromMilliseconds(20));
-        return await services.GetRequiredService<IBookmarkProvider>().ClaimDueAsync(DateTime.UtcNow.AddMinutes(1), 1000, CancellationToken.None);
+        // The waits under test expire after a millisecond; claiming at the real now leaves other tests'
+        // future bookmarks in the shared database alone.
+        await Task.Delay(TimeSpan.FromMilliseconds(50));
+        return await services.GetRequiredService<IBookmarkProvider>().ClaimDueAsync(DateTime.UtcNow, 1000, CancellationToken.None);
     }
 
     /// <summary>A new leader's recovery: find the woken branches, then dispatch them, and run the one under test.</summary>
     private static async Task RecoverAsync(IServiceProvider services, long runId, long branchId)
     {
         RunRecoveryService recovery = Recovery(services);
-        IReadOnlyCollection<BranchExecutionRequest> woken = await recovery.FindWokenAsync(CancellationToken.None);
+        IReadOnlyCollection<BranchExecutionRequest> woken = await recovery.CollectWokenAsync(CancellationToken.None);
         woken.Should().Contain(new BranchExecutionRequest(runId, branchId, BranchExecutionReason.Recovered));
 
         var dispatcher = (RecordingRunDispatcher)services.GetRequiredService<IRunDispatcher>();

@@ -37,7 +37,7 @@ public sealed class EngineLeadershipCoordinator : BackgroundService
         {
             // Read before the bus starts and the gate opens, while nothing here can wake a branch yet:
             // once the scheduler and consumers run, a branch they woke would look the same.
-            IReadOnlyCollection<BranchExecutionRequest> woken = await _runRecoveryService.FindWokenAsync(stoppingToken);
+            IReadOnlyCollection<BranchExecutionRequest> woken = await _runRecoveryService.CollectWokenAsync(stoppingToken);
 
             _busHandle = await _busControl.StartAsync(stoppingToken);
             _leadershipState.SetBusStarted();

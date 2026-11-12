@@ -11,7 +11,8 @@ BEGIN
     -- parks on a timer bookmark like any other - so "Waiting with no bookmark" is the stranded state
     -- for all of them, and the same state follows a wake whose claim deleted the bookmark but whose
     -- dispatch was lost (WokenAt set; a new leader resumes those through Branch_GetWoken first). The
-    -- cutoff is the grace period that keeps a branch mid-park, or woken and queued, out of this list.
+    -- cutoff is the grace period that keeps a branch mid-park out of this list, and one just woken: the
+    -- claim stamps UpdatedAt. One queued longer than that is covered by the caller's two-pass check.
     SELECT TOP (@BatchSize)
         br.Id,
         br.RefId,

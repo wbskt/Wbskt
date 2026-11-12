@@ -118,6 +118,68 @@ public sealed class EngineLeaseLifecycleTests
         Assert.Equal(["bus-stopped", "lease-released"], events.Where(e => e is "bus-stopped" or "lease-released"));
     }
 
+    [Fact]
+    public async Task A_new_leader_reads_the_woken_branches_before_it_starts_the_bus_or_opens_the_gate()
+    {
+        // wbskt/Wbskt#768: once the bus runs and the gate is open, the scheduler and consumers wake branches
+        // of their own, which look the same as the ones the previous leader woke and lost; read then, they
+        // would be run twice.
+        var steps = new ConcurrentQueue<string>();
+        var state = new LeadershipState();
+        var lease = new RecordingLeaseProvider(acquire: true, events: new ConcurrentQueue<string>());
+        var recovered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var bus = new Mock<IBusControl>();
+        bus.Setup(b => b.StartAsync(It.IsAny<CancellationToken>()))
+            .Callback(() => steps.Enqueue("bus-started"))
+            .ReturnsAsync(Mock.Of<BusHandle>());
+
+        var woken = new BranchRow
+        {
+            Id = 81, RefId = Guid.NewGuid(), RunId = 181, ParentBranchId = null, ForkCohortId = null,
+            NodeId = Guid.NewGuid(), Status = "Waiting", PendingTakePort = null, LocalJson = "{}", LastOutputJson = null,
+            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow, RowVersion = [1]
+        };
+        var branches = new Mock<IBranchProvider>();
+        branches.Setup(b => b.GetWokenAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Callback(() => steps.Enqueue(state.BusStarted ? "woken-read-after-gate" : "woken-read"))
+            .ReturnsAsync([woken]);
+        branches.Setup(b => b.GetRunningBranchesAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
+
+        var dispatcher = new Mock<IRunDispatcher>();
+        dispatcher.Setup(d => d.DispatchAsync(It.IsAny<BranchExecutionRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<BranchExecutionRequest, CancellationToken>((request, _) =>
+            {
+                steps.Enqueue($"dispatch-{request.BranchId}");
+                recovered.TrySetResult();
+            })
+            .Returns(ValueTask.CompletedTask);
+
+        using IHost host = new HostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton(TimeProvider.System);
+                services.AddSingleton(state);
+                services.AddSingleton<IHostIdentity>(new FixedHostIdentity());
+                services.AddSingleton<ILeaseProvider>(lease);
+                services.AddSingleton(bus.Object);
+                services.AddSingleton(branches.Object);
+                services.AddSingleton(dispatcher.Object);
+                services.AddSingleton<RunRecoveryService>();
+                services.AddSingleton(WorkerTestServices.Options(new WorkflowEngineOptions { LeaderElectionRenewInterval = TimeSpan.FromMilliseconds(50) }));
+                services.AddHostedService<LeaderElectionService>();
+                services.AddHostedService<EngineLeadershipCoordinator>();
+            })
+            .Build();
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await host.StartAsync(timeout.Token);
+        await recovered.Task.WaitAsync(timeout.Token);
+        await host.StopAsync(timeout.Token);
+
+        Assert.Equal(["woken-read", "bus-started", "dispatch-81"], steps);
+    }
+
     private static LeaderElectionService CreateElectionService(ILeaseProvider lease, LeadershipState state) =>
         new(
             WorkerTestServices.Scopes(lease),

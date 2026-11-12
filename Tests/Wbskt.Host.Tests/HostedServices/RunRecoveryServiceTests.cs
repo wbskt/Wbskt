@@ -43,11 +43,11 @@ public sealed class RunRecoveryServiceTests
 
         // Assert
         Assert.Equal([(171L, 71L, BranchExecutionReason.Recovered), (181L, 81L, BranchExecutionReason.Recovered)], runDispatcher.Requests);
-        Assert.Contains(logger.Messages, message => message.Contains("Recovered 1 running branches and 1 Waiting branches whose wake was not dispatched.", StringComparison.Ordinal));
+        Assert.Contains(logger.Messages, message => message.Contains("Recovered 1 running branches and 1 Waiting branches whose wake may not have been dispatched.", StringComparison.Ordinal));
     }
 
     [Fact]
-    public async Task Finding_woken_branches_reads_every_page_and_dispatches_nothing()
+    public async Task Collecting_woken_branches_reads_every_page_and_dispatches_nothing()
     {
         // Arrange
         BranchRow[] woken = Enumerable.Range(1, RunRecoveryService.WokenPageSize + 5)
@@ -58,7 +58,7 @@ public sealed class RunRecoveryServiceTests
         var service = new RunRecoveryService(WorkerTestServices.Scopes(branchProvider), runDispatcher, new RecordingLogger<RunRecoveryService>());
 
         // Act
-        IReadOnlyCollection<BranchExecutionRequest> found = await service.FindWokenAsync(CancellationToken.None);
+        IReadOnlyCollection<BranchExecutionRequest> found = await service.CollectWokenAsync(CancellationToken.None);
 
         // Assert
         Assert.Equal(woken.Select(branch => branch.Id), found.Select(request => request.BranchId));
@@ -80,7 +80,7 @@ public sealed class RunRecoveryServiceTests
         await service.RecoverAsync([], CancellationToken.None);
 
         // Assert
-        Assert.Contains(logger.Messages, message => message.Contains("Recovered 0 running branches and 0 Waiting branches whose wake was not dispatched.", StringComparison.Ordinal));
+        Assert.Contains(logger.Messages, message => message.Contains("Recovered 0 running branches and 0 Waiting branches whose wake may not have been dispatched.", StringComparison.Ordinal));
     }
 
     [Fact]
