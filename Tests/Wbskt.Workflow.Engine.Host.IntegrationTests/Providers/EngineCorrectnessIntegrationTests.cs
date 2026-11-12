@@ -223,6 +223,31 @@ public sealed class EngineCorrectnessIntegrationTests(SqlEdgeFixture fixture)
         Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Runs WHERE Id = @p0", lapsed));
     }
 
+    /// <summary>
+    /// #774: a run its plan still keeps is kept whole, routine history included. The engine's retention
+    /// worker now only runs <c>dbo.Run_DeleteRetired</c>; it used to delete Info history at 30 days first.
+    /// </summary>
+    [SkippableFact]
+    public async Task A_run_the_plan_still_keeps_keeps_its_routine_history()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var now = new DateTime(2001, 1, 30);
+        int business = await RunInWorkspaceAsync(plan: "Business", overrides: null);
+        await ExecAsync("""
+            INSERT INTO dbo.HistoryEvents (RunId, NodeId, EventKind, Severity, PayloadJson, Timestamp)
+            VALUES (@p0, NEWID(), N'RunStarted', N'Info', N'{}', '2000-12-20');
+            """, business);
+
+        await ProviderFactory.RunRetention(fixture.ConnectionString).DeleteRetiredRunsAsync(
+            now,
+            [new RunHistoryRetention(PlanCode.Business, 90)],
+            new DateTime(1990, 1, 1),
+            100,
+            CancellationToken.None);
+
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.HistoryEvents WHERE RunId = @p0 AND Severity = N'Info'", business));
+    }
+
     private async Task<int> RunInWorkspaceAsync(string? plan, string? overrides, int? heldDays = null, DateTime? heldUntil = null)
     {
         int workspaceId = Random.Shared.Next(1_000_000, int.MaxValue);

@@ -88,12 +88,6 @@ CREATE INDEX IX_Runs_WorkflowDefinitionId_Active
     WHERE Status IN (N'Running', N'Failing', N'Cancelling');
 GO
 
--- Finds the runs ended since a moment (RunCredits_Post).
-CREATE INDEX IX_Runs_CompletedAt
-    ON dbo.Runs (CompletedAt)
-    WHERE CompletedAt IS NOT NULL;
-GO
-
 -- Run_DeleteRetired seeks each workflow's finished runs up to its workspace's own cutoff, so the runs a
 -- longer plan keeps are never read by a sweep that cannot delete them.
 CREATE INDEX IX_Runs_WorkflowDefinitionId_CompletedAt
