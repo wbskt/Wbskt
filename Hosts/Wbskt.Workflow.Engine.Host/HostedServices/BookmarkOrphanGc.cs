@@ -9,7 +9,8 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
 /// <summary>
 /// Reconciles bookmarks with the branches they wake, in both directions: deletes bookmarks whose run is
-/// over, and fails Waiting branches that have no bookmark left to wake them.
+/// over, fails Waiting branches that have no bookmark left to wake them, and wakes sub-workflow steps
+/// still parked on a child run that has already ended.
 /// </summary>
 public sealed class BookmarkOrphanGc(
     TimeProvider clock,
@@ -42,6 +43,41 @@ public sealed class BookmarkOrphanGc(
         }
 
         await FailStrandedBranchesAsync(services, ct);
+        await WakeParentsOfEndedChildrenAsync(services, ct);
+    }
+
+    /// <summary>
+    /// A parent parked on a child that has ended waits for ever when the child's completion event was
+    /// lost: the finalizer stopped between the terminal status and the hook, or the event came before the
+    /// parent parked and its own check did not run. Raising it again is harmless when it was not lost:
+    /// the first event to claim the bookmark wins and a later one matches nothing.
+    /// </summary>
+    private async Task WakeParentsOfEndedChildrenAsync(IServiceProvider services, CancellationToken ct)
+    {
+        var runProvider = services.GetRequiredService<IRunProvider>();
+        DateTime cutoffUtc = clock.GetUtcNow().UtcDateTime - _strandedThreshold;
+        IReadOnlyCollection<RunRow> children = await runProvider.GetEndedChildrenAwaitedAsync(cutoffUtc, StrandedBatchSize, ct);
+        if (children.Count == 0)
+        {
+            return;
+        }
+
+        var completionHook = services.GetRequiredService<ISubWorkflowCompletionHook>();
+        int woken = 0;
+        foreach (RunRow child in children)
+        {
+            try
+            {
+                await completionHook.OnRunCompletedAsync(child.RefId, child.Status, child.OutputJson, ct);
+                woken++;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Logger.LogError(ex, "Orphan GC could not raise the completion of child run {ChildRunId}", child.Id);
+            }
+        }
+
+        Logger.LogWarning("Orphan GC raised the completion of {Count} child runs a parent was still waiting on", woken);
     }
 
     private async Task FailStrandedBranchesAsync(IServiceProvider services, CancellationToken ct)

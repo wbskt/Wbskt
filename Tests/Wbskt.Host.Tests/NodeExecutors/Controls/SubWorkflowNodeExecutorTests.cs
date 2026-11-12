@@ -44,6 +44,41 @@ public sealed class SubWorkflowNodeExecutorTests
     }
 
     [Fact]
+    public async Task A_child_that_ended_before_the_parent_parked_is_raised_again_once_it_has()
+    {
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 99, null, "ok"));
+        var runProvider = new Mock<IRunProvider>();
+        runProvider.SetupSequence(r => r.GetByIdAsync(99, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(RunRow(ChildRunRefId))
+            .ReturnsAsync(RunRow(ChildRunRefId) with { Status = RunStatus.Succeeded, OutputJson = """{"total":42}""" });
+        var hook = new Mock<ISubWorkflowCompletionHook>();
+        var executor = new SubWorkflowNodeExecutor(hub.Object, runProvider.Object, new FixedClock(), completionHook: hook.Object);
+
+        var wait = Assert.IsType<NodeExecutionResult.WaitForBookmark>(await executor.ExecuteAsync(Context(new Dictionary<string, JsonElement>()), CancellationToken.None));
+        Assert.NotNull(wait.AfterParked);
+        await wait.AfterParked!(CancellationToken.None);
+
+        hook.Verify(h => h.OnRunCompletedAsync(ChildRunRefId, RunStatus.Succeeded, """{"total":42}""", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_child_still_running_once_the_parent_parked_is_left_to_its_own_event()
+    {
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 99, null, "ok"));
+        var hook = new Mock<ISubWorkflowCompletionHook>();
+        var executor = new SubWorkflowNodeExecutor(hub.Object, StartedRunProvider().Object, new FixedClock(), completionHook: hook.Object);
+
+        var wait = Assert.IsType<NodeExecutionResult.WaitForBookmark>(await executor.ExecuteAsync(Context(new Dictionary<string, JsonElement>()), CancellationToken.None));
+        await wait.AfterParked!(CancellationToken.None);
+
+        hook.VerifyNoOtherCalls();
+    }
+
+    [Fact]
     public async Task First_visit_starts_the_child_past_the_workspace_run_ceiling()
     {
         // The parent holds a place under the ceiling already; the child must not be refused for it.

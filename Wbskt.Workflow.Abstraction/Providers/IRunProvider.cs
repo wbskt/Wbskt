@@ -102,6 +102,14 @@ public interface IRunProvider
     Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct);
 
     /// <summary>
+    /// Child runs that ended before <paramref name="cutoffUtc"/> while a parent's sub-workflow step is
+    /// still parked on them, so the event that should have woken the parent was lost. Defaulted so the
+    /// test doubles that never sweep need no stub.
+    /// </summary>
+    Task<IReadOnlyCollection<RunRow>> GetEndedChildrenAwaitedAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
+        => Task.FromResult<IReadOnlyCollection<RunRow>>(Array.Empty<RunRow>());
+
+    /// <summary>
     /// Every run in <paramref name="status"/>. Crash recovery reads 'Failing' and 'Cancelling' runs this
     /// way to re-apply their stop. Defaulted so the test doubles that never recover need no stub.
     /// </summary>
