@@ -81,8 +81,9 @@ BEGIN
             JOIN dbo.Runs r WITH (UPDLOCK) ON r.Id = rc.RunId
             WHERE rc.RunId = @Root;
 
-            -- A charge that landed as WorkspaceCreditCap_Set cut the budget can leave it below what was
-            -- spent. That excess is already in @CapLeft as spent, so it is not asked of the cap again.
+            -- Spent can be past the budget: a charge that landed as WorkspaceCreditCap_Set cut it, or a
+            -- child's start cost, which Run_Start charges on the root whether it has room or not. That
+            -- excess is already in @CapLeft as spent, so it is not asked of the cap again.
             IF @Spent > @Budget
                 SET @Budget = @Spent;
 

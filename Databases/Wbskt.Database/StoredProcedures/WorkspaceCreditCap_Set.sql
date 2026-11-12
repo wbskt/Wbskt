@@ -11,11 +11,14 @@
 -- that was given its whole budget (no cap when it started) keeps that budget as its ceiling. Its next
 -- charge then goes through RunCounters_TryCharge's lease path, which extends it only from what the cap
 -- has left, so a run already going cannot spend past a cap set while it runs, and the unspent budgets it
--- held stop counting as reserved against the cap. A charge whose statement read the run's budget before
--- the cut can still land on top of it; that overshoot is at most one charge per run, and the lease path
--- counts it as spent rather than as budget.
--- 50035 when the lock is not free within five seconds. Its priority is high: a deadlock with
--- RunCredits_Post makes the poster, which retries on its next tick, the one rolled back.
+-- held stop counting as reserved against the cap. Charges already under way as the budget is cut (one
+-- per branch charging at that moment) read the run's budget from before the cut and can still land, never
+-- past that old budget; the lease path counts what they add as spent rather than as budget.
+--
+-- 50035 when the cap's lock is not free within two seconds, and 1222 when a row it needs is not free
+-- within five: the caller answers 503 and the owner tries again. For the same reason its deadlock
+-- priority is low, so a deadlock with the engine (RunCredits_Post, a run ending) rolls back this set
+-- rather than the engine's work.
 CREATE PROCEDURE dbo.WorkspaceCreditCap_Set
     @WorkspaceId      INT,
     @MonthlyCreditCap DECIMAL(18,4),
@@ -24,7 +27,8 @@ AS
 BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
-    SET DEADLOCK_PRIORITY HIGH;
+    SET DEADLOCK_PRIORITY LOW;
+    SET LOCK_TIMEOUT 5000;
 
     BEGIN TRANSACTION;
 
@@ -44,7 +48,7 @@ BEGIN
 
         DECLARE @CapResource NVARCHAR(255) = CONCAT(N'credit-cap:', @WorkspaceId);
         DECLARE @CapLockResult INT;
-        EXEC @CapLockResult = sp_getapplock @Resource = @CapResource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
+        EXEC @CapLockResult = sp_getapplock @Resource = @CapResource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 2000;
         IF @CapLockResult < 0
             THROW 50035, 'The workspace is too busy to set its credit cap; try again.', 1;
 

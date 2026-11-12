@@ -164,21 +164,23 @@ cap, however many runs it starts at once. With the cap removed, a lease extends 
 Setting a cap brings the workspace's runs already going under it too (`dbo.WorkspaceCreditCap_Set`, under
 the same lock): each one's budget is cut to what it has spent, one started with no cap keeps its whole
 budget as its ceiling, and its next charge is extended from what the cap has left, so a run looping when
-the owner sets a cap stops at the cap rather than at its own budget. A charge already under way as the
-budget is cut can still land, one per run at most. A start reads the cap row with `HOLDLOCK` and the set
-writes it first, so no run starts under the old cap once the new one is in. Lowering a cap below what
-was already spent refuses new runs at once, and the response says so (`capReached`). As it posts,
-`CreditUsagePoster` raises
+the owner sets a cap stops at the cap rather than at its own budget. Charges already under way as the
+budget is cut (one per branch charging at that moment) can still land, never past the budget the run held
+before. A start reads the cap row with `HOLDLOCK` and the set writes it first, so no run starts under the
+old cap once the new one is in. Lowering a cap below what was already spent refuses new runs at once,
+and the response says so (`capReached`). As it posts, `CreditUsagePoster` raises
 `WorkspaceCreditCapReachedEvent` when a post carries a workspace across 80% and then 100% of its cap.
 
-**Busy.** Both locks a start can wait on (the tenant's run limit and a workspace's cap) give up after five
-seconds with 50035 rather than hold an inbound request and a pooled connection. (A lease extension, which
-is not on an inbound request, waits up to 30 seconds for the cap's lock before it fails its step with
-50035. Setting a cap waits up to five seconds for it too, and answers **503** `WORKSPACE_CREDIT_CAP_BUSY`
-with `Retry-After`, as it does when it loses a deadlock.) `RunStarter` tries again
-twice (after 50 ms, then 200 ms), then throws `RunStartBusyException`: a trigger's event goes back to the
-queue to be redelivered, and a test run answers **503** `WORKSPACE_BUSY` with `Retry-After`. A busy start
-is never read as a full plan. Each one counts on `wbskt_workflow_run_starts_busy_total`
+**Busy.** The locks a start can wait on (the tenant's run limit and a workspace's cap) give up after five
+seconds with 50035 rather than hold an inbound request and a pooled connection. A start also reads a
+workspace's cap row under a shared lock, which waits while a cap is being set; the set holds that row
+while it waits up to two seconds for the cap's lock and then cuts the runs going. (A lease extension, which is not on an inbound
+request, waits up to 30 seconds for the cap's lock before it fails its step with 50035. Setting a cap
+answers **503** `WORKSPACE_CREDIT_CAP_BUSY` with `Retry-After` when the cap's lock is not free within two
+seconds, a row it needs is not free within five (1222), or it loses a deadlock, which it is set up to
+lose rather than the engine.) `RunStarter` tries again twice (after 50 ms, then 200 ms), then throws
+`RunStartBusyException`: a trigger's event goes back to the queue to be redelivered, and a test run
+answers **503** `WORKSPACE_BUSY` with `Retry-After`. A busy start is never read as a full plan. Each one counts on `wbskt_workflow_run_starts_busy_total`
 (`outcome` is `retried` or `gave_up`).
 
 A refused trigger is reported once per workflow and limit per minute as `WorkflowTriggerRefusedEvent`,
