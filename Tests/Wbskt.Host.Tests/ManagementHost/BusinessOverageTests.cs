@@ -69,14 +69,59 @@ public sealed class BusinessOverageTests
         Assert.StartsWith(InternalRoutes.Prefix + "/", InternalRoutes.BusinessOverage);
     }
 
-    private BusinessOverageService Service() =>
-        new(_usage, new PlanCatalog(Options.Create(new PlanCatalogOptions())), new FixedClock(Now));
+    [Theory]
+
+    // Two hours after November ends (the default delay) October and November are both closed.
+    [InlineData(2026, 12, 1, 2, 2026, 11, true)]
+
+    // Just before then November is still worked out as it stands; October was closed long ago.
+    [InlineData(2026, 12, 1, 1, 2026, 11, false)]
+    [InlineData(2026, 12, 1, 1, 2026, 10, true)]
+    public async Task A_past_month_is_closed_once_its_meters_have_caught_up(int year, int month, int day, int hour, int askedYear, int askedMonth, bool closed)
+    {
+        Result<BusinessOverageReport> report = await Service(new DateTimeOffset(year, month, day, hour, 0, 0, TimeSpan.Zero)).GetAsync(askedYear, askedMonth, CancellationToken.None);
+
+        Assert.Equal(closed, report.Value.Closed);
+        Assert.Equal(closed ? new DateOnly(askedYear, askedMonth, 1) : null, _usage.MonthClosed);
+    }
+
+    [Theory]
+    [InlineData(1, true)]
+    [InlineData(0, false)]
+    public async Task Tracking_records_this_month_and_closes_the_last_once_it_is_due(int hoursPastDelay, bool closes)
+    {
+        DateTimeOffset now = new DateTimeOffset(2026, 12, 1, 1, 59, 0, TimeSpan.Zero).AddHours(hoursPastDelay);
+
+        await Service(now).TrackAsync(CancellationToken.None);
+
+        Assert.Equal(now.UtcDateTime, _usage.TrackedAt);
+        Assert.Equal(closes ? new DateOnly(2026, 11, 1) : null, _usage.MonthClosed);
+    }
+
+    private BusinessOverageService Service(DateTimeOffset? now = null) =>
+        new(_usage, new PlanCatalog(Options.Create(new PlanCatalogOptions())), new FixedClock(now ?? Now), Options.Create(new BillingOptions()));
 
     private sealed class FakeUsage : IBusinessUsageProvider
     {
         public IReadOnlyCollection<BusinessUsage> Rows { get; set; } = [];
 
         public DateOnly? MonthAsked { get; private set; }
+
+        public DateOnly? MonthClosed { get; private set; }
+
+        public DateTime? TrackedAt { get; private set; }
+
+        public Task TrackAsync(DateTime now, CancellationToken ct)
+        {
+            TrackedAt = now;
+            return Task.CompletedTask;
+        }
+
+        public Task CloseAsync(DateOnly monthStart, DateTime now, CancellationToken ct)
+        {
+            MonthClosed = monthStart;
+            return Task.CompletedTask;
+        }
 
         public Task<IReadOnlyCollection<BusinessUsage>> GetByMonthAsync(DateOnly monthStart, CancellationToken ct)
         {

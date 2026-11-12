@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Billing;
 using Wbskt.Management.Host.Models;
@@ -11,10 +12,14 @@ namespace Wbskt.Management.Host.Services.Billing;
 /// What each Business tenant owes past its contract for a month: its messages past the contract's monthly
 /// messages, and the credits its plan covered past its monthly credits. Business runs carry on to
 /// <see cref="BusinessContract.CreditOverageMultiple"/> times their credits and are never throttled on
-/// messages, so this is the only place that use is counted for a bill.
+/// messages, so this is the only place that use is counted for a bill. A month is closed
+/// <see cref="BillingOptions.BusinessMonthCloseDelay"/> after it ends (by <see cref="TrackAsync"/>, or by the
+/// first report asked for it after that), and read as it was closed from then on.
 /// </summary>
-internal sealed class BusinessOverageService(IBusinessUsageProvider usage, PlanCatalog catalog, TimeProvider clock) : IBusinessOverageService
+internal sealed class BusinessOverageService(IBusinessUsageProvider usage, PlanCatalog catalog, TimeProvider clock, IOptions<BillingOptions> options) : IBusinessOverageService
 {
+    private readonly TimeSpan _closeDelay = options.Value.BusinessMonthCloseDelay;
+
     public async Task<Result<BusinessOverageReport>> GetAsync(int year, int month, CancellationToken ct)
     {
         DateTime now = clock.GetUtcNow().UtcDateTime;
@@ -24,9 +29,30 @@ internal sealed class BusinessOverageService(IBusinessUsageProvider usage, PlanC
         }
 
         var monthStart = new DateOnly(year, month, 1);
+        bool closed = IsDue(monthStart, now);
+        if (closed)
+        {
+            await usage.CloseAsync(monthStart, now, ct);
+        }
+
         IReadOnlyCollection<BusinessUsage> tenants = await usage.GetByMonthAsync(monthStart, ct);
-        return Result<BusinessOverageReport>.Success(new BusinessOverageReport(monthStart, [.. tenants.Select(Overage)]));
+        return Result<BusinessOverageReport>.Success(new BusinessOverageReport(monthStart, [.. tenants.Select(Overage)], closed));
     }
+
+    public async Task TrackAsync(CancellationToken ct)
+    {
+        DateTime now = clock.GetUtcNow().UtcDateTime;
+        await usage.TrackAsync(now, ct);
+
+        var lastMonth = new DateOnly(now.Year, now.Month, 1).AddMonths(-1);
+        if (IsDue(lastMonth, now))
+        {
+            await usage.CloseAsync(lastMonth, now, ct);
+        }
+    }
+
+    private bool IsDue(DateOnly monthStart, DateTime now) =>
+        now >= monthStart.AddMonths(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc) + _closeDelay;
 
     private BusinessOverage Overage(BusinessUsage used)
     {

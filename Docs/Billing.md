@@ -137,7 +137,18 @@ every plan, and on Business they say the runs carry on, what the overage costs a
 (`dbo.WorkspaceMessageUsage`) against `MessagesPerMonth`, credits the plan covered
 (`dbo.TenantCreditMonths`, Posted less what packs paid for) against `CreditsPerMonth`, and the amount at
 the contract's rates ($1 per million extra messages, $0.50 per 1,000 extra credits, rounded to the cent).
-It reads each tenant's contract as it stands now, so run it for last month before changing a contract.
+Each month is closed once and read as it was closed from then on (`dbo.BusinessMonth_Close`,
+`dbo.BusinessTenantMonths`, `dbo.BusinessMonthCloses`), so a contract that ends or changes later, or a
+workspace deleted later, does not change what a month owes. `BusinessUsageWorker` (every
+`Billing:BusinessUsageInterval`, 15 minutes) records the tenants on Business now against the month with
+their contract as it stands (`dbo.BusinessTenantMonth_Track`), so a contract whose `endsAt` falls in the
+month, which moves its tenant off Business by itself, is still billed for that month with the contract
+it was last seen on. `Billing:BusinessMonthCloseDelay` (2 hours) after the month ends, the worker closes
+it, or the first report asked for it after that does; until then the report works the month out as it
+stands and says `closed: false`. A month is its tracked tenants plus any tenant on Business now whose
+plan copy has not changed since before the month ended (one the worker missed, or a month before it
+ran). Messages are summed from the meter through every workspace the tenant has had, deleted ones
+included, since a deleted workspace's copy is kept (`RetiredAt`).
 
 Starts that take a place already held (a queued event's replay, a run replacing those it cancels) skip
 the limit on runs going at once, but not the month's credits: a replay after the credits ran out is

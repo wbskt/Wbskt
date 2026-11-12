@@ -2,7 +2,11 @@ namespace Wbskt.Management.Models;
 
 /// <summary>Each Business tenant's use past its contract in one calendar month (UTC), for the invoice.</summary>
 /// <param name="MonthStart">The first day of the month reported.</param>
-public sealed record BusinessOverageReport(DateOnly MonthStart, IReadOnlyCollection<BusinessOverage> Tenants);
+/// <param name="Closed">
+/// True once the month is over and kept as it was then: its tenants, contracts and totals no longer change.
+/// False for a month still running, or just ended, whose figures are worked out as they stand now.
+/// </param>
+public sealed record BusinessOverageReport(DateOnly MonthStart, IReadOnlyCollection<BusinessOverage> Tenants, bool Closed);
 
 /// <summary>
 /// One Business tenant's month against its contract (Docs/Billing.md, Business). Credits its credit packs

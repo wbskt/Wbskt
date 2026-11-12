@@ -22,4 +22,24 @@ internal sealed class BusinessUsageProvider : BaseSqlProvider, IBusinessUsagePro
                 r.GetDecimal(r.GetOrdinal("CreditsDrawn"))),
             ct);
     }
+
+    public async Task TrackAsync(DateTime now, CancellationToken ct)
+    {
+        await ExecuteNonQueryAsync(
+            "dbo.BusinessTenantMonth_Track",
+            p => p.Add("@Now", SqlDbType.DateTime2).Value = now,
+            ct);
+    }
+
+    public async Task CloseAsync(DateOnly monthStart, DateTime now, CancellationToken ct)
+    {
+        await ExecuteNonQueryAsync(
+            "dbo.BusinessMonth_Close",
+            p =>
+            {
+                p.Add("@MonthStart", SqlDbType.Date).Value = monthStart.ToDateTime(TimeOnly.MinValue);
+                p.Add("@Now", SqlDbType.DateTime2).Value = now;
+            },
+            ct);
+    }
 }

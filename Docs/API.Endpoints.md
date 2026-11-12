@@ -620,7 +620,7 @@ For operators, the Business overage behind the invoice:
 
 | Endpoint | Guard | What it does |
 |---|---|---|
-| `GET /api/internal/billing/business-overage?year=&month=` | shared internal key | **Backend network only; for operators.** Each Business tenant's use past its contract in that calendar month (UTC), for the invoice: `{ monthStart, tenants: [{ tenantRefId, messagesPerMonth, messagesUsed, extraMessages, creditsPerMonth, creditsUsed, creditsFromPacks, extraCredits, amountUsd }] }`. Credits its packs paid for are not overage. Guarded like the auth host's internal routes: `X-Wbskt-Internal-Key` must match this host's `Internal:ApiKey` (`AUTH_INTERNAL_API_KEY`). `BILLING_MONTH_INVALID` (400) for a month that has not started or does not exist. |
+| `GET /api/internal/billing/business-overage?year=&month=` | shared internal key | **Backend network only; for operators.** Each Business tenant's use past its contract in that calendar month (UTC), for the invoice: `{ monthStart, tenants: [{ tenantRefId, messagesPerMonth, messagesUsed, extraMessages, creditsPerMonth, creditsUsed, creditsFromPacks, extraCredits, amountUsd }], closed }`. Credits its packs paid for are not overage. A month is closed two hours after it ends (`closed: true`) and reads the same from then on, with each tenant on the contract it was last seen on during the month, including one whose contract has ended since; before that it is worked out as it stands. Guarded like the auth host's internal routes: `X-Wbskt-Internal-Key` must match this host's `Internal:ApiKey` (`AUTH_INTERNAL_API_KEY`). `BILLING_MONTH_INVALID` (400) for a month that has not started or does not exist. |
 
 ### 2.12 Operational
 
