@@ -52,6 +52,16 @@ public sealed class SmtpEmailSender : IEmailSender
         // Multiple recipients are ordinary; MailAddressCollection parses a comma-separated list.
         message.To.Add(to);
 
-        await client.SendMailAsync(message, ct);
+        // SmtpClient.Timeout covers only the synchronous Send, so the bound is a token.
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(_options.SendTimeout);
+        try
+        {
+            await client.SendMailAsync(message, timeout.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new TimeoutException($"The SMTP relay {_options.Host}:{_options.Port} did not take the message within {_options.SendTimeout.TotalSeconds:0} s.");
+        }
     }
 }

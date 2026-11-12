@@ -27,6 +27,12 @@ public sealed class EmailOptions
 
     public string? FromDisplayName { get; init; }
 
+    /// <summary>
+    /// How long one send may take before it counts as failed. A relay that accepts the connection and then
+    /// stops answering would otherwise hold the sequential mail drains until the TCP stack gives up.
+    /// </summary>
+    public TimeSpan SendTimeout { get; init; } = TimeSpan.FromSeconds(30);
+
     /// <summary>Whether enough is configured to send at all.</summary>
     public bool IsConfigured => !string.IsNullOrWhiteSpace(Host) && !string.IsNullOrWhiteSpace(FromAddress);
 }
