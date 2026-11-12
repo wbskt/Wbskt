@@ -788,4 +788,30 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         (await ServicesFixture.ReadErrorCodeAsync(withRole)).Should().Be("PERMISSION_UNAUTHORIZED");
         withoutRole.IsSuccessStatusCode.Should().BeTrue("inviting without a role needs only users.manage");
     }
+
+    [SkippableFact]
+    public async Task MEM_40_RemovingFromOrDeletingAGroupThatCarriesRoles_NeedsRolesManage()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var (lead, _) = await ArrangeLeadAsync(admin, tenantRef);
+        var (_, memberRef, _) = await ArrangeMemberAsync(admin, tenantRef);
+        var restricted = await fixture.CreateGroupAsync(admin.Token, tenantRef);
+        var roleRef = await CreateRoleWithPermissionAsync(admin.Token, tenantRef, "users.read");
+        await fixture.Auth.As(admin.Token).AssignGroupRoleRawAsync(tenantRef, restricted, roleRef, new AssignmentScopeRequest(WorkspaceRef: (Guid?)null));
+        (await fixture.Auth.As(admin.Token).AddMemberToGroupRawAsync(tenantRef, memberRef, restricted))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        // Either would take the group's roles, a deny among them, away from the member.
+        var removed = await fixture.Auth.As(lead.Token).RemoveMemberFromGroupRawAsync(tenantRef, memberRef, restricted);
+        var deleted = await fixture.Auth.As(lead.Token).DeleteGroupRawAsync(tenantRef, restricted);
+
+        removed.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await ServicesFixture.ReadErrorCodeAsync(removed)).Should().Be("PERMISSION_UNAUTHORIZED");
+        deleted.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await ServicesFixture.ReadErrorCodeAsync(deleted)).Should().Be("PERMISSION_UNAUTHORIZED");
+        (await fixture.Auth.As(admin.Token).RemoveMemberFromGroupRawAsync(tenantRef, memberRef, restricted))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent, "an administrator holds roles.manage");
+    }
 }

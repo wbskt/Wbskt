@@ -214,7 +214,9 @@ roles away, a deny included. Each of these needs `roles.manage` tenant-wide on t
 `users.manage` its endpoint declares; without it the answer is 403 `PERMISSION_UNAUTHORIZED`.
 Otherwise someone given `users.manage` to invite people could invite a second address of their own as
 `Admin`, or join the group that holds it, and end up with every permission. (Creating a workspace is
-the one grant without it: the creator gets `Admin` in that workspace, as below.)
+the one grant without it: the creator gets `Admin` in that workspace, as below.) Removing or suspending a
+tenant member is not covered: it ends their access as a whole rather than moving a role, it is what
+`users.manage` is for, and the tenant's last administrator cannot be removed.
 
 `POST /api/v1/workspaces/{ref}/members` requires `users.manage` **in that workspace**, and also adds the
 user to the workspace's tenant (`WorkspaceMember_Add`) — without that row they would pass the

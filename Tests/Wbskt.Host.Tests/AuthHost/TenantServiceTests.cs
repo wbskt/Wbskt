@@ -71,6 +71,9 @@ public sealed class TenantServiceTests
 
         Assert.Equal("PERMISSION_UNAUTHORIZED", withRole.Error.Code);
         Assert.Equal(ErrorType.Forbidden, withRole.Error.Type);
+
+        // Refused before the role is looked up, so the answer says nothing about whether it exists.
+        _accessControl.Verify(p => p.FindRoleIdByRefIdAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
         _tenants.Verify(p => p.CreateInvitationAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
