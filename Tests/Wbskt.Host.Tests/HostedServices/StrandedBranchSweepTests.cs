@@ -199,7 +199,7 @@ public sealed class StrandedBranchSweepTests
             Gc = new BookmarkOrphanGc(
                 state.Clock,
                 new ActiveLeadership(),
-                WorkerTestServices.Scopes(branchProvider, bookmarkProvider, Failer),
+                WorkerTestServices.Scopes(branchProvider, bookmarkProvider, runProvider, Failer),
                 NullLogger<BookmarkOrphanGc>.Instance,
                 WorkerTestServices.Options(new WorkflowEngineOptions { StrandedBranchThreshold = Threshold }));
         }

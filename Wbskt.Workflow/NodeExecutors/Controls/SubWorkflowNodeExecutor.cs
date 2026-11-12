@@ -30,7 +30,11 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 /// <param name="options">
 /// Optional so the executor's unit tests need no configuration; without it the default depth ceiling applies.
 /// </param>
-internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runProvider, TimeProvider clock, IExpressionEvaluator? evaluator = null, IOptions<WorkflowEngineOptions>? options = null) : ParkingNodeExecutor(clock)
+/// <param name="completionHook">
+/// Raises the child's completion event again once the parent has parked, for a child that ended first.
+/// Optional so the executor's unit tests need no stub.
+/// </param>
+internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runProvider, TimeProvider clock, IExpressionEvaluator? evaluator = null, IOptions<WorkflowEngineOptions>? options = null, ISubWorkflowCompletionHook? completionHook = null) : ParkingNodeExecutor(clock)
 {
     private readonly int _maxDepth = options?.Value.MaxSubWorkflowDepth ?? new WorkflowEngineOptions().MaxSubWorkflowDepth;
 
@@ -126,7 +130,26 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
         }
 
         RunRow childRun = await runProvider.GetByIdAsync(result.RunId.Value, ct);
-        return Park(ctx, new ParkPlan(new ChildRunCompletedWakeCondition(childRun.RefId), childRun.RefId.ToString(), null));
+        return Park(ctx, new ParkPlan(new ChildRunCompletedWakeCondition(childRun.RefId), childRun.RefId.ToString(), null)) with
+        {
+            // The child runs on its own and can end before the parent's bookmark exists; its event then
+            // matched nothing. Read once parked, so one of the two always sees the other.
+            AfterParked = afterCt => WakeIfChildEndedAsync(childRun.Id, afterCt)
+        };
+    }
+
+    private async Task WakeIfChildEndedAsync(long childRunId, CancellationToken ct)
+    {
+        if (completionHook is null)
+        {
+            return;
+        }
+
+        RunRow child = await runProvider.GetByIdAsync(childRunId, ct);
+        if (RunStatus.IsTerminal(child.Status))
+        {
+            await completionHook.OnRunCompletedAsync(child.RefId, child.Status, child.OutputJson, ct);
+        }
     }
 
     /// <summary>

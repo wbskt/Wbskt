@@ -32,6 +32,70 @@ public sealed class BookmarkOrphanGcTests
         Assert.True(provider.DeleteOrphansCallCount >= 1);
     }
 
+    [Fact]
+    public async Task A_parent_still_waiting_on_an_ended_child_is_woken()
+    {
+        // Arrange
+        var child = new RunRow
+        {
+            Id = 7, RefId = Guid.NewGuid(), WorkflowDefinitionId = 1, WorkflowRefId = Guid.NewGuid(), WorkflowVersion = 1,
+            TriggerNodeId = Guid.NewGuid(), CorrelationKey = null, Status = RunStatus.Failed,
+            StartedAt = DateTime.UtcNow, CompletedAt = DateTime.UtcNow, CancellationRequestedAt = null,
+            CancellationReason = null, CreditBudget = 0m, CreatedAt = DateTime.UtcNow, OutputJson = """{"ok":false}"""
+        };
+        var runs = new EndedChildRunProvider([child]);
+        var hook = new RecordingCompletionHook();
+        var gc = new BookmarkOrphanGc(
+            TimeProvider.System,
+            new FixedLeadershipGate(true),
+            WorkerTestServices.Scopes(new RecordingBookmarkProvider(), new NoStrandedBranchProvider(), runs, hook),
+            NullLogger<BookmarkOrphanGc>.Instance,
+            WorkerTestServices.Options(new WorkflowEngineOptions { BookmarkOrphanGcInterval = TimeSpan.FromMilliseconds(20) }));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        // Act
+        await gc.StartAsync(cts.Token);
+        await hook.Called.Task.WaitAsync(cts.Token);
+        await gc.StopAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal((child.RefId, RunStatus.Failed, """{"ok":false}"""), hook.First);
+    }
+
+    private sealed class EndedChildRunProvider(IReadOnlyCollection<RunRow> children) : IRunProvider
+    {
+        public Task<IReadOnlyCollection<RunRow>> GetEndedChildrenAwaitedAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => Task.FromResult(children);
+        public Task<RunRow> CreateAsync(RunRow row, CancellationToken ct) => throw new NotSupportedException();
+        public Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<RunRow> GetByIdAsync(long runId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<RunRow?> FindRowByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<RunRow>> ListByWorkspaceAsync(int workspaceId, string? statusFilter, int top, long? cursorId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<RunStatsRow> GetStatsAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<RunFailureBucketRow>> GetTopFailuresAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, int top, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<NodeTimingRow>> GetNodeTimingsAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, int top, CancellationToken ct) => throw new NotSupportedException();
+        public Task<RunRow> UpdateStatusAsync(Guid refId, string status, DateTime? completedAt, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct) => throw new NotSupportedException();
+        public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
+    }
+
+    private sealed class RecordingCompletionHook : ISubWorkflowCompletionHook
+    {
+        public TaskCompletionSource Called { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public (Guid RunRefId, string Status, string? OutputJson)? First { get; private set; }
+
+        public Task OnRunCompletedAsync(Guid runRefId, string terminalStatus, CancellationToken ct) => OnRunCompletedAsync(runRefId, terminalStatus, null, ct);
+
+        public Task OnRunCompletedAsync(Guid runRefId, string terminalStatus, string? outputJson, CancellationToken ct)
+        {
+            First ??= (runRefId, terminalStatus, outputJson);
+            Called.TrySetResult();
+            return Task.CompletedTask;
+        }
+    }
+
     private sealed class FixedLeadershipGate(bool isActive) : ILeadershipGate
     {
         public int Checks { get; private set; }

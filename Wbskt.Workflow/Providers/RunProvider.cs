@@ -450,6 +450,20 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
         );
     }
 
+    public async Task<IReadOnlyCollection<RunRow>> GetEndedChildrenAwaitedAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.Run_GetEndedChildrenAwaited",
+            p =>
+            {
+                p.AddWithValue("@CutoffUtc", cutoffUtc);
+                p.AddWithValue("@BatchSize", batchSize);
+            },
+            Map,
+            ct
+        );
+    }
+
     public async Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
     {
         return await ExecuteCollectionAsync(
