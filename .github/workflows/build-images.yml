@@ -735,6 +735,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     permissions:
       contents: read
+      issues: write
     uses: ./.github/workflows/deploy.yml
     with:
       tag: ${{ needs.meta.outputs.tag }}
