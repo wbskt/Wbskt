@@ -33,13 +33,14 @@ require_tls="$(printf '%s' "${SMTP_USE_STARTTLS:-true}" | tr '[:upper:]' '[:lowe
     echo "  group_interval: 5m"
     echo "  repeat_interval: 4h"
     # Watchdog always fires: it goes only to the dead man's switch, or nowhere when there is none,
-    # and never to the people the default receiver reaches.
+    # and never to the people the default receiver reaches. The repeat is checked on each 1m group
+    # tick, so 4m sends about every 5 minutes.
     echo "  routes:"
     echo "    - matchers: ['alertname=\"Watchdog\"']"
     echo "      receiver: deadmans"
     echo "      group_wait: 0s"
     echo "      group_interval: 1m"
-    echo "      repeat_interval: 5m"
+    echo "      repeat_interval: 4m"
     echo "receivers:"
     echo "  - name: deadmans"
     if [ -n "${ALERT_DEADMANS_URL:-}" ]; then

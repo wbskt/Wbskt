@@ -11,7 +11,8 @@ groups:
         # Always firing, on purpose. Alertmanager sends it to ALERT_DEADMANS_URL every 5 minutes, and
         # the service there alerts when it stops arriving: the VM is down, offline, out of disk, or
         # Prometheus or Alertmanager stopped. Every other rule is evaluated and sent from this VM, so
-        # nothing else can report that. It never reaches the email or webhook receivers.
+        # nothing else can report that. It never reaches the email or webhook receivers. A route or
+        # inhibit rule keyed on severity must leave it out.
         expr: vector(1)
         labels:
           severity: none
