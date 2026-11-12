@@ -56,6 +56,8 @@ public static class GatewayCoreExtensions
         services.AddHostedService<HeartbeatPublisher>();
         services.Configure<PingSamplerOptions>(configuration.GetSection(PingSamplerOptions.SectionName));
         services.AddHostedService<PingSampler>();
+        services.Configure<AccessRecheckOptions>(configuration.GetSection(AccessRecheckOptions.SectionName));
+        services.AddHostedService<AccessRecheck>();
 
         return services;
     }

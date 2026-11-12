@@ -20,7 +20,7 @@ public sealed class InboundMessageDispatcherTests
     private static readonly Guid CommandId = Guid.Parse("88888888-8888-8888-8888-888888888888");
 
     private readonly RecordingEventBus _bus = new();
-    private readonly FakeClientConnection _connection = new() { ClientId = 1, WorkspaceId = 2 };
+    private readonly FakeClientConnection _connection = new() { ClientId = 1, WorkspaceId = 2, TokenIssuedAtUtc = DateTime.UtcNow };
     private readonly InboundMessageDispatcher _dispatcher;
 
     public InboundMessageDispatcherTests()
