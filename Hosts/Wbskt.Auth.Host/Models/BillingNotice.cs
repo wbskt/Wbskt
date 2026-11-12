@@ -30,5 +30,8 @@ public sealed record BillingContact(int UserId, string Username, string Email);
 /// <summary>A subscription behind on payment (<c>dbo.TenantSubscriptions_GetPastDueBetween</c>).</summary>
 public sealed record PastDueSubscription(int TenantId, string SubscriptionId, PlanCode PlanCode, DateTime PastDueSince);
 
-/// <summary>A billing email leased for sending (<c>dbo.BillingNoticeMails_Take</c>); <see cref="Attempts"/> counts this one.</summary>
-public sealed record BillingNoticeMail(long Id, int TenantId, BillingNoticeKind Kind, string To, string Subject, string HtmlBody, int Attempts);
+/// <summary>
+/// A billing email leased for sending (<c>dbo.BillingNoticeMails_Take</c>); <see cref="Attempts"/> counts this one.
+/// <see cref="TextBody"/> is null for a mail queued before plain-text bodies were stored, which goes out as HTML only.
+/// </summary>
+public sealed record BillingNoticeMail(long Id, int TenantId, BillingNoticeKind Kind, string To, string Subject, string? TextBody, string HtmlBody, int Attempts);

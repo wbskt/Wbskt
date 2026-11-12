@@ -60,7 +60,7 @@ internal sealed class OutboundMailDispatcher : BackgroundService
         {
             try
             {
-                await _sender.SendAsync(mail.To, mail.Subject, mail.HtmlBody, EmailBodyFormat.Html, ct);
+                await _sender.SendMultipartAsync(mail.To, mail.Subject, mail.TextBody, mail.HtmlBody, ct);
 
                 // The relay took it; delivery from there is the relay's. Without this line a missing
                 // mail cannot be told apart from one that was never handed over. Never the body: it

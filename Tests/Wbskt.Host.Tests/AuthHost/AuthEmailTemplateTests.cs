@@ -30,8 +30,9 @@ public sealed class AuthEmailTemplateTests
     {
         var mail = AuthEmailTemplates.Invitation(Options, "invitee@example.test", "<img src=x onerror=alert(1)>", "tok", Expiry);
 
-        Assert.DoesNotContain("<img", mail.HtmlBody);
-        Assert.Contains("&lt;img", mail.HtmlBody);
+        // "<img src=x", not "<img": the layout's own logo is an image.
+        Assert.DoesNotContain("<img src=x", mail.HtmlBody);
+        Assert.Contains("&lt;img src=x", mail.HtmlBody);
     }
 
     /// <summary>
@@ -50,7 +51,7 @@ public sealed class AuthEmailTemplateTests
     {
         var mail = AuthEmailTemplates.Invitation(Options, "invitee@example.test", "Smith & Sons", "tok", Expiry);
 
-        Assert.Contains("<h1>You have been invited to join Smith &amp; Sons</h1>", mail.HtmlBody);
+        Assert.Contains(">You have been invited to join Smith &amp; Sons</h1>", mail.HtmlBody);
         Assert.DoesNotContain("&amp;amp;", mail.HtmlBody);
     }
 
@@ -90,5 +91,41 @@ public sealed class AuthEmailTemplateTests
         var exists = AuthEmailTemplates.AccountAlreadyExists(Options, "a@example.test", "a");
         Assert.Contains("forgot-password", exists.HtmlBody);
         Assert.DoesNotContain("token=", exists.HtmlBody);
+    }
+    /// <summary>
+    /// The plain-text body is what text-only clients and anyone blocking HTML read, so it carries the
+    /// same link, and user-chosen values verbatim: nothing renders it, so encoding would only garble it.
+    /// </summary>
+    [Fact]
+    public void The_text_body_carries_the_link_and_no_markup()
+    {
+        var mail = AuthEmailTemplates.Invitation(Options, "invitee@example.test", "Smith & <Sons>", "abc", Expiry);
+
+        Assert.Contains("https://console.example.test/accept-invitation?token=abc", mail.TextBody);
+        Assert.Contains("Smith & <Sons>", mail.TextBody);
+        Assert.DoesNotContain("&amp;", mail.TextBody);
+        Assert.DoesNotContain("<p", mail.TextBody);
+    }
+
+    /// <summary>The preheader is the inbox preview line and is user-influenced, so it is encoded like the rest.</summary>
+    [Fact]
+    public void The_preheader_is_encoded()
+    {
+        var mail = AuthEmailTemplates.Invitation(Options, "invitee@example.test", "<b>Acme</b>", "tok", Expiry);
+
+        Assert.Contains("Join the &lt;b&gt;Acme&lt;/b&gt; workspace", mail.HtmlBody);
+        Assert.DoesNotContain("<b>Acme", mail.HtmlBody);
+    }
+
+    [Fact]
+    public void The_layout_carries_the_configured_logo_and_footer_links()
+    {
+        var options = new AuthEmailOptions { ConsoleBaseUrl = "https://console.example.test", WebsiteUrl = "https://site.example.test/", LogoUrl = "https://site.example.test/mark.png" };
+
+        var mail = AuthEmailTemplates.PasswordReset(options, "a@example.test", "a", "t", Expiry);
+
+        Assert.Contains("src=\"https://site.example.test/mark.png\"", mail.HtmlBody);
+        Assert.Contains("href=\"https://site.example.test/privacy\"", mail.HtmlBody);
+        Assert.Contains("https://site.example.test/terms", mail.TextBody);
     }
 }

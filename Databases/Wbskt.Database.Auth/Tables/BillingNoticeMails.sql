@@ -18,6 +18,8 @@ CREATE TABLE dbo.BillingNoticeMails
     SentAt        DATETIME2(3)   NULL,
     GaveUpAt      DATETIME2(3)   NULL,
     CreatedAt     DATETIME2(3)   NOT NULL CONSTRAINT DF_BillingNoticeMails_CreatedAt DEFAULT SYSUTCDATETIME(),
+    -- Last, so adding it was an ALTER rather than a table rebuild. Null on rows queued before it existed.
+    TextBody      NVARCHAR(MAX)  NULL,
     CONSTRAINT PK_BillingNoticeMails PRIMARY KEY (Id),
     CONSTRAINT FK_BillingNoticeMails_Tenants FOREIGN KEY (TenantId) REFERENCES dbo.Tenants (Id) ON DELETE CASCADE
 );

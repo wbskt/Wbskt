@@ -21,6 +21,17 @@ public sealed class AuthEmailOptions
     /// <summary>Shown as the sender's name and in the mail body. Purely cosmetic.</summary>
     public string ProductName { get; init; } = "Wbskt";
 
+    /// <summary>The marketing site, linked from every mail's footer with its privacy and terms pages.</summary>
+    public string WebsiteUrl { get; init; } = "https://wbskt.com";
+
+    /// <summary>
+    /// The brand mark at the top of every mail: a square PNG shown at 28px, so at least 56px for
+    /// high-density screens. A hosted image rather than an inline SVG or attachment, because no major
+    /// client renders SVG and attachments show up as files in some. Where images are blocked the cell
+    /// behind it keeps the orange tile and its alt text.
+    /// </summary>
+    public string LogoUrl { get; init; } = "https://wbskt.com/email/wbskt-mark.png";
+
     /// <summary>
     /// Whether sign-in requires a confirmed address. <b>True, and it should stay true anywhere real.</b>
     /// <para>
