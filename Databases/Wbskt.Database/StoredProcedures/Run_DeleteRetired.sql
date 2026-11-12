@@ -53,7 +53,8 @@ BEGIN
     DECLARE @Today DATE = CAST(SYSUTCDATETIME() AS DATE);
 
     UPDATE rc
-    SET PostedCredits = rc.CreditsConsumed
+    SET PostedCredits = rc.CreditsConsumed,
+        HasUnposted = 0
     OUTPUT inserted.RunId, inserted.PostedCredits - deleted.PostedCredits INTO @Moved (RunId, Credits)
     FROM dbo.RunCounters rc
     WHERE rc.RunId IN (SELECT Id FROM @Runs)

@@ -6,8 +6,9 @@
 -- caller can tell when the tenant crossed its allowance. Credits Run_DeleteRetired posts are not seen
 -- here, so a crossing made only by them is not reported. Off the hot path: RunCounters_TryCharge only
 -- adds to a run's own counter, and the engine calls this every few seconds (CreditUsagePoster).
--- Reads the runs still going and those that ended since @EndedSince, which catches a charge landing
--- just after a run ended; Run_DeleteRetired posts anything left before a run is deleted. A run's
+-- Reads every counter marked as holding unposted credits (HasUnposted, set by each charge), plus the runs
+-- still going and those that ended since @EndedSince; Run_DeleteRetired posts anything left before a run
+-- is deleted. A run's
 -- PostedCredits moves in the same statement that reads its delta, so a retry never posts twice.
 -- What a tenant posts past its plan's allowance is drawn from its credit grants in the same transaction
 -- (dbo.TenantCreditGrants_Draw).
@@ -37,24 +38,31 @@ BEGIN
           UNION
           SELECT r.Id, r.WorkflowDefinitionId
           FROM dbo.Runs r
-          WHERE r.CompletedAt >= @EndedSince) c
+          WHERE r.CompletedAt >= @EndedSince
+          UNION
+          SELECT r.Id, r.WorkflowDefinitionId
+          FROM dbo.RunCounters u
+          JOIN dbo.Runs r ON r.Id = u.RunId
+          WHERE u.HasUnposted = 1) c
     JOIN dbo.RunCounters rc ON rc.RunId = c.RunId
     JOIN dbo.WorkflowDefinitions d ON d.Id = c.WorkflowDefinitionId
-    WHERE rc.CreditsConsumed <> rc.PostedCredits;
+    WHERE rc.CreditsConsumed <> rc.PostedCredits OR rc.HasUnposted = 1;
 
     BEGIN TRANSACTION;
 
     UPDATE rc
-    SET PostedCredits = rc.CreditsConsumed
+    SET PostedCredits = rc.CreditsConsumed,
+        HasUnposted = 0
     OUTPUT inserted.RunId, inserted.PostedCredits - deleted.PostedCredits INTO @Moved (RunId, Credits)
     FROM dbo.RunCounters rc
     JOIN @Candidates c ON c.RunId = rc.RunId
-    WHERE rc.CreditsConsumed <> rc.PostedCredits;
+    WHERE rc.CreditsConsumed <> rc.PostedCredits OR rc.HasUnposted = 1;
 
     INSERT INTO @ByWorkspace (WorkspaceId, Runs, Credits)
     SELECT c.WorkspaceId, COUNT(*), SUM(m.Credits)
     FROM @Moved m
     JOIN @Candidates c ON c.RunId = m.RunId
+    WHERE m.Credits <> 0
     GROUP BY c.WorkspaceId;
 
     MERGE dbo.WorkspaceCreditUsage WITH (HOLDLOCK) AS t

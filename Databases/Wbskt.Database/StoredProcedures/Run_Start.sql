@@ -131,7 +131,7 @@ BEGIN
             -- this calendar month (UTC) is the ledger less what was drawn from credit grants as it was
             -- posted (dbo.TenantCreditMonths); what is left is the plan's remainder (none once a downgrade
             -- puts the month past it) plus what the grants still hold, less what the runs still going
-            -- consumed and have not posted yet. Not locked: starts racing for the last credits are bounded
+            -- consumed and have not posted yet, ended or not. Not locked: starts racing for the last credits are bounded
             -- instead by each run's budget, cut to what is left, so the plan's allowance is soft by at most
             -- those budgets. NULL is no limit.
             IF @CreditAllowance IS NOT NULL AND @WorkspaceId IS NOT NULL
@@ -142,13 +142,15 @@ BEGIN
                             FROM dbo.WorkspaceCreditUsage u
                             JOIN dbo.TenantWorkspaces(@WorkspaceId, @TenantId) w ON w.WorkspaceId = u.WorkspaceId
                             WHERE u.Day >= @MonthStart), 0);
+                -- Every run with credits not yet posted, ended or not (IX_RunCounters_Unposted): one that
+                -- ended between two posts still counts what it spent.
                 DECLARE @CreditsUnposted DECIMAL(18,4) =
                     ISNULL((SELECT SUM(rc.CreditsConsumed - rc.PostedCredits)
-                            FROM dbo.Runs r
-                            JOIN dbo.RunCounters rc ON rc.RunId = r.Id
+                            FROM dbo.RunCounters rc
+                            JOIN dbo.Runs r ON r.Id = rc.RunId
                             JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
                             JOIN dbo.TenantWorkspaces(@WorkspaceId, @TenantId) w ON w.WorkspaceId = d.WorkspaceId
-                            WHERE r.Status IN (N'Running', N'Failing', N'Cancelling')), 0);
+                            WHERE rc.HasUnposted = 1), 0);
                 DECLARE @CreditsDrawn DECIMAL(18,4) =
                     ISNULL((SELECT Drawn FROM dbo.TenantCreditMonths WHERE TenantId = @TenantId AND MonthStart = @MonthStart), 0);
 
@@ -242,8 +244,8 @@ BEGIN
 
             SET @RunId = SCOPE_IDENTITY();
 
-            INSERT INTO dbo.RunCounters (RunId, ActiveBranchCount, CreditsConsumed, BudgetRunId, BudgetCeiling)
-            VALUES (@RunId, 1, @StartCost, @BudgetRunId, @BudgetCeiling);
+            INSERT INTO dbo.RunCounters (RunId, ActiveBranchCount, CreditsConsumed, BudgetRunId, BudgetCeiling, HasUnposted)
+            VALUES (@RunId, 1, @StartCost, @BudgetRunId, @BudgetCeiling, CASE WHEN @StartCost <> 0 THEN 1 ELSE 0 END);
 
             INSERT INTO dbo.Branches (RefId, RunId, NodeId, Status, LocalJson)
             VALUES (@BranchRefId, @RunId, @TriggerNodeId, N'Active', @BranchLocalJson);
