@@ -70,7 +70,8 @@ so a redelivered event wakes nothing twice. A claim marked Failed can be reclaim
 mid-dispatch does not lose the event. A claim an engine left Pending when it stopped is released
 by the next leader before its bus starts (`IdempotencyKey_ReleaseAbandonedClaims`): marked Failed so the
 broker's redelivery reclaims it, except a trigger start whose run exists (left Pending, or marked Failed
-on the way down), which is settled, since recovery already runs that run. An event claim records that the event had waiting branches to wake
+on the way down), which is settled, since recovery already runs that run. The release gives each row
+a new token, so an old leader still finishing one cannot settle it or hand its run to its own pump. An event claim records that the event had waiting branches to wake
 before it claims any (`IdempotencyKey_MarkResumed`), so a redelivery that finds them gone settles as a
 wake instead of starting trigger runs. Event and trigger-start claims are settled only under the token that holds them,
 so an old leader still finishing one after its lease lapsed cannot overwrite a redelivery's claim. `Runs.TriggerStartKey`

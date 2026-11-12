@@ -28,8 +28,10 @@ CREATE INDEX IX_IdempotencyKeys_CreatedAt
     ON dbo.IdempotencyKeys (CreatedAt);
 GO
 
--- IdempotencyKey_ReleaseAbandonedClaims looks only at Pending and Failed rows, which are few at any
--- moment, so a new leader's sweep seeks them rather than scanning a day of settled ones. The cost is
+-- IdempotencyKey_ReleaseAbandonedClaims looks only at Pending and Failed rows, so a new leader's sweep
+-- seeks them rather than scanning a day of settled ones. Pending rows are few at any moment; Failed
+-- ones (action keys among them) stay until the retention sweep deletes them, still far fewer than the
+-- Succeeded ones. The cost is
 -- that every claim enters and leaves this index once, on the busiest table, for a sweep that runs per
 -- failover.
 CREATE INDEX IX_IdempotencyKeys_Unsettled

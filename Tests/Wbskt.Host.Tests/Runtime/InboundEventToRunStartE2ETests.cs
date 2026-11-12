@@ -420,10 +420,26 @@ public sealed class InboundEventToRunStartE2ETests
         public Task<IdempotencyKeyRow> MarkSucceededAsync(string keyValue, string resultJson, CancellationToken ct) => Task.FromResult<IdempotencyKeyRow>(null!);
         public Task<IdempotencyKeyRow> MarkFailedAsync(string keyValue, string errorJson, CancellationToken ct) => throw new NotSupportedException();
         public Task<IdempotencyKeyRow> ReclaimFailedAsync(string keyValue, Guid newBranchRefId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IdempotencyKeyRow> MarkClaimSucceededAsync(string keyValue, Guid claimToken, string resultJson, CancellationToken ct) => MarkSucceededAsync(keyValue, resultJson, ct);
-        public Task<IdempotencyKeyRow> MarkClaimFailedAsync(string keyValue, Guid claimToken, string errorJson, CancellationToken ct) => MarkFailedAsync(keyValue, errorJson, ct);
         public Task MarkResumedAsync(string keyValue, Guid claimToken, CancellationToken ct) => Task.CompletedTask;
         public Task<int> ReleaseAbandonedClaimsAsync(CancellationToken ct) => throw new NotSupportedException();
+        public Task<IdempotencyKeyRow> MarkClaimFailedAsync(string keyValue, Guid claimToken, string errorJson, CancellationToken ct) => MarkFailedAsync(keyValue, errorJson, ct);
+
+        // Every claim here is taken once, so the settle always finds its own token.
+        public Task<IdempotencyKeyRow> MarkClaimSucceededAsync(string keyValue, Guid claimToken, string resultJson, CancellationToken ct) =>
+            Task.FromResult(new IdempotencyKeyRow
+            {
+                Id = 1,
+                KeyValue = keyValue,
+                RunId = 0,
+                BranchRefId = claimToken,
+                NodeId = Guid.Empty,
+                Attempt = 0,
+                Status = "Succeeded",
+                ResultJson = resultJson,
+                ErrorJson = null,
+                CreatedAt = Clock.UtcNow,
+                CompletedAt = Clock.UtcNow
+            });
 
         public Task<PendingTriggerEventRow?> EnqueueBehindActiveRunAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, CancellationToken ct) => throw new NotSupportedException();
         public Task<PendingTriggerEventRow?> DequeueNextAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct) => Task.FromResult<PendingTriggerEventRow?>(null);

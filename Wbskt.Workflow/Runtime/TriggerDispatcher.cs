@@ -169,13 +169,14 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
 
                 TriggerRegistrationDispatch dispatch;
                 long? branchToDispatch;
+                IdempotencyKeyRow settledClaim;
                 try
                 {
                     (dispatch, branchToDispatch) = await StartForRegistrationAsync(registration, normalizedEvent, correlationValue, startKey, registrationClaim.Reclaimed, ct);
 
                     // Not ct: the run exists by now, and a stop that left its claim Failed would have the redelivery
                     // hand its branch to the pump again.
-                    await _idempotencyKeyProvider.MarkClaimSucceededAsync(startKey, registrationClaim.Token, JsonSerializer.Serialize(dispatch, EngineJson.Options), CancellationToken.None);
+                    settledClaim = await _idempotencyKeyProvider.MarkClaimSucceededAsync(startKey, registrationClaim.Token, JsonSerializer.Serialize(dispatch, EngineJson.Options), CancellationToken.None);
                 }
                 catch
                 {
@@ -185,7 +186,9 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
 
                 // Only after the claim is settled: a retry that reclaims this registration's claim knows
                 // its run was never handed to the pump, so it can hand it over without running it twice.
-                if (branchToDispatch is long branchId)
+                // A claim a new leader released while this start ran is no longer this attempt's, and that
+                // leader's recovery, or the redelivery, hands the branch over instead.
+                if (branchToDispatch is long branchId && settledClaim.BranchRefId == registrationClaim.Token)
                 {
                     await _runDispatcher.DispatchAsync(new BranchExecutionRequest(dispatch.RunId!.Value, branchId, BranchExecutionReason.TriggerStarted), ct);
                 }
