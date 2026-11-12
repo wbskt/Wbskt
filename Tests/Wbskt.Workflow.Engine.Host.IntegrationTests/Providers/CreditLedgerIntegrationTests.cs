@@ -112,7 +112,7 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         Func<Task> refused = () => StartAsync(replacementWd, credits: new PlanCredits(5m, tenantId));
 
         (await refused.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(PlanCreditLimitError);
-        (await ScalarAsync("SELECT CAST(COUNT(*) AS DECIMAL(18,4)) FROM dbo.WorkspaceAccounts WHERE WorkspaceId = @Id AND RetiredAt IS NOT NULL", deleted)).Should().Be(1m);
+        (await RetiredAtAsync(deleted)).Should().NotBeNull("the copy is kept and marked, not deleted");
     }
 
     [SkippableFact]
@@ -304,6 +304,15 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@Id", id);
         return (decimal)(await command.ExecuteScalarAsync())!;
+    }
+
+    private async Task<DateTime?> RetiredAtAsync(int workspaceId)
+    {
+        await using var connection = new SqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new SqlCommand("SELECT RetiredAt FROM dbo.WorkspaceAccounts WHERE WorkspaceId = @Id", connection);
+        command.Parameters.AddWithValue("@Id", workspaceId);
+        return await command.ExecuteScalarAsync() as DateTime?;
     }
 
     private async Task RetireAsync(int workspaceId)

@@ -20,6 +20,9 @@ BEGIN
             LimitOverrides,
             ROW_NUMBER() OVER (PARTITION BY TenantId ORDER BY PlanRevision DESC, WorkspaceId) AS Pick
         FROM dbo.WorkspaceAccounts
+        -- A deleted workspace's copy stops following the tenant's plan, so it is not read for the plan;
+        -- its messages still count below.
+        WHERE RetiredAt IS NULL
     )
     SELECT
         t.TenantRefId,

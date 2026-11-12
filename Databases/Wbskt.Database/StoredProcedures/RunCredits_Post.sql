@@ -77,6 +77,18 @@ BEGIN
     WHERE a.CreditsPerMonth IS NOT NULL
     GROUP BY a.TenantId;
 
+    -- A deleted workspace's copy (RetiredAt) keeps the allowance it last had, so a cancelled run of it
+    -- posting late is held to the tenant's allowance from a live copy when there is one.
+    UPDATE p
+    SET Allowance = l.Allowance
+    FROM @Posts p
+    CROSS APPLY (SELECT MAX(a.CreditsPerMonth) AS Allowance
+                 FROM dbo.WorkspaceAccounts a
+                 WHERE a.TenantId = p.TenantId
+                   AND a.RetiredAt IS NULL
+                   AND a.CreditsPerMonth IS NOT NULL) l
+    WHERE l.Allowance IS NOT NULL;
+
     DECLARE @Now DATETIME2(3) = SYSUTCDATETIME();
     IF EXISTS (SELECT 1 FROM @Posts)
         EXEC dbo.TenantCreditGrants_Draw @Posts = @Posts, @MonthStart = @MonthStart, @At = @Now;

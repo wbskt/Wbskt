@@ -77,6 +77,35 @@ public sealed class MessageMeterIntegrationTests(SqlEdgeFixture fixture)
         Assert.Equal([busy], await provider.RecordNoticeAsync([busy], monthStart, 80, CancellationToken.None));
     }
 
+    /// <summary>
+    /// A deleted workspace's messages stay in its tenant's pool for the month, so deleting it hands
+    /// nothing back, but it is not listed itself: nothing is left of it to warn or throttle.
+    /// </summary>
+    [SkippableFact]
+    public async Task A_deleted_workspaces_messages_stay_in_the_pool_without_listing_it()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int tenantId = Random.Shared.Next(1_000_000, int.MaxValue);
+        int deleted = Random.Shared.Next(1_000_000, int.MaxValue);
+        int kept = deleted - 1;
+        await ExecAsync("""
+            INSERT INTO dbo.WorkspaceAccounts (WorkspaceId, TenantId, TenantRefId, PlanCode, LimitOverrides, PlanRevision, RetiredAt)
+            VALUES (@p0, @p2, NEWID(), N'Maker', NULL, 1, SYSUTCDATETIME()), (@p1, @p2, NEWID(), N'Maker', NULL, 1, NULL);
+            """, deleted, kept, tenantId);
+        int received = await EventIdAsync("ClientMessageReceivedEvent");
+        DateTime now = DateTime.UtcNow;
+        await TrafficAsync(
+            new EventLogEntry(received, "{}", now, deleted, MessageId: Guid.NewGuid()),
+            new EventLogEntry(received, "{}", now, deleted, MessageId: Guid.NewGuid()),
+            new EventLogEntry(received, "{}", now, kept, MessageId: Guid.NewGuid()));
+        var monthStart = new DateOnly(now.Year, now.Month, 1);
+
+        IReadOnlyCollection<WorkspaceMessageAccount> accounts = await new MessageAllowanceProvider(Configuration()).GetAccountsAsync(monthStart, CancellationToken.None);
+
+        Assert.Equal(new WorkspaceMessageAccount(kept, PlanCode.Maker, null, 3), accounts.Single(a => a.WorkspaceId == kept));
+        Assert.DoesNotContain(accounts, a => a.WorkspaceId == deleted);
+    }
+
     private async Task TrafficAsync(params EventLogEntry[] entries)
     {
         var provider = new EventProvider(Configuration());
