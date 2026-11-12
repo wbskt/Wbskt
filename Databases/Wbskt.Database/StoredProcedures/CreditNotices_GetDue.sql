@@ -36,8 +36,9 @@ BEGIN
 
     UNION ALL
 
-    -- The allowance is the tenant's plan's from a live copy of its account (a deleted workspace's copy
-    -- keeps the one it last had), and the notice names the live workspace that posted the most this
+    -- The allowance is the tenant's plan's from a live copy of its account, or from a deleted
+    -- workspace's copy (which keeps the one it last had) when none is live, as RunCredits_Post and
+    -- Run_DeleteRetired take it; the notice names the live workspace that posted the most this
     -- month, or a deleted one only when none is left. Read through IX_TenantCreditMonths_MonthStart.
     SELECT
         N'Allowance',
@@ -48,10 +49,10 @@ BEGIN
         l.Level,
         m.NotifiedPercent
     FROM dbo.TenantCreditMonths m
-    CROSS APPLY (SELECT MAX(wa.CreditsPerMonth) AS Allowance
+    CROSS APPLY (SELECT COALESCE(MAX(CASE WHEN wa.RetiredAt IS NULL THEN wa.CreditsPerMonth END),
+                                 MAX(wa.CreditsPerMonth)) AS Allowance
                  FROM dbo.WorkspaceAccounts wa
-                 WHERE wa.TenantId = m.TenantId
-                   AND wa.RetiredAt IS NULL) a
+                 WHERE wa.TenantId = m.TenantId) a
     CROSS APPLY (SELECT CASE WHEN m.Posted >= a.Allowance THEN 100
                              WHEN m.Posted >= a.Allowance * 0.8 THEN 80
                              ELSE 0 END AS Level) l

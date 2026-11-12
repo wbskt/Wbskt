@@ -46,10 +46,11 @@ internal sealed class CreditUsageProvider : BaseSqlProvider, ICreditUsageProvide
             if (isCap)
             {
                 p.AddWithValue("@WorkspaceId", notice.WorkspaceId);
+                p.AddWithValue("@Limit", notice.Limit);
             }
             else
             {
-                p.AddWithValue("@TenantId", notice.TenantId);
+                p.AddWithValue("@TenantId", notice.TenantId ?? throw new InvalidOperationException($"An allowance notice for workspace {notice.WorkspaceId} has no tenant."));
             }
 
             p.Add("@MonthStart", SqlDbType.Date).Value = monthStart.ToDateTime(TimeOnly.MinValue);

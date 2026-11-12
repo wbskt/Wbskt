@@ -378,6 +378,29 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
+    public async Task A_mark_for_a_cap_raised_since_it_was_read_is_not_kept()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        await SetCapAsync(workspaceId, 10m);
+        long runId = await StartAsync(wd, startCost: 1m);
+        await ChargeAsync(runId, 9m);
+        await PostAsync();
+        var credits = ProviderFactory.CreditUsage(fixture.ConnectionString);
+        CreditNotice owed = (await credits.GetDueNoticesAsync(ThisMonth, CancellationToken.None)).Single(n => n.WorkspaceId == workspaceId);
+
+        await SetCapAsync(workspaceId, 12m);
+        await credits.MarkNotifiedAsync(owed, ThisMonth, 100, CancellationToken.None);
+
+        owed.Owed().Should().Equal(80, 100);
+        (await credits.GetDueNoticesAsync(ThisMonth, CancellationToken.None))
+            .Should().ContainSingle(n => n.WorkspaceId == workspaceId)
+            .Which.Owed().Should().Equal([80], "10 of the raised 12 is past 80% and the old cap's mark was not kept");
+    }
+
+    [SkippableFact]
     public async Task An_allowance_notice_names_a_live_workspace_over_a_deleted_one_that_spent_more()
     {
         Skip.IfNot(fixture.IsAvailable, SkipReason);
@@ -407,8 +430,8 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         int big = NewId();
         await AddAccountAsync(small, tenantId, creditsPerMonth: 10m);
         await AddAccountAsync(big, tenantId, creditsPerMonth: 10m);
-        long smallRun = await StartAsync(await CreateDefinitionAsync(small), startCost: 2m);
-        long bigRun = await StartAsync(await CreateDefinitionAsync(big), startCost: 9m);
+        await StartAsync(await CreateDefinitionAsync(small), startCost: 2m);
+        await StartAsync(await CreateDefinitionAsync(big), startCost: 9m);
         await PostAsync();
         var credits = ProviderFactory.CreditUsage(fixture.ConnectionString);
 
@@ -418,8 +441,6 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         owed.Should().Be(new CreditNotice(CreditNoticeKind.Allowance, big, tenantId, 10m, 11m, 100, 0));
         owed.Owed().Should().Equal(80, 100);
         (await credits.GetDueNoticesAsync(ThisMonth, CancellationToken.None)).Should().NotContain(n => n.TenantId == tenantId);
-        smallRun.Should().BePositive();
-        bigRun.Should().BePositive();
     }
 
     [SkippableFact]
