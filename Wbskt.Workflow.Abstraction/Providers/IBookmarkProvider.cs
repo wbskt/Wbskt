@@ -11,7 +11,11 @@ public interface IBookmarkProvider
         => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(Array.Empty<BookmarkRow>());
     Task<IReadOnlyCollection<BookmarkRow>> GetAllByRunIdAsync(int runId, CancellationToken ct);
 
-    /// <summary>Atomically claims (deletes) the bookmark by RefId. Returns false if it was already claimed/gone - the caller lost the race.</summary>
+    /// <summary>
+    /// Atomically claims (deletes) the bookmark by RefId, and in the same transaction marks its branch woken
+    /// (so a new leader resumes it if the dispatch is lost). Returns false if it was already claimed/gone -
+    /// the caller lost the race, and nothing is written.
+    /// </summary>
     Task<bool> TryClaimAsync(Guid refId, CancellationToken ct);
 
     /// <summary>

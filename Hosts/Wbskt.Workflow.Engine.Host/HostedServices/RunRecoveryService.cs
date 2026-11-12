@@ -23,7 +23,7 @@ public sealed class RunRecoveryService : IEngineStartupTracker
         _logger = logger;
     }
 
-    /// <summary>The page size <see cref="FindWokenAsync"/> reads woken branches in.</summary>
+    /// <summary>The page size <see cref="CollectWokenAsync"/> reads woken branches in.</summary>
     internal const int WokenPageSize = 1_000;
 
     /// <summary>
@@ -32,7 +32,7 @@ public sealed class RunRecoveryService : IEngineStartupTracker
     /// dispatch anything itself, that is before the bus starts and the leadership gate opens: a branch
     /// this instance woke would be in the same state and would then be run twice.
     /// </summary>
-    public async Task<IReadOnlyCollection<BranchExecutionRequest>> FindWokenAsync(CancellationToken ct)
+    public async Task<IReadOnlyCollection<BranchExecutionRequest>> CollectWokenAsync(CancellationToken ct)
     {
         try
         {
@@ -70,7 +70,7 @@ public sealed class RunRecoveryService : IEngineStartupTracker
     /// IHostedService: EngineLeadershipCoordinator calls this directly, only once this instance becomes
     /// leader (see Program.cs).
     /// </summary>
-    /// <param name="woken">The branches <see cref="FindWokenAsync"/> found before the gate opened.</param>
+    /// <param name="woken">The branches <see cref="CollectWokenAsync"/> found before the gate opened.</param>
     public async Task RecoverAsync(IReadOnlyCollection<BranchExecutionRequest> woken, CancellationToken ct)
     {
         try
@@ -141,7 +141,7 @@ public sealed class RunRecoveryService : IEngineStartupTracker
                 await _runDispatcher.DispatchAsync(request, ct);
             }
 
-            _logger.LogInformation("Recovered {Count} running branches and {Woken} Waiting branches whose wake was not dispatched.", branches.Count, woken.Count);
+            _logger.LogInformation("Recovered {Count} running branches and {Woken} Waiting branches whose wake may not have been dispatched.", branches.Count, woken.Count);
             _readyTcs.TrySetResult();
         }
         catch (Exception ex)

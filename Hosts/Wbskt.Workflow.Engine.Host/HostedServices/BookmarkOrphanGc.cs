@@ -22,10 +22,10 @@ public sealed class BookmarkOrphanGc(
     private readonly TimeSpan _strandedThreshold = options.Value.StrandedBranchThreshold;
 
     // Branches seen stranded on the previous pass, by id, with the row version they had then. A wake
-    // deletes its bookmark (the claim) before the woken branch is written, so for that moment a branch
-    // looks stranded however old it is; the grace period cannot tell the two apart because the claim
-    // does not touch the branch. Failing only a branch seen stranded, unchanged, on two passes in a row
-    // leaves a whole interval for a wake to reach it. Touched by one tick at a time.
+    // deletes its bookmark (the claim) and the woken branch then waits, Waiting with no bookmark, until
+    // its loop runs. The claim stamps the branch's UpdatedAt, so the grace period covers a wake that runs
+    // promptly; failing only a branch seen stranded, unchanged, on two passes in a row leaves a whole
+    // interval more for one queued behind a backlog. Touched by one tick at a time.
     private Dictionary<long, byte[]> _suspects = new();
 
     protected override string Name => "Bookmark orphan GC";
