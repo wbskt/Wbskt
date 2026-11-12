@@ -271,6 +271,26 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
+    public async Task A_cap_set_while_a_run_is_going_holds_that_run_to_it()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        long looping = await StartAsync(wd, startCost: 1m);
+        await ChargeAsync(looping, 4m);
+
+        await SetCapAsync(workspaceId, 10m);
+        long next = await StartAsync(wd, credits: new PlanCredits(1000m, null));
+
+        var counters = ProviderFactory.RunCounters(fixture.ConnectionString);
+        (await ProviderFactory.Run(fixture.ConnectionString).GetByIdAsync(looping, CancellationToken.None)).CreditBudget.Should().Be(5m, "its budget is cut to what it has spent");
+        next.Should().BePositive("the unspent budget it held is no longer reserved against the cap");
+        (await counters.TryChargeAsync((int)looping, 4m, CancellationToken.None)).Should().NotBeNull("the cap still has room after the next run's lease");
+        (await counters.TryChargeAsync((int)looping, 1m, CancellationToken.None)).Should().BeNull("the cap is spent or held, not the run's own 100");
+    }
+
+    [SkippableFact]
     public async Task A_post_reports_each_workspaces_month_and_its_cap()
     {
         Skip.IfNot(fixture.IsAvailable, SkipReason);

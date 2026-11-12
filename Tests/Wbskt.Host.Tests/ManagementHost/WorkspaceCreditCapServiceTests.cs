@@ -1,5 +1,6 @@
 using Moq;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Host.Tests.AuthHost;
 using Wbskt.Events.Billing;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Providers;
@@ -33,6 +34,18 @@ public sealed class WorkspaceCreditCapServiceTests
         Result<WorkspaceCreditCapResponse> result = await Service().SetAsync(7, new WorkspaceCreditCapRequest(100m), CancellationToken.None);
 
         Assert.True(result.Value.CapReached);
+    }
+
+    [Fact]
+    public async Task A_cap_whose_lock_is_busy_is_a_503_to_try_again_and_announces_nothing()
+    {
+        _caps.Setup(x => x.SetAsync(7, 100m, It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(SqlExceptions.WithNumber(50035, "busy"));
+
+        Result<WorkspaceCreditCapResponse> result = await Service().SetAsync(7, new WorkspaceCreditCapRequest(100m), CancellationToken.None);
+
+        Assert.Equal((ErrorType.Unavailable, "WORKSPACE_CREDIT_CAP_BUSY"), (result.Error.Type, result.Error.Code));
+        _eventBus.VerifyNoOtherCalls();
     }
 
     [Fact]

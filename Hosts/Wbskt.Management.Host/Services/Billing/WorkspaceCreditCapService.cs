@@ -1,3 +1,4 @@
+using Microsoft.Data.SqlClient;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Billing;
 using Wbskt.Infrastructure;
@@ -11,6 +12,8 @@ internal sealed class WorkspaceCreditCapService(IWorkspaceCreditCapProvider caps
     // DECIMAL(18,4) holds up to 10^14; a cap anywhere near that is no cap at all.
     private const decimal MaxCap = 1_000_000_000_000m;
 
+    private const int CapBusyError = 50035; // THROW in dbo.WorkspaceCreditCap_Set
+
     public async Task<Result<WorkspaceCreditCapResponse>> SetAsync(int workspaceId, WorkspaceCreditCapRequest request, CancellationToken ct)
     {
         if (request.MonthlyCreditCap is < 0 or > MaxCap)
@@ -21,7 +24,17 @@ internal sealed class WorkspaceCreditCapService(IWorkspaceCreditCapProvider caps
 
         DateTime nowUtc = clock.GetUtcNow().UtcDateTime;
         var monthStart = new DateOnly(nowUtc.Year, nowUtc.Month, 1);
-        decimal spent = await caps.SetAsync(workspaceId, request.MonthlyCreditCap, monthStart, ct);
+        decimal spent;
+        try
+        {
+            spent = await caps.SetAsync(workspaceId, request.MonthlyCreditCap, monthStart, ct);
+        }
+        catch (SqlException ex) when (ex.Number == CapBusyError)
+        {
+            return Result<WorkspaceCreditCapResponse>.Failure(Error.Unavailable(
+                "WORKSPACE_CREDIT_CAP_BUSY", "The workspace's runs are busy with its credit cap; try again."));
+        }
+
         await eventBus.PublishAsync(new WorkspaceCreditCapSetEvent(workspaceId, request.MonthlyCreditCap), ct);
 
         // A cap lowered to or below what was already spent refuses new runs at once; the response says so.
