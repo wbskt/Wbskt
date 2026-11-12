@@ -67,9 +67,9 @@ jobs:
     if: needs.changes.outputs.hosts == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           global-json-file: global.json
           cache: true
@@ -86,7 +86,7 @@ jobs:
       # Coverage and per-test results, kept whether or not the run above passed.
       - name: Coverage report
         if: always()
-        uses: danielpalme/ReportGenerator-GitHub-Action@5
+        uses: danielpalme/ReportGenerator-GitHub-Action@5f3701a41d14548c9b8e575a5c235230e515cbc0 # v5.6.0
         with:
           reports: '**/coverage.cobertura.xml'
           targetdir: coverage-report
@@ -101,7 +101,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: unit-tests-results
           path: |
@@ -145,9 +145,9 @@ jobs:
       WBSKT_SMTP_TEST_PORT: "1025"
       WBSKT_SMTP_TEST_API: http://localhost:8025
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           global-json-file: global.json
           cache: true
@@ -196,7 +196,7 @@ jobs:
       # Coverage and per-test results, kept whether or not the run above passed.
       - name: Coverage report
         if: always()
-        uses: danielpalme/ReportGenerator-GitHub-Action@5
+        uses: danielpalme/ReportGenerator-GitHub-Action@5f3701a41d14548c9b8e575a5c235230e515cbc0 # v5.6.0
         with:
           reports: '**/coverage.cobertura.xml'
           targetdir: coverage-report
@@ -211,7 +211,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: integration-tests-results
           path: |
@@ -293,9 +293,9 @@ jobs:
       # wbskt_engine carries exactly the same grants.
       ConnectionStrings__DefaultConnection: Server=localhost;Database=Wbskt.Database;User ID=wbskt_management;Password=Wb1-e2e-Host-Login;Encrypt=False;
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           global-json-file: global.json
           cache: true
@@ -342,7 +342,7 @@ jobs:
 
       - name: Upload OpenAPI documents
         if: ${{ !cancelled() && matrix.pass == 'rest' && steps.hosts.outcome == 'success' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: openapi-snapshots
           path: openapi-current/
@@ -475,7 +475,7 @@ jobs:
 
       - name: Upload host logs and test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: e2e-results-${{ matrix.pass }}
           path: |
@@ -492,7 +492,7 @@ jobs:
     if: ${{ !cancelled() && needs.changes.outputs.hosts == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: e2e-results-*
           path: results
@@ -525,9 +525,9 @@ jobs:
     if: needs.changes.outputs.hosts == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           global-json-file: global.json
           cache: true
@@ -580,11 +580,11 @@ jobs:
           --health-retries 10
           --health-start-period 30s
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -592,7 +592,7 @@ jobs:
 
       # This commit's migrator, loaded into the local daemon rather than pushed. Writes the migrator
       # job's cache scope, so that job's build on master is mostly a cache hit.
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: deploy/docker/Dockerfile.migrator
@@ -615,7 +615,7 @@ jobs:
 
       - name: Upload rehearsal output
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: migration-rehearsal
           path: rehearsal-out/
@@ -664,18 +664,18 @@ jobs:
             project: Hosts/Wbskt.Workflow.Engine.Host/Wbskt.Workflow.Engine.Host.csproj
             dll: Wbskt.Workflow.Engine.Host.dll
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         if: github.event_name != 'pull_request'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: deploy/docker/Dockerfile
@@ -701,18 +701,18 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         if: github.event_name != 'pull_request'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: deploy/docker/Dockerfile.migrator

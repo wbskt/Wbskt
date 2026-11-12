@@ -35,8 +35,8 @@ jobs:
       matrix:
         sdk: [python, dotnet]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.13'
       - run: pip install -r requirements.txt
@@ -56,7 +56,7 @@ jobs:
           echo "Using $REPO@$ref"
           echo "repo=$REPO" >> "$GITHUB_OUTPUT"
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: ${{ steps.sdk-ref.outputs.repo }}
           ref: ${{ steps.sdk-ref.outputs.ref }}
@@ -68,7 +68,7 @@ jobs:
           pip install -e "$GITHUB_WORKSPACE/sdk"
           echo "WBSKT_HARNESS=python $GITHUB_WORKSPACE/sdk/conformance/harness.py" >> "$GITHUB_ENV"
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         if: matrix.sdk == 'dotnet'
         with:
           global-json-file: sdk/global.json
