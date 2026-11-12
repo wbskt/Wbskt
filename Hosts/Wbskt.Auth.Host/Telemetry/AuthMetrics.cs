@@ -28,6 +28,7 @@ public sealed class AuthMetrics : IWorkerTickMetrics, IDisposable
         WorkspaceResolutions = _meter.CreateCounter<long>("wbskt_auth_workspace_resolutions_total");
         PermissionChecks = _meter.CreateCounter<long>("wbskt_auth_permission_checks_total");
         MailSuppressed = _meter.CreateCounter<long>("wbskt_auth_mail_suppressed_total");
+        Mail = _meter.CreateCounter<long>("wbskt_auth_mail_total");
         BreachChecks = _meter.CreateCounter<long>("wbskt_auth_breached_password_checks_total");
         BillingWebhooks = _meter.CreateCounter<long>("wbskt_auth_billing_webhooks_total");
         BillingRefunds = _meter.CreateCounter<long>("wbskt_auth_billing_refunds_total");
@@ -36,6 +37,7 @@ public sealed class AuthMetrics : IWorkerTickMetrics, IDisposable
         // The series the alerts watch start at zero, so the first one counted is an increase: a series that
         // first appears at 1 has no earlier sample, and increase() would miss it.
         RecordBillingRefund("unconfirmed", 0);
+        Mail.Add(0, new KeyValuePair<string, object?>("outcome", "dropped"));
         BillingWebhooks.Add(0, new KeyValuePair<string, object?>("type", "unknown"), new KeyValuePair<string, object?>("outcome", "signature_invalid"));
         foreach ((string kind, string outcome) in ReconcileAlerted)
         {
@@ -52,6 +54,13 @@ public sealed class AuthMetrics : IWorkerTickMetrics, IDisposable
     public Counter<long> WorkspaceResolutions { get; }
     public Counter<long> PermissionChecks { get; }
     public Counter<long> MailSuppressed { get; }
+
+    /// <summary>
+    /// Outbound mail, tagged <c>outcome</c>: sent (the relay took it), failed (one attempt failed and is
+    /// retried), dropped (given up after the retries, or refused by a full queue) or invalid_address
+    /// (malformed, so never retried). MailFailing watches dropped.
+    /// </summary>
+    public Counter<long> Mail { get; }
 
     /// <summary>Breached-password lookups, tagged <c>outcome</c>: clean, breached, or unavailable (accepted unchecked).</summary>
     public Counter<long> BreachChecks { get; }
@@ -115,6 +124,13 @@ public sealed class AuthMetrics : IWorkerTickMetrics, IDisposable
     /// <summary>A mail the per-address cooldown dropped. A steady count is someone aiming our mail at an inbox.</summary>
     public void RecordMailSuppressed(string kind) =>
         MailSuppressed.Add(1, new KeyValuePair<string, object?>("kind", kind));
+
+    public void RecordMail(string outcome) =>
+        Mail.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
+
+    /// <summary>Reports how many messages wait for the relay as <c>wbskt_auth_mail_queue_depth</c>, read at each scrape.</summary>
+    public void ObserveMailQueueDepth(Func<int> depth) =>
+        _meter.CreateObservableGauge("wbskt_auth_mail_queue_depth", depth);
 
     public void RecordBreachCheck(string outcome) =>
         BreachChecks.Add(1, new KeyValuePair<string, object?>("outcome", outcome));

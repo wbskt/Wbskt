@@ -71,6 +71,20 @@ groups:
             Check the auth host's logs for the provider's status codes and dbo.BillingWebhookEvents
             for the rows left unprocessed.
 
+      - alert: MailFailing
+        # The auth host gave up on a message after its retries, or its queue was full. Every
+        # confirmation, invitation and password reset goes this way, and sign-in needs a confirmed
+        # address, so a relay that refuses mail means nobody new can get in.
+        expr: sum(increase(wbskt_auth_mail_total{outcome="dropped"}[15m])) > 0
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $value }} outgoing mails were dropped in the last 15 minutes"
+          description: >-
+            The SMTP relay is refusing or not answering (expired credential, sending limit, provider
+            outage), or the queue (wbskt_auth_mail_queue_depth) filled. The auth host's error lines
+            "was not sent after" and "outbound mail queue is full" carry the relay's error.
+
       - alert: BillingRefundUnconfirmed
         # A duplicate subscription's refund timed out or the provider answered with an error that does not
         # say nothing happened. It is not asked for again, since that could refund twice, so a person has

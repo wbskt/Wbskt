@@ -1,3 +1,4 @@
+using Wbskt.Auth.Host.Telemetry;
 using Wbskt.Infrastructure.Email;
 
 namespace Wbskt.Auth.Host.Services.Email;
@@ -18,6 +19,7 @@ internal sealed class OutboundMailDispatcher : BackgroundService
     private readonly OutboundMailQueue _queue;
     private readonly IEmailSender _sender;
     private readonly ILogger<OutboundMailDispatcher> _logger;
+    private readonly AuthMetrics _metrics;
     private readonly IReadOnlyList<TimeSpan> _retryDelays;
 
     /// <remarks>
@@ -28,12 +30,15 @@ internal sealed class OutboundMailDispatcher : BackgroundService
         OutboundMailQueue queue,
         IEmailSender sender,
         ILogger<OutboundMailDispatcher> logger,
+        AuthMetrics metrics,
         IReadOnlyList<TimeSpan>? retryDelays = null)
     {
         _queue = queue;
         _sender = sender;
         _logger = logger;
+        _metrics = metrics;
         _retryDelays = retryDelays ?? DefaultRetryDelays;
+        metrics.ObserveMailQueueDepth(() => queue.Count);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -63,9 +68,10 @@ internal sealed class OutboundMailDispatcher : BackgroundService
                 await _sender.SendMultipartAsync(mail.To, mail.Subject, mail.TextBody, mail.HtmlBody, ct);
 
                 // The relay took it; delivery from there is the relay's. Without this line a missing
-                // mail cannot be told apart from one that was never handed over. Never the body: it
-                // carries the token.
-                _logger.LogInformation("Mail \"{Subject}\" to {Recipient} accepted by the relay.", mail.Subject, mail.To);
+                // mail cannot be told apart from one that was never handed over. Never the body (it
+                // carries the token) and never the address, only its fingerprint (EmailFingerprint).
+                _metrics.RecordMail("sent");
+                _logger.LogInformation("Mail \"{Subject}\" to {RecipientFingerprint} accepted by the relay.", mail.Subject, EmailFingerprint.Of(mail.To));
                 return;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -76,20 +82,23 @@ internal sealed class OutboundMailDispatcher : BackgroundService
             }
             catch (FormatException ex)
             {
-                // A malformed address fails identically on every attempt. The address is logged
-                // because it is the only way to find the account that has one; the body is not.
-                _logger.LogWarning(ex, "Mail to {Recipient} was not sent: the address is malformed.", mail.To);
+                // A malformed address fails identically on every attempt. An operator finds the
+                // account by checking a suspect address against the fingerprint.
+                _metrics.RecordMail("invalid_address");
+                _logger.LogWarning(ex, "Mail \"{Subject}\" to {RecipientFingerprint} was not sent: the address is malformed.", mail.Subject, EmailFingerprint.Of(mail.To));
                 return;
             }
             catch (Exception ex)
             {
                 if (attempt >= _retryDelays.Count)
                 {
-                    _logger.LogError(ex, "Mail to {Recipient} was not sent after {Attempts} attempts.", mail.To, attempt + 1);
+                    _metrics.RecordMail("dropped");
+                    _logger.LogError(ex, "Mail \"{Subject}\" to {RecipientFingerprint} was not sent after {Attempts} attempts.", mail.Subject, EmailFingerprint.Of(mail.To), attempt + 1);
                     return;
                 }
 
-                _logger.LogWarning(ex, "Mail to {Recipient} failed on attempt {Attempt}; retrying.", mail.To, attempt + 1);
+                _metrics.RecordMail("failed");
+                _logger.LogWarning(ex, "Mail \"{Subject}\" to {RecipientFingerprint} failed on attempt {Attempt}; retrying.", mail.Subject, EmailFingerprint.Of(mail.To), attempt + 1);
 
                 try
                 {

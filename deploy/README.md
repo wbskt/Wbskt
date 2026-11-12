@@ -470,6 +470,7 @@ alerts fire and reach nobody, and Alertmanager says so in its log.
 | `ContainerRestarting` | a container restarted in place 3 or more times in 15 minutes |
 | `EngineNotReporting` | no engine has reported metrics for 5 minutes |
 | `DeletedWorkspaceRetiredBySweep` | management's daily deleted workspace sweep retired a workspace its delete event had missed |
+| `MailFailing` | the auth host dropped an outgoing mail in 15 minutes: retries used up, or its queue was full (pages) |
 
 Engine readiness is deliberately not alerted on: a standby engine is not ready by design.
 

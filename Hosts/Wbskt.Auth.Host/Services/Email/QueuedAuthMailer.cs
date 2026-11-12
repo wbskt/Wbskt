@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using Wbskt.Auth.Host.Telemetry;
 using Wbskt.Infrastructure.Email;
 
 namespace Wbskt.Auth.Host.Services.Email;
@@ -11,7 +12,8 @@ internal sealed class QueuedAuthMailer(
     OutboundMailQueue queue,
     IEmailSender sender,
     IOptions<AuthEmailOptions> options,
-    ILogger<QueuedAuthMailer> logger) : IAuthMailer
+    ILogger<QueuedAuthMailer> logger,
+    AuthMetrics metrics) : IAuthMailer
 {
     private readonly AuthEmailOptions _options = options.Value;
 
@@ -50,6 +52,7 @@ internal sealed class QueuedAuthMailer(
 
         if (!queue.TryWrite(mail))
         {
+            metrics.RecordMail("dropped");
             logger.LogError("The outbound mail queue is full; {MailKind} was dropped. The relay is not keeping up.", kind);
         }
 
