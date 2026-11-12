@@ -99,12 +99,14 @@ public sealed class MqttConnectAuthenticatorTests : IDisposable
     [InlineData("upper")]
     [InlineData("braces")]
     [InlineData("no-dashes")]
+    [InlineData("padded")]
     public async Task The_clients_own_ref_id_in_another_spelling_is_refused_so_a_revoke_can_find_its_connection(string spelling)
     {
         string clientId = spelling switch
         {
             "upper" => ClientRefId.ToString("D").ToUpperInvariant(),
             "braces" => ClientRefId.ToString("B"),
+            "padded" => " " + ClientRefId.ToString("D"),
             _ => ClientRefId.ToString("N")
         };
 
