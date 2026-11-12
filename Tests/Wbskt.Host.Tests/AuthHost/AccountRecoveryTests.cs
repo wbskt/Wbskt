@@ -571,6 +571,24 @@ public sealed class RegistrationDisclosureTests
     }
 
     /// <summary>
+    /// An address held by another account's email-change undo answers 204 like a registered one, so a
+    /// held username must still answer 409 there, or it would tell which addresses were moved off lately.
+    /// </summary>
+    [Fact]
+    public async Task A_taken_username_hides_whether_the_address_is_held_for_an_undo()
+    {
+        var harness = new ConflictHarness();
+        harness.WithUsernameTaken();
+
+        var taken = await harness.Registration.HandleReservedAddressAsync("taken", CancellationToken.None);
+        var free = await harness.Registration.HandleReservedAddressAsync("newname", CancellationToken.None);
+
+        Assert.Equal("AUTH_USERNAME_CONFLICT", taken.Error.Code);
+        Assert.True(free.IsSuccess);
+        Assert.Empty(harness.Mailer.Sent);
+    }
+
+    /// <summary>
     /// The account that collided was deleted or renamed after the insert failed, so neither field is
     /// held any more. There is nothing true to answer with, so the insert's fault reaches the caller.
     /// </summary>
