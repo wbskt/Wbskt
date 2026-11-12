@@ -49,7 +49,8 @@ On MQTT 3.1.1 the same refusals arrive as the 3.1.1 return codes (4 for 0x86, 5 
 | `wbskt/v1/{clientRefId}/up` | client → gateway | The client publishes every message (model §4) here, and may publish nowhere else. |
 | `wbskt/v1/{clientRefId}/down` | gateway → client | The gateway sends every message here. It subscribes the client itself as it connects, so a client need not subscribe; one that does may subscribe to this topic and no other. |
 
-Topics are case-sensitive and use the same lower-case `clientRefId`; a PUBLISH to any other spelling is dropped. `MqttBinding` in `Wbskt.Protocol` builds both. Each PUBLISH carries one message: one JSON object in
+Topics are case-sensitive and use the same lower-case `clientRefId`; a PUBLISH to any other
+spelling is dropped. `MqttBinding` in `Wbskt.Protocol` builds both. Each PUBLISH carries one message: one JSON object in
 UTF-8, at most 64 KB. A packet over 64 KB plus 1 KB of MQTT framing ends the connection at once,
 before the gateway reads it.
 
