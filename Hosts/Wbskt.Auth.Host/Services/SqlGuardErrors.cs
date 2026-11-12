@@ -25,6 +25,14 @@ internal static class SqlGuardErrors
         "PLAN_MEMBER_LIMIT_REACHED",
         "Your plan allows no more members. Remove one, or upgrade.");
 
+    /// <summary>
+    /// What <c>dbo.User_Delete</c> answers (THROW 50018) when it would leave <paramref name="tenants"/>
+    /// with nobody to administer them, for the same refusal found before it is called.
+    /// </summary>
+    public static Error SoleAdministrator(IReadOnlyCollection<string> tenants) => Error.Conflict(
+        "ACCOUNT_SOLE_ADMINISTRATOR",
+        $"Nobody else administers {string.Join(", ", tenants)}. Make another member an administrator, or remove the other members, before deleting your account.");
+
     public static bool TryTranslate(Exception ex, Error? conflictError, out Error error)
     {
         error = ex switch

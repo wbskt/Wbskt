@@ -233,6 +233,15 @@ internal sealed class AccountProvider : BaseSqlProvider, IAccountProvider
             cancellationToken);
     }
 
+    public async Task<IReadOnlyCollection<string>> GetDeletionBlockersAsync(int userId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.User_GetDeletionBlockers",
+            p => p.AddWithValue("@UserId", userId),
+            reader => reader.GetString(0),
+            cancellationToken);
+    }
+
     public async Task<IReadOnlyCollection<int>> DeleteUserAsync(int userId, IReadOnlyDictionary<int, OutboxMessage> deletedWorkspaces, CancellationToken cancellationToken = default)
     {
         // The property names are what the procedure's OPENJSON reads.

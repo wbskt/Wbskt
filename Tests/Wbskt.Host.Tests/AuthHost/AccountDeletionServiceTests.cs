@@ -35,6 +35,7 @@ public sealed class AccountDeletionServiceTests
     {
         _accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
         _billing.Setup(b => b.GetLiveSubscriptionsOfSoleTenantsAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        _accounts.Setup(p => p.GetDeletionBlockersAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync([]);
         _gateway.SetupGet(g => g.Name).Returns("dodo");
         _gateway.SetupGet(g => g.IsConfigured).Returns(true);
     }
@@ -54,6 +55,25 @@ public sealed class AccountDeletionServiceTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(["cancel", "delete"], order);
+    }
+
+    /// <summary>
+    /// The only administrator of a tenant others belong to cannot delete the account, and finding that
+    /// out must not cost them the subscription of the tenant that is theirs alone.
+    /// </summary>
+    [Fact]
+    public async Task A_deletion_that_will_be_refused_cancels_no_subscription()
+    {
+        _billing.Setup(b => b.GetLiveSubscriptionsOfSoleTenantsAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync([Subscription("sub_1")]);
+        _accounts.Setup(p => p.GetDeletionBlockersAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(["Acme", "Globex"]);
+
+        var result = await Service().DeleteAccountAsync(42, Password, Ip);
+
+        Assert.Equal("ACCOUNT_SOLE_ADMINISTRATOR", result.Error.Code);
+        Assert.Equal(Wbskt.Infrastructure.ErrorType.Conflict, result.Error.Type);
+        Assert.Contains("Acme, Globex", result.Error.Message);
+        _gateway.Verify(g => g.CancelSubscriptionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _accounts.Verify(p => p.DeleteUserAsync(It.IsAny<int>(), It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
