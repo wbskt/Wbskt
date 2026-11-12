@@ -32,7 +32,6 @@ public sealed class CreditUsagePoster(
 
     private bool _brokerDown;
 
-    private readonly TimeSpan _endedWindow = options.Value.CreditPostEndedWindow;
     private readonly ILogger<CreditUsagePoster> _logger = logger;
 
     protected override string Name => "Credit usage poster";
@@ -46,7 +45,7 @@ public sealed class CreditUsagePoster(
         DateTime nowUtc = clock.GetUtcNow().UtcDateTime;
         for (int batch = 0; batch < MaxBatchesPerTick; batch++)
         {
-            IReadOnlyCollection<WorkspaceCreditPost> posted = await credits.PostAsync(DateOnly.FromDateTime(nowUtc), nowUtc - _endedWindow, BatchSize, ct);
+            IReadOnlyCollection<WorkspaceCreditPost> posted = await credits.PostAsync(DateOnly.FromDateTime(nowUtc), BatchSize, ct);
             await WarnAsync(eventBus, posted, ct);
 
             if (posted.Sum(post => post.Runs) < BatchSize)

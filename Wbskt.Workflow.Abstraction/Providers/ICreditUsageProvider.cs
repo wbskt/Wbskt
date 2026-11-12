@@ -7,8 +7,7 @@ public interface ICreditUsageProvider
 {
     /// <summary>
     /// Moves what up to <paramref name="batchSize"/> runs consumed since they last posted into the ledger
-    /// on <paramref name="day"/>: the runs still going, and those that ended since <paramref name="endedSinceUtc"/>.
-    /// Returns what each workspace posted.
+    /// on <paramref name="day"/>, whether the runs are still going or ended. Returns what each workspace posted.
     /// </summary>
-    Task<IReadOnlyCollection<WorkspaceCreditPost>> PostAsync(DateOnly day, DateTime endedSinceUtc, int batchSize, CancellationToken ct);
+    Task<IReadOnlyCollection<WorkspaceCreditPost>> PostAsync(DateOnly day, int batchSize, CancellationToken ct);
 }

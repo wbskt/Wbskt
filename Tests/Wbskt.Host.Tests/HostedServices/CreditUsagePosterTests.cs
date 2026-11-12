@@ -25,7 +25,7 @@ public sealed class CreditUsagePosterTests
 
         // Runs that ended within the last hour (the default window) are still read.
         Assert.Equal(2, provider.Calls.Count);
-        Assert.All(provider.Calls, call => Assert.Equal((new DateOnly(2026, 5, 26), Now.AddHours(-1), CreditUsagePoster.BatchSize), call));
+        Assert.All(provider.Calls, call => Assert.Equal((new DateOnly(2026, 5, 26), CreditUsagePoster.BatchSize), call));
     }
 
     [Fact]
@@ -143,11 +143,11 @@ public sealed class CreditUsagePosterTests
     {
         private readonly Queue<IReadOnlyCollection<WorkspaceCreditPost>> _posts = new(posts);
 
-        public List<(DateOnly Day, DateTime EndedSince, int BatchSize)> Calls { get; } = [];
+        public List<(DateOnly Day, int BatchSize)> Calls { get; } = [];
 
-        public Task<IReadOnlyCollection<WorkspaceCreditPost>> PostAsync(DateOnly day, DateTime endedSinceUtc, int batchSize, CancellationToken ct)
+        public Task<IReadOnlyCollection<WorkspaceCreditPost>> PostAsync(DateOnly day, int batchSize, CancellationToken ct)
         {
-            Calls.Add((day, endedSinceUtc, batchSize));
+            Calls.Add((day, batchSize));
             return Task.FromResult(_posts.Count > 0 ? _posts.Dequeue() : []);
         }
     }

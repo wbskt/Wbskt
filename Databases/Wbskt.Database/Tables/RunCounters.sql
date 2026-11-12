@@ -17,14 +17,16 @@ CREATE TABLE dbo.RunCounters
     BudgetCeiling        DECIMAL(18,4) NULL,
     UpdatedAt         DATETIME2(3)  NOT NULL DEFAULT SYSUTCDATETIME(),
     -- Set by a charge (RunCounters_TryCharge, and Run_Start for a start cost) and cleared by the post that
-    -- moves it to the ledger (RunCredits_Post). The credits not yet posted are read through it, whatever
-    -- the run's status, so a run that ends between two posts still counts what it spent.
+    -- moves it to the ledger (RunCredits_Post, or Run_DeleteRetired before a run is deleted). The credits
+    -- not yet posted are found through it alone, whatever the run's status, so a run that ends between two
+    -- posts still counts what it spent and one that ended long ago is still posted.
     HasUnposted       BIT           NOT NULL CONSTRAINT DF_RunCounters_HasUnposted DEFAULT 0,
     CONSTRAINT FK_RunCounters_Runs FOREIGN KEY (RunId) REFERENCES dbo.Runs (Id)
 );
 GO
 
--- The few counters with credits not yet posted: the poster runs every few seconds, so this stays small.
+-- The counters with credits not yet posted: the poster empties it every few seconds (CreditPostInterval),
+-- so it holds only what was charged since, unless the poster stops.
 CREATE NONCLUSTERED INDEX IX_RunCounters_Unposted
     ON dbo.RunCounters (RunId)
     INCLUDE (CreditsConsumed, PostedCredits)

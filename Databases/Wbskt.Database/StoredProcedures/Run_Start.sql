@@ -137,20 +137,23 @@ BEGIN
             IF @CreditAllowance IS NOT NULL AND @WorkspaceId IS NOT NULL
             BEGIN
                 DECLARE @MonthStart DATE = DATEFROMPARTS(YEAR(@StartedAt), MONTH(@StartedAt), 1);
-                DECLARE @CreditsPosted DECIMAL(18,4) =
-                    ISNULL((SELECT SUM(u.Credits)
-                            FROM dbo.WorkspaceCreditUsage u
-                            JOIN dbo.TenantWorkspaces(@WorkspaceId, @TenantId) w ON w.WorkspaceId = u.WorkspaceId
-                            WHERE u.Day >= @MonthStart), 0);
-                -- Every run with credits not yet posted, ended or not (IX_RunCounters_Unposted): one that
-                -- ended between two posts still counts what it spent.
-                DECLARE @CreditsUnposted DECIMAL(18,4) =
-                    ISNULL((SELECT SUM(rc.CreditsConsumed - rc.PostedCredits)
-                            FROM dbo.RunCounters rc
-                            JOIN dbo.Runs r ON r.Id = rc.RunId
-                            JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
-                            JOIN dbo.TenantWorkspaces(@WorkspaceId, @TenantId) w ON w.WorkspaceId = d.WorkspaceId
-                            WHERE rc.HasUnposted = 1), 0);
+                -- Posted and unposted are read in one statement, so a post moving credits between the two
+                -- cannot be missed by both (one snapshot under RCSI). The unposted part is every run with
+                -- credits not yet posted, ended or not (IX_RunCounters_Unposted): one that ended between two
+                -- posts still counts what it spent.
+                DECLARE @CreditsPosted DECIMAL(18,4);
+                DECLARE @CreditsUnposted DECIMAL(18,4);
+                SELECT
+                    @CreditsPosted = ISNULL((SELECT SUM(u.Credits)
+                                             FROM dbo.WorkspaceCreditUsage u
+                                             JOIN dbo.TenantWorkspaces(@WorkspaceId, @TenantId) w ON w.WorkspaceId = u.WorkspaceId
+                                             WHERE u.Day >= @MonthStart), 0),
+                    @CreditsUnposted = ISNULL((SELECT SUM(rc.CreditsConsumed - rc.PostedCredits)
+                                               FROM dbo.RunCounters rc
+                                               JOIN dbo.Runs r ON r.Id = rc.RunId
+                                               JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
+                                               JOIN dbo.TenantWorkspaces(@WorkspaceId, @TenantId) w ON w.WorkspaceId = d.WorkspaceId
+                                               WHERE rc.HasUnposted = 1), 0);
                 DECLARE @CreditsDrawn DECIMAL(18,4) =
                     ISNULL((SELECT Drawn FROM dbo.TenantCreditMonths WHERE TenantId = @TenantId AND MonthStart = @MonthStart), 0);
 
