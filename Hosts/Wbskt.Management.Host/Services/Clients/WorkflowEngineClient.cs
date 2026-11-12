@@ -43,8 +43,8 @@ internal sealed class WorkflowEngineClient : IWorkflowEngineClient
         return new StartRunResponse(engineResponse?.RunRefId ?? Guid.Empty, outcome);
     }
 
-    // A refusal names the plan limit; one without a reason (an older engine, or a claim settled before
-    // the reason was stored) reads as the run limit.
+    // A refusal names the plan limit; one without a reason (from an older engine, or replayed from a
+    // claim an older engine settled) reads as the run limit.
     private static StartRunOutcome ToRefusal(InboundResponse response) =>
         response.Registrations.FirstOrDefault(r => r.Outcome == InboundOutcome.Refused)?.RefusalReason switch
         {
