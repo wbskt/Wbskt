@@ -86,6 +86,12 @@ internal interface IAccountProvider : IReferenceProvider
     Task<IReadOnlyCollection<int>> GetSoleTenantWorkspaceIdsAsync(int userId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// The names of the tenants others belong to that nobody but this user administers
+    /// (<c>dbo.User_GetDeletionBlockers</c>): while there are any, <see cref="DeleteUserAsync"/> refuses.
+    /// </summary>
+    Task<IReadOnlyCollection<string>> GetDeletionBlockersAsync(int userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Deletes the account (<c>dbo.User_Delete</c>): its sole tenants with their workspaces, each
     /// workspace's event from <paramref name="deletedWorkspaces"/> queued in the outbox in the same
     /// transaction; its membership of every other tenant; its sessions and tokens. The user row is

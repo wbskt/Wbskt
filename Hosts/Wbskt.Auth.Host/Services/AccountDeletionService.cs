@@ -80,6 +80,15 @@ internal sealed class AccountDeletionService : IAccountDeletionService
             return Result.Failure(Error.Validation("AUTH_CURRENT_PASSWORD_INVALID", "The password is not correct."));
         }
 
+        // Asked before the provider is: a deletion User_Delete would refuse must not cancel the
+        // subscriptions first. User_Delete checks again under its locks for a change in between.
+        var blockers = await _accounts.GetDeletionBlockersAsync(userId, cancellationToken);
+        if (blockers.Count > 0)
+        {
+            _logger.LogInformation("Account deletion refused: user {UserId} is the only administrator of {TenantCount} shared tenant(s).", userId, blockers.Count);
+            return Result.Failure(SqlGuardErrors.SoleAdministrator(blockers));
+        }
+
         var cancelled = await CancelSubscriptionsAsync(userId, cancellationToken);
         if (cancelled.IsFailure)
         {

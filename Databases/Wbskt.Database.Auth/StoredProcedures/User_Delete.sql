@@ -45,12 +45,11 @@ BEGIN
     FROM dbo.TenantMembers TM WITH (HOLDLOCK)
     WHERE TM.UserId = @UserId;
 
+    -- Read under the locks above, so it is the same answer dbo.User_GetDeletionBlockers gave unless a
+    -- member joined or an administrator left in between.
     DECLARE @Blocking NVARCHAR(2000) = (
-        SELECT STRING_AGG(CAST(TN.Name AS NVARCHAR(MAX)), N', ') WITHIN GROUP (ORDER BY TN.Name)
-        FROM @Tenants T
-        INNER JOIN dbo.Tenants TN ON TN.Id = T.TenantId
-        WHERE T.IsSole = 0
-          AND NOT EXISTS (SELECT 1 FROM dbo.Tenant_Administrators(T.TenantId) A WHERE A.UserId <> @UserId));
+        SELECT STRING_AGG(CAST(B.Name AS NVARCHAR(MAX)), N', ') WITHIN GROUP (ORDER BY B.Name)
+        FROM dbo.User_DeletionBlockers(@UserId) B);
 
     IF @Blocking IS NOT NULL
     BEGIN

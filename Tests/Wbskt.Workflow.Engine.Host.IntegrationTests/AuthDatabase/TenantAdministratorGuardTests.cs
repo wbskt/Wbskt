@@ -225,6 +225,31 @@ public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
     /// Two administrators each removing the other at the same moment. Without the tenant row lock,
     /// both read the other as still present and both commit, leaving none.
     /// </summary>
+    /// <summary>
+    /// <c>dbo.User_GetDeletionBlockers</c> names the tenants <c>dbo.User_Delete</c> would refuse over, so an
+    /// account deletion can ask before it cancels anything: a shared tenant only this user administers,
+    /// and nothing once another administrator is there or the tenant is theirs alone.
+    /// </summary>
+    [SkippableFact]
+    public async Task A_shared_tenant_only_this_user_administers_blocks_the_deletion_until_another_is_made_one()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var (tenantId, ownerId, adminRoleId) = await CreateTenantAsync();
+        string? whileAlone = await ProcScalarAsync<string>("dbo.User_GetDeletionBlockers", ("@UserId", ownerId));
+
+        int member = await AddMemberAsync(tenantId, null);
+        string? blocker = await ProcScalarAsync<string>("dbo.User_GetDeletionBlockers", ("@UserId", ownerId));
+        Exception? refused = await AttemptAsync(() => ExecAsync("dbo.User_Delete", ("@UserId", ownerId), ("@DeletedWorkspaces", "[]")));
+
+        await ExecAsync("dbo.UserRole_Assign", ("@UserId", member), ("@RoleId", adminRoleId), ("@TenantId", tenantId));
+        string? afterAnother = await ProcScalarAsync<string>("dbo.User_GetDeletionBlockers", ("@UserId", ownerId));
+
+        Assert.Null(whileAlone);
+        Assert.Equal("guard-test", blocker);
+        Assert.Equal(50018, Assert.IsType<SqlException>(refused).Number);
+        Assert.Null(afterAnother);
+    }
+
     [SkippableFact]
     public async Task Concurrent_removals_cannot_both_succeed()
     {
