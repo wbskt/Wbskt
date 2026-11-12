@@ -127,6 +127,60 @@ public sealed class ClientTokenCutoffsTests
         Assert.Null(await cutoffs.IsRevokedAsync(ClientRef, Moment));
     }
 
+    [Fact]
+    public async Task A_batch_read_refuses_by_the_same_rule_as_one_read()
+    {
+        var (cutoffs, database) = Create();
+        Guid none = Guid.NewGuid(), junk = Guid.NewGuid(), forever = Guid.NewGuid(), sameSecond = Guid.NewGuid(), secondBefore = Guid.NewGuid();
+        database.Setup(d => d.StringGetAsync(It.IsAny<RedisKey[]>(), It.IsAny<CommandFlags>()))
+            .ReturnsAsync([RedisValue.Null, (RedisValue)"x", (RedisValue)long.MaxValue, (RedisValue)MomentSeconds, (RedisValue)(MomentSeconds + 1)]);
+
+        var refused = await cutoffs.FindRefusedAsync(
+            [new(none, Moment), new(junk, Moment), new(forever, Moment), new(sameSecond, Moment), new(secondBefore, Moment)]);
+
+        Assert.Equal([forever, secondBefore], refused);
+        database.Verify(d => d.StringGetAsync(
+            It.Is<RedisKey[]>(k => k.Length == 5 && k[0] == $"wbskt:client-cutoff:{none}" && k[4] == $"wbskt:client-cutoff:{secondBefore}"),
+            It.IsAny<CommandFlags>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_batch_read_goes_out_five_hundred_keys_at_a_time()
+    {
+        var (cutoffs, database) = Create();
+        var sizes = new List<int>();
+        database.Setup(d => d.StringGetAsync(It.IsAny<RedisKey[]>(), It.IsAny<CommandFlags>()))
+            .Callback<RedisKey[], CommandFlags>((keys, _) => sizes.Add(keys.Length))
+            .ReturnsAsync((RedisKey[] keys, CommandFlags _) => keys.Select(_ => RedisValue.Null).ToArray());
+
+        var refused = await cutoffs.FindRefusedAsync(Enumerable.Range(0, 1001).Select(_ => new ClientToken(Guid.NewGuid(), Moment)).ToList());
+
+        Assert.Empty(refused!);
+        Assert.Equal([500, 500, 1], sizes);
+    }
+
+    [Fact]
+    public async Task A_batch_read_that_fails_part_way_cannot_say()
+    {
+        var (cutoffs, database) = Create();
+        database.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey[]>(), It.IsAny<CommandFlags>()))
+            .ReturnsAsync(Enumerable.Repeat((RedisValue)long.MaxValue, 500).ToArray())
+            .ThrowsAsync(new RedisConnectionException(ConnectionFailureType.SocketFailure, "down"));
+
+        Assert.Null(await cutoffs.FindRefusedAsync(Enumerable.Range(0, 600).Select(_ => new ClientToken(Guid.NewGuid(), Moment)).ToList()));
+    }
+
+    [Fact]
+    public async Task A_batch_read_with_redis_disconnected_cannot_say_and_asks_nothing()
+    {
+        var database = new Mock<IDatabase>(MockBehavior.Strict);
+        var redis = new Mock<IConnectionMultiplexer>();
+        redis.SetupGet(r => r.IsConnected).Returns(false);
+        redis.Setup(r => r.GetDatabase(It.IsAny<int>(), It.IsAny<object>())).Returns(database.Object);
+
+        Assert.Null(await new ClientTokenCutoffs(redis.Object, NullLogger<ClientTokenCutoffs>.Instance).FindRefusedAsync([new(ClientRef, Moment)]));
+    }
+
     private static (ClientTokenCutoffs Cutoffs, Mock<IDatabase> Database) Create()
     {
         var database = new Mock<IDatabase>();

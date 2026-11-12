@@ -208,7 +208,7 @@ groups:
         labels:
           severity: warn
         annotations:
-          summary: "A {{ $labels.transport }} gateway missed {{ $value }} client revoke events"
+          summary: "A {{ $labels.transport }} gateway missed {{ $value | humanize }} client revoke events"
           description: >-
             The gateway's broker connection dropped while a client lost access, so the event was
             discarded with its auto-delete queue; the access re-check closed the connection instead.

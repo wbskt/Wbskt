@@ -43,8 +43,16 @@ internal sealed class FakeClientConnection : ClientConnectionBase
         return Task.CompletedTask;
     }
 
+    /// <summary>Thrown by a requested close, as by a transport that failed to send it.</summary>
+    public Exception? CloseFailure { get; set; }
+
     protected override Task CloseAsync(DisconnectReason reason, string description)
     {
+        if (CloseFailure != null)
+        {
+            throw CloseFailure;
+        }
+
         _closes.Enqueue(new CloseRequest(reason, description));
         Open = false;
         return Task.CompletedTask;

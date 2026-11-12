@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -63,6 +64,48 @@ public sealed class AccessRecheckTests
         var fresh = Hold(clientRef, IssuedAt.AddMinutes(5));
         await Recheck().TickAsync(CancellationToken.None);
         Assert.Null(fresh.CloseRequest);
+    }
+
+    [Fact]
+    public async Task Only_a_revoke_this_host_never_received_counts_as_missed()
+    {
+        Guid missedRef = Guid.NewGuid(), lateRef = Guid.NewGuid();
+        Hold(missedRef);
+        var late = Hold(lateRef);
+        _cutoffs.Setup(c => c.FindRefusedAsync(It.IsAny<IReadOnlyCollection<ClientToken>>(), It.IsAny<CancellationToken>()))
+            .Callback(() => _cache.Revoke(lateRef))
+            .ReturnsAsync([missedRef, lateRef]);
+        var counted = new List<long>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Name == "wbskt_socket_access_recheck_closed_total")
+            {
+                l.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((_, value, _, _) => counted.Add(value));
+        listener.Start();
+
+        await Recheck().TickAsync(CancellationToken.None);
+
+        Assert.Equal(DisconnectReason.Revoked, late.CloseRequest?.Reason);
+        Assert.Equal([1L], counted.Where(v => v > 0));
+    }
+
+    [Fact]
+    public async Task A_close_that_throws_does_not_stop_the_rest()
+    {
+        Guid failingRef = Guid.NewGuid(), nextRef = Guid.NewGuid();
+        var failing = Hold(failingRef);
+        failing.CloseFailure = new InvalidOperationException("gone");
+        var next = Hold(nextRef);
+        _cutoffs.Setup(c => c.FindRefusedAsync(It.IsAny<IReadOnlyCollection<ClientToken>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([failingRef, nextRef]);
+
+        await Recheck().TickAsync(CancellationToken.None);
+
+        Assert.Equal(DisconnectReason.Revoked, next.CloseRequest?.Reason);
     }
 
     [Fact]
