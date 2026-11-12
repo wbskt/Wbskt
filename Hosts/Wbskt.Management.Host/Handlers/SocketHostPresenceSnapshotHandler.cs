@@ -38,7 +38,9 @@ public sealed class SocketHostPresenceSnapshotHandler : IConsumer<SocketHostPres
         {
             try
             {
-                await _eventBus.PublishAsync(new ClientDisconnectedEvent(client.ClientRefId, client.ClientId, client.WorkspaceId, Reason, snapshot.HostId), context.CancellationToken);
+                // Dated by the snapshot, on the host's clock, so a reconnect the host saw after it still wins.
+                var disconnected = new ClientDisconnectedEvent(client.ClientRefId, client.ClientId, client.WorkspaceId, Reason, snapshot.HostId) { CreatedAtUtc = snapshot.TakenAtUtc };
+                await _eventBus.PublishAsync(disconnected, context.CancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

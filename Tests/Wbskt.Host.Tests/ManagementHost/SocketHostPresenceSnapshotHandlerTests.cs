@@ -30,7 +30,7 @@ public sealed class SocketHostPresenceSnapshotHandlerTests
 
         bus.Verify(b => b.PublishAsync(
             It.Is<ClientDisconnectedEvent>(e => e.ClientRefId == lost.ClientRefId && e.ClientId == 4 && e.WorkspaceId == 9 && e.HostId == "socket-a"
-                && e.Reason == SocketHostPresenceSnapshotHandler.Reason),
+                && e.Reason == SocketHostPresenceSnapshotHandler.Reason && e.CreatedAtUtc == takenAt),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 }

@@ -75,7 +75,7 @@ public sealed class SocketHostPresenceIntegrationTests(SqlEdgeFixture fixture)
         await hosts.RecordHeartbeatAsync(otherHost);
         Assert.DoesNotContain(await clients.ExpirePresenceAsync(StaleAfter), e => e.ClientId == heldClient);
 
-        var cleared = await clients.ResetPresenceByHostAsync(restartedHost);
+        var cleared = await clients.ResetPresenceByHostAsync(restartedHost, DateTime.UtcNow);
 
         var only = Assert.Single(cleared);
         Assert.Equal(heldClient, only.ClientId);
@@ -83,7 +83,34 @@ public sealed class SocketHostPresenceIntegrationTests(SqlEdgeFixture fixture)
         Assert.Equal(restartedHost, only.HostId);
         Assert.False(await IsConnectedAsync(heldClient));
         Assert.True(await IsConnectedAsync(otherClient));
-        Assert.Empty(await clients.ResetPresenceByHostAsync(restartedHost));
+        Assert.Empty(await clients.ResetPresenceByHostAsync(restartedHost, DateTime.UtcNow));
+    }
+
+    [SkippableFact]
+    public async Task A_reconnect_to_the_restarted_host_survives_its_repair_whichever_is_consumed_first()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var clients = new ClientProvider(ProviderFactory.BuildConfiguration(fixture.ConnectionString));
+        int workspaceId = Random.Shared.Next(1_000_000, int.MaxValue);
+        string host = $"restarted-{Guid.NewGuid():N}";
+        var startedAt = DateTime.UtcNow.AddMinutes(-1);
+        var reconnectedAt = startedAt.AddSeconds(3);
+
+        // The reconnect is consumed first: the repair, however late, leaves it alone, and so does the
+        // disconnect it announces, which is dated by the start.
+        (int early, _) = await CreateClientAsync(workspaceId);
+        await PresenceAsync(early, reconnectedAt, host);
+        Assert.Empty(await clients.ResetPresenceByHostAsync(host, startedAt));
+        await clients.UpdatePresenceAsync(early, false, startedAt, host);
+        Assert.True(await IsConnectedAsync(early));
+
+        // The repair is consumed first: the old connection is cleared, and the reconnect still lands.
+        (int late, _) = await CreateClientAsync(workspaceId);
+        await PresenceAsync(late, startedAt.AddMinutes(-10), host);
+        Assert.Contains(await clients.ResetPresenceByHostAsync(host, startedAt), c => c.ClientId == late);
+        await clients.UpdatePresenceAsync(late, false, startedAt, host);
+        await PresenceAsync(late, reconnectedAt, host);
+        Assert.True(await IsConnectedAsync(late));
     }
 
     [SkippableFact]

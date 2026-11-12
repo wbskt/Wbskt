@@ -258,11 +258,15 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             cancellationToken);
     }
 
-    public async Task<IReadOnlyCollection<ExpiredPresence>> ResetPresenceByHostAsync(string hostId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyCollection<ExpiredPresence>> ResetPresenceByHostAsync(string hostId, DateTime startedAtUtc, CancellationToken cancellationToken = default)
     {
         return await ExecuteCollectionAsync(
             "dbo.Client_ResetPresenceBy_HostId",
-            p => p.AddWithValue("@HostId", hostId),
+            p =>
+            {
+                p.AddWithValue("@HostId", hostId);
+                p.Add("@StartedAt", SqlDbType.DateTime2).Value = startedAtUtc;
+            },
             reader => new ExpiredPresence(
                 reader.GetInt32(reader.GetOrdinal("Id")),
                 reader.GetGuid(reader.GetOrdinal("RefId")),
