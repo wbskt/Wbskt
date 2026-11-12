@@ -1,7 +1,9 @@
+using Microsoft.Extensions.Options;
 using MassTransit;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Events.Hosting;
+using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 
 namespace Wbskt.Management.Host.Handlers;
@@ -25,19 +27,31 @@ public sealed class SocketHostPresenceSnapshotHandler : IConsumer<SocketHostPres
     private readonly IClientProvider _clients;
     private readonly ISocketHostProvider _hosts;
     private readonly IEventBus _eventBus;
+    private readonly TimeProvider _clock;
+    private readonly TimeSpan _staleAfter;
     private readonly ILogger<SocketHostPresenceSnapshotHandler> _logger;
 
-    public SocketHostPresenceSnapshotHandler(IClientProvider clients, ISocketHostProvider hosts, IEventBus eventBus, ILogger<SocketHostPresenceSnapshotHandler> logger)
+    public SocketHostPresenceSnapshotHandler(IClientProvider clients, ISocketHostProvider hosts, IEventBus eventBus, TimeProvider clock,
+        IOptions<PresenceOptions> presence, ILogger<SocketHostPresenceSnapshotHandler> logger)
     {
         _clients = clients;
         _hosts = hosts;
         _eventBus = eventBus;
+        _clock = clock;
+        _staleAfter = TimeSpan.FromSeconds(presence.Value.HostStaleAfterSeconds);
         _logger = logger;
     }
 
     public async Task Consume(ConsumeContext<SocketHostPresenceSnapshot> context)
     {
         var snapshot = context.Message;
+
+        // One that waited in a backlog says nothing about now: the host may have died since it was taken.
+        if (snapshot.TakenAtUtc < _clock.GetUtcNow().UtcDateTime - _staleAfter)
+        {
+            _logger.LogInformation("Ignored socket host {HostId}'s presence snapshot from {TakenAt}: too old to act on.", snapshot.HostId, snapshot.TakenAtUtc);
+            return;
+        }
 
         // A snapshot is proof of life: without the beat recorded first, the sweep could expire a client
         // this sets back online before the host's heartbeat, a separate message, is handled.
