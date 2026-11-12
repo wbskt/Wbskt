@@ -11,9 +11,10 @@ CREATE TABLE dbo.RunCounters
     -- RunCounters_TryCharge holds the root's budget to beside the root's own CreditsConsumed.
     BudgetRunId          INT           NULL,
     ChildCreditsConsumed DECIMAL(18,4) NOT NULL CONSTRAINT DF_RunCounters_ChildCreditsConsumed DEFAULT 0,
-    -- A run in a workspace with a credit cap gets its budget in leases (dbo.Runs.CreditBudget), so one
-    -- run going does not reserve the whole cap: RunCounters_TryCharge extends it from what the cap has
-    -- left as it runs out, up to BudgetCeiling. NULL for a run whose budget was given whole.
+    -- A run held to the plan's monthly credits or to a workspace's credit cap gets its budget in leases
+    -- (dbo.Runs.CreditBudget), so one run going does not reserve the whole remainder: RunCounters_TryCharge
+    -- extends it from what is left as it runs out, up to BudgetCeiling. NULL for a run whose budget was
+    -- given whole.
     BudgetCeiling        DECIMAL(18,4) NULL,
     UpdatedAt         DATETIME2(3)  NOT NULL DEFAULT SYSUTCDATETIME(),
     -- Set by a charge (RunCounters_TryCharge, and Run_Start for a start cost) and cleared by the post that
@@ -21,6 +22,13 @@ CREATE TABLE dbo.RunCounters
     -- not yet posted are found through it alone, whatever the run's status, so a run that ends between two
     -- posts still counts what it spent and one that ended long ago is still posted.
     HasUnposted       BIT           NOT NULL CONSTRAINT DF_RunCounters_HasUnposted DEFAULT 0,
+    -- A root run held to the plan's monthly credits gets its budget in leases too (Run_Start):
+    -- CreditAllowance is the allowance it was started under and TenantId the tenant it counts against
+    -- (NULL before the workspace's copy arrived), so RunCounters_TryCharge extends the lease from what
+    -- the tenant has left. NULL allowance for a run not held to one (a sub-workflow child, a run started
+    -- before leasing), whose budget does not count as reserved (dbo.TenantCreditsReserved).
+    CreditAllowance   DECIMAL(18,4) NULL,
+    TenantId          INT           NULL,
     CONSTRAINT FK_RunCounters_Runs FOREIGN KEY (RunId) REFERENCES dbo.Runs (Id)
 );
 GO

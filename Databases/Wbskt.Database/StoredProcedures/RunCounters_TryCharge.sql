@@ -34,14 +34,18 @@ BEGIN
 
         BEGIN TRANSACTION;
 
-        -- A leased budget that the charge would pass is extended from what the workspace's cap has left,
-        -- under the cap's lock (as Run_Start takes it, before any counter row): by the larger of what
-        -- the charge needs and a twentieth of the cap, never past the ceiling or the cap. With the cap
-        -- removed since, the budget goes straight to its ceiling. The extension is reserved against the
-        -- cap from then on, as the lease it adds to was.
+        -- A leased budget that the charge would pass is extended from what the tenant's monthly credits
+        -- and the workspace's cap have left, under their locks (as Run_Start takes them, the tenant's
+        -- first, and both before any counter row): by the larger of what the charge needs and a lease (a
+        -- twentieth of the allowance, or of what the tenant has left if more, and no more than a
+        -- twentieth of the cap), never past the ceiling or what either has left. With neither held to
+        -- (the cap removed since, on a run started without an allowance), the budget goes straight to its
+        -- ceiling. The extension is reserved from then on, as the lease it adds to was.
         DECLARE @Ceiling DECIMAL(18,4);
         DECLARE @WorkspaceId INT;
-        SELECT @Ceiling = rc.BudgetCeiling, @WorkspaceId = d.WorkspaceId
+        DECLARE @Allowance DECIMAL(18,4);
+        DECLARE @TenantId INT;
+        SELECT @Ceiling = rc.BudgetCeiling, @WorkspaceId = d.WorkspaceId, @Allowance = rc.CreditAllowance, @TenantId = rc.TenantId
         FROM dbo.RunCounters rc
         JOIN dbo.Runs r ON r.Id = rc.RunId
         JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
@@ -55,21 +59,35 @@ BEGIN
                          AND r.CreditBudget < rc.BudgetCeiling
                          AND rc.CreditsConsumed + rc.ChildCreditsConsumed + @Cost > r.CreditBudget)
         BEGIN
+            IF @Allowance IS NOT NULL
+            BEGIN
+                DECLARE @CreditsResource NVARCHAR(255) = dbo.PlanLimitLockResource(N'credits', @WorkspaceId, @TenantId);
+                DECLARE @CreditsLockResult INT;
+                EXEC @CreditsLockResult = sp_getapplock @Resource = @CreditsResource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 30000;
+                IF @CreditsLockResult < 0
+                    THROW 50035, 'The account is too busy to extend the run''s credit budget; try again.', 1;
+            END
+
             DECLARE @CapResource NVARCHAR(255) = CONCAT(N'credit-cap:', @WorkspaceId);
             DECLARE @CapLockResult INT;
             EXEC @CapLockResult = sp_getapplock @Resource = @CapResource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 30000;
             IF @CapLockResult < 0
                 THROW 50035, 'The workspace is too busy to extend the run''s credit budget; try again.', 1;
 
-            -- What the cap has free is read before the run's own rows are locked: RunCredits_Post locks
-            -- counter rows in its own order, and reading the others' counters while holding the root's
-            -- could meet it the other way round. The root's spent and reserved parts add up to the same
-            -- whether a charge lands on it meanwhile or not, so the figure holds.
+            -- What the tenant and the cap have free is read before the run's own rows are locked:
+            -- RunCredits_Post locks counter rows in its own order, and reading the others' counters while
+            -- holding the root's could meet it the other way round. The root's spent and reserved parts
+            -- add up to the same whether a charge lands on it meanwhile or not, so the figures hold.
+            DECLARE @Now DATETIME2(3) = SYSUTCDATETIME();
+            DECLARE @TenantLeft DECIMAL(18,4);
+            IF @Allowance IS NOT NULL
+                SET @TenantLeft = (SELECT Credits FROM dbo.TenantCreditsLeft(@WorkspaceId, @TenantId, @Allowance, @Now));
+
             DECLARE @Cap DECIMAL(18,4) = (SELECT MonthlyCreditCap FROM dbo.WorkspaceCreditCaps WHERE WorkspaceId = @WorkspaceId);
             DECLARE @CapLeft DECIMAL(18,4);
             IF @Cap IS NOT NULL
             BEGIN
-                DECLARE @MonthStart DATE = DATEFROMPARTS(YEAR(SYSUTCDATETIME()), MONTH(SYSUTCDATETIME()), 1);
+                DECLARE @MonthStart DATE = DATEFROMPARTS(YEAR(@Now), MONTH(@Now), 1);
                 SET @CapLeft = @Cap
                     - (SELECT Credits FROM dbo.WorkspaceCreditsSpent(@WorkspaceId, @MonthStart))
                     - (SELECT Credits FROM dbo.WorkspaceCreditsReserved(@WorkspaceId));
@@ -84,7 +102,7 @@ BEGIN
 
             -- Spent can be past the budget: a charge that landed as WorkspaceCreditCap_Set cut it, or a
             -- child's start cost, which Run_Start charges on the root whether it has room or not. That
-            -- excess is already in @CapLeft as spent, so it is not asked of the cap again.
+            -- excess is already in @CapLeft and @TenantLeft as spent, so it is not asked of them again.
             IF @Spent > @Budget
                 SET @Budget = @Spent;
 
@@ -92,17 +110,26 @@ BEGIN
             IF @Need > 0 AND @Budget < @Ceiling
             BEGIN
                 DECLARE @Extend DECIMAL(18,4) = @Ceiling - @Budget;
-                IF @Cap IS NOT NULL
+                DECLARE @Lease DECIMAL(18,4);
+                IF @Allowance IS NOT NULL
+                    SET @Lease = CASE WHEN @TenantLeft > @Allowance THEN @TenantLeft ELSE @Allowance END / 20;
+                IF @Cap IS NOT NULL AND (@Lease IS NULL OR @Cap / 20 < @Lease)
+                    SET @Lease = @Cap / 20;
+
+                IF @Lease IS NOT NULL
                 BEGIN
-                    DECLARE @Lease DECIMAL(18,4) = CASE WHEN @Need > @Cap / 20 THEN @Need ELSE @Cap / 20 END;
+                    IF @Lease < @Need
+                        SET @Lease = @Need;
                     IF @Lease < @Extend
                         SET @Extend = @Lease;
-                    IF @CapLeft < @Extend
-                        SET @Extend = @CapLeft;
                 END
+                IF @CapLeft < @Extend
+                    SET @Extend = @CapLeft;
+                IF @TenantLeft < @Extend
+                    SET @Extend = @TenantLeft;
 
                 -- Only an extension that lets the charge through is taken, so a refused charge leaves
-                -- nothing of the cap held by a run that cannot use it.
+                -- nothing held by a run that cannot use it.
                 IF @Extend >= @Need
                     UPDATE dbo.Runs
                     SET CreditBudget = @Budget + @Extend

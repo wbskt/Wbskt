@@ -4,7 +4,8 @@
 -- clients and runs going, the workspace's own credit cap and what its runs going hold of it, the credits
 -- the tenant's grants still hold, and which of those expire first: when, and how many. Also the part of
 -- the month's credits already posted and what was drawn from grants as it was posted
--- (dbo.TenantCreditMonths), so the caller can work out what is left as Run_Start does.
+-- (dbo.TenantCreditMonths) and what the tenant's runs going hold of their budgets
+-- (dbo.TenantCreditsReserved), so the caller can work out what is left as Run_Start does.
 CREATE PROCEDURE dbo.WorkspaceUsage_GetSummary
     @WorkspaceId INT,
     @TenantId    INT,
@@ -87,6 +88,7 @@ BEGIN
         ISNULL((SELECT Drawn
                 FROM dbo.TenantCreditMonths
                 WHERE TenantId = @TenantId
-                  AND MonthStart = @MonthStart), 0) AS TenantCreditsDrawn;
+                  AND MonthStart = @MonthStart), 0) AS TenantCreditsDrawn,
+        (SELECT Credits FROM dbo.TenantCreditsReserved(@WorkspaceId, @TenantId)) AS TenantCreditsReserved;
 END;
 GO

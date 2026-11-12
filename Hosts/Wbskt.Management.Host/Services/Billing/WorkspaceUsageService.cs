@@ -55,12 +55,13 @@ internal sealed class WorkspaceUsageService(IWorkspaceUsageProvider usage, IWork
             days));
     }
 
-    // Run_Start's sum: the plan's remainder (posted less what grants covered, never below zero) plus what
-    // the grants still hold, less what runs have not posted yet.
+    // Run_Start's sum (dbo.TenantCreditsLeft): the plan's remainder (posted less what grants covered, never
+    // below zero) plus what the grants still hold, less what runs have not posted yet and what the runs
+    // going hold of their budgets.
     private static decimal RemainingCredits(WorkspaceUsageSummary summary, decimal runsRefusedAt)
     {
         decimal planLeft = Math.Max(0m, runsRefusedAt - (summary.TenantCreditsPosted - summary.TenantCreditsDrawn));
         decimal unposted = summary.TenantCredits - summary.TenantCreditsPosted;
-        return Math.Max(0m, planLeft + summary.CreditGrantBalance - unposted);
+        return Math.Max(0m, planLeft + summary.CreditGrantBalance - unposted - summary.TenantCreditsReserved);
     }
 }
