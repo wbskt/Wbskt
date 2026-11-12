@@ -17,7 +17,7 @@ public interface IWorkspaceService
     Task<Result> AddUserToWorkspaceAsync(int workspaceId, AddMemberRequest request, CancellationToken cancellationToken = default);
     Task<Result> RemoveUserFromWorkspaceAsync(int workspaceId, Guid userRef, CancellationToken cancellationToken = default);
     Task<Result<IPagedList<TenantMemberResponse>>> GetMembersAsync(int workspaceId, int skip, int take, CancellationToken cancellationToken = default);
-    Task<Result> UpdateWorkspaceAsync(int workspaceId, CreateWorkspaceRequest request, CancellationToken cancellationToken = default);
+    Task<Result> UpdateWorkspaceAsync(int workspaceId, UpdateWorkspaceRequest request, CancellationToken cancellationToken = default);
     Task<Result> DeleteWorkspaceAsync(int callerId, int workspaceId, CancellationToken cancellationToken = default);
     Task<Result> TransferOwnershipAsync(int callerId, int workspaceId, Guid newOwnerRef, CancellationToken cancellationToken = default);
 

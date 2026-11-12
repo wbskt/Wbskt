@@ -45,9 +45,10 @@ public class WorkspacesController : ApiControllerBase
     }
 
     /// <summary>
-    /// Creates a new workspace and makes the current user its primary owner.
+    /// Creates a new workspace and makes the current user its primary owner. The caller needs
+    /// <c>workspaces.create</c> tenant-wide in the tenant it goes in.
     /// </summary>
-    /// <param name="request">The workspace creation details (name, description).</param>
+    /// <param name="request">The workspace's name and description, and optionally the tenant to create it in.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The newly created workspace details.</returns>
     [HttpPost]
@@ -122,7 +123,7 @@ public class WorkspacesController : ApiControllerBase
     /// <summary>Renames a workspace or changes its description.</summary>
     [HttpPut("{workspaceRef:guid}")]
     [RequiresPermission(PermissionNames.UsersManage)]
-    public async Task<IActionResult> UpdateWorkspace([FromWorkspace] int workspaceId, [FromBody] CreateWorkspaceRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> UpdateWorkspace([FromWorkspace] int workspaceId, [FromBody] UpdateWorkspaceRequest request, CancellationToken cancellationToken)
     {
         return MapResult(await _workspaceService.UpdateWorkspaceAsync(workspaceId, request, cancellationToken));
     }

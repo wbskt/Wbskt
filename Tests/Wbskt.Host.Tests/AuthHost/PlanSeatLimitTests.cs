@@ -137,8 +137,10 @@ public sealed class PlanSeatLimitTests
     {
         _tenants.Setup(p => p.GetTenantsForUserAsync(CallerId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([OwnTenant, new Tenant { Id = TenantId, RefId = TenantRef, Name = "Acme" }]);
+        _access.Setup(p => p.VerifyPermissionAsync(CallerId, TenantId, null, PermissionNames.WorkspacesCreate, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
 
-        var result = await Workspaces().CreateWorkspaceAsync(CallerId, new CreateWorkspaceRequest("lab", null, OwnTenant.RefId));
+        var result = await Workspaces().CreateWorkspaceAsync(CallerId, new CreateWorkspaceRequest("lab", null, TenantRef));
 
         Assert.Equal("PERMISSION_UNAUTHORIZED", result.Error.Code);
         Assert.Equal(ErrorType.Forbidden, result.Error.Type);
@@ -148,13 +150,18 @@ public sealed class PlanSeatLimitTests
     [Fact]
     public async Task With_no_tenant_named_the_one_where_the_caller_may_create_is_used()
     {
-        // An invited member is in the inviting tenant without the grant, and admin of their own.
+        // An invited member: admin of their own tenant, in the inviting one without the grant.
         _tenants.Setup(p => p.GetTenantsForUserAsync(CallerId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([OwnTenant, new Tenant { Id = TenantId, RefId = TenantRef, Name = "Acme" }]);
+        _access.Setup(p => p.VerifyPermissionAsync(CallerId, TenantId, null, PermissionNames.WorkspacesCreate, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        _access.Setup(p => p.VerifyPermissionAsync(CallerId, OwnTenant.Id, null, PermissionNames.WorkspacesCreate, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
 
-        await Workspaces().CreateWorkspaceAsync(CallerId, new CreateWorkspaceRequest("lab", null));
+        var result = await Workspaces().CreateWorkspaceAsync(CallerId, new CreateWorkspaceRequest("lab", null));
 
-        _workspaces.Verify(p => p.CreateWorkspaceAsync("lab", string.Empty, CallerId, TenantId, 3, It.IsAny<CancellationToken>()), Times.Once);
+        Assert.True(result.IsSuccess);
+        _workspaces.Verify(p => p.CreateWorkspaceAsync("lab", string.Empty, CallerId, OwnTenant.Id, 3, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

@@ -1236,6 +1236,24 @@
         ],
         "type": "object"
       },
+      "UpdateWorkspaceRequest": {
+        "properties": {
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description"
+        ],
+        "type": "object"
+      },
       "UsageCount": {
         "properties": {
           "limit": {
@@ -4123,17 +4141,17 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateWorkspaceRequest"
+                "$ref": "#/components/schemas/UpdateWorkspaceRequest"
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateWorkspaceRequest"
+                "$ref": "#/components/schemas/UpdateWorkspaceRequest"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateWorkspaceRequest"
+                "$ref": "#/components/schemas/UpdateWorkspaceRequest"
               }
             }
           },
