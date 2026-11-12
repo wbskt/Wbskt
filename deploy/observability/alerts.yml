@@ -45,25 +45,34 @@ groups:
           summary: "{{ $value }} branches are queued for execution in the engine"
 
       - alert: MailRelayDown
-        # The auth host gave up on mail and sent none in 15 minutes: the relay is refusing everything
-        # (expired credential, sending limit, outage). Every confirmation, invitation and password reset
-        # goes this way, and sign-in needs a confirmed address, so nobody new can get in.
+        # The auth host gave up on at least two mails and sent none in 15 minutes: the relay is refusing
+        # everything (expired credential, sending limit, outage, or "relaying denied", which arrives as a
+        # refused recipient). Every confirmation, invitation and password reset goes this way, and sign-in
+        # needs a confirmed address, so nobody new can get in. Two, so one mistyped address at a quiet
+        # hour does not page.
         expr: |
-          sum(increase(wbskt_auth_mail_total{outcome=~"dropped|queue_full"}[15m])) > 0
+          sum(increase(wbskt_auth_mail_total{outcome=~"dropped|queue_full|rejected"}[15m])) >= 2
           and (sum(increase(wbskt_auth_mail_total{outcome="sent"}[15m])) or vector(0)) == 0
         labels:
           severity: page
         annotations:
           summary: "No mail went out in 15 minutes and {{ $value | printf \"%.0f\" }} were given up on"
           description: >-
-            The auth host's "was not sent after" lines name the relay's status code. This alert is
+            The auth host's "was not sent after" and "was refused by the relay" lines name the relay's
+            status code, and for a relay it could not reach, the socket or TLS error under it. This alert is
             mailed through that same relay when ALERT_EMAIL_TO is the only receiver, so it reaches
             someone only with ALERT_WEBHOOK_URL set.
 
       - alert: MailFailing
         # Some mail was given up on after its retries (about 10 seconds), or refused by a full queue,
-        # while other mail still went out: a relay blip, or a backlog building.
-        expr: sum(increase(wbskt_auth_mail_total{outcome=~"dropped|queue_full"}[15m])) > 0
+        # while other mail still went out: a relay blip, or a backlog building. Quiet while MailRelayDown
+        # holds (the same condition, repeated), so one outage notifies once.
+        expr: |
+          sum(increase(wbskt_auth_mail_total{outcome=~"dropped|queue_full"}[15m])) > 0
+          unless on() (
+            sum(increase(wbskt_auth_mail_total{outcome=~"dropped|queue_full|rejected"}[15m])) >= 2
+            and (sum(increase(wbskt_auth_mail_total{outcome="sent"}[15m])) or vector(0)) == 0
+          )
         labels:
           severity: warn
         annotations:
