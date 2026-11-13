@@ -126,8 +126,8 @@ Repository secrets the workflows need:
 | `DEPLOY_SSH_KEY` | Private half of the deploy key |
 | `DEPLOY_KNOWN_HOSTS` | `ssh-keyscan <host>` output — pins the host key so the runner can't be MITM'd |
 
-The Dashboard repo needs the same five. Define them as **organisation** secrets shared with both
-repos rather than copying them, so rotating the deploy key is one change instead of two.
+The Dashboard and Wbskt.Admin repos need the same five. Define them as **organisation** secrets
+shared with all three repos rather than copying them, so rotating the deploy key is one change.
 
 `GITHUB_TOKEN` covers the GHCR push; no extra secret for that. The workflows target the
 `production` (backend) and `production-console` GitHub Environments, so adding required reviewers
@@ -353,6 +353,9 @@ ADMIN_STAFF_SECRET_KEY=...         # openssl rand -base64 32
 docker compose --profile migrate run --rm migrator
 deploy/scripts/deploy.sh --admin-tag sha-<commit>    # or latest
 ```
+
+After that, every push to Wbskt.Admin's `master` runs the same command from its CI (`deploy` job,
+environment `production-admin`); run it by hand only to roll back.
 
 `--admin-tag` pulls `wbskt-admin` and `wbskt-admin-migrator` at that tag, publishes the admin's own
 database (`Wbskt.Admin`: staff and their sessions) and its `wbskt_admin_host` login, then recreates
