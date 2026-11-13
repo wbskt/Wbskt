@@ -34,6 +34,10 @@
             <DefaultValue></DefaultValue>
             <Value>$(SqlCmdVar__2)</Value>
         </SqlCmdVariable>
+        <SqlCmdVariable Include="AdminReaderPassword">
+            <DefaultValue></DefaultValue>
+            <Value>$(SqlCmdVar__3)</Value>
+        </SqlCmdVariable>
     </ItemGroup>
 
 </Project>

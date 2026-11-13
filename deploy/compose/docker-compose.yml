@@ -850,6 +850,7 @@ services:
       SQL_AUTH_PASSWORD: ${SQL_AUTH_PASSWORD:?SQL_AUTH_PASSWORD is required - see .env.example}
       SQL_MANAGEMENT_PASSWORD: ${SQL_MANAGEMENT_PASSWORD:?SQL_MANAGEMENT_PASSWORD is required - see .env.example}
       SQL_ENGINE_PASSWORD: ${SQL_ENGINE_PASSWORD:?SQL_ENGINE_PASSWORD is required - see .env.example}
+      SQL_ADMIN_READER_PASSWORD: ${SQL_ADMIN_READER_PASSWORD:-}
     depends_on:
       sql:
         condition: service_healthy
