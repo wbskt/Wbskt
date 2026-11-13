@@ -361,7 +361,7 @@ the one container and waits for it to report healthy. Backend deploys never touc
 **Your staff login.** Run once per person; it prints the password and an authenticator secret once:
 
 ```bash
-docker compose exec admin dotnet Wbskt.Admin.Host.dll staff add <username> "<display name>"
+docker compose --profile admin exec admin dotnet Wbskt.Admin.Host.dll staff add <username> "<display name>"
 ```
 
 Use `exec`, not `run`, so the credentials are not left in a stopped container's log. Add the secret
@@ -379,13 +379,17 @@ is what stops a web page that rebinds its own name to 127.0.0.1 from reaching it
 **Lost authenticator, or someone leaves.**
 
 ```bash
-docker compose exec admin dotnet Wbskt.Admin.Host.dll staff reset <username>     # new password and secret, ends sessions, re-enables
-docker compose exec admin dotnet Wbskt.Admin.Host.dll staff disable <username>   # no more sign-ins, sessions end now
+docker compose --profile admin exec admin dotnet Wbskt.Admin.Host.dll staff reset <username>     # new password and secret, ends sessions, re-enables
+docker compose --profile admin exec admin dotnet Wbskt.Admin.Host.dll staff disable <username>   # no more sign-ins, sessions end now
 ```
 
 `ADMIN_STAFF_SECRET_KEY` encrypts every authenticator secret. Changing it locks everyone out until
 each login is `staff reset`. The `Wbskt.Admin` database is not in the nightly backup: it holds only
 staff logins and sessions, which `staff add` recreates.
+
+**After a full restart.** `docker compose down && docker compose up -d` (the maintenance-window path)
+leaves the admin stopped, because a plain `up` skips the `admin` profile. Bring it back with
+`docker compose --profile admin up -d --no-build --no-deps admin`.
 
 ## Incremental deployment (already running, you've changed something)
 
