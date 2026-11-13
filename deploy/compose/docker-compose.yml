@@ -857,7 +857,7 @@ services:
     networks: [backend]
 
   # The platform admin (wbskt/Wbskt.Admin): staff look after people and accounts through it. Built and
-  # published by that repo; deploy it with `deploy.sh --admin-tag <tag>`, which moves ADMIN_IMAGE_TAG
+  # published and deployed by that repo's CI through `deploy.sh --admin-tag <tag>`, which moves ADMIN_IMAGE_TAG
   # on its own, runs admin-migrator, then recreates this one container. Profile admin keeps both out of
   # a plain `docker compose up`, so an install without the admin needs none of its settings.
   admin-migrator:
