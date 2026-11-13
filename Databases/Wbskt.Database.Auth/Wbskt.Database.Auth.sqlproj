@@ -9,9 +9,11 @@
 
     <ItemGroup>
         <SqlFiles Include="Functions\*.sql" />
+        <SqlFiles Include="Security\*.sql" />
         <SqlFiles Include="StoredProcedures\*.sql" />
         <SqlFiles Include="Tables\*.sql" />
         <SqlFiles Include="Types\*.sql" />
+        <SqlFiles Include="Views\*.sql" />
     </ItemGroup>
 
     <ItemGroup>
