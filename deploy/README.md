@@ -126,8 +126,10 @@ Repository secrets the workflows need:
 | `DEPLOY_SSH_KEY` | Private half of the deploy key |
 | `DEPLOY_KNOWN_HOSTS` | `ssh-keyscan <host>` output — pins the host key so the runner can't be MITM'd |
 
-The Dashboard and Wbskt.Admin repos need the same five. Define them as **organisation** secrets
-shared with all three repos rather than copying them, so rotating the deploy key is one change.
+The Dashboard and Wbskt.Admin repos need the same five. Those two are private, and on GitHub's free
+plan a private repo can't read organisation secrets, so each repo keeps its own copies. Give each repo
+its own deploy key, each behind the forced command in `authorized_keys`, so one can be revoked without
+the others.
 
 `GITHUB_TOKEN` covers the GHCR push; no extra secret for that. The workflows target the
 `production` (backend) and `production-console` GitHub Environments, so adding required reviewers
