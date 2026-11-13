@@ -407,3 +407,26 @@ BEGIN
     EXEC (N'GRANT EXECUTE ON SCHEMA::dbo TO [wbskt_auth]');
 END
 GO
+
+-- Login for the platform admin host (wbskt/Wbskt.Admin): [wbskt_admin_reader], which may read the views
+-- in the [admin] schema and nothing else, in this database and, under the same login, in the other one.
+-- Created as the per-host logins above are: from the $(AdminReaderPassword) SQLCMD variable, skipped
+-- when it is empty, rotated by rerunning with a new one, each statement through EXEC so the DACPAC
+-- build does not lift it into the model. No EXECUTE and nothing on dbo: the admin host never writes
+-- here, it asks the host that owns the change through an internal admin endpoint.
+IF N'$(AdminReaderPassword)' <> N''
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'wbskt_admin_reader')
+        EXEC (N'CREATE LOGIN [wbskt_admin_reader] WITH PASSWORD = N''$(AdminReaderPassword)'', DEFAULT_DATABASE = [$(DatabaseName)]');
+    ELSE
+        EXEC (N'ALTER LOGIN [wbskt_admin_reader] WITH PASSWORD = N''$(AdminReaderPassword)''');
+
+    IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'wbskt_admin_reader')
+        EXEC (N'CREATE USER [wbskt_admin_reader] FOR LOGIN [wbskt_admin_reader]');
+    ELSE
+        EXEC (N'ALTER USER [wbskt_admin_reader] WITH LOGIN = [wbskt_admin_reader]');
+
+    EXEC (N'GRANT CONNECT TO [wbskt_admin_reader]');
+    EXEC (N'GRANT SELECT ON SCHEMA::[admin] TO [wbskt_admin_reader]');
+END
+GO

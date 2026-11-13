@@ -18,6 +18,18 @@ for name in SQL_AUTH_PASSWORD SQL_MANAGEMENT_PASSWORD SQL_ENGINE_PASSWORD; do
     esac
 done
 
+# The platform admin host's read-only login (wbskt/Wbskt.Admin), allowed to SELECT the [admin] views in
+# both databases and nothing else. Optional: unset, the login is not created, as for an install that
+# does not run the admin host. sqlpackage refuses an empty /v: value, so it is passed only when set.
+SQL_ADMIN_READER_PASSWORD="${SQL_ADMIN_READER_PASSWORD:-}"
+case "$SQL_ADMIN_READER_PASSWORD" in
+    *"'"*|*";"*|*'"'*) echo "SQL_ADMIN_READER_PASSWORD must not contain ' \" or ;" >&2; exit 1 ;;
+esac
+ADMIN_READER_ARGS=()
+if [ -n "$SQL_ADMIN_READER_PASSWORD" ]; then
+    ADMIN_READER_ARGS=("/v:AdminReaderPassword=${SQL_ADMIN_READER_PASSWORD}")
+fi
+
 # The root administrator's password hash, applied only on the run that creates the auth database's
 # root account (a fresh install). Optional: left empty, root is created with no usable password and
 # signs in after a password reset. The format is ASP.NET Core Identity's, so only base64 is valid;
@@ -69,7 +81,8 @@ sqlpackage /Action:Publish \
     /p:CreateNewDatabase="${CREATE_NEW_DATABASE}" \
     /p:CommandTimeout="${COMMAND_TIMEOUT}" \
     /v:AuthHostPassword="${SQL_AUTH_PASSWORD}" \
-    "${ROOT_HASH_ARGS[@]}"
+    "${ROOT_HASH_ARGS[@]}" \
+    "${ADMIN_READER_ARGS[@]}"
 
 echo "Publishing Wbskt.Database (CreateNewDatabase=${CREATE_NEW_DATABASE}, BlockOnPossibleDataLoss=${BLOCK_ON_POSSIBLE_DATA_LOSS})..."
 sqlpackage /Action:Publish \
@@ -79,6 +92,7 @@ sqlpackage /Action:Publish \
     /p:CreateNewDatabase="${CREATE_NEW_DATABASE}" \
     /p:CommandTimeout="${COMMAND_TIMEOUT}" \
     /v:ManagementHostPassword="${SQL_MANAGEMENT_PASSWORD}" \
-    /v:EngineHostPassword="${SQL_ENGINE_PASSWORD}"
+    /v:EngineHostPassword="${SQL_ENGINE_PASSWORD}" \
+    "${ADMIN_READER_ARGS[@]}"
 
 echo "Database migration complete."

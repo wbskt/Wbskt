@@ -619,8 +619,12 @@ post-deployment scripts from the passwords in `.env`:
 | `wbskt_auth` | `Wbskt.Database.Auth` | auth (`SQL_AUTH_PASSWORD`) |
 | `wbskt_management` | `Wbskt.Database` | management (`SQL_MANAGEMENT_PASSWORD`) |
 | `wbskt_engine` | `Wbskt.Database` | engine (`SQL_ENGINE_PASSWORD`) |
+| `wbskt_admin_reader` | both | the platform admin host, wbskt/Wbskt.Admin (`SQL_ADMIN_READER_PASSWORD`, optional) |
 
-Each login can connect to its database and execute the procedures in `dbo`, nothing else: no
+`wbskt_admin_reader` is the exception: it executes nothing and may only `SELECT` the views in the
+`admin` schema of each database, which leave out password hashes, token hashes and secrets. It is
+created only when `SQL_ADMIN_READER_PASSWORD` is set. The other logins
+can connect to their database and execute the procedures in `dbo`, nothing else: no
 direct table access, no other database, no server rights. Every query the hosts make is a stored
 procedure, so that is all they need, and a bug in any host can no longer read or change data
 outside what its procedures allow. `sa` is now used only by the migrator, the SQL healthcheck and
