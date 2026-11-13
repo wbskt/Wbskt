@@ -11,22 +11,35 @@ set -euo pipefail
 : "${SQL_MANAGEMENT_PASSWORD:?SQL_MANAGEMENT_PASSWORD is required - see deploy/compose/.env.example}"
 : "${SQL_ENGINE_PASSWORD:?SQL_ENGINE_PASSWORD is required - see deploy/compose/.env.example}"
 
-# The passwords are substituted into T-SQL string literals, and end up inside connection strings.
-for name in SQL_AUTH_PASSWORD SQL_MANAGEMENT_PASSWORD SQL_ENGINE_PASSWORD; do
-    case "${!name}" in
+# The passwords are substituted into T-SQL string literals, and end up inside connection strings,
+# so ' " and ; are refused. SQL Server's password policy is checked here too, before anything is
+# published: otherwise the schema is applied and only then does CREATE LOGIN fail, which leaves the
+# auth database migrated and the core one not.
+check_password() {
+    local name="$1" value="$2" kinds=0
+    case "$value" in
         *"'"*|*";"*|*'"'*) echo "$name must not contain ' \" or ;" >&2; exit 1 ;;
     esac
+    [[ "$value" =~ [[:upper:]] ]] && kinds=$((kinds + 1))
+    [[ "$value" =~ [[:lower:]] ]] && kinds=$((kinds + 1))
+    [[ "$value" =~ [[:digit:]] ]] && kinds=$((kinds + 1))
+    [[ "$value" =~ [^[:alnum:]] ]] && kinds=$((kinds + 1))
+    if (( ${#value} < 8 || kinds < 3 )); then
+        echo "$name does not meet SQL Server's password policy: 8+ characters from three of upper case, lower case, digits and symbols. Make one with: printf 'Wb1%s\\n' \"\$(openssl rand -hex 16)\"" >&2
+        exit 1
+    fi
+}
+for name in SQL_AUTH_PASSWORD SQL_MANAGEMENT_PASSWORD SQL_ENGINE_PASSWORD; do
+    check_password "$name" "${!name}"
 done
 
 # The platform admin host's read-only login (wbskt/Wbskt.Admin), allowed to SELECT the [admin] views in
 # both databases and nothing else. Optional: unset, the login is not created, as for an install that
 # does not run the admin host. sqlpackage refuses an empty /v: value, so it is passed only when set.
 SQL_ADMIN_READER_PASSWORD="${SQL_ADMIN_READER_PASSWORD:-}"
-case "$SQL_ADMIN_READER_PASSWORD" in
-    *"'"*|*";"*|*'"'*) echo "SQL_ADMIN_READER_PASSWORD must not contain ' \" or ;" >&2; exit 1 ;;
-esac
 ADMIN_READER_ARGS=()
 if [ -n "$SQL_ADMIN_READER_PASSWORD" ]; then
+    check_password SQL_ADMIN_READER_PASSWORD "$SQL_ADMIN_READER_PASSWORD"
     ADMIN_READER_ARGS=("/v:AdminReaderPassword=${SQL_ADMIN_READER_PASSWORD}")
 fi
 
