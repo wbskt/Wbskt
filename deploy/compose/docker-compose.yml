@@ -855,3 +855,56 @@ services:
       sql:
         condition: service_healthy
     networks: [backend]
+
+  # The platform admin (wbskt/Wbskt.Admin): staff look after people and accounts through it. Built and
+  # published by that repo; deploy it with `deploy.sh --admin-tag <tag>`, which moves ADMIN_IMAGE_TAG
+  # on its own, runs admin-migrator, then recreates this one container. Profile admin keeps both out of
+  # a plain `docker compose up`, so an install without the admin needs none of its settings.
+  admin-migrator:
+    image: ${REGISTRY:-ghcr.io/wbskt}/wbskt-admin-migrator:${ADMIN_IMAGE_TAG:-latest}
+    container_name: wbskt-admin-migrator
+    mem_limit: 1g
+    memswap_limit: 1g
+    profiles: ["admin"]
+    environment:
+      # As sa, like the main migrator: it creates the database and the admin host's login.
+      ADMIN_DB_CONNECTION_STRING: Server=sql;Database=Wbskt.Admin;User Id=sa;Password=${SQL_SA_PASSWORD:?SQL_SA_PASSWORD is required - see .env.example};TrustServerCertificate=True;Encrypt=True;
+      SQL_ADMIN_HOST_PASSWORD: ${SQL_ADMIN_HOST_PASSWORD:-}
+      MIGRATE_COMMAND_TIMEOUT: ${MIGRATE_COMMAND_TIMEOUT:-1800}
+    depends_on:
+      sql:
+        condition: service_healthy
+    networks: [backend]
+    logging: *default-logging
+
+  admin:
+    image: ${REGISTRY:-ghcr.io/wbskt}/wbskt-admin:${ADMIN_IMAGE_TAG:-latest}
+    container_name: wbskt-admin
+    profiles: ["admin"]
+    # Loopback only, and no Traefik labels: staff reach it over an SSH tunnel to the VM
+    # (ssh -L 8090:127.0.0.1:8090 ...), never from the internet. See "Platform admin" in deploy/README.md.
+    ports:
+      - "127.0.0.1:8090:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      # Staff and their sessions, as wbskt_admin_host (execute on its own procedures only).
+      ConnectionStrings__Admin: Server=sql;Database=Wbskt.Admin;User Id=wbskt_admin_host;Password=${SQL_ADMIN_HOST_PASSWORD:-};TrustServerCertificate=True;Encrypt=True;
+      # People, accounts and usage, as wbskt_admin_reader (SELECT on the [admin] views only).
+      ConnectionStrings__AuthReader: Server=sql;Database=Wbskt.Database.Auth;User Id=wbskt_admin_reader;Password=${SQL_ADMIN_READER_PASSWORD:-};TrustServerCertificate=True;Encrypt=True;
+      ConnectionStrings__MainReader: Server=sql;Database=Wbskt.Database;User Id=wbskt_admin_reader;Password=${SQL_ADMIN_READER_PASSWORD:-};TrustServerCertificate=True;Encrypt=True;
+      # Encrypts the staff authenticator secrets. The host refuses to start without a valid one.
+      Staff__SecretKey: ${ADMIN_STAFF_SECRET_KEY:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      sql:
+        condition: service_healthy
+    networks: [backend]
+    restart: unless-stopped
+    mem_limit: ${HOST_MEM_LIMIT:-384m}
+    memswap_limit: ${HOST_MEM_LIMIT:-384m}
+    logging: *default-logging

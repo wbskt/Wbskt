@@ -6,6 +6,7 @@
 #   deploy/scripts/deploy.sh --tag sha-abc1234                             # backend hosts
 #   deploy/scripts/deploy.sh --tag sha-abc1234 --services auth,management --skip-migrations
 #   deploy/scripts/deploy.sh --console-tag sha-def5678                     # console only
+#   deploy/scripts/deploy.sh --admin-tag sha-0123abc                       # platform admin only
 #
 # Nothing is built here - images come from CI via GHCR (.github/workflows/build-images.yml here,
 # .github/workflows/build-and-deploy.yml in the Dashboard repo).
@@ -42,6 +43,7 @@ readonly ENV_FILE="$COMPOSE_DIR/.env"
 
 TAG=""
 CONSOLE_TAG=""
+ADMIN_TAG=""
 REF=""
 SERVICES=()
 SKIP_MIGRATIONS=false
@@ -50,6 +52,7 @@ usage() {
     cat <<'EOF'
 usage: deploy.sh --tag <image-tag> [--services <a,b,c>] [--ref <git-ref>] [--skip-migrations]
        deploy.sh --console-tag <image-tag>
+       deploy.sh --admin-tag <image-tag>
 
   --tag              Backend image tag, e.g. sha-abc1234. Also selects the commit this
                      checkout is reset to.
@@ -65,6 +68,10 @@ usage: deploy.sh --tag <image-tag> [--services <a,b,c>] [--ref <git-ref>] [--ski
 
   --console-tag      Console image tag from the Dashboard repo. Deploys only the console and
                      leaves this checkout alone. Not combinable with the options above.
+
+  --admin-tag        Platform admin image tag from the Wbskt.Admin repo. Migrates the admin
+                     database, then deploys only the admin host, loopback only. Leaves this
+                     checkout alone. Not combinable with any other option.
 EOF
 }
 
@@ -79,6 +86,8 @@ parse_args() {
             --tag)         TAG="${2:-}"; [[ -n "$TAG" ]] || die "--tag needs a value"; shift 2 ;;
             --console-tag) CONSOLE_TAG="${2:-}"
                            [[ -n "$CONSOLE_TAG" ]] || die "--console-tag needs a value"; shift 2 ;;
+            --admin-tag)   ADMIN_TAG="${2:-}"
+                           [[ -n "$ADMIN_TAG" ]] || die "--admin-tag needs a value"; shift 2 ;;
             --ref)         REF="${2:-}"; [[ -n "$REF" ]] || die "--ref needs a value"; shift 2 ;;
             --services)    [[ -n "${2:-}" ]] || die "--services needs a value"
                            read -r -a SERVICES <<< "${2//,/ }"; shift 2 ;;
@@ -131,12 +140,21 @@ validate_backend() {
 }
 
 validate_console() {
-    if [[ -n "$TAG" || -n "$REF" || ${#SERVICES[@]} -gt 0 || "$SKIP_MIGRATIONS" == true ]]; then
+    if [[ -n "$ADMIN_TAG" || -n "$TAG" || -n "$REF" || ${#SERVICES[@]} -gt 0 || "$SKIP_MIGRATIONS" == true ]]; then
         die "--console-tag is its own mode; it cannot be combined with --tag/--ref/--services/--skip-migrations"
     fi
     validate_tag "$CONSOLE_TAG"
     require_env_file
     SERVICES=(console)
+}
+
+validate_admin() {
+    if [[ -n "$TAG" || -n "$CONSOLE_TAG" || -n "$REF" || ${#SERVICES[@]} -gt 0 || "$SKIP_MIGRATIONS" == true ]]; then
+        die "--admin-tag is its own mode; it cannot be combined with any other option"
+    fi
+    validate_tag "$ADMIN_TAG"
+    require_env_file
+    SERVICES=(admin)
 }
 
 # Resets the checkout to the deployed commit, then hands off to the version of this script that
@@ -301,6 +319,41 @@ deploy_console() {
     echo "==> deployed console $CONSOLE_TAG"
 }
 
+# The platform admin's settings are optional in .env (an install may not run it), so compose cannot
+# insist on them; this does, before anything is pulled.
+require_admin_env() {
+    local key missing=""
+    for key in SQL_ADMIN_HOST_PASSWORD SQL_ADMIN_READER_PASSWORD ADMIN_STAFF_SECRET_KEY; do
+        grep -Eq "^${key}=.+" "$ENV_FILE" || missing+=" $key"
+    done
+    [[ -z "$missing" ]] || die "set$missing in $ENV_FILE first (see \"Platform admin\" in deploy/README.md)"
+}
+
+# The admin image comes from the Wbskt.Admin repo, so like the console there is no checkout to sync.
+# Its own database is migrated first, by the migrator image published alongside it; the main
+# databases' [admin] views and its reader login come from this repo's migrator on backend deploys.
+deploy_admin() {
+    cd "$COMPOSE_DIR"
+    export COMPOSE_PROFILES=admin
+    require_complete_env
+    require_admin_env
+    set_env_var ADMIN_IMAGE_TAG "$ADMIN_TAG"
+
+    free_disk_space
+
+    echo "==> pulling admin and admin-migrator at $ADMIN_TAG"
+    docker compose pull admin admin-migrator
+
+    echo "==> migrating the admin database"
+    docker compose run --rm --no-deps admin-migrator
+
+    echo "==> starting admin"
+    docker compose up -d --no-build --no-deps admin
+
+    wait_for_health admin
+    echo "==> deployed admin $ADMIN_TAG on 127.0.0.1:8090"
+}
+
 deploy_backend() {
     cd "$COMPOSE_DIR"
     require_complete_env
@@ -434,6 +487,12 @@ main() {
     if [[ -n "$CONSOLE_TAG" ]]; then
         validate_console
         deploy_console
+        return
+    fi
+
+    if [[ -n "$ADMIN_TAG" ]]; then
+        validate_admin
+        deploy_admin
         return
     fi
 
