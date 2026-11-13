@@ -282,7 +282,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
      p = parent issue, s = o|c, a = areas, pr = priority, sz = size. "work" adds a state and a sentence to an issue number. -->
 <script type="application/json" id="roadmap-data">
 {
- "asOf": "2026-11-12",
+ "asOf": "2026-11-13",
  "headline": "M2 backend has 6 pieces of real work left: two wait on you (the SDK release keys and the deleted-client call), the never-ending-runs epic (#594), and the housekeeping epic (#618), now down to one M3 item. The 11 Nov architecture review (#730) is 48 of 73 done: all 5 backend P1s and every backend and library P2 except two are merged (12 Nov), the last ones being the alerting and nightly fixes (#776 to #780, PR #842 to #849). Left from it: the Team headroom call that belongs to the pricing decision (#751), the Arduino install line, which waits on your OK to tag 0.9.0-beta.2 (#767), the console items (Amal) and the Post-launch small items. Production stopped answering SSH at about 13:40 UTC on 12 Nov, so the last merges are not deployed (#848).",
  "milestones": [
   {
@@ -298,7 +298,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "short": "M2",
    "due": "2026-11-30",
    "start": "2026-11-01",
-   "open": 25,
+   "open": 29,
    "closed": 189
   },
   {
@@ -560,6 +560,10 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   }
  ],
  "issues": [
+  {"n":854,"t":"Platform admin: repair admin and freeze an account","s":"o","m":"M2","p":851,"a":["auth"]},
+  {"n":853,"t":"Platform admin: internal admin endpoints that write the staff audit","s":"o","m":"M2","p":851,"a":["auth","management"]},
+  {"n":852,"t":"Read-only admin views and staff audit tables for the platform admin","s":"o","m":"M2","p":851,"a":["db"]},
+  {"n":851,"t":"Platform admin: a private service for staff to look after people and accounts","s":"o","m":"M2","p":null,"a":[],"epic":1,"sub":{"completed":0,"total":3}},
   {"n":839,"t":"Clear the readings of workspaces deleted before their account copy was kept","s":"o","m":null,"p":null,"a":[]},
   {"n":836,"t":"Handle a busy workspace in the tickers and sub-workflow starts","s":"o","m":null,"p":null,"a":[]},
   {"n":835,"t":"Replay a manual run's first answer to a retry with the same idempotency key","s":"o","m":null,"p":null,"a":[]},
