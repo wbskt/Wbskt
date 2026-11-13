@@ -335,6 +335,58 @@ Each host then serves `/scalar` and `/openapi/v1.json`: `https://auth.<DOMAIN>/s
 `https://api.<DOMAIN>/scalar` and `https://ws.<DOMAIN>/scalar`. Both paths are anonymous, so anyone
 can read the full API surface while this is on. Calls made from the page still need a valid token.
 
+### Platform admin
+
+The platform admin ([wbskt/Wbskt.Admin](https://github.com/wbskt/Wbskt.Admin)) is where staff look
+after people and accounts. It is not on the internet: the `admin` container publishes
+`127.0.0.1:8090` only and has no Traefik labels, so the one way in is an SSH tunnel to the VM.
+
+**First time.** Fill in the three settings in `compose/.env`, run the main migrator so the reader
+login exists, then deploy the admin image that repo's CI published:
+
+```bash
+# compose/.env
+SQL_ADMIN_READER_PASSWORD=Wb1...   # printf 'Wb1%s\n' "$(openssl rand -hex 16)"
+SQL_ADMIN_HOST_PASSWORD=Wb1...     # the same, a different one
+ADMIN_STAFF_SECRET_KEY=...         # openssl rand -base64 32
+
+docker compose --profile migrate run --rm migrator
+deploy/scripts/deploy.sh --admin-tag sha-<commit>    # or latest
+```
+
+`--admin-tag` pulls `wbskt-admin` and `wbskt-admin-migrator` at that tag, publishes the admin's own
+database (`Wbskt.Admin`: staff and their sessions) and its `wbskt_admin_host` login, then recreates
+the one container and waits for it to report healthy. Backend deploys never touch it.
+
+**Your staff login.** Run once per person; it prints the password and an authenticator secret once:
+
+```bash
+docker compose exec admin dotnet Wbskt.Admin.Host.dll staff add <username> "<display name>"
+```
+
+Use `exec`, not `run`, so the credentials are not left in a stopped container's log. Add the secret
+to an authenticator app (or open the `otpauth://` link it prints).
+
+**Opening it.** From your laptop, then browse to http://localhost:8090:
+
+```bash
+ssh -N -L 8090:127.0.0.1:8090 <you>@<vm>
+```
+
+Use `localhost` or `127.0.0.1` in the address bar: the admin answers to no other host name, which
+is what stops a web page that rebinds its own name to 127.0.0.1 from reaching it.
+
+**Lost authenticator, or someone leaves.**
+
+```bash
+docker compose exec admin dotnet Wbskt.Admin.Host.dll staff reset <username>     # new password and secret, ends sessions, re-enables
+docker compose exec admin dotnet Wbskt.Admin.Host.dll staff disable <username>   # no more sign-ins, sessions end now
+```
+
+`ADMIN_STAFF_SECRET_KEY` encrypts every authenticator secret. Changing it locks everyone out until
+each login is `staff reset`. The `Wbskt.Admin` database is not in the nightly backup: it holds only
+staff logins and sessions, which `staff add` recreates.
+
 ## Incremental deployment (already running, you've changed something)
 
 Normally: push to `master`, wait for **Build images**, then dispatch **Deploy** with that run's
