@@ -36,6 +36,13 @@ internal static class E2EConfig
         Environment.GetEnvironmentVariable("E2E_WORKFLOW_URL") ?? "https://localhost:7030";
 
     /// <summary>
+    /// The admin host's key (<c>X-Wbskt-Admin-Key</c>), which start-hosts.sh gives the auth and management
+    /// hosts as <c>Internal:AdminApiKey</c>. The staff action scenarios skip when a host has no key.
+    /// </summary>
+    public static string AdminApiKey =>
+        Environment.GetEnvironmentVariable("E2E_ADMIN_API_KEY") ?? "e2e-admin-key";
+
+    /// <summary>
     /// Opt-in gate for the rate-limiting scenarios. They deliberately exhaust the auth host's
     /// per-IP budget, and since every test in the suite shares that IP, anything running inside the
     /// same window afterwards gets a 429 it did not ask for. Off unless explicitly enabled, and

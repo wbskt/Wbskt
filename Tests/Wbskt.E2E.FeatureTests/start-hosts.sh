@@ -36,8 +36,12 @@ declare -A ports=([auth]=5000 [management]=5010 [client-auth]=5015 [gateway-ws]=
 # Auth: every scenario's user signs up on Free (one workspace, one member) and then makes a workspace of
 # its own (CreateIsolatedWorkspaceAsync) or invites others, so the suite raises those two Free limits.
 # Pooled limits the scenarios count against (clients, active runs) stay at Free's real values.
+# Auth and management: the admin host's key, so the staff action scenarios (Scenarios/Admin) reach their
+# routes, which answer 404 on a host without one.
+admin_key="Internal__AdminApiKey=${E2E_ADMIN_API_KEY:-e2e-admin-key}"
 declare -A settings=(
-  [auth]="Billing__Plans__Free__Workspaces=1000 Billing__Plans__Free__Members=1000"
+  [auth]="Billing__Plans__Free__Workspaces=1000 Billing__Plans__Free__Members=1000 $admin_key"
+  [management]="$admin_key"
   [client-auth]="Host__Role=ClientAuth Kestrel__Endpoints__Http__Url=http://localhost:5015 Kestrel__Endpoints__Https__Url=https://localhost:7015"
 )
 
@@ -51,7 +55,7 @@ if [[ -z "${Jwt__SigningKey:-}" ]]; then
     openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt | base64 -w0 > "$key_file"
   fi
   client_token_key="Jwt__SigningKey=$(cat "$key_file")"
-  settings[management]="$client_token_key"
+  settings[management]+=" $client_token_key"
   settings[client-auth]+=" $client_token_key"
 fi
 

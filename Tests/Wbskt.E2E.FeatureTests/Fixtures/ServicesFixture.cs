@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
@@ -241,6 +242,22 @@ public sealed class ServicesFixture : IDisposable
     /// <summary>Sends a request to an absolute URL and returns the raw response without throwing on a failure status.</summary>
     public Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, string? token = null, object? body = null) =>
         Auth.As(token).SendRawAsync(method, url, body);
+
+    /// <summary>
+    /// Sends a request to a host's <c>/api/internal/admin</c> route as the admin host does: no user token,
+    /// the admin key in <c>X-Wbskt-Admin-Key</c> (<paramref name="adminKey"/>, or <see cref="E2EConfig.AdminApiKey"/>).
+    /// </summary>
+    public async Task<HttpResponseMessage> SendAdminAsync(HttpMethod method, string url, object? body = null, string? adminKey = null)
+    {
+        using var req = new HttpRequestMessage(method, url);
+        req.Headers.Add("X-Wbskt-Admin-Key", adminKey ?? E2EConfig.AdminApiKey);
+        if (body is not null)
+        {
+            req.Content = JsonContent.Create(body, body.GetType(), options: WbsktApiClient.WriteOptions);
+        }
+
+        return await _http.SendAsync(req);
+    }
 
     /// <summary>Sends a GET as Traefik would pass it on, with an <c>X-Forwarded-For</c> header.</summary>
     public async Task<HttpResponseMessage> GetForwardedAsync(string url, string token, string forwardedFor)

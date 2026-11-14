@@ -301,6 +301,7 @@ All base URLs can be overridden so the tests can target non-default environments
 | `E2E_ENGINE2_URL`     | `http://localhost:5031`    |
 | `E2E_ADMIN_EMAIL`     | `admin@wbskt.com`          |
 | `E2E_ADMIN_PASSWORD`  | `Password123!`             |
+| `E2E_ADMIN_API_KEY`   | `e2e-admin-key` (the hosts' `Internal:AdminApiKey`, which start-hosts.sh and e2e-up.sh set to it) |
 
 ---
 
@@ -309,6 +310,7 @@ All base URLs can be overridden so the tests can target non-default environments
 | Class | What it tests |
 |---|---|
 | `AuthAndRegistrationTests` | A new user can register + login; then the **seeded admin** creates an AutoApproval policy → client registration → client login |
+| `StaffActionsE2ETests` | The admin host's staff changes, sent as it sends them (the admin key, no user token): a staff plan, limits alone with a stale revision refused, ending a staff plan, credits given and revoked, a workspace's cap on the management host, signing out everywhere, sign-in off and on, a refused change refused again for its key, a member suspended and restored, the last administrator kept, a member removed. A repeat with the same idempotency key answers the first audit row. Skips when the hosts have no `Internal:AdminApiKey`. |
 | `WorkflowCommandLoopTests` | Full round-trip: publish `ClientTrigger→action:clientMessage` workflow, connect WbsktClient, send telemetry, assert OpenVent command received and run completes |
 
 ---
