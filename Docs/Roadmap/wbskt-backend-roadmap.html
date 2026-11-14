@@ -341,6 +341,11 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   }
  ],
  "work": {
+  "851": {
+   "state": "progress",
+   "why": "The read-only admin is live in wbskt/Wbskt.Admin: overview, search, tenant, user and workspace lists and pages, and the staff audit (#852). Changes come next, phase by phase (#853): the admin key and the staff action runner (PR #860), then plan and limits, credits, the workspace credit cap and people actions, each with its form in the admin.",
+   "prs": [860]
+  },
   "519": {
    "state": "progress",
    "why": "The MQTT gateway is merged (PR #642 and PR #654, 9 Nov): mqtts://mqtt.DOMAIN:8883 and plain :1883, with all five MQTT E2E scenarios passing in CI. Left: a workflow-trigger E2E scenario, the message budget over MQTT, conformance for the binding, and client IPs through Traefik's TCP router (#655). The first deploy that includes it needs the operator steps in deploy/README.md: DNS, firewall 8883 and 1883, and recreating Traefik.",
