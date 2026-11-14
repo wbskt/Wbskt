@@ -150,7 +150,8 @@ internal sealed class AdminTenantService(
                 }
 
                 // The key is the grant's reference, so the main database records it once however often it is delivered.
-                var granted = new TenantCreditsGrantedEvent(tenant.TenantId, tenant.TenantRefId, request.Credits, request.ExpiresAt, StaffCreditGrants.Source, GrantRef(request.Staff.IdempotencyKey))
+                var sourceRef = StaffCreditGrants.SourceRef(tenant.TenantRefId, request.Staff.IdempotencyKey);
+                var granted = new TenantCreditsGrantedEvent(tenant.TenantId, tenant.TenantRefId, request.Credits, request.ExpiresAt, StaffCreditGrants.Source, sourceRef)
                 {
                     WorkspaceIds = await audit.OfTenantAsync(tenant.TenantId, ct)
                 };
@@ -173,8 +174,10 @@ internal sealed class AdminTenantService(
                     return Result.Failure(TenantNotFound);
                 }
 
-                // Only a staff grant can be named here: the source is fixed, so a bought pack is never touched.
-                var revoked = new TenantCreditGrantRevokedEvent(tenant.TenantId, tenant.TenantRefId, StaffCreditGrants.Source, GrantRef(grantRef))
+                // Only this tenant's staff grant can be named here: the source is fixed and the reference starts with
+                // the tenant, so neither a bought pack nor another tenant's grant is ever touched.
+                var sourceRef = StaffCreditGrants.SourceRef(tenant.TenantRefId, grantRef);
+                var revoked = new TenantCreditGrantRevokedEvent(tenant.TenantId, tenant.TenantRefId, StaffCreditGrants.Source, sourceRef)
                 {
                     WorkspaceIds = await audit.OfTenantAsync(tenant.TenantId, ct)
                 };
@@ -183,8 +186,6 @@ internal sealed class AdminTenantService(
             },
             cancellationToken);
     }
-
-    private static string GrantRef(Guid key) => key.ToString("D");
 
     /// <summary>
     /// Moves the tenant to its subscription's plan now rather than at the next hourly review. It runs after

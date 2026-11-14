@@ -241,11 +241,11 @@ public sealed class AdminTenantsTests
         Assert.Equal(12, json.RootElement.GetProperty("tenantId").GetInt32());
         Assert.Equal(5000m, json.RootElement.GetProperty("credits").GetDecimal());
         Assert.Equal(StaffCreditGrants.Source, json.RootElement.GetProperty("source").GetString());
-        Assert.Equal(Staff.IdempotencyKey.ToString("D"), json.RootElement.GetProperty("sourceRef").GetString());
+        Assert.Equal($"{tenant.TenantRefId:D}/{Staff.IdempotencyKey:D}", json.RootElement.GetProperty("sourceRef").GetString());
     }
 
     [Fact]
-    public async Task Revoking_names_only_a_staff_grant()
+    public async Task Revoking_names_only_this_tenants_staff_grant()
     {
         var tenant = new TenantPlan(12, Guid.NewGuid(), PlanCode.Pro, null, 3, null);
         var grantRef = Guid.NewGuid();
@@ -259,7 +259,7 @@ public sealed class AdminTenantsTests
         Assert.Equal(typeof(TenantCreditGrantRevokedEvent).FullName, message.MessageType);
         using var json = JsonDocument.Parse(message.Payload);
         Assert.Equal(StaffCreditGrants.Source, json.RootElement.GetProperty("source").GetString());
-        Assert.Equal(grantRef.ToString("D"), json.RootElement.GetProperty("sourceRef").GetString());
+        Assert.Equal($"{tenant.TenantRefId:D}/{grantRef:D}", json.RootElement.GetProperty("sourceRef").GetString());
     }
 
     [Fact]
