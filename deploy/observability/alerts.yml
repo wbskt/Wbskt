@@ -1,6 +1,11 @@
 # The handful of conditions that mean a customer is affected or data is at risk. Each one names
 # what to look at first. Thresholds are starting points: tune them once there is a baseline.
 #
+# The annotations are what the alert email shows (alert-email.tmpl), to someone who may not know the
+# stack: summary (what happened, one sentence; also the subject), impact (what it means for customers
+# or data), action (what to do), and optionally command (the first thing to run on the VM) and
+# dashboard (a Grafana path, the overview dashboard otherwise).
+#
 # Deliberately absent: an alert on engine readiness. Only the leader reports ready; a standby is a
 # healthy process that is not ready by design, and alerting on it pages for normal behaviour.
 # EngineNotReporting below covers "no engine at all".
@@ -18,6 +23,11 @@ groups:
           severity: none
         annotations:
           summary: "The alerting pipeline is working; this alert always fires"
+          impact: >-
+            None. It is never emailed: it goes only to the dead man's switch (ALERT_DEADMANS_URL), so a
+            service outside the VM notices when alerts stop being sent.
+          action: >-
+            Nothing to do. Never silence it, or the outside service decides the VM is down.
 
       - alert: WorkflowRunFailureRateHigh
         expr: |
@@ -30,10 +40,16 @@ groups:
         labels:
           severity: page
         annotations:
-          summary: "{{ $value | humanizePercentage }} of workflow runs failed over the last 15 minutes"
-          description: >-
-            Break it down by workspace_id and workflow_ref in Grafana to tell one tenant's broken
-            workflow from a platform fault, then follow a failed run's trace in Tempo.
+          summary: "{{ $value | humanizePercentage }} of workflow runs failed in the last 15 minutes"
+          impact: >-
+            Customers' automations are not finishing. If one customer's workflow is broken, only they are
+            affected; if runs fail across many workspaces, the platform itself has a fault.
+          action: >-
+            On the Grafana dashboard, break the failures down by workspace_id and workflow_ref. One workflow
+            failing over and over is usually the customer's own setup. Failures spread across workspaces
+            point at the engine: open a failed run's trace in Grafana (Explore, Tempo) to see the step that
+            failed.
+          command: "docker compose logs --tail 200 engine"
 
       - alert: WorkflowWakeBacklog
         # Timers and timeouts that fell due over a minute ago and nobody claimed. max, not sum: every
@@ -43,10 +59,15 @@ groups:
         labels:
           severity: page
         annotations:
-          summary: "{{ $value }} workflow wake-ups are overdue and unclaimed"
-          description: >-
-            The engine leader is stuck, behind, or absent. Check the engine logs and which replica
-            holds leadership.
+          summary: "{{ $value }} workflow timers and timeouts are overdue and nobody has picked them up"
+          impact: >-
+            Workflows waiting on a delay, a schedule or a timeout are stuck and will not move on, so
+            customers see their automations hang.
+          action: >-
+            The workflow engine is stuck, behind, or not running. Check that an engine container is up and
+            read its recent logs. Restarting it is safe: the waiting steps are kept in the database and are
+            picked up again.
+          command: "docker compose ps engine && docker compose logs --tail 200 engine"
 
       - alert: WorkflowDispatchBacklog
         expr: max(wbskt_workflow_dispatcher_queue_depth) > 500
@@ -54,7 +75,14 @@ groups:
         labels:
           severity: warn
         annotations:
-          summary: "{{ $value }} branches are queued for execution in the engine"
+          summary: "{{ $value }} workflow steps are queued in the engine, waiting to run"
+          impact: >-
+            Workflows are running late. Nothing is lost, but customers' automations react more slowly than
+            usual.
+          action: >-
+            Usually a burst of triggers, or one workflow looping fast. If the queue keeps growing, look on
+            the Grafana dashboard for a workflow running far more than usual, and at the engine's logs.
+          command: "docker compose logs --tail 200 engine"
 
       - alert: MailRelayDown
         # The auth host gave up on at least two mails and sent none in 15 minutes: the relay is refusing
@@ -68,12 +96,17 @@ groups:
         labels:
           severity: page
         annotations:
-          summary: "No mail went out in 15 minutes and {{ $value | printf \"%.0f\" }} were given up on"
-          description: >-
-            The auth host's "was not sent after" and "was refused by the relay" lines name the relay's
-            status code, and for a relay it could not reach, the socket or TLS error under it. This alert is
-            mailed through that same relay when ALERT_EMAIL_TO is the only receiver, so it reaches
-            someone only with ALERT_WEBHOOK_URL set.
+          summary: "Outgoing email has stopped: none sent in 15 minutes, {{ $value | printf \"%.0f\" }} given up on"
+          impact: >-
+            Sign-up confirmations, invitations and password resets are not being delivered. New users cannot
+            confirm their address, so they cannot sign in.
+          action: >-
+            The mail relay is refusing everything or cannot be reached: often an expired password, a sending
+            limit, or the provider being down. The auth host's "was not sent after" and "was refused by the
+            relay" log lines carry the relay's error code. If the SMTP_* settings in .env changed, fix them
+            and restart auth. This alert is mailed through that same relay, so it reaches anyone only when
+            ALERT_WEBHOOK_URL is set too.
+          command: "docker compose logs --since 1h auth | grep -E \"was not sent after|refused by the relay\""
 
       - alert: MailFailing
         # Some mail was given up on after its retries (about 10 seconds), or refused by a full queue,
@@ -88,11 +121,15 @@ groups:
         labels:
           severity: warn
         annotations:
-          summary: "{{ $value | printf \"%.0f\" }} outgoing mails were given up on in the last 15 minutes"
-          description: >-
-            dropped means the relay refused or did not answer through the retries; queue_full means
-            wbskt_auth_mail_queue_depth reached its cap. The auth host's error lines carry the relay's
-            status code. Users can ask for each message again.
+          summary: "{{ $value | printf \"%.0f\" }} outgoing emails were given up on in the last 15 minutes"
+          impact: >-
+            Some people did not get a confirmation, invitation or password reset email. Other mail is still
+            going out, and they can ask for theirs again.
+          action: >-
+            Usually a short hiccup at the mail relay; if it repeats, the auth host's error lines name the
+            relay's error code. An outcome of queue_full means mail is being asked for faster than it can be
+            sent.
+          command: "docker compose logs --since 1h auth | grep -E \"was not sent after|refused by the relay\""
 
       - alert: BillingWebhooksSetAside
         # A payment webhook that names no tenant here, no plan or pack on offer, or a subscription the
@@ -102,12 +139,16 @@ groups:
         labels:
           severity: warn
         annotations:
-          summary: "{{ $value }} {{ $labels.type }} payment webhooks were set aside in the last hour"
-          description: >-
-            Read the reason in dbo.BillingWebhookEvents.LastError (auth database) or the auth host's
-            "Set aside" log line. A subscription naming no tenant usually means the checkout's
-            metadata did not reach it; a product not on offer means a Billing:Payments product id is
-            missing.
+          summary: "{{ $value }} {{ $labels.type }} payment notifications could not be matched to a customer or plan"
+          impact: >-
+            A customer may have paid and been left on the wrong plan or without the credits they bought, and
+            nothing else will flag it.
+          action: >-
+            Read why each was set aside in dbo.BillingWebhookEvents.LastError (auth database) or the auth
+            host's "Set aside" log line. A subscription naming no tenant usually means the checkout's
+            metadata did not reach it; a product not on offer means a DODO_PRODUCT_* id is missing from
+            .env. Fix the cause, then replay the event from the payment provider's dashboard.
+          command: "docker compose logs --since 2h auth | grep \"Set aside\""
 
       - alert: BillingWebhooksFailing
         # The provider delivers a failed webhook again, so one failure is noise; several in an hour mean
@@ -116,10 +157,14 @@ groups:
         labels:
           severity: warn
         annotations:
-          summary: "{{ $value }} payment webhooks failed in the last hour"
-          description: >-
-            Check the auth host's logs for the provider's status codes and dbo.BillingWebhookEvents
-            for the rows left unprocessed.
+          summary: "{{ $value }} payment notifications failed to process in the last hour"
+          impact: >-
+            Plan changes and credit purchases are delayed. The payment provider sends each one again, so
+            nothing is lost yet, but it stops trying after about a day.
+          action: >-
+            The provider's API or the auth database is refusing us. The auth host's logs carry the
+            provider's status codes, and the unprocessed rows are in dbo.BillingWebhookEvents.
+          command: "docker compose logs --since 2h auth | grep -i webhook"
 
       - alert: BillingRefundUnconfirmed
         # A duplicate subscription's refund timed out or the provider answered with an error that does not
@@ -129,11 +174,15 @@ groups:
         labels:
           severity: warn
         annotations:
-          summary: "A duplicate subscription's refund is unconfirmed"
-          description: >-
-            The auth host's error log names the payment. Look it up in the provider's dashboard and refund
-            it by hand if no refund is there. Its claim stays on dbo.TenantSubscriptions
-            (DuplicateRefundPaymentId, DuplicateRefundClaimedAt), so the host will not ask again.
+          summary: "A refund for a customer's duplicate subscription may not have gone through"
+          impact: >-
+            A customer who was charged twice may not have got their money back. It is not retried on its
+            own, because that could refund them twice.
+          action: >-
+            The auth host's error log names the payment. Look it up in the payment provider's dashboard and,
+            if no refund is there, refund it by hand. The host will not ask again (its claim stays on
+            dbo.TenantSubscriptions).
+          command: "docker compose logs --since 2h auth | grep -i refund"
 
       - alert: BillingReconcileFailing
         # The daily reconcile reads the provider's recent subscriptions and payments again in case their
@@ -144,11 +193,15 @@ groups:
         labels:
           severity: warn
         annotations:
-          summary: "{{ $value }} subscriptions, payments or lists could not be reconciled in the last day"
-          description: >-
-            The auth host's "Could not reconcile" and "Could not list" error logs name each one and the
-            provider's answer; a truncated list logs "stopped" with the window it was reading.
-            Fix the cause before the next day's run, or replay the events from the provider's dashboard.
+          summary: "The daily billing check could not verify {{ $value }} subscriptions, payments or lists"
+          impact: >-
+            The daily check that catches payment notifications we never received did not finish. It tries
+            again each day for three days; after that a missed payment or plan change is lost.
+          action: >-
+            The auth host's "Could not reconcile" and "Could not list" log lines name each one and the
+            provider's answer (a cut-short list logs "stopped"). Fix the cause before the next run, or
+            replay the events from the payment provider's dashboard.
+          command: "docker compose logs --since 24h auth | grep -E \"Could not (reconcile|list)|stopped\""
 
       - alert: BillingWebhookSignaturesRefused
         # Deliveries that carry a signature which does not hold up usually mean the signing secret was
@@ -159,11 +212,16 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "{{ $value }} payment webhooks were refused for their signature in two hours"
-          description: >-
-            Compare Billing:Dodo:WebhookSecret on the auth host with the webhook's secret in the
-            provider's dashboard. Once fixed, replay the refused deliveries from the dashboard; the
-            hourly subscription review re-reads only subscriptions that stayed active past their period.
+          summary: "{{ $value }} payment notifications were rejected because their signature did not match"
+          impact: >-
+            Payment events are being thrown away, so subscriptions and purchases are not applied. The
+            provider stops retrying after about a day, and events lost then are not sent again.
+          action: >-
+            The webhook signing secret was most likely changed on one side only. Compare
+            DODO_PAYMENTS_WEBHOOK_KEY in .env with the webhook's secret in the payment provider's dashboard,
+            make them match and restart auth. Then replay the rejected deliveries from the provider's
+            dashboard.
+          command: "docker compose logs --since 2h auth | grep -i signature"
 
       - alert: CreditGrantsRepaired
         # The hourly reconcile wrote a credit grant change an event should have: a pack paid for whose
@@ -173,10 +231,15 @@ groups:
         labels:
           severity: warn
         annotations:
-          summary: "The credit grant reconcile repaired {{ $value }} {{ $labels.change }} change(s)"
-          description: >-
-            Read the management host's "Repaired the credit grant" log lines for the payments, then
-            look for the Tenant credit events in the dead-letter queues and the auth outbox.
+          summary: "The hourly credit check fixed {{ $value }} {{ $labels.change }} change(s) that had gone missing"
+          impact: >-
+            Some customers' credit balances were wrong for up to an hour (a pack paid for but not credited,
+            or a refund not taken off). They are correct now.
+          action: >-
+            Nothing for the customer. Find out why the event was lost: the management host's "Repaired the
+            credit grant" log lines name the payments; look for Tenant credit events in the dead-letter
+            queues (RabbitMQ UI) and the auth outbox.
+          command: "docker compose logs --since 3h management | grep \"Repaired the credit grant\""
 
       - alert: WorkspaceRunCeilingReached
         # A workspace whose plan already has as many active runs as it allows (PlanLimits.ActiveRuns,
@@ -187,11 +250,13 @@ groups:
         labels:
           severity: warn
         annotations:
-          summary: "Workspace {{ $labels.workspace_id }} is refusing triggers at its active-run ceiling"
-          description: >-
-            Look for runs piling up in that workspace (a stuck wait, a trigger firing far faster
-            than its runs finish). If the load is legitimate, the tenant needs a bigger plan or a
-            limit override.
+          summary: "Workspace {{ $labels.workspace_id }} is at its plan's limit of running workflows and is turning new ones away"
+          impact: >-
+            One customer's new workflow runs are refused until some of theirs finish. Other customers are
+            not affected.
+          action: >-
+            Look in that workspace for runs piling up: a run stuck waiting, or a trigger firing much faster
+            than its runs finish. If the load is real, the customer needs a bigger plan or a limit override.
 
       - alert: DeadLetteredMessages
         # MassTransit moves a message that exhausted its retries to <queue>_error, and one with no
@@ -201,10 +266,15 @@ groups:
         labels:
           severity: page
         annotations:
-          summary: "{{ $value }} messages dead-lettered in {{ $labels.queue }}"
-          description: >-
-            Inspect them in the RabbitMQ management UI (or the logs for the consumer's exception),
-            fix the cause, then move them back to the source queue.
+          summary: "{{ $value }} background messages failed and were set aside in {{ $labels.queue }}"
+          impact: >-
+            Work the platform does between its services was not done: depending on the queue, a device
+            update, a billing change or a workflow event never happened.
+          action: >-
+            In the RabbitMQ management UI, read the messages in that queue, and read the logs of the service
+            that consumes it for the exception. Fix the cause, then move the messages back to the original
+            queue (the same name without _error or _skipped) so they are processed.
+          command: "ssh -L 15672:127.0.0.1:15672 <your VM>, then open http://localhost:15672"
 
       - alert: CallbackQueueBacklog
         # Public webhooks and wakes wait here for the engine. The broker caps the queue at 10,000
@@ -216,10 +286,13 @@ groups:
         labels:
           severity: warn
         annotations:
-          summary: "{{ $value }} public callbacks are waiting for the workflow engine"
-          description: >-
-            The engine is down or not keeping up. At 10,000 callbacks or 64 MiB the queue refuses
-            more and webhook callers are answered 503 until it drains.
+          summary: "{{ $value }} incoming webhooks are waiting for the workflow engine"
+          impact: >-
+            Customers' webhook-triggered workflows are delayed. At 10,000 waiting (or 64 MiB), new webhook
+            calls are refused with an error until the queue drains.
+          action: >-
+            The workflow engine is down or not keeping up. Check that it is running and read its logs.
+          command: "docker compose ps engine && docker compose logs --tail 200 engine"
 
       - alert: CallbackQueueBytesBacklog
         # Webhook bodies can be up to 128 KiB, so about 512 large callbacks fill the 64 MiB cap long
@@ -229,10 +302,13 @@ groups:
         labels:
           severity: warn
         annotations:
-          summary: "{{ $value | humanize1024 }}B of public callbacks are waiting for the workflow engine"
-          description: >-
-            The engine is down or not keeping up. At 64 MiB (or 10,000 callbacks) the queue refuses
-            more and webhook callers are answered 503 until it drains.
+          summary: "{{ $value | humanize1024 }}B of incoming webhooks are waiting for the workflow engine"
+          impact: >-
+            Customers' webhook-triggered workflows are delayed. At 64 MiB (or 10,000 waiting), new webhook
+            calls are refused with an error until the queue drains.
+          action: >-
+            The workflow engine is down or not keeping up. Check that it is running and read its logs.
+          command: "docker compose ps engine && docker compose logs --tail 200 engine"
 
       - alert: SocketDisconnectRateHigh
         # Abnormal disconnects only: client_closed is a client signing off, server_stopping a deploy.
@@ -245,11 +321,15 @@ groups:
         labels:
           severity: warn
         annotations:
-          summary: "Clients are dropping off the {{ $labels.transport }} gateway faster than usual"
-          description: >-
-            More abnormal disconnects in 10 minutes than half the connected clients on this transport.
-            Look for a network or proxy problem in front of ws.<domain> (websocket) or mqtt.<domain>
-            (mqtt), or a gateway host restarting.
+          summary: "Devices are dropping off the {{ $labels.transport }} connection much faster than usual"
+          impact: >-
+            Customers' devices keep disconnecting unexpectedly, so commands and readings are delayed or
+            missed while they reconnect.
+          action: >-
+            More devices dropped in 10 minutes than half of those connected. Look for a network or proxy
+            problem in front of ws.<domain> (websocket) or mqtt.<domain> (mqtt), or a gateway container
+            restarting.
+          command: "docker compose ps traefik gateway-ws gateway-mqtt"
 
       - alert: RevokeMissedByGateway
         # The gateway's access re-check closed a connection whose revoke, delete or secret rotation
@@ -258,11 +338,14 @@ groups:
         labels:
           severity: warn
         annotations:
-          summary: "A {{ $labels.transport }} gateway missed {{ $value | humanize }} client revoke events"
-          description: >-
-            The gateway's broker connection dropped while a client lost access, so the event was
-            discarded with its auto-delete queue; the access re-check closed the connection instead.
-            Look at RabbitMQ connection churn for the gateway around that time.
+          summary: "A {{ $labels.transport }} gateway missed {{ $value | humanize }} device access removals and caught them late"
+          impact: >-
+            A device whose access was revoked, deleted or rotated stayed connected for up to a minute longer
+            than it should have. It has been disconnected now.
+          action: >-
+            The gateway lost its connection to RabbitMQ while the access change happened, so the event was
+            lost; its once-a-minute re-check closed the connection instead. Look at the gateway's RabbitMQ
+            connection drops around that time. If it keeps happening, the link to the broker is unstable.
 
       - alert: DeletedWorkspaceRetiredBySweep
         # Management's daily deleted workspace sweep found a workspace the auth host had deleted that
@@ -272,11 +355,15 @@ groups:
         labels:
           severity: warn
         annotations:
-          summary: "The deleted workspace sweep retired {{ $value }} workspace(s) the delete event missed"
-          description: >-
-            The sweep has already repaired them. Find out why the event did not: the management
-            log's "was deleted but still had live content" warning names each workspace, and a
-            WorkspaceDeletedEvent dead-lettered in a management _error queue is the usual cause.
+          summary: "The daily cleanup removed {{ $value }} deleted workspace(s) whose devices or workflows were still live"
+          impact: >-
+            A workspace a customer deleted kept its devices, policies or workflows running for up to a day.
+            The cleanup has removed them now.
+          action: >-
+            Find out why the delete event was lost: the management log's "was deleted but still had live
+            content" warning names each workspace, and a WorkspaceDeletedEvent left in a management _error
+            queue is the usual cause.
+          command: "docker compose logs --since 25h management | grep \"still had live content\""
 
       - alert: BackupMissing
         # backup.sh pushes this timestamp only after a verified backup has been uploaded.
@@ -285,8 +372,13 @@ groups:
         labels:
           severity: page
         annotations:
-          summary: "No successful database backup for over 26 hours"
-          description: Check /var/log/wbskt-backup.log on the VM and that the cron entry still exists.
+          summary: "No database backup has succeeded for over 26 hours"
+          impact: >-
+            If the database were lost now, everything since the last good backup would be lost with it.
+          action: >-
+            Read the backup log on the VM for the error, and check that the cron entry still exists (crontab
+            -l). Once fixed, run backup.sh by hand to take a backup straight away.
+          command: "tail -50 /var/log/wbskt-backup.log"
 
       - alert: BackupNeverReported
         expr: absent(wbskt_backup_last_success_timestamp_seconds)
@@ -294,7 +386,13 @@ groups:
         labels:
           severity: page
         annotations:
-          summary: "The backup job has never reported a success to this Prometheus"
+          summary: "The backup job has never reported a successful backup"
+          impact: >-
+            There may be no backups at all: if the database were lost, its data could not be restored.
+          action: >-
+            Check that the nightly backup is in the crontab and that it pushes to the Pushgateway (see
+            Backups in deploy/README.md). Run backup.sh by hand and read its output.
+          command: "tail -50 /var/log/wbskt-backup.log"
 
       - alert: DatabaseNearExpressLimit
         # backup.sh pushes each database's allocated data-file size nightly. SQL Server Express caps
@@ -304,11 +402,14 @@ groups:
         labels:
           severity: warn
         annotations:
-          summary: "{{ $labels.database }} has {{ $value | humanize1024 }}B of data files, near the Express limit of 10 GiB"
-          description: >-
-            Find what grew (sp_spaceused per table). If it is free space left by deleted rows, shrink
-            the file once (DBCC SHRINKFILE); if it is real data, plan the move off Express before the
-            database reaches 10 GB. See "SQL Server edition" in deploy/README.md.
+          summary: "The {{ $labels.database }} database is at {{ $value | humanize1024 }}B, nearing SQL Server Express's 10 GB limit"
+          impact: >-
+            Nothing is failing yet. At 10 GB the database stops accepting new data, which would stop
+            readings, workflow runs and audit for every customer.
+          action: >-
+            Find what grew (sp_spaceused per table). If it is free space left by deleted rows, shrink the
+            file once (DBCC SHRINKFILE). If it is real data, plan the move off Express now. See "SQL Server
+            edition" in deploy/README.md.
 
       - alert: DatabaseAtExpressLimit
         # Past the warning and still growing: at 10 GB every insert needing a new page fails, which
@@ -318,10 +419,13 @@ groups:
         labels:
           severity: page
         annotations:
-          summary: "{{ $labels.database }} has {{ $value | humanize1024 }}B of data files; Express stops writes at 10 GiB"
-          description: >-
-            Same steps as DatabaseNearExpressLimit, now urgent: shrink the file if it is free space, or
-            trim readings retention and move off Express. See "SQL Server edition" in deploy/README.md.
+          summary: "The {{ $labels.database }} database is at {{ $value | humanize1024 }}B; at 10 GB it stops accepting new data"
+          impact: >-
+            Close to an outage for every customer: past 10 GB, new readings, workflow runs and audit entries
+            cannot be saved.
+          action: >-
+            The same steps as the near-limit warning, now urgent: shrink the file if it is free space, or
+            cut readings retention and move off Express. See "SQL Server edition" in deploy/README.md.
 
       - alert: EngineNotReporting
         # Held back while the collector is down: OtelCollectorDown is the one cause then.
@@ -332,7 +436,13 @@ groups:
         labels:
           severity: page
         annotations:
-          summary: "No workflow engine has reported metrics for about 10 minutes"
+          summary: "The workflow engine has been silent for about 10 minutes"
+          impact: >-
+            Either the engine is down, so no customer workflow is running, or it is running but its
+            monitoring is broken, so the workflow alerts cannot fire.
+          action: >-
+            Check whether the engine container is running and read its logs. If it stopped, start it again.
+          command: "docker compose ps engine && docker compose logs --tail 200 engine"
 
       - alert: HostNotReporting
         # A host that stopped or lost its exporter sends nothing, and nothing else would say so: only the
@@ -354,11 +464,15 @@ groups:
         labels:
           severity: page
         annotations:
-          summary: "{{ $labels.job }} has reported no metrics for about 10 minutes"
-          description: >-
-            On the VM, docker compose ps and docker compose logs --tail 200 for that service (the job
-            without its wbskt- prefix, such as auth or gateway-ws) show whether it is down or only its
-            telemetry is. A service scaled to 0 replicas fires this too.
+          summary: "The {{ $labels.job | reReplaceAll \"^wbskt-\" \"\" }} service has been silent for about 10 minutes"
+          impact: >-
+            Either that service is down, so what it does (sign-in for auth, the console's API for
+            management, device connections for client-auth and the gateways) is failing, or it is running
+            but its monitoring is broken.
+          action: >-
+            Check whether it is running and read its recent logs. A service deliberately scaled to 0
+            replicas fires this too.
+          command: "docker compose ps {{ $labels.job | reReplaceAll \"^wbskt-\" \"\" }} && docker compose logs --tail 200 {{ $labels.job | reReplaceAll \"^wbskt-\" \"\" }}"
 
       - alert: PeriodicJobFailing
         # A periodic job (credit posting, reconciles, retention, the deleted-workspace sweep, the
@@ -400,11 +514,15 @@ groups:
         labels:
           severity: warn
         annotations:
-          summary: "{{ $labels.worker }} on {{ $labels.job }} ({{ $labels.instance }}) keeps failing"
-          description: >-
-            Its error lines name the failure: docker compose logs for that service (the job without its
-            wbskt- prefix), or Loki with {service_name="{{ $labels.job }}"} |= "{{ $labels.worker }}".
-            The job runs again on its own once the cause is fixed.
+          summary: "The background job {{ $labels.worker }} on {{ $labels.job | reReplaceAll \"^wbskt-\" \"\" }} keeps failing"
+          impact: >-
+            A scheduled job (credit posting, billing checks, data retention, the deleted-workspace cleanup,
+            or device access re-checks) is not doing its work. What breaks depends on the job, and usually
+            builds up slowly.
+          action: >-
+            Its error lines name the failure: the service's logs, or Loki in Grafana with {service_name="{{
+            $labels.job }}"} |= "{{ $labels.worker }}". It runs again on its own once the cause is fixed.
+          command: "docker compose logs --since 1h {{ $labels.job | reReplaceAll \"^wbskt-\" \"\" }} | grep \"{{ $labels.worker }}\""
 
       - alert: DiskAlmostFull
         # Every real filesystem on the VM: /, and the image store or SQL volume if they are separate.
@@ -418,10 +536,14 @@ groups:
         labels:
           severity: page
         annotations:
-          summary: "{{ $labels.mountpoint }} on the VM has {{ $value | humanizePercentage }} free"
-          description: >-
-            Follow "Disk space" in deploy/README.md: find what grew with docker system df and du,
-            prune unused images, vacuum the journal. Never prune volumes.
+          summary: "The VM's disk at {{ $labels.mountpoint }} is almost full: {{ $value | humanizePercentage }} free"
+          impact: >-
+            When it fills, the database stops saving data and deploys fail, which takes the whole platform
+            down.
+          action: >-
+            Follow "Disk space" in deploy/README.md: find what grew with docker system df and du, remove
+            unused images, and trim the system journal. Never prune Docker volumes: they hold the data.
+          command: "df -h && docker system df"
 
       - alert: DiskFillingFast
         # Early warning: at the last six hours' rate, the filesystem is full within a day.
@@ -433,8 +555,14 @@ groups:
         labels:
           severity: warn
         annotations:
-          summary: "{{ $labels.mountpoint }} on the VM will be full within 24 hours at the current rate"
-          description: Look for a runaway log, local backups piling up, or images not being pruned.
+          summary: "The VM's disk at {{ $labels.mountpoint }} will be full within 24 hours at the current rate"
+          impact: >-
+            Nothing is failing yet, but when the disk fills the database stops saving data and the platform
+            goes down.
+          action: >-
+            Look for a runaway log, local backups piling up, or old images not being removed. See "Disk
+            space" in deploy/README.md.
+          command: "df -h && docker system df"
 
       - alert: NodeExporterDown
         # Without it the two disk alerts above can never fire.
@@ -443,7 +571,12 @@ groups:
         labels:
           severity: warn
         annotations:
-          summary: "Prometheus cannot scrape node-exporter, so disk space is unwatched"
+          summary: "The VM's disk space is no longer being watched"
+          impact: >-
+            The disk-full alerts cannot fire while this lasts, so the disk could fill up without warning.
+          action: >-
+            node-exporter, the small container that reports disk space, is down. Start it again.
+          command: "docker compose up -d node-exporter"
 
       - alert: OtelCollectorDown
         # Every host sends traces, metrics and logs through it, so while it is down EngineNotReporting
@@ -453,8 +586,14 @@ groups:
         labels:
           severity: page
         annotations:
-          summary: "Prometheus cannot scrape the OpenTelemetry collector, so no host telemetry is arriving"
-          description: docker compose logs --tail 200 otel-collector on the VM shows why.
+          summary: "Monitoring data from the services has stopped arriving"
+          impact: >-
+            Customers may not notice anything, but while this lasts the workflow, engine and service alerts
+            cannot fire, so a real outage would go unnoticed.
+          action: >-
+            The OpenTelemetry collector, which carries every service's metrics, logs and traces, is down or
+            failing. Read its logs and start it again.
+          command: "docker compose logs --tail 200 otel-collector && docker compose up -d otel-collector"
 
       - alert: ContainerRestarting
         # A container that crashes and is restarted in place keeps its series, so its start time
@@ -466,10 +605,14 @@ groups:
         labels:
           severity: page
         annotations:
-          summary: "{{ $labels.name }} restarted {{ $value }} times in 15 minutes"
-          description: >-
-            It is crash-looping. docker logs --tail 200 {{ $labels.name }} on the VM shows why; a
-            container stopped by its memory limit shows OOMKilled in docker inspect.
+          summary: "{{ $labels.name }} has crashed and restarted {{ $value }} times in 15 minutes"
+          impact: >-
+            That part of the platform keeps going down and coming back, so whatever it serves fails on and
+            off.
+          action: >-
+            Read its logs for the error that stops it. If docker inspect shows OOMKilled, it ran out of
+            memory: raise its limit (see Memory limits in deploy/README.md).
+          command: "docker logs --tail 200 {{ $labels.name }}"
 
       - alert: ContainerNearMemoryLimit
         # A .NET host has used over 90% of its mem_limit for 10 minutes. There it throws
@@ -485,10 +628,14 @@ groups:
         labels:
           severity: warn
         annotations:
-          summary: "{{ $labels.name }} is at {{ $value | humanizePercentage }} of its memory limit"
-          description: >-
-            A leak, or a limit too low for the load. docker stats on the VM shows it; raise the limit
-            in .env (see Memory limits in deploy/README.md) or restart the container.
+          summary: "{{ $labels.name }} is using {{ $value | humanizePercentage }} of its memory limit"
+          impact: >-
+            Near its limit a service fails requests with out-of-memory errors, possibly for hours, without
+            restarting on its own.
+          action: >-
+            Either a memory leak or a limit too low for the load. Restart the container to clear it now, and
+            raise its limit in .env if the load is real (see Memory limits in deploy/README.md).
+          command: "docker stats --no-stream"
 
       - alert: RabbitMQMemoryAlarm
         # RabbitMQ blocks every publishing connection while its memory alarm is on: client traffic
@@ -499,7 +646,12 @@ groups:
         labels:
           severity: page
         annotations:
-          summary: "RabbitMQ's memory alarm is on, so it is refusing every publish"
-          description: >-
-            Usually a queue backing up with no consumer. The management UI (ssh -L 15672:127.0.0.1:15672)
-            shows which; raise rabbitmq's mem_limit in docker-compose.yml if it is just too small.
+          summary: "The message broker (RabbitMQ) is out of memory and has stopped accepting messages"
+          impact: >-
+            Device traffic, events between the services and background work are all blocked. This is a
+            platform-wide outage.
+          action: >-
+            Usually one queue backing up with nothing reading it. Open the RabbitMQ management UI to find
+            which, and fix or restart the service that should read it. If the broker is simply too small,
+            raise rabbitmq's mem_limit in docker-compose.yml.
+          command: "ssh -L 15672:127.0.0.1:15672 <your VM>, then open http://localhost:15672"

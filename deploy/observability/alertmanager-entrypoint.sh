@@ -8,12 +8,15 @@
 #   ALERT_DEADMANS_URL  a dead man's switch (a healthchecks.io-style ping URL) that Watchdog, the
 #                       always-firing rule, is posted to every 5 minutes; the service there alerts
 #                       when the posts stop, which is how an outage of this whole VM is noticed
+#   ALERT_TIMEZONE      the time zone alert emails give times in (default UTC), such as Asia/Kolkata;
+#                       read from the VM's /usr/share/zoneinfo, which compose mounts
 #
 # With neither set, alerts still fire and are visible in Grafana and the Alertmanager UI; they just
 # reach nobody, which the startup log says plainly.
 set -eu
 
 config=/tmp/alertmanager.yml
+email_template=/tmp/alert-email.tmpl
 receivers=""
 
 # A YAML single-quoted scalar: a quote inside is written twice, and nothing else is special. printf
@@ -25,7 +28,23 @@ q() {
 # The auth host reads the same setting and accepts True/False in any case; YAML wants a bare boolean.
 require_tls="$(printf '%s' "${SMTP_USE_STARTTLS:-true}" | tr '[:upper:]' '[:lower:]')"
 
+# The image has no zone database and the template's tz call fails on a zone it cannot load, which
+# would stop every alert mail; so a zone that is not there falls back to UTC, which always loads.
+timezone="${ALERT_TIMEZONE:-UTC}"
+case "$timezone" in
+    *[!A-Za-z0-9_/+-]*|/*|*..*) timezone_ok=false ;;
+    UTC) timezone_ok=true ;;
+    *) if [ -f "/usr/share/zoneinfo/$timezone" ]; then timezone_ok=true; else timezone_ok=false; fi ;;
+esac
+if [ "$timezone_ok" = false ]; then
+    echo "alertmanager: ALERT_TIMEZONE '$timezone' is not a zone in /usr/share/zoneinfo - alert emails use UTC" >&2
+    timezone=UTC
+fi
+sed "s|__ALERT_TIMEZONE__|$timezone|g" /etc/alertmanager/alert-email.tmpl > "$email_template"
+
 {
+    echo "templates:"
+    printf '  - %s\n' "$(q "$email_template")"
     echo "route:"
     echo "  receiver: default"
     echo "  group_by: [alertname]"
@@ -66,6 +85,11 @@ require_tls="$(printf '%s' "${SMTP_USE_STARTTLS:-true}" | tr '[:upper:]' '[:lowe
             printf '        auth_password: %s\n' "$(q "${SMTP_PASSWORD:-}")"
         fi
         echo "        send_resolved: true"
+        # deploy/observability/alert-email.tmpl, in place of Alertmanager's table of raw labels.
+        echo "        headers:"
+        echo "          Subject: '{{ template \"wbskt.email.subject\" . }}'"
+        echo "        html: '{{ template \"wbskt.email.html\" . }}'"
+        echo "        text: '{{ template \"wbskt.email.text\" . }}'"
     fi
 
     if [ -n "${ALERT_WEBHOOK_URL:-}" ]; then
@@ -91,4 +115,7 @@ if [ -z "${ALERT_DEADMANS_URL:-}" ]; then
     echo "alertmanager: ALERT_DEADMANS_URL is not set - if this VM goes down, nothing outside it notices" >&2
 fi
 
-exec /bin/alertmanager --config.file="$config" --storage.path=/alertmanager "$@"
+# The external URL is where its UI is reached: through the SSH tunnel in deploy/README.md. Without it,
+# links Alertmanager builds point at the container's id.
+exec /bin/alertmanager --config.file="$config" --storage.path=/alertmanager \
+    --web.external-url=http://localhost:9093 "$@"

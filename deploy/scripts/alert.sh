@@ -22,7 +22,12 @@ escaped="$(printf '%s' "$message" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | awk 'B
 curl -fsS -X POST "$url/api/v2/alerts" -H 'Content-Type: application/json' --data-binary @- <<JSON
 [{
   "labels": {"alertname": "BackupFailed", "severity": "page", "host": "$(hostname)"},
-  "annotations": {"summary": "$escaped"},
+  "annotations": {
+    "summary": "$escaped",
+    "impact": "Last night's database backup did not finish, so the newest good backup is older than it should be. If the database were lost now, the data since then would be lost with it.",
+    "action": "Read the backup log on the VM for the error, fix it, then run backup.sh by hand to take a backup straight away. BackupMissing keeps firing until one succeeds.",
+    "command": "tail -50 /var/log/wbskt-backup.log"
+  },
   "endsAt": "$ends_at"
 }]
 JSON

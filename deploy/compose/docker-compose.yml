@@ -661,6 +661,7 @@ services:
       ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
       ALERT_DEADMANS_URL: ${ALERT_DEADMANS_URL:-}
+      ALERT_TIMEZONE: ${ALERT_TIMEZONE:-UTC}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USE_STARTTLS: ${SMTP_USE_STARTTLS:-true}
@@ -669,6 +670,9 @@ services:
       SMTP_FROM_ADDRESS: ${SMTP_FROM_ADDRESS:-}
     volumes:
       - ../observability/alertmanager-entrypoint.sh:/etc/alertmanager/entrypoint.sh:ro
+      - ../observability/alert-email.tmpl:/etc/alertmanager/alert-email.tmpl:ro
+      # The image has no zone database; the email template reads ALERT_TIMEZONE from the VM's.
+      - /usr/share/zoneinfo:/usr/share/zoneinfo:ro
       - alertmanager-data:/alertmanager
     # Loopback only: deploy/scripts/alert.sh posts backup failures here from the VM itself.
     ports:

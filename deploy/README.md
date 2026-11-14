@@ -513,6 +513,17 @@ Rules live in `observability/alerts.yml`, delivered by Alertmanager to `ALERT_EM
 same `SMTP_*` relay the auth host uses) and/or `ALERT_WEBHOOK_URL`. Set at least one: with neither,
 alerts fire and reach nobody, and Alertmanager says so in its log.
 
+Each email is built from `observability/alert-email.tmpl`: the subject says how urgent it is
+(*Urgent* for `page` and `critical`, *Warning* for `warn`) and what happened, and the body gives each
+alert's annotations as **What this means**, **What to do** and a command to run first, the time it
+started in `ALERT_TIMEZONE` (a zone name such as `Asia/Kolkata`; UTC when unset), and links to
+Grafana and Alertmanager that open through the SSH tunnel above. A resolved alert says so, and how
+long it lasted. A new rule carries the same annotations, written for someone who did not write it:
+`summary` (what happened, one sentence; also the subject), `impact` (what it means for customers or
+data), `action` (what to do), and optionally `command` and `dashboard` (a Grafana path, the overview
+dashboard otherwise). The template and the zone are read at start, so after changing either run
+`docker compose up -d --force-recreate alertmanager`.
+
 | Alert | Fires when |
 |---|---|
 | `Watchdog` | always: it goes only to `ALERT_DEADMANS_URL` every 5 minutes, so an outside service notices when it stops (see below) |
