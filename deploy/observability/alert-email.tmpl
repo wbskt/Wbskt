@@ -17,7 +17,7 @@
 
 {{ define "wbskt.urgency" }}{{ if or (eq . "page") (eq . "critical") }}Urgent{{ else if eq . "warn" }}Warning{{ else }}Notice{{ end }}{{ end }}
 
-{{ define "wbskt.urgency.hint" }}{{ if or (eq . "page") (eq . "critical") }}Customers are affected or data is at risk. Act now.{{ else if eq . "warn" }}Nothing is down yet. Look at it today.{{ else }}For information.{{ end }}{{ end }}
+{{ define "wbskt.urgency.hint" }}{{ if or (eq . "page") (eq . "critical") }}Something is broken or about to be. Act now.{{ else if eq . "warn" }}Nothing is down yet. Look at it today.{{ else }}For information.{{ end }}{{ end }}
 
 {{ define "wbskt.time" }}{{ . | tz "__ALERT_TIMEZONE__" | date "Mon 2 Jan, 15:04 MST" }}{{ end }}
 
@@ -27,9 +27,9 @@
 
 {{ define "wbskt.email.subject" -}}
 {{ if gt (len .Alerts.Firing) 0 -}}
-[Wbskt] {{ template "wbskt.urgency" (index .Alerts.Firing 0).Labels.severity }}: {{ with (index .Alerts.Firing 0).Annotations.summary }}{{ . }}{{ else }}{{ (index .Alerts.Firing 0).Labels.alertname }}{{ end }}{{ if gt (len .Alerts.Firing) 1 }} (and {{ len .Alerts.Firing }} alerts in all){{ end }}
+[Wbskt] {{ template "wbskt.urgency" (index .Alerts.Firing 0).Labels.severity }}: {{ with (index .Alerts.Firing 0).Annotations.summary }}{{ . }}{{ else }}{{ (index .Alerts.Firing 0).Labels.alertname }}{{ end }}{{ if gt (len .Alerts.Firing) 1 }} ({{ len .Alerts.Firing }} alerts){{ end }}
 {{- else -}}
-[Wbskt] Resolved: {{ with (index .Alerts 0).Annotations.summary }}{{ . }}{{ else }}{{ (index .Alerts 0).Labels.alertname }}{{ end }}{{ if gt (len .Alerts) 1 }} (and {{ len .Alerts }} alerts in all){{ end }}
+[Wbskt] Resolved: {{ with (index .Alerts 0).Annotations.summary }}{{ . }}{{ else }}{{ (index .Alerts 0).Labels.alertname }}{{ end }}{{ if gt (len .Alerts) 1 }} ({{ len .Alerts }} alerts){{ end }}
 {{- end }}
 {{- end }}
 
