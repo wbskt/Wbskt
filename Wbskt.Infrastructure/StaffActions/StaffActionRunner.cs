@@ -42,24 +42,29 @@ public sealed class StaffActionRunner(IStaffAuditProvider audit, ILogger<StaffAc
         }
 
         Result outcome;
-        try
+        using (var scope = new TransactionScope(
+                   TransactionScopeOption.Required,
+                   new TransactionOptions { IsolationLevel = IsolationLevel.ReadCommitted, Timeout = Timeout },
+                   TransactionScopeAsyncFlowOption.Enabled))
         {
-            using var scope = new TransactionScope(
-                TransactionScopeOption.Required,
-                new TransactionOptions { IsolationLevel = IsolationLevel.ReadCommitted, Timeout = Timeout },
-                TransactionScopeAsyncFlowOption.Enabled);
+            long auditId;
+            try
+            {
+                auditId = await audit.InsertAsync(new StaffAuditEntry(staff, action, StaffOutcome.Succeeded, null), cancellationToken);
+            }
+            catch (SqlException ex) when (ex.Number is 2601 or 2627)
+            {
+                // Only the audit row's key is caught here: a unique violation inside the change is the change's own fault.
+                scope.Dispose();
+                return await ReplayAfterRaceAsync(staff, action, cancellationToken);
+            }
 
-            long auditId = await audit.InsertAsync(new StaffAuditEntry(staff, action, StaffOutcome.Succeeded, null), cancellationToken);
             outcome = await change(cancellationToken);
             if (outcome.IsSuccess)
             {
                 scope.Complete();
                 return new StaffActionResponse(auditId, false);
             }
-        }
-        catch (SqlException ex) when (ex.Number is 2601 or 2627)
-        {
-            return await ReplayAfterRaceAsync(staff, action, cancellationToken);
         }
 
         // The scope rolled the change and its row back; the refusal gets a row of its own.
