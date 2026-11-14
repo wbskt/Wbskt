@@ -343,8 +343,8 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
  "work": {
   "851": {
    "state": "progress",
-   "why": "The read-only admin is live in wbskt/Wbskt.Admin: overview, search, tenant, user and workspace lists and pages, and the staff audit (#852). Changes come next, phase by phase (#853): the admin key and the staff action runner (PR #860, merged), staff plans and limits (PR #861, merged), credits and ending a staff plan early (PR #862, merged), the workspace credit cap on the management host (PR #863, merged), people actions on the auth host (PR #864, merged), and member suspend, restore and remove (PR #865), each with its form in the admin.",
-   "prs": [860, 861, 862, 863, 864, 865]
+   "why": "The read-only admin is live in wbskt/Wbskt.Admin: overview, search, tenant, user and workspace lists and pages, and the staff audit (#852). Changes come next, phase by phase (#853): the admin key and the staff action runner (PR #860, merged), staff plans and limits (PR #861, merged), credits and ending a staff plan early (PR #862, merged), the workspace credit cap on the management host (PR #863, merged), people actions on the auth host (PR #864, merged), member suspend, restore and remove (PR #865, merged), each with its form in the admin, and end-to-end scenarios for every staff action (PR #866).",
+   "prs": [860, 861, 862, 863, 864, 865, 866]
   },
   "519": {
    "state": "progress",
@@ -886,6 +886,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":127,"t":"Reject breached passwords using the Have I Been Pwned range API","s":"c","m":"M2","p":175,"a":["auth"],"pr":"P2","sz":"S","x":"2026-11-03"}
  ],
  "merged": [
+  {"n":865,"t":"feat(auth): let staff suspend, restore and remove a tenant's members","d":"2026-11-14"},
   {"n":864,"t":"feat(auth): let staff clear lockouts, send account mail and end sign-in","d":"2026-11-14"},
   {"n":863,"t":"feat(management): let staff set a workspace's credit cap","d":"2026-11-14"},
   {"n":862,"t":"feat(auth): let staff give credits, revoke them and end a staff plan early","d":"2026-11-14"},
