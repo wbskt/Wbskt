@@ -149,6 +149,8 @@ services:
       Auth__Email__Port: "1025"
       Auth__Email__UseStartTls: "false"
       Auth__Email__FromAddress: no-reply@wbskt.local
+      # The admin host's key, so the staff action scenarios (Scenarios/Admin) reach the admin routes.
+      Internal__AdminApiKey: ${E2E_ADMIN_API_KEY:-e2e-admin-key}
     volumes:
       - ../config/serilog.json:/Config/serilog.json:ro
       - ${E2E_DEV_CERT_DIR:?run Tests/Wbskt.E2E.FeatureTests/e2e-up.sh, which sets it}:/https:ro
@@ -179,6 +181,7 @@ services:
       # Plain HTTP to the engine: the container does not trust the development certificate that
       # appsettings.Development.json's https://localhost:7030 would need.
       Services__WorkflowEngine: http://localhost:5030
+      Internal__AdminApiKey: ${E2E_ADMIN_API_KEY:-e2e-admin-key}
     volumes:
       - ../config/serilog.json:/Config/serilog.json:ro
       - ${E2E_DEV_CERT_DIR:?run Tests/Wbskt.E2E.FeatureTests/e2e-up.sh, which sets it}:/https:ro
