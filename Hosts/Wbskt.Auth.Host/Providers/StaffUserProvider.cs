@@ -18,4 +18,9 @@ internal sealed class StaffUserProvider(IConfiguration configuration) : BaseSqlP
             p.AddWithValue("@RevokedByIp", revokedByIp);
         }, cancellationToken);
     }
+
+    public Task<int> FindTenantIdByRefIdAsync(Guid tenantRef, CancellationToken cancellationToken)
+    {
+        return ExecuteScalarAsync<int>("dbo.Tenant_FindBy_RefId", p => p.AddWithValue("@RefId", tenantRef), cancellationToken);
+    }
 }
