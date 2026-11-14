@@ -14,6 +14,8 @@ namespace Wbskt.Infrastructure.StaffActions;
 /// <para>
 /// The audit row goes in first. Its unique idempotency key makes a second call with the same key wait
 /// for the first to commit, then fail on the key, and that failure is answered with the first call's row.
+/// A refused first call commits nothing, so a retry racing it runs the change itself, and the first
+/// call's Refused row then loses the key; that is logged as a warning, since the audit misses it.
 /// </para>
 /// </remarks>
 public sealed class StaffActionRunner(IStaffAuditProvider audit, ILogger<StaffActionRunner> logger) : IStaffActionRunner
@@ -74,7 +76,9 @@ public sealed class StaffActionRunner(IStaffAuditProvider audit, ILogger<StaffAc
         }
         catch (SqlException ex) when (ex.Number is 2601 or 2627)
         {
-            logger.LogInformation("Staff action {Action} was refused ({Code}) while a retry with the same key was recorded.", action.Name, outcome.Error.Code);
+            logger.LogWarning(
+                "Staff action {Action} on {TargetRefId} by {StaffRefId} was refused ({Code}), but a retry with the same key was recorded first, so the staff audit has no row for the refusal.",
+                action.Name, action.TargetRefId, staff.StaffRefId, outcome.Error.Code);
         }
 
         return outcome.Error;
