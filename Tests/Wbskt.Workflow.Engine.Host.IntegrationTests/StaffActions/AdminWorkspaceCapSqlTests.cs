@@ -33,9 +33,9 @@ public sealed class AdminWorkspaceCapSqlTests(SqlEdgeFixture main)
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:DefaultConnection"] = main.ConnectionString })
             .Build();
-        var caps = new WorkspaceCreditCapService(new WorkspaceCreditCapProvider(configuration), new NoBus(), TimeProvider.System);
         var runner = new StaffActionRunner(new StaffAuditProvider(configuration, "DefaultConnection"), NullLogger<StaffActionRunner>.Instance);
-        return new AdminWorkspaceService(new OneWorkspace(workspaceId), caps, runner, NullLogger<AdminWorkspaceService>.Instance);
+        return new AdminWorkspaceService(new OneWorkspace(workspaceId), new WorkspaceCreditCapProvider(configuration), new NoBus(), TimeProvider.System,
+            runner, NullLogger<AdminWorkspaceService>.Instance);
     }
 
     private static StaffChange Staff(Guid key) => new(Guid.NewGuid(), "pika", "Integration test of a workspace cap", key);
