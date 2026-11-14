@@ -22,4 +22,7 @@ public interface ITenantPlanService
     Task<Result<TenantPlanResponse>> SetAsync(Guid tenantRef, SetTenantPlanRequest request, PlanSource source, CancellationToken cancellationToken);
 
     Task<Result<Page<WorkspaceAccountResponse>>> GetWorkspaceAccountsAsync(PageRequest page, int? tenantId, int? workspaceId, CancellationToken cancellationToken);
+
+    /// <summary>One workspace with its tenant's plan, by its RefId; <c>WORKSPACE_NOT_FOUND</c> when there is none.</summary>
+    Task<Result<WorkspaceAccountResponse>> GetWorkspaceAccountAsync(Guid workspaceRef, CancellationToken cancellationToken);
 }

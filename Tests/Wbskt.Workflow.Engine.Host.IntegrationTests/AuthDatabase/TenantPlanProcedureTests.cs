@@ -97,6 +97,27 @@ public sealed class TenantPlanProcedureTests(AuthSqlFixture fixture)
         Assert.Equal([second], one.Select(r => r.WorkspaceId));
     }
 
+    [SkippableFact]
+    public async Task A_workspace_account_is_found_by_the_workspaces_ref_and_an_unknown_ref_finds_none()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int tenantId = await CreateTenantAsync();
+        int workspaceId = await CreateWorkspaceAsync(tenantId);
+        Guid workspaceRef = await ScalarAsync<Guid>("SELECT RefId FROM dbo.Workspaces WHERE Id = @p0;", workspaceId);
+
+        Assert.Equal(workspaceId, await FindWorkspaceIdAsync(workspaceRef));
+        Assert.Null(await FindWorkspaceIdAsync(Guid.NewGuid()));
+    }
+
+    private async Task<int?> FindWorkspaceIdAsync(Guid workspaceRef)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = new SqlCommand("dbo.WorkspaceAccount_FindBy_RefId", conn) { CommandType = CommandType.StoredProcedure };
+        cmd.Parameters.AddWithValue("@RefId", workspaceRef);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        return await reader.ReadAsync() ? reader.GetInt32(reader.GetOrdinal("WorkspaceId")) : null;
+    }
+
     private async Task<(string PlanCode, string? Overrides, int Revision)?> SetAsync(int tenantId, string planCode, string? overrides, int expectedRevision, string payload)
     {
         await using var conn = await OpenAsync();

@@ -31,6 +31,13 @@ public static class InternalRoutes
     public const string WorkspaceAccounts = Prefix + "/workspaces/accounts";
 
     /// <summary>
+    /// Auth host: one workspace with its tenant's plan, by the workspace's RefId, in the shape of
+    /// <see cref="WorkspaceAccounts"/>. For the management host to learn a workspace's Id when a caller
+    /// with no user token names it, so it takes <see cref="ApiKeyHeader"/>.
+    /// </summary>
+    public const string WorkspaceAccount = Prefix + "/workspaces/{workspaceRef:guid}/account";
+
+    /// <summary>
     /// Auth host: <c>GET</c> or <c>PUT</c> a tenant's plan (<c>{tenantRef}</c>). For operators and the
     /// payment provider's webhook, never a user, so it takes <see cref="ApiKeyHeader"/>.
     /// </summary>
@@ -79,6 +86,9 @@ public static class InternalRoutes
 
     /// <summary>Auth host: <c>POST</c> takes back what is left of a credit grant staff gave.</summary>
     public const string AdminTenantCreditGrantRevoke = AdminPrefix + "/tenants/{tenantRef:guid}/credit-grants/{grantRef:guid}/revoke";
+
+    /// <summary>Management host: <c>PUT</c> sets or clears a workspace's monthly credit cap, for the admin host.</summary>
+    public const string AdminWorkspaceCreditCap = AdminPrefix + "/workspaces/{workspaceRef:guid}/credit-cap";
 
     /// <summary>
     /// The admin host's own key, <c>Internal:AdminApiKey</c> on the host that serves an

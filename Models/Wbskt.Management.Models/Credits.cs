@@ -1,3 +1,5 @@
+using Wbskt.Models.Admin;
+
 namespace Wbskt.Management.Models;
 
 /// <summary>
@@ -11,3 +13,10 @@ public sealed record WorkspaceCreditCapRequest(decimal? MonthlyCreditCap);
 /// <param name="CreditsSpentThisMonth">What the workspace has spent this calendar month (UTC).</param>
 /// <param name="CapReached">True when the cap is at or below that, so the workspace's new runs are refused from now on.</param>
 public sealed record WorkspaceCreditCapResponse(decimal? MonthlyCreditCap, decimal CreditsSpentThisMonth, bool CapReached);
+
+/// <summary>
+/// A staff member sets a workspace's monthly credit cap, or removes it with <paramref name="MonthlyCreditCap"/>
+/// null, through the platform admin (<c>InternalRoutes.AdminWorkspaceCreditCap</c>). The same rules as
+/// <see cref="WorkspaceCreditCapRequest"/>.
+/// </summary>
+public sealed record AdminSetWorkspaceCreditCapRequest(StaffChange Staff, decimal? MonthlyCreditCap);

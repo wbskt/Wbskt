@@ -57,4 +57,11 @@ public class InternalPlansController : ApiControllerBase
     {
         return MapResult(await _tenantPlanService.GetWorkspaceAccountsAsync(page, tenantId, workspaceId, cancellationToken));
     }
+
+    /// <summary>One workspace with its tenant's plan, by its RefId, for a caller that has only the RefId.</summary>
+    [HttpGet(InternalRoutes.WorkspaceAccount)]
+    public async Task<ActionResult<WorkspaceAccountResponse>> GetWorkspaceAccount(Guid workspaceRef, CancellationToken cancellationToken)
+    {
+        return MapResult(await _tenantPlanService.GetWorkspaceAccountAsync(workspaceRef, cancellationToken));
+    }
 }

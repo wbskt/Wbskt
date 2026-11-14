@@ -36,4 +36,18 @@ internal sealed class WorkspaceAccountsClient(HttpClient httpClient) : IWorkspac
         return await response.Content.ReadFromJsonAsync<Page<WorkspaceAccountResponse>>(cancellationToken: cancellationToken)
                ?? throw new InvalidOperationException("The auth host answered the workspace accounts request with an empty body.");
     }
+
+    public async Task<WorkspaceAccountResponse?> FindAsync(Guid workspaceRef, CancellationToken cancellationToken)
+    {
+        string path = InternalRoutes.WorkspaceAccount.Replace("{workspaceRef:guid}", workspaceRef.ToString("D"));
+        using var response = await httpClient.GetAsync($"/{path}", cancellationToken);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<WorkspaceAccountResponse>(cancellationToken: cancellationToken)
+               ?? throw new InvalidOperationException("The auth host answered the workspace account request with an empty body.");
+    }
 }
