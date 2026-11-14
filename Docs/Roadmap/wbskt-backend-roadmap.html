@@ -282,7 +282,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
      p = parent issue, s = o|c, a = areas, pr = priority, sz = size. "work" adds a state and a sentence to an issue number. -->
 <script type="application/json" id="roadmap-data">
 {
- "asOf": "2026-11-13",
+ "asOf": "2026-11-14",
  "headline": "M2 backend has 6 pieces of real work left: two wait on you (the SDK release keys and the deleted-client call), the never-ending-runs epic (#594), and the housekeeping epic (#618), now down to one M3 item. The 11 Nov architecture review (#730) is 48 of 73 done: all 5 backend P1s and every backend and library P2 except two are merged (12 Nov), the last ones being the alerting and nightly fixes (#776 to #780, PR #842 to #849). Left from it: the Team headroom call that belongs to the pricing decision (#751), the Arduino install line, which waits on your OK to tag 0.9.0-beta.2 (#767), the console items (Amal) and the Post-launch small items. Production stopped answering SSH at about 13:40 UTC on 12 Nov, so the last merges are not deployed (#848).",
  "milestones": [
   {
@@ -343,8 +343,8 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
  "work": {
   "851": {
    "state": "progress",
-   "why": "The read-only admin is live in wbskt/Wbskt.Admin: overview, search, tenant, user and workspace lists and pages, and the staff audit (#852). Changes come next, phase by phase (#853): the admin key and the staff action runner (PR #860, merged), staff plans and limits (PR #861, merged), credits and ending a staff plan early (PR #862, merged), the workspace credit cap on the management host (PR #863), then people and member actions, each with its form in the admin.",
-   "prs": [860, 861, 862, 863]
+   "why": "The read-only admin is live in wbskt/Wbskt.Admin: overview, search, tenant, user and workspace lists and pages, and the staff audit (#852). Changes come next, phase by phase (#853): the admin key and the staff action runner (PR #860, merged), staff plans and limits (PR #861, merged), credits and ending a staff plan early (PR #862, merged), the workspace credit cap on the management host (PR #863, merged), people actions on the auth host (PR #864), then member actions, each with its form in the admin.",
+   "prs": [860, 861, 862, 863, 864]
   },
   "519": {
    "state": "progress",
@@ -886,6 +886,10 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":127,"t":"Reject breached passwords using the Have I Been Pwned range API","s":"c","m":"M2","p":175,"a":["auth"],"pr":"P2","sz":"S","x":"2026-11-03"}
  ],
  "merged": [
+  {"n":863,"t":"feat(management): let staff set a workspace's credit cap","d":"2026-11-14"},
+  {"n":862,"t":"feat(auth): let staff give credits, revoke them and end a staff plan early","d":"2026-11-14"},
+  {"n":861,"t":"feat(auth): let staff set a tenant's plan or its limits alone","d":"2026-11-14"},
+  {"n":860,"t":"feat(auth): add the admin key and a runner that audits staff changes","d":"2026-11-14"},
   {"n":849,"t":"feat(deploy): raise an alert from outside the vm it watches","d":"2026-11-12"},
   {"n":847,"t":"feat(deploy): alert on failing periodic jobs and silent hosts","d":"2026-11-12"},
   {"n":845,"t":"feat(deploy): cap each container's memory so a leak cannot kill sql server","d":"2026-11-12"},
