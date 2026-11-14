@@ -28,3 +28,18 @@ public sealed record AdminSetTenantPlanRequest(
 /// Null or empty overrides clear them.
 /// </summary>
 public sealed record AdminSetTenantLimitsRequest(StaffChange Staff, PlanLimitOverrides? LimitOverrides, int ExpectedRevision);
+
+/// <summary>
+/// Ends the tenant's staff plan now (<c>InternalRoutes.AdminTenantPlanEnd</c>) and hands it back to billing,
+/// which puts it on its subscription's plan, or Free. <paramref name="ExpectedRevision"/> is the revision seen.
+/// </summary>
+public sealed record AdminEndStaffPlanRequest(StaffChange Staff, int ExpectedRevision);
+
+/// <summary>
+/// Gives the tenant <paramref name="Credits"/> workflow credits, spendable until <paramref name="ExpiresAt"/>
+/// (<c>InternalRoutes.AdminTenantCreditGrants</c>). The grant's reference is the staff change's idempotency key.
+/// </summary>
+public sealed record AdminGrantCreditsRequest(StaffChange Staff, decimal Credits, DateTimeOffset ExpiresAt);
+
+/// <summary>Takes back what is left of a grant staff gave (<c>InternalRoutes.AdminTenantCreditGrantRevoke</c>).</summary>
+public sealed record AdminRevokeCreditGrantRequest(StaffChange Staff);

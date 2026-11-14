@@ -12,4 +12,10 @@ public interface IAdminTenantService
     Task<Result<StaffActionResponse>> SetPlanAsync(Guid tenantRef, AdminSetTenantPlanRequest request, CancellationToken cancellationToken);
 
     Task<Result<StaffActionResponse>> SetLimitsAsync(Guid tenantRef, AdminSetTenantLimitsRequest request, CancellationToken cancellationToken);
+
+    Task<Result<StaffActionResponse>> EndStaffPlanAsync(Guid tenantRef, AdminEndStaffPlanRequest request, CancellationToken cancellationToken);
+
+    Task<Result<StaffActionResponse>> GrantCreditsAsync(Guid tenantRef, AdminGrantCreditsRequest request, CancellationToken cancellationToken);
+
+    Task<Result<StaffActionResponse>> RevokeCreditGrantAsync(Guid tenantRef, Guid grantRef, AdminRevokeCreditGrantRequest request, CancellationToken cancellationToken);
 }

@@ -54,6 +54,8 @@ dbo.Tenants.PlanCode ──(copy)──────────►  dbo.Workspac
   (a paid subscription's plan) or `Operator` (set by an operator, optionally until `PlanEndsAt`). An
   operator's plan outranks a subscription while it holds: billing leaves it alone until its end date
   passes, and then puts the tenant back on whatever its subscription pays for (Free when nothing).
+  Staff can end one early from the platform admin (`…/plan/end`): its end is set to now and billing
+  reviews the tenant at once, or at the hourly review if the provider cannot be reached.
 - **The main database holds a copy per workspace** (`dbo.WorkspaceAccounts`), because the hosts that
   enforce limits read the main database and must not call the auth host on every client message or
   run start. `TenantId` on the copy is what lets pooled limits be counted there.
@@ -254,6 +256,15 @@ and makes the writes an event would have: the grant, its revocation and its late
 write is idempotent, so the reconcile and the events can meet in any order. Each repair is logged and
 counted on `wbskt_management_credit_grants_repaired_total{change}`, which the `CreditGrantsRepaired`
 alert watches.
+
+**Staff grants.** Staff give credits from the platform admin (`POST /api/internal/admin/tenants/{tenantRef}/credit-grants`,
+see `Docs/API.Endpoints.md`): at most 100,000 a grant, expiring within a year. The auth host writes
+`TenantCreditsGrantedEvent` with source `staff` and, as its reference, the staff change's idempotency key,
+to its outbox in the same transaction as the staff audit row; the main database records it as any other
+grant. There is no purchase row behind it, so the reconcile above does not repair it: the outbox, written
+in the change's transaction, is what makes it arrive. Revoking one (`…/credit-grants/{grantRef}/revoke`)
+sends `TenantCreditGrantRevokedEvent` with source `staff`, so it can never name a bought pack. The expiry
+email says the credits were added by Wbskt support rather than bought.
 
 A grant whose payment has an open chargeback is **held** (`TenantCreditGrantHoldChangedEvent`,
 `dbo.TenantCreditGrant_SetHold`): it stops counting towards the balance and is not drawn from while held,

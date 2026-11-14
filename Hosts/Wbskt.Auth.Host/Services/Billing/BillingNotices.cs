@@ -1,5 +1,6 @@
 using System.Globalization;
 using Wbskt.Auth.Host.Models;
+using Wbskt.Models.Admin;
 using Wbskt.Models.Billing;
 
 namespace Wbskt.Auth.Host.Services.Billing;
@@ -176,7 +177,9 @@ internal static class BillingNotices
             $"{Number(remaining)} workflow credits expire on {Date(expiresAt)}",
             "Credits expire soon",
             [
-                $"{Number(remaining)} workflow credits from a credit pack on your account are still unspent and expire on {Date(expiresAt)}.",
+                source == StaffCreditGrants.Source
+                    ? $"{Number(remaining)} workflow credits Wbskt support added to your account are still unspent and expire on {Date(expiresAt)}."
+                    : $"{Number(remaining)} workflow credits from a credit pack on your account are still unspent and expire on {Date(expiresAt)}.",
                 "Until then, runs past your plan's monthly allowance draw on them. After that date they can no longer be spent."
             ]);
 

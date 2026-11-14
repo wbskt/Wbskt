@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -8,14 +9,19 @@ using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Wbskt.Auth.Host.Controllers;
+using Wbskt.Auth.Host.Models;
+using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services;
 using Wbskt.Auth.Models;
+using Wbskt.Events.Billing;
 using Wbskt.Host.Tests.Infrastructure;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Authorization;
 using Wbskt.Infrastructure.Billing;
+using Wbskt.Infrastructure.Events.Outbox;
 using Wbskt.Infrastructure.StaffActions;
 using Wbskt.Models.Admin;
 using Wbskt.Models.Billing;
@@ -198,8 +204,147 @@ public sealed class AdminTenantsTests
         Assert.Null(runner.Action);
     }
 
-    private static AdminTenantService Service(ITenantPlanService plans, ITenantLimits? limits = null, IStaffActionRunner? runner = null) =>
-        new(plans, limits ?? new FixedTenantLimits(), runner ?? Mock.Of<IStaffActionRunner>(MockBehavior.Strict), new FixedClock(Now));
+    [Theory]
+    [InlineData(0, 30)]
+    [InlineData(-5, 30)]
+    [InlineData(100_001, 30)]
+    [InlineData(0.00001, 30)]
+    [InlineData(500, 0)]
+    [InlineData(500, 367)]
+    public async Task Staff_credits_are_1_to_100000_and_expire_within_a_year(double credits, int days)
+    {
+        var runner = new RecordingRunner();
+
+        var result = await Service(new Mock<ITenantPlanService>(MockBehavior.Strict).Object, runner: runner).GrantCreditsAsync(
+            Guid.NewGuid(), new AdminGrantCreditsRequest(Staff, (decimal)credits, Now.AddDays(days)), CancellationToken.None);
+
+        Assert.Equal(days is 0 or 367 ? "CREDITS_EXPIRES_AT_INVALID" : "CREDITS_INVALID", result.Error.Code);
+        Assert.Null(runner.Action);
+    }
+
+    [Fact]
+    public async Task Staff_credits_are_an_outbox_event_named_by_the_idempotency_key()
+    {
+        var tenant = new TenantPlan(12, Guid.NewGuid(), PlanCode.Pro, null, 3, null);
+        var runner = new RecordingRunner();
+        var outbox = new RecordingOutbox();
+        var expiresAt = Now.AddDays(90);
+
+        var result = await Service(Mock.Of<ITenantPlanService>(), runner: runner, tenants: Tenants(tenant), outbox: outbox)
+            .GrantCreditsAsync(tenant.TenantRefId, new AdminGrantCreditsRequest(Staff, 5000m, expiresAt), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(new StaffAction(AdminTenantService.GrantCreditsAction, AdminTenantService.TargetKind, tenant.TenantRefId), runner.Action);
+        var message = Assert.Single(outbox.Messages);
+        Assert.Equal(typeof(TenantCreditsGrantedEvent).FullName, message.MessageType);
+        using var json = JsonDocument.Parse(message.Payload);
+        Assert.Equal(12, json.RootElement.GetProperty("tenantId").GetInt32());
+        Assert.Equal(5000m, json.RootElement.GetProperty("credits").GetDecimal());
+        Assert.Equal(StaffCreditGrants.Source, json.RootElement.GetProperty("source").GetString());
+        Assert.Equal(Staff.IdempotencyKey.ToString("D"), json.RootElement.GetProperty("sourceRef").GetString());
+    }
+
+    [Fact]
+    public async Task Revoking_names_only_a_staff_grant()
+    {
+        var tenant = new TenantPlan(12, Guid.NewGuid(), PlanCode.Pro, null, 3, null);
+        var grantRef = Guid.NewGuid();
+        var outbox = new RecordingOutbox();
+
+        var result = await Service(Mock.Of<ITenantPlanService>(), runner: new RecordingRunner(), tenants: Tenants(tenant), outbox: outbox)
+            .RevokeCreditGrantAsync(tenant.TenantRefId, grantRef, new AdminRevokeCreditGrantRequest(Staff), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var message = Assert.Single(outbox.Messages);
+        Assert.Equal(typeof(TenantCreditGrantRevokedEvent).FullName, message.MessageType);
+        using var json = JsonDocument.Parse(message.Payload);
+        Assert.Equal(StaffCreditGrants.Source, json.RootElement.GetProperty("source").GetString());
+        Assert.Equal(grantRef.ToString("D"), json.RootElement.GetProperty("sourceRef").GetString());
+    }
+
+    [Fact]
+    public async Task Credits_for_an_unknown_tenant_are_refused_and_send_nothing()
+    {
+        var outbox = new RecordingOutbox();
+
+        var result = await Service(Mock.Of<ITenantPlanService>(), runner: new RecordingRunner(), tenants: Tenants(null), outbox: outbox)
+            .GrantCreditsAsync(Guid.NewGuid(), new AdminGrantCreditsRequest(Staff, 10m, Now.AddDays(1)), CancellationToken.None);
+
+        Assert.Equal("TENANT_NOT_FOUND", result.Error.Code);
+        Assert.Empty(outbox.Messages);
+    }
+
+    [Theory]
+    [InlineData(PlanSource.Subscription, 30)]
+    [InlineData(PlanSource.Operator, -1)]
+    public async Task Only_a_staff_plan_still_running_can_be_ended(PlanSource source, int endsInDays)
+    {
+        var tenant = new TenantPlan(12, Guid.NewGuid(), PlanCode.Team, null, 3, null, source, Now.AddDays(endsInDays).UtcDateTime);
+        var review = new Mock<ITenantPlanReview>(MockBehavior.Strict);
+
+        var result = await Service(new Mock<ITenantPlanService>(MockBehavior.Strict).Object, runner: new RecordingRunner(), tenants: Tenants(tenant), review: review.Object)
+            .EndStaffPlanAsync(tenant.TenantRefId, new AdminEndStaffPlanRequest(Staff, 3), CancellationToken.None);
+
+        Assert.Equal("STAFF_PLAN_NOT_ACTIVE", result.Error.Code);
+    }
+
+    [Fact]
+    public async Task Ending_a_staff_plan_ends_it_now_and_asks_billing_to_move_the_tenant()
+    {
+        var overrides = new PlanLimitOverrides { Clients = 900 };
+        var tenant = new TenantPlan(12, Guid.NewGuid(), PlanCode.Team, overrides, 3, null, PlanSource.Operator, Now.AddDays(10).UtcDateTime);
+        var plans = new Mock<ITenantPlanService>();
+        plans.Setup(p => p.SetAsync(tenant.TenantRefId, It.IsAny<SetTenantPlanRequest>(), PlanSource.Operator, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantPlanResponse(tenant.TenantRefId, PlanCode.Team, overrides, 4, Now, PlanSource.Operator, Now));
+        var review = new Mock<ITenantPlanReview>();
+        review.Setup(r => r.ReviewAsync(12, It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("provider down"));
+        var runner = new RecordingRunner();
+
+        var result = await Service(plans.Object, runner: runner, tenants: Tenants(tenant), review: review.Object)
+            .EndStaffPlanAsync(tenant.TenantRefId, new AdminEndStaffPlanRequest(Staff, 3), CancellationToken.None);
+
+        // The provider being down does not undo the end: the hourly review moves the tenant instead.
+        Assert.True(result.IsSuccess);
+        Assert.Equal(AdminTenantService.EndPlanAction, runner.Action!.Name);
+        plans.Verify(p => p.SetAsync(tenant.TenantRefId, new SetTenantPlanRequest(PlanCode.Team, overrides, 3, Now, null), PlanSource.Operator, It.IsAny<CancellationToken>()));
+        review.Verify(r => r.ReviewAsync(12, It.IsAny<CancellationToken>()));
+    }
+
+    private static ITenantPlanProvider Tenants(TenantPlan? tenant)
+    {
+        var tenants = new Mock<ITenantPlanProvider>();
+        tenants.Setup(t => t.FindByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(tenant);
+        return tenants.Object;
+    }
+
+    private static AdminTenantService Service(
+        ITenantPlanService plans,
+        ITenantLimits? limits = null,
+        IStaffActionRunner? runner = null,
+        ITenantPlanProvider? tenants = null,
+        IOutboxWriter? outbox = null,
+        ITenantPlanReview? review = null) =>
+        new(plans, limits ?? new FixedTenantLimits(), runner ?? Mock.Of<IStaffActionRunner>(MockBehavior.Strict), new FixedClock(Now),
+            tenants ?? Mock.Of<ITenantPlanProvider>(MockBehavior.Strict), new NoWorkspaces(), outbox ?? new RecordingOutbox(),
+            review ?? Mock.Of<ITenantPlanReview>(), NullLogger<AdminTenantService>.Instance);
+
+    private sealed class NoWorkspaces : IAuditWorkspaces
+    {
+        public Task<IReadOnlyList<int>> OfTenantAsync(int tenantId, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<int>>([7]);
+
+        public Task<IReadOnlyList<int>> OfUserAsync(int userId, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<int>>([]);
+    }
+
+    private sealed class RecordingOutbox : IOutboxWriter
+    {
+        public List<OutboxMessage> Messages { get; } = [];
+
+        public Task AddAsync(OutboxMessage message, CancellationToken cancellationToken)
+        {
+            Messages.Add(message);
+            return Task.CompletedTask;
+        }
+    }
 
     private sealed class FixedClock(DateTimeOffset now) : TimeProvider
     {
