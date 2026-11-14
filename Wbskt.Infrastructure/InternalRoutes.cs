@@ -102,6 +102,12 @@ public static class InternalRoutes
     /// <summary>Auth host: <c>PUT</c> turns a person's sign-in on or off.</summary>
     public const string AdminUserSignIn = AdminPrefix + "/users/{userRef:guid}/sign-in";
 
+    /// <summary>Auth host: <c>PUT</c> suspends a member of a tenant, or lifts it.</summary>
+    public const string AdminTenantMemberSuspension = AdminPrefix + "/tenants/{tenantRef:guid}/members/{userRef:guid}/suspension";
+
+    /// <summary>Auth host: <c>POST</c> removes a member from a tenant.</summary>
+    public const string AdminTenantMemberRemove = AdminPrefix + "/tenants/{tenantRef:guid}/members/{userRef:guid}/remove";
+
     /// <summary>Management host: <c>PUT</c> sets or clears a workspace's monthly credit cap, for the admin host.</summary>
     public const string AdminWorkspaceCreditCap = AdminPrefix + "/workspaces/{workspaceRef:guid}/credit-cap";
 

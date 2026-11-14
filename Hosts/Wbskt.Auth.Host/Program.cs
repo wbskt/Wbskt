@@ -77,6 +77,7 @@ public static class Program
         builder.Services.AddScoped<IAdminTenantService, AdminTenantService>();
         builder.Services.AddScoped<IStaffUserProvider, StaffUserProvider>();
         builder.Services.AddScoped<IAdminUserService, AdminUserService>();
+        builder.Services.AddScoped<IAdminMemberService, AdminMemberService>();
         builder.Services.AddScoped<IOutboxWriter, OutboxWriter>();
         builder.Services.AddScoped<ITenantPlanReview, TenantPlanReview>();
         // Payments: the provider's checkout, portal and webhooks (Docs/Billing.md, Payments). Off until the

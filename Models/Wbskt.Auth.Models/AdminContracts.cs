@@ -56,3 +56,15 @@ public sealed record AdminUserActionRequest(StaffChange Staff);
 /// they have.
 /// </summary>
 public sealed record AdminSetUserSignInRequest(StaffChange Staff, bool Allowed);
+
+/// <summary>
+/// Suspends a member in one tenant, or lifts it (<c>InternalRoutes.AdminTenantMemberSuspension</c>). Their
+/// account and other tenants are untouched. Refused when it would leave the tenant without an administrator.
+/// </summary>
+public sealed record AdminSetMemberSuspendedRequest(StaffChange Staff, bool Suspended);
+
+/// <summary>
+/// Removes a member from a tenant (<c>InternalRoutes.AdminTenantMemberRemove</c>), as leaving would: their
+/// roles there go, and workspaces they owned pass to another of its administrators.
+/// </summary>
+public sealed record AdminRemoveMemberRequest(StaffChange Staff);

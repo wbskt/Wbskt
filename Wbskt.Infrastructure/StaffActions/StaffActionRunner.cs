@@ -52,7 +52,7 @@ public sealed class StaffActionRunner(IStaffAuditProvider audit, ILogger<StaffAc
             long auditId;
             try
             {
-                auditId = await audit.InsertAsync(new StaffAuditEntry(staff, action, StaffOutcome.Succeeded, null), cancellationToken);
+                auditId = await audit.InsertAsync(new StaffAuditEntry(staff, action, StaffOutcome.Succeeded, action.Detail), cancellationToken);
             }
             catch (SqlException ex) when (ex.Number is 2601 or 2627)
             {
