@@ -49,14 +49,14 @@ internal sealed class AdminUserService(
             return UserNotFound;
         }
 
-        if (user.LockedUntil is not { } until || until <= time.GetUtcNow().UtcDateTime)
+        return await RunAsync(request.Staff, ClearLockoutAction, user, async (now, ct) =>
         {
-            return Error.Conflict("USER_NOT_LOCKED", "This person is not locked out.");
-        }
+            if (now.LockedUntil is not { } until || until <= time.GetUtcNow().UtcDateTime)
+            {
+                return Result.Failure(Error.Conflict("USER_NOT_LOCKED", "This person is not locked out."));
+            }
 
-        return await runner.RunAsync(request.Staff, Action(ClearLockoutAction, userRef), async ct =>
-        {
-            await staffUsers.ClearLockoutAsync(user.Id, ct);
+            await staffUsers.ClearLockoutAsync(now.Id, ct);
             return Result.Success();
         }, cancellationToken);
     }
@@ -69,21 +69,21 @@ internal sealed class AdminUserService(
             return UserNotFound;
         }
 
-        if (user.IsEmailVerified)
-        {
-            return Error.Conflict("EMAIL_ALREADY_VERIFIED", "This person's address is already verified.");
-        }
-
-        if (!user.IsActive)
-        {
-            return SignInOff;
-        }
-
         var token = SecurityTokens.Generate();
         var expiresAt = time.GetUtcNow().UtcDateTime.Add(RegistrationService.EmailVerificationLifetime);
-        var result = await runner.RunAsync(request.Staff, Action(ResendVerificationAction, userRef), async ct =>
+        var result = await RunAsync(request.Staff, ResendVerificationAction, user, async (now, ct) =>
         {
-            await accounts.CreateEmailVerificationTokenAsync(user.Id, SecurityTokens.Hash(token), expiresAt, ct);
+            if (now.IsEmailVerified)
+            {
+                return Result.Failure(Error.Conflict("EMAIL_ALREADY_VERIFIED", "This person's address is already verified."));
+            }
+
+            if (!now.IsActive)
+            {
+                return Result.Failure(SignInOff);
+            }
+
+            await accounts.CreateEmailVerificationTokenAsync(now.Id, SecurityTokens.Hash(token), expiresAt, ct);
             return Result.Success();
         }, cancellationToken);
 
@@ -99,16 +99,16 @@ internal sealed class AdminUserService(
             return UserNotFound;
         }
 
-        if (!user.IsActive)
-        {
-            return SignInOff;
-        }
-
         var token = SecurityTokens.Generate();
         var expiresAt = time.GetUtcNow().UtcDateTime.Add(PasswordService.PasswordResetLifetime);
-        var result = await runner.RunAsync(request.Staff, Action(SendPasswordResetAction, userRef), async ct =>
+        var result = await RunAsync(request.Staff, SendPasswordResetAction, user, async (now, ct) =>
         {
-            await accounts.CreatePasswordResetTokenAsync(user.Id, SecurityTokens.Hash(token), expiresAt, StaffAddress, ct);
+            if (!now.IsActive)
+            {
+                return Result.Failure(SignInOff);
+            }
+
+            await accounts.CreatePasswordResetTokenAsync(now.Id, SecurityTokens.Hash(token), expiresAt, StaffAddress, ct);
             return Result.Success();
         }, cancellationToken);
 
@@ -124,9 +124,9 @@ internal sealed class AdminUserService(
             return UserNotFound;
         }
 
-        var result = await runner.RunAsync(request.Staff, Action(SignOutEverywhereAction, userRef), async ct =>
+        var result = await RunAsync(request.Staff, SignOutEverywhereAction, user, async (now, ct) =>
         {
-            await sessions.RevokeAllRefreshTokensForUserAsync(user.Id, StaffAddress, ct);
+            await sessions.RevokeAllRefreshTokensForUserAsync(now.Id, StaffAddress, ct);
             return Result.Success();
         }, cancellationToken);
 
@@ -142,14 +142,14 @@ internal sealed class AdminUserService(
             return UserNotFound;
         }
 
-        if (user.IsActive == request.Allowed)
+        var result = await RunAsync(request.Staff, request.Allowed ? AllowSignInAction : BlockSignInAction, user, async (now, ct) =>
         {
-            return Error.Conflict("USER_SIGN_IN_UNCHANGED", request.Allowed ? "Sign-in is already on for this person." : "Sign-in is already off for this person.");
-        }
+            if (now.IsActive == request.Allowed)
+            {
+                return Result.Failure(Error.Conflict("USER_SIGN_IN_UNCHANGED", request.Allowed ? "Sign-in is already on for this person." : "Sign-in is already off for this person."));
+            }
 
-        var result = await runner.RunAsync(request.Staff, Action(request.Allowed ? AllowSignInAction : BlockSignInAction, userRef), async ct =>
-        {
-            await staffUsers.SetActiveAsync(user.Id, request.Allowed, StaffAddress, ct);
+            await staffUsers.SetActiveAsync(now.Id, request.Allowed, StaffAddress, ct);
             return Result.Success();
         }, cancellationToken);
 
@@ -161,13 +161,19 @@ internal sealed class AdminUserService(
         return result;
     }
 
+    /// <summary>
+    /// Checks the person's state inside the runner, after its replay check, so a retry of a change that
+    /// already happened gets the first answer rather than "nothing to do". The person is read again in the
+    /// change's transaction; a refusal there is audited as Refused.
+    /// </summary>
+    private Task<Result<StaffActionResponse>> RunAsync(StaffChange staff, string action, User user, Func<User, CancellationToken, Task<Result>> change, CancellationToken cancellationToken) =>
+        runner.RunAsync(staff, new StaffAction(action, TargetKind, user.RefId), async ct => await change(await accounts.GetByIdAsync(user.Id, ct), ct), cancellationToken);
+
     private async Task<User?> FindAsync(Guid userRef, CancellationToken cancellationToken)
     {
         int id = await accounts.FindIdByRefIdAsync(userRef, cancellationToken);
         return id == 0 ? null : await accounts.GetByIdAsync(id, cancellationToken);
     }
-
-    private static StaffAction Action(string name, Guid userRef) => new(name, TargetKind, userRef);
 
     /// <summary>
     /// Runs <paramref name="effect"/> once the change has committed, and not for a replay. Best effort: the
