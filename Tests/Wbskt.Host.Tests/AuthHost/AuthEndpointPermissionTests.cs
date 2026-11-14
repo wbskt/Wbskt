@@ -22,6 +22,7 @@ public sealed class AuthEndpointPermissionTests
     /// <summary>
     /// The scoped actions that need no permission, each because it is about the caller themself and
     /// checks membership in its service. Host-to-host actions carrying <see cref="InternalApiKeyAttribute"/>
+    /// (or, for the platform admin host, <see cref="AdminApiKeyAttribute"/>)
     /// are not on this list: no user is behind them, and the key is their requirement.
     /// </summary>
     private static readonly HashSet<string> Unrestricted =
@@ -160,10 +161,14 @@ public sealed class AuthEndpointPermissionTests
                             route,
                             TenantPermissionFilter.RequirementsFor(method, controller),
                             WorkspacePermissionFilter.RequirementsFor(method, controller),
-                            controller.GetCustomAttribute<InternalApiKeyAttribute>() is not null || method.GetCustomAttribute<InternalApiKeyAttribute>() is not null);
+                            HasKey<InternalApiKeyAttribute>(controller, method) || HasKey<AdminApiKeyAttribute>(controller, method));
                     }
                 }
             }
         }
     }
+
+    private static bool HasKey<TAttribute>(Type controller, MethodInfo method)
+        where TAttribute : Attribute =>
+        controller.GetCustomAttribute<TAttribute>() is not null || method.GetCustomAttribute<TAttribute>() is not null;
 }
