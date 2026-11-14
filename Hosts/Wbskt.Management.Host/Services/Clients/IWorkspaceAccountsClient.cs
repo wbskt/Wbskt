@@ -12,4 +12,7 @@ public interface IWorkspaceAccountsClient
     /// cannot answer.
     /// </summary>
     Task<Page<WorkspaceAccountResponse>> GetPageAsync(string? cursor, int? tenantId, int? workspaceId, CancellationToken cancellationToken);
+
+    /// <summary>The workspace with that RefId, or null when the auth host has none. Throws when it cannot answer.</summary>
+    Task<WorkspaceAccountResponse?> FindAsync(Guid workspaceRef, CancellationToken cancellationToken);
 }

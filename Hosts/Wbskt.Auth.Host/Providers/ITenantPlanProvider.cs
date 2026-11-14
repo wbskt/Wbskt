@@ -24,4 +24,6 @@ internal interface ITenantPlanProvider
 
     /// <summary>Up to <paramref name="take"/> workspaces with their tenant's plan, after <paramref name="afterWorkspaceId"/>, by workspace id.</summary>
     Task<IReadOnlyCollection<WorkspaceAccountResponse>> GetWorkspaceAccountsAsync(int? afterWorkspaceId, int take, int? tenantId, int? workspaceId, CancellationToken cancellationToken);
+
+    Task<WorkspaceAccountResponse?> FindWorkspaceAccountByRefIdAsync(Guid workspaceRef, CancellationToken cancellationToken);
 }

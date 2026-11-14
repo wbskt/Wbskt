@@ -2,6 +2,7 @@ using System.Reflection;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
+using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Authorization;
 using Wbskt.Management.Host.Authorization;
 using Wbskt.Primitives.Constants;
@@ -106,12 +107,22 @@ public sealed class ManagementEndpointPermissionTests
             .Where(a => a.Route.Contains(WorkspaceRouteSegment, StringComparison.OrdinalIgnoreCase))
             .ToList();
         var undeclared = scoped
-            .Where(a => a.Requirements.Count == 0)
+            .Where(a => a.Requirements.Count == 0 && !a.Keyed)
             .Select(a => $"{a.Name} ({a.Route})")
             .ToList();
 
         scoped.Should().HaveCountGreaterThan(Expected.Count / 2, "the route filter must find the workspace-scoped actions, or this test checks nothing");
         undeclared.Should().BeEmpty("a workspace-scoped action needs [RequiresPermission], or any member of the workspace could call it");
+    }
+
+    [Fact]
+    public void A_host_to_host_action_with_a_workspace_in_its_route_is_never_open_to_users()
+    {
+        var keyed = Actions().Where(a => a.Keyed).ToList();
+
+        keyed.Should().OnlyContain(a => a.Route.StartsWith(InternalRoutes.Prefix + "/", StringComparison.Ordinal),
+            "a keyed action is for another host, so it lives under the internal prefix Traefik never routes");
+        keyed.Should().OnlyContain(a => a.Requirements.Count == 0, "a keyed action has no signed-in user whose permissions could be checked");
     }
 
     [Fact]
@@ -153,7 +164,7 @@ public sealed class ManagementEndpointPermissionTests
             r.Permissions.Count == 1 ? r.Permissions[0] : $"{r.Mode}({string.Join(", ", r.Permissions)})"));
     }
 
-    private sealed record Action(string Name, string Route, MethodInfo Method, IReadOnlyList<RequiresPermissionAttribute> Requirements);
+    private sealed record Action(string Name, string Route, MethodInfo Method, IReadOnlyList<RequiresPermissionAttribute> Requirements, bool Keyed);
 
     private static IEnumerable<Action> Actions()
     {
@@ -173,9 +184,14 @@ public sealed class ManagementEndpointPermissionTests
                 {
                     var route = template is null ? prefix : template.StartsWith("api/") ? template : $"{prefix}/{template}";
                     yield return new Action($"{controller.Name}.{method.Name}", route, method,
-                        WorkspacePermissionFilter.RequirementsFor(method, controller));
+                        WorkspacePermissionFilter.RequirementsFor(method, controller),
+                        HasKey<InternalApiKeyAttribute>(controller, method) || HasKey<AdminApiKeyAttribute>(controller, method));
                 }
             }
         }
     }
+
+    private static bool HasKey<TAttribute>(Type controller, MethodInfo method)
+        where TAttribute : Attribute =>
+        controller.GetCustomAttribute<TAttribute>() is not null || method.GetCustomAttribute<TAttribute>() is not null;
 }

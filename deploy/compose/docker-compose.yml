@@ -315,6 +315,8 @@ services:
       Services__AuthInternalApiKey: ${AUTH_INTERNAL_API_KEY:?AUTH_INTERNAL_API_KEY is required - see .env.example}
       # The same shared key guards this host's own internal routes (the Business overage report).
       Internal__ApiKey: ${AUTH_INTERNAL_API_KEY:?AUTH_INTERNAL_API_KEY is required - see .env.example}
+      # The platform admin host's own key, for /api/internal/admin/*. Unset, those routes answer 404.
+      Internal__AdminApiKey: ${ADMIN_API_KEY:-}
       Cors__AllowedOrigins__0: ${CONSOLE_ORIGIN:?CONSOLE_ORIGIN is required - see .env.example}
       Cors__ExtraOrigins: ${CORS_EXTRA_ORIGINS:-}
     volumes:
@@ -900,9 +902,10 @@ services:
       ConnectionStrings__MainReader: Server=sql;Database=Wbskt.Database;User Id=wbskt_admin_reader;Password=${SQL_ADMIN_READER_PASSWORD:-};TrustServerCertificate=True;Encrypt=True;
       # Encrypts the staff authenticator secrets. The host refuses to start without a valid one.
       Staff__SecretKey: ${ADMIN_STAFF_SECRET_KEY:-}
-      # Staff changes go to the auth host's /api/internal/admin routes, straight over the backend network
-      # and never through Traefik. Without ADMIN_API_KEY the admin shows its actions as unavailable.
+      # Staff changes go to the auth and management hosts' /api/internal/admin routes, straight over the
+      # backend network and never through Traefik. Without ADMIN_API_KEY the admin shows its actions as unavailable.
       Platform__AuthUrl: http://auth:8080
+      Platform__ManagementUrl: http://management:8080
       Platform__AdminApiKey: ${ADMIN_API_KEY:-}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]

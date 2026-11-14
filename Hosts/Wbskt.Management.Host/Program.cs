@@ -14,10 +14,12 @@ using Wbskt.Infrastructure.Events;
 using Wbskt.Infrastructure.HealthChecks;
 using Wbskt.Infrastructure.Json;
 using Wbskt.Infrastructure.Security;
+using Wbskt.Infrastructure.StaffActions;
 using Wbskt.Infrastructure.Authorization;
 using Wbskt.Management.Host.Authorization;
 using Wbskt.Management.Host.Controllers.Workflow;
 using Wbskt.Management.Host.Extensions;
+using Wbskt.Management.Host.Services.Admin;
 using Wbskt.Management.Host.Handlers.Events;
 using Wbskt.Management.Host.Hosting;
 using Wbskt.Management.Host.Hubs;
@@ -110,6 +112,9 @@ public static class Program
         builder.Services.AddScoped<WorkspaceAccountSync>();
         builder.Services.AddScoped<IWorkspaceCreditCapProvider, WorkspaceCreditCapProvider>();
         builder.Services.AddScoped<IWorkspaceCreditCapService, WorkspaceCreditCapService>();
+        // Changes the platform admin host asks for, each with its staff audit row in the main database.
+        builder.Services.AddStaffActions("DefaultConnection");
+        builder.Services.AddScoped<IAdminWorkspaceService, AdminWorkspaceService>();
         builder.Services.AddScoped<IWorkspaceUsageProvider, WorkspaceUsageProvider>();
         builder.Services.AddScoped<IWorkspaceUsageService, WorkspaceUsageService>();
         builder.Services.AddScoped<IBusinessUsageProvider, BusinessUsageProvider>();

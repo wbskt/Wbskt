@@ -53,14 +53,21 @@ internal sealed class TenantPlanProvider(IConfiguration configuration) : BaseSql
             p.AddWithValue("@Take", take);
             p.AddWithValue("@TenantId", (object?)tenantId ?? DBNull.Value);
             p.AddWithValue("@WorkspaceId", (object?)workspaceId ?? DBNull.Value);
-        }, r => new WorkspaceAccountResponse(
-            r.GetInt32(r.GetOrdinal("WorkspaceId")),
-            r.GetInt32(r.GetOrdinal("TenantId")),
-            r.GetGuid(r.GetOrdinal("TenantRefId")),
-            ReadPlanCode(r),
-            ReadOverrides(r),
-            r.GetInt32(r.GetOrdinal("PlanRevision"))), cancellationToken);
+        }, MapWorkspaceAccount, cancellationToken);
     }
+
+    public Task<WorkspaceAccountResponse?> FindWorkspaceAccountByRefIdAsync(Guid workspaceRef, CancellationToken cancellationToken)
+    {
+        return ExecuteFindAsync("dbo.WorkspaceAccount_FindBy_RefId", p => p.AddWithValue("@RefId", workspaceRef), MapWorkspaceAccount, cancellationToken);
+    }
+
+    private static WorkspaceAccountResponse MapWorkspaceAccount(SqlDataReader r) => new(
+        r.GetInt32(r.GetOrdinal("WorkspaceId")),
+        r.GetInt32(r.GetOrdinal("TenantId")),
+        r.GetGuid(r.GetOrdinal("TenantRefId")),
+        ReadPlanCode(r),
+        ReadOverrides(r),
+        r.GetInt32(r.GetOrdinal("PlanRevision")));
 
     private static TenantPlan MapPlan(SqlDataReader r)
     {

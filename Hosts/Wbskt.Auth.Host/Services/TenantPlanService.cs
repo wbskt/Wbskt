@@ -102,6 +102,17 @@ internal sealed class TenantPlanService(ITenantPlanProvider plans, IAuditWorkspa
         };
     }
 
+    public async Task<Result<WorkspaceAccountResponse>> GetWorkspaceAccountAsync(Guid workspaceRef, CancellationToken cancellationToken)
+    {
+        WorkspaceAccountResponse? account = await plans.FindWorkspaceAccountByRefIdAsync(workspaceRef, cancellationToken);
+        if (account is null)
+        {
+            return Error.NotFound("WORKSPACE_NOT_FOUND", "No workspace has that RefId.");
+        }
+
+        return account;
+    }
+
     private static TenantPlanResponse ToResponse(TenantPlan plan) =>
         new(plan.TenantRefId, plan.PlanCode, plan.LimitOverrides, plan.PlanRevision, plan.PlanChangedAt?.ToUtcOffset(), plan.Source, plan.EndsAt?.ToUtcOffset());
 }
