@@ -1,0 +1,146 @@
+{{/*
+  The alert email. alertmanager-entrypoint.sh copies this file to /tmp with __ALERT_TIMEZONE__ replaced,
+  and points email_configs' subject, html and text at the definitions below.
+
+  Each rule in alerts.yml (and BackupFailed in scripts/alert.sh) carries these annotations:
+    summary    what happened, in one plain sentence; also the subject line
+    impact     what it means for customers or data, and so how much it matters
+    action     what to do about it, in order
+    command    optional: the first command to run on the VM, shown on its own line
+    dashboard  optional: a Grafana path to open instead of the overview dashboard
+  An alert without them still renders: missing parts are left out.
+
+  Links point at localhost because Grafana and Alertmanager listen on the VM's loopback only; they
+  open once the SSH tunnel in the footer is up. A template error stops the mail being sent, so keep
+  every function call here one that cannot fail on odd input.
+*/}}
+
+{{ define "wbskt.urgency" }}{{ if or (eq . "page") (eq . "critical") }}Urgent{{ else if eq . "warn" }}Warning{{ else }}Notice{{ end }}{{ end }}
+
+{{ define "wbskt.urgency.hint" }}{{ if or (eq . "page") (eq . "critical") }}Customers are affected or data is at risk. Act now.{{ else if eq . "warn" }}Nothing is down yet. Look at it today.{{ else }}For information.{{ end }}{{ end }}
+
+{{ define "wbskt.time" }}{{ . | tz "__ALERT_TIMEZONE__" | date "Mon 2 Jan, 15:04 MST" }}{{ end }}
+
+{{ define "wbskt.duration" }}{{ reReplaceAll "^(.*[hm]) [0-9]+s$" "$1" (humanizeDuration .) }}{{ end }}
+
+{{ define "wbskt.grafana" }}http://localhost:3000{{ end }}
+
+{{ define "wbskt.email.subject" -}}
+{{ if gt (len .Alerts.Firing) 0 -}}
+[Wbskt] {{ template "wbskt.urgency" (index .Alerts.Firing 0).Labels.severity }}: {{ with (index .Alerts.Firing 0).Annotations.summary }}{{ . }}{{ else }}{{ (index .Alerts.Firing 0).Labels.alertname }}{{ end }}{{ if gt (len .Alerts.Firing) 1 }} (and {{ len .Alerts.Firing }} alerts in all){{ end }}
+{{- else -}}
+[Wbskt] Resolved: {{ with (index .Alerts 0).Annotations.summary }}{{ . }}{{ else }}{{ (index .Alerts 0).Labels.alertname }}{{ end }}{{ if gt (len .Alerts) 1 }} (and {{ len .Alerts }} alerts in all){{ end }}
+{{- end }}
+{{- end }}
+
+{{ define "wbskt.labels" }}{{ range .SortedPairs }}{{ if and (ne .Name "alertname") (ne .Name "severity") }}{{ .Name }}={{ .Value }}  {{ end }}{{ end }}{{ end }}
+
+{{/* ------------------------------------------------------------------ HTML */}}
+
+{{ define "wbskt.email.html.firing" }}
+{{ $urgent := or (eq .Labels.severity "page") (eq .Labels.severity "critical") }}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:#ffffff;border:1px solid #e4e4e7;border-left:4px solid {{ if $urgent }}#dc2626{{ else }}#d97706{{ end }};border-radius:6px;margin:0 0 16px">
+  <tr><td style="padding:18px 20px 6px">
+    <div style="font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:{{ if $urgent }}#b91c1c{{ else }}#b45309{{ end }}">{{ template "wbskt.urgency" .Labels.severity }} · {{ template "wbskt.urgency.hint" .Labels.severity }}</div>
+    <div style="font-size:18px;line-height:1.35;font-weight:600;color:#18181b;margin:6px 0 4px">{{ with .Annotations.summary }}{{ . }}{{ else }}{{ .Labels.alertname }}{{ end }}</div>
+    <div style="font-size:13px;color:#71717a">Since {{ template "wbskt.time" .StartsAt }} ({{ template "wbskt.duration" (since .StartsAt).Seconds }} ago)</div>
+  </td></tr>
+  {{ with .Annotations.impact }}
+  <tr><td style="padding:12px 20px 0">
+    <div style="font-size:13px;font-weight:600;color:#3f3f46;margin:0 0 4px">What this means</div>
+    <div style="font-size:14px;line-height:1.55;color:#27272a">{{ . }}</div>
+  </td></tr>
+  {{ end }}
+  {{ with .Annotations.action }}
+  <tr><td style="padding:12px 20px 0">
+    <div style="font-size:13px;font-weight:600;color:#3f3f46;margin:0 0 4px">What to do</div>
+    <div style="font-size:14px;line-height:1.55;color:#27272a">{{ . }}</div>
+  </td></tr>
+  {{ end }}
+  {{ with .Annotations.command }}
+  <tr><td style="padding:10px 20px 0">
+    <div style="font-family:Menlo,Consolas,'Courier New',monospace;font-size:13px;line-height:1.5;color:#18181b;background:#f4f4f5;border:1px solid #e4e4e7;border-radius:4px;padding:8px 10px;word-break:break-all">{{ . }}</div>
+  </td></tr>
+  {{ end }}
+  <tr><td style="padding:14px 20px 16px">
+    <a href="{{ template "wbskt.grafana" }}{{ with .Annotations.dashboard }}{{ . }}{{ else }}/d/wbskt-overview{{ end }}" style="display:inline-block;font-size:13px;font-weight:600;color:#ffffff;background:#18181b;text-decoration:none;border-radius:4px;padding:7px 12px;margin:0 6px 6px 0">Open in Grafana</a>
+    <a href="http://localhost:9093/#/alerts?filter=%7Balertname%3D%22{{ .Labels.alertname }}%22%7D" style="display:inline-block;font-size:13px;font-weight:600;color:#18181b;background:#ffffff;border:1px solid #d4d4d8;text-decoration:none;border-radius:4px;padding:6px 12px;margin:0 6px 6px 0">See it in Alertmanager</a>
+    <div style="font-family:Menlo,Consolas,'Courier New',monospace;font-size:11px;line-height:1.5;color:#a1a1aa;margin-top:6px">{{ .Labels.alertname }} · {{ template "wbskt.labels" .Labels }}</div>
+  </td></tr>
+</table>
+{{ end }}
+
+{{ define "wbskt.email.html.resolved" }}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:#ffffff;border:1px solid #e4e4e7;border-left:4px solid #16a34a;border-radius:6px;margin:0 0 12px">
+  <tr><td style="padding:14px 20px">
+    <div style="font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#15803d">Resolved · No action needed</div>
+    <div style="font-size:16px;line-height:1.35;font-weight:600;color:#18181b;margin:6px 0 4px">{{ with .Annotations.summary }}{{ . }}{{ else }}{{ .Labels.alertname }}{{ end }}</div>
+    <div style="font-size:13px;color:#71717a">Lasted {{ template "wbskt.duration" (.EndsAt.Sub .StartsAt).Seconds }}, from {{ template "wbskt.time" .StartsAt }} to {{ template "wbskt.time" .EndsAt }}</div>
+    <div style="font-family:Menlo,Consolas,'Courier New',monospace;font-size:11px;line-height:1.5;color:#a1a1aa;margin-top:6px">{{ .Labels.alertname }} · {{ template "wbskt.labels" .Labels }}</div>
+  </td></tr>
+</table>
+{{ end }}
+
+{{ define "wbskt.email.html" }}
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ template "wbskt.email.subject" . }}</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#18181b">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:#f4f4f5">
+<tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;max-width:640px">
+  <tr><td style="padding:0 2px 14px">
+    <div style="font-size:13px;font-weight:600;color:#52525b">Wbskt production alerts</div>
+    <div style="font-size:14px;color:#3f3f46;margin-top:4px">
+      {{ if gt (len .Alerts.Firing) 0 }}{{ len .Alerts.Firing }} {{ if eq (len .Alerts.Firing) 1 }}problem is{{ else }}problems are{{ end }} still going on{{ if gt (len .Alerts.Resolved) 0 }}, {{ len .Alerts.Resolved }} cleared{{ end }}.{{ else }}{{ if eq (len .Alerts.Resolved) 1 }}This problem has{{ else }}These {{ len .Alerts.Resolved }} problems have{{ end }} cleared on {{ if eq (len .Alerts.Resolved) 1 }}its{{ else }}their{{ end }} own or after a fix.{{ end }}
+    </div>
+  </td></tr>
+  <tr><td>
+    {{ range .Alerts.Firing }}{{ template "wbskt.email.html.firing" . }}{{ end }}
+    {{ range .Alerts.Resolved }}{{ template "wbskt.email.html.resolved" . }}{{ end }}
+  </td></tr>
+  <tr><td style="padding:6px 2px 0;font-size:12px;line-height:1.6;color:#71717a">
+    The links open through an SSH tunnel to the VM, since Grafana and Alertmanager are not public:
+    <div style="font-family:Menlo,Consolas,'Courier New',monospace;font-size:12px;color:#3f3f46;background:#ffffff;border:1px solid #e4e4e7;border-radius:4px;padding:6px 8px;margin:6px 0;word-break:break-all">ssh -L 3000:127.0.0.1:3000 -L 9093:127.0.0.1:9093 &lt;your VM&gt;</div>
+    Every alert, and what fires it, is listed under "Alerts" in deploy/README.md. To stop mail about something already being handled, silence it in Alertmanager.
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>
+{{ end }}
+
+{{/* ------------------------------------------------------------------ plain text */}}
+
+{{ define "wbskt.email.text" -}}
+Wbskt production alerts
+{{ range .Alerts.Firing }}
+==== {{ template "wbskt.urgency" .Labels.severity }}: {{ with .Annotations.summary }}{{ . }}{{ else }}{{ .Labels.alertname }}{{ end }}
+{{ template "wbskt.urgency.hint" .Labels.severity }}
+Since {{ template "wbskt.time" .StartsAt }} ({{ template "wbskt.duration" (since .StartsAt).Seconds }} ago)
+{{ with .Annotations.impact }}
+What this means:
+{{ . }}
+{{ end }}{{ with .Annotations.action }}
+What to do:
+{{ . }}
+{{ end }}{{ with .Annotations.command }}
+  $ {{ . }}
+{{ end }}
+Grafana: {{ template "wbskt.grafana" }}{{ with .Annotations.dashboard }}{{ . }}{{ else }}/d/wbskt-overview{{ end }}
+Alert: {{ .Labels.alertname }}  {{ template "wbskt.labels" .Labels }}
+{{ end }}{{ range .Alerts.Resolved }}
+==== RESOLVED: {{ with .Annotations.summary }}{{ . }}{{ else }}{{ .Labels.alertname }}{{ end }}
+No action needed. Lasted {{ template "wbskt.duration" (.EndsAt.Sub .StartsAt).Seconds }}, from {{ template "wbskt.time" .StartsAt }} to {{ template "wbskt.time" .EndsAt }}.
+Alert: {{ .Labels.alertname }}  {{ template "wbskt.labels" .Labels }}
+{{ end }}
+--
+Links open through an SSH tunnel to the VM:
+  ssh -L 3000:127.0.0.1:3000 -L 9093:127.0.0.1:9093 <your VM>
+Every alert is listed under "Alerts" in deploy/README.md. Silence one in Alertmanager at http://localhost:9093.
+{{ end }}
