@@ -27,7 +27,7 @@ public sealed class AdminViewContractTests(SqlEdgeFixture main, AuthSqlFixture a
         ["Sessions"] = ["SessionId", "UserId", "StartedAt", "LastRefreshedAt", "ExpiresAt", "RevokedAt", "IpAddress"],
         ["Subscriptions"] = ["TenantId", "Provider", "SubscriptionId", "CustomerId", "PlanCode", "BillingInterval", "Status", "CurrentPeriodEnd", "CancelAtPeriodEnd", "PastDueSince", "ScheduledPlanCode", "ScheduledBillingInterval", "ScheduledAt", "UpdatedAt", "CreatedAt"],
         ["CreditPurchases"] = ["TenantId", "Provider", "PaymentId", "Credits", "PurchasedAt", "ExpiresAt", "RefundedAt", "HeldAt", "CreatedAt"],
-        ["StaffAudit"] = ["Id", "StaffRefId", "StaffName", "Action", "TargetKind", "TargetRefId", "Reason", "Outcome", "Detail", "CreatedAt"]
+        ["StaffAudit"] = ["Id", "StaffRefId", "StaffName", "Action", "TargetKind", "TargetRefId", "Reason", "Outcome", "Detail", "IdempotencyKey", "CreatedAt"]
     };
 
     private static readonly Dictionary<string, string[]> MainViews = new()
@@ -39,7 +39,7 @@ public sealed class AdminViewContractTests(SqlEdgeFixture main, AuthSqlFixture a
         ["CreditMonths"] = ["TenantId", "MonthStart", "Posted", "Drawn"],
         ["CreditGrants"] = ["Id", "TenantId", "Credits", "Drawn", "GrantedAt", "ExpiresAt", "Source", "SourceRef", "RevokedAt", "HeldAt", "CreatedAt"],
         ["PersonEvents"] = ["Id", "UserId", "UserRefId", "EventName", "EventCriticality", "WorkspaceId", "Source", "ClientAddress", "UserAgent", "EventData", "MessageId", "CreatedAt"],
-        ["StaffAudit"] = ["Id", "StaffRefId", "StaffName", "Action", "TargetKind", "TargetRefId", "Reason", "Outcome", "Detail", "CreatedAt"]
+        ["StaffAudit"] = ["Id", "StaffRefId", "StaffName", "Action", "TargetKind", "TargetRefId", "Reason", "Outcome", "Detail", "IdempotencyKey", "CreatedAt"]
     };
 
     [SkippableFact]
