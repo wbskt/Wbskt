@@ -62,8 +62,14 @@ public static class InternalRoutes
     /// </summary>
     public const string AdminPrefix = Prefix + "/admin";
 
-    /// <summary>Auth host: a tenant's plan and the limits it runs under now, for the admin host.</summary>
+    /// <summary>
+    /// Auth host: <c>GET</c> a tenant's plan and the limits it runs under now, or <c>PUT</c> its limit
+    /// overrides alone, leaving its plan and whoever set it in charge, for the admin host.
+    /// </summary>
     public const string AdminTenantLimits = AdminPrefix + "/tenants/{tenantRef:guid}/limits";
+
+    /// <summary>Auth host: <c>PUT</c> a staff plan on a tenant until a date, for the admin host.</summary>
+    public const string AdminTenantPlan = AdminPrefix + "/tenants/{tenantRef:guid}/plan";
 
     /// <summary>
     /// The admin host's own key, <c>Internal:AdminApiKey</c> on the host that serves an

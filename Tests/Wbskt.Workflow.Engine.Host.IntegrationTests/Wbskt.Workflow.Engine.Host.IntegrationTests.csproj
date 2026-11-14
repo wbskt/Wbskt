@@ -30,6 +30,7 @@
     <ProjectReference Include="..\..\Wbskt.Infrastructure\Wbskt.Infrastructure.csproj" />
     <ProjectReference Include="..\..\Wbskt.Workflow\Wbskt.Workflow.csproj" />
     <ProjectReference Include="..\..\Wbskt.Workflow.Abstraction\Wbskt.Workflow.Abstraction.csproj" />
+    <ProjectReference Include="..\..\Hosts\Wbskt.Auth.Host\Wbskt.Auth.Host.csproj" />
     <ProjectReference Include="..\..\Hosts\Wbskt.Management.Host\Wbskt.Management.Host.csproj" />
     <ProjectReference Include="..\..\Hosts\Wbskt.Workflow.Engine.Host\Wbskt.Workflow.Engine.Host.csproj" />
   </ItemGroup>
