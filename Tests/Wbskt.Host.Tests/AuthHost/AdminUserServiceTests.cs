@@ -64,7 +64,7 @@ public sealed class AdminUserServiceTests
         var result = await Service().ClearLockoutAsync(_user.RefId, Request, CancellationToken.None);
 
         Assert.Equal("USER_NOT_LOCKED", result.Error.Code);
-        Assert.Null(_runner.Action);
+        _staffUsers.VerifyNoOtherCalls();
     }
 
     [Fact]
@@ -165,7 +165,20 @@ public sealed class AdminUserServiceTests
         var result = await Service().SetSignInAsync(_user.RefId, new AdminSetUserSignInRequest(Staff, true), CancellationToken.None);
 
         Assert.Equal("USER_SIGN_IN_UNCHANGED", result.Error.Code);
-        Assert.Null(_runner.Action);
+        _staffUsers.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task A_retry_of_a_change_already_made_replays_instead_of_finding_nothing_to_do()
+    {
+        _runner.Replay = true;
+
+        var cleared = await Service().ClearLockoutAsync(_user.RefId, Request, CancellationToken.None);
+        var signIn = await Service().SetSignInAsync(_user.RefId, new AdminSetUserSignInRequest(Staff, true), CancellationToken.None);
+
+        Assert.True(cleared.Value.Replayed);
+        Assert.True(signIn.Value.Replayed);
+        _staffUsers.VerifyNoOtherCalls();
     }
 
     [Fact]
