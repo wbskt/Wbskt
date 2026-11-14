@@ -87,6 +87,21 @@ public static class InternalRoutes
     /// <summary>Auth host: <c>POST</c> takes back what is left of a credit grant staff gave.</summary>
     public const string AdminTenantCreditGrantRevoke = AdminPrefix + "/tenants/{tenantRef:guid}/credit-grants/{grantRef:guid}/revoke";
 
+    /// <summary>Auth host: <c>POST</c> lifts a person's sign-in lockout and clears their failure count.</summary>
+    public const string AdminUserLockoutClear = AdminPrefix + "/users/{userRef:guid}/lockout/clear";
+
+    /// <summary>Auth host: <c>POST</c> mails a person a new email verification link.</summary>
+    public const string AdminUserVerificationResend = AdminPrefix + "/users/{userRef:guid}/email-verification/resend";
+
+    /// <summary>Auth host: <c>POST</c> mails a person a password reset link.</summary>
+    public const string AdminUserPasswordReset = AdminPrefix + "/users/{userRef:guid}/password-reset";
+
+    /// <summary>Auth host: <c>POST</c> ends every session a person has.</summary>
+    public const string AdminUserSessionsRevoke = AdminPrefix + "/users/{userRef:guid}/sessions/revoke";
+
+    /// <summary>Auth host: <c>PUT</c> turns a person's sign-in on or off.</summary>
+    public const string AdminUserSignIn = AdminPrefix + "/users/{userRef:guid}/sign-in";
+
     /// <summary>Management host: <c>PUT</c> sets or clears a workspace's monthly credit cap, for the admin host.</summary>
     public const string AdminWorkspaceCreditCap = AdminPrefix + "/workspaces/{workspaceRef:guid}/credit-cap";
 

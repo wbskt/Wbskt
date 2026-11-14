@@ -34,7 +34,7 @@ internal sealed class RegistrationService : IRegistrationService
     /// minutes before someone stops looking at their inbox for the day. An hour here would mean
     /// anyone who registers in the evening finds a dead link in the morning.
     /// </summary>
-    private static readonly TimeSpan EmailVerificationLifetime = TimeSpan.FromHours(24);
+    internal static readonly TimeSpan EmailVerificationLifetime = TimeSpan.FromHours(24);
 
     private readonly IAccountProvider _accounts;
     private readonly ITenantProvider _tenants;
