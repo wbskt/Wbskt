@@ -18,6 +18,7 @@ using Wbskt.Infrastructure.Events.Outbox;
 using Wbskt.Auth.Host.Telemetry;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.StaffActions;
 using Wbskt.Infrastructure.Hosting;
 using Wbskt.Infrastructure.Authorization;
 using Wbskt.Infrastructure.Configuration;
@@ -71,6 +72,9 @@ public static class Program
         builder.Services.AddPlanCatalog(builder.Configuration);
         builder.Services.AddScoped<ITenantLimits, TenantLimits>();
         builder.Services.AddScoped<ITenantUsageService, TenantUsageService>();
+        // Changes the platform admin host asks for, each with its staff audit row in the auth database.
+        builder.Services.AddStaffActions("AuthDBConnection");
+        builder.Services.AddScoped<IAdminTenantService, AdminTenantService>();
         // Payments: the provider's checkout, portal and webhooks (Docs/Billing.md, Payments). Off until the
         // provider's API key and webhook secret are set; the products sold come from Billing:Payments.
         builder.Services.Configure<BillingOptions>(builder.Configuration.GetSection(BillingOptions.SectionName));
