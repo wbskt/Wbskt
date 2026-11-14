@@ -1,6 +1,8 @@
 using Wbskt.Auth.Models;
+using Wbskt.EventBus.Abstractions;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.StaffActions;
+using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services.Billing;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Models;
@@ -9,13 +11,16 @@ using Wbskt.Models.Admin;
 namespace Wbskt.Management.Host.Services.Admin;
 
 /// <remarks>
-/// The cap goes through <see cref="IWorkspaceCreditCapService.SetAsync"/>, the method the console's route
-/// uses, so a staff change takes the same validation, locking and event. The main database knows a
-/// workspace only by its Id, so the RefId is looked up on the auth host first, outside the change.
+/// The cap goes through <see cref="WorkspaceCreditCapService"/>, the service the console's route uses,
+/// so a staff change takes the same validation, locking and event. Its event is held until the staff
+/// runner has committed, and sent only for a change made now, not for a replay. The main database knows
+/// a workspace only by its Id, so the RefId is looked up on the auth host first, outside the change.
 /// </remarks>
 internal sealed class AdminWorkspaceService(
     IWorkspaceAccountsClient workspaces,
-    IWorkspaceCreditCapService caps,
+    IWorkspaceCreditCapProvider capProvider,
+    IEventBus eventBus,
+    TimeProvider clock,
     IStaffActionRunner runner,
     ILogger<AdminWorkspaceService> logger)
     : IAdminWorkspaceService
@@ -42,7 +47,9 @@ internal sealed class AdminWorkspaceService(
             return Error.NotFound("WORKSPACE_NOT_FOUND", "No workspace has that RefId.");
         }
 
-        return await runner.RunAsync(
+        var held = new DeferredEventBus();
+        var caps = new WorkspaceCreditCapService(capProvider, held, clock);
+        var result = await runner.RunAsync(
             request.Staff,
             new StaffAction(SetCreditCapAction, TargetKind, workspaceRef),
             async ct =>
@@ -51,5 +58,12 @@ internal sealed class AdminWorkspaceService(
                 return set.IsSuccess ? Result.Success() : Result.Failure(set.Error);
             },
             cancellationToken);
+
+        if (result.IsSuccess && !result.Value.Replayed)
+        {
+            await held.ReleaseAsync(eventBus, cancellationToken);
+        }
+
+        return result;
     }
 }

@@ -218,8 +218,9 @@ and the response says so (`capReached`). After it posts, `CreditUsagePoster` rai
 reached and was not yet told of (see the notices below).
 Staff can set or clear a cap from the platform admin (`PUT /api/internal/admin/workspaces/{workspaceRef}/credit-cap`
 on the management host): the same service and procedure, with a staff audit row in the main database
-committed in the same transaction. The event carries no actor, so the workspace sees the change without a
-name on it.
+committed in the same transaction. Its `WorkspaceCreditCapSetEvent` is sent only once that transaction has
+committed, and not again for a replayed request. The event carries no actor, so the workspace sees the change
+without a name on it.
 
 **Busy.** The locks a start can wait on (the tenant's run limit, its credits and a workspace's cap) give up after five
 seconds with 50035 rather than hold an inbound request and a pooled connection. A start also reads a
