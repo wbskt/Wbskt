@@ -343,7 +343,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
  "work": {
   "851": {
    "state": "progress",
-   "why": "The read-only admin is live in wbskt/Wbskt.Admin: overview, search, tenant, user and workspace lists and pages, and the staff audit (#852). Changes come next, phase by phase (#853): the admin key and the staff action runner (PR #860, merged), staff plans and limits (PR #861, merged), credits and ending a staff plan early (PR #862, merged), the workspace credit cap on the management host (PR #863, merged), people actions on the auth host (PR #864, merged), member suspend, restore and remove (PR #865, merged), each with its form in the admin, and end-to-end scenarios for every staff action (PR #866).",
+   "why": "The read-only admin is live in wbskt/Wbskt.Admin: overview, search, tenant, user and workspace lists and pages, and the staff audit (#852). Changes come next, phase by phase (#853): the admin key and the staff action runner (PR #860, merged), staff plans and limits (PR #861, merged), credits and ending a staff plan early (PR #862, merged), the workspace credit cap on the management host (PR #863, merged), people actions on the auth host (PR #864, merged), member suspend, restore and remove (PR #865, merged), each with its form in the admin, and end-to-end scenarios for every staff action with the overview's credits staff gave this month (PR #866, merged). #853 is done; repairing an admin and freezing an account (#854) is next.",
    "prs": [860, 861, 862, 863, 864, 865, 866]
   },
   "519": {
@@ -566,9 +566,9 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
  ],
  "issues": [
   {"n":854,"t":"Platform admin: repair admin and freeze an account","s":"o","m":"M2","p":851,"a":["auth"]},
-  {"n":853,"t":"Platform admin: internal admin endpoints that write the staff audit","s":"o","m":"M2","p":851,"a":["auth","management"]},
+  {"n":853,"t":"Platform admin: internal admin endpoints that write the staff audit","s":"c","m":"M2","p":851,"a":["auth","management"],"x":"2026-11-14"},
   {"n":852,"t":"Read-only admin views and staff audit tables for the platform admin","s":"o","m":"M2","p":851,"a":["db"]},
-  {"n":851,"t":"Platform admin: a private service for staff to look after people and accounts","s":"o","m":"M2","p":null,"a":[],"epic":1,"sub":{"completed":0,"total":3}},
+  {"n":851,"t":"Platform admin: a private service for staff to look after people and accounts","s":"o","m":"M2","p":null,"a":[],"epic":1,"sub":{"completed":1,"total":3}},
   {"n":839,"t":"Clear the readings of workspaces deleted before their account copy was kept","s":"o","m":null,"p":null,"a":[]},
   {"n":836,"t":"Handle a busy workspace in the tickers and sub-workflow starts","s":"o","m":null,"p":null,"a":[]},
   {"n":835,"t":"Replay a manual run's first answer to a retry with the same idempotency key","s":"o","m":null,"p":null,"a":[]},
@@ -886,6 +886,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":127,"t":"Reject breached passwords using the Have I Been Pwned range API","s":"c","m":"M2","p":175,"a":["auth"],"pr":"P2","sz":"S","x":"2026-11-03"}
  ],
  "merged": [
+  {"n":866,"t":"test(e2e): cover every staff action through the admin key","d":"2026-11-14"},
   {"n":865,"t":"feat(auth): let staff suspend, restore and remove a tenant's members","d":"2026-11-14"},
   {"n":864,"t":"feat(auth): let staff clear lockouts, send account mail and end sign-in","d":"2026-11-14"},
   {"n":863,"t":"feat(management): let staff set a workspace's credit cap","d":"2026-11-14"},
