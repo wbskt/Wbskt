@@ -43,3 +43,16 @@ public sealed record AdminGrantCreditsRequest(StaffChange Staff, decimal Credits
 
 /// <summary>Takes back what is left of a grant staff gave (<c>InternalRoutes.AdminTenantCreditGrantRevoke</c>).</summary>
 public sealed record AdminRevokeCreditGrantRequest(StaffChange Staff);
+
+/// <summary>
+/// A staff change to a person's account that takes nothing but the change itself: clearing a sign-in
+/// lockout, resending the email verification, sending a password reset, or signing out everywhere
+/// (<c>InternalRoutes.AdminUser*</c>).
+/// </summary>
+public sealed record AdminUserActionRequest(StaffChange Staff);
+
+/// <summary>
+/// Turns a person's sign-in on or off (<c>InternalRoutes.AdminUserSignIn</c>). Off also ends every session
+/// they have.
+/// </summary>
+public sealed record AdminSetUserSignInRequest(StaffChange Staff, bool Allowed);
