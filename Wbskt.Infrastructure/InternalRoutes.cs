@@ -55,4 +55,20 @@ public static class InternalRoutes
     /// <c>Services:AuthInternalApiKey</c>, and by an operator.
     /// </summary>
     public const string ApiKeyHeader = "X-Wbskt-Internal-Key";
+
+    /// <summary>
+    /// What the platform admin host (wbskt/Wbskt.Admin) calls to change something on behalf of a staff
+    /// member. Only <see cref="AdminApiKeyHeader"/> opens it, never <see cref="ApiKeyHeader"/>.
+    /// </summary>
+    public const string AdminPrefix = Prefix + "/admin";
+
+    /// <summary>Auth host: a tenant's plan and the limits it runs under now, for the admin host.</summary>
+    public const string AdminTenantLimits = AdminPrefix + "/tenants/{tenantRef:guid}/limits";
+
+    /// <summary>
+    /// The admin host's own key, <c>Internal:AdminApiKey</c> on the host that serves an
+    /// <see cref="AdminPrefix"/> route. It opens those routes and nothing else, so it can be rotated or
+    /// revoked without touching <see cref="ApiKeyHeader"/>.
+    /// </summary>
+    public const string AdminApiKeyHeader = "X-Wbskt-Admin-Key";
 }
