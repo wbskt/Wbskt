@@ -259,11 +259,12 @@ alert watches.
 
 **Staff grants.** Staff give credits from the platform admin (`POST /api/internal/admin/tenants/{tenantRef}/credit-grants`,
 see `Docs/API.Endpoints.md`): at most 100,000 a grant, expiring within a year. The auth host writes
-`TenantCreditsGrantedEvent` with source `staff` and, as its reference, the staff change's idempotency key,
-to its outbox in the same transaction as the staff audit row; the main database records it as any other
+`TenantCreditsGrantedEvent` with source `staff` and the reference `{tenantRef}/{grantRef}`, where `grantRef` is the
+staff change's idempotency key, to its outbox in the same transaction as the staff audit row; the main database records it as any other
 grant. There is no purchase row behind it, so the reconcile above does not repair it: the outbox, written
 in the change's transaction, is what makes it arrive. Revoking one (`…/credit-grants/{grantRef}/revoke`)
-sends `TenantCreditGrantRevokedEvent` with source `staff`, so it can never name a bought pack. The expiry
+sends `TenantCreditGrantRevokedEvent` with source `staff` and a reference built from the tenant in the route,
+so it can never name a bought pack or another tenant's grant. The expiry
 email says the credits were added by Wbskt support rather than bought.
 
 A grant whose payment has an open chargeback is **held** (`TenantCreditGrantHoldChangedEvent`,
