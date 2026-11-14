@@ -363,6 +363,12 @@ environment `production-admin`); run it by hand only to roll back.
 database (`Wbskt.Admin`: staff and their sessions) and its `wbskt_admin_host` login, then recreates
 the one container and waits for it to report healthy. Backend deploys never touch it.
 
+**Letting staff change things.** Reading needs nothing more. For staff to change a tenant's plan or
+limits, set `ADMIN_API_KEY=` (`openssl rand -hex 32`) in `compose/.env`, then recreate `auth` with a
+backend deploy and the admin with `--admin-tag`. Both read the one setting: the auth host opens its
+`/api/internal/admin` routes to that key alone, and the admin sends it to `http://auth:8080` over the
+backend network. Left empty, those routes answer 404 and the admin shows its actions as unavailable.
+
 **Your staff login.** Run once per person; it prints the password and an authenticator secret once:
 
 ```bash
