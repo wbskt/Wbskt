@@ -44,4 +44,25 @@ public class AdminTenantsController : ApiControllerBase
     {
         return MapResult(await _adminTenantService.SetPlanAsync(tenantRef, request, cancellationToken));
     }
+
+    /// <summary>Ends the tenant's staff plan now; billing puts it on its subscription's plan, or Free.</summary>
+    [HttpPost(InternalRoutes.AdminTenantPlanEnd)]
+    public async Task<ActionResult<StaffActionResponse>> EndStaffPlan(Guid tenantRef, [FromBody] AdminEndStaffPlanRequest request, CancellationToken cancellationToken)
+    {
+        return MapResult(await _adminTenantService.EndStaffPlanAsync(tenantRef, request, cancellationToken));
+    }
+
+    /// <summary>Gives the tenant credits that expire. The main database records the grant when its event arrives.</summary>
+    [HttpPost(InternalRoutes.AdminTenantCreditGrants)]
+    public async Task<ActionResult<StaffActionResponse>> GrantCredits(Guid tenantRef, [FromBody] AdminGrantCreditsRequest request, CancellationToken cancellationToken)
+    {
+        return MapResult(await _adminTenantService.GrantCreditsAsync(tenantRef, request, cancellationToken));
+    }
+
+    /// <summary>Takes back what is left of a grant staff gave; what it already paid for stays paid.</summary>
+    [HttpPost(InternalRoutes.AdminTenantCreditGrantRevoke)]
+    public async Task<ActionResult<StaffActionResponse>> RevokeCreditGrant(Guid tenantRef, Guid grantRef, [FromBody] AdminRevokeCreditGrantRequest request, CancellationToken cancellationToken)
+    {
+        return MapResult(await _adminTenantService.RevokeCreditGrantAsync(tenantRef, grantRef, request, cancellationToken));
+    }
 }

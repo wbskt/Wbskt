@@ -71,6 +71,15 @@ public static class InternalRoutes
     /// <summary>Auth host: <c>PUT</c> a staff plan on a tenant until a date, for the admin host.</summary>
     public const string AdminTenantPlan = AdminPrefix + "/tenants/{tenantRef:guid}/plan";
 
+    /// <summary>Auth host: <c>POST</c> ends a tenant's staff plan now and hands the tenant back to billing.</summary>
+    public const string AdminTenantPlanEnd = AdminPrefix + "/tenants/{tenantRef:guid}/plan/end";
+
+    /// <summary>Auth host: <c>POST</c> gives a tenant credits that expire, for the admin host.</summary>
+    public const string AdminTenantCreditGrants = AdminPrefix + "/tenants/{tenantRef:guid}/credit-grants";
+
+    /// <summary>Auth host: <c>POST</c> takes back what is left of a credit grant staff gave.</summary>
+    public const string AdminTenantCreditGrantRevoke = AdminPrefix + "/tenants/{tenantRef:guid}/credit-grants/{grantRef:guid}/revoke";
+
     /// <summary>
     /// The admin host's own key, <c>Internal:AdminApiKey</c> on the host that serves an
     /// <see cref="AdminPrefix"/> route. It opens those routes and nothing else, so it can be rotated or

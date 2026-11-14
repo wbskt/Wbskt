@@ -75,6 +75,8 @@ public static class Program
         // Changes the platform admin host asks for, each with its staff audit row in the auth database.
         builder.Services.AddStaffActions("AuthDBConnection");
         builder.Services.AddScoped<IAdminTenantService, AdminTenantService>();
+        builder.Services.AddScoped<IOutboxWriter, OutboxWriter>();
+        builder.Services.AddScoped<ITenantPlanReview, TenantPlanReview>();
         // Payments: the provider's checkout, portal and webhooks (Docs/Billing.md, Payments). Off until the
         // provider's API key and webhook secret are set; the products sold come from Billing:Payments.
         builder.Services.Configure<BillingOptions>(builder.Configuration.GetSection(BillingOptions.SectionName));

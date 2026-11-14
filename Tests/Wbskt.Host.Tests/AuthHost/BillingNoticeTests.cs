@@ -14,6 +14,7 @@ using Wbskt.Events.Auth;
 using Wbskt.Events.Billing;
 using Wbskt.Infrastructure.Billing;
 using Wbskt.Infrastructure.Email;
+using Wbskt.Models.Admin;
 using Wbskt.Models.Billing;
 using Wbskt.Primitives.Constants;
 
@@ -158,6 +159,13 @@ public sealed class BillingNoticeTests
     {
         Assert.Contains(BillingNotices.MessagesApproaching(plan, 100, 80, Now).Paragraphs, p => p.Contains(expected));
         Assert.DoesNotContain(BillingNotices.MessagesReached(PlanCode.Business, 100, 100, throttled: false, Now).Paragraphs, p => p.Contains("slowed"));
+    }
+
+    [Fact]
+    public void Credits_staff_gave_are_named_as_added_by_support_not_as_a_pack()
+    {
+        Assert.Contains(BillingNotices.PackExpiring(StaffCreditGrants.Source, Guid.NewGuid().ToString(), 500m, Now.AddDays(10)).Paragraphs, p => p.Contains("Wbskt support added"));
+        Assert.Contains(BillingNotices.PackExpiring("dodo", "pay_1", 500m, Now.AddDays(10)).Paragraphs, p => p.Contains("credit pack"));
     }
 
     [Fact]

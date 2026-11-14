@@ -22,17 +22,21 @@ public sealed class AdminTenantPlanSqlTests(AuthSqlFixture auth)
 {
     private const string Skipped = "SQL Server not reachable — skipping.";
 
+    private readonly CountingReview _review = new();
+
     private AdminTenantService Service()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:AuthDBConnection"] = auth.ConnectionString })
             .Build();
+        var tenants = new TenantPlanProvider(configuration);
+        var audit = new AuditWorkspaces(new WorkspaceProvider(configuration), NullLogger<AuditWorkspaces>.Instance);
         var plans = new TenantPlanService(
-            new TenantPlanProvider(configuration),
+            tenants,
             new AuditWorkspaces(new WorkspaceProvider(configuration), NullLogger<AuditWorkspaces>.Instance),
             NullLogger<TenantPlanService>.Instance);
         var runner = new StaffActionRunner(new StaffAuditProvider(configuration, "AuthDBConnection"), NullLogger<StaffActionRunner>.Instance);
-        return new AdminTenantService(plans, new UnusedLimits(), runner, TimeProvider.System);
+        return new AdminTenantService(plans, new UnusedLimits(), runner, TimeProvider.System, tenants, audit, new OutboxWriter(configuration), _review, NullLogger<AdminTenantService>.Instance);
     }
 
     private static StaffChange Staff(Guid key) => new(Guid.NewGuid(), "pika", "Integration test of a staff plan", key);
@@ -84,6 +88,36 @@ public sealed class AdminTenantPlanSqlTests(AuthSqlFixture auth)
         Assert.Equal(1, await CountAsync("SELECT COUNT(*) FROM dbo.StaffAudit WHERE IdempotencyKey = @Id AND Outcome = N'Refused' AND Detail = N'TENANT_PLAN_CHANGED';", key));
     }
 
+    [SkippableFact]
+    public async Task Staff_credits_commit_their_event_with_the_audit_row()
+    {
+        Skip.IfNot(auth.IsAvailable, Skipped);
+        var tenantRef = await CreateTenantAsync();
+        var key = Guid.NewGuid();
+
+        var result = await Service().GrantCreditsAsync(
+            tenantRef, new AdminGrantCreditsRequest(Staff(key), 2500m, DateTimeOffset.UtcNow.AddDays(90)), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, await CountAsync("SELECT COUNT(*) FROM dbo.OutboxMessages WHERE MessageType LIKE N'%TenantCreditsGrantedEvent' AND Payload LIKE N'%' + CONVERT(NVARCHAR(36), @Id) + N'%';", key));
+        Assert.Equal(1, await CountAsync("SELECT COUNT(*) FROM dbo.StaffAudit WHERE IdempotencyKey = @Id AND Outcome = N'Succeeded' AND Action = N'GrantCredits';", key));
+    }
+
+    [SkippableFact]
+    public async Task Ending_a_staff_plan_ends_it_now_and_reviews_the_tenant()
+    {
+        Skip.IfNot(auth.IsAvailable, Skipped);
+        var tenantRef = await CreateTenantAsync();
+        var service = Service();
+        await service.SetPlanAsync(tenantRef, new AdminSetTenantPlanRequest(Staff(Guid.NewGuid()), PlanCode.Pro, null, 0, DateTimeOffset.UtcNow.AddDays(30)), CancellationToken.None);
+
+        var result = await service.EndStaffPlanAsync(tenantRef, new AdminEndStaffPlanRequest(Staff(Guid.NewGuid()), 1), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, await CountAsync("SELECT COUNT(*) FROM dbo.Tenants WHERE RefId = @Id AND PlanSource = N'Operator' AND PlanRevision = 2 AND PlanEndsAt <= SYSUTCDATETIME();", tenantRef));
+        Assert.Equal(1, _review.Calls);
+    }
+
     private async Task<Guid> CreateTenantAsync()
     {
         var tenantRef = Guid.NewGuid();
@@ -115,5 +149,16 @@ public sealed class AdminTenantPlanSqlTests(AuthSqlFixture auth)
         public Task<Error> WithSeatsAsync(Error refusal, Guid tenantRef, CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public Task<Error> WithSeatsAsync(Error refusal, int tenantId, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class CountingReview : ITenantPlanReview
+    {
+        public int Calls { get; private set; }
+
+        public Task ReviewAsync(int tenantId, CancellationToken cancellationToken)
+        {
+            Calls++;
+            return Task.CompletedTask;
+        }
     }
 }
