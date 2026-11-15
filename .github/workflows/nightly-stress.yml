@@ -186,6 +186,10 @@ jobs:
             echo "::error::the load tester did not stop after its 300 seconds and was killed (exit $status)"
             exit 1
           fi
+          if lost=$(grep -m1 'clients were connected at the end' load-output.txt); then
+            echo "::error::$lost"
+            exit 1
+          fi
           if [[ "$status" -ne 0 ]]; then
             echo "::error::the load tester exited with $status"
             exit 1

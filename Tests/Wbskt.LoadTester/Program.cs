@@ -81,15 +81,24 @@ stopwatch.Stop();
 Console.WriteLine($"Client spin-up process finished in {stopwatch.Elapsed.TotalSeconds:F2} seconds.");
 
 var running = Stopwatch.StartNew();
+var lowest = connectedCount;
 while (runFor is null || running.Elapsed < runFor)
 {
+    lowest = Math.Min(lowest, connectedCount);
     Console.SetCursorPosition(0, Console.CursorTop);
     Console.Write($"Connected clients: {connectedCount}/{clientCount}    (Press Ctrl+C to exit)");
     await Task.Delay(1000);
 }
 
 Console.WriteLine();
-Console.WriteLine($"Load run finished after {running.Elapsed.TotalSeconds:F0} seconds with {connectedCount}/{clientCount} clients connected.");
+Console.WriteLine($"Load run finished after {running.Elapsed.TotalSeconds:F0} seconds with {connectedCount}/{clientCount} clients connected (lowest {lowest}).");
+
+// A run that lost clients and never got them back has failed, even though every host stayed up.
+if (connectedCount < clientCount)
+{
+    Console.WriteLine($"Only {connectedCount} of {clientCount} clients were connected at the end.");
+    Environment.ExitCode = 1;
+}
 
 
 // A simple in-memory storage for the load test to avoid file contention
