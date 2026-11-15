@@ -69,18 +69,21 @@ BEGIN
                          AND r.CreditBudget < rc.BudgetCeiling
                          AND rc.CreditsConsumed + rc.ChildCreditsConsumed + @Cost > r.CreditBudget)
         BEGIN
+            -- Both waits are bounded at five seconds, as in Run_Start, so the two together stay well
+            -- inside the 30-second command timeout. A wait that ran to the timeout surfaced as a client
+            -- timeout rather than as 50035, which is the error RetryExecutor backs off and retries.
             IF @Allowance IS NOT NULL
             BEGIN
                 DECLARE @CreditsResource NVARCHAR(255) = dbo.PlanLimitLockResource(N'credits', @WorkspaceId, @TenantId);
                 DECLARE @CreditsLockResult INT;
-                EXEC @CreditsLockResult = sp_getapplock @Resource = @CreditsResource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 30000;
+                EXEC @CreditsLockResult = sp_getapplock @Resource = @CreditsResource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
                 IF @CreditsLockResult < 0
                     THROW 50035, 'The account is too busy to extend the run''s credit budget; try again.', 1;
             END
 
             DECLARE @CapResource NVARCHAR(255) = CONCAT(N'credit-cap:', @WorkspaceId);
             DECLARE @CapLockResult INT;
-            EXEC @CapLockResult = sp_getapplock @Resource = @CapResource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 30000;
+            EXEC @CapLockResult = sp_getapplock @Resource = @CapResource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
             IF @CapLockResult < 0
                 THROW 50035, 'The workspace is too busy to extend the run''s credit budget; try again.', 1;
 

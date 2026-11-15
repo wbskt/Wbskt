@@ -22,6 +22,7 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
 {
     private const int PlanCreditLimitError = 50033;
     private const int WorkspaceCreditCapError = 50034;
+    private const int ChargeBusyError = 50035;
     private const string SkipReason = "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.";
 
     [SkippableFact]
@@ -267,6 +268,40 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
         (await counters.TryAsync(first, 1m)).Should().BeNull();
         Func<Task> third = () => StartAsync(wd, credits: credits, budget: 1_000m);
         (await third.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(PlanCreditLimitError);
+    }
+
+    [SkippableFact]
+    public async Task A_charge_past_its_lease_that_cannot_get_the_credits_lock_in_time_is_refused_as_busy()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int tenantId = NewId();
+        int workspaceId = NewId();
+        await AddAccountAsync(workspaceId, tenantId, creditsPerMonth: 100m);
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        long run = await StartAsync(wd, credits: new PlanCredits(100m, tenantId), budget: 1_000m);
+
+        // A start or charge elsewhere in the tenant holds its credits lock for longer than the charge will wait.
+        await using var holder = new SqlConnection(fixture.ConnectionString);
+        await holder.OpenAsync();
+        await using SqlTransaction tx = (SqlTransaction)await holder.BeginTransactionAsync();
+        await using (var hold = new SqlCommand(
+            "DECLARE @Resource NVARCHAR(255) = dbo.PlanLimitLockResource(N'credits', @WorkspaceId, @TenantId); EXEC sp_getapplock @Resource = @Resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction';",
+            holder,
+            tx))
+        {
+            hold.Parameters.AddWithValue("@WorkspaceId", workspaceId);
+            hold.Parameters.AddWithValue("@TenantId", tenantId);
+            await hold.ExecuteNonQueryAsync();
+        }
+
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+        Func<Task> act = () => ProviderFactory.RunCounters(fixture.ConnectionString).TryChargeAsync((int)run, 30m, CancellationToken.None);
+
+        (await act.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(ChargeBusyError, "the engine retries 50035, not a command timeout");
+        waited.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(20), "the wait gives up well inside the 30-second command timeout");
+        await tx.RollbackAsync();
+        (await ConsumedAsync(run)).Should().Be(0m);
     }
 
     [SkippableFact]
