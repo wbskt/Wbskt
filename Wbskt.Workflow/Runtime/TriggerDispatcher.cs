@@ -427,15 +427,13 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             return new RegistrationClaim(false, false, settled, claimToken);
         }
 
-        if (string.Equals(claim.Status, IdempotencyKeyStatus.Failed, StringComparison.Ordinal))
-        {
-            claim = await _idempotencyKeyProvider.ReclaimFailedAsync(startKey, claimToken, ct);
-            return new RegistrationClaim(claim.BranchRefId == claimToken, true, null, claimToken);
-        }
-
-        // Pending under another token: an attempt that is still going, or one that crashed before it
-        // could settle. Either way this attempt must not start the registration a second time.
-        return new RegistrationClaim(false, false, null, claimToken);
+        // Failed, or Pending under another token: an attempt that is still going, or one that failed and
+        // could not settle. The reclaim takes a Failed one, and a Pending one only once it is minutes
+        // old; an attempt still going keeps it, and this one must not start the registration a second
+        // time. A reclaimed claim may have got as far as its run, which StartForRegistrationAsync finds.
+        claim = await _idempotencyKeyProvider.ReclaimFailedAsync(startKey, claimToken, ct);
+        bool owned = claim.BranchRefId == claimToken;
+        return new RegistrationClaim(owned, owned, null, claimToken);
     }
 
     private sealed record RegistrationClaim(bool Owned, bool Reclaimed, TriggerRegistrationDispatch? Settled, Guid Token);

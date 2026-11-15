@@ -12,8 +12,9 @@ public interface IIdempotencyKeyProvider
     /// <summary>
     /// Reclaims a 'Failed' claim row back to 'Pending' under a new claim token, atomically. Used when
     /// a previous claimant crashed or errored mid-resume so the event was never actually delivered -
-    /// without this, the stale 'Failed' row would wedge the key as permanently claimed. Returns the
-    /// current row regardless of whether this caller won the reclaim race (check BranchRefId == newBranchRefId).
+    /// without this, the stale 'Failed' row would wedge the key as permanently claimed. An inbound-event
+    /// or trigger-start claim left 'Pending' for minutes is reclaimed the same way. Returns the current
+    /// row regardless of whether this caller won the reclaim race (check BranchRefId == newBranchRefId).
     /// </summary>
     Task<IdempotencyKeyRow> ReclaimFailedAsync(string keyValue, Guid newBranchRefId, CancellationToken ct);
 

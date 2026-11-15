@@ -99,18 +99,36 @@ internal sealed class IdempotencyKeyProvider : BaseSqlProvider, IIdempotencyKeyP
             new InvalidOperationException("IdempotencyKey_MarkSucceeded did not return a row."),
             ct);
 
-    public Task<IdempotencyKeyRow> MarkClaimFailedAsync(string keyValue, Guid claimToken, string errorJson, CancellationToken ct) =>
-        ExecuteSingleAsync(
-            "dbo.IdempotencyKey_MarkFailed",
-            p =>
+    // Callers mark a claim Failed after a dispatch failed, often because SQL is briefly unreachable. A
+    // claim this write leaves Pending is dropped as a duplicate by the bus's retries of the same message,
+    // so the write is tried again through a short outage rather than given up at once.
+    private static readonly TimeSpan[] MarkClaimFailedRetryDelays =
+        [TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(8)];
+
+    public async Task<IdempotencyKeyRow> MarkClaimFailedAsync(string keyValue, Guid claimToken, string errorJson, CancellationToken ct)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try
             {
-                p.AddWithValue("@KeyValue", keyValue);
-                p.AddWithValue("@ErrorJson", errorJson);
-                p.AddWithValue("@ClaimToken", claimToken);
-            },
-            Map,
-            new InvalidOperationException("IdempotencyKey_MarkFailed did not return a row."),
-            ct);
+                return await ExecuteSingleAsync(
+                    "dbo.IdempotencyKey_MarkFailed",
+                    p =>
+                    {
+                        p.AddWithValue("@KeyValue", keyValue);
+                        p.AddWithValue("@ErrorJson", errorJson);
+                        p.AddWithValue("@ClaimToken", claimToken);
+                    },
+                    Map,
+                    new InvalidOperationException("IdempotencyKey_MarkFailed did not return a row."),
+                    ct);
+            }
+            catch (SqlException) when (attempt < MarkClaimFailedRetryDelays.Length)
+            {
+                await Task.Delay(MarkClaimFailedRetryDelays[attempt], ct);
+            }
+        }
+    }
 
     public Task MarkResumedAsync(string keyValue, Guid claimToken, CancellationToken ct) =>
         ExecuteNonQueryAsync(

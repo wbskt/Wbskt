@@ -69,11 +69,12 @@ internal sealed class BookmarkResumer : IBookmarkResumer
         IdempotencyKeyRow claim = await _idempotencyKeyProvider.UpsertPendingAsync(idempotencyKey, 0, claimToken, Guid.Empty, 0, ct);
         if (claim.BranchRefId != claimToken)
         {
-            if (string.Equals(claim.Status, IdempotencyKeyStatus.Failed, StringComparison.Ordinal))
+            if (!string.Equals(claim.Status, IdempotencyKeyStatus.Succeeded, StringComparison.Ordinal))
             {
                 // The previous claimant crashed or threw mid-resume without ever delivering the
-                // event (see the catch below), leaving a wedged 'Failed' claim. Reclaim it instead
-                // of permanently dropping every redelivery of this event as a duplicate.
+                // event (see the catch below), leaving a wedged 'Failed' claim, or one still 'Pending'
+                // long after it could not record that. Reclaim it instead of permanently dropping every
+                // redelivery of this event as a duplicate; a claim still in use is left to its holder.
                 claim = await _idempotencyKeyProvider.ReclaimFailedAsync(idempotencyKey, claimToken, ct);
             }
 
@@ -83,7 +84,7 @@ internal sealed class BookmarkResumer : IBookmarkResumer
                 return new BookmarkMatchResult(false, null, true);
             }
 
-            _logger?.LogInformation("Event {EventId} reclaimed a stale Failed idempotency claim", evt.InboundEventId);
+            _logger?.LogInformation("Event {EventId} reclaimed a stale idempotency claim", evt.InboundEventId);
         }
 
         _logger?.LogDebug("Event {EventId} acquired idempotency claim", evt.InboundEventId);
