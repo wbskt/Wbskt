@@ -683,6 +683,11 @@ const ALERTS = [
  ['NodeExporterDown','VM','Prometheus cannot scrape node-exporter, so disk space is unwatched'],
  ['ContainerRestarting','VM','A container restarted in place 3 or more times in 15 minutes'],
  ['ContainerNearMemoryLimit','VM','A container above 90% of its mem_limit for 10 minutes; a .NET host there throws OutOfMemoryException without restarting (warn)'],
+ ['ContainerOutOfMemoryKilled','VM','The kernel killed a process in a container for passing its mem_limit (cAdvisor oom_event, warn)'],
+ ['HostOutOfMemoryExceptions','VM','A .NET host threw OutOfMemoryException in 15 minutes (page)'],
+ ['CadvisorDown','VM','Prometheus cannot scrape cAdvisor, so the container alerts cannot fire'],
+ ['RabbitMQMetricsDown','Bus','Prometheus cannot scrape RabbitMQ, so the queue and broker alerts cannot fire'],
+ ['PrometheusRulesFailing','Telemetry','An alert rule failed to evaluate in 30 minutes'],
  ['RabbitMQMemoryAlarm','Bus','RabbitMQ’s memory alarm is on, so every publish is blocked (page)'],
  ['OtelCollectorDown','Telemetry','Prometheus cannot scrape the OpenTelemetry collector for 5 minutes, so no host telemetry is arriving'],
 ];

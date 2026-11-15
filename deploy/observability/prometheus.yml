@@ -61,6 +61,16 @@ scrape_configs:
     static_configs:
       - targets: [pushgateway:9091]
 
+  # Prometheus itself, for PrometheusRulesFailing: a rule that cannot be
+  # evaluated never fires and says nothing. Only the counter it reads is kept.
+  - job_name: prometheus
+    static_configs:
+      - targets: [localhost:9090]
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: prometheus_rule_evaluation_failures_total
+        action: keep
+
   # The collector's own metrics. It is how OtelCollectorDown knows the collector is up, since the
   # image cannot run a Docker healthcheck.
   - job_name: otel-collector

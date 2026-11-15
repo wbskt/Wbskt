@@ -728,7 +728,8 @@ services:
 
   # Per-container metrics, for ContainerRestarting: a host that crashes and is restarted by
   # restart: unless-stopped keeps its container, so cAdvisor sees the same series start again.
-  # Trimmed to CPU and memory (start times always come with them): the full set is thousands of series per container.
+  # Trimmed to CPU, memory (start times always come with them) and OOM kills, for ContainerOutOfMemoryKilled:
+  # the full set is thousands of series per container.
   cadvisor:
     image: ghcr.io/google/cadvisor:v0.60.6
     container_name: wbskt-cadvisor
@@ -737,7 +738,7 @@ services:
       - --housekeeping_interval=30s
       - --store_container_labels=false
       - --whitelisted_container_labels=com.docker.compose.service
-      - --enable_metrics=cpu,memory
+      - --enable_metrics=cpu,memory,oom_event
     privileged: true
     devices:
       - /dev/kmsg

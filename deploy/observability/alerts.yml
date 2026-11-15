@@ -595,6 +595,90 @@ groups:
             failing. Read its logs and start it again.
           command: "docker compose logs --tail 200 otel-collector && docker compose up -d otel-collector"
 
+      - alert: ContainerOutOfMemoryKilled
+        # The kernel killed a process in a container for passing its mem_limit (cAdvisor reads /dev/kmsg).
+        # ContainerRestarting counts only from the third restart; a host killed in the middle of a
+        # request or a database write is worth knowing about the first time.
+        expr: |
+          sum by (container_label_com_docker_compose_service, name) (
+            increase(container_oom_events_total{name!=""}[15m])
+          ) > 0
+        labels:
+          severity: warn
+        annotations:
+          summary: "{{ $labels.name }} was killed for running out of memory"
+          impact: >-
+            Whatever it was doing at that moment failed: open connections dropped and requests in flight
+            were lost. It restarts on its own, but it will be killed again under the same load.
+          action: >-
+            Check whether the VM itself is short of memory (free -m) or only this container. Raise its
+            limit in .env if the load is real (see Memory limits in deploy/README.md), or look for a leak.
+          command: "free -m && docker stats --no-stream"
+
+      - alert: HostOutOfMemoryExceptions
+        # A .NET host's GC heap is capped below its mem_limit, so near the cap it throws
+        # OutOfMemoryException inside the process instead of being killed. Nothing restarts it, and
+        # ContainerNearMemoryLimit can miss a short spike between its samples.
+        expr: |
+          sum by (job) (
+            increase(dotnet_exceptions_total{error_type="System.OutOfMemoryException"}[15m])
+          ) > 0
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $labels.job }} is failing with out-of-memory errors"
+          impact: >-
+            Requests to this service fail while it lasts, and it may not recover on its own because the
+            process keeps running.
+          action: >-
+            Restart the service to clear it now, then find out why: a leak, or a limit too low for the load
+            (see Memory limits in deploy/README.md).
+          command: "docker stats --no-stream"
+
+      - alert: CadvisorDown
+        # Without it ContainerRestarting, ContainerNearMemoryLimit and ContainerOutOfMemoryKilled can never fire.
+        expr: absent(up{job="cadvisor"} == 1)
+        for: 10m
+        labels:
+          severity: warn
+        annotations:
+          summary: "Container crashes and memory are no longer being watched"
+          impact: >-
+            The container restart and memory alerts cannot fire while this lasts, so a crashing or
+            memory-starved service could go unnoticed.
+          action: >-
+            cAdvisor, the container that reports per-container CPU and memory, is down. Start it again.
+          command: "docker compose up -d cadvisor"
+
+      - alert: RabbitMQMetricsDown
+        # Without these DeadLetteredMessages, the callback queue alerts and RabbitMQMemoryAlarm can never fire.
+        expr: absent(up{job="rabbitmq"} == 1) or absent(up{job="rabbitmq-node"} == 1)
+        for: 10m
+        labels:
+          severity: warn
+        annotations:
+          summary: "The message broker's queues are no longer being watched"
+          impact: >-
+            The dead-letter, queue backlog and broker memory alerts cannot fire while this lasts. If
+            RabbitMQ itself is down, the services are failing too.
+          action: >-
+            Check that rabbitmq is running and healthy, and that its Prometheus plugin answers on port 15692.
+          command: "docker compose ps rabbitmq && docker compose logs --tail 100 rabbitmq"
+
+      - alert: PrometheusRulesFailing
+        # A rule whose query errors is never true, so the alert it defines is silently gone.
+        expr: sum(increase(prometheus_rule_evaluation_failures_total[30m])) > 0
+        labels:
+          severity: warn
+        annotations:
+          summary: "Some alert rules cannot be evaluated"
+          impact: >-
+            The alerts those rules define cannot fire, so the problems they watch for would go unnoticed.
+          action: >-
+            Open Prometheus's Rules page to see which rule fails and why, then fix it in
+            deploy/observability/alerts.yml.
+          command: "ssh -L 9090:127.0.0.1:9090 <your VM>, then open http://localhost:9090/rules"
+
       - alert: ContainerRestarting
         # A container that crashes and is restarted in place keeps its series, so its start time
         # changes. A deploy recreates containers under new ids and does not count.
