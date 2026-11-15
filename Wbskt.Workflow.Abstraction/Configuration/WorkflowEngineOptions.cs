@@ -99,4 +99,12 @@ public sealed class WorkflowEngineOptions
     // which governs per-item claim leases (bookmarks, scheduled fires), not the engine-leader lease.
     public TimeSpan LeaderElectionRenewInterval { get; init; } = TimeSpan.FromSeconds(10);
     public int LeaderElectionLeaseTtlSeconds { get; init; } = 30;
+
+    /// <summary>
+    /// How long after taking over a new leader looks once more for Active branches nothing drives: an old
+    /// leader still stopping can start a run, or fork a branch, after the new one's recovery read them.
+    /// Longer than the lease TTL plus the old leader's shutdown (the host's 30 s, and compose's
+    /// stop_grace_period of 30 s after it), so the old process is gone by then.
+    /// </summary>
+    public TimeSpan LeaderOverlapRecheckDelay { get; init; } = TimeSpan.FromSeconds(90);
 }

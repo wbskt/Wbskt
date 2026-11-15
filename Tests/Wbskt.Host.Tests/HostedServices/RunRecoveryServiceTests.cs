@@ -4,6 +4,7 @@ using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.HostedServices;
+using Wbskt.Workflow.Runtime;
 
 namespace Wbskt.Host.Tests.HostedServices;
 
@@ -28,6 +29,50 @@ public sealed class RunRecoveryServiceTests
 
         // Assert
         Assert.Equal([(171L, 71L, BranchExecutionReason.Recovered), (172L, 72L, BranchExecutionReason.Recovered)], runDispatcher.Requests);
+    }
+
+    [Fact]
+    public async Task The_overlap_pass_runs_only_the_Active_branches_an_old_leader_left_with_nothing_to_drive_them()
+    {
+        DateTime now = new(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc);
+        var branches = new List<BranchRow> { CreateBranch(71, 171) };
+        var dispatcher = new ChannelRunDispatcher();
+        var logger = new RecordingLogger<RunRecoveryService>();
+        var service = new RunRecoveryService(WorkerTestServices.Scopes(new RecordingBranchProvider(branches)), dispatcher, logger, dispatcher, new FixedClock(now));
+
+        service.StartRecordingDispatches();
+        await service.RecoverAsync([], CancellationToken.None);
+
+        // While this leader ran: the old one started a run (72), this one started one and dispatched it
+        // (74), and this one has just written one it has yet to dispatch (73).
+        branches.Add(CreateBranch(72, 172));
+        branches.Add(CreateBranch(73, 173) with { UpdatedAt = now.AddSeconds(-2) });
+        branches.Add(CreateBranch(74, 174));
+        await dispatcher.DispatchAsync(new BranchExecutionRequest(174, 74, BranchExecutionReason.TriggerStarted), CancellationToken.None);
+
+        await service.RecoverOverlapAsync(CancellationToken.None);
+
+        var dispatched = new List<(long BranchId, BranchExecutionReason Reason)>();
+        while (dispatcher.Reader.TryRead(out BranchExecutionRequest? request))
+        {
+            dispatched.Add((request.BranchId, request.Reason));
+        }
+
+        Assert.Equal([(71L, BranchExecutionReason.Recovered), (74L, BranchExecutionReason.TriggerStarted), (72L, BranchExecutionReason.Recovered)], dispatched);
+        Assert.Contains(logger.Messages, message => message.Contains("Recovered 1 Active branches the previous leader left", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task The_overlap_pass_stops_recording()
+    {
+        var dispatcher = new ChannelRunDispatcher();
+        var service = new RunRecoveryService(WorkerTestServices.Scopes(new RecordingBranchProvider([])), dispatcher, new RecordingLogger<RunRecoveryService>(), dispatcher);
+        service.StartRecordingDispatches();
+
+        await service.RecoverOverlapAsync(CancellationToken.None);
+        await dispatcher.DispatchAsync(new BranchExecutionRequest(1, 2, BranchExecutionReason.TriggerStarted), CancellationToken.None);
+
+        Assert.Empty(dispatcher.StopRecording());
     }
 
     [Fact]
@@ -213,6 +258,11 @@ public sealed class RunRecoveryServiceTests
             UpdatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
             RowVersion = [1]
         };
+    }
+
+    private sealed class FixedClock(DateTime utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(utcNow);
     }
 
     private sealed class RecordingBranchProvider(IReadOnlyCollection<BranchRow> branches, IReadOnlyCollection<BranchRow>? woken = null) : IBranchProvider

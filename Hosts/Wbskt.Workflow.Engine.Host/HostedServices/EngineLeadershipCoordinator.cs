@@ -1,4 +1,6 @@
 using MassTransit;
+using Microsoft.Extensions.Options;
+using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine;
 
@@ -14,14 +16,20 @@ public sealed class EngineLeadershipCoordinator : BackgroundService
     private readonly IBusControl _busControl;
     private readonly RunRecoveryService _runRecoveryService;
     private readonly ILogger<EngineLeadershipCoordinator> _logger;
+    private readonly TimeSpan _overlapRecheckDelay;
+    private readonly TimeProvider _clock;
     private BusHandle? _busHandle;
 
     public EngineLeadershipCoordinator(
         LeadershipState leadershipState,
         IBusControl busControl,
         RunRecoveryService runRecoveryService,
-        ILogger<EngineLeadershipCoordinator> logger)
+        ILogger<EngineLeadershipCoordinator> logger,
+        IOptions<WorkflowEngineOptions> options,
+        TimeProvider clock)
     {
+        _overlapRecheckDelay = options.Value.LeaderOverlapRecheckDelay;
+        _clock = clock;
         _leadershipState = leadershipState;
         _busControl = busControl;
         _runRecoveryService = runRecoveryService;
@@ -42,6 +50,7 @@ public sealed class EngineLeadershipCoordinator : BackgroundService
             // Also before the bus starts: a Pending event claim can then only be a stopped engine's.
             await _runRecoveryService.ReleaseAbandonedClaimsAsync(stoppingToken);
 
+            _runRecoveryService.StartRecordingDispatches();
             _busHandle = await _busControl.StartAsync(stoppingToken);
             _leadershipState.SetBusStarted();
 
@@ -62,6 +71,18 @@ public sealed class EngineLeadershipCoordinator : BackgroundService
         }
 
         _logger.LogInformation("Engine leadership startup complete.");
+
+        // The previous leader may still have been stopping, and starting runs, while this one recovered.
+        await Task.Delay(_overlapRecheckDelay, _clock, stoppingToken);
+        try
+        {
+            await _runRecoveryService.RecoverOverlapAsync(stoppingToken);
+        }
+        catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+        {
+            // What it misses is left to the reaper, as before; not a reason to give up the lease.
+            _logger.LogError(ex, "Could not look for Active branches the previous leader left while it was stopping.");
+        }
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)
