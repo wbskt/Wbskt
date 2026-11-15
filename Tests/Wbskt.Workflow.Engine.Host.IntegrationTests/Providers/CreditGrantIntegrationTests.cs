@@ -23,6 +23,7 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
     private const int PlanCreditLimitError = 50033;
     private const int WorkspaceCreditCapError = 50034;
     private const int ChargeBusyError = 50035;
+    private const int LockTimeoutError = 1222;
     private const string SkipReason = "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.";
 
     [SkippableFact]
@@ -305,6 +306,92 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
+    public async Task Charges_starts_a_post_and_a_cap_cut_going_at_once_keep_to_the_cap_and_the_allowance_without_deadlocking_the_engine()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int tenantId = NewId();
+        int workspaceId = NewId();
+        int siblingId = NewId();
+        await AddAccountAsync(workspaceId, tenantId, creditsPerMonth: 100m);
+        await AddAccountAsync(siblingId, tenantId, creditsPerMonth: 100m);
+        await ExecAsync("INSERT INTO dbo.WorkspaceCreditCaps (WorkspaceId, MonthlyCreditCap) VALUES (@One, 60)", workspaceId, workspaceId);
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        WorkflowDefinitionRow siblingWd = await CreateDefinitionAsync(siblingId);
+        var credits = new PlanCredits(100m, tenantId);
+        var capped = new List<long>();
+        var siblings = new List<long>();
+        for (int i = 0; i < 4; i++)
+        {
+            capped.Add(await StartAsync(wd, credits: credits, budget: 1_000m));
+        }
+
+        for (int i = 0; i < 2; i++)
+        {
+            siblings.Add(await StartAsync(siblingWd, credits: credits, budget: 1_000m));
+        }
+
+        var counters = ProviderFactory.RunCounters(fixture.ConnectionString);
+
+        // Each run asks for 30 in steps of 3: 180 in all against the tenant's 100, 120 of it against the
+        // workspace's cap of 60. Only "busy" (50035) and the limits are outcomes; a deadlock (1205) or a
+        // lock timeout on the engine's side fails the test. The cap set may give up as its caller retries.
+        async Task ChargeInStepsAsync(long run)
+        {
+            for (int i = 0; i < 10; i++)
+            {
+                try
+                {
+                    await counters.TryChargeAsync((int)run, 3m, CancellationToken.None);
+                }
+                catch (SqlException ex) when (ex.Number == ChargeBusyError)
+                {
+                }
+            }
+        }
+
+        async Task StartAnotherAsync()
+        {
+            try
+            {
+                await StartAsync(wd, credits: credits, budget: 1_000m);
+            }
+            catch (SqlException ex) when (ex.Number is PlanCreditLimitError or WorkspaceCreditCapError or ChargeBusyError)
+            {
+            }
+        }
+
+        async Task CutCapAsync()
+        {
+            try
+            {
+                await SetCapAsync(workspaceId, 45m);
+            }
+            catch (SqlException ex) when (ex.Number is ChargeBusyError or LockTimeoutError)
+            {
+            }
+        }
+
+        await Task.WhenAll(capped.Concat(siblings).Select(ChargeInStepsAsync).Concat([StartAnotherAsync(), StartAnotherAsync(), CutCapAsync(), PostAsync()]));
+
+        decimal cappedSpent = 0m;
+        foreach (long run in capped)
+        {
+            cappedSpent += await ConsumedAsync(run);
+        }
+
+        decimal siblingSpent = 0m;
+        foreach (long run in siblings)
+        {
+            siblingSpent += await ConsumedAsync(run);
+        }
+
+        cappedSpent.Should().BePositive();
+        cappedSpent.Should().BeLessThanOrEqualTo(60m, "a charge under way as the cap is cut lands within the old cap, never past it");
+        (cappedSpent + siblingSpent).Should().BeLessThanOrEqualTo(100m, "the tenant's month is never spent past between its workspaces");
+    }
+
+    [SkippableFact]
     public async Task Runs_parked_on_their_leases_leave_the_allowance_to_the_runs_the_plan_lets_start()
     {
         Skip.IfNot(fixture.IsAvailable, SkipReason);
@@ -487,6 +574,22 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
         first.Should().ContainSingle().Which.Should().BeEquivalentTo(new { SourceRef = $"live_{tag}", Remaining = 60m, ExpiresAt = expires, WorkspaceIds = new[] { workspaceId } });
         again.Should().BeEmpty();
         released.Should().ContainSingle(g => g.SourceRef == $"live_{tag}");
+    }
+
+    private async Task SetCapAsync(int workspaceId, decimal cap)
+    {
+        await using var connection = new SqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new SqlCommand("dbo.WorkspaceCreditCap_Set", connection) { CommandType = System.Data.CommandType.StoredProcedure };
+        command.Parameters.AddWithValue("@WorkspaceId", workspaceId);
+        command.Parameters.Add("@MonthlyCreditCap", System.Data.SqlDbType.Decimal).Value = cap;
+        command.Parameters["@MonthlyCreditCap"].Precision = 18;
+        command.Parameters["@MonthlyCreditCap"].Scale = 4;
+        command.Parameters.AddWithValue("@MonthStart", new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1));
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+        }
     }
 
     private static int NewId() => Random.Shared.Next(1_000_000, int.MaxValue - 1);
