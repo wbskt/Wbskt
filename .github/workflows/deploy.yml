@@ -159,6 +159,8 @@ jobs:
       # succeeds closes it. always() rather than failure(): the job timeout cancels rather than fails.
       - name: Report the deploy result
         if: always()
+        # Closing the issue after a good deploy must not turn that deploy red.
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}

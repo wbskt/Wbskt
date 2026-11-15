@@ -21,6 +21,9 @@ message="${4:?message missing}"
 repo="$GITHUB_REPOSITORY"
 workflow="${GITHUB_WORKFLOW:-a workflow}"
 
+# Made up front: listing by a label that does not exist yet is not something to depend on.
+gh label create "$label" --repo "$repo" --color B60205 --description "Opened and closed by CI" 2>/dev/null || true
+
 latest() {
   gh issue list --repo "$repo" --label "$label" --author app/github-actions --state "$1" --limit 1 --json number --jq '.[0].number // empty'
 }
@@ -39,8 +42,6 @@ case "$action" in
     if [[ -n "$closed" ]]; then
       gh issue reopen "$closed" --repo "$repo" --comment "$message"
     else
-      gh label create "$label" --repo "$repo" --color B60205 \
-        --description "Opened and closed by CI" 2>/dev/null || true
       gh issue create --repo "$repo" --title "$title" --label "$label" \
         --body "$message"$'\n\n'"$workflow closes this issue once the condition clears, and reopens it if it comes back."
     fi
