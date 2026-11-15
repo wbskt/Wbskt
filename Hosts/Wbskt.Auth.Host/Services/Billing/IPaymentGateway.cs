@@ -36,6 +36,16 @@ public interface IPaymentGateway
     Task<ProviderIdList> ListPaymentIdsAsync(DateTimeOffset createdFrom, CancellationToken ct);
 
     /// <summary>
+    /// The payments refunded at or after <paramref name="createdFrom"/>, by the payment's id, for the same
+    /// reconcile: a refund of a payment made before the window would otherwise go unread when its webhook
+    /// is lost.
+    /// </summary>
+    Task<ProviderIdList> ListRefundedPaymentIdsAsync(DateTimeOffset createdFrom, CancellationToken ct);
+
+    /// <summary>The payments with a dispute opened at or after <paramref name="createdFrom"/>, by the payment's id, for the same reconcile.</summary>
+    Task<ProviderIdList> ListDisputedPaymentIdsAsync(DateTimeOffset createdFrom, CancellationToken ct);
+
+    /// <summary>
     /// Whether the provider accepts this deployment's credentials, by one harmless read. False when it
     /// refuses them, as it does a live key sent to its test API; throws when it cannot be reached.
     /// </summary>
