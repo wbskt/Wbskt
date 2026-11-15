@@ -9,10 +9,11 @@ BEGIN
     -- throw between them leaves a Waiting branch that nothing will ever wake, and it keeps its run's
     -- ActiveBranchCount above zero, so the run never finalizes. Every wait parks this way - a Delay
     -- parks on a timer bookmark like any other - so "Waiting with no bookmark" is the stranded state
-    -- for all of them, and the same state follows a wake whose claim deleted the bookmark but whose
-    -- dispatch was lost (WokenAt set; a new leader resumes those through Branch_GetWoken first). The
-    -- cutoff is the grace period that keeps a branch mid-park out of this list, and one just woken: the
-    -- claim stamps UpdatedAt. One queued longer than that is covered by the caller's two-pass check.
+    -- for all of them. A branch whose claim deleted the bookmark to wake it is in the same state, but
+    -- its wake is stored on it (WokenAt), so it is not stranded: it is left out here, and the orphan GC
+    -- dispatches it through Branch_GetWoken if its dispatch was lost. The cutoff is the grace period
+    -- that keeps a branch mid-park out of this list. One queued longer than that is covered by the
+    -- caller's two-pass check.
     SELECT TOP (@BatchSize)
         br.Id,
         br.RefId,
@@ -30,6 +31,7 @@ BEGIN
     FROM dbo.Branches br
     INNER JOIN dbo.Runs r ON r.Id = br.RunId
     WHERE br.Status = N'Waiting'
+      AND br.WokenAt IS NULL
       AND br.UpdatedAt < @CutoffUtc
       AND r.Status IN (N'Running', N'Failing', N'Cancelling')
       AND NOT EXISTS (SELECT 1 FROM dbo.Bookmarks b

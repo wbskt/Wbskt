@@ -9,8 +9,8 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
 /// <summary>
 /// Reconciles bookmarks with the branches they wake, in both directions: deletes bookmarks whose run is
-/// over, fails Waiting branches that have no bookmark left to wake them, and wakes sub-workflow steps
-/// still parked on a child run that has already ended.
+/// over, fails Waiting branches that have no bookmark left to wake them, dispatches woken branches whose
+/// dispatch was lost, and wakes sub-workflow steps still parked on a child run that has already ended.
 /// </summary>
 public sealed class BookmarkOrphanGc(
     TimeProvider clock,
@@ -20,14 +20,23 @@ public sealed class BookmarkOrphanGc(
     IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger)
 {
     private const int StrandedBatchSize = 100;
+    private const int RedispatchAgainAfterThresholds = 6;
     private readonly TimeSpan _strandedThreshold = options.Value.StrandedBranchThreshold;
 
-    // Branches seen stranded on the previous pass, by id, with the row version they had then. A wake
-    // deletes its bookmark (the claim) and the woken branch then waits, Waiting with no bookmark, until
-    // its loop runs. The claim stamps the branch's UpdatedAt, so the grace period covers a wake that runs
-    // promptly; failing only a branch seen stranded, unchanged, on two passes in a row leaves a whole
-    // interval more for one queued behind a backlog. Touched by one tick at a time.
+    // Branches seen stranded on the previous pass, by id, with the row version they had then. The grace
+    // period covers a park mid-way between its two writes; acting only on a branch seen, unchanged, on
+    // two passes in a row leaves a whole interval more. Touched by one tick at a time, as are the two below.
     private Dictionary<long, byte[]> _suspects = new();
+
+    // The same for woken branches still waiting for their loop: the claim stamps UpdatedAt, so the grace
+    // period covers a wake that runs promptly, and the second sighting one queued behind a backlog.
+    private Dictionary<long, byte[]> _wokenSuspects = new();
+
+    // Woken branches this instance has dispatched, with the row version they had and when. The dispatch
+    // queue is in memory, so one it holds is not lost while this instance leads, and dispatching the same
+    // unchanged branch again soon would only run it twice behind a backlog. Only one still unchanged
+    // long after (a loop that threw before writing it) is dispatched again.
+    private Dictionary<long, (byte[] Version, DateTime At)> _redispatched = new();
 
     protected override string Name => "Bookmark orphan GC";
 
@@ -43,6 +52,7 @@ public sealed class BookmarkOrphanGc(
         }
 
         await FailStrandedBranchesAsync(services, ct);
+        await DispatchLostWakesAsync(services, ct);
         await WakeParentsOfEndedChildrenAsync(services, ct);
     }
 
@@ -90,18 +100,11 @@ public sealed class BookmarkOrphanGc(
         DateTime cutoffUtc = clock.GetUtcNow().UtcDateTime - _strandedThreshold;
         IReadOnlyCollection<BranchRow> stranded = await branchProvider.GetWaitingWithoutBookmarkAsync(cutoffUtc, StrandedBatchSize, ct);
 
-        Dictionary<long, byte[]> previous = _suspects;
         var suspects = new Dictionary<long, byte[]>();
         IStrandedBranchFailer? failer = null;
         int failedCount = 0;
-        foreach (BranchRow branch in stranded)
+        foreach (BranchRow branch in SeenTwice(stranded, _suspects, suspects))
         {
-            if (!previous.TryGetValue(branch.Id, out byte[]? seenVersion) || !seenVersion.AsSpan().SequenceEqual(branch.RowVersion))
-            {
-                suspects[branch.Id] = branch.RowVersion;
-                continue;
-            }
-
             try
             {
                 failer ??= services.GetRequiredService<IStrandedBranchFailer>();
@@ -124,5 +127,71 @@ public sealed class BookmarkOrphanGc(
         {
             Logger.LogWarning("Orphan GC failed {Count} branches stranded Waiting with no bookmark", failedCount);
         }
+    }
+
+    /// <summary>
+    /// A wake is claimed and stored on its branch before the branch is dispatched, and the dispatch can
+    /// be lost while the leader keeps running: the scheduler's read of a claimed bookmark fails, or the
+    /// dispatch throws after the claim. A new leader resumes such branches, but a leader that never stops
+    /// left them Waiting for ever. The stored wake makes dispatching one again do what the lost dispatch
+    /// would have, as a new leader does.
+    /// </summary>
+    private async Task DispatchLostWakesAsync(IServiceProvider services, CancellationToken ct)
+    {
+        var branchProvider = services.GetRequiredService<IBranchProvider>();
+        DateTime cutoffUtc = clock.GetUtcNow().UtcDateTime - _strandedThreshold;
+        IReadOnlyCollection<BranchRow> woken = await branchProvider.GetWokenNotWrittenSinceAsync(cutoffUtc, StrandedBatchSize, ct);
+
+        DateTime now = clock.GetUtcNow().UtcDateTime;
+        var suspects = new Dictionary<long, byte[]>();
+        var redispatched = new Dictionary<long, (byte[] Version, DateTime At)>();
+        foreach (BranchRow branch in woken)
+        {
+            if (_redispatched.TryGetValue(branch.Id, out var sent)
+                && sent.Version.AsSpan().SequenceEqual(branch.RowVersion)
+                && now - sent.At < _strandedThreshold * RedispatchAgainAfterThresholds)
+            {
+                redispatched[branch.Id] = sent;
+            }
+        }
+
+        IRunDispatcher? dispatcher = null;
+        int dispatched = 0;
+        foreach (BranchRow branch in SeenTwice(woken.Where(branch => !redispatched.ContainsKey(branch.Id)), _wokenSuspects, suspects))
+        {
+            dispatcher ??= services.GetRequiredService<IRunDispatcher>();
+            await dispatcher.DispatchAsync(new BranchExecutionRequest(branch.RunId, branch.Id, BranchExecutionReason.Recovered), ct);
+            redispatched[branch.Id] = (branch.RowVersion, now);
+            dispatched++;
+        }
+
+        _wokenSuspects = suspects;
+        _redispatched = redispatched;
+        if (dispatched > 0)
+        {
+            Logger.LogWarning("Orphan GC dispatched {Count} woken branches whose dispatch was lost", dispatched);
+        }
+    }
+
+    /// <summary>
+    /// The branches also seen, unchanged, on the previous pass. Every other branch is recorded in
+    /// <paramref name="next"/> as a suspect for the next pass.
+    /// </summary>
+    private static List<BranchRow> SeenTwice(IEnumerable<BranchRow> branches, Dictionary<long, byte[]> previous, Dictionary<long, byte[]> next)
+    {
+        var confirmed = new List<BranchRow>();
+        foreach (BranchRow branch in branches)
+        {
+            if (previous.TryGetValue(branch.Id, out byte[]? seenVersion) && seenVersion.AsSpan().SequenceEqual(branch.RowVersion))
+            {
+                confirmed.Add(branch);
+            }
+            else
+            {
+                next[branch.Id] = branch.RowVersion;
+            }
+        }
+
+        return confirmed;
     }
 }

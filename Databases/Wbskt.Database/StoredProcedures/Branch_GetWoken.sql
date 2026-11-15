@@ -1,6 +1,7 @@
 CREATE PROCEDURE dbo.Branch_GetWoken
-    @AfterId   BIGINT,
-    @BatchSize INT
+    @AfterId       BIGINT,
+    @BatchSize     INT,
+    @UpdatedBefore DATETIME2(3) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -9,7 +10,8 @@ BEGIN
     -- the claim's own transaction, and cleared by the next write that moves the branch). Each one's
     -- wake is stored on it, so resuming it does what the lost dispatch would have done. A branch left
     -- Waiting with no bookmark and no WokenAt was stopped mid-park instead; it is not listed here, and
-    -- the orphan GC deals with it. Paged by Id, after @AfterId.
+    -- the orphan GC deals with it. Paged by Id, after @AfterId. A new leader reads them all; the orphan
+    -- GC passes @UpdatedBefore to read only those whose wake has waited past its grace period.
     SELECT TOP (@BatchSize)
         br.Id,
         br.RefId,
@@ -29,6 +31,7 @@ BEGIN
     WHERE br.WokenAt IS NOT NULL
       AND br.Id > @AfterId
       AND br.Status = N'Waiting'
+      AND (@UpdatedBefore IS NULL OR br.UpdatedAt < @UpdatedBefore)
       AND r.Status IN (N'Running', N'Failing', N'Cancelling')
     ORDER BY br.Id;
 END;
