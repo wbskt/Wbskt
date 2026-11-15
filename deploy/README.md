@@ -562,6 +562,11 @@ dashboard otherwise). The template and the zone are read at start, so after chan
 | `NodeExporterDown` | Prometheus cannot scrape node-exporter, so nothing is watching disk space |
 | `ContainerRestarting` | a container restarted in place 3 or more times in 15 minutes |
 | `ContainerNearMemoryLimit` | a container above 90% of its `mem_limit` for 10 minutes (warn) |
+| `ContainerOutOfMemoryKilled` | the kernel killed a process in a container for passing its `mem_limit` (warn) |
+| `HostOutOfMemoryExceptions` | a .NET host threw `OutOfMemoryException` in 15 minutes (pages) |
+| `CadvisorDown` | Prometheus cannot scrape cAdvisor, so the container alerts cannot fire (warn) |
+| `RabbitMQMetricsDown` | Prometheus cannot scrape RabbitMQ, so the queue and broker alerts cannot fire (warn) |
+| `PrometheusRulesFailing` | an alert rule failed to evaluate in 30 minutes (warn) |
 | `RabbitMQMemoryAlarm` | RabbitMQ's memory alarm is on, so it blocks every publish (page) |
 | `EngineNotReporting` | no engine has reported metrics for about 10 minutes (held back while the collector is down) |
 | `HostNotReporting` | every replica of auth, management, client-auth or a gateway has gone quiet for about 10 minutes (one alert per service, held back while the collector is down) |
