@@ -306,7 +306,7 @@ All run on the leader only.
 | Worker | Every | Does |
 |---|---|---|
 | `BookmarkScheduler` | 1 s | Claims due bookmarks and resumes their branches (or sets the TTL port). |
-| `BookmarkOrphanGc` | 5 min | Deletes bookmarks whose branch is gone. Fails a `Waiting` branch with no bookmark (`BOOKMARK_LOST`) once two passes past `StrandedBranchThreshold` (5 min) saw it unchanged. Raises again the completion of a child run that ended at least `StrandedBranchThreshold` ago while a sub-workflow step is still parked on it. |
+| `BookmarkOrphanGc` | 5 min | Deletes bookmarks whose branch is gone. Fails a `Waiting` branch with no bookmark and no stored wake (`BOOKMARK_LOST`) once two passes past `StrandedBranchThreshold` (5 min) saw it unchanged. Dispatches again (reason `Recovered`) a branch whose wake a claim stored (`WokenAt`) but that two such passes saw still waiting: its dispatch was lost while the leader kept running. It does not dispatch the same unchanged branch twice within six thresholds. Raises again the completion of a child run that ended at least `StrandedBranchThreshold` ago while a sub-workflow step is still parked on it. |
 | `ScheduledFireTicker` | 1 s | Leases due `ScheduledFires` rows (for `LeaseDurationSeconds`, 120 s), fires the `schedule` channel and advances the next fire time by the cron (Cronos). |
 | `ClientPresenceTicker` | 1 s | Resolves presence checks: Fire, Stale or Pending. Gives up after 10 minutes. |
 | `ClientHoldTicker` | 1 s | Fires `client-hold` triggers whose filter has held for the configured time. |

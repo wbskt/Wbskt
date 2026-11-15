@@ -18,7 +18,8 @@ namespace Wbskt.Host.Tests.HostedServices;
 
 /// <summary>
 /// A branch parks in two writes - Waiting, then its bookmark - and one stranded between them used to
-/// hold its run open forever. The orphan GC now fails such a branch with BOOKMARK_LOST.
+/// hold its run open forever. The orphan GC now fails such a branch with BOOKMARK_LOST. A branch whose
+/// wake was claimed and stored but never dispatched is dispatched again instead.
 /// </summary>
 public sealed class StrandedBranchSweepTests
 {
@@ -83,6 +84,71 @@ public sealed class StrandedBranchSweepTests
         Assert.Equal(BranchStatus.Waiting, state.Branches[BranchId + 1].Status);
         Assert.Equal(2, state.ActiveBranches);
         Assert.Equal(RunStatus.Running, state.Runs[RunId].Status);
+    }
+
+    [Fact]
+    public async Task A_woken_branch_whose_dispatch_was_lost_is_dispatched_again_not_failed()
+    {
+        // Arrange: a claim deleted the bookmark and stored the wake, and the dispatch never happened.
+        var state = new State();
+        state.AddBranch(BranchId, BranchStatus.Waiting, updatedAt: Start);
+        state.Woken.Add(BranchId);
+        state.Clock.Now = Start + TimeSpan.FromHours(1);
+        var harness = new Harness(state);
+
+        // Act: seen on two passes in a row, then once more while the dispatch is still queued.
+        await harness.Gc.TickAsync(CancellationToken.None);
+        Assert.Empty(harness.Dispatcher.Requests);
+        await harness.Gc.TickAsync(CancellationToken.None);
+        await harness.Gc.TickAsync(CancellationToken.None);
+
+        // Assert: dispatched once to run its stored wake, and never failed.
+        BranchExecutionRequest request = Assert.Single(harness.Dispatcher.Requests);
+        Assert.Equal((RunId, BranchId, BranchExecutionReason.Recovered), (request.RunId, request.BranchId, request.Reason));
+        Assert.Equal(BranchStatus.Waiting, state.Branches[BranchId].Status);
+        Assert.Equal(1, state.ActiveBranches);
+        Assert.DoesNotContain(state.Journal, entry => entry.EventKind == HistoryEventKind.NodeFailed);
+    }
+
+    [Fact]
+    public async Task A_woken_branch_still_unchanged_long_after_its_dispatch_is_dispatched_once_more()
+    {
+        // Arrange: dispatched, but the loop that picked it up never wrote it.
+        var state = new State();
+        state.AddBranch(BranchId, BranchStatus.Waiting, updatedAt: Start);
+        state.Woken.Add(BranchId);
+        state.Clock.Now = Start + TimeSpan.FromHours(1);
+        var harness = new Harness(state);
+        await harness.Gc.TickAsync(CancellationToken.None);
+        await harness.Gc.TickAsync(CancellationToken.None);
+
+        // Act: half an hour later, two more passes.
+        state.Clock.Now += Threshold * 6;
+        await harness.Gc.TickAsync(CancellationToken.None);
+        await harness.Gc.TickAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, harness.Dispatcher.Requests.Count);
+    }
+
+    [Fact]
+    public async Task A_woken_branch_that_runs_between_the_passes_is_not_dispatched_again()
+    {
+        // Arrange
+        var state = new State();
+        state.AddBranch(BranchId, BranchStatus.Waiting, updatedAt: Start);
+        state.Woken.Add(BranchId);
+        state.Clock.Now = Start + TimeSpan.FromHours(1);
+        var harness = new Harness(state);
+
+        // Act: its own dispatch runs it after the first pass.
+        await harness.Gc.TickAsync(CancellationToken.None);
+        await new InMemoryBranchProvider(state).UpdatePointerAsync(BranchId, WaitNodeId, BranchStatus.Active, "{}", null, CancellationToken.None);
+        await harness.Gc.TickAsync(CancellationToken.None);
+        await harness.Gc.TickAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Empty(harness.Dispatcher.Requests);
     }
 
     [Fact]
@@ -180,6 +246,7 @@ public sealed class StrandedBranchSweepTests
             var journal = new InMemoryJournal(state);
             var cache = new StaticDefinitionCache(state.Definition);
             var runDispatcher = new RecordingRunDispatcher(new List<string>());
+            Dispatcher = runDispatcher;
             var idGenerator = new SequentialIdGenerator();
             var runCancellationService = cancellation ?? new NoOpRunCancellationService();
             var finalizer = new RunFinalizer(runProvider, branchProvider, journal, new NoOpDrainer(), new NullRunCompletedPublisher(), bookmarkProvider, new NoOpCompletionHook(), state.Clock, new RunCancellationTokenRegistry(), new NoOpJoinAggregatorProvider(), cache);
@@ -199,12 +266,14 @@ public sealed class StrandedBranchSweepTests
             Gc = new BookmarkOrphanGc(
                 state.Clock,
                 new ActiveLeadership(),
-                WorkerTestServices.Scopes(branchProvider, bookmarkProvider, runProvider, Failer),
+                WorkerTestServices.Scopes(branchProvider, bookmarkProvider, runProvider, Failer, runDispatcher),
                 NullLogger<BookmarkOrphanGc>.Instance,
                 WorkerTestServices.Options(new WorkflowEngineOptions { StrandedBranchThreshold = Threshold }));
         }
 
         public BranchLoop BranchLoop { get; }
+
+        public RecordingRunDispatcher Dispatcher { get; }
 
         public StrandedBranchFailer Failer { get; }
 
@@ -255,6 +324,7 @@ public sealed class StrandedBranchSweepTests
         public Dictionary<long, RunRow> Runs { get; } = [];
         public Dictionary<long, BranchRow> Branches { get; } = [];
         public List<BookmarkRow> Bookmarks { get; } = [];
+        public HashSet<long> Woken { get; } = [];
         public List<RunJournalEntry> Journal { get; } = [];
         public int ActiveBranches { get; set; } = 1;
         public bool FailBookmarkInserts { get; set; }
@@ -343,10 +413,25 @@ public sealed class StrandedBranchSweepTests
             state.LastStrandedCutoff = cutoffUtc;
             IReadOnlyCollection<BranchRow> rows = state.Branches.Values
                 .Where(branch => branch.Status == BranchStatus.Waiting
+                    && !state.Woken.Contains(branch.Id)
                     && branch.UpdatedAt < cutoffUtc
                     && !RunStatus.IsTerminal(state.Runs[branch.RunId].Status)
                     && !state.Bookmarks.Any(bookmark => bookmark.RunId == branch.RunId && bookmark.BranchRefId == branch.RefId))
                 .OrderBy(branch => branch.UpdatedAt)
+                .Take(batchSize)
+                .ToArray();
+            return Task.FromResult(rows);
+        }
+
+        // What Branch_GetWoken selects with @UpdatedBefore.
+        public Task<IReadOnlyCollection<BranchRow>> GetWokenNotWrittenSinceAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
+        {
+            IReadOnlyCollection<BranchRow> rows = state.Branches.Values
+                .Where(branch => branch.Status == BranchStatus.Waiting
+                    && state.Woken.Contains(branch.Id)
+                    && branch.UpdatedAt < cutoffUtc
+                    && !RunStatus.IsTerminal(state.Runs[branch.RunId].Status))
+                .OrderBy(branch => branch.Id)
                 .Take(batchSize)
                 .ToArray();
             return Task.FromResult(rows);
@@ -363,6 +448,7 @@ public sealed class StrandedBranchSweepTests
         {
             BranchRow updated = change(state.Branches[branchId]) with { UpdatedAt = state.Clock.Now, RowVersion = state.NextVersion() };
             state.Branches[branchId] = updated;
+            state.Woken.Remove(branchId);
             return Task.FromResult(updated);
         }
     }

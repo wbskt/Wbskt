@@ -165,6 +165,8 @@ cost. Parked waits survive restarts and failover.
   for its remaining time.
 * A waiting branch whose bookmark has vanished is failed with `BOOKMARK_LOST` once two sweeps past
   the 5-minute threshold have seen it unchanged, rather than left waiting forever.
+* A branch whose wake was claimed but never dispatched is dispatched again by the same sweep, so it
+  carries on with the wake it was given instead of being failed.
 
 ## 6. Retries
 

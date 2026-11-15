@@ -232,4 +232,28 @@ public sealed class BookmarkClaimIntegrationTests(SqlEdgeFixture fixture)
         stored.PendingTakePort.Should().BeNull("the signal won the race, not the TTL");
         (await WokenIdsAsync()).Should().Contain(branch.Id);
     }
+
+    [SkippableFact]
+    public async Task A_woken_branch_is_listed_for_its_lost_dispatch_not_as_stranded()
+    {
+        // wbskt/Wbskt#768: the orphan GC failed a woken branch whose dispatch was lost as BOOKMARK_LOST,
+        // although its wake was stored. It is now read apart, to be dispatched again.
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
+
+        int runId = await SeedRunAsync();
+        BranchRow woken = await SeedWaitingBranchAsync(runId);
+        BranchRow stranded = await SeedWaitingBranchAsync(runId);
+        var bookmarkProvider = ProviderFactory.Bookmark(fixture.ConnectionString);
+        BookmarkRow bookmark = await bookmarkProvider.CreateAsync(BookmarkFor(woken, "signal", null), CancellationToken.None);
+        (await bookmarkProvider.TryClaimWithWakeAsync(bookmark.RefId, """{"__wake":{"n":1}}""", CancellationToken.None)).Should().BeTrue();
+
+        var branchProvider = ProviderFactory.Branch(fixture.ConnectionString);
+        DateTime later = DateTime.UtcNow.AddMinutes(1);
+        IEnumerable<long> strandedIds = (await branchProvider.GetWaitingWithoutBookmarkAsync(later, 10_000, CancellationToken.None)).Select(branch => branch.Id);
+        strandedIds.Should().Contain(stranded.Id).And.NotContain(woken.Id);
+        IEnumerable<long> lostIds = (await branchProvider.GetWokenNotWrittenSinceAsync(later, 10_000, CancellationToken.None)).Select(branch => branch.Id);
+        lostIds.Should().Contain(woken.Id).And.NotContain(stranded.Id);
+        (await branchProvider.GetWokenNotWrittenSinceAsync(DateTime.UtcNow.AddMinutes(-1), 10_000, CancellationToken.None))
+            .Select(branch => branch.Id).Should().NotContain(woken.Id, "a wake younger than the cutoff is still on its way");
+    }
 }

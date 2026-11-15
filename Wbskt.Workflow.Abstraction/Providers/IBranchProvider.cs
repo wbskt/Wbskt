@@ -13,10 +13,9 @@ public interface IBranchProvider
     Task<IReadOnlyCollection<BranchRow>> GetRunningBranchesAsync(CancellationToken ct);
 
     /// <summary>
-    /// Waiting branches of a live run that have no bookmark to wake them and have not been written since
-    /// <paramref name="cutoffUtc"/>: branches stranded by a park that never wrote its bookmark, or by a
-    /// wake whose claim deleted the bookmark and whose dispatch was lost. Defaulted so the test doubles
-    /// that never sweep need no stub.
+    /// Waiting branches of a live run that have no bookmark to wake them, no stored wake, and have not
+    /// been written since <paramref name="cutoffUtc"/>: branches stranded by a park that never wrote its
+    /// bookmark. Defaulted so the test doubles that never sweep need no stub.
     /// </summary>
     Task<IReadOnlyCollection<BranchRow>> GetWaitingWithoutBookmarkAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
         => Task.FromResult<IReadOnlyCollection<BranchRow>>(Array.Empty<BranchRow>());
@@ -28,6 +27,14 @@ public interface IBranchProvider
     /// that never recover need no stub.
     /// </summary>
     Task<IReadOnlyCollection<BranchRow>> GetWokenAsync(long afterId, int batchSize, CancellationToken ct)
+        => Task.FromResult<IReadOnlyCollection<BranchRow>>(Array.Empty<BranchRow>());
+
+    /// <summary>
+    /// Waiting branches of a live run whose wake a claim stored and that have not been written since
+    /// <paramref name="cutoffUtc"/>: woken, but not yet run, longer than a dispatch takes. Defaulted so the
+    /// test doubles that never sweep need no stub.
+    /// </summary>
+    Task<IReadOnlyCollection<BranchRow>> GetWokenNotWrittenSinceAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
         => Task.FromResult<IReadOnlyCollection<BranchRow>>(Array.Empty<BranchRow>());
 
     Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct);
