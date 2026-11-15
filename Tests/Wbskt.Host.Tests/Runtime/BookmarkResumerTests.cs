@@ -226,6 +226,25 @@ public sealed class BookmarkResumerTests
     }
 
     [Fact]
+    public async Task MatchInbound_reclaims_a_claim_left_pending_by_a_holder_that_could_not_settle_it()
+    {
+        // Arrange: the holder's dispatch failed and so did its write marking the claim Failed. The
+        // procedure hands over a Pending claim only once it is minutes old.
+        var bookmark = CreateBookmark(77, 42, Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Guid.Parse("11111111-1111-1111-1111-111111111111"));
+        var idempotency = RecordingIdempotencyKeyProvider.FailedClaim_ReclaimSucceeds(status: "Pending");
+        var dispatcher = new RecordingRunDispatcher();
+        var resumer = new BookmarkResumer(new RecordingBookmarkProvider(bookmark), idempotency, new RecordingBranchProvider((bookmark.BranchRefId, 1001)), dispatcher);
+
+        // Act
+        BookmarkMatchResult result = await resumer.MatchInboundAsync(CreateInboundEvent(), hasRegistrations: true, CancellationToken.None);
+
+        // Assert
+        Assert.True(result.Matched);
+        Assert.False(result.Idempotent);
+        Assert.Equal([(42L, 1001L, BranchExecutionReason.BookmarkResumed)], dispatcher.Requests);
+    }
+
+    [Fact]
     public async Task MatchInbound_marks_the_claim_resumed_before_it_claims_a_bookmark()
     {
         var bookmark = CreateBookmark(77, 42, Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Guid.Parse("11111111-1111-1111-1111-111111111111"));
@@ -460,7 +479,7 @@ public sealed class BookmarkResumerTests
         }
 
         /// <summary>A stale 'Failed' claim from a crashed prior resume, which this caller successfully reclaims.</summary>
-        public static RecordingIdempotencyKeyProvider FailedClaim_ReclaimSucceeds(string? resultJson = null)
+        public static RecordingIdempotencyKeyProvider FailedClaim_ReclaimSucceeds(string? resultJson = null, string status = "Failed")
         {
             return new RecordingIdempotencyKeyProvider(
                 (key, _, _, _, _) => new IdempotencyKeyRow
@@ -471,7 +490,7 @@ public sealed class BookmarkResumerTests
                     BranchRefId = Guid.Parse("99999999-9999-9999-9999-999999999999"),
                     NodeId = Guid.Empty,
                     Attempt = 0,
-                    Status = "Failed",
+                    Status = status,
                     ResultJson = null,
                     ErrorJson = "boom",
                     CreatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
@@ -551,11 +570,9 @@ public sealed class BookmarkResumerTests
         public Task<IdempotencyKeyRow> ReclaimFailedAsync(string keyValue, Guid newBranchRefId, CancellationToken ct)
         {
             ReclaimCalls.Add((keyValue, newBranchRefId));
-            if (_reclaimFactory is null)
-            {
-                throw new NotSupportedException();
-            }
-            return Task.FromResult(_reclaimFactory(keyValue, newBranchRefId));
+
+            // Without a reclaim set up, the claim is still in use and is returned as it is, as the procedure does.
+            return Task.FromResult(_reclaimFactory is null ? _factory(keyValue, 0, Guid.Empty, Guid.Empty, 0) : _reclaimFactory(keyValue, newBranchRefId));
         }
 
         public Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();

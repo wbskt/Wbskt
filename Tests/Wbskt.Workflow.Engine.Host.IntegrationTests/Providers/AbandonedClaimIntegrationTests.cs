@@ -55,6 +55,49 @@ public sealed class AbandonedClaimIntegrationTests(SqlEdgeFixture fixture)
         reclaimed.Status.Should().Be("Pending");
     }
 
+    [SkippableFact]
+    public async Task An_event_claim_left_pending_for_minutes_is_reclaimed_while_a_young_one_and_action_keys_are_not()
+    {
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
+
+        var keys = ProviderFactory.IdempotencyKey(fixture.ConnectionString);
+        string suffix = Guid.NewGuid().ToString("N");
+        string young = $"inbound-event:young-{suffix}";
+        string stale = $"inbound-event:{suffix}";
+        string staleStart = $"trigger-start:1:{suffix}";
+        string staleAction = $"action:1:{suffix}";
+        foreach (string key in new[] { young, stale, staleStart, staleAction })
+        {
+            await keys.UpsertPendingAsync(key, 0, Guid.NewGuid(), Guid.Empty, 0, CancellationToken.None);
+        }
+
+        // A holder whose dispatch failed and could not mark its claim Failed either, five minutes ago.
+        await using (var connection = new SqlConnection(fixture.ConnectionString))
+        {
+            await connection.OpenAsync();
+            await using var backdate = new SqlCommand(
+                "UPDATE dbo.IdempotencyKeys SET CreatedAt = DATEADD(MINUTE, -5, SYSUTCDATETIME()) WHERE KeyValue IN (@Stale, @StaleStart, @StaleAction)",
+                connection);
+            backdate.Parameters.AddWithValue("@Stale", stale);
+            backdate.Parameters.AddWithValue("@StaleStart", staleStart);
+            backdate.Parameters.AddWithValue("@StaleAction", staleAction);
+            await backdate.ExecuteNonQueryAsync();
+        }
+
+        Guid redelivery = Guid.NewGuid();
+        (await keys.ReclaimFailedAsync(young, redelivery, CancellationToken.None)).BranchRefId.Should().NotBe(redelivery, "a claim taken moments ago may still be going");
+        (await keys.ReclaimFailedAsync(staleAction, redelivery, CancellationToken.None)).BranchRefId.Should().NotBe(redelivery, "a Pending action key means run the node again");
+        (await keys.ReclaimFailedAsync(staleStart, redelivery, CancellationToken.None)).BranchRefId.Should().Be(redelivery);
+
+        IdempotencyKeyRow reclaimed = await keys.ReclaimFailedAsync(stale, redelivery, CancellationToken.None);
+        reclaimed.BranchRefId.Should().Be(redelivery);
+        reclaimed.Status.Should().Be("Pending");
+        reclaimed.CreatedAt.Should().BeAfter(DateTime.UtcNow.AddMinutes(-1), "the reclaim takes the claim afresh");
+
+        Guid another = Guid.NewGuid();
+        (await keys.ReclaimFailedAsync(stale, another, CancellationToken.None)).BranchRefId.Should().Be(redelivery, "the new holder is not reclaimed from at once");
+    }
+
     [SkippableTheory]
     [InlineData(false)]
     [InlineData(true)]
