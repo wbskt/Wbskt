@@ -67,7 +67,9 @@ Two visits to the same node in a loop get different keys; a replay of one visit 
 
 Idempotency rows double as claims. `inbound-event:{id}` is claimed before bookmarks are matched,
 so a redelivered event wakes nothing twice. A claim marked Failed can be reclaimed, so an error
-mid-dispatch does not lose the event. A claim an engine left Pending when it stopped is released
+mid-dispatch does not lose the event. Marking it Failed is retried through a short outage, and an event
+or trigger-start claim still Pending two minutes after it was taken is reclaimable too, since its holder
+failed without being able to say so. A claim an engine left Pending when it stopped is released
 by the next leader before its bus starts (`IdempotencyKey_ReleaseAbandonedClaims`): marked Failed so the
 broker's redelivery reclaims it, except a trigger start whose run exists (left Pending, or marked Failed
 on the way down), which is settled, since recovery already runs that run. The release gives each row
