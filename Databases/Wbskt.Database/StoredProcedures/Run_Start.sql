@@ -194,9 +194,11 @@ BEGIN
                         THROW 50035, 'The workspace is too busy to start another run; try again.', 1;
 
                     DECLARE @MonthStart DATE = DATEFROMPARTS(YEAR(@StartedAt), MONTH(@StartedAt), 1);
-                    DECLARE @WorkspaceSpent DECIMAL(18,4) = (SELECT Credits FROM dbo.WorkspaceCreditsSpent(@WorkspaceId, @MonthStart));
-                    DECLARE @WorkspaceReserved DECIMAL(18,4) = (SELECT Credits FROM dbo.WorkspaceCreditsReserved(@WorkspaceId));
-                    DECLARE @CapLeft DECIMAL(18,4) = @Cap - @WorkspaceSpent - @WorkspaceReserved;
+                    -- One statement, so spent and reserved come from one snapshot: read apart, a charge that
+                    -- moved credits from reserved to spent between them would be missed by both.
+                    DECLARE @CapLeft DECIMAL(18,4) = @Cap
+                        - (SELECT Credits FROM dbo.WorkspaceCreditsSpent(@WorkspaceId, @MonthStart))
+                        - (SELECT Credits FROM dbo.WorkspaceCreditsReserved(@WorkspaceId));
 
                     IF @CapLeft <= 0 OR @CapLeft < @StartCost
                         THROW 50034, 'The workspace has used its monthly credit cap.', 1;
