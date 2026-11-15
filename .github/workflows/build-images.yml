@@ -19,6 +19,11 @@ on:
     branches: [master]
   workflow_dispatch:
 
+# The default for jobs that declare nothing (tests, E2E, the scan): read the code and nothing else.
+# The jobs that publish images or open issues declare what they need.
+permissions:
+  contents: read
+
 jobs:
   # Whether this change can affect what the jobs below test. A pull request that touches only the
   # docs or Markdown skips them. A skipped job counts as passed for a required check, where a
