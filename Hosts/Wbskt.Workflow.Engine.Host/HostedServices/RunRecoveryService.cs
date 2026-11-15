@@ -9,6 +9,8 @@ public sealed class RunRecoveryService : IEngineStartupTracker
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IRunDispatcher _runDispatcher;
     private readonly ILogger<RunRecoveryService> _logger;
+    private readonly IRunDispatchRecorder? _recorder;
+    private readonly TimeProvider _clock;
     private readonly TaskCompletionSource _readyTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public Task Ready => _readyTcs.Task;
@@ -16,12 +18,22 @@ public sealed class RunRecoveryService : IEngineStartupTracker
     public RunRecoveryService(
         IServiceScopeFactory scopeFactory,
         IRunDispatcher runDispatcher,
-        ILogger<RunRecoveryService> logger)
+        ILogger<RunRecoveryService> logger,
+        IRunDispatchRecorder? recorder = null,
+        TimeProvider? clock = null)
     {
         _scopeFactory = scopeFactory;
         _runDispatcher = runDispatcher;
         _logger = logger;
+        _recorder = recorder;
+        _clock = clock ?? TimeProvider.System;
     }
+
+    /// <summary>
+    /// How long an Active branch must have gone unwritten before <see cref="RecoverOverlapAsync"/> takes
+    /// it: one this instance has just made is dispatched within moments of its write.
+    /// </summary>
+    internal static readonly TimeSpan OverlapGrace = TimeSpan.FromSeconds(10);
 
     /// <summary>The page size <see cref="CollectWokenAsync"/> reads woken branches in.</summary>
     internal const int WokenPageSize = 1_000;
@@ -173,6 +185,51 @@ public sealed class RunRecoveryService : IEngineStartupTracker
         {
             _readyTcs.TrySetException(ex);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Starts recording the branches this instance dispatches. Call it before the bus starts, so every
+    /// branch this leader drives is recorded, for <see cref="RecoverOverlapAsync"/>.
+    /// </summary>
+    public void StartRecordingDispatches() => _recorder?.StartRecording();
+
+    /// <summary>
+    /// Dispatches the Active branches this leader has not dispatched since it took over. An old leader
+    /// still stopping keeps consuming for a while: a run it starts, or a branch it forks, after
+    /// <see cref="RecoverAsync"/> read the Active branches is committed with nothing to drive it, as its
+    /// own dispatch is lost with the process and its trigger claim was already released, so the message
+    /// is not redelivered. Call it once, after the old process must be gone.
+    /// </summary>
+    public async Task RecoverOverlapAsync(CancellationToken ct)
+    {
+        if (_recorder is null)
+        {
+            return;
+        }
+
+        IReadOnlySet<long> dispatched = _recorder.StopRecording();
+        DateTime cutoffUtc = _clock.GetUtcNow().UtcDateTime - OverlapGrace;
+
+        await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
+        var branchProvider = scope.ServiceProvider.GetRequiredService<IBranchProvider>();
+        IReadOnlyCollection<BranchRow> branches = await branchProvider.GetRunningBranchesAsync(ct);
+
+        int recovered = 0;
+        foreach (BranchRow branch in branches)
+        {
+            if (dispatched.Contains(branch.Id) || branch.UpdatedAt >= cutoffUtc)
+            {
+                continue;
+            }
+
+            await _runDispatcher.DispatchAsync(new BranchExecutionRequest(branch.RunId, branch.Id, BranchExecutionReason.Recovered), ct);
+            recovered++;
+        }
+
+        if (recovered > 0)
+        {
+            _logger.LogWarning("Recovered {Count} Active branches the previous leader left while it was stopping.", recovered);
         }
     }
 

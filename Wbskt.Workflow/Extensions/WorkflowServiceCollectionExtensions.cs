@@ -116,6 +116,7 @@ public static class WorkflowServiceCollectionExtensions
         services.AddSingleton<WorkflowMetrics>();
         services.AddSingleton<ChannelRunDispatcher>();
         services.AddSingleton<IRunDispatcher>(serviceProvider => serviceProvider.GetRequiredService<ChannelRunDispatcher>());
+        services.AddSingleton<IRunDispatchRecorder>(serviceProvider => serviceProvider.GetRequiredService<ChannelRunDispatcher>());
         services.AddSingleton<IWorkflowDefinitionCache, WorkflowDefinitionCache>();
         // Process-wide, like the definition cache: the engine host's WorkflowDefinitionChangedConsumer
         // clears both when the management host announces a change.
