@@ -425,12 +425,25 @@ or stops anything and names the variable. A new required variable therefore has 
 VM's `.env` before the commit that requires it is deployed: the deploy resets the checkout first,
 so from then on the nightly backup reads the new compose file as well.
 
-A backend deploy only recreates the five hosts, but it lands every other service's definition and
-config file too. It ends by comparing each running container with the compose file and prints a
-`::warning::` (an annotation on the Deploy run) for each service that is behind: a changed
-definition, a bind-mounted file such as `alerts.yml` changed since the container started, or no
-container at all. It prints the command that applies them. Nothing is recreated for you, since
-recreating sql, rabbitmq or traefik is a decision of its own.
+A backend deploy recreates the hosts, and it lands every other service's definition and config
+file too. It ends by comparing each running container with the compose file. A service is behind
+when its definition changed, a bind-mounted file such as `alerts.yml` changed after it started, or it
+has no container at all.
+
+- **Supporting services** (`SUPPORTING_SERVICES` in `deploy.sh`: the console and the observability
+  stack) are recreated there and then, and the deploy waits for them to be healthy. They hold no
+  client connections and come back in seconds, and leaving them behind is how memory caps and alert
+  routing once sat unapplied for days behind green deploys.
+- **Held services** (sql, rabbitmq, redis, traefik, and any service not yet listed) are never
+  recreated by a deploy, because each drops every connection while it restarts. The deploy prints a
+  `::warning::` for each and the command that applies them, and the Deploy workflow keeps one issue,
+  labelled `deploy-drift`, open while any is behind. It closes on the first deploy after they match.
+  Recreate them in a quiet minute: `docker compose up -d --no-build --no-deps --force-recreate <services>`.
+- A **host** left out of a `--services` deploy is reported with the `deploy.sh` command that brings it up to date.
+
+A failed or timed-out deploy opens one issue, labelled `deploy-failed`; each later failure comments on
+it and the next successful deploy closes it. The job is bounded at 30 minutes, and the ssh session
+ends within a minute of the VM going silent.
 
 ## Network changes
 

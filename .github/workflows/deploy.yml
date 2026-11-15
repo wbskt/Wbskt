@@ -46,11 +46,20 @@ jobs:
       cancel-in-progress: false
     # Gate on a GitHub Environment so production deploys can require a reviewer's approval.
     environment: production
+    # A deploy takes a few minutes. Without a bound, an ssh session to a VM that stopped answering
+    # mid-deploy hangs for GitHub's default of 6 hours, holding the deploy queue the whole time.
+    timeout-minutes: 30
     permissions:
       contents: read
       # The last step opens an issue when a deploy fails, so a failure is not left to be noticed.
       issues: write
     steps:
+      # Only for the issue scripts; the deploy itself runs from the VM's own checkout.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
       # Inputs and secrets are passed through env, never interpolated into the script body - a
       # ${{ }} expansion inside `run:` is substituted as raw text and would let a crafted input
       # string execute arbitrary commands on the runner.
@@ -98,6 +107,8 @@ jobs:
           exit 1
 
       - name: Deploy
+        # bash, not the default `bash -e`: with pipefail the tee below cannot hide a failed deploy.
+        shell: bash
         env:
           TAG: ${{ inputs.tag }}
           SERVICES: ${{ inputs.services }}
@@ -116,26 +127,49 @@ jobs:
             args+=(--skip-migrations)
           fi
           echo "deploy.sh ${args[*]}"
+          # The keepalives end the session within a minute of the VM going silent, rather than
+          # leaving it to the job's timeout.
           ssh -i "$RUNNER_TEMP/id_deploy" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 \
+            -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
             -o UserKnownHostsFile="$RUNNER_TEMP/known_hosts" \
             "$DEPLOY_USER@$DEPLOY_HOST" \
-            "$DEPLOY_PATH/deploy/scripts/deploy.sh" "${args[@]}"
+            "$DEPLOY_PATH/deploy/scripts/deploy.sh" "${args[@]}" | tee "$RUNNER_TEMP/deploy.log"
 
-      # One open issue per run of failures: later failures comment on it instead of opening more.
-      - name: Open an issue for the failed deploy
-        if: failure()
+      # deploy.sh brings the supporting services in line itself, but recreating sql, rabbitmq, redis
+      # or traefik drops connections, so it only names them. Keep an issue open while any is behind.
+      - name: Report services left behind the compose file
+        # A GitHub hiccup here must not read as a failed deploy in the step below.
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
           TAG: ${{ inputs.tag }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          title="Production deploy failed"
-          body="The deploy of \`$TAG\` failed: $RUN_URL"
-          number=$(gh issue list --state open --search "\"$title\" in:title" --json number,title \
-            --jq "map(select(.title == \"$title\"))[0].number // empty")
-          if [[ -n "$number" ]]; then
-            gh issue comment "$number" --body "$body"
+          held=$(sed -n 's/^held-services-behind: *//p' "$RUNNER_TEMP/deploy.log" | tail -1)
+          title="Production services behind the compose file"
+          if [[ -n "$held" ]]; then
+            .github/scripts/sync-labelled-issue.sh open deploy-drift "$title" \
+              "After the deploy of \`$TAG\`, these services still run an older definition or config file: $held. Recreating them drops their connections, so it is left for a quiet minute, in deploy/compose on the VM: \`docker compose up -d --no-build --no-deps --force-recreate $held\`. $RUN_URL"
           else
-            gh issue create --title "$title" --body "$body"
+            .github/scripts/sync-labelled-issue.sh close deploy-drift "$title" \
+              "Every service matched the compose file after the deploy of \`$TAG\`: $RUN_URL"
+          fi
+
+      # One issue for a run of failures: each later failure comments on it, and the next deploy that
+      # succeeds closes it. always() rather than failure(): the job timeout cancels rather than fails.
+      - name: Report the deploy result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          RESULT: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Production deploy failed"
+          if [[ "$RESULT" == success ]]; then
+            .github/scripts/sync-labelled-issue.sh close deploy-failed "$title" \
+              "The deploy of \`$TAG\` succeeded: $RUN_URL"
+          else
+            COMMENT_IF_OPEN=true .github/scripts/sync-labelled-issue.sh open deploy-failed "$title" \
+              "The deploy of \`$TAG\` ended in $RESULT: $RUN_URL"
           fi
