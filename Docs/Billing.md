@@ -543,7 +543,11 @@ exists, nothing is deleted: 503 `BILLING_SUBSCRIPTION_NOT_CANCELLED`, and the ca
   restart (`dbo.BillingReconcile_Claim` keeps when it last started in `dbo.BillingReconciles`). It lists
   the provider's subscriptions and payments made in the last `Billing:Payments:ReconcileWindow` (3 days,
   longer than the provider's day of redeliveries), leaving out subscriptions never paid for (a checkout
-  left open, `pending`), and reads each one again through `TenantBillingSync`, as a webhook would, pausing
+  left open, `pending`), and reads each one again through `TenantBillingSync`, as a webhook would. It
+  also reads the payment behind every refund made in that window and every dispute opened in the last
+  `Billing:Payments:DisputeReconcileWindow` (120 days, as a dispute is won or lost weeks after it opens),
+  so a refund or chargeback of an older payment whose webhook was lost still takes back the plan or the
+  credits it paid for. A payment already read in the run is not read again. It pauses
   `ReconcilePause` (250 ms) between them for the provider's rate limit. A first payment whose webhooks
   all failed (paid, still on Free), a credit pack whose payment never arrived (no purchase row, so the
   hourly grant reconcile has nothing to repair) and a renewal's failed payment are all caught within a
@@ -553,7 +557,8 @@ exists, nothing is deleted: 503 `BILLING_SUBSCRIPTION_NOT_CANCELLED`, and the ca
   before its claim drops it, and asks the provider again to cancel a duplicate already cancelled. A
   subscription it stores first is stamped with the time of the reconcile, so if only a later duplicate's
   webhook arrived, the older provider subscription is the one marked duplicate and refunded.
-  It counts each read on `wbskt_auth_billing_reconciles_total` (`kind`, `outcome`); a list the provider
+  It counts each read on `wbskt_auth_billing_reconciles_total` (`kind`: `subscription`, `payment`,
+  `refund`, `dispute`; `outcome`); a list the provider
   refused is `kind="<kind>_list", outcome="failed"` and one cut short at the 50-page cap (5,000 items)
   is `outcome="truncated"`; a provider timeout counts as failed. `BillingReconcileFailing` fires on any
   failed or truncated in a day; those are read again the next day while they are still in the window.

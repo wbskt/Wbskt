@@ -32,6 +32,13 @@ public sealed class BillingOptions
     /// </summary>
     public TimeSpan ReconcileWindow { get; set; } = TimeSpan.FromDays(3);
 
+    /// <summary>
+    /// How far back the reconcile reads the payments behind the provider's disputes. A dispute is listed
+    /// by when it was opened, and is won or lost weeks later, so this is far longer than
+    /// <see cref="ReconcileWindow"/>.
+    /// </summary>
+    public TimeSpan DisputeReconcileWindow { get; set; } = TimeSpan.FromDays(120);
+
     /// <summary>How often the reconcile runs, across every auth replica and restart (<c>dbo.BillingReconciles</c>).</summary>
     public TimeSpan ReconcileEvery { get; set; } = TimeSpan.FromDays(1);
 

@@ -111,6 +111,12 @@ public sealed class DodoPaymentGateway(HttpClient http, IOptions<DodoOptions> op
     public async Task<ProviderIdList> ListPaymentIdsAsync(DateTimeOffset createdFrom, CancellationToken ct) =>
         await ListIdsAsync("payments", createdFrom, item => item.PaymentId, ct);
 
+    public async Task<ProviderIdList> ListRefundedPaymentIdsAsync(DateTimeOffset createdFrom, CancellationToken ct) =>
+        await ListIdsAsync("refunds", createdFrom, item => item.PaymentId, ct);
+
+    public async Task<ProviderIdList> ListDisputedPaymentIdsAsync(DateTimeOffset createdFrom, CancellationToken ct) =>
+        await ListIdsAsync("disputes", createdFrom, item => item.PaymentId, ct);
+
     public async Task<ProviderProduct?> FindProductAsync(string productId, CancellationToken ct)
     {
         using HttpResponseMessage response = await http.GetAsync($"products/{Uri.EscapeDataString(productId)}", ct);

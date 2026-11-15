@@ -6,7 +6,8 @@ namespace Wbskt.Auth.Host.Services.Billing;
 
 /// <summary>
 /// Reads every subscription and payment the provider made in the last
-/// <see cref="BillingOptions.ReconcileWindow"/> again, through the same sync a webhook starts. The
+/// <see cref="BillingOptions.ReconcileWindow"/> again, with the payments behind the refunds made in that
+/// window and the disputes opened in <see cref="BillingOptions.DisputeReconcileWindow"/>, through the same sync a webhook starts. The
 /// provider stops redelivering a webhook after about a day; one that never got through (the host or its
 /// database down, the route wrong, the signing secret rotated on one side) would otherwise leave a tenant
 /// that paid on Free, a credit pack never granted, or a cancelled plan kept. The sync is safe to repeat:
@@ -39,8 +40,15 @@ internal sealed class BillingReconcile(
         try
         {
             // Subscriptions first, so a payment read after its subscription finds it stored.
-            await ReconcileAsync("subscription", () => gateway.ListSubscriptionIdsAsync(from, ct), id => sync.SyncSubscriptionAsync(id, ct), ct);
-            await ReconcileAsync("payment", () => gateway.ListPaymentIdsAsync(from, ct), id => sync.SyncPaymentAsync(id, ct), ct);
+            await ReconcileAsync("subscription", () => gateway.ListSubscriptionIdsAsync(from, ct), id => sync.SyncSubscriptionAsync(id, ct), [], ct);
+
+            // A refund or a dispute of a payment older than the window is read through its payment. One
+            // already read this run is not read again.
+            var payments = new HashSet<string>(StringComparer.Ordinal);
+            await ReconcileAsync("payment", () => gateway.ListPaymentIdsAsync(from, ct), id => sync.SyncPaymentAsync(id, ct), payments, ct);
+            await ReconcileAsync("refund", () => gateway.ListRefundedPaymentIdsAsync(from, ct), id => sync.SyncPaymentAsync(id, ct), payments, ct);
+            DateTimeOffset disputesFrom = now - options.Value.DisputeReconcileWindow;
+            await ReconcileAsync("dispute", () => gateway.ListDisputedPaymentIdsAsync(disputesFrom, ct), id => sync.SyncPaymentAsync(id, ct), payments, ct);
         }
         catch
         {
@@ -51,7 +59,7 @@ internal sealed class BillingReconcile(
         }
     }
 
-    private async Task ReconcileAsync(string kind, Func<Task<ProviderIdList>> list, Func<string, Task<BillingSyncResult>> read, CancellationToken ct)
+    private async Task ReconcileAsync(string kind, Func<Task<ProviderIdList>> list, Func<string, Task<BillingSyncResult>> read, HashSet<string> seen, CancellationToken ct)
     {
         ProviderIdList listed;
         try
@@ -61,7 +69,7 @@ internal sealed class BillingReconcile(
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
             // A list the provider refused or timed out on (a rotated key, a rate limit, an outage) leaves
-            // this kind for the next run; the other kind still goes ahead.
+            // this kind for the next run; the other kinds still go ahead.
             metrics.RecordBillingReconcile($"{kind}_list", "failed");
             logger.LogError(ex, "Could not list {Provider} {Kind}s to reconcile.", gateway.Name, kind);
             return;
@@ -75,6 +83,11 @@ internal sealed class BillingReconcile(
         bool first = true;
         foreach (string id in listed.Ids)
         {
+            if (!seen.Add(id))
+            {
+                continue;
+            }
+
             if (!first)
             {
                 await Task.Delay(options.Value.ReconcilePause, clock, ct);

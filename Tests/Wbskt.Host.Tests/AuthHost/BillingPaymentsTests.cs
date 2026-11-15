@@ -1200,6 +1200,43 @@ public sealed class BillingPaymentsTests
     }
 
     [Fact]
+    public async Task The_reconcile_reads_the_payments_behind_recent_refunds_and_disputes_once_each()
+    {
+        GivenReconcileDue();
+        _gateway.Setup(g => g.ListSubscriptionIdsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderIdList([], Complete: true));
+        _gateway.Setup(g => g.ListPaymentIdsAsync(Now - _options.ReconcileWindow, It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderIdList(["pay_new"], Complete: true));
+        _gateway.Setup(g => g.ListRefundedPaymentIdsAsync(Now - _options.ReconcileWindow, It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderIdList(["pay_new", "pay_old"], Complete: true));
+        _gateway.Setup(g => g.ListDisputedPaymentIdsAsync(Now - _options.DisputeReconcileWindow, It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderIdList(["pay_old", "pay_disputed"], Complete: true));
+        var metrics = new AuthMetrics();
+        List<string> recorded = RecordReconciles(metrics, out MeterListener listener);
+        using (listener)
+        {
+            await Reconcile(metrics).RunAsync(CancellationToken.None);
+        }
+
+        _gateway.Verify(g => g.FindPaymentAsync("pay_new", It.IsAny<CancellationToken>()), Times.Once);
+        _gateway.Verify(g => g.FindPaymentAsync("pay_old", It.IsAny<CancellationToken>()), Times.Once);
+        _gateway.Verify(g => g.FindPaymentAsync("pay_disputed", It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(["payment/set_aside", "refund/set_aside", "dispute/set_aside"], recorded);
+    }
+
+    [Fact]
+    public async Task Dodo_lists_refunds_and_disputes_by_the_payment_they_reverse()
+    {
+        var handler = new StubHandler(request => request.RequestUri!.AbsolutePath == "/refunds"
+            ? Json("""{"items":[{"refund_id":"rfn_1","payment_id":"pay_1","status":"succeeded"}]}""")
+            : Json("""{"items":[{"dispute_id":"dsp_1","payment_id":"pay_2","dispute_status":"dispute_lost"}]}"""));
+        var gateway = Dodo(handler);
+
+        ProviderIdList refunded = await gateway.ListRefundedPaymentIdsAsync(Now, CancellationToken.None);
+        ProviderIdList disputed = await gateway.ListDisputedPaymentIdsAsync(Now, CancellationToken.None);
+
+        Assert.Equal(["pay_1"], refunded.Ids);
+        Assert.Equal(["pay_2"], disputed.Ids);
+        Assert.Equal(["/refunds", "/disputes"], handler.Requests.Select(r => r.RequestUri!.AbsolutePath));
+    }
+
+    [Fact]
     public async Task A_list_the_provider_refuses_is_counted_and_the_other_kind_still_runs()
     {
         GivenReconcileDue();
@@ -1281,6 +1318,8 @@ public sealed class BillingPaymentsTests
         _gateway.Setup(g => g.IsConfigured).Returns(true);
         _gateway.Setup(g => g.Name).Returns("dodo");
         _billing.Setup(b => b.ClaimReconcileAsync("dodo", Now.UtcDateTime, _options.ReconcileEvery, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _gateway.Setup(g => g.ListRefundedPaymentIdsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderIdList([], Complete: true));
+        _gateway.Setup(g => g.ListDisputedPaymentIdsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderIdList([], Complete: true));
     }
 
     private BillingReconcile Reconcile(AuthMetrics metrics) =>
