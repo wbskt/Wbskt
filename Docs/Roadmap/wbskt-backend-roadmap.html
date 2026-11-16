@@ -282,8 +282,8 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
      p = parent issue, s = o|c, a = areas, pr = priority, sz = size. "work" adds a state and a sentence to an issue number. -->
 <script type="application/json" id="roadmap-data">
 {
- "asOf": "2026-11-15",
- "headline": "M2 backend has 6 pieces of real work left: two wait on you (the SDK release keys and the deleted-client call), the never-ending-runs epic (#594), and the housekeeping epic (#618), now down to one M3 item. The 11 Nov architecture review (#730) is 48 of 73 done: all 5 backend P1s and every backend and library P2 except two are merged (12 Nov), the last ones being the alerting and nightly fixes (#776 to #780, PR #842 to #849). Left from it: the Team headroom call that belongs to the pricing decision (#751), the Arduino install line, which waits on your OK to tag 0.9.0-beta.2 (#767), the console items (Amal) and the Post-launch small items. A second review on 15 Nov found eight more backend issues: seven are fixed and deployed (#868 to #881, PR #869 to #883), and month-end credit notices (#876) wait on a product call. Deploys reach production again, and now restart changed monitoring services themselves.",
+ "asOf": "2026-11-16",
+ "headline": "M2 backend has 6 pieces of real work left: two wait on you (the SDK release keys and the deleted-client call), the never-ending-runs epic (#594), and the housekeeping epic (#618), now down to one M3 item. The 11 Nov architecture review (#730) is 48 of 73 done: all 5 backend P1s and every backend and library P2 except two are merged (12 Nov), the last ones being the alerting and nightly fixes (#776 to #780, PR #842 to #849). Left from it: the Team headroom call that belongs to the pricing decision (#751), the Arduino install line, which waits on your OK to tag 0.9.0-beta.2 (#767), the console items (Amal) and the Post-launch small items. A second review on 15 Nov found eight more backend issues: seven are fixed and deployed (#868 to #881, PR #869 to #883), and month-end credit notices (#876) wait on a product call. Deploys reach production again, and now restart changed monitoring services themselves. On 16 Nov signup verification mail failed with SMTP 553: the relay refused the sender because the SMTP login on the VM no longer works (fix the password in compose/.env); the auth log now says so (#888, PR #889).",
  "milestones": [
   {
    "name": "M1 Hardening",
@@ -299,7 +299,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "due": "2026-11-30",
    "start": "2026-11-01",
    "open": 29,
-   "closed": 189
+   "closed": 190
   },
   {
    "name": "M3 Go public",
@@ -565,6 +565,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   }
  ],
  "issues": [
+  {"n":888,"t":"Say when the mail relay refuses the sender, not just 553","s":"c","m":"M2","p":null,"a":["auth"],"x":"2026-11-16"},
   {"n":881,"t":"A run an old engine leader starts during a handover can be left with nothing driving it","s":"c","m":"M2","p":null,"a":["engine"],"x":"2026-11-15"},
   {"n":879,"t":"Alert on out-of-memory kills and exceptions, and on silent monitoring gaps","s":"c","m":"M2","p":null,"a":["ops"],"x":"2026-11-15"},
   {"n":877,"t":"Billing reconcile misses refunds and chargebacks of older payments","s":"c","m":"M2","p":null,"a":["auth"],"x":"2026-11-15"},
@@ -894,6 +895,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":127,"t":"Reject breached passwords using the Have I Been Pwned range API","s":"c","m":"M2","p":175,"a":["auth"],"pr":"P2","sz":"S","x":"2026-11-03"}
  ],
  "merged": [
+  {"n":889,"t":"fix(auth): name a likely login failure when the relay refuses the sender","d":"2026-11-16"},
   {"n":883,"t":"test(engine): race charges, starts, a post and a cap cut against each other","d":"2026-11-15"},
   {"n":882,"t":"fix(engine): drive runs an old leader started during a handover","d":"2026-11-15"},
   {"n":880,"t":"feat(deploy): alert on out-of-memory kills and silent monitoring gaps","d":"2026-11-15"},
