@@ -234,6 +234,25 @@ public sealed class OutboundMailPipelineTests
     }
 
     [Fact]
+    public void A_refused_sender_is_described_as_a_likely_login_failure()
+    {
+        var ex = new SmtpException(SmtpStatusCode.MailboxNameNotAllowed, "5.7.1 <no-reply@example.com>: Sender address rejected: not logged in");
+
+        string described = MailFailure.Describe(ex);
+
+        Assert.StartsWith("SmtpException (553 MailboxNameNotAllowed); the relay refused the sender", described);
+        Assert.Contains("Password", described);
+    }
+
+    [Fact]
+    public void A_recipient_refused_with_553_is_not_described_as_a_login_failure()
+    {
+        var ex = new SmtpFailedRecipientException(SmtpStatusCode.MailboxNameNotAllowed, "<someone@example.com>", "5.1.3 Bad recipient address syntax");
+
+        Assert.DoesNotContain("refused the sender", MailFailure.Describe(ex));
+    }
+
+    [Fact]
     public void A_refused_recipient_is_described_without_the_relay_reply_that_names_it()
     {
         var ex = new SmtpFailedRecipientException(SmtpStatusCode.MailboxUnavailable, "<someone@example.com>", "5.1.1 <someone@example.com>: Recipient address rejected");

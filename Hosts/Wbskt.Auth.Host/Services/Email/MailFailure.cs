@@ -29,8 +29,22 @@ internal static class MailFailure
                 : $" <- {inner.GetType().Name}";
         }
 
+        if (IsSenderRefusal(ex))
+        {
+            described += "; the relay refused the sender, as it does when the login was refused (check Auth:Email UserName, Password and FromAddress)";
+        }
+
         return described;
     }
+
+    /// <summary>
+    /// Whether the relay refused the sender rather than a recipient. SmtpClient does not throw when the
+    /// relay rejects its password: it carries on unauthenticated, and the relay then refuses the
+    /// from-address with a 553 (or a 530), which reads as an address problem rather than a bad login.
+    /// </summary>
+    private static bool IsSenderRefusal(Exception ex) =>
+        ex is SmtpException { StatusCode: SmtpStatusCode.MailboxNameNotAllowed or SmtpStatusCode.MustIssueStartTlsFirst }
+        and not SmtpFailedRecipientException;
 
     /// <summary>Whether the relay refused this recipient for good, so trying again cannot help.</summary>
     public static bool IsPermanentRecipientRefusal(Exception ex) =>
