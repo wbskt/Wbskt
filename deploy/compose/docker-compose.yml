@@ -798,9 +798,9 @@ services:
     restart: unless-stopped
     environment:
       # The Go runtime does not read the cgroup limit; without this its heap overshoots mem_limit.
-      GOMEMLIMIT: 326MiB
-    mem_limit: 384m
-    memswap_limit: 384m
+      GOMEMLIMIT: 544MiB
+    mem_limit: 640m
+    memswap_limit: 640m
     logging: *default-logging
 
   grafana:

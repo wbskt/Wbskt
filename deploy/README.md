@@ -491,7 +491,7 @@ static config (entrypoints, ACME settings, etc.), not for routine host redeploys
 ## Observability
 
 Every host sends traces, metrics and logs over OTLP to `otel-collector`, which fans them out to
-Tempo (traces, 72h), Prometheus (metrics, `METRICS_RETENTION`, default 15d) and Loki (logs, 7d).
+Tempo (traces, 24h), Prometheus (metrics, `METRICS_RETENTION`, default 15d) and Loki (logs, 7d).
 MassTransit carries the trace context in message headers, so one trace follows a client message
 from the WebSocket gateway, across the bus, into the engine and the management host. Logs carry the
 trace and span ids, and Grafana links the two both ways. `docker compose logs` keeps working too:
@@ -559,6 +559,7 @@ dashboard otherwise). The template and the zone are read at start, so after chan
 | `DatabaseAtExpressLimit` | a database's data files pass 9 GiB; Express refuses writes at 10 GB (pages) |
 | `DiskAlmostFull` | any real filesystem on the VM has under 15% free for 10 minutes |
 | `DiskFillingFast` | at the last 6 hours' rate a filesystem under 40% free fills within 24 hours |
+| `HostDiskIOSaturated` | the VM spent over half its CPU time waiting on disk for 15 minutes (warn) |
 | `NodeExporterDown` | Prometheus cannot scrape node-exporter, so nothing is watching disk space |
 | `ContainerRestarting` | a container restarted in place 3 or more times in 15 minutes |
 | `ContainerNearMemoryLimit` | a container above 90% of its `mem_limit` for 10 minutes (warn) |
@@ -811,6 +812,10 @@ What hitting a cap looks like depends on the container:
 - **RabbitMQ** raises its memory alarm at 60% of 1 GiB (`deploy/observability/rabbitmq/memory.conf`,
   since RabbitMQ reads the VM's RAM, not the cap) and then blocks every publisher, client
   traffic included. `RabbitMQMemoryAlarm` pages on it.
+- **Tempo, Loki and Prometheus** read their data files through the page cache, which counts toward the
+  cap. Pinned at the cap, the kernel evicts those pages and the service reads them back over and over,
+  saturating the disk; SQL Server's reads queue behind it and queries time out while SQL looks idle
+  (#886). `HostDiskIOSaturated` warns on it; the `BLOCK I/O` column of `docker stats` names the reader.
 - **Redis** refuses writes at `maxmemory 128mb`, leaving room under its cap for an AOF rewrite; every
   caller logs that and falls back.
 - The larger Go services (Traefik, Loki, Tempo, the collector, Grafana, cAdvisor) get a `GOMEMLIMIT`
@@ -825,15 +830,15 @@ What hitting a cap looks like depends on the container:
 | prometheus | `PROMETHEUS_MEM_LIMIT`, default `512m` |
 | rabbitmq | 1g (alarm at about 600 MiB; keep `memory.conf` equal to the cap) |
 | loki | 512m |
-| tempo | 384m |
+| tempo | 640m |
 | redis | 256m, with `maxmemory 128mb` |
 | otel-collector, grafana | 256m each |
 | cadvisor | 192m |
 | console, alertmanager, pushgateway, node-exporter | 64m each |
 | migrator (one-shot, during a deploy) | 1g |
 
-The caps are ceilings, not reservations. With one replica of everything they add up to 6,720 MiB
-(about 6.6 GiB, 7.6 GiB while the migrator runs), and SQL Server takes about 2.3 GiB beside them, so
+The caps are ceilings, not reservations. With one replica of everything they add up to 6,976 MiB
+(about 6.8 GiB, 7.8 GiB while the migrator runs), and SQL Server takes about 2.3 GiB beside them, so
 an 8 GB VM is oversubscribed only if every container reaches its cap at once; `oom_score_adj` keeps
 SQL Server out of the way if that happens. Idle, the stack uses far less. Each extra replica adds its
 limit. On a smaller VM, lower `HOST_MEM_LIMIT` and keep swap on. On a busier one, raise

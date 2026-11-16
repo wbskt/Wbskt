@@ -11,9 +11,15 @@ distributor:
         grpc:
           endpoint: 0.0.0.0:4317
 
+# Kept small for a shared 4-8 GB VM. Pinned at its mem_limit, Tempo once read 115 GB back from disk as
+# the kernel evicted its WAL and block pages, and every SQL query timed out waiting behind it (#886).
+ingester:
+  # Live traces stay in memory until the head block is cut; the default is 30 minutes.
+  max_block_duration: 10m
+
 compactor:
   compaction:
-    block_retention: 72h
+    block_retention: 24h
 
 storage:
   trace:

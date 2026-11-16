@@ -564,8 +564,24 @@ groups:
             space" in deploy/README.md.
           command: "df -h && docker system df"
 
+      - alert: HostDiskIOSaturated
+        # Half the VM's CPU time waiting on disk. SQL reads queue behind whatever is saturating it, so
+        # queries time out while SQL Server itself looks idle (#886: Tempo at its mem_limit).
+        expr: avg by (instance) (rate(node_cpu_seconds_total{mode="iowait"}[5m])) > 0.5
+        for: 15m
+        labels:
+          severity: warn
+        annotations:
+          summary: "The VM is spending {{ $value | humanizePercentage }} of its CPU time waiting on disk"
+          impact: >-
+            Database queries slow down and start timing out, so pages in the console fail to load.
+          action: >-
+            Find the container doing the reading in the BLOCK I/O column and look at its memory: one pinned
+            at its mem_limit re-reads its own files from disk. Restart it and raise its limit.
+          command: "vmstat 1 5 && docker stats --no-stream"
+
       - alert: NodeExporterDown
-        # Without it the two disk alerts above can never fire.
+        # Without it the disk alerts above can never fire.
         expr: absent(up{job="node"} == 1)
         for: 10m
         labels:
