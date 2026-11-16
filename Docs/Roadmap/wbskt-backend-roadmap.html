@@ -565,6 +565,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   }
  ],
  "issues": [
+  {"n":891,"t":"Grafana thrashing the disk makes it unusable and SQL time out in production","s":"c","m":"M2","p":null,"a":["ops"],"x":"2026-11-16"},
   {"n":888,"t":"Say when the mail relay refuses the sender, not just 553","s":"c","m":"M2","p":null,"a":["auth"],"x":"2026-11-16"},
   {"n":881,"t":"A run an old engine leader starts during a handover can be left with nothing driving it","s":"c","m":"M2","p":null,"a":["engine"],"x":"2026-11-15"},
   {"n":879,"t":"Alert on out-of-memory kills and exceptions, and on silent monitoring gaps","s":"c","m":"M2","p":null,"a":["ops"],"x":"2026-11-15"},
@@ -895,6 +896,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":127,"t":"Reject breached passwords using the Have I Been Pwned range API","s":"c","m":"M2","p":175,"a":["auth"],"pr":"P2","sz":"S","x":"2026-11-03"}
  ],
  "merged": [
+  {"n":892,"t":"fix(deploy): give grafana room to cache its own binary and plugins","d":"2026-11-16"},
   {"n":889,"t":"fix(auth): name a likely login failure when the relay refuses the sender","d":"2026-11-16"},
   {"n":883,"t":"test(engine): race charges, starts, a post and a cap cut against each other","d":"2026-11-15"},
   {"n":882,"t":"fix(engine): drive runs an old leader started during a handover","d":"2026-11-15"},
