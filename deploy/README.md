@@ -816,6 +816,9 @@ What hitting a cap looks like depends on the container:
   cap. Pinned at the cap, the kernel evicts those pages and the service reads them back over and over,
   saturating the disk; SQL Server's reads queue behind it and queries time out while SQL looks idle
   (#886). `HostDiskIOSaturated` warns on it; the `BLOCK I/O` column of `docker stats` names the reader.
+- **Grafana** does the same with its own binary and plugin pages: at a 256m cap it read 52 GB in 12
+  hours, its API timed out so dashboards never loaded, and SQL timed out behind it (#891). Its
+  `GOMEMLIMIT` stays at 217MiB so the rest of its 512m cap holds those pages.
 - **Redis** refuses writes at `maxmemory 128mb`, leaving room under its cap for an AOF rewrite; every
   caller logs that and falls back.
 - The larger Go services (Traefik, Loki, Tempo, the collector, Grafana, cAdvisor) get a `GOMEMLIMIT`
@@ -831,14 +834,15 @@ What hitting a cap looks like depends on the container:
 | rabbitmq | 1g (alarm at about 600 MiB; keep `memory.conf` equal to the cap) |
 | loki | 512m |
 | tempo | 640m |
+| grafana | 512m (`GOMEMLIMIT` 217MiB) |
 | redis | 256m, with `maxmemory 128mb` |
-| otel-collector, grafana | 256m each |
+| otel-collector | 256m |
 | cadvisor | 192m |
 | console, alertmanager, pushgateway, node-exporter | 64m each |
 | migrator (one-shot, during a deploy) | 1g |
 
-The caps are ceilings, not reservations. With one replica of everything they add up to 6,976 MiB
-(about 6.8 GiB, 7.8 GiB while the migrator runs), and SQL Server takes about 2.3 GiB beside them, so
+The caps are ceilings, not reservations. With one replica of everything they add up to 7,232 MiB
+(about 7.1 GiB, 8.1 GiB while the migrator runs), and SQL Server takes about 2.3 GiB beside them, so
 an 8 GB VM is oversubscribed only if every container reaches its cap at once; `oom_score_adj` keeps
 SQL Server out of the way if that happens. Idle, the stack uses far less. Each extra replica adds its
 limit. On a smaller VM, lower `HOST_MEM_LIMIT` and keep swap on. On a busier one, raise
