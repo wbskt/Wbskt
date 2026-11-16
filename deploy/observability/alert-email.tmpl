@@ -104,8 +104,8 @@
     {{ range .Alerts.Resolved }}{{ template "wbskt.email.html.resolved" . }}{{ end }}
   </td></tr>
   <tr><td style="padding:6px 2px 0;font-size:12px;line-height:1.6;color:#71717a">
-    The links open through an SSH tunnel to the VM, since Grafana and Alertmanager are not public:
-    <div style="font-family:Menlo,Consolas,'Courier New',monospace;font-size:12px;color:#3f3f46;background:#ffffff;border:1px solid #e4e4e7;border-radius:4px;padding:6px 8px;margin:6px 0;word-break:break-all">ssh -L 3000:127.0.0.1:3000 -L 9093:127.0.0.1:9093 &lt;your VM&gt;</div>
+    The links open through an SSH tunnel to the VM, since Grafana, Alertmanager and the RabbitMQ UI are not public:
+    <div style="font-family:Menlo,Consolas,'Courier New',monospace;font-size:12px;color:#3f3f46;background:#ffffff;border:1px solid #e4e4e7;border-radius:4px;padding:6px 8px;margin:6px 0;word-break:break-all">ssh -L 3000:127.0.0.1:3000 -L 9093:127.0.0.1:9093 -L 15672:127.0.0.1:15672 &lt;your VM&gt;</div>
     Every alert, and what fires it, is listed under "Alerts" in deploy/README.md. To stop mail about something already being handled, silence it in Alertmanager.
   </td></tr>
 </table>
@@ -141,6 +141,6 @@ Alert: {{ .Labels.alertname }}  {{ template "wbskt.labels" .Labels }}
 {{ end }}
 --
 Links open through an SSH tunnel to the VM:
-  ssh -L 3000:127.0.0.1:3000 -L 9093:127.0.0.1:9093 <your VM>
+  ssh -L 3000:127.0.0.1:3000 -L 9093:127.0.0.1:9093 -L 15672:127.0.0.1:15672 <your VM>
 Every alert is listed under "Alerts" in deploy/README.md. Silence one in Alertmanager at http://localhost:9093.
 {{ end }}
