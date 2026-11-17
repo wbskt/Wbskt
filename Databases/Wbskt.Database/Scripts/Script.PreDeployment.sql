@@ -215,7 +215,7 @@ Pre-Deployment Script: workflow state moves to dbo.Workflows
 --------------------------------------------------------------------------------------
 A workflow's state (Enabled, Disabled, Deprecated, Deleted) and its one live version now live on a
 dbo.Workflows row, replacing WorkflowDefinitions.IsEnabled and the dbo.WorkflowDeletions tombstones.
-The diff that follows drops IsEnabled, so the state is read here, while it still exists, into
+The state is read here, before the diff, into
 dbo.WorkflowStateMigration; the post-deployment script fills dbo.Workflows from it and drops it.
 
   - a tombstone                                  -> Deleted
@@ -228,12 +228,14 @@ queued events, so whatever an older or a retired version still had is removed he
 registrations are keyed by workflow and trigger node now ("schedule:<workflowRefId>:<nodeId>")
 rather than by the ScheduledFires row, which is replaced on every enable.
 
-Guarded on IsEnabled still existing, so it runs once. Dropping the column needs
-MIGRATE_ALLOW_DATA_LOSS=true for this deploy (deploy/README.md).
+Guarded on dbo.WorkflowDeletions still existing (the post-deployment script drops it once
+dbo.Workflows is filled), so it runs once and never on a fresh database. IsEnabled itself stays in
+the table, unused: dropping it would trip the deploy's data-loss guard (#898).
 */
-IF COL_LENGTH('dbo.WorkflowDefinitions', 'IsEnabled') IS NOT NULL
+IF OBJECT_ID('dbo.WorkflowDeletions', 'U') IS NOT NULL
+   AND COL_LENGTH('dbo.WorkflowDefinitions', 'IsEnabled') IS NOT NULL
 BEGIN
-    PRINT '>>> Workflows: capturing workflow state before IsEnabled is dropped';
+    PRINT '>>> Workflows: capturing workflow state into dbo.Workflows';
 
     EXEC sp_executesql N'
         IF OBJECT_ID(''dbo.WorkflowStateMigration'', ''U'') IS NOT NULL

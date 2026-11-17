@@ -776,20 +776,23 @@ run. The column was written but never read, so nothing is lost but the column it
 Nothing is recoverable afterwards, so take a backup first — `deploy/scripts/backup.sh` — and confirm
 a client can still log in before moving on.
 
-### Workflow states need this flag, once
+### Workflow states are additive, and need no flag
 
-Giving workflows a state and a live version (`dbo.Workflows`, #895) drops
-`WorkflowDefinitions.IsEnabled`, so the deploy carrying it also fails the incremental publish (and the
-upgrade rehearsal) until `MIGRATE_ALLOW_DATA_LOSS=true` is passed for that one run. sqlpackage plans
-the drop before the pre-deployment script runs, so dropping the column there does not avoid it.
+Giving workflows a state and a live version (`dbo.Workflows`, #895) moves a workflow's state off
+`WorkflowDefinitions.IsEnabled`. The column stays in the table, unused, because dropping a column
+from a table with rows trips the data-loss guard, and the rehearsal failure that causes also stops
+the image build (#898).
 
-The pre-deployment script reads every workflow's state out of the column first, and the
-post-deployment script writes it to `dbo.Workflows`: a deleted workflow stays deleted, one whose
-newest version was enabled stays Enabled on that version, and every other one (today's deprecated
-workflows) becomes Disabled. Schedule triggers are re-keyed by workflow and node, and registrations,
-schedules and queued events left by versions that are no longer live are removed. Take a backup
-first, and after the deploy check that `SELECT State, COUNT(*) FROM dbo.Workflows GROUP BY State`
-matches what the console showed before.
+The pre-deployment script reads every workflow's state out of `IsEnabled` and `dbo.WorkflowDeletions`
+first, and the post-deployment script writes it to `dbo.Workflows`:
+
+- A deleted workflow stays deleted.
+- A workflow whose newest version was enabled stays Enabled on that version.
+- Every other workflow (today's deprecated ones) becomes Disabled.
+
+Schedule triggers are re-keyed by workflow and node. Registrations, schedules and queued events left
+by versions that are no longer live are removed. After the deploy,
+`SELECT State, COUNT(*) FROM dbo.Workflows GROUP BY State` should match what the console showed before.
 
 ### Email verification is additive, and needs no flag
 
