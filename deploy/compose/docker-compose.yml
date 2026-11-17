@@ -106,7 +106,7 @@ services:
       - --entrypoints.websecure.address=:443
       - --entrypoints.websecure.transport.respondingTimeouts.readTimeout=0
       - --entrypoints.websecure.transport.respondingTimeouts.writeTimeout=0
-      # Internal-only entrypoint for the engine's api/inbound/* and internal/integrations/*; never published to the host,
+      # Internal-only entrypoint for the engine's api/inbound/*; never published to the host,
       # only reachable by other containers as http://traefik:8081.
       - --entrypoints.engine.address=:8081
       # MQTT over TLS for the MQTT gateway: TLS ends here and plain MQTT goes on to gateway-mqtt.
@@ -311,6 +311,7 @@ services:
       Jwt__TrustedJwksUrl: http://auth:8080/.well-known/jwks.json
       Services__Auth: http://auth:8080
       Services__WorkflowEngine: http://traefik:8081
+      Services__WorkflowEngineDirect: http://engine:8080
       Services__WorkflowEngineApiKey: ${ENGINE_INBOUND_API_KEY:?ENGINE_INBOUND_API_KEY is required - see .env.example}
       Services__AuthInternalApiKey: ${AUTH_INTERNAL_API_KEY:?AUTH_INTERNAL_API_KEY is required - see .env.example}
       # The same shared key guards this host's own internal routes (the Business overage report).
@@ -518,9 +519,10 @@ services:
       replicas: ${ENGINE_REPLICAS:-1}
     labels:
       - traefik.enable=true
-      # Management reaches the engine only through this router: api/inbound/* for runs and
-      # signals, internal/integrations/* to seal and test integration credentials.
-      - traefik.http.routers.engine.rule=PathPrefix(`/api/inbound`) || PathPrefix(`/internal/integrations`)
+      # Management reaches the leader through this router for api/inbound/* (runs and signals). It
+      # calls api/internal/integrations/* on engine:8080 directly: any replica answers those, and the
+      # internal route guard refuses them through a proxy.
+      - traefik.http.routers.engine.rule=PathPrefix(`/api/inbound`)
       - traefik.http.routers.engine.entrypoints=engine
       # Engine is backend-only, so override the provider-level wbskt_edge default.
       - traefik.docker.network=wbskt_backend

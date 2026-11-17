@@ -197,6 +197,18 @@ public static class Program
             client.Timeout = TimeSpan.FromSeconds(builder.Configuration.GetValue("Services:WorkflowEngineTimeoutSeconds", 10));
         })
         .AddHttpMessageHandler<WorkflowEngineApiKeyHandler>();
+        // The integration routes are host-to-host, so they are called on the engine itself rather than
+        // through Traefik's leader router, whose forwarded headers the internal route guard refuses. Any
+        // replica answers them. Without a direct address (development, where nothing proxies the
+        // engine) the engine's one address serves both.
+        builder.Services.AddHttpClient<IEngineIntegrationClient, EngineIntegrationClient>(client =>
+        {
+            client.BaseAddress = new Uri(builder.Configuration["Services:WorkflowEngineDirect"]
+                                         ?? builder.Configuration["Services:WorkflowEngine"]
+                                         ?? throw new ArgumentNullException(nameof(client.BaseAddress), "Services:WorkflowEngine configuration is missing."));
+            client.Timeout = TimeSpan.FromSeconds(builder.Configuration.GetValue("Services:WorkflowEngineTimeoutSeconds", 10));
+        })
+        .AddHttpMessageHandler<WorkflowEngineApiKeyHandler>();
         // Every engine operation goes through the gateway: start, signal, wake and webhook over the
         // client above, cancel as a command on the real bus (its send is the action, like a client
         // command). The engine client itself is only the gateway's transport.

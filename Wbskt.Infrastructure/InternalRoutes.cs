@@ -13,6 +13,18 @@ public static class InternalRoutes
     /// <summary>Auth host: a workspace's internal id and the caller's permissions in it, for the management host.</summary>
     public const string ResolveWorkspace = Prefix + "/workspaces/resolve";
 
+    /// <summary>
+    /// Engine: validates an integration's settings and seals its secret, for the management host,
+    /// which holds no master key. Unlike the inbound routes it starts no run, so any replica answers.
+    /// </summary>
+    public const string EngineIntegrationSeal = Prefix + "/integrations/seal";
+
+    /// <summary>Engine: tries an integration against its service without storing anything.</summary>
+    public const string EngineIntegrationTest = Prefix + "/integrations/test";
+
+    /// <summary>Engine: the chats a saved Telegram integration's bot has heard from lately.</summary>
+    public const string EngineIntegrationTelegramChats = Prefix + "/integrations/telegram/chats";
+
     /// <summary>Auth host: the caller's internal user id, for a host whose records are keyed by it (see <c>WbsktClaims</c>).</summary>
     public const string CurrentUser = Prefix + "/users/me";
 

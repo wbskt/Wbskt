@@ -9,7 +9,7 @@ using static Wbskt.Host.Tests.NodeExecutors.Actions.NotificationExecutorTests;
 namespace Wbskt.Host.Tests.Clients;
 
 /// <summary>How the engine's answers to seal and test reach the management host's callers.</summary>
-public sealed class WorkflowEngineClientIntegrationTests
+public sealed class EngineIntegrationClientTests
 {
     private static readonly IntegrationSealRequest Seal = new(3, Guid.NewGuid(), "telegram", null, null, null, null);
     private static readonly IntegrationProbeRequest Probe = new(3, Guid.NewGuid(), "telegram", null, null, null, null, new IntegrationTestOptions("42", null));
@@ -22,7 +22,7 @@ public sealed class WorkflowEngineClientIntegrationTests
 
         var result = await Client(handler).SealIntegrationAsync(Seal, CancellationToken.None);
 
-        Assert.Equal($"https://engine.test/{EngineIntegrationsApi.SealRoute}", handler.LastUri);
+        Assert.Equal($"https://engine.test/{InternalRoutes.EngineIntegrationSeal}", handler.LastUri);
         Assert.Equal(HttpMethod.Post, handler.LastRequest!.Method);
         Assert.Equal([1, 2, 3], result.Value.Secret.Ciphertext);
         Assert.Equal("••••0123", result.Value.SecretHint);
@@ -36,7 +36,7 @@ public sealed class WorkflowEngineClientIntegrationTests
 
         var result = await Client(handler).ProbeIntegrationAsync(Probe, CancellationToken.None);
 
-        Assert.Equal($"https://engine.test/{EngineIntegrationsApi.TestRoute}", handler.LastUri);
+        Assert.Equal($"https://engine.test/{InternalRoutes.EngineIntegrationTest}", handler.LastUri);
         Assert.Contains("\"chatId\":\"42\"", handler.LastBody);
         // A failed test is an answer, not a failure.
         Assert.True(result.IsSuccess);
@@ -111,7 +111,7 @@ public sealed class WorkflowEngineClientIntegrationTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Client(handler).SealIntegrationAsync(Seal, cts.Token));
     }
 
-    private static WorkflowEngineClient Client(HttpMessageHandler handler) =>
+    private static EngineIntegrationClient Client(HttpMessageHandler handler) =>
         new(new HttpClient(handler) { BaseAddress = new Uri("https://engine.test/") });
 
     private static HttpResponseMessage Answer(HttpStatusCode status, string body) =>

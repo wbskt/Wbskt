@@ -177,6 +177,21 @@ public sealed partial class HostArchitectureTests
     }
 
     [Fact]
+    public void A_host_to_host_route_is_internal_and_hidden()
+    {
+        // The public routers exclude InternalRoutes.Prefix and the route guard 404s it when forwarded,
+        // so a host-to-host route outside it is guarded by neither. "internal" anywhere else in a route
+        // is the tell (#787: the engine's integration routes sat at /internal/integrations).
+        var offending = AllHosts.SelectMany(ActionsIn)
+            .Where(a => a.Route.StartsWith(InternalRoutes.Prefix, StringComparison.Ordinal)
+                ? !IsHidden(a)
+                : a.Route.Contains("internal", StringComparison.OrdinalIgnoreCase))
+            .Select(a => $"{a.Name} {a.Route}");
+
+        Assert.Empty(offending);
+    }
+
+    [Fact]
     public void No_declared_response_carries_an_internal_id()
     {
         // Callers name things by RefId. An int Id leaks row counts and is only meaningful inside one
@@ -206,6 +221,9 @@ public sealed partial class HostArchitectureTests
 
     private static IEnumerable<string> RouteParameters(string route) =>
         RouteParameterPattern().Matches(route).Select(m => m.Groups["name"].Value);
+
+    private static bool IsHidden(Action action) =>
+        (action.Method.GetCustomAttribute<ApiExplorerSettingsAttribute>() ?? action.Controller.GetCustomAttribute<ApiExplorerSettingsAttribute>())?.IgnoreApi == true;
 
     /// <summary>The T of <c>Task&lt;ActionResult&lt;T&gt;&gt;</c>, <c>ActionResult&lt;T&gt;</c> or <c>Task&lt;T&gt;</c>.</summary>
     private static Type? DeclaredResponse(MethodInfo method)
