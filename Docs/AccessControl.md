@@ -227,7 +227,9 @@ tenant member is not covered: it ends their access as a whole rather than moving
 user to the workspace's tenant (`WorkspaceMember_Add`) — without that row they would pass the
 membership gate but resolve no roles, since every assignment is filtered by `TenantId`.
 Workspace owners automatically receive the tenant's `Admin` role scoped to the new workspace
-(`Workspace_Create`).
+(`Workspace_Create`), and so does a member a workspace is handed to (`PUT /api/v1/workspaces/{ref}/owner`,
+`Workspace_SetOwner`) unless they already hold it there or tenant-wide. A suspended member cannot be
+made owner; they answer 404 `USER_NOT_FOUND`, as someone outside the tenant does.
 Creating a workspace (`POST /api/v1/workspaces`) needs `workspaces.create` **tenant-wide** in the tenant
 it goes in, because a workspace counts against that tenant's plan. Only `Admin` roles hold it by default.
 
