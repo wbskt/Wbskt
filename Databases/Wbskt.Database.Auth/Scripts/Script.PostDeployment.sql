@@ -284,6 +284,16 @@ WHERE r.Kind = 'Admin'
   AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = r.Id AND rp.PermissionId = p.Id);
 GO
 
+-- The Admin role cannot be changed through the API (RolePermission_Grant and _Remove, THROW 50028);
+-- a deny set on one before that rule would otherwise stay, with nothing able to lift it.
+UPDATE rp
+SET IsDeny = 0
+FROM dbo.RolePermissions rp
+INNER JOIN dbo.Roles r ON r.Id = rp.RoleId
+WHERE r.Kind = 'Admin'
+  AND rp.IsDeny = 1;
+GO
+
 -- RolePermissions: the User roles the pre-deployment script recorded as empty get the default
 -- reads Tenant_Create now seeds (keep the two lists the same). Runs once, then drops its list.
 IF OBJECT_ID('dbo.__UserRoleDefaultsBackfill', 'U') IS NOT NULL

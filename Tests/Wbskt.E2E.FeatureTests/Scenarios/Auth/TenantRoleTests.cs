@@ -263,6 +263,26 @@ public sealed class TenantRoleTests(ServicesFixture fixture)
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
+    [SkippableFact]
+    public async Task ROLE_13b_TheAdminRole_CannotBeChangedOrDeleted()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var adminRole = (await fixture.GetRolesAsync(admin.Token, tenantRef)).Single(r => r.Name == "Admin");
+        var client = fixture.Auth.As(admin.Token);
+
+        // Denying roles.manage would leave nobody able to change a role again, so the role is fixed.
+        var deny = await client.GrantRolePermissionRawAsync(tenantRef, adminRole.RefId, new GrantRolePermissionRequest(Slug: "roles.manage", IsDeny: true));
+        var delete = await client.DeleteRoleRawAsync(tenantRef, adminRole.RefId);
+
+        deny.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await ServicesFixture.ReadErrorCodeAsync(deny)).Should().Be("ROLE_BUILT_IN");
+        delete.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await ServicesFixture.ReadErrorCodeAsync(delete)).Should().Be("ROLE_BUILT_IN");
+        (await fixture.GetRolesAsync(admin.Token, tenantRef)).Select(r => r.RefId).Should().Contain(adminRole.RefId);
+    }
+
     // ── Authorization ─────────────────────────────────────────────────────────────────────
 
     [SkippableFact]

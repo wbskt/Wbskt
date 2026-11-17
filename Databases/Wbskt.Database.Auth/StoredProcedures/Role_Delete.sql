@@ -13,6 +13,13 @@ BEGIN
         THROW 50001, 'Role does not belong to the specified tenant.', 1;
     END
 
+    -- Workspace_Create and Workspace_SetOwner give a workspace's owner the Admin role there, and a
+    -- tenant without it could only be administered through grants made one by one.
+    IF EXISTS (SELECT 1 FROM dbo.Roles WHERE Id = @Id AND Kind = N'Admin')
+    BEGIN
+        THROW 50028, 'The built-in Admin role cannot be deleted.', 1;
+    END
+
     BEGIN TRANSACTION;
 
     -- Last-administrator guard; see dbo.Tenant_Administrators for the rule and the lock.

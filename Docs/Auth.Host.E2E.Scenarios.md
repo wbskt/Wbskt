@@ -521,6 +521,7 @@ admin unless stated.
 | `ROLE_11` | + | Delete a role | **204**; absent from the list |
 | `ROLE_12` | + | Deleting a role removes it from everyone who held it | A user assigned it loses the derived permissions on re-resolve |
 | `ROLE_13` | − | Delete an unknown `roleRef` | **403** `ROLE_NOT_FOUND` |
+| `ROLE_13b` | − | Deny a permission on, or delete, the built-in Admin role | **409** `ROLE_BUILT_IN`; the role keeps every permission |
 | `ROLE_14` | − | Any role operation without `roles.manage` | **403** `PERMISSION_UNAUTHORIZED` |
 | `ROLE_15` | − | List roles without `roles.read` | **403** |
 | `ROLE_16` | − | Any role route with an unknown `tenantRef` | **403** `TENANT_NOT_FOUND` |
