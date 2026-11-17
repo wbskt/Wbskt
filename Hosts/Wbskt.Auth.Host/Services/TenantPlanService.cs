@@ -1,5 +1,6 @@
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
+using Wbskt.Auth.Host.Services.Billing;
 using Wbskt.Auth.Models;
 using Wbskt.Events.Auth;
 using Wbskt.Infrastructure;
@@ -9,7 +10,7 @@ using Wbskt.Models.Billing;
 
 namespace Wbskt.Auth.Host.Services;
 
-internal sealed class TenantPlanService(ITenantPlanProvider plans, IAuditWorkspaces audit, ILogger<TenantPlanService> logger) : ITenantPlanService
+internal sealed class TenantPlanService(ITenantPlanProvider plans, ITenantBillingProvider billing, IAuditWorkspaces audit, ILogger<TenantPlanService> logger) : ITenantPlanService
 {
     private static readonly Error NotFound = Error.NotFound("TENANT_NOT_FOUND", "Tenant not found.");
     private static readonly Error Changed = Error.Conflict("TENANT_PLAN_CHANGED", "The tenant's plan changed since it was read. Read it again and retry.");
@@ -60,6 +61,17 @@ internal sealed class TenantPlanService(ITenantPlanProvider plans, IAuditWorkspa
             return ToResponse(current);
         }
 
+        // Putting an operator's plan on a tenant that pays for one itself leaves the subscription charging
+        // beside it; the operator cancels it in the provider's dashboard first, or says the tenant keeps it.
+        // A change to an operator's plan already on (its limits, its end) was asked about when it was put on.
+        if (source == PlanSource.Operator && current.Source != PlanSource.Operator && !request.KeepSubscription
+            && await FindBillingAsync(current.TenantId, cancellationToken) is { } billingSubscription)
+        {
+            return Error.Conflict(
+                "PLAN_SUBSCRIPTION_BILLING",
+                $"The tenant pays for {billingSubscription.PlanCode} with {billingSubscription.Provider} subscription {billingSubscription.SubscriptionId}, which would go on charging beside this plan. Cancel it in the provider's dashboard first, or set keepSubscription.");
+        }
+
         var changedEvent = new TenantPlanChangedEvent(current.TenantId, current.TenantRefId, request.PlanCode, current.PlanCode, current.PlanRevision + 1)
         {
             WorkspaceIds = await audit.OfTenantAsync(current.TenantId, cancellationToken),
@@ -79,6 +91,9 @@ internal sealed class TenantPlanService(ITenantPlanProvider plans, IAuditWorkspa
             updated.TenantId, current.PlanCode, updated.PlanCode, updated.Source, updated.PlanRevision);
         return ToResponse(updated);
     }
+
+    private async Task<TenantSubscription?> FindBillingAsync(int tenantId, CancellationToken cancellationToken) =>
+        (await billing.GetSubscriptionsAsync(tenantId, cancellationToken)).FirstOrDefault(s => s.DuplicateAt is null && SubscriptionPlan.IsBilling(s));
 
     public async Task<Result<Page<WorkspaceAccountResponse>>> GetWorkspaceAccountsAsync(PageRequest page, int? tenantId, int? workspaceId, CancellationToken cancellationToken)
     {

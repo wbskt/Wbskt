@@ -17,6 +17,57 @@ public sealed class TenantPlanServiceTests
 
     private readonly Mock<ITenantPlanProvider> _plans = new();
     private readonly Mock<IAuditWorkspaces> _audit = new();
+    private readonly Mock<ITenantBillingProvider> _billing = new();
+    private readonly List<TenantSubscription> _subscriptions = [];
+
+    public TenantPlanServiceTests()
+    {
+        _billing.Setup(b => b.GetSubscriptionsAsync(9, It.IsAny<CancellationToken>())).ReturnsAsync(() => _subscriptions);
+    }
+
+    [Theory]
+    [InlineData(SubscriptionStatus.Active, false, true)]
+    [InlineData(SubscriptionStatus.PastDue, false, true)]
+    [InlineData(SubscriptionStatus.Active, true, false)]
+    [InlineData(SubscriptionStatus.Cancelled, true, false)]
+    [InlineData(SubscriptionStatus.Expired, false, false)]
+    public async Task An_operators_plan_over_a_subscription_still_billing_is_refused_unless_the_tenant_keeps_it(SubscriptionStatus status, bool cancelAtPeriodEnd, bool refused)
+    {
+        Current(PlanCode.Pro, 3, source: PlanSource.Subscription);
+        _subscriptions.Add(new TenantSubscription(9, "dodo", "sub_1", "cus_1", "prod_pro_m", PlanCode.Pro, BillingInterval.Monthly, status, DateTime.UtcNow.AddDays(10), cancelAtPeriodEnd, null, null));
+        _plans.Setup(p => p.SetAsync(9, PlanCode.Business, It.IsAny<PlanLimitOverrides?>(), 3, PlanSource.Operator, It.IsAny<DateTime?>(), It.IsAny<OutboxMessage>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantPlan(9, TenantRef, PlanCode.Business, null, 4, null, PlanSource.Operator));
+
+        var set = await Service().SetAsync(TenantRef, new SetTenantPlanRequest(PlanCode.Business), PlanSource.Operator, CancellationToken.None);
+        var kept = await Service().SetAsync(TenantRef, new SetTenantPlanRequest(PlanCode.Business, KeepSubscription: true), PlanSource.Operator, CancellationToken.None);
+
+        Assert.Equal(refused, set.IsFailure);
+        if (refused)
+        {
+            Assert.Equal("PLAN_SUBSCRIPTION_BILLING", set.Error.Code);
+            Assert.Equal(ErrorType.Conflict, set.Error.Type);
+            Assert.Contains("sub_1", set.Error.Message);
+        }
+
+        Assert.True(kept.IsSuccess);
+    }
+
+    [Fact]
+    public async Task A_change_to_an_operators_plan_already_on_and_a_subscriptions_own_plan_are_never_asked_about()
+    {
+        _subscriptions.Add(new TenantSubscription(9, "dodo", "sub_1", "cus_1", "prod_pro_m", PlanCode.Pro, BillingInterval.Monthly, SubscriptionStatus.Active, DateTime.UtcNow.AddDays(10), false, null, null));
+        _plans.Setup(p => p.SetAsync(9, It.IsAny<PlanCode>(), It.IsAny<PlanLimitOverrides?>(), 3, It.IsAny<PlanSource>(), It.IsAny<DateTime?>(), It.IsAny<OutboxMessage>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantPlan(9, TenantRef, PlanCode.Business, null, 4, null, PlanSource.Operator));
+
+        Current(PlanCode.Business, 3, source: PlanSource.Operator);
+        var limits = await Service().SetAsync(TenantRef, new SetTenantPlanRequest(PlanCode.Business, new PlanLimitOverrides { Clients = 3_000 }), PlanSource.Operator, CancellationToken.None);
+        Current(PlanCode.Free, 3, source: PlanSource.Default);
+        var subscribed = await Service().SetAsync(TenantRef, new SetTenantPlanRequest(PlanCode.Pro), PlanSource.Subscription, CancellationToken.None);
+
+        Assert.True(limits.IsSuccess);
+        Assert.True(subscribed.IsSuccess);
+        _billing.Verify(b => b.GetSubscriptionsAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 
     [Fact]
     public async Task An_unknown_tenant_is_not_found()
@@ -221,5 +272,5 @@ public sealed class TenantPlanServiceTests
 
     private static WorkspaceAccountResponse Account(int workspaceId) => new(workspaceId, 9, TenantRef, PlanCode.Pro, null, 1);
 
-    private TenantPlanService Service() => new(_plans.Object, _audit.Object, NullLogger<TenantPlanService>.Instance);
+    private TenantPlanService Service() => new(_plans.Object, _billing.Object, _audit.Object, NullLogger<TenantPlanService>.Instance);
 }

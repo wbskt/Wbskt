@@ -61,7 +61,7 @@ internal sealed class AdminTenantService(
                 Error.Validation("PLAN_ENDS_AT_INVALID", "A staff plan ends in the future and within a year."));
         }
 
-        var set = new SetTenantPlanRequest(request.PlanCode, request.LimitOverrides, request.ExpectedRevision, request.EndsAt, request.ContractClients);
+        var set = new SetTenantPlanRequest(request.PlanCode, request.LimitOverrides, request.ExpectedRevision, request.EndsAt, request.ContractClients, request.KeepSubscription);
         return runner.RunAsync(
             request.Staff,
             new StaffAction(SetPlanAction, TargetKind, tenantRef),

@@ -23,8 +23,11 @@ public record DeletedWorkspacesResponse(int[] WorkspaceIds);
 /// or to Free. Setting an end date that has passed hands it back at the next review.
 /// <paramref name="ContractClients"/> sizes a Business contract: its clients, messages and credits follow
 /// from it (<c>BusinessContract</c>) unless <paramref name="LimitOverrides"/> sets them.
+/// An operator's plan put on a tenant with a subscription still billing is refused (409
+/// <c>PLAN_SUBSCRIPTION_BILLING</c>), since the subscription would go on charging beside it, unless
+/// <paramref name="KeepSubscription"/> says that is meant.
 /// </summary>
-public record SetTenantPlanRequest(PlanCode PlanCode, PlanLimitOverrides? LimitOverrides = null, int? ExpectedRevision = null, DateTimeOffset? EndsAt = null, int? ContractClients = null);
+public record SetTenantPlanRequest(PlanCode PlanCode, PlanLimitOverrides? LimitOverrides = null, int? ExpectedRevision = null, DateTimeOffset? EndsAt = null, int? ContractClients = null, bool KeepSubscription = false);
 
 /// <summary>A tenant's plan as it stands: who set it, and when an operator's plan ends.</summary>
 public record TenantPlanResponse(

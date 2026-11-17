@@ -12,7 +12,9 @@ public sealed record AdminTenantLimitsResponse(TenantPlanResponse Plan, PlanLimi
 /// <summary>
 /// Puts a tenant on a staff plan (<c>InternalRoutes.AdminTenantPlan</c>). Billing leaves the tenant alone
 /// until <paramref name="EndsAt"/>, so a staff plan always ends, within a year. The overrides replace the
-/// tenant's whole set, and <paramref name="ExpectedRevision"/> is the revision the staff member saw.
+/// tenant's whole set, and <paramref name="ExpectedRevision"/> is the revision the staff member saw. A tenant
+/// with a subscription still billing is refused unless <paramref name="KeepSubscription"/> is set, as for
+/// <see cref="SetTenantPlanRequest"/>.
 /// </summary>
 public sealed record AdminSetTenantPlanRequest(
     StaffChange Staff,
@@ -20,7 +22,8 @@ public sealed record AdminSetTenantPlanRequest(
     PlanLimitOverrides? LimitOverrides,
     int ExpectedRevision,
     DateTimeOffset EndsAt,
-    int? ContractClients = null);
+    int? ContractClients = null,
+    bool KeepSubscription = false);
 
 /// <summary>
 /// Replaces a tenant's limit overrides and nothing else (<c>InternalRoutes.AdminTenantLimits</c>): its
