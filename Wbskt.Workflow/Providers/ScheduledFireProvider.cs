@@ -12,24 +12,6 @@ internal sealed class ScheduledFireProvider : BaseSqlProvider, IScheduledFirePro
 {
     public ScheduledFireProvider(IConfiguration configuration) : base(configuration) { }
 
-    public async Task<ScheduledFireRow> InsertAsync(Guid triggerNodeId, int workflowDefinitionId, Guid workflowRefId, string cronOrInterval, DateTime nextFireAt, CancellationToken ct)
-    {
-        return await ExecuteSingleAsync(
-            "dbo.ScheduledFire_Insert",
-            p =>
-            {
-                p.AddWithValue("@TriggerNodeId", triggerNodeId);
-                p.AddWithValue("@WorkflowDefinitionId", workflowDefinitionId);
-                p.AddWithValue("@WorkflowRefId", workflowRefId);
-                p.AddWithValue("@CronOrInterval", cronOrInterval);
-                p.AddWithValue("@NextFireAt", nextFireAt);
-            },
-            Map,
-            new InvalidOperationException("ScheduledFire_Insert did not return a row."),
-            ct
-        );
-    }
-
     public async Task<IReadOnlyCollection<ScheduledFireRow>> LeaseDueAsync(int leaseSec, int batch, CancellationToken ct)
     {
         return await ExecuteCollectionAsync(
@@ -64,15 +46,6 @@ internal sealed class ScheduledFireProvider : BaseSqlProvider, IScheduledFirePro
         await ExecuteNonQueryAsync(
             "dbo.ScheduledFire_DeleteById",
             p => p.AddWithValue("@Id", checked((int)id)),
-            ct
-        );
-    }
-
-    public async Task DeleteAllByWorkflowDefinitionIdAsync(int workflowDefinitionId, CancellationToken ct)
-    {
-        await ExecuteNonQueryAsync(
-            "dbo.ScheduledFire_DeleteAllBy_WorkflowDefinitionId",
-            p => p.AddWithValue("@WorkflowDefinitionId", workflowDefinitionId),
             ct
         );
     }

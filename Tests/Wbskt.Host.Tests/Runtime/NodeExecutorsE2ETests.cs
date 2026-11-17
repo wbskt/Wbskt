@@ -32,7 +32,6 @@ public sealed class NodeExecutorsE2ETests
             9,
             "phase9-e2e",
             null,
-            true,
             [
                 new ManualTriggerNode { NodeId = triggerNodeId, Name = "start", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" }], Config = new ManualTriggerConfig { Description = "start" } },
                 new LogicGateNode { NodeId = logicNodeId, Name = "logic", Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "true", Direction = PortDirection.Output, Label = "True" }, new PortDefinition { PortId = "false", Direction = PortDirection.Output, Label = "False" }], Config = new LogicGateConfig { Condition = LogicConditionJsonConverter.FromLegacyString("gate") } },

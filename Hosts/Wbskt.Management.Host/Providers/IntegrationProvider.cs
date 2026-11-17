@@ -88,7 +88,7 @@ internal sealed class IntegrationProvider(IConfiguration configuration) : BaseSq
         reader.GetString(reader.GetOrdinal("WorkflowName")),
         reader.GetGuid(reader.GetOrdinal("NodeId")),
         reader.GetString(reader.GetOrdinal("NodeName")),
-        reader.GetBoolean(reader.GetOrdinal("IsEnabled")));
+        reader.GetBoolean(reader.GetOrdinal("IsLive")));
 
     private static Integration Map(SqlDataReader reader)
     {

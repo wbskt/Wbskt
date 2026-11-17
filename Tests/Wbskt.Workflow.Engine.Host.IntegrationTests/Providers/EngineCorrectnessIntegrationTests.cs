@@ -4,6 +4,8 @@ using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Models.Billing;
 using Wbskt.Workflow.Abstraction.Providers;
+using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Channels;
 using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 
 namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
@@ -112,18 +114,23 @@ public sealed class EngineCorrectnessIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
-    public async Task Registering_a_schedule_twice_keeps_one_row()
+    public async Task Enabling_a_version_with_a_schedule_twice_keeps_one_row()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
         var refId = Guid.NewGuid();
-        await PublishAsync(refId, Random.Shared.Next(1_000_000, int.MaxValue));
+        int workspaceId = Random.Shared.Next(1_000_000, int.MaxValue);
+        await PublishAsync(refId, workspaceId);
         int definitionId = await ScalarAsync<int>("SELECT Id FROM dbo.WorkflowDefinitions WHERE RefId = @p0", refId);
         var triggerNodeId = Guid.NewGuid();
+        var plan = new TriggerPlan(
+            [new PlannedTrigger(triggerNodeId, ScheduleChannel.Name, ScheduleChannel.Key(refId, triggerNodeId), null, "AllowParallel", null, null)],
+            [new PlannedSchedule(triggerNodeId, "*/5 * * * *", DateTime.UtcNow)]);
 
-        int first = await InsertScheduleAsync(definitionId, refId, triggerNodeId);
-        int second = await InsertScheduleAsync(definitionId, refId, triggerNodeId);
+        await LiveWorkflows.EnableAsync(fixture.ConnectionString, refId, workspaceId, plan: plan);
 
-        Assert.Equal(first, second);
+        // The second enable of the live version changes nothing, so the schedule is not added again.
+        await LiveWorkflows.EnableAsync(fixture.ConnectionString, refId, workspaceId, plan: plan);
+
         Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.ScheduledFires WHERE WorkflowDefinitionId = @p0", definitionId));
     }
 
@@ -301,24 +308,11 @@ public sealed class EngineCorrectnessIntegrationTests(SqlEdgeFixture fixture)
 
     private static StateVariableValue Variable(string name, string valueJson) => new(name, "number", valueJson);
 
-    private async Task<int> InsertScheduleAsync(int definitionId, Guid workflowRefId, Guid triggerNodeId)
-    {
-        await using var conn = await OpenAsync();
-        await using var cmd = new SqlCommand("dbo.ScheduledFire_Insert", conn) { CommandType = CommandType.StoredProcedure };
-        cmd.Parameters.AddWithValue("@TriggerNodeId", triggerNodeId);
-        cmd.Parameters.AddWithValue("@WorkflowDefinitionId", definitionId);
-        cmd.Parameters.AddWithValue("@WorkflowRefId", workflowRefId);
-        cmd.Parameters.AddWithValue("@CronOrInterval", "*/5 * * * *");
-        cmd.Parameters.AddWithValue("@NextFireAt", DateTime.UtcNow);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        await reader.ReadAsync();
-        return reader.GetInt32(reader.GetOrdinal("Id"));
-    }
 
     private Task PublishAsync(Guid refId, int workspaceId) =>
         ProcAsync("dbo.WorkflowDefinition_Publish",
             ("@RefId", refId), ("@WorkspaceId", workspaceId), ("@Name", "wf"), ("@Description", ""),
-            ("@IsEnabled", true), ("@DefinitionJson", "{}"), ("@PublishedBy", 1));
+            ("@DefinitionJson", "{}"), ("@PublishedBy", 1));
 
     private async Task ProcAsync(string procedure, params (string Name, object Value)[] parameters)
     {

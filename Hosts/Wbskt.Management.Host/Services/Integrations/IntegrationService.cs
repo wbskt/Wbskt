@@ -266,7 +266,7 @@ internal sealed class IntegrationService(
             return new IntegrationDeleteResult(
                 Result.Failure(Error.Conflict(
                     "INTEGRATION_IN_USE",
-                    $"'{integration.Name}' is used by {workflows} published workflow{(workflows == 1 ? string.Empty : "s")}. Remove it from their steps, or deprecate them, first.")),
+                    $"'{integration.Name}' is used by {workflows} live workflow{(workflows == 1 ? string.Empty : "s")}. Disable them, or make a version live that does not use it, first.")),
                 blocking.Select(MapUse).ToList());
         }
 
@@ -435,7 +435,7 @@ internal sealed class IntegrationService(
     }
 
     private static IntegrationUsedBy MapUse(IntegrationUse use) =>
-        new(use.WorkflowRefId, use.WorkflowName, use.NodeId, use.NodeName, use.IsEnabled ? "published" : "deprecated");
+        new(use.WorkflowRefId, use.WorkflowName, use.NodeId, use.NodeName, use.IsLive);
 
     private static IntegrationResponse Map(Integration i) => new(
         i.RefId,

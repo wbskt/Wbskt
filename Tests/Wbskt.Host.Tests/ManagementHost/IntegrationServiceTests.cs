@@ -323,9 +323,9 @@ public sealed class IntegrationServiceTests
 
         Assert.Equal("INTEGRATION_IN_USE", result.Result.Error.Code);
         Assert.Equal(ErrorType.Conflict, result.Result.Error.Type);
-        Assert.Contains("used by 1 published workflow.", result.Result.Error.Message);
+        Assert.Contains("used by 1 live workflow.", result.Result.Error.Message);
         Assert.Equal([step1, step2], result.UsedBy.Select(u => u.StepId));
-        Assert.All(result.UsedBy, u => Assert.Equal("published", u.Status));
+        Assert.All(result.UsedBy, u => Assert.True(u.IsLive));
         harness.Bus.VerifyNoOtherCalls();
     }
 
@@ -356,7 +356,7 @@ public sealed class IntegrationServiceTests
     }
 
     [Fact]
-    public async Task Usage_reports_deprecated_steps_as_such()
+    public async Task Usage_reports_steps_in_a_version_that_is_not_live_as_such()
     {
         var harness = new Harness();
         var saved = harness.Save(Saved());
@@ -365,7 +365,7 @@ public sealed class IntegrationServiceTests
 
         var result = await harness.Service.GetUsageAsync(WorkspaceId, saved.RefId, CancellationToken.None);
 
-        Assert.Equal("deprecated", Assert.Single(result.Value.UsedBy).Status);
+        Assert.False(Assert.Single(result.Value.UsedBy).IsLive);
     }
 
     [Fact]

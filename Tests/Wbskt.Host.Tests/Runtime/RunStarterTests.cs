@@ -233,6 +233,21 @@ public sealed class RunStarterTests
     }
 
     [Fact]
+    public async Task Start_of_a_version_that_stopped_being_live_is_refused_as_such()
+    {
+        // The trigger matched before a disable or a switch of the live version committed.
+        List<string> operations = [];
+        var runProvider = new RecordingRunProvider(operations) { NotLive = true };
+        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions());
+
+        var refused = await Assert.ThrowsAsync<WorkflowNotLiveException>(() =>
+            starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), AnEvent(), null, CancellationToken.None));
+
+        Assert.Equal(42, refused.WorkflowDefinitionId);
+        Assert.Equal(["run"], operations);
+    }
+
+    [Fact]
     public async Task An_exempt_replay_skips_the_ceiling_but_not_the_months_credits()
     {
         List<string> operations = [];
@@ -448,6 +463,7 @@ public sealed class RunStarterTests
         public PlanCeiling? Ceiling { get; private set; }
         public bool CreditsSpent { get; init; }
         public bool CapSpent { get; init; }
+        public bool NotLive { get; init; }
         public PlanCredits? Credits { get; private set; }
         public int BusyTimes { get; init; }
         public int Attempts { get; private set; }
@@ -465,6 +481,12 @@ public sealed class RunStarterTests
             {
                 operations.Add("run");
                 throw AuthHost.SqlExceptions.WithNumber(50033, "The plan has used its workflow credits for this month.");
+            }
+
+            if (NotLive)
+            {
+                operations.Add("run");
+                throw AuthHost.SqlExceptions.WithNumber(50036, "The workflow version is not live.");
             }
 
             if (CapSpent && creditAllowance is not null)
@@ -549,7 +571,6 @@ public sealed class RunStarterTests
                 9,
                 "definition",
                 null,
-                true,
                 [new ClientTriggerNode { NodeId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), Name = "client", Ports = [], Config = new ClientTriggerConfig { ClientRef = "client-1", Type = "telemetry" } }],
                 [],
                 [],
@@ -564,7 +585,6 @@ public sealed class RunStarterTests
                 WorkspaceId = definition.WorkspaceId,
                 Name = definition.Name,
                 Description = definition.Description,
-                IsEnabled = definition.IsEnabled,
                 DefinitionJson = JsonSerializer.Serialize(definition, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
                 PublishedBy = definition.PublishedBy,
                 CreatedAt = definition.CreatedAt
@@ -576,9 +596,7 @@ public sealed class RunStarterTests
         public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef> integrationRefs, CancellationToken ct) => InsertAsync(row, ct);
 
         public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, CancellationToken ct) => throw new NotSupportedException();
-        public Task DeprecateAsync(int id, CancellationToken ct) => throw new NotSupportedException();
         public Task<bool> DeleteUnreferencedAsync(int id, CancellationToken ct) => Task.FromResult(true);
-        public Task SetEnabledAsync(int id, bool isEnabled, CancellationToken ct) => Task.CompletedTask;
     }
 
     private sealed class FixedClock : TimeProvider
@@ -597,9 +615,4 @@ public sealed class RunStarterTests
         public Guid NewId() => _ids.Dequeue();
     }
 }
-
-
-
-
-
 

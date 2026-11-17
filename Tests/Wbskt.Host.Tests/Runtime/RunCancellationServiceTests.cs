@@ -383,7 +383,6 @@ public sealed class RunCancellationServiceTests
             9,
             "cancelled-loop",
             null,
-            true,
             [new TestNode { NodeId = nodeId, Name = "start", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
             [],
             [],

@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Integrations;
@@ -131,7 +132,7 @@ public sealed class IntegrationUsageE2ETests(ServicesFixture fixture)
         usage.Should().HaveCount(2);
         usage.Should().OnlyContain(u => u.GetProperty("workflowRefId").GetGuid() == workflow
                                         && u.GetProperty("workflowName").GetString() == "E2E usage"
-                                        && u.GetProperty("status").GetString() == "published");
+                                        && u.GetProperty("isLive").GetBoolean());
         usage.Select(u => u.GetProperty("stepName").GetString()).Should().BeEquivalentTo("Tell the owner", "Tell the neighbour");
         var stepIds = definition.Nodes.OfType<TelegramNotificationNode>().Select(n => n.NodeId);
         usage.Select(u => u.GetProperty("stepId").GetGuid()).Should().BeEquivalentTo(stepIds);
@@ -151,7 +152,7 @@ public sealed class IntegrationUsageE2ETests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task INT_USE_07_UsageFollowsTheCurrentVersion()
+    public async Task INT_USE_07_UsageFollowsTheLiveVersion()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
         var (token, ws) = await _api.NewWorkspaceAsync();
@@ -162,62 +163,60 @@ public sealed class IntegrationUsageE2ETests(ServicesFixture fixture)
         await _api.PublishAsync(token, ws, new WorkflowBuilder("E2E versions", workflowRef).AddManualTrigger().AddTelegram(first, "1", "v1").BuildAndValidate());
         await _api.PublishAsync(token, ws, new WorkflowBuilder("E2E versions", workflowRef).AddManualTrigger().AddTelegram(second, "1", "v2").BuildAndValidate());
 
-        (await _api.UsageAsync(token, ws, first)).GetProperty("usedBy").GetArrayLength().Should().Be(0, "only the current version counts");
+        (await _api.UsageAsync(token, ws, first)).GetProperty("usedBy").GetArrayLength().Should().Be(0, "only the live version counts");
         (await _api.UsageAsync(token, ws, second)).GetProperty("usedBy").GetArrayLength().Should().Be(1);
 
         // So the integration the old version used can go.
         (await _api.DeleteRawAsync(token, ws, first)).StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        // And rolling back to that version is a publish like any other: refused, the integration is gone.
-        using var rollback = await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.ManagementUrl($"/api/workspaces/{ws}/workflows/{workflowRef}/rollback/1"),
-            token);
-        rollback.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await rollback.Content.ReadAsStringAsync()).Should().Contain("INTEGRATION_NOT_FOUND");
-        (await _api.UsageAsync(token, ws, second)).GetProperty("usedBy").GetArrayLength().Should().Be(1, "the refused rollback changed nothing");
+        // And making that version live again is checked as a publish is: refused, the integration is gone.
+        using var enable = await fixture.Management.As(token).EnableWorkflowRawAsync(ws, workflowRef, 1);
+        enable.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await enable.Content.ReadAsStringAsync()).Should().Contain("INTEGRATION_NOT_FOUND");
+        (await _api.UsageAsync(token, ws, second)).GetProperty("usedBy").GetArrayLength().Should().Be(1, "the refused enable changed nothing");
+        (await fixture.Management.As(token).GetWorkflowAsync(ws, workflowRef)).LiveVersion.Should().Be(2);
     }
 
     [SkippableFact]
-    public async Task INT_USE_08_ADeprecatedWorkflow_ShowsAsDeprecated_AndNoLongerBlocksDelete_ButReinstatingNeedsTheIntegration()
+    public async Task INT_USE_08_ADisabledWorkflow_IsNotLive_AndNoLongerBlocksDelete_ButEnablingItNeedsTheIntegration()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
         var (token, ws) = await _api.NewWorkspaceAsync();
         var bot = IntegrationsApi.RefOf(await _api.CreateAsync(token, ws, IntegrationsApi.Telegram("Bot")));
         var workflow = await _api.PublishAsync(token, ws,
-            new WorkflowBuilder("E2E deprecate", Guid.NewGuid()).AddManualTrigger().AddTelegram(bot, "1", "hi").BuildAndValidate());
+            new WorkflowBuilder("E2E disable", Guid.NewGuid()).AddManualTrigger().AddTelegram(bot, "1", "hi").BuildAndValidate());
+        var management = fixture.Management.As(token);
 
-        using (var deprecated = await fixture.SendAsync(HttpMethod.Post, ServicesFixture.ManagementUrl($"/api/workspaces/{ws}/workflows/{workflow}/deprecate"), token))
-        {
-            deprecated.IsSuccessStatusCode.Should().BeTrue(await deprecated.Content.ReadAsStringAsync());
-        }
+        await management.DisableWorkflowAsync(ws, workflow);
 
         var usedBy = (await _api.UsageAsync(token, ws, bot)).GetProperty("usedBy");
-        usedBy.GetArrayLength().Should().Be(1);
-        usedBy[0].GetProperty("status").GetString().Should().Be("deprecated");
+        usedBy.GetArrayLength().Should().Be(1, "a disabled workflow still names it in the version it would enable next");
+        usedBy[0].GetProperty("isLive").GetBoolean().Should().BeFalse();
 
-        (await _api.DeleteRawAsync(token, ws, bot)).StatusCode.Should().Be(HttpStatusCode.NoContent, "a deprecated workflow does not hold its integrations");
+        (await _api.DeleteRawAsync(token, ws, bot)).StatusCode.Should().Be(HttpStatusCode.NoContent, "a workflow that is not live does not hold its integrations");
 
-        using var reinstate = await fixture.SendAsync(HttpMethod.Post, ServicesFixture.ManagementUrl($"/api/workspaces/{ws}/workflows/{workflow}/reinstate"), token);
-        reinstate.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await reinstate.Content.ReadAsStringAsync()).Should().Contain("INTEGRATION_NOT_FOUND");
+        using var enable = await management.EnableWorkflowRawAsync(ws, workflow, 1);
+        enable.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await enable.Content.ReadAsStringAsync()).Should().Contain("INTEGRATION_NOT_FOUND");
     }
 
     [SkippableFact]
-    public async Task INT_USE_09_ReinstatingWithTheIntegrationStillThere_Works_AndBlocksDeleteAgain()
+    public async Task INT_USE_09_EnablingAgainWithTheIntegrationStillThere_Works_AndBlocksDeleteAgain()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
         var (token, ws) = await _api.NewWorkspaceAsync();
         var bot = IntegrationsApi.RefOf(await _api.CreateAsync(token, ws, IntegrationsApi.Telegram("Bot")));
         var workflow = await _api.PublishAsync(token, ws,
-            new WorkflowBuilder("E2E reinstate", Guid.NewGuid()).AddManualTrigger().AddTelegram(bot, "1", "hi").BuildAndValidate());
+            new WorkflowBuilder("E2E enable", Guid.NewGuid()).AddManualTrigger().AddTelegram(bot, "1", "hi").BuildAndValidate());
+        var management = fixture.Management.As(token);
 
-        (await fixture.SendAsync(HttpMethod.Post, ServicesFixture.ManagementUrl($"/api/workspaces/{ws}/workflows/{workflow}/deprecate"), token))
-            .IsSuccessStatusCode.Should().BeTrue();
-        (await fixture.SendAsync(HttpMethod.Post, ServicesFixture.ManagementUrl($"/api/workspaces/{ws}/workflows/{workflow}/reinstate"), token))
-            .IsSuccessStatusCode.Should().BeTrue();
+        await management.DeprecateWorkflowAsync(ws, workflow);
+        (await management.ReinstateWorkflowAsync(ws, workflow)).State.Should().Be(WorkflowState.Disabled, "reinstating brings a workflow back disabled");
+        (await _api.UsageAsync(token, ws, bot)).GetProperty("usedBy")[0].GetProperty("isLive").GetBoolean().Should().BeFalse();
 
-        (await _api.UsageAsync(token, ws, bot)).GetProperty("usedBy")[0].GetProperty("status").GetString().Should().Be("published");
+        await management.EnableWorkflowAsync(ws, workflow, 1);
+
+        (await _api.UsageAsync(token, ws, bot)).GetProperty("usedBy")[0].GetProperty("isLive").GetBoolean().Should().BeTrue();
         (await _api.DeleteRawAsync(token, ws, bot)).StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 
@@ -273,7 +272,7 @@ public sealed class IntegrationUsageE2ETests(ServicesFixture fixture)
             HttpMethod.Post,
             ServicesFixture.ManagementUrl($"/api/workspaces/{ws}/workflows"),
             token,
-            new { refId = definition.WorkflowRefId, name = definition.Name, definition = json });
+            new { refId = definition.WorkflowRefId, name = definition.Name, definition = json, enable = true });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await response.Content.ReadAsStringAsync()).Should().Contain("INTEGRATION_REF_MISSING");

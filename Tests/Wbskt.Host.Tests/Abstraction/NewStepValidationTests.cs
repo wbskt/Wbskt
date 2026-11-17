@@ -69,7 +69,8 @@ public sealed class NewStepValidationTests
             ["refId"] = Guid.NewGuid().ToString(),
             ["name"] = "wf",
             ["description"] = null,
-            ["definition"] = definition
+            ["definition"] = definition,
+            ["enable"] = false
         };
 
         return (JsonSerializer.Deserialize<WorkflowPublishRequest>(body.ToJsonString(), Options)!, nodeId);

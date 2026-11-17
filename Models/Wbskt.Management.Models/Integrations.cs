@@ -91,9 +91,9 @@ public sealed record IntegrationResponse(
     DateTimeOffset? SecretRotatedAt);
 
 /// <summary>
-/// One step that sends through an integration, in a live workflow's current version.
-/// <c>Status</c> is <c>published</c> (blocks deleting the integration) or <c>deprecated</c> (does not).
+/// One step that sends through an integration: in an enabled workflow's live version, or in the newest
+/// version of a disabled or deprecated one. Only a live use (<c>IsLive</c>) blocks deleting the integration.
 /// </summary>
-public sealed record IntegrationUsedBy(Guid WorkflowRefId, string WorkflowName, Guid StepId, string StepName, string Status);
+public sealed record IntegrationUsedBy(Guid WorkflowRefId, string WorkflowName, Guid StepId, string StepName, bool IsLive);
 
 public sealed record IntegrationUsageResponse(IReadOnlyList<IntegrationUsedBy> UsedBy);

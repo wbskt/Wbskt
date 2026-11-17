@@ -209,3 +209,94 @@ DROP PROCEDURE IF EXISTS dbo.TenantCreditGrants_GetUnsettled;
 GO
 DROP TABLE IF EXISTS dbo.TenantCreditGrantSettlements;
 GO
+/*
+--------------------------------------------------------------------------------------
+Pre-Deployment Script: workflow state moves to dbo.Workflows
+--------------------------------------------------------------------------------------
+A workflow's state (Enabled, Disabled, Deprecated, Deleted) and its one live version now live on a
+dbo.Workflows row, replacing WorkflowDefinitions.IsEnabled and the dbo.WorkflowDeletions tombstones.
+The diff that follows drops IsEnabled, so the state is read here, while it still exists, into
+dbo.WorkflowStateMigration; the post-deployment script fills dbo.Workflows from it and drops it.
+
+  - a tombstone                                  -> Deleted
+  - newest version enabled                       -> Enabled, that version live
+  - newest version not enabled                   -> Disabled (today's deprecated workflows: they
+                                                    become editable again, nothing starts them)
+
+Only the live version keeps trigger registrations and schedules, and only an enabled workflow keeps
+queued events, so whatever an older or a retired version still had is removed here. Schedule
+registrations are keyed by workflow and trigger node now ("schedule:<workflowRefId>:<nodeId>")
+rather than by the ScheduledFires row, which is replaced on every enable.
+
+Guarded on IsEnabled still existing, so it runs once. Dropping the column needs
+MIGRATE_ALLOW_DATA_LOSS=true for this deploy (deploy/README.md).
+*/
+IF COL_LENGTH('dbo.WorkflowDefinitions', 'IsEnabled') IS NOT NULL
+BEGIN
+    PRINT '>>> Workflows: capturing workflow state before IsEnabled is dropped';
+
+    EXEC sp_executesql N'
+        IF OBJECT_ID(''dbo.WorkflowStateMigration'', ''U'') IS NOT NULL
+            DROP TABLE dbo.WorkflowStateMigration;
+
+        CREATE TABLE dbo.WorkflowStateMigration
+        (
+            RefId            UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+            WorkspaceId      INT              NOT NULL,
+            State            TINYINT          NOT NULL,
+            LiveDefinitionId INT              NULL,
+            StateChangedBy   INT              NOT NULL,
+            StateChangedAt   DATETIME2(3)     NOT NULL,
+            CreatedAt        DATETIME2(3)     NOT NULL
+        );
+
+        WITH Newest AS (
+            SELECT WD.RefId, WD.WorkspaceId, WD.Id, WD.IsEnabled, WD.PublishedBy, WD.CreatedAt,
+                   ROW_NUMBER() OVER (PARTITION BY WD.RefId ORDER BY WD.Version DESC) AS Rn,
+                   MIN(WD.CreatedAt) OVER (PARTITION BY WD.RefId) AS FirstCreatedAt
+            FROM dbo.WorkflowDefinitions WD
+            WHERE WD.Kind = N''Version''
+        )
+        INSERT INTO dbo.WorkflowStateMigration (RefId, WorkspaceId, State, LiveDefinitionId, StateChangedBy, StateChangedAt, CreatedAt)
+        SELECT N.RefId,
+               N.WorkspaceId,
+               CASE WHEN D.RefId IS NOT NULL THEN 4 WHEN N.IsEnabled = 1 THEN 1 ELSE 2 END,
+               CASE WHEN D.RefId IS NULL AND N.IsEnabled = 1 THEN N.Id END,
+               COALESCE(D.DeletedBy, N.PublishedBy),
+               COALESCE(D.DeletedAt, N.CreatedAt),
+               N.FirstCreatedAt
+        FROM Newest N
+        LEFT JOIN dbo.WorkflowDeletions D ON D.RefId = N.RefId
+        WHERE N.Rn = 1;
+
+        DELETE TR
+        FROM dbo.TriggerRegistrations TR
+        WHERE NOT EXISTS (SELECT 1 FROM dbo.WorkflowStateMigration M WHERE M.LiveDefinitionId = TR.WorkflowDefinitionId);
+
+        DELETE SF
+        FROM dbo.ScheduledFires SF
+        WHERE NOT EXISTS (SELECT 1 FROM dbo.WorkflowStateMigration M WHERE M.LiveDefinitionId = SF.WorkflowDefinitionId);
+
+        DELETE PTE
+        FROM dbo.PendingTriggerEvents PTE
+        WHERE NOT EXISTS (SELECT 1 FROM dbo.WorkflowStateMigration M WHERE M.RefId = PTE.WorkflowRefId AND M.State = 1);
+
+        UPDATE TR
+        SET TriggerKey = N''schedule:'' + LOWER(CONVERT(NVARCHAR(36), SF.WorkflowRefId)) + N'':'' + LOWER(CONVERT(NVARCHAR(36), SF.TriggerNodeId))
+        FROM dbo.TriggerRegistrations TR
+        JOIN dbo.ScheduledFires SF ON TR.TriggerKey = N''schedule:'' + CAST(SF.Id AS NVARCHAR(20));
+
+        DECLARE @Count INT = (SELECT COUNT(*) FROM dbo.WorkflowStateMigration);
+        PRINT ''>>> Workflows: captured the state of '' + CAST(@Count AS NVARCHAR(20)) + '' workflow(s)'';';
+END
+GO
+DROP PROCEDURE IF EXISTS dbo.WorkflowDefinition_UpdateIsEnabled;
+GO
+DROP PROCEDURE IF EXISTS dbo.TriggerRegistration_Insert;
+GO
+DROP PROCEDURE IF EXISTS dbo.TriggerRegistration_DeleteAllBy_WorkflowDefinitionId;
+GO
+DROP PROCEDURE IF EXISTS dbo.ScheduledFire_Insert;
+GO
+DROP PROCEDURE IF EXISTS dbo.ScheduledFire_DeleteAllBy_WorkflowDefinitionId;
+GO

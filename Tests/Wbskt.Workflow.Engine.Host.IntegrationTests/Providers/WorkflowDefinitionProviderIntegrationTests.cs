@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 
 namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
@@ -16,7 +17,7 @@ public sealed class WorkflowDefinitionProviderIntegrationTests(SqlEdgeFixture fi
         WorkspaceId = 1,
         Name = $"IT-Workflow-{refId:N}",
         Description = "Integration test workflow",
-        IsEnabled = true,
+       
         DefinitionJson = """{"nodes":[],"edges":[]}""",
         PublishedBy = 1,
         CreatedAt = DateTime.UtcNow
@@ -43,16 +44,15 @@ public sealed class WorkflowDefinitionProviderIntegrationTests(SqlEdgeFixture fi
 
         // Not compared byte-for-byte with the input: WorkflowDefinition_Publish is the single
         // authority on the version number and stamps it into the JSON under the same HOLDLOCK that
-        // computed it, alongside isEnabled. So the stored document is the submitted one plus those
-        // two properties, and asserting equality with the input would be asserting that the stamping
-        // does not happen.
+        // computed it. So the stored document is the submitted one plus that property, and asserting
+        // equality with the input would be asserting that the stamping does not happen.
         using JsonDocument stored = JsonDocument.Parse(retrieved.DefinitionJson);
         JsonElement root = stored.RootElement;
 
         root.GetProperty("nodes").GetArrayLength().Should().Be(0);
         root.GetProperty("edges").GetArrayLength().Should().Be(0);
         root.GetProperty("version").GetInt32().Should().Be(inserted.Version);
-        root.GetProperty("isEnabled").GetBoolean().Should().BeTrue();
+        root.TryGetProperty("isEnabled", out _).Should().BeFalse("whether a workflow runs is its state, not its definition's");
     }
 
     [SkippableFact]
@@ -73,7 +73,7 @@ public sealed class WorkflowDefinitionProviderIntegrationTests(SqlEdgeFixture fi
     }
 
     [SkippableFact]
-    public async Task Deprecate_changes_IsEnabled_to_false()
+    public async Task A_first_publish_is_disabled_with_no_live_version()
     {
         Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
@@ -81,12 +81,12 @@ public sealed class WorkflowDefinitionProviderIntegrationTests(SqlEdgeFixture fi
         Guid refId = Guid.NewGuid();
 
         WorkflowDefinitionRow inserted = await provider.InsertAsync(BuildRow(refId), CancellationToken.None);
-        inserted.IsEnabled.Should().BeTrue();
 
-        await provider.DeprecateAsync(inserted.Id, CancellationToken.None);
-
-        WorkflowDefinitionRow retrieved = await provider.GetByIdAsync(inserted.Id, CancellationToken.None);
-        retrieved.IsEnabled.Should().BeFalse();
+        WorkflowStateRow? state = await ProviderFactory.WorkflowState(fixture.ConnectionString).FindAsync(refId, inserted.WorkspaceId, CancellationToken.None);
+        state.Should().NotBeNull();
+        state!.State.Should().Be(WorkflowState.Disabled);
+        state.LiveVersion.Should().BeNull();
+        state.LatestVersion.Should().Be(inserted.Version);
     }
 
     [SkippableFact]

@@ -18,13 +18,13 @@ BEGIN
        OR EXISTS (SELECT 1 FROM dbo.WorkflowDrafts WHERE RefId = @RefId AND WorkspaceId <> @WorkspaceId)
         THROW 50021, 'The workflow belongs to another workspace.', 1;
 
-    IF EXISTS (SELECT 1 FROM dbo.WorkflowDeletions WHERE RefId = @RefId)
+    IF EXISTS (SELECT 1 FROM dbo.Workflows WHERE RefId = @RefId AND State = 4)
         THROW 50022, 'The workflow was deleted.', 1;
 
-    SET @DefinitionJson = JSON_MODIFY(JSON_MODIFY(@DefinitionJson, '$.version', @BaseVersion), '$.isEnabled', CAST(1 AS BIT));
+    SET @DefinitionJson = JSON_MODIFY(@DefinitionJson, '$.version', @BaseVersion);
 
-    INSERT INTO dbo.WorkflowDefinitions (RefId, Version, WorkspaceId, Name, Description, IsEnabled, DefinitionJson, PublishedBy, Kind)
-    VALUES (@RefId, @BaseVersion, @WorkspaceId, @Name, @Description, 1, @DefinitionJson, @PublishedBy, N'Test');
+    INSERT INTO dbo.WorkflowDefinitions (RefId, Version, WorkspaceId, Name, Description, DefinitionJson, PublishedBy, Kind)
+    VALUES (@RefId, @BaseVersion, @WorkspaceId, @Name, @Description, @DefinitionJson, @PublishedBy, N'Test');
 
     SELECT
         Id,
@@ -33,7 +33,6 @@ BEGIN
         WorkspaceId,
         Name,
         Description,
-        IsEnabled,
         DefinitionJson,
         PublishedBy,
         CreatedAt

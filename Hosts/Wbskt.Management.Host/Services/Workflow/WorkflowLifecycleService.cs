@@ -1,6 +1,6 @@
 using System.Globalization;
-using Microsoft.Data.SqlClient;
 using System.Text.Json;
+using Microsoft.Data.SqlClient;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Abstractions;
 using Wbskt.Events.Workflow;
@@ -11,7 +11,6 @@ using Wbskt.Management.Host.Services.Integrations;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
-using Wbskt.Workflow.Abstraction.Integrations;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -19,25 +18,25 @@ using Wbskt.Workflow.Abstraction.Validation;
 
 namespace Wbskt.Management.Host.Services.Workflow;
 
-// Publish, deprecate, reinstate, rollback and delete write definitions and trigger registrations
-// directly. This host caches neither; the engine caches both, and is told to drop them by a
-// WorkflowDefinitionChangedEvent published after each change (and after a failed publish is undone,
-// since the registrations moved in between). The event is queued like the others, so the engine also
-// keeps its entries for a bounded time only.
+// Every state change is one procedure, one transaction under the workflow's row lock, and the procedure
+// decides whether it is allowed (WorkflowLifecycleErrors maps its refusals). Publishing only adds a
+// version; making one live is Workflow_Enable, which swaps the trigger registrations, schedules and
+// queue with the state. Every state in between is a valid one, so nothing here undoes a step.
+//
+// This host caches neither definitions nor registrations; the engine caches both, and is told to drop
+// them by a WorkflowDefinitionChangedEvent published after each change. The event is queued like the
+// others, so the engine also keeps its entries for a bounded time only.
 public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
 {
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
-    private const int WorkflowOwnedElsewhereError = 50021; // THROW in dbo.WorkflowDefinition_Publish
-    private const int WorkflowDeletedError = 50022; // THROW in dbo.WorkflowDefinition_Publish
-    private const int IntegrationMissingError = 50023; // THROW in dbo.WorkflowDefinition_Publish
-    private const int WorkflowLimitReachedError = 50024; // THROW in dbo.WorkflowDefinition_Publish
-    private const int WorkflowVersionMovedError = 50025; // THROW in dbo.WorkflowDefinition_Publish
 
     public const int DefaultMaxPerWorkspace = 100;
     private const string DeletedCancellationReason = "Workflow deleted.";
+    private const string DisabledCancellationReason = "Workflow disabled.";
 
-    private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
-    private readonly ITriggerRegistrationService _triggerRegistrationService;
+    private readonly IWorkflowDefinitionProvider _definitions;
+    private readonly IWorkflowStateProvider _states;
+    private readonly ITriggerPlanner _planner;
     private readonly WorkflowValidator _validator;
     private readonly IntegrationReferenceCheck _integrationCheck;
     private readonly IIdentityService _identityService;
@@ -48,8 +47,9 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
     private readonly ClientReferenceCheck? _clientCheck;
 
     public WorkflowLifecycleService(
-        IWorkflowDefinitionProvider workflowDefinitionProvider,
-        ITriggerRegistrationService triggerRegistrationService,
+        IWorkflowDefinitionProvider definitions,
+        IWorkflowStateProvider states,
+        ITriggerPlanner planner,
         WorkflowValidator validator,
         IntegrationReferenceCheck integrationCheck,
         IIdentityService identityService,
@@ -59,66 +59,42 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
         IConfiguration? configuration = null,
         ClientReferenceCheck? clientCheck = null)
     {
-        _configuration = configuration;
-        _clientCheck = clientCheck;
-        _eventBus = eventBus;
-        _engine = engine;
-        _workflowDefinitionProvider = workflowDefinitionProvider;
-        _triggerRegistrationService = triggerRegistrationService;
+        _definitions = definitions;
+        _states = states;
+        _planner = planner;
         _validator = validator;
         _integrationCheck = integrationCheck;
         _identityService = identityService;
+        _engine = engine;
+        _eventBus = eventBus;
         _logger = logger;
+        _configuration = configuration;
+        _clientCheck = clientCheck;
     }
 
     // Configuration, not a constant, so it can become a plan tier without a redeploy of the code.
     private int MaxPerWorkspace => _configuration?.GetValue("Workflows:MaxPerWorkspace", DefaultMaxPerWorkspace) ?? DefaultMaxPerWorkspace;
 
+    private int CurrentUserId => _identityService.GetUserIdentity().UserId;
+
     public Task<Result<WorkflowPublishResponse>> PublishAsync(int workspaceId, Guid workspaceRef, WorkflowPublishRequest request, CancellationToken ct)
     {
-        return PublishCoreAsync(workspaceId, workspaceRef, request, restoredFromVersion: null, WorkflowPublishGuards.None, ct);
+        return PublishAsync(workspaceId, workspaceRef, request, WorkflowPublishGuards.None, ct);
     }
 
-    public Task<Result<WorkflowPublishResponse>> PublishAsync(int workspaceId, Guid workspaceRef, WorkflowPublishRequest request, WorkflowPublishGuards guards, CancellationToken ct)
+    public async Task<Result<WorkflowPublishResponse>> PublishAsync(int workspaceId, Guid workspaceRef, WorkflowPublishRequest request, WorkflowPublishGuards guards, CancellationToken ct)
     {
-        return PublishCoreAsync(workspaceId, workspaceRef, request, restoredFromVersion: null, guards, ct);
-    }
+        _logger.LogInformation("Publishing workflow '{WorkflowName}' (RefId: '{RefId}') in WorkspaceId: {WorkspaceId}, enable: {Enable}", request.Name, request.RefId, workspaceId, request.Enable);
 
-    private async Task<Result<WorkflowPublishResponse>> PublishCoreAsync(int workspaceId, Guid workspaceRef, WorkflowPublishRequest request, int? restoredFromVersion, WorkflowPublishGuards guards, CancellationToken ct)
-    {
-        _logger.LogInformation("Publishing workflow '{WorkflowName}' (RefId: '{RefId}') in WorkspaceId: {WorkspaceId}", request.Name, request.RefId, workspaceId);
-
-        // The request's id is the one the version is stored and triggered under, which the definition's
-        // own WorkflowRefId is not required to match, so the validator is told it for the self-reference check.
-        ValidationResult validation = _validator.Validate(request.Definition, request.RefId);
-        if (!validation.IsValid)
+        Result<IntegrationReferences> check = await CheckAsync(workspaceId, request.RefId, request.Definition, ct);
+        if (check.IsFailure)
         {
-            return Result<WorkflowPublishResponse>.Failure(ValidationFailed(validation.Issues));
-        }
-
-        // The integrations its steps name must be this workspace's, of the right type. Only then are
-        // they recorded with the version, which is what makes them read as used.
-        IntegrationReferences integrationRefs = await _integrationCheck.CheckAsync(workspaceId, request.Definition, ct);
-        if (integrationRefs.Issues.Count > 0)
-        {
-            return Result<WorkflowPublishResponse>.Failure(ValidationFailed(integrationRefs.Issues));
-        }
-
-        // A client that is gone fails every command to it and never fires its triggers; one that is
-        // only revoked is a warning, as it can be registered again.
-        if (_clientCheck is not null)
-        {
-            var clientIssues = await _clientCheck.CheckAsync(workspaceId, request.Definition, ct);
-            if (clientIssues.Any(issue => issue.Severity == ValidationSeverity.Error))
-            {
-                return Result<WorkflowPublishResponse>.Failure(ValidationFailed(clientIssues));
-            }
+            return Result<WorkflowPublishResponse>.Failure(check.Error);
         }
 
         // Only a genuine "no such workflow" means this is the first version. A database fault
         // propagates rather than masquerading as a new workflow and skipping the ownership check below.
-        WorkflowDefinitionRow? existing = await _workflowDefinitionProvider.FindCurrentByRefIdAsync(request.RefId, ct);
-
+        WorkflowDefinitionRow? existing = await _definitions.FindCurrentByRefIdAsync(request.RefId, ct);
         if (existing is not null && existing.WorkspaceId != workspaceId)
         {
             _logger.LogWarning("Workflow publish rejected: Workflow '{RefId}' does not belong to WorkspaceId: {WorkspaceId}", request.RefId, workspaceId);
@@ -131,7 +107,7 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
         WorkflowDefinitionRow inserted;
         try
         {
-            inserted = await _workflowDefinitionProvider.InsertAsync(new WorkflowDefinitionRow
+            inserted = await _definitions.InsertAsync(new WorkflowDefinitionRow
             {
                 Id = 0,
                 RefId = request.RefId,
@@ -139,341 +115,225 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
                 WorkspaceId = workspaceId,
                 Name = request.Name,
                 Description = request.Description,
-                IsEnabled = true,
-                DefinitionJson = JsonSerializer.Serialize(request.Definition with { WorkspaceId = workspaceId, IsEnabled = true }, SerializerOptions),
-                PublishedBy = _identityService.GetUserIdentity().UserId,
+                DefinitionJson = JsonSerializer.Serialize(request.Definition with { WorkspaceId = workspaceId }, SerializerOptions),
+                PublishedBy = CurrentUserId,
                 CreatedAt = request.Definition.CreatedAt
-            }, integrationRefs.Refs, MaxPerWorkspace, guards, ct);
+            }, check.Value.Refs, MaxPerWorkspace, guards, ct);
         }
-        catch (SqlException ex) when (ex.Number == WorkflowVersionMovedError)
+        catch (SqlException ex) when (ex.Number == WorkflowLifecycleErrors.VersionMoved)
         {
             _logger.LogInformation("Workflow publish refused: Workflow '{RefId}' is no longer at version {Version}", request.RefId, guards.ExpectedCurrentVersion);
             return Result<WorkflowPublishResponse>.Failure(WorkflowDraftErrors.Outdated);
         }
-        catch (SqlException ex) when (ex.Number == WorkflowLimitReachedError)
+        catch (SqlException ex) when (ex.Number == WorkflowLifecycleErrors.LimitReached)
         {
             _logger.LogWarning("Workflow publish rejected: WorkspaceId {WorkspaceId} is at its limit of {MaxWorkflows} workflows", workspaceId, MaxPerWorkspace);
             return Result<WorkflowPublishResponse>.Failure(Error.Conflict(
                 "WORKFLOW_LIMIT_REACHED",
                 $"A workspace can have at most {MaxPerWorkspace} workflows. Delete one you no longer use."));
         }
-        catch (SqlException ex) when (ex.Number == IntegrationMissingError)
-        {
-            // An integration a step names was deleted between the check above and the insert.
-            _logger.LogWarning("Workflow publish rejected: an integration of workflow '{RefId}' was deleted while publishing", request.RefId);
-            return Result<WorkflowPublishResponse>.Failure(Error.Validation(
-                "WORKFLOW_VALIDATION_FAILED",
-                "[INTEGRATION_NOT_FOUND] An integration a step sends through was just deleted. Choose another and publish again."));
-        }
-        catch (SqlException ex) when (ex.Number == WorkflowDeletedError)
-        {
-            // The current-version read above already treats a deleted workflow as missing, so this
-            // is where a publish (or a rollback) under a deleted RefId ends.
-            _logger.LogWarning("Workflow publish rejected: Workflow '{RefId}' was deleted", request.RefId);
-            return Result<WorkflowPublishResponse>.Failure(Error.Conflict("WORKFLOW_DELETED", $"Workflow '{request.RefId}' was deleted and cannot be published again."));
-        }
-        catch (SqlException ex) when (ex.Number == WorkflowOwnedElsewhereError)
+        catch (SqlException ex) when (ex.Number == WorkflowLifecycleErrors.OwnedElsewhere)
         {
             // Another workspace's first publish of the same RefId won the race past the check above.
             _logger.LogWarning("Workflow publish rejected under lock: Workflow '{RefId}' belongs to another workspace", request.RefId);
             return Result<WorkflowPublishResponse>.Failure(WorkflowRefTaken);
         }
-
-        // From here the row exists. Anything that fails must not leave a published version whose
-        // triggers were never registered - that workflow would be current, and dead.
-        try
+        catch (SqlException ex) when (WorkflowLifecycleErrors.TryMap(ex, request.RefId, null, out Error error))
         {
-            if (existing is not null)
-            {
-                await _workflowDefinitionProvider.DeprecateAsync(existing.Id, ct);
-                await _triggerRegistrationService.OnDeprecatedAsync(existing.Id, ct);
-            }
-
-            await _triggerRegistrationService.OnPublishedAsync(inserted.Id, workspaceRef, ct);
-        }
-        catch (Exception ex)
-        {
-            await CompensateFailedPublishAsync(inserted, existing, workspaceRef, ex, ct);
-            // The registrations were removed and put back in between, and the engine may have read them then.
-            await TryAnnounceChangedAsync(workspaceId, inserted.RefId, [inserted.Id, existing?.Id], ct);
-            throw;
+            // Deprecated, deleted, or an integration deleted between the check above and the insert.
+            _logger.LogWarning("Workflow publish of '{RefId}' refused: {Code}", request.RefId, error.Code);
+            return Result<WorkflowPublishResponse>.Failure(error);
         }
 
-        await AnnounceChangedAsync(workspaceId, inserted.RefId, [inserted.Id, existing?.Id], ct);
-        _logger.LogInformation("Workflow '{WorkflowName}' (RefId: '{RefId}') version {Version} published successfully", request.Name, request.RefId, inserted.Version);
-        await _eventBus.PublishAsync(new WorkflowPublishedEvent(inserted.RefId, inserted.Id, workspaceId, inserted.Version, request.Name, restoredFromVersion)
+        _logger.LogInformation("Workflow '{WorkflowName}' (RefId: '{RefId}') version {Version} published", request.Name, request.RefId, inserted.Version);
+        await _eventBus.PublishAsync(new WorkflowPublishedEvent(inserted.RefId, inserted.Id, workspaceId, inserted.Version, request.Name, request.Enable)
         {
             Changes = [new FieldChange("version", existing?.Version.ToString(CultureInfo.InvariantCulture), inserted.Version.ToString(CultureInfo.InvariantCulture))]
         }, ct);
-        return Result<WorkflowPublishResponse>.Success(new WorkflowPublishResponse(inserted.RefId, inserted.Version, "Published"));
+
+        if (!request.Enable)
+        {
+            WorkflowStateRow? state = await _states.FindAsync(inserted.RefId, workspaceId, ct);
+            return Result<WorkflowPublishResponse>.Success(new WorkflowPublishResponse(inserted.RefId, inserted.Version, state?.State ?? WorkflowState.Disabled, state?.LiveVersion));
+        }
+
+        // A second step on purpose: a version published but not live is a valid state, so a refused
+        // enable leaves the previous live version running and the new one waiting to be enabled.
+        Result<WorkflowStateResponse> enabled = await EnableCoreAsync(workspaceId, workspaceRef, inserted, request.Definition, check.Value, ct);
+        if (enabled.IsFailure)
+        {
+            _logger.LogWarning("Workflow '{RefId}' version {Version} was published but not made live: {Code}", inserted.RefId, inserted.Version, enabled.Error.Code);
+            return Result<WorkflowPublishResponse>.Failure(enabled.Error with
+            {
+                Message = $"Version {inserted.Version} was published but not made live: {enabled.Error.Message}"
+            });
+        }
+
+        return Result<WorkflowPublishResponse>.Success(new WorkflowPublishResponse(inserted.RefId, inserted.Version, enabled.Value.State, enabled.Value.LiveVersion));
     }
 
-    public async Task<Result> ReinstateAsync(int workspaceId, Guid workspaceRef, Guid refId, CancellationToken ct)
+    public async Task<Result<WorkflowStateResponse>> EnableAsync(int workspaceId, Guid workspaceRef, Guid refId, int version, CancellationToken ct)
     {
-        _logger.LogInformation("Reinstating workflow '{RefId}' in WorkspaceId: {WorkspaceId}", refId, workspaceId);
+        _logger.LogInformation("Enabling workflow '{RefId}' version {Version} in WorkspaceId: {WorkspaceId}", refId, version, workspaceId);
 
-        var load = await WorkflowOwnershipCheck.LoadCurrentAsync(_workflowDefinitionProvider, _logger, workspaceId, refId, ct);
-        if (load.IsFailure)
+        // A workflow that is not this workspace's is WORKFLOW_NOT_FOUND, as on every other action; only
+        // a version missing from a workflow the caller can see is WORKFLOW_VERSION_NOT_FOUND.
+        WorkflowDefinitionRow? row = await _definitions.FindRowByRefIdVersionAsync(refId, version, ct);
+        if (row is null || row.WorkspaceId != workspaceId)
         {
-            return Result.Failure(load.Error);
+            bool visible = await _states.FindAsync(refId, workspaceId, ct) is not null;
+            return Result<WorkflowStateResponse>.Failure(visible ? WorkflowLifecycleErrors.VersionNotFound(refId, version) : WorkspaceOwnership.WorkflowNotFound);
         }
 
-        WorkflowDefinitionRow row = load.Value;
-        if (row.IsEnabled)
-        {
-            return Result.Failure(Error.Conflict("WORKFLOW_ALREADY_ENABLED", $"Workflow '{refId}' is already enabled."));
-        }
-
-        // An integration deleted while the workflow was deprecated would leave its steps failing on
-        // every run; refuse here, where the author can still choose another and publish.
-        // A step published before integrations existed names none and fails every run the same way.
-        WorkflowDefinition? stored = JsonSerializer.Deserialize<WorkflowDefinition>(row.DefinitionJson, SerializerOptions);
-        var unnamed = (stored?.Nodes ?? [])
-            .Where(n => n is IIntegrationStep { IntegrationRef: null } && IntegrationTypes.IsRequiredFor(n.Kind))
-            .Select(n => new ValidationIssue(
-                ValidationSeverity.Error,
-                "INTEGRATION_REF_MISSING",
-                $"Step '{n.Name}' must name the {IntegrationTypes.NameOf(IntegrationTypes.ForStepKind(n.Kind)!.Value)} integration it sends through. Choose one and publish again.",
-                n.NodeId))
-            .ToList();
-        IntegrationReferences integrationRefs = await _integrationCheck.CheckAsync(workspaceId, stored, ct);
-        if (unnamed.Count > 0 || integrationRefs.Issues.Count > 0)
-        {
-            return Result.Failure(ValidationFailed(unnamed.Concat(integrationRefs.Issues)));
-        }
-
-        // Deprecating deregisters the triggers, so re-enabling has to put them back - otherwise the
-        // workflow reads as published and never fires. Registering first means a failure leaves the
-        // row still disabled, which is the state the caller already had.
-        await _triggerRegistrationService.OnPublishedAsync(row.Id, workspaceRef, ct);
-
-        try
-        {
-            await _workflowDefinitionProvider.SetEnabledAsync(row.Id, true, ct);
-        }
-        catch
-        {
-            // Registrations without an enabled definition would fire a workflow the operator
-            // believes is off - worse than leaving it off.
-            await TryDeregisterAsync(row.Id, ct);
-            await TryAnnounceChangedAsync(workspaceId, row.RefId, [row.Id], ct);
-            throw;
-        }
-
-        await AnnounceChangedAsync(workspaceId, row.RefId, [row.Id], ct);
-        _logger.LogInformation("Workflow '{RefId}' version {Version} reinstated", refId, row.Version);
-        await _eventBus.PublishAsync(new WorkflowReinstatedEvent(row.RefId, row.Id, workspaceId, row.Version)
-        {
-            Changes = [new FieldChange("status", "Deprecated", "Published")]
-        }, ct);
-        return Result.Success();
-    }
-
-    public async Task<Result<WorkflowPublishResponse>> RollbackAsync(int workspaceId, Guid workspaceRef, Guid refId, int version, CancellationToken ct)
-    {
-        _logger.LogInformation("Rolling workflow '{RefId}' back to version {Version} in WorkspaceId: {WorkspaceId}", refId, version, workspaceId);
-
-        WorkflowDefinitionRow? source = await _workflowDefinitionProvider.FindRowByRefIdVersionAsync(refId, version, ct);
-        if (source is null)
-        {
-            _logger.LogWarning("Failed to roll back: workflow '{RefId}' version {Version} not found.", refId, version);
-            return Result<WorkflowPublishResponse>.Failure(Error.NotFound("WORKFLOW_VERSION_NOT_FOUND", $"Workflow '{refId}' has no version {version}."));
-        }
-
-        var ensureWorkspaceResult = WorkflowOwnershipCheck.EnsureWorkspace(source, workspaceId, refId, _logger);
-        if (ensureWorkspaceResult.IsFailure)
-        {
-            return Result<WorkflowPublishResponse>.Failure(ensureWorkspaceResult.Error);
-        }
-
-        WorkflowDefinition? definition;
-        try
-        {
-            definition = JsonSerializer.Deserialize<WorkflowDefinition>(source.DefinitionJson, SerializerOptions);
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogError("Cannot roll back workflow '{RefId}' to version {Version}: stored definition is unreadable. Error: {Message}", refId, version, ex.Message);
-            return Result<WorkflowPublishResponse>.Failure(Error.Failure("WORKFLOW_DEFINITION_UNREADABLE", $"Version {version} of workflow '{refId}' could not be deserialized."));
-        }
-
+        WorkflowDefinition? definition = JsonSerializer.Deserialize<WorkflowDefinition>(row.DefinitionJson, SerializerOptions);
         if (definition is null)
         {
-            return Result<WorkflowPublishResponse>.Failure(Error.Failure("WORKFLOW_DEFINITION_UNREADABLE", $"Version {version} of workflow '{refId}' could not be deserialized."));
+            throw new InvalidOperationException($"Version {version} of workflow '{refId}' could not be deserialized.");
         }
 
-        // Rolling back publishes the old definition as a NEW version rather than resurrecting the old
-        // row, so the version history stays append-only and the runs of every version keep pointing at
-        // the definition they actually ran. Going through PublishAsync also means a rollback is
-        // validated, versioned, registered and compensated on failure exactly like any other publish -
-        // which matters, because a definition published before a validation rule existed may no longer
-        // be valid.
-        return await PublishCoreAsync(
-            workspaceId,
-            workspaceRef,
-            new WorkflowPublishRequest(refId, source.Name, source.Description, definition),
-            restoredFromVersion: version,
-            WorkflowPublishGuards.None,
-            ct);
+        // An old version is held to today's rules: one published before a rule existed, or whose
+        // integration or client has since gone, would otherwise go live and fail on every run.
+        Result<IntegrationReferences> check = await CheckAsync(workspaceId, refId, definition, ct);
+        if (check.IsFailure)
+        {
+            return Result<WorkflowStateResponse>.Failure(check.Error);
+        }
+
+        return await EnableCoreAsync(workspaceId, workspaceRef, row, definition, check.Value, ct);
     }
 
-    /// <summary>
-    /// Each error names its node, so the message points at what to fix rather than being a bare
-    /// sentence. The structured form is available from the validate endpoint.
-    /// </summary>
-    private Error ValidationFailed(IEnumerable<ValidationIssue> issues)
+    private async Task<Result<WorkflowStateResponse>> EnableCoreAsync(int workspaceId, Guid workspaceRef, WorkflowDefinitionRow row, WorkflowDefinition definition, IntegrationReferences integrationRefs, CancellationToken ct)
     {
-        string message = string.Join("; ", issues
-            .Where(issue => issue.Severity == ValidationSeverity.Error)
-            .Select(issue => (issue.NodeId, issue.Field) switch
+        TriggerPlan plan = _planner.Plan(definition, row.RefId, workspaceRef);
+
+        WorkflowEnableResult result;
+        try
+        {
+            result = await _states.EnableAsync(row.RefId, workspaceId, row.Version, CurrentUserId, plan, integrationRefs.Refs, ct);
+        }
+        catch (SqlException ex) when (WorkflowLifecycleErrors.TryMap(ex, row.RefId, row.Version, out Error error))
+        {
+            _logger.LogWarning("Enabling workflow '{RefId}' version {Version} refused: {Code}", row.RefId, row.Version, error.Code);
+            return Result<WorkflowStateResponse>.Failure(error);
+        }
+
+        var response = new WorkflowStateResponse(row.RefId, WorkflowState.Enabled, row.Version);
+        if (!result.Changed)
+        {
+            return Result<WorkflowStateResponse>.Success(response);
+        }
+
+        await AnnounceChangedAsync(workspaceId, row.RefId, [result.PreviousLiveDefinitionId, result.LiveDefinitionId], ct);
+
+        int? previousVersion = result.PreviousLiveDefinitionId is int previousId ? (await _definitions.GetByIdAsync(previousId, ct)).Version : null;
+        _logger.LogInformation("Workflow '{RefId}' version {Version} is live (was {PreviousVersion}); {Dropped} queued event(s) dropped", row.RefId, row.Version, previousVersion, result.DroppedQueuedEvents);
+        await _eventBus.PublishAsync(new WorkflowEnabledEvent(row.RefId, row.Id, workspaceId, row.Version, previousVersion)
+        {
+            Changes = [new FieldChange("liveVersion", previousVersion?.ToString(CultureInfo.InvariantCulture), row.Version.ToString(CultureInfo.InvariantCulture))]
+        }, ct);
+
+        return Result<WorkflowStateResponse>.Success(response);
+    }
+
+    public async Task<Result<WorkflowStateResponse>> DisableAsync(int workspaceId, Guid refId, bool cancelRunningRuns, CancellationToken ct)
+    {
+        _logger.LogInformation("Disabling workflow '{RefId}' in WorkspaceId: {WorkspaceId} (cancel running runs: {Cancel})", refId, workspaceId, cancelRunningRuns);
+
+        Result<WorkflowDisableResult> disabled = await TakeOutOfServiceAsync(workspaceId, refId, deprecate: false, ct);
+        if (disabled.IsFailure)
+        {
+            return Result<WorkflowStateResponse>.Failure(disabled.Error);
+        }
+
+        WorkflowDisableResult result = disabled.Value;
+
+        // Asked for, so honoured on a repeated disable too: runs going on a disabled workflow are what
+        // the first call left behind. Queued, so a broker outage delays the cancels rather than failing
+        // a disable that has already committed.
+        int cancelled = 0;
+        if (cancelRunningRuns)
+        {
+            foreach (long runId in result.ActiveRunIds)
             {
-                (Guid nodeId, string field) => $"[{issue.Code}] {issue.Message} (node {nodeId}, {field})",
-                (Guid nodeId, null) => $"[{issue.Code}] {issue.Message} (node {nodeId})",
-                _ => $"[{issue.Code}] {issue.Message}"
-            }));
-        _logger.LogWarning("Workflow publish failed: Validation issues: {Issues}", message);
-        return Error.Validation("WORKFLOW_VALIDATION_FAILED", message);
-    }
-
-    /// <summary>
-    /// Tells the engine that these versions' definitions or trigger registrations changed, so it drops
-    /// what it cached of them (<see cref="WorkflowDefinitionChangedEvent"/>).
-    /// </summary>
-    private Task AnnounceChangedAsync(int workspaceId, Guid refId, IEnumerable<int?> definitionIds, CancellationToken ct)
-    {
-        int[] ids = definitionIds.OfType<int>().Distinct().ToArray();
-        return _eventBus.PublishAsync(new WorkflowDefinitionChangedEvent(refId, workspaceId, ids), ct);
-    }
-
-    /// <summary>
-    /// <see cref="AnnounceChangedAsync"/> on a path that is already failing: the original failure is what
-    /// the caller reports, so a problem here is logged rather than thrown.
-    /// </summary>
-    private async Task TryAnnounceChangedAsync(int workspaceId, Guid refId, IEnumerable<int?> definitionIds, CancellationToken ct)
-    {
-        try
-        {
-            await AnnounceChangedAsync(workspaceId, refId, definitionIds, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Could not announce the change to workflow '{RefId}' to the engine; its cached registrations expire on their own.", refId);
-        }
-    }
-
-    private async Task TryDeregisterAsync(int definitionId, CancellationToken ct)
-    {
-        try
-        {
-            await _triggerRegistrationService.OnDeprecatedAsync(definitionId, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to deregister triggers for definition {DefinitionId} while undoing a reinstate.", definitionId);
-        }
-    }
-
-    /// <summary>
-    /// Undoes a publish that inserted its row and then failed. Without this the new version stays
-    /// current with no triggers registered - and if it superseded an earlier version, that one has
-    /// already been deprecated and deregistered, so the workflow stops firing altogether.
-    ///
-    /// Best-effort and fully guarded: the original failure is what the caller reports, so a problem
-    /// here must not replace it. Anything left behind is logged loudly enough to fix by hand.
-    /// </summary>
-    private async Task CompensateFailedPublishAsync(
-        WorkflowDefinitionRow inserted,
-        WorkflowDefinitionRow? existing,
-        Guid workspaceRef,
-        Exception cause,
-        CancellationToken ct)
-    {
-        _logger.LogError(
-            "Publish of workflow '{RefId}' version {Version} failed after the row was inserted ({Message}); rolling back.",
-            inserted.RefId, inserted.Version, cause.Message);
-
-        try
-        {
-            // Drop any registrations the failed attempt managed to create before throwing.
-            await _triggerRegistrationService.OnDeprecatedAsync(inserted.Id, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Rollback: could not deregister triggers for workflow definition {Id}.", inserted.Id);
-        }
-
-        try
-        {
-            bool removed = await _workflowDefinitionProvider.DeleteUnreferencedAsync(inserted.Id, ct);
-            if (!removed)
-            {
-                _logger.LogError(
-                    "Rollback: workflow definition {Id} could not be removed (runs already reference it); it remains as a version with no triggers.",
-                    inserted.Id);
+                await _engine.QueueCancelRunAsync(runId, DisabledCancellationReason, ct);
+                cancelled++;
             }
         }
-        catch (Exception ex)
+
+        if (result.Changed && result.PreviousLiveDefinitionId is int previousId)
         {
-            _logger.LogError(ex, "Rollback: could not remove workflow definition {Id}.", inserted.Id);
+            await AnnounceChangedAsync(workspaceId, refId, [previousId], ct);
+            WorkflowDefinitionRow previous = await _definitions.GetByIdAsync(previousId, ct);
+            _logger.LogInformation("Workflow '{RefId}' disabled (was version {Version}): {Cancelled} run(s) cancelling, {Dropped} queued event(s) dropped", refId, previous.Version, cancelled, result.DroppedQueuedEvents);
+            await _eventBus.PublishAsync(new WorkflowDisabledEvent(refId, previousId, workspaceId, previous.Version, cancelled, result.DroppedQueuedEvents)
+            {
+                Changes = [new FieldChange("state", nameof(WorkflowState.Enabled), nameof(WorkflowState.Disabled))]
+            }, ct);
         }
 
-        if (existing is null)
-        {
-            return;
-        }
-
-        // Put the superseded version back the way it was.
-        try
-        {
-            await _workflowDefinitionProvider.SetEnabledAsync(existing.Id, true, ct);
-            // The real workspace ref matters: webhook trigger keys are workspace-scoped, so
-            // re-registering with anything else would mint keys nothing can ever match.
-            await _triggerRegistrationService.OnPublishedAsync(existing.Id, workspaceRef, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Rollback: could not restore previous workflow definition {Id}; it may be left deprecated with no triggers.",
-                existing.Id);
-        }
+        return Result<WorkflowStateResponse>.Success(new WorkflowStateResponse(refId, WorkflowState.Disabled, null, cancelled, result.DroppedQueuedEvents));
     }
 
-    /// <summary>
-    /// A publish names its own RefId, so it can land on one another workspace already uses. That is
-    /// a conflict to resolve by choosing another RefId, not a permission the caller lacks: inside a
-    /// workspace a 403 only ever means a missing permission (see "The ID Boundary").
-    /// </summary>
-    private static readonly Error WorkflowRefTaken = Error.Conflict("WORKFLOW_REF_TAKEN", "This workflow reference is already in use. Publish under a new RefId.");
-
-    public async Task<Result> DeprecateAsync(int workspaceId, Guid refId, CancellationToken ct)
+    public async Task<Result<WorkflowStateResponse>> DeprecateAsync(int workspaceId, Guid refId, CancellationToken ct)
     {
         _logger.LogInformation("Deprecating workflow '{RefId}' in WorkspaceId: {WorkspaceId}", refId, workspaceId);
 
-        var load = await WorkflowOwnershipCheck.LoadCurrentAsync(_workflowDefinitionProvider, _logger, workspaceId, refId, ct);
-        if (load.IsFailure)
+        // Read before the change only to name the state it came from in the audit entry.
+        WorkflowStateRow? before = await _states.FindAsync(refId, workspaceId, ct);
+
+        Result<WorkflowDisableResult> deprecated = await TakeOutOfServiceAsync(workspaceId, refId, deprecate: true, ct);
+        if (deprecated.IsFailure)
         {
-            return Result.Failure(load.Error);
+            return Result<WorkflowStateResponse>.Failure(deprecated.Error);
         }
 
-        WorkflowDefinitionRow row = load.Value;
-        await _workflowDefinitionProvider.DeprecateAsync(row.Id, ct);
-        await _triggerRegistrationService.OnDeprecatedAsync(row.Id, ct);
-        await AnnounceChangedAsync(workspaceId, row.RefId, [row.Id], ct);
-
-        _logger.LogInformation("Workflow '{RefId}' deprecated successfully", refId);
-        await _eventBus.PublishAsync(new WorkflowDeprecatedEvent(row.RefId, row.Id, workspaceId, row.Version)
+        WorkflowDisableResult result = deprecated.Value;
+        if (result.Changed)
         {
-            Changes = [new FieldChange("status", row.IsEnabled ? "Published" : "Deprecated", "Deprecated")]
+            if (result.PreviousLiveDefinitionId is int previousId)
+            {
+                await AnnounceChangedAsync(workspaceId, refId, [previousId], ct);
+            }
+
+            WorkflowDefinitionRow newest = await LoadNewestAsync(refId, ct);
+            _logger.LogInformation("Workflow '{RefId}' deprecated; {Dropped} queued event(s) dropped", refId, result.DroppedQueuedEvents);
+            await _eventBus.PublishAsync(new WorkflowDeprecatedEvent(refId, newest.Id, workspaceId, newest.Version)
+            {
+                Changes = [new FieldChange("state", (before?.State ?? WorkflowState.Disabled).ToString(), nameof(WorkflowState.Deprecated))]
+            }, ct);
+        }
+
+        return Result<WorkflowStateResponse>.Success(new WorkflowStateResponse(refId, WorkflowState.Deprecated, null, 0, result.DroppedQueuedEvents));
+    }
+
+    public async Task<Result<WorkflowStateResponse>> ReinstateAsync(int workspaceId, Guid refId, CancellationToken ct)
+    {
+        _logger.LogInformation("Reinstating workflow '{RefId}' in WorkspaceId: {WorkspaceId}", refId, workspaceId);
+
+        try
+        {
+            await _states.ReinstateAsync(refId, workspaceId, CurrentUserId, ct);
+        }
+        catch (SqlException ex) when (WorkflowLifecycleErrors.TryMap(ex, refId, null, out Error error))
+        {
+            return Result<WorkflowStateResponse>.Failure(error);
+        }
+
+        WorkflowDefinitionRow newest = await LoadNewestAsync(refId, ct);
+        _logger.LogInformation("Workflow '{RefId}' reinstated as disabled", refId);
+        await _eventBus.PublishAsync(new WorkflowReinstatedEvent(refId, newest.Id, workspaceId, newest.Version)
+        {
+            Changes = [new FieldChange("state", nameof(WorkflowState.Deprecated), nameof(WorkflowState.Disabled))]
         }, ct);
-        return Result.Success();
+
+        return Result<WorkflowStateResponse>.Success(new WorkflowStateResponse(refId, WorkflowState.Disabled, null));
     }
 
     public async Task<Result> DeleteAsync(int workspaceId, Guid refId, CancellationToken ct)
     {
         _logger.LogInformation("Deleting workflow '{RefId}' in WorkspaceId: {WorkspaceId}", refId, workspaceId);
 
-        var deletion = await _workflowDefinitionProvider.DeleteAsync(refId, workspaceId, _identityService.GetUserIdentity().UserId, ct);
+        var deletion = await _definitions.DeleteAsync(refId, workspaceId, CurrentUserId, ct);
         if (deletion is null)
         {
             // Same answer for unknown, already deleted, and another workspace's workflow.
@@ -490,9 +350,96 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
         }
 
         await AnnounceChangedAsync(workspaceId, refId, deletion.DefinitionIds.Select(id => (int?)id), ct);
-        _logger.LogInformation("Workflow '{RefId}' deleted: {Versions} version(s) disabled, {Runs} run(s) cancelling", refId, deletion.DefinitionIds.Count, deletion.ActiveRunIds.Count);
+        _logger.LogInformation("Workflow '{RefId}' deleted: {Versions} version(s), {Runs} run(s) cancelling", refId, deletion.DefinitionIds.Count, deletion.ActiveRunIds.Count);
         await _eventBus.PublishAsync(new WorkflowDeletedEvent(refId, deletion.DefinitionIds.DefaultIfEmpty().Max(), workspaceId, deletion.ActiveRunIds.Count), ct);
         return Result.Success();
     }
 
+    private async Task<Result<WorkflowDisableResult>> TakeOutOfServiceAsync(int workspaceId, Guid refId, bool deprecate, CancellationToken ct)
+    {
+        try
+        {
+            return Result<WorkflowDisableResult>.Success(await _states.DisableAsync(refId, workspaceId, CurrentUserId, deprecate, ct));
+        }
+        catch (SqlException ex) when (WorkflowLifecycleErrors.TryMap(ex, refId, null, out Error error))
+        {
+            _logger.LogInformation("{Action} workflow '{RefId}' refused: {Code}", deprecate ? "Deprecating" : "Disabling", refId, error.Code);
+            return Result<WorkflowDisableResult>.Failure(error);
+        }
+    }
+
+    /// <summary>The newest version, which names a state change that has no live version in the audit log.</summary>
+    private async Task<WorkflowDefinitionRow> LoadNewestAsync(Guid refId, CancellationToken ct)
+    {
+        return await _definitions.FindCurrentByRefIdAsync(refId, ct)
+            ?? throw new InvalidOperationException($"Workflow '{refId}' changed state but has no version.");
+    }
+
+    /// <summary>
+    /// What publishing and enabling both require of a definition: the validator passes, the integrations
+    /// its steps name are this workspace's and of the right type, and no client it names is gone (one
+    /// only revoked is a warning, as it can be registered again).
+    /// </summary>
+    private async Task<Result<IntegrationReferences>> CheckAsync(int workspaceId, Guid refId, WorkflowDefinition definition, CancellationToken ct)
+    {
+        // The request's id is the one the version is stored and triggered under, which the definition's
+        // own WorkflowRefId is not required to match, so the validator is told it for the self-reference check.
+        ValidationResult validation = _validator.Validate(definition, refId);
+        if (!validation.IsValid)
+        {
+            return Result<IntegrationReferences>.Failure(ValidationFailed(validation.Issues));
+        }
+
+        IntegrationReferences integrationRefs = await _integrationCheck.CheckAsync(workspaceId, definition, ct);
+        if (integrationRefs.Issues.Count > 0)
+        {
+            return Result<IntegrationReferences>.Failure(ValidationFailed(integrationRefs.Issues));
+        }
+
+        if (_clientCheck is not null)
+        {
+            var clientIssues = await _clientCheck.CheckAsync(workspaceId, definition, ct);
+            if (clientIssues.Any(issue => issue.Severity == ValidationSeverity.Error))
+            {
+                return Result<IntegrationReferences>.Failure(ValidationFailed(clientIssues));
+            }
+        }
+
+        return Result<IntegrationReferences>.Success(integrationRefs);
+    }
+
+    /// <summary>
+    /// Each error names its node, so the message points at what to fix rather than being a bare
+    /// sentence. The structured form is available from the validate endpoint.
+    /// </summary>
+    private Error ValidationFailed(IEnumerable<ValidationIssue> issues)
+    {
+        string message = string.Join("; ", issues
+            .Where(issue => issue.Severity == ValidationSeverity.Error)
+            .Select(issue => (issue.NodeId, issue.Field) switch
+            {
+                (Guid nodeId, string field) => $"[{issue.Code}] {issue.Message} (node {nodeId}, {field})",
+                (Guid nodeId, null) => $"[{issue.Code}] {issue.Message} (node {nodeId})",
+                _ => $"[{issue.Code}] {issue.Message}"
+            }));
+        _logger.LogWarning("Workflow validation failed: {Issues}", message);
+        return Error.Validation("WORKFLOW_VALIDATION_FAILED", message);
+    }
+
+    /// <summary>
+    /// Tells the engine that these versions' definitions or trigger registrations changed, so it drops
+    /// what it cached of them (<see cref="WorkflowDefinitionChangedEvent"/>).
+    /// </summary>
+    private Task AnnounceChangedAsync(int workspaceId, Guid refId, IEnumerable<int?> definitionIds, CancellationToken ct)
+    {
+        int[] ids = definitionIds.OfType<int>().Distinct().ToArray();
+        return _eventBus.PublishAsync(new WorkflowDefinitionChangedEvent(refId, workspaceId, ids), ct);
+    }
+
+    /// <summary>
+    /// A publish names its own RefId, so it can land on one another workspace already uses. That is
+    /// a conflict to resolve by choosing another RefId, not a permission the caller lacks: inside a
+    /// workspace a 403 only ever means a missing permission (see "The ID Boundary").
+    /// </summary>
+    private static readonly Error WorkflowRefTaken = Error.Conflict("WORKFLOW_REF_TAKEN", "This workflow reference is already in use. Publish under a new RefId.");
 }

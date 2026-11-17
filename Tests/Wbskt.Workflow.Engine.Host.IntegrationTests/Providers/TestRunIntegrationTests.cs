@@ -52,7 +52,7 @@ public sealed class TestRunIntegrationTests(SqlEdgeFixture fixture)
         var runs = ProviderFactory.Run(fixture.ConnectionString);
         int workspaceId = NewWorkspace();
         Guid refId = Guid.NewGuid();
-        var live = await definitions.InsertAsync(Row(refId, workspaceId), CancellationToken.None);
+        var live = await definitions.InsertAsync(Row(refId, workspaceId), CancellationToken.None).LiveAsync(fixture.ConnectionString);
         var copy = await definitions.InsertTestCopyAsync(Row(refId, workspaceId) with { Version = 1 }, CancellationToken.None);
 
         var first = await StartAsync(runs, copy, isTest: true);
@@ -85,7 +85,7 @@ public sealed class TestRunIntegrationTests(SqlEdgeFixture fixture)
         var runs = ProviderFactory.Run(fixture.ConnectionString);
         int workspaceId = NewWorkspace();
         var parentCopy = await definitions.InsertTestCopyAsync(Row(Guid.NewGuid(), workspaceId), CancellationToken.None);
-        var child = await definitions.InsertAsync(Row(Guid.NewGuid(), workspaceId), CancellationToken.None);
+        var child = await definitions.InsertAsync(Row(Guid.NewGuid(), workspaceId), CancellationToken.None).LiveAsync(fixture.ConnectionString);
         var parent = await StartAsync(runs, parentCopy, isTest: true);
 
         var first = await StartAsync(runs, child, isTest: false, parentRunRefId: parent.Run.RefId);
@@ -112,7 +112,7 @@ public sealed class TestRunIntegrationTests(SqlEdgeFixture fixture)
         await using (var conn = new SqlConnection(fixture.ConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = new SqlCommand("INSERT INTO dbo.WorkflowDeletions (RefId, WorkspaceId, DeletedBy) VALUES (@RefId, @WorkspaceId, 1)", conn);
+            await using var cmd = new SqlCommand("INSERT INTO dbo.Workflows (RefId, WorkspaceId, State, StateChangedBy) VALUES (@RefId, @WorkspaceId, 4, 1)", conn);
             cmd.Parameters.AddWithValue("@RefId", refId);
             cmd.Parameters.AddWithValue("@WorkspaceId", workspaceId);
             await cmd.ExecuteNonQueryAsync();
@@ -130,7 +130,7 @@ public sealed class TestRunIntegrationTests(SqlEdgeFixture fixture)
         var runs = ProviderFactory.Run(fixture.ConnectionString);
         int workspaceId = NewWorkspace();
         Guid refId = Guid.NewGuid();
-        var live = await definitions.InsertAsync(Row(refId, workspaceId), CancellationToken.None);
+        var live = await definitions.InsertAsync(Row(refId, workspaceId), CancellationToken.None).LiveAsync(fixture.ConnectionString);
         var copy = await definitions.InsertTestCopyAsync(Row(refId, workspaceId) with { Version = 1 }, CancellationToken.None);
 
         await StartAsync(runs, live, isTest: false);
@@ -229,7 +229,7 @@ public sealed class TestRunIntegrationTests(SqlEdgeFixture fixture)
         WorkspaceId = workspaceId,
         Name = "test-run-test",
         Description = null,
-        IsEnabled = true,
+       
         DefinitionJson = """{"nodes":[],"edges":[]}""",
         PublishedBy = 1,
         CreatedAt = DateTime.UtcNow

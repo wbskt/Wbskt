@@ -28,6 +28,7 @@ public sealed class WorkflowTestRunServiceTests
     private static readonly Guid RunRef = Guid.Parse("cccccccc-0000-0000-0000-000000000003");
 
     private readonly Mock<IWorkflowDefinitionProvider> _definitions = new();
+    private readonly Mock<IWorkflowStateProvider> _states = new();
     private readonly Mock<IWorkflowDraftProvider> _drafts = new();
     private readonly Mock<IWorkflowQueryService> _query = new();
     private readonly Mock<IWorkflowEngineGateway> _engine = new();
@@ -59,16 +60,47 @@ public sealed class WorkflowTestRunServiceTests
     [Fact]
     public async Task The_live_version_runs_from_a_copy_of_itself()
     {
-        _definitions.Setup(x => x.FindCurrentByRefIdAsync(RefId, It.IsAny<CancellationToken>())).ReturnsAsync(new WorkflowDefinitionRow
-        {
-            Id = 3, RefId = RefId, Version = 6, WorkspaceId = WorkspaceId, Name = "Live", Description = null, IsEnabled = true,
-            DefinitionJson = Json(TriggerA), PublishedBy = 1, CreatedAt = DateTime.UtcNow
-        });
+        Published(WorkflowState.Enabled, liveVersion: 6, latestVersion: 7, versionRun: 6);
 
         var result = await Service().StartAsync(WorkspaceId, RefId, new StartTestRunRequest(TestRunSource.Live), CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        _definitions.Verify(x => x.InsertTestCopyAsync(It.Is<WorkflowDefinitionRow>(r => r.Version == 6 && r.Name == "Live"), It.IsAny<CancellationToken>()), Times.Once);
+        _definitions.Verify(x => x.InsertTestCopyAsync(It.Is<WorkflowDefinitionRow>(r => r.Version == 6 && r.Name == "v6"), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_disabled_workflow_tests_its_newest_version()
+    {
+        Published(WorkflowState.Disabled, liveVersion: null, latestVersion: 7, versionRun: 7);
+
+        var result = await Service().StartAsync(WorkspaceId, RefId, new StartTestRunRequest(TestRunSource.Live), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        _definitions.Verify(x => x.InsertTestCopyAsync(It.Is<WorkflowDefinitionRow>(r => r.Version == 7), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(TestRunSource.Live)]
+    [InlineData(TestRunSource.Draft)]
+    public async Task A_deprecated_workflow_is_not_tested(TestRunSource source)
+    {
+        Published(WorkflowState.Deprecated, liveVersion: null, latestVersion: 2, versionRun: 2);
+        Draft(baseVersion: 2, TriggerA);
+
+        var result = await Service().StartAsync(WorkspaceId, RefId, new StartTestRunRequest(source), CancellationToken.None);
+
+        Assert.Equal("WORKFLOW_DEPRECATED", result.Error.Code);
+        Assert.Equal(ErrorType.Conflict, result.Error.Type);
+        _definitions.Verify(x => x.InsertTestCopyAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()), Times.Never);
+        _engine.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task A_workflow_never_published_has_no_live_version_to_test()
+    {
+        var result = await Service().StartAsync(WorkspaceId, RefId, new StartTestRunRequest(TestRunSource.Live), CancellationToken.None);
+
+        Assert.Equal("WORKFLOW_NOT_FOUND", result.Error.Code);
     }
 
     [Fact]
@@ -154,7 +186,18 @@ public sealed class WorkflowTestRunServiceTests
     {
         var identity = new Mock<IIdentityService>();
         identity.Setup(x => x.GetUserIdentity()).Returns(new UserIdentity(9));
-        return new WorkflowTestRunService(_definitions.Object, _drafts.Object, _query.Object, _engine.Object, identity.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowTestRunService>>());
+        return new WorkflowTestRunService(_definitions.Object, _states.Object, _drafts.Object, _query.Object, _engine.Object, identity.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowTestRunService>>());
+    }
+
+    private void Published(WorkflowState state, int? liveVersion, int latestVersion, int versionRun)
+    {
+        _states.Setup(x => x.FindAsync(RefId, WorkspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowStateRow(RefId, WorkspaceId, state, liveVersion is null ? null : 30 + liveVersion, liveVersion, latestVersion));
+        _definitions.Setup(x => x.FindRowByRefIdVersionAsync(RefId, versionRun, It.IsAny<CancellationToken>())).ReturnsAsync(new WorkflowDefinitionRow
+        {
+            Id = 30 + versionRun, RefId = RefId, Version = versionRun, WorkspaceId = WorkspaceId, Name = $"v{versionRun}", Description = null,
+            DefinitionJson = Json(TriggerA), PublishedBy = 1, CreatedAt = DateTime.UtcNow
+        });
     }
 
     private void Draft(int? baseVersion, params Guid[] triggers)
@@ -170,7 +213,7 @@ public sealed class WorkflowTestRunServiceTests
     private static string Json(params Guid[] triggers)
     {
         var definition = new WorkflowDefinition(
-            RefId, 0, WorkspaceId, "wf", null, true,
+            RefId, 0, WorkspaceId, "wf", null,
             triggers.Select(id => (BaseNode)new ManualTriggerNode
             {
                 NodeId = id,

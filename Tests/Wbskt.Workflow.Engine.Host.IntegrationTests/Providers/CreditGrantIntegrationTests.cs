@@ -696,9 +696,9 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
         {
             Id = 0, RefId = Guid.NewGuid(), Version = 0, WorkspaceId = workspaceId,
             Name = $"IT-WD-{Guid.NewGuid():N}",
-            Description = null, IsEnabled = true,
+            Description = null,
             DefinitionJson = """{"nodes":[],"edges":[]}""",
             PublishedBy = 1, CreatedAt = DateTime.UtcNow
-        }, CancellationToken.None);
+        }, CancellationToken.None).LiveAsync(fixture.ConnectionString);
     }
 }

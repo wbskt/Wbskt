@@ -38,12 +38,12 @@ public sealed class WebhookChannel : TriggerChannel
     public override string CorrelationKey(InboundEvent evt) =>
         Key(Required(evt, "workspaceRefId"), Required(evt, "webhookPath"));
 
-    public override Task<TriggerRegistrationSpec?> RegisterAsync(BaseNode node, TriggerPublication publication, CancellationToken ct) =>
-        Task.FromResult<TriggerRegistrationSpec?>(node is WebhookTriggerNode trigger
+    public override TriggerRegistrationSpec? Plan(BaseNode node, TriggerPublication publication) =>
+        node is WebhookTriggerNode trigger
             ? new TriggerRegistrationSpec(Key(publication.WorkspaceRef.ToString(), trigger.Config.Path), trigger.Config.ConcurrencyPolicy, trigger.Config.CorrelationKey)
             {
                 Filter = trigger.Config.Filter,
                 WebhookSecret = trigger.Config.Secret
             }
-            : null);
+            : null;
 }

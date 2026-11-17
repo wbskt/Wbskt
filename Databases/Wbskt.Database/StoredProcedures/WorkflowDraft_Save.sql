@@ -35,10 +35,23 @@ BEGIN
         THROW 50021, 'The workflow belongs to another workspace.', 1;
     END
 
-    IF EXISTS (SELECT 1 FROM dbo.WorkflowDeletions WHERE RefId = @RefId)
+    -- After the draft's row, the order every procedure that changes a workflow takes them in.
+    DECLARE @State TINYINT;
+    SELECT @State = State
+      FROM dbo.Workflows WITH (UPDLOCK, HOLDLOCK)
+     WHERE RefId = @RefId;
+
+    IF @State = 4
     BEGIN
         ROLLBACK TRAN;
         THROW 50022, 'The workflow was deleted.', 1;
+    END
+
+    -- A deprecated workflow is read-only until it is reinstated.
+    IF @State = 3
+    BEGIN
+        ROLLBACK TRAN;
+        THROW 50041, 'The workflow is deprecated.', 1;
     END
 
     IF (@Revision IS NULL AND @ExpectedRevision IS NOT NULL)

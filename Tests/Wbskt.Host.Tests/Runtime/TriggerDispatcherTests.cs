@@ -706,6 +706,26 @@ public sealed class TriggerDispatcherTests
     }
 
     [Fact]
+    public async Task A_registration_whose_workflow_stopped_being_live_is_settled_as_unmatched_and_reports_nothing()
+    {
+        // Matched from the cache just before a disable or a switch of the live version committed.
+        var reporter = new RecordingRefusalReporter();
+        var runDispatcher = new RecordingRunDispatcher([]);
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel)),
+            runStarter: new RecordingRunStarter([]) { NotLive = true },
+            runDispatcher: runDispatcher,
+            refusalReporter: reporter);
+
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        Assert.Equal(TriggerDispatchOutcome.NoRegistration, result.Outcome);
+        Assert.Null(result.RunId);
+        Assert.Empty(runDispatcher.Requests);
+        Assert.Empty(reporter.Refusals);
+    }
+
+    [Fact]
     public async Task A_start_that_goes_through_reports_nothing()
     {
         var reporter = new RecordingRefusalReporter();
@@ -1291,6 +1311,7 @@ public sealed class TriggerDispatcherTests
         public bool AtCeiling { get; set; }
         public bool CreditsSpent { get; init; }
         public bool CapSpent { get; init; }
+        public bool NotLive { get; init; }
 
         /// <summary>Refuses only the first start it sees, as for a trigger in the one full workspace.</summary>
         public bool RefuseFirst { get; set; }
@@ -1331,6 +1352,11 @@ public sealed class TriggerDispatcherTests
                 if (CapSpent && !exemptFromCeiling)
                 {
                     throw new WorkspaceCreditCapException(1);
+                }
+
+                if (NotLive)
+                {
+                    throw new WorkflowNotLiveException(Guid.NewGuid(), workflowDefinitionId);
                 }
 
                 if (triggerStartKey != null && _byKey.TryGetValue(triggerStartKey, out RunStartResult? existing))

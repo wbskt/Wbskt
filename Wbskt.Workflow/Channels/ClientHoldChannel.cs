@@ -49,17 +49,17 @@ public sealed class ClientHoldChannel : TriggerChannel
     public override string CorrelationKey(InboundEvent evt) =>
         ClientChannel.Key(Required(evt, "clientRefId"), Required(evt, "messageType"));
 
-    public override Task<TriggerRegistrationSpec?> RegisterAsync(BaseNode node, TriggerPublication publication, CancellationToken ct)
+    public override TriggerRegistrationSpec? Plan(BaseNode node, TriggerPublication publication)
     {
         if (node is not ClientTriggerNode { Config.HoldSeconds: > 0 } trigger)
         {
-            return Task.FromResult<TriggerRegistrationSpec?>(null);
+            return null;
         }
 
         // The filter is still copied onto the row, both for the recording and for the dispatcher,
         // which checks it again on the held payload.
         ClientTriggerConfig config = trigger.Config;
-        string key = ClientHoldTriggerKey.Build(Guid.Parse(config.ClientRef), config.Type, config.HoldSeconds, publication.Definition.RefId, trigger.NodeId);
-        return Task.FromResult<TriggerRegistrationSpec?>(new TriggerRegistrationSpec(key, config.ConcurrencyPolicy, config.CorrelationKey) { Filter = config.Filter });
+        string key = ClientHoldTriggerKey.Build(Guid.Parse(config.ClientRef), config.Type, config.HoldSeconds, publication.WorkflowRefId, trigger.NodeId);
+        return new TriggerRegistrationSpec(key, config.ConcurrencyPolicy, config.CorrelationKey) { Filter = config.Filter };
     }
 }

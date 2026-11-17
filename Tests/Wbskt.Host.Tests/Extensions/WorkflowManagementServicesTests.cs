@@ -61,12 +61,24 @@ public sealed class WorkflowManagementServicesTests
     }
 
     [Fact]
-    public void AddWorkflowManagementServices_resolves_ITriggerRegistrationService()
+    public void AddWorkflowManagementServices_resolves_the_trigger_planner_and_the_state_provider()
     {
         using ServiceProvider provider = BuildServices().BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
         using IServiceScope scope = provider.CreateScope();
 
-        Assert.NotNull(scope.ServiceProvider.GetRequiredService<ITriggerRegistrationService>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<ITriggerPlanner>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IWorkflowStateProvider>());
+    }
+
+    [Fact]
+    public void AddWorkflowManagementServices_does_not_write_registrations_outside_Workflow_Enable()
+    {
+        // Registrations and schedules change only inside dbo.Workflow_Enable and Workflow_Disable, with
+        // the state; a provider that wrote them on its own could leave a disabled workflow registered.
+        IServiceCollection services = BuildServices();
+
+        Assert.DoesNotContain(services, d => d.ServiceType == typeof(ITriggerRegistrationProvider));
+        Assert.DoesNotContain(services, d => d.ServiceType == typeof(IScheduledFireProvider));
     }
 
     [Fact]

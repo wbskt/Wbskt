@@ -113,8 +113,6 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         var runStarter2 = scope2.ServiceProvider.GetRequiredService<IRunStarter>();
         var pendingDrainer1 = scope1.ServiceProvider.GetRequiredService<IPendingTriggerEventDrainer>();
         var pendingDrainer2 = scope2.ServiceProvider.GetRequiredService<IPendingTriggerEventDrainer>();
-        var triggerRegistrationService1 = scope1.ServiceProvider.GetRequiredService<ITriggerRegistrationService>();
-        var triggerRegistrationService2 = scope2.ServiceProvider.GetRequiredService<ITriggerRegistrationService>();
         var runFinalizer1 = scope1.ServiceProvider.GetRequiredService<IRunFinalizer>();
         var runFinalizer2 = scope2.ServiceProvider.GetRequiredService<IRunFinalizer>();
         var cancellationService1 = scope1.ServiceProvider.GetRequiredService<IRunCancellationService>();
@@ -169,8 +167,6 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         Assert.NotSame(runStarter1, runStarter2);
         Assert.IsType<PendingTriggerEventDrainer>(pendingDrainer1);
         Assert.NotSame(pendingDrainer1, pendingDrainer2);
-        Assert.IsType<TriggerRegistrationService>(triggerRegistrationService1);
-        Assert.NotSame(triggerRegistrationService1, triggerRegistrationService2);
         Assert.IsType<RunFinalizer>(runFinalizer1);
         Assert.NotSame(runFinalizer1, runFinalizer2);
         Assert.IsType<RunCancellationService>(cancellationService1);

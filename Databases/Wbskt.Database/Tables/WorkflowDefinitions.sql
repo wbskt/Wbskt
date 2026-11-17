@@ -6,7 +6,6 @@ CREATE TABLE dbo.WorkflowDefinitions
     WorkspaceId     INT              NOT NULL,
     Name            NVARCHAR(200)    NOT NULL,
     Description     NVARCHAR(2000)   NULL,
-    IsEnabled       BIT              NOT NULL DEFAULT 1,
     DefinitionJson  NVARCHAR(MAX)    NOT NULL,
     PublishedBy     INT              NOT NULL,
     CreatedAt       DATETIME2(3)     NOT NULL DEFAULT SYSUTCDATETIME(),
@@ -38,6 +37,7 @@ CREATE INDEX IX_WorkflowDefinitions_Test
     WHERE Kind = N'Test';
 GO
 
-CREATE INDEX IX_WorkflowDefinitions_WorkspaceId_Enabled
-    ON dbo.WorkflowDefinitions (WorkspaceId, IsEnabled);
+-- Workspace-wide sweeps of the versions: Workspace_Retire and the admin counts.
+CREATE INDEX IX_WorkflowDefinitions_WorkspaceId
+    ON dbo.WorkflowDefinitions (WorkspaceId);
 GO

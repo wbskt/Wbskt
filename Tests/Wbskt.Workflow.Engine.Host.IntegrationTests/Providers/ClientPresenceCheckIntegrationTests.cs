@@ -151,13 +151,9 @@ public sealed class ClientPresenceCheckIntegrationTests(SqlEdgeFixture fixture)
         var nodeId = Guid.NewGuid();
         await ProcAsync("dbo.WorkflowDefinition_Publish",
             ("@RefId", workflowRefId), ("@WorkspaceId", workspaceId), ("@Name", "wf"), ("@Description", ""),
-            ("@IsEnabled", true), ("@DefinitionJson", "{}"), ("@PublishedBy", 1));
-        int definitionId = await ScalarAsync<int>("SELECT Id FROM dbo.WorkflowDefinitions WHERE RefId = @p0", workflowRefId);
+            ("@DefinitionJson", "{}"), ("@PublishedBy", 1));
         string key = ClientPresenceTriggerKey.Build(clientRef, state, forSeconds, workflowRefId, nodeId);
-        await ProcAsync("dbo.TriggerRegistration_Insert",
-            ("@WorkflowDefinitionId", definitionId), ("@WorkflowRefId", workflowRefId), ("@WorkflowVersion", 1),
-            ("@TriggerNodeId", nodeId), ("@TriggerKind", "presence"), ("@TriggerKey", key),
-            ("@CorrelationExpression", DBNull.Value), ("@ConcurrencyPolicy", "Queue"), ("@FilterExpression", DBNull.Value));
+        await LiveWorkflows.EnableAsync(fixture.ConnectionString, workflowRefId, workspaceId, plan: LiveWorkflows.Registration(nodeId, "presence", key));
         return key;
     }
 

@@ -1,3 +1,5 @@
+using Wbskt.Workflow.Abstraction.Enums;
+
 namespace Wbskt.Workflow.Abstraction.Entities;
 
 public record WorkflowDefinitionRow
@@ -8,7 +10,6 @@ public record WorkflowDefinitionRow
     public required int WorkspaceId { get; init; }
     public required string Name { get; init; }
     public required string? Description { get; init; }
-    public required bool IsEnabled { get; init; }
     public required string DefinitionJson { get; init; }
     public required int PublishedBy { get; init; }
     public required DateTime CreatedAt { get; init; }
@@ -27,4 +28,10 @@ public record WorkflowDefinitionRow
 
     /// <summary>The workflow's draft, when it has one. Only the summary list reads it; null elsewhere.</summary>
     public WorkflowDraftSummary? Draft { get; init; }
+
+    /// <summary>The workflow's state. Only the summary list reads it; null elsewhere.</summary>
+    public WorkflowState? State { get; init; }
+
+    /// <summary>The live version, when the workflow is enabled. Only the summary list reads it.</summary>
+    public int? LiveVersion { get; init; }
 }

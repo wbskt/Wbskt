@@ -110,21 +110,11 @@ public sealed class ClientHoldStateIntegrationTests(SqlEdgeFixture fixture)
         var nodeId = Guid.NewGuid();
         await ProcAsync("dbo.WorkflowDefinition_Publish",
             ("@RefId", workflowRefId), ("@WorkspaceId", workspaceId), ("@Name", "wf"), ("@Description", ""),
-            ("@IsEnabled", true), ("@DefinitionJson", "{}"), ("@PublishedBy", 1));
-        int definitionId;
-        await using (var conn = await OpenAsync())
-        await using (var cmd = new SqlCommand("SELECT Id FROM dbo.WorkflowDefinitions WHERE RefId = @p0", conn))
-        {
-            cmd.Parameters.AddWithValue("@p0", workflowRefId);
-            definitionId = (int)(await cmd.ExecuteScalarAsync())!;
-        }
+            ("@DefinitionJson", "{}"), ("@PublishedBy", 1));
 
         string key = ClientHoldTriggerKey.Build(clientRef, type, holdSeconds, workflowRefId, nodeId);
-        await ProcAsync("dbo.TriggerRegistration_Insert",
-            ("@WorkflowDefinitionId", definitionId), ("@WorkflowRefId", workflowRefId), ("@WorkflowVersion", 1),
-            ("@TriggerNodeId", nodeId), ("@TriggerKind", ClientHoldTriggerKey.TriggerKind), ("@TriggerKey", key),
-            ("@CorrelationExpression", DBNull.Value), ("@ConcurrencyPolicy", "Queue"),
-            ("@FilterExpression", "{\"kind\":\"literal\",\"value\":true}"));
+        await LiveWorkflows.EnableAsync(fixture.ConnectionString, workflowRefId, workspaceId,
+            plan: LiveWorkflows.Registration(nodeId, ClientHoldTriggerKey.TriggerKind, key, filterExpression: "{\"kind\":\"literal\",\"value\":true}"));
         return key;
     }
 

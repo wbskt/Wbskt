@@ -71,11 +71,11 @@ public sealed class CrashRecoveryIntegrationTests(SqlEdgeFixture fixture)
             WorkspaceId = 1,
             Name = "CrashRecovery",
             Description = null,
-            IsEnabled = true,
+           
             DefinitionJson = dummyJson,
             PublishedBy = 1,
             CreatedAt = DateTime.UtcNow
-        }, CancellationToken.None);
+        }, CancellationToken.None).LiveAsync(fixture.ConnectionString);
         
         // 2. Insert a Run and an Orphaned Active Branch manually
         Guid runRefId = Guid.NewGuid();

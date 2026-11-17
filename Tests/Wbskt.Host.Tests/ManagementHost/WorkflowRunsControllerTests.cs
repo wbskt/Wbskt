@@ -192,7 +192,7 @@ public sealed class WorkflowRunsControllerTests
             CreateRunRow(42, Guid.NewGuid(), workflowRefId, 5, "Completed"),
             CreateRunRow(43, Guid.NewGuid(), workflowRefId, 5, "Completed")
         ]);
-        var service = new WorkflowRunQueryService(runProvider.Object, branchProvider.Object, definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
+        var service = new WorkflowRunQueryService(runProvider.Object, branchProvider.Object, definitionProvider.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
         var response = await service.ListByWorkflowAsync(WorkspaceId, workflowRefId, "Running", null, 2, null, CancellationToken.None);
 
@@ -223,7 +223,7 @@ public sealed class WorkflowRunsControllerTests
                 new RunListDetailRow { RunId = 2, CreditsConsumed = 1m, EndedNodeId = ValidWorkflowBuilder.Logic1Id },
                 new RunListDetailRow { RunId = 3, CurrentNodeId = ValidWorkflowBuilder.Logic1Id, CurrentAttempt = 2, CurrentMaxAttempts = 3 }
             ]);
-        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
         var response = await service.ListByWorkspaceAsync(WorkspaceId, null, null, 3, null, CancellationToken.None);
 
@@ -252,7 +252,7 @@ public sealed class WorkflowRunsControllerTests
             CreateRunRow(41, Guid.NewGuid(), workflowRefId, 5, "Running"),
             CreateRunRow(42, Guid.NewGuid(), workflowRefId, 5, "Completed")
         ]);
-        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
         var response = await service.ListByWorkflowAsync(WorkspaceId, workflowRefId, null, null, 2, null, CancellationToken.None);
 
@@ -276,7 +276,7 @@ public sealed class WorkflowRunsControllerTests
             .ReturnsAsync([new RunFailureBucketRow { ErrorCode = "WEBHOOK_HTTP_ERROR", NodeId = Guid.NewGuid(), Occurrences = 2, LastSeenAt = DateTime.UtcNow }]);
         runProvider.Setup(x => x.GetNodeTimingsAsync(workflowRefId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
         var response = await service.GetStatsAsync(WorkspaceId, workflowRefId, DateTime.UtcNow.AddDays(-7), DateTime.UtcNow, CancellationToken.None);
 
@@ -308,7 +308,7 @@ public sealed class WorkflowRunsControllerTests
                 new WorkflowRunSummaryRow { WorkflowRefId = busy, TotalRuns = 100, SucceededCount = 100, FailedCount = 0, ActiveCount = 0, WaitingCount = 0, AvgDurationMs = 50 },
                 new WorkflowRunSummaryRow { WorkflowRefId = quiet, TotalRuns = 2, SucceededCount = 0, FailedCount = 2, ActiveCount = 0, WaitingCount = 0, AvgDurationMs = 10 }
             ]);
-        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), Mock.Of<IWorkflowDefinitionProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), Mock.Of<IWorkflowDefinitionProvider>(), Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
         var response = await service.GetWorkspaceStatsAsync(WorkspaceId, DateTime.UtcNow.AddDays(-7), DateTime.UtcNow, CancellationToken.None);
 
@@ -343,7 +343,7 @@ public sealed class WorkflowRunsControllerTests
                 new RunDailyStatsRow { WorkflowRefId = other, Day = new DateOnly(2026, 11, 1), TotalRuns = 1, SucceededCount = 1, FailedCount = 0, CancelledCount = 0 },
                 new RunDailyStatsRow { WorkflowRefId = other, Day = new DateOnly(2026, 11, 3), TotalRuns = 1, SucceededCount = 0, FailedCount = 1, CancelledCount = 0 }
             ]);
-        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), Mock.Of<IWorkflowDefinitionProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), Mock.Of<IWorkflowDefinitionProvider>(), Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
         var response = await service.GetWorkspaceStatsAsync(WorkspaceId, from, to, CancellationToken.None);
 
@@ -365,7 +365,7 @@ public sealed class WorkflowRunsControllerTests
             .ReturnsAsync([new WorkflowRunSummaryRow { WorkflowRefId = Guid.NewGuid(), TotalRuns = 1, SucceededCount = 1, FailedCount = 0, ActiveCount = 0, WaitingCount = 0, AvgDurationMs = 5 }]);
         runProvider.Setup(x => x.GetWorkspaceDailyStatsAsync(WorkspaceId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), Mock.Of<IWorkflowDefinitionProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), Mock.Of<IWorkflowDefinitionProvider>(), Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
         var response = await service.GetWorkspaceStatsAsync(WorkspaceId, DateTime.UtcNow.AddDays(-200), DateTime.UtcNow, CancellationToken.None);
 
@@ -396,7 +396,7 @@ public sealed class WorkflowRunsControllerTests
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId));
         var branchProvider = new Mock<IBranchProvider>();
         branchProvider.Setup(x => x.GetAllByRunIdAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync([]);
-        var service = new WorkflowRunQueryService(runProvider.Object, branchProvider.Object, definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
+        var service = new WorkflowRunQueryService(runProvider.Object, branchProvider.Object, definitionProvider.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
         var response = await service.GetDetailAsync(WorkspaceId, runRefId, CancellationToken.None);
 
@@ -413,7 +413,7 @@ public sealed class WorkflowRunsControllerTests
             .ReturnsAsync(CreateStats(total: 4, succeeded: 0, failed: 0, active: 4));
         runProvider.Setup(x => x.GetPerWorkflowStatsAsync(WorkspaceId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), Mock.Of<IWorkflowDefinitionProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), Mock.Of<IWorkflowDefinitionProvider>(), Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
         var response = await service.GetWorkspaceStatsAsync(WorkspaceId, DateTime.UtcNow.AddDays(-7), DateTime.UtcNow, CancellationToken.None);
 
@@ -423,7 +423,7 @@ public sealed class WorkflowRunsControllerTests
     [Fact]
     public async Task GetWorkspaceStatsAsync_rejects_an_inverted_window()
     {
-        var service = new WorkflowRunQueryService(Mock.Of<IRunProvider>(), Mock.Of<IBranchProvider>(), Mock.Of<IWorkflowDefinitionProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
+        var service = new WorkflowRunQueryService(Mock.Of<IRunProvider>(), Mock.Of<IBranchProvider>(), Mock.Of<IWorkflowDefinitionProvider>(), Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
         var response = await service.GetWorkspaceStatsAsync(WorkspaceId, DateTime.UtcNow, DateTime.UtcNow.AddDays(-1), CancellationToken.None);
 
@@ -446,7 +446,7 @@ public sealed class WorkflowRunsControllerTests
             .ReturnsAsync([]);
         runProvider.Setup(x => x.GetNodeTimingsAsync(workflowRefId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
         var response = await service.GetStatsAsync(WorkspaceId, workflowRefId, DateTime.UtcNow.AddDays(-7), DateTime.UtcNow, CancellationToken.None);
 
@@ -457,7 +457,7 @@ public sealed class WorkflowRunsControllerTests
     [Fact]
     public async Task GetStatsAsync_rejects_an_inverted_window()
     {
-        var service = new WorkflowRunQueryService(Mock.Of<IRunProvider>(), Mock.Of<IBranchProvider>(), Mock.Of<IWorkflowDefinitionProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
+        var service = new WorkflowRunQueryService(Mock.Of<IRunProvider>(), Mock.Of<IBranchProvider>(), Mock.Of<IWorkflowDefinitionProvider>(), Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
         var response = await service.GetStatsAsync(WorkspaceId, Guid.NewGuid(), DateTime.UtcNow, DateTime.UtcNow.AddDays(-1), CancellationToken.None);
 
@@ -472,7 +472,7 @@ public sealed class WorkflowRunsControllerTests
         var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
         definitionProvider.Setup(x => x.FindCurrentByRefIdAsync(workflowRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId + 1));
-        var service = new WorkflowRunQueryService(Mock.Of<IRunProvider>(), Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
+        var service = new WorkflowRunQueryService(Mock.Of<IRunProvider>(), Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
         var response = await service.GetStatsAsync(WorkspaceId, workflowRefId, DateTime.UtcNow.AddDays(-7), DateTime.UtcNow, CancellationToken.None);
 
@@ -511,7 +511,7 @@ public sealed class WorkflowRunsControllerTests
             CreateRunRow(41, Guid.NewGuid(), workflowA, 5, "Running"),
             CreateRunRow(42, Guid.NewGuid(), workflowB, 5, "Succeeded")
         ]);
-        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
         var response = await service.ListByWorkspaceAsync(WorkspaceId, null, null, 10, null, CancellationToken.None);
 
@@ -532,7 +532,7 @@ public sealed class WorkflowRunsControllerTests
         var workflowRefId = Guid.NewGuid();
         definitionProvider.Setup(x => x.FindCurrentByRefIdAsync(workflowRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId + 1));
-        var service = new WorkflowRunQueryService(runProvider.Object, branchProvider.Object, definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
+        var service = new WorkflowRunQueryService(runProvider.Object, branchProvider.Object, definitionProvider.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
         var response = await service.ListByWorkflowAsync(WorkspaceId, workflowRefId, null, null, 10, null, CancellationToken.None);
         
@@ -555,7 +555,7 @@ public sealed class WorkflowRunsControllerTests
         branchProvider.Setup(x => x.GetAllByRunIdAsync(51, It.IsAny<CancellationToken>())).ReturnsAsync([
             new BranchRow { Id = 100, RefId = Guid.NewGuid(), RunId = 51, ParentBranchId = null, ForkCohortId = null, NodeId = Guid.NewGuid(), Status = "Running", PendingTakePort = null, LocalJson = "{}", LastOutputJson = null, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow, RowVersion = [1] }
         ]);
-        var service = new WorkflowRunQueryService(runProvider.Object, branchProvider.Object, definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
+        var service = new WorkflowRunQueryService(runProvider.Object, branchProvider.Object, definitionProvider.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
         var detail = await service.GetDetailAsync(WorkspaceId, runRefId, CancellationToken.None);
 
@@ -574,12 +574,12 @@ public sealed class WorkflowRunsControllerTests
         runProvider.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(52, runRefId, workflowRefId, 0, "Running") with { IsTest = true });
         definitionProvider.Setup(x => x.GetByIdAsync(9, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId) with { Version = 0, IsTestCopy = true });
-        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
         var result = await service.GetDefinitionAsync(WorkspaceId, runRefId, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal("Test", result.Value.Status);
+        Assert.True(result.Value.IsTestCopy);
         Assert.Equal(0, result.Value.Version);
     }
 
@@ -592,7 +592,7 @@ public sealed class WorkflowRunsControllerTests
         var workflowRefId = Guid.NewGuid();
         runProvider.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(53, runRefId, workflowRefId, 1, "Running"));
         definitionProvider.Setup(x => x.GetByIdAsync(9, It.IsAny<CancellationToken>())).ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId + 1));
-        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
         var result = await service.GetDefinitionAsync(WorkspaceId, runRefId, CancellationToken.None);
 
@@ -609,7 +609,7 @@ public sealed class WorkflowRunsControllerTests
         runProvider.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(63, runRefId, workflowRefId, 2, "Running"));
         definitionProvider.Setup(x => x.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId));
-        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
         var response = await service.ResolveCancellableRunAsync(WorkspaceId, runRefId, CancellationToken.None);
 
@@ -630,7 +630,7 @@ public sealed class WorkflowRunsControllerTests
         runProvider.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(64, runRefId, workflowRefId, 2, "Succeeded"));
         definitionProvider.Setup(x => x.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId));
-        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
         var response = await service.ResolveCancellableRunAsync(WorkspaceId, runRefId, CancellationToken.None);
 
@@ -650,7 +650,7 @@ public sealed class WorkflowRunsControllerTests
         runProvider.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(70, runRefId, workflowRefId, 1, "Running"));
         definitionProvider.Setup(x => x.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId + 99));
-        var service = new WorkflowRunQueryService(runProvider.Object, branchProvider.Object, definitionProvider.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
+        var service = new WorkflowRunQueryService(runProvider.Object, branchProvider.Object, definitionProvider.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
         var response = await service.EnsureRunInWorkspaceAsync(WorkspaceId, runRefId, CancellationToken.None);
         
@@ -669,7 +669,7 @@ public sealed class WorkflowRunsControllerTests
             Runs.Setup(x => x.FindRowByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((RunRow?)null);
             var gateway = new WorkflowEngineGateway(Mock.Of<IWorkflowEngineClient>(), Commands.Object, Mock.Of<ICommandSender>());
-            var queryService = new WorkflowRunQueryService(Runs.Object, Mock.Of<IBranchProvider>(), Definitions.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
+            var queryService = new WorkflowRunQueryService(Runs.Object, Mock.Of<IBranchProvider>(), Definitions.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
             Controller = new WorkflowRunsController(queryService, new WorkflowRunService(Mock.Of<IWorkflowQueryService>(), queryService, gateway, QueuedBus.Object, Mock.Of<ILogger<WorkflowRunService>>()))
             {
                 ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
@@ -709,7 +709,6 @@ public sealed class WorkflowRunsControllerTests
             WorkspaceId = workspaceId,
             Name = "wf",
             Description = null,
-            IsEnabled = true,
             DefinitionJson = "{\"nodes\":[],\"edges\":[]}",
             PublishedBy = 1,
             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)

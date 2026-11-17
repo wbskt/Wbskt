@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models.Bookmarks;
 using Wbskt.Workflow.Abstraction.Models.Expressions;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
@@ -122,6 +123,39 @@ public sealed class SubWorkflowNodeExecutorTests
         NodeContext ctx = Context(new Dictionary<string, JsonElement>());
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(ctx, CancellationToken.None));
+        Assert.Equal("SUBWORKFLOW_NOT_STARTED", fail.ErrorCode);
+    }
+
+    [Theory]
+    [InlineData(WorkflowState.Disabled, "SUBWORKFLOW_CHILD_DISABLED")]
+    [InlineData(WorkflowState.Deprecated, "SUBWORKFLOW_CHILD_DEPRECATED")]
+    public async Task A_child_out_of_service_fails_the_step_saying_so(WorkflowState state, string code)
+    {
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.NoRegistration, null, null, "no-reg"));
+        NodeContext ctx = Context(new Dictionary<string, JsonElement>());
+        var states = new Mock<IWorkflowStateProvider>();
+        states.Setup(s => s.FindAsync(ChildRefId, ctx.Branch.WorkspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowStateRow(ChildRefId, ctx.Branch.WorkspaceId, state, null, null, 1));
+        var executor = new SubWorkflowNodeExecutor(hub.Object, new Mock<IRunProvider>().Object, new FixedClock(), workflowStates: states.Object);
+
+        var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(ctx, CancellationToken.None));
+
+        Assert.Equal(code, fail.ErrorCode);
+        Assert.False(fail.Retryable);
+    }
+
+    [Fact]
+    public async Task A_child_in_another_workspace_or_never_published_still_reads_as_not_started()
+    {
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.NoRegistration, null, null, "no-reg"));
+        var executor = new SubWorkflowNodeExecutor(hub.Object, new Mock<IRunProvider>().Object, new FixedClock(), workflowStates: Mock.Of<IWorkflowStateProvider>());
+
+        var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(Context(new Dictionary<string, JsonElement>()), CancellationToken.None));
+
         Assert.Equal("SUBWORKFLOW_NOT_STARTED", fail.ErrorCode);
     }
 

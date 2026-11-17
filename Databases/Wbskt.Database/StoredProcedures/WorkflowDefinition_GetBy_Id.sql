@@ -11,7 +11,6 @@ BEGIN
         WorkspaceId,
         Name,
         Description,
-        IsEnabled,
         DefinitionJson,
         PublishedBy,
         CreatedAt,

@@ -36,14 +36,14 @@ public sealed class WorkflowsController : ApiControllerBase
 
     /// <summary>
     /// Checks a definition without publishing it. Publishing is the only other way to run the
-    /// validator, and it creates an immutable version and re-registers triggers - far too heavy for
+    /// validator, and it creates an immutable version (and may make it live) - far too heavy for
     /// "is this draft OK?".
     /// </summary>
     [HttpPost("validate")]
     // Same permission as publishing: this is an authoring operation, and it reveals which rules a
     // definition breaks.
     [RequiresPermission(PermissionNames.WorkflowsCreate)]
-    public async Task<ActionResult<WorkflowValidationResponse>> ValidateDefinition([FromWorkspace] int workspaceId, [FromBody] WorkflowPublishRequest request, CancellationToken ct)
+    public async Task<ActionResult<WorkflowValidationResponse>> ValidateDefinition([FromWorkspace] int workspaceId, [FromBody] WorkflowValidationRequest request, CancellationToken ct)
     {
         // An invalid definition is a successful answer to "is this valid?" - 200 with IsValid false,
         // not an HTTP error.
@@ -100,9 +100,40 @@ public sealed class WorkflowsController : ApiControllerBase
         return MapResult(result);
     }
 
+    /// <summary>
+    /// Makes any published version the live one: the only version new runs start on. From Disabled it
+    /// turns the workflow on; from Enabled it switches the live version, which is how an earlier version
+    /// is brought back. The version is checked against today's rules first. Enabling the version already
+    /// live changes nothing.
+    /// </summary>
+    [HttpPost("{workflowRef:guid}/enable")]
+    [RequiresPermission(PermissionNames.WorkflowsExecute)]
+    public async Task<ActionResult<WorkflowStateResponse>> Enable(Guid workspaceRef, [FromWorkspace] int workspaceId, Guid workflowRef, [FromBody] WorkflowEnableRequest request, CancellationToken ct)
+    {
+        var result = await _lifecycleService.EnableAsync(workspaceId, workspaceRef, workflowRef, request.Version, ct);
+        return MapResult(result);
+    }
+
+    /// <summary>
+    /// Stops new runs; the workflow stays editable and publishable. Events queued behind a busy run are
+    /// dropped, runs going finish (or are cancelled when asked), and runs waiting on a signal, a client or
+    /// a timer still resume. Disabling a disabled workflow changes nothing.
+    /// </summary>
+    [HttpPost("{workflowRef:guid}/disable")]
+    [RequiresPermission(PermissionNames.WorkflowsExecute)]
+    public async Task<ActionResult<WorkflowStateResponse>> Disable([FromWorkspace] int workspaceId, Guid workflowRef, [FromBody] WorkflowDisableRequest request, CancellationToken ct)
+    {
+        var result = await _lifecycleService.DisableAsync(workspaceId, workflowRef, request.CancelRunningRuns, ct);
+        return MapResult(result);
+    }
+
+    /// <summary>
+    /// Retires a workflow: it stops like a disable, runs going finish, and it becomes read-only (no draft
+    /// saves, publishes or enables) until reinstated.
+    /// </summary>
     [HttpPost("{workflowRef:guid}/deprecate")]
     [RequiresPermission(PermissionNames.WorkflowsDelete)]
-    public async Task<IActionResult> Deprecate([FromWorkspace] int workspaceId, Guid workflowRef, CancellationToken ct)
+    public async Task<ActionResult<WorkflowStateResponse>> Deprecate([FromWorkspace] int workspaceId, Guid workflowRef, CancellationToken ct)
     {
         var result = await _lifecycleService.DeprecateAsync(workspaceId, workflowRef, ct);
         return MapResult(result);
@@ -122,28 +153,14 @@ public sealed class WorkflowsController : ApiControllerBase
     }
 
     /// <summary>
-    /// Undoes a deprecate. Deprecating deregisters the workflow's triggers, so this re-registers them
-    /// (schedules are re-seeded from their cron) as well as flipping the flag back.
+    /// Undoes a deprecate. The workflow comes back Disabled: editable again, and live once a version is
+    /// enabled.
     /// </summary>
     [HttpPost("{workflowRef:guid}/reinstate")]
     [RequiresPermission(PermissionNames.WorkflowsDelete)]
-    public async Task<IActionResult> Reinstate(Guid workspaceRef, [FromWorkspace] int workspaceId, Guid workflowRef, CancellationToken ct)
+    public async Task<ActionResult<WorkflowStateResponse>> Reinstate([FromWorkspace] int workspaceId, Guid workflowRef, CancellationToken ct)
     {
-        // Bringing a workflow back into service is an authoring change, so it takes the same
-        // permission as deprecating it.
-        var result = await _lifecycleService.ReinstateAsync(workspaceId, workspaceRef, workflowRef, ct);
-        return MapResult(result);
-    }
-
-    /// <summary>
-    /// Republishes an earlier version as a new version. The history stays append-only, so the runs of
-    /// every version keep pointing at the definition they actually ran.
-    /// </summary>
-    [HttpPost("{workflowRef:guid}/rollback/{version:int}")]
-    [RequiresPermission(PermissionNames.WorkflowsCreate)]
-    public async Task<ActionResult<WorkflowPublishResponse>> Rollback(Guid workspaceRef, [FromWorkspace] int workspaceId, Guid workflowRef, int version, CancellationToken ct)
-    {
-        var result = await _lifecycleService.RollbackAsync(workspaceId, workspaceRef, workflowRef, version, ct);
+        var result = await _lifecycleService.ReinstateAsync(workspaceId, workflowRef, ct);
         return MapResult(result);
     }
 

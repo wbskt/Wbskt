@@ -21,7 +21,6 @@ public class WorkflowDefinitionProviderTests
                 ["Description"] = "Test workflow",
                 ["PublishedBy"] = 10,
                 ["DefinitionJson"] = "{\"nodes\":[]}",
-                ["IsEnabled"] = true,
                 ["CreatedAt"] = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc)
             }
         });
@@ -35,7 +34,6 @@ public class WorkflowDefinitionProviderTests
         row.WorkspaceId.Should().Be(1);
         row.Name.Should().Be("My Workflow");
         row.Description.Should().Be("Test workflow");
-        row.IsEnabled.Should().BeTrue();
         row.DefinitionJson.Should().Be("{\"nodes\":[]}");
         row.PublishedBy.Should().Be(10);
         row.CreatedAt.Should().Be(new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));

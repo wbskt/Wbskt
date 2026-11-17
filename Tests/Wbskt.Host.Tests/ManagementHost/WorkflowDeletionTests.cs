@@ -11,14 +11,15 @@ using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Channels;
+using Wbskt.Workflow.Runtime;
 using Wbskt.Workflow.Abstraction.Validation;
 
 namespace Wbskt.Host.Tests.ManagementHost;
 
 /// <summary>
-/// Deleting a workflow and listing its versions. What matters is that a delete asks the engine to stop
-/// what is running, that a workflow which is not this workspace's reads as not found, and that only
-/// the newest version is ever reported live.
+/// Deleting a workflow. What matters is that a delete asks the engine to stop what is running, and
+/// that a workflow which is not this workspace's reads as not found.
 /// </summary>
 public sealed class WorkflowDeletionTests
 {
@@ -64,42 +65,6 @@ public sealed class WorkflowDeletionTests
         harness.Engine.VerifyNoOtherCalls();
     }
 
-    [Fact]
-    public async Task Only_the_newest_version_is_reported_live()
-    {
-        var harness = new Harness();
-        harness.Provider
-            .Setup(p => p.GetVersionsAsync(RefId, WorkspaceId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([Version(3, enabled: false), Version(2, enabled: false), Version(1, enabled: true)]);
-
-        var result = await harness.Queries.GetVersionsAsync(WorkspaceId, RefId, CancellationToken.None);
-
-        Assert.Equal([(3, "Deprecated"), (2, "Superseded"), (1, "Superseded")], result.Value.Select(v => (v.Version, v.Status)));
-    }
-
-    [Fact]
-    public async Task Versions_of_a_workflow_that_is_not_here_are_not_found()
-    {
-        var harness = new Harness();
-        harness.Provider
-            .Setup(p => p.GetVersionsAsync(RefId, WorkspaceId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
-
-        var result = await harness.Queries.GetVersionsAsync(WorkspaceId, RefId, CancellationToken.None);
-
-        Assert.Equal("WORKFLOW_NOT_FOUND", result.Error.Code);
-    }
-
-    private static WorkflowVersionRow Version(int version, bool enabled) => new()
-    {
-        Version = version,
-        Name = "wf",
-        IsEnabled = enabled,
-        PublishedBy = 7,
-        CreatedAt = DateTime.UtcNow,
-        RunCount = version * 10
-    };
-
     private sealed class Harness
     {
         public Harness()
@@ -107,7 +72,7 @@ public sealed class WorkflowDeletionTests
             var identity = new Mock<IIdentityService>();
             identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
             Service = new WorkflowLifecycleService(
-                Provider.Object, Mock.Of<ITriggerRegistrationService>(),
+                Provider.Object, Mock.Of<IWorkflowStateProvider>(), new TriggerPlanner(TriggerChannelRegistry.Default, TimeProvider.System),
                 new WorkflowValidator(), new IntegrationReferenceCheck(Mock.Of<IIntegrationProvider>()), identity.Object, Engine.Object, Bus.Object, Mock.Of<ILogger<WorkflowLifecycleService>>());
         }
 
@@ -118,7 +83,5 @@ public sealed class WorkflowDeletionTests
         public Mock<IEventBus> Bus { get; } = new();
 
         public WorkflowLifecycleService Service { get; }
-
-        public WorkflowQueryService Queries => new WorkflowQueryService(Provider.Object, new WorkflowValidator(), new IntegrationReferenceCheck(Mock.Of<IIntegrationProvider>()), Mock.Of<ILogger<WorkflowQueryService>>());
     }
 }

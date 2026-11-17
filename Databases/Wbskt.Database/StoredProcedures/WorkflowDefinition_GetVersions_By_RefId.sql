@@ -11,15 +11,15 @@ BEGIN
         WD.Version,
         WD.Name,
         WD.Description,
-        WD.IsEnabled,
+        CAST(CASE WHEN W.LiveDefinitionId = WD.Id THEN 1 ELSE 0 END AS BIT) AS IsLive,
         WD.PublishedBy,
         WD.CreatedAt,
         (SELECT COUNT_BIG(*) FROM dbo.Runs RU WHERE RU.WorkflowDefinitionId = WD.Id) AS RunCount
     FROM dbo.WorkflowDefinitions WD
+    INNER JOIN dbo.Workflows W ON W.RefId = WD.RefId AND W.State <> 4
     WHERE WD.RefId = @RefId
       AND WD.WorkspaceId = @WorkspaceId
       AND WD.Kind = N'Version'
-      AND NOT EXISTS (SELECT 1 FROM dbo.WorkflowDeletions WDel WHERE WDel.RefId = WD.RefId)
     ORDER BY WD.Version DESC;
 END
 GO

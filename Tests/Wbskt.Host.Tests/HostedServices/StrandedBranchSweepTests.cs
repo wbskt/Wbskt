@@ -294,7 +294,6 @@ public sealed class StrandedBranchSweepTests
                 9,
                 "stranded-branch",
                 null,
-                true,
                 [new TestNode { NodeId = WaitNodeId, Name = "wait", Ports = [], KindValue = "test:wait" }],
                 [],
                 Array.Empty<SharedVariableDeclaration>(),

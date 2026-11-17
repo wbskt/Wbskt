@@ -1,8 +1,6 @@
-using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models.Expressions;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
-using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Workflow.Abstraction.Runtime;
 
@@ -23,21 +21,26 @@ public interface ITriggerChannel
     string CorrelationKey(InboundEvent evt);
 
     /// <summary>
-    /// The registration a published node gets on this channel, or null when the node is not one of
-    /// this channel's triggers. Channels that only wake parked branches register nothing.
+    /// The registration a node of a live version gets on this channel, or null when the node is not one
+    /// of this channel's triggers. Channels that only wake parked branches register nothing.
     /// </summary>
-    Task<TriggerRegistrationSpec?> RegisterAsync(BaseNode node, TriggerPublication publication, CancellationToken ct);
+    TriggerRegistrationSpec? Plan(BaseNode node, TriggerPublication publication);
 }
 
-/// <summary>The workflow version being published, and what a channel may need to register its triggers.</summary>
-public sealed record TriggerPublication(WorkflowDefinitionRow Definition, Guid WorkspaceRef, IScheduledFireProvider ScheduledFires, TimeProvider Clock);
+/// <summary>The workflow a version is being made live for, and the moment its schedules count from.</summary>
+public sealed record TriggerPublication(Guid WorkflowRefId, Guid WorkspaceRef, DateTime Now);
 
 public sealed record TriggerRegistrationSpec(string TriggerKey, WorkflowConcurrencyPolicy ConcurrencyPolicy, string? CorrelationExpression)
 {
     public WorkflowExpression? Filter { get; init; }
 
     public string? WebhookSecret { get; init; }
+
+    /// <summary>The schedule a time trigger ticks on, created with the registration.</summary>
+    public PlannedScheduleSpec? Schedule { get; init; }
 }
+
+public sealed record PlannedScheduleSpec(string CronOrInterval, DateTime NextFireAt);
 
 public interface ITriggerChannelRegistry
 {

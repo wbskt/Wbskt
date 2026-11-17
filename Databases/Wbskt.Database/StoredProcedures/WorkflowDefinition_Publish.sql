@@ -3,7 +3,6 @@ CREATE PROCEDURE dbo.WorkflowDefinition_Publish
     @WorkspaceId    INT,
     @Name           NVARCHAR(200),
     @Description    NVARCHAR(2000),
-    @IsEnabled      BIT,
     @DefinitionJson NVARCHAR(MAX),
     @PublishedBy    INT,
     -- The steps that send through an integration, by its RefId. Omitted means none.
@@ -32,6 +31,13 @@ BEGIN
           FROM dbo.WorkflowDrafts WITH (UPDLOCK, HOLDLOCK)
          WHERE RefId = @RefId;
 
+    -- Then the workflow's row (a key-range lock when this is its first version), before the versions:
+    -- the order Workflow_Enable, Workflow_Disable and WorkflowDefinition_Delete take them in.
+    DECLARE @State TINYINT;
+    SELECT @State = State
+      FROM dbo.Workflows WITH (UPDLOCK, HOLDLOCK)
+     WHERE RefId = @RefId;
+
     DECLARE @NextVersion INT =
         ISNULL((SELECT MAX(Version)
                   FROM dbo.WorkflowDefinitions WITH (HOLDLOCK, UPDLOCK)
@@ -47,10 +53,17 @@ BEGIN
     END
 
     -- A deleted workflow stays deleted: publishing under its RefId would bring its triggers back.
-    IF EXISTS (SELECT 1 FROM dbo.WorkflowDeletions WHERE RefId = @RefId)
+    IF @State = 4
     BEGIN
         ROLLBACK TRAN;
         THROW 50022, 'The workflow was deleted.', 1;
+    END
+
+    -- A deprecated workflow is read-only until it is reinstated.
+    IF @State = 3
+    BEGIN
+        ROLLBACK TRAN;
+        THROW 50041, 'The workflow is deprecated.', 1;
     END
 
     IF @ExpectedCurrentVersion IS NOT NULL AND @NextVersion - 1 <> @ExpectedCurrentVersion
@@ -66,11 +79,10 @@ BEGIN
         DECLARE @Resource NVARCHAR(255) = CONCAT(N'workflow-ceiling:', @WorkspaceId);
         EXEC sp_getapplock @Resource = @Resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction';
 
-        IF (SELECT COUNT(DISTINCT WD.RefId)
-              FROM dbo.WorkflowDefinitions WD
-             WHERE WD.WorkspaceId = @WorkspaceId
-               AND WD.Kind = N'Version'
-               AND NOT EXISTS (SELECT 1 FROM dbo.WorkflowDeletions D WHERE D.RefId = WD.RefId)) >= @MaxWorkflows
+        IF (SELECT COUNT(*)
+              FROM dbo.Workflows
+             WHERE WorkspaceId = @WorkspaceId
+               AND State IN (1, 2, 3)) >= @MaxWorkflows
         BEGIN
             ROLLBACK TRAN;
             THROW 50024, 'The workspace has reached its workflow limit.', 1;
@@ -100,16 +112,22 @@ BEGIN
     -- "version" property can never disagree - which they could when the caller pre-computed a version
     -- from an unlocked read and baked it into the JSON before calling.
     -- Property names are camelCase to match JsonSerializerDefaults.Web output.
-    SET @DefinitionJson = JSON_MODIFY(
-                              JSON_MODIFY(@DefinitionJson, '$.version', @NextVersion),
-                              '$.isEnabled', CAST(@IsEnabled AS BIT));
+    SET @DefinitionJson = JSON_MODIFY(@DefinitionJson, '$.version', @NextVersion);
 
-    INSERT INTO dbo.WorkflowDefinitions (RefId, Version, WorkspaceId, Name, Description, IsEnabled, DefinitionJson, PublishedBy)
-    VALUES (@RefId, @NextVersion, @WorkspaceId, @Name, @Description, @IsEnabled, @DefinitionJson, @PublishedBy);
+    INSERT INTO dbo.WorkflowDefinitions (RefId, Version, WorkspaceId, Name, Description, DefinitionJson, PublishedBy)
+    VALUES (@RefId, @NextVersion, @WorkspaceId, @Name, @Description, @DefinitionJson, @PublishedBy);
+
+    DECLARE @DefinitionId INT = SCOPE_IDENTITY();
 
     INSERT INTO dbo.WorkflowIntegrationRefs (WorkflowDefinitionId, NodeId, NodeName, IntegrationId)
-    SELECT SCOPE_IDENTITY(), NodeId, NodeName, IntegrationId
+    SELECT @DefinitionId, NodeId, NodeName, IntegrationId
     FROM @Refs;
+
+    -- Publishing never changes what is live: a first version starts Disabled, and the caller enables
+    -- it (Workflow_Enable) when it should go live.
+    IF @State IS NULL
+        INSERT INTO dbo.Workflows (RefId, WorkspaceId, State, LiveDefinitionId, StateChangedBy)
+        VALUES (@RefId, @WorkspaceId, 2, NULL, @PublishedBy);
 
     IF @DraftRevision IS NOT NULL
         DELETE FROM dbo.WorkflowDrafts
@@ -126,11 +144,10 @@ BEGIN
         WorkspaceId,
         Name,
         Description,
-        IsEnabled,
         DefinitionJson,
         PublishedBy,
         CreatedAt
       FROM dbo.WorkflowDefinitions
-     WHERE RefId = @RefId AND Version = @NextVersion AND Kind = N'Version';
+     WHERE Id = @DefinitionId;
 END;
 GO

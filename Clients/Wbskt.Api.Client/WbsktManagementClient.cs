@@ -339,11 +339,11 @@ public sealed class WbsktManagementClient : WbsktApiClient
         SendRawAsync(HttpMethod.Post, $"/api/v1/workspaces/{workspaceRef}/workflows", request, cancellationToken);
 
     /// <summary>Validates a workflow definition without publishing it. <c>POST /api/workspaces/{workspaceRef}/workflows/validate</c>.</summary>
-    public Task<WorkflowValidationResponse> ValidateWorkflowAsync(Guid workspaceRef, WorkflowPublishRequest request, CancellationToken cancellationToken = default) =>
+    public Task<WorkflowValidationResponse> ValidateWorkflowAsync(Guid workspaceRef, WorkflowValidationRequest request, CancellationToken cancellationToken = default) =>
         ReceiveAsync<WorkflowValidationResponse>(ValidateWorkflowRawAsync(workspaceRef, request, cancellationToken), cancellationToken);
 
     /// <summary><see cref="ValidateWorkflowAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
-    public Task<HttpResponseMessage> ValidateWorkflowRawAsync(Guid workspaceRef, WorkflowPublishRequest request, CancellationToken cancellationToken = default) =>
+    public Task<HttpResponseMessage> ValidateWorkflowRawAsync(Guid workspaceRef, WorkflowValidationRequest request, CancellationToken cancellationToken = default) =>
         SendRawAsync(HttpMethod.Post, $"/api/v1/workspaces/{workspaceRef}/workflows/validate", request, cancellationToken);
 
     /// <summary>A page of a workspace's workflows. <c>GET /api/workspaces/{workspaceRef}/workflows</c>.</summary>
@@ -378,9 +378,25 @@ public sealed class WbsktManagementClient : WbsktApiClient
     public Task<HttpResponseMessage> GetWorkflowVersionRawAsync(Guid workspaceRef, Guid workflowRef, int version, CancellationToken cancellationToken = default) =>
         SendRawAsync(HttpMethod.Get, $"/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/versions/{version}", null, cancellationToken);
 
-    /// <summary>Deprecates a workflow: its triggers stop starting runs. <c>POST /api/workspaces/{workspaceRef}/workflows/{workflowRef}/deprecate</c>.</summary>
-    public Task DeprecateWorkflowAsync(Guid workspaceRef, Guid workflowRef, CancellationToken cancellationToken = default) =>
-        ReceiveAsync(DeprecateWorkflowRawAsync(workspaceRef, workflowRef, cancellationToken), cancellationToken);
+    /// <summary>Makes a published version the live one. <c>POST /api/workspaces/{workspaceRef}/workflows/{workflowRef}/enable</c>.</summary>
+    public Task<WorkflowStateResponse> EnableWorkflowAsync(Guid workspaceRef, Guid workflowRef, int version, CancellationToken cancellationToken = default) =>
+        ReceiveAsync<WorkflowStateResponse>(EnableWorkflowRawAsync(workspaceRef, workflowRef, version, cancellationToken), cancellationToken);
+
+    /// <summary><see cref="EnableWorkflowAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
+    public Task<HttpResponseMessage> EnableWorkflowRawAsync(Guid workspaceRef, Guid workflowRef, int version, CancellationToken cancellationToken = default) =>
+        SendRawAsync(HttpMethod.Post, $"/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/enable", new WorkflowEnableRequest(version), cancellationToken);
+
+    /// <summary>Stops a workflow's triggers starting runs; it stays editable. <c>POST /api/workspaces/{workspaceRef}/workflows/{workflowRef}/disable</c>.</summary>
+    public Task<WorkflowStateResponse> DisableWorkflowAsync(Guid workspaceRef, Guid workflowRef, bool cancelRunningRuns = false, CancellationToken cancellationToken = default) =>
+        ReceiveAsync<WorkflowStateResponse>(DisableWorkflowRawAsync(workspaceRef, workflowRef, cancelRunningRuns, cancellationToken), cancellationToken);
+
+    /// <summary><see cref="DisableWorkflowAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
+    public Task<HttpResponseMessage> DisableWorkflowRawAsync(Guid workspaceRef, Guid workflowRef, bool cancelRunningRuns = false, CancellationToken cancellationToken = default) =>
+        SendRawAsync(HttpMethod.Post, $"/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/disable", new WorkflowDisableRequest(cancelRunningRuns), cancellationToken);
+
+    /// <summary>Deprecates a workflow: it stops running and becomes read-only. <c>POST /api/workspaces/{workspaceRef}/workflows/{workflowRef}/deprecate</c>.</summary>
+    public Task<WorkflowStateResponse> DeprecateWorkflowAsync(Guid workspaceRef, Guid workflowRef, CancellationToken cancellationToken = default) =>
+        ReceiveAsync<WorkflowStateResponse>(DeprecateWorkflowRawAsync(workspaceRef, workflowRef, cancellationToken), cancellationToken);
 
     /// <summary><see cref="DeprecateWorkflowAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> DeprecateWorkflowRawAsync(Guid workspaceRef, Guid workflowRef, CancellationToken cancellationToken = default) =>
@@ -394,21 +410,13 @@ public sealed class WbsktManagementClient : WbsktApiClient
     public Task<HttpResponseMessage> DeleteWorkflowRawAsync(Guid workspaceRef, Guid workflowRef, CancellationToken cancellationToken = default) =>
         SendRawAsync(HttpMethod.Delete, $"/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}", null, cancellationToken);
 
-    /// <summary>Reinstates a deprecated workflow. <c>POST /api/workspaces/{workspaceRef}/workflows/{workflowRef}/reinstate</c>.</summary>
-    public Task ReinstateWorkflowAsync(Guid workspaceRef, Guid workflowRef, CancellationToken cancellationToken = default) =>
-        ReceiveAsync(ReinstateWorkflowRawAsync(workspaceRef, workflowRef, cancellationToken), cancellationToken);
+    /// <summary>Brings a deprecated workflow back, disabled. <c>POST /api/workspaces/{workspaceRef}/workflows/{workflowRef}/reinstate</c>.</summary>
+    public Task<WorkflowStateResponse> ReinstateWorkflowAsync(Guid workspaceRef, Guid workflowRef, CancellationToken cancellationToken = default) =>
+        ReceiveAsync<WorkflowStateResponse>(ReinstateWorkflowRawAsync(workspaceRef, workflowRef, cancellationToken), cancellationToken);
 
     /// <summary><see cref="ReinstateWorkflowAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
     public Task<HttpResponseMessage> ReinstateWorkflowRawAsync(Guid workspaceRef, Guid workflowRef, CancellationToken cancellationToken = default) =>
         SendRawAsync(HttpMethod.Post, $"/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/reinstate", null, cancellationToken);
-
-    /// <summary>Publishes an earlier version of a workflow again as its newest. <c>POST /api/workspaces/{workspaceRef}/workflows/{workflowRef}/rollback/{version}</c>.</summary>
-    public Task<WorkflowPublishResponse> RollbackWorkflowAsync(Guid workspaceRef, Guid workflowRef, int version, CancellationToken cancellationToken = default) =>
-        ReceiveAsync<WorkflowPublishResponse>(RollbackWorkflowRawAsync(workspaceRef, workflowRef, version, cancellationToken), cancellationToken);
-
-    /// <summary><see cref="RollbackWorkflowAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
-    public Task<HttpResponseMessage> RollbackWorkflowRawAsync(Guid workspaceRef, Guid workflowRef, int version, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Post, $"/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/rollback/{version}", null, cancellationToken);
 
     /// <summary>Starts a manual run. Re-posting the same idempotency key is deduplicated. <c>POST /api/workspaces/{workspaceRef}/workflows/{workflowRef}/runs</c>.</summary>
     public Task<StartRunResponse> StartRunAsync(Guid workspaceRef, Guid workflowRef, StartRunRequest request, CancellationToken cancellationToken = default) =>

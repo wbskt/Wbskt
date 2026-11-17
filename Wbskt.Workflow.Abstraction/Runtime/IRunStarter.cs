@@ -36,6 +36,19 @@ public interface IRunStarter
 public sealed record RunStartResult(long RunId, Guid RunRefId, long BranchId, bool Created);
 
 /// <summary>
+/// Thrown by <see cref="IRunStarter.StartAsync"/> when the version is not the workflow's live one: the
+/// workflow was disabled, deprecated or deleted, or another version made live, after the trigger was
+/// matched. Nothing was created. A test run is never refused for this.
+/// </summary>
+public sealed class WorkflowNotLiveException(Guid workflowRefId, int workflowDefinitionId)
+    : InvalidOperationException($"Version {workflowDefinitionId} of workflow {workflowRefId} is not live.")
+{
+    public Guid WorkflowRefId { get; } = workflowRefId;
+
+    public int WorkflowDefinitionId { get; } = workflowDefinitionId;
+}
+
+/// <summary>
 /// Thrown by <see cref="IRunStarter.StartAsync"/> when the plan of the workflow's workspace already has
 /// <paramref name="limit"/> runs going across its tenant's workspaces. Nothing was created.
 /// </summary>

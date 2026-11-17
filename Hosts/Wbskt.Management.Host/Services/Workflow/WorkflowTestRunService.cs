@@ -7,6 +7,7 @@ using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -27,6 +28,7 @@ public sealed class WorkflowTestRunService : IWorkflowTestRunService
     private const int WorkflowDeletedError = 50022; // THROW in dbo.WorkflowDefinition_InsertTestCopy
 
     private readonly IWorkflowDefinitionProvider _definitions;
+    private readonly IWorkflowStateProvider _states;
     private readonly IWorkflowDraftProvider _drafts;
     private readonly IWorkflowQueryService _queryService;
     private readonly IWorkflowEngineGateway _engine;
@@ -36,6 +38,7 @@ public sealed class WorkflowTestRunService : IWorkflowTestRunService
 
     public WorkflowTestRunService(
         IWorkflowDefinitionProvider definitions,
+        IWorkflowStateProvider states,
         IWorkflowDraftProvider drafts,
         IWorkflowQueryService queryService,
         IWorkflowEngineGateway engine,
@@ -44,6 +47,7 @@ public sealed class WorkflowTestRunService : IWorkflowTestRunService
         ILogger<WorkflowTestRunService> logger)
     {
         _definitions = definitions;
+        _states = states;
         _drafts = drafts;
         _queryService = queryService;
         _engine = engine;
@@ -85,8 +89,7 @@ public sealed class WorkflowTestRunService : IWorkflowTestRunService
                 WorkspaceId = workspaceId,
                 Name = subject.Value.Name,
                 Description = subject.Value.Description,
-                IsEnabled = true,
-                DefinitionJson = JsonSerializer.Serialize(definition with { IsEnabled = true }, SerializerOptions),
+                DefinitionJson = JsonSerializer.Serialize(definition, SerializerOptions),
                 PublishedBy = _identityService.GetUserIdentity().UserId,
                 CreatedAt = DateTime.UtcNow
             }, ct);
@@ -147,6 +150,14 @@ public sealed class WorkflowTestRunService : IWorkflowTestRunService
 
     private async Task<Result<TestRunSubject>> LoadAsync(int workspaceId, Guid workflowRefId, TestRunSource source, CancellationToken ct)
     {
+        // A deprecated workflow is read-only, and testing it would suggest otherwise. A disabled one can
+        // be tested: that is how an author checks a version before enabling it.
+        WorkflowStateRow? state = await _states.FindAsync(workflowRefId, workspaceId, ct);
+        if (state?.State == WorkflowState.Deprecated)
+        {
+            return Result<TestRunSubject>.Failure(WorkflowLifecycleErrors.WorkflowDeprecated);
+        }
+
         if (source == TestRunSource.Draft)
         {
             WorkflowDraftRow? draft = await _drafts.FindAsync(workflowRefId, workspaceId, ct);
@@ -155,10 +166,17 @@ public sealed class WorkflowTestRunService : IWorkflowTestRunService
                 : Result<TestRunSubject>.Success(new TestRunSubject(Deserialize(draft.DefinitionJson, workflowRefId), draft.BaseVersion ?? 0, draft.Name, draft.Description));
         }
 
-        var current = await WorkflowOwnershipCheck.LoadCurrentAsync(_definitions, _logger, workspaceId, workflowRefId, ct);
-        return current.IsFailure
-            ? Result<TestRunSubject>.Failure(current.Error)
-            : Result<TestRunSubject>.Success(new TestRunSubject(Deserialize(current.Value.DefinitionJson, workflowRefId), current.Value.Version, current.Value.Name, current.Value.Description));
+        if (state is null)
+        {
+            return Result<TestRunSubject>.Failure(WorkspaceOwnership.WorkflowNotFound);
+        }
+
+        // What a trigger would start: the live version, or the newest while the workflow is disabled.
+        int version = state.LiveVersion ?? state.LatestVersion;
+        WorkflowDefinitionRow? row = await _definitions.FindRowByRefIdVersionAsync(workflowRefId, version, ct);
+        return row is null
+            ? Result<TestRunSubject>.Failure(WorkspaceOwnership.WorkflowNotFound)
+            : Result<TestRunSubject>.Success(new TestRunSubject(Deserialize(row.DefinitionJson, workflowRefId), row.Version, row.Name, row.Description));
     }
 
     private static Result<Guid> ResolveTrigger(WorkflowDefinition definition, Guid? requested)

@@ -42,7 +42,6 @@ public sealed class WorkflowBuilder
             WorkspaceId: 1,
             Name: _name,
             Description: null,
-            IsEnabled: true,
             Nodes: _nodes,
             Edges: _edges,
             SharedVariableSchema: [],

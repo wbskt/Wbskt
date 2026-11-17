@@ -1191,7 +1191,6 @@ public static class ValidWorkflowBuilder
             WorkspaceId: 1,
             Name: "Test Workflow",
             Description: null,
-            IsEnabled: true,
             Nodes: [trigger, logic],
             Edges: [edge],
             SharedVariableSchema: [],

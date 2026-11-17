@@ -1,4 +1,3 @@
-using Wbskt.Workflow.Abstraction.Enums;
 using System.Text.Json;
 using MassTransit;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,12 +11,16 @@ using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Host.Services.Integrations;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Enums;
+using Wbskt.Workflow.Abstraction.Integrations;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Abstraction.Validation;
+using Wbskt.Workflow.Channels;
 using Wbskt.Workflow.Engine.Host.InboundAdapters;
 using Wbskt.Workflow.Engine.Host.Providers;
+using Wbskt.Workflow.Runtime;
 
 namespace Wbskt.Host.Tests.InboundAdapters;
 
@@ -58,10 +61,10 @@ public sealed class WorkflowDefinitionChangedConsumerTests
     }
 
     [Fact]
-    public async Task A_trigger_reinstated_on_the_management_host_is_seen_by_the_engine_after_one_event()
+    public async Task A_trigger_enabled_on_the_management_host_is_seen_by_the_engine_after_one_event()
     {
-        // The engine has cached "no hold trigger listens for this client". The workflow is then
-        // reinstated in the management host, which registers the trigger and announces the change.
+        // The engine has cached "no hold trigger listens for this client". A version of the workflow is
+        // then made live in the management host, which registers the trigger and announces the change.
         var holds = new MutableHoldStateProvider();
         var engine = new EngineSide(holds);
         await engine.ReceiveAsync();
@@ -69,9 +72,9 @@ public sealed class WorkflowDefinitionChangedConsumerTests
         Assert.Equal(1, holds.Lookups);
         Assert.Empty(holds.Records);
 
-        var management = new ManagementSide(isEnabled: false, onRegistered: () => holds.Registrations = [HoldRegistration()]);
-        var reinstated = await management.Service.ReinstateAsync(WorkspaceId, Guid.NewGuid(), WorkflowRef, CancellationToken.None);
-        Assert.True(reinstated.IsSuccess);
+        var management = new ManagementSide(onEnabled: () => holds.Registrations = [HoldRegistration()]);
+        var enabled = await management.Service.EnableAsync(WorkspaceId, Guid.NewGuid(), WorkflowRef, 1, CancellationToken.None);
+        Assert.True(enabled.IsSuccess);
 
         // Until the event arrives the engine still answers from its cache...
         await engine.ReceiveAsync();
@@ -87,16 +90,16 @@ public sealed class WorkflowDefinitionChangedConsumerTests
     }
 
     [Fact]
-    public async Task A_trigger_deprecated_on_the_management_host_is_dropped_by_the_engine_after_one_event()
+    public async Task A_trigger_disabled_on_the_management_host_is_dropped_by_the_engine_after_one_event()
     {
         var holds = new MutableHoldStateProvider { Registrations = [HoldRegistration()] };
         var engine = new EngineSide(holds);
         await engine.ReceiveAsync();
         Assert.Single(holds.Records);
 
-        var management = new ManagementSide(isEnabled: true, onDeregistered: () => holds.Registrations = []);
-        var deprecated = await management.Service.DeprecateAsync(WorkspaceId, WorkflowRef, CancellationToken.None);
-        Assert.True(deprecated.IsSuccess);
+        var management = new ManagementSide(onDisabled: () => holds.Registrations = []);
+        var disabled = await management.Service.DisableAsync(WorkspaceId, WorkflowRef, cancelRunningRuns: false, CancellationToken.None);
+        Assert.True(disabled.IsSuccess);
 
         await engine.DeliverAsync(management.Bus.Single<WorkflowDefinitionChangedEvent>());
         await engine.ReceiveAsync();
@@ -177,44 +180,46 @@ public sealed class WorkflowDefinitionChangedConsumerTests
         public Task DeliverAsync(WorkflowDefinitionChangedEvent changed) => _consumer.Consume(Context(changed));
     }
 
-    /// <summary>The management host's lifecycle service over a workflow row, with the trigger writes stood in for.</summary>
+    /// <summary>The management host's lifecycle service over one version, with the state procedures stood in for.</summary>
     private sealed class ManagementSide
     {
         public const int DefinitionId = 40;
 
-        public ManagementSide(bool isEnabled, Action? onRegistered = null, Action? onDeregistered = null)
+        public ManagementSide(Action? onEnabled = null, Action? onDisabled = null)
         {
+            var row = new WorkflowDefinitionRow
+            {
+                Id = DefinitionId,
+                RefId = WorkflowRef,
+                Version = 1,
+                WorkspaceId = WorkspaceId,
+                Name = "Freezer alarm",
+                Description = null,
+                // Nothing in it is checked here beyond what enabling re-validates.
+                DefinitionJson = $$"""{"workflowRefId":"{{WorkflowRef}}","version":1,"name":"Freezer alarm","nodes":[],"edges":[],"sharedVariableSchema":[],"createdAt":"2026-10-14T00:00:00Z"}""",
+                PublishedBy = 7,
+                CreatedAt = new DateTime(2026, 10, 14, 0, 0, 0, DateTimeKind.Utc)
+            };
             var definitions = new Mock<IWorkflowDefinitionProvider>();
-            definitions.Setup(p => p.FindCurrentByRefIdAsync(WorkflowRef, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new WorkflowDefinitionRow
-                {
-                    Id = DefinitionId,
-                    RefId = WorkflowRef,
-                    Version = 1,
-                    WorkspaceId = WorkspaceId,
-                    Name = "Freezer alarm",
-                    Description = null,
-                    IsEnabled = isEnabled,
-                    // Nothing in it is checked here; reinstating only re-checks the integrations it names.
-                    DefinitionJson = "null",
-                    PublishedBy = 7,
-                    CreatedAt = new DateTime(2026, 10, 14, 0, 0, 0, DateTimeKind.Utc)
-                });
+            definitions.Setup(p => p.FindRowByRefIdVersionAsync(WorkflowRef, 1, It.IsAny<CancellationToken>())).ReturnsAsync(row);
+            definitions.Setup(p => p.FindCurrentByRefIdAsync(WorkflowRef, It.IsAny<CancellationToken>())).ReturnsAsync(row);
+            definitions.Setup(p => p.GetByIdAsync(DefinitionId, It.IsAny<CancellationToken>())).ReturnsAsync(row);
 
-            var triggers = new Mock<ITriggerRegistrationService>();
-            triggers.Setup(t => t.OnPublishedAsync(DefinitionId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-                .Callback(() => onRegistered?.Invoke())
-                .Returns(Task.CompletedTask);
-            triggers.Setup(t => t.OnDeprecatedAsync(DefinitionId, It.IsAny<CancellationToken>()))
-                .Callback(() => onDeregistered?.Invoke())
-                .Returns(Task.CompletedTask);
+            var states = new Mock<IWorkflowStateProvider>();
+            states.Setup(t => t.EnableAsync(WorkflowRef, WorkspaceId, 1, 7, It.IsAny<TriggerPlan>(), It.IsAny<IReadOnlyCollection<WorkflowIntegrationRef>>(), It.IsAny<CancellationToken>()))
+                .Callback(() => onEnabled?.Invoke())
+                .ReturnsAsync(new WorkflowEnableResult(true, null, DefinitionId, 0));
+            states.Setup(t => t.DisableAsync(WorkflowRef, WorkspaceId, 7, false, It.IsAny<CancellationToken>()))
+                .Callback(() => onDisabled?.Invoke())
+                .ReturnsAsync(new WorkflowDisableResult(true, DefinitionId, 0, []));
 
             var identity = new Mock<IIdentityService>();
             identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
 
             Service = new WorkflowLifecycleService(
                 definitions.Object,
-                triggers.Object,
+                states.Object,
+                new TriggerPlanner(TriggerChannelRegistry.Default, TimeProvider.System),
                 new WorkflowValidator(),
                 new IntegrationReferenceCheck(Mock.Of<IIntegrationProvider>()),
                 identity.Object,

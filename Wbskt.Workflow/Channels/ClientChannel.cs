@@ -43,13 +43,13 @@ public sealed class ClientChannel : TriggerChannel
     public override string CorrelationKey(InboundEvent evt) =>
         Key(Required(evt, "clientRefId"), Required(evt, "messageType"));
 
-    public override Task<TriggerRegistrationSpec?> RegisterAsync(BaseNode node, TriggerPublication publication, CancellationToken ct) =>
-        Task.FromResult<TriggerRegistrationSpec?>(node is ClientTriggerNode { Config.HoldSeconds: <= 0 } trigger
+    public override TriggerRegistrationSpec? Plan(BaseNode node, TriggerPublication publication) =>
+        node is ClientTriggerNode { Config.HoldSeconds: <= 0 } trigger
             ? new TriggerRegistrationSpec(Key(trigger.Config.ClientRef, trigger.Config.Type), trigger.Config.ConcurrencyPolicy, trigger.Config.CorrelationKey)
             {
                 Filter = trigger.Config.Filter
             }
-            : null);
+            : null;
 }
 
 public sealed record ClientMessage(
