@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Wbskt.EventBus.Abstractions;
@@ -142,5 +143,37 @@ public sealed class QueuedEventBusTests
         await dispatcher.StopAsync(CancellationToken.None);
 
         bus.Verify(b => b.PublishAsync(It.IsAny<TokenRotatedEvent>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+    [Fact]
+    public void A_service_with_no_place_for_the_queued_bus_is_refused_at_registration()
+    {
+        var services = new ServiceCollection();
+
+        var refused = Assert.Throws<InvalidOperationException>(() => services.AddScopedWithQueuedEvents<NoBus, NoBus>());
+
+        Assert.Contains(nameof(NoBus), refused.Message);
+        Assert.Empty(services);
+    }
+
+    [Fact]
+    public void A_service_that_takes_a_bus_is_given_the_queued_one()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddQueuedEventBus();
+        services.AddSingleton(Mock.Of<IEventBus>());
+        services.AddScopedWithQueuedEvents<TakesBus, TakesBus>();
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        Assert.IsType<QueuedEventBus>(scope.ServiceProvider.GetRequiredService<TakesBus>().Bus);
+    }
+
+    private sealed class NoBus;
+
+    private sealed class TakesBus(IEventBus bus)
+    {
+        public IEventBus Bus { get; } = bus;
     }
 }

@@ -184,10 +184,21 @@ public static class QueuedEventBusExtensions
     /// Registers a scoped service whose <see cref="IEventBus"/> constructor argument is the
     /// <see cref="QueuedEventBus"/>, so its publishes never wait on the broker.
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// <typeparamref name="TImplementation"/> has no public constructor taking an <see cref="IEventBus"/>.
+    /// </exception>
     public static IServiceCollection AddScopedWithQueuedEvents<TService, TImplementation>(this IServiceCollection services)
         where TService : class
         where TImplementation : class, TService
     {
+        // The bus is handed to the constructor as an argument, and a type without a place for it would
+        // only fail on its first request; refuse it while the host is still starting instead.
+        if (!typeof(TImplementation).GetConstructors().Any(c => c.GetParameters().Any(p => p.ParameterType == typeof(IEventBus))))
+        {
+            throw new InvalidOperationException(
+                $"{typeof(TImplementation).Name} takes no IEventBus, so it cannot be given the queued one. Register it with AddScoped.");
+        }
+
         services.AddScoped<TService>(sp => ActivatorUtilities.CreateInstance<TImplementation>(sp, sp.GetRequiredKeyedService<IEventBus>(QueuedKey)));
         return services;
     }
