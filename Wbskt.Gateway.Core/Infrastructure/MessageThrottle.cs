@@ -96,6 +96,8 @@ public sealed class MessageThrottle(TimeProvider time)
 /// </summary>
 public sealed class ClientAllowance(MessageThrottle throttle, int workspaceId, Guid clientRefId)
 {
+    private bool _capabilitiesTaken;
+
     /// <summary>Messages held back since the last one let through.</summary>
     public int ConsecutiveHeldBack { get; private set; }
 
@@ -110,5 +112,20 @@ public sealed class ClientAllowance(MessageThrottle throttle, int workspaceId, G
 
         ConsecutiveHeldBack = 0;
         return true;
+    }
+
+    /// <summary>
+    /// Takes a capabilities message: the session's first always goes through, since without it the console
+    /// cannot offer the client's commands; any after it is one of the client's own messages.
+    /// </summary>
+    public bool TryTakeCapabilities()
+    {
+        if (!_capabilitiesTaken)
+        {
+            _capabilitiesTaken = true;
+            return true;
+        }
+
+        return TryTake();
     }
 }

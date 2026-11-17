@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Wbskt.Gateway.Core.Infrastructure;
 using Wbskt.Protocol;
 using Wbskt.Gateway.Core.Telemetry;
 
@@ -56,14 +57,10 @@ public sealed class InboundMessageDispatcher
 
         // A Free account past its monthly messages: the client's own messages go through one a minute.
         // Not counted towards the budget's disconnect: a device that keeps its usual pace is slowed, not cut off.
-        // Capabilities are let through like sys.*: one a connection, and without them the console
-        // cannot offer the client's commands.
-        if (!MessageTypes.IsSystem(message.Type)
-            && !MessageTypes.Comparer.Equals(message.Type, MessageTypes.Capabilities)
-            && context.Allowance?.TryTake() == false)
+        if (!MessageTypes.IsSystem(message.Type) && context.Allowance is { } allowance && !TakeAllowance(allowance, message.Type))
         {
             _metrics.Dropped("allowance");
-            if (context.Allowance.ConsecutiveHeldBack == 1)
+            if (allowance.ConsecutiveHeldBack == 1)
             {
                 _logger.LogInformation("Client {ClientRefId}'s account has used its monthly messages; holding it to one a minute.", context.ClientRefId);
             }
@@ -104,4 +101,11 @@ public sealed class InboundMessageDispatcher
             }
         }
     }
+
+    // A session's first capabilities is let through like sys.*, so a throttled client's commands can still
+    // be offered; one sent again after it counts like any other of its messages.
+    private static bool TakeAllowance(ClientAllowance allowance, string messageType) =>
+        MessageTypes.Comparer.Equals(messageType, MessageTypes.Capabilities)
+            ? allowance.TryTakeCapabilities()
+            : allowance.TryTake();
 }
