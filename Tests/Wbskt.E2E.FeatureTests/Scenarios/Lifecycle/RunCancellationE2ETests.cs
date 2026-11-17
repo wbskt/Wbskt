@@ -230,7 +230,7 @@ public sealed class RunCancellationE2ETests(ServicesFixture fixture)
 
     private async Task<Guid> StartAndWaitForRunAsync(string token, Guid workspaceRef, Guid publishedRef, Guid triggerNodeId)
     {
-        await fixture.StartManualRunAsync(token, workspaceRef, publishedRef, triggerNodeId.ToString(), idempotencyKey: null);
+        await fixture.StartManualRunAsync(token, workspaceRef, publishedRef, triggerNodeId, idempotencyKey: null);
         var runRefId = await fixture.WaitForFirstRunAsync(token, workspaceRef, publishedRef, TimeSpan.FromSeconds(30));
         runRefId.Should().NotBe(Guid.Empty);
         return runRefId;

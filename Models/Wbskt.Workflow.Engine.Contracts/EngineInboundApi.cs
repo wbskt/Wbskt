@@ -14,11 +14,28 @@ public static class EngineInboundApi
 
     public const string SignalRoute = "api/inbound/signal";
 
-    /// <summary>Starts a run of the workflow's manual trigger. A key names the request, so a retry of it starts no second run.</summary>
-    public static string Manual(Guid workflowRefId, string? idempotencyKey) =>
-        string.IsNullOrWhiteSpace(idempotencyKey)
+    /// <summary>
+    /// Starts a run of the workflow's manual trigger, or of each of them when no
+    /// <paramref name="triggerNodeId"/> is named. A key names the request, so a retry of it starts no
+    /// second run.
+    /// </summary>
+    public static string Manual(Guid workflowRefId, string? idempotencyKey, Guid? triggerNodeId = null)
+    {
+        var query = new List<string>(2);
+        if (!string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            query.Add($"idempotencyKey={Uri.EscapeDataString(idempotencyKey)}");
+        }
+
+        if (triggerNodeId is { } nodeId)
+        {
+            query.Add($"triggerNodeId={nodeId}");
+        }
+
+        return query.Count == 0
             ? $"{ManualRoute}/{workflowRefId}"
-            : $"{ManualRoute}/{workflowRefId}?idempotencyKey={Uri.EscapeDataString(idempotencyKey)}";
+            : $"{ManualRoute}/{workflowRefId}?{string.Join('&', query)}";
+    }
 
     /// <summary>Signals a run. The name is the author's, so it is escaped as the path segment it becomes.</summary>
     public static string Signal(Guid runRefId, string signalName) =>

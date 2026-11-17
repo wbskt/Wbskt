@@ -63,7 +63,7 @@ public sealed class IntegrationRunE2ETests(ServicesFixture fixture)
         const string rotated = "987654321:BBF-rotated-e2e-bot-token-9876";
         await _api.UpdateAsync(token, ws, bot, new { secrets = new { botToken = rotated } });
 
-        await fixture.StartManualRunAsync(token, ws, workflow, trigger.ToString(), idempotencyKey: null);
+        await fixture.StartManualRunAsync(token, ws, workflow, trigger, idempotencyKey: null);
         (await telegram.WaitForAsync(r => r.Path == $"/telegram/bot{rotated}/sendMessage"))
             .Should().NotBeNull("the next run opens the secret as it is now, not as it was at publish");
     }

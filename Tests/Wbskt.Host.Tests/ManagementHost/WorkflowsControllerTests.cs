@@ -138,7 +138,7 @@ public sealed class WorkflowsControllerTests
             .ReturnsAsync(expected);
         var bus = new Mock<IEventBus>();
         var controller = new WorkflowsController(service.Object, Mock.Of<IWorkflowLifecycleService>(), new WorkflowRunService(service.Object, Mock.Of<IWorkflowRunQueryService>(), engineClient.Object, bus.Object, Mock.Of<ILogger<WorkflowRunService>>()));
-        var request = new StartRunRequest("manual-node", null);
+        var request = new StartRunRequest(Guid.NewGuid(), null);
 
         var response = await controller.StartManualRun(WorkspaceId, workflowRefId, request, CancellationToken.None);
 
@@ -165,7 +165,7 @@ public sealed class WorkflowsControllerTests
         var bus = new Mock<IEventBus>();
         var controller = new WorkflowsController(service.Object, Mock.Of<IWorkflowLifecycleService>(), new WorkflowRunService(service.Object, Mock.Of<IWorkflowRunQueryService>(), engineClient.Object, bus.Object, Mock.Of<ILogger<WorkflowRunService>>()));
 
-        await controller.StartManualRun(WorkspaceId, workflowRefId, new StartRunRequest("manual-node", null), CancellationToken.None);
+        await controller.StartManualRun(WorkspaceId, workflowRefId, new StartRunRequest(Guid.NewGuid(), null), CancellationToken.None);
 
         bus.VerifyNoOtherCalls();
     }

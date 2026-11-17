@@ -13,13 +13,14 @@ namespace Wbskt.Workflow.Engine.Host.Controllers;
 public sealed class InboundManualController(IInboundHub hub) : ControllerBase
 {
     [HttpPost("{workflowRefId:guid}")]
-    public async Task<InboundResponse> Post(Guid workflowRefId, [FromBody] JsonElement payload, [FromQuery] string? idempotencyKey, CancellationToken ct)
+    public async Task<InboundResponse> Post(Guid workflowRefId, [FromBody] JsonElement payload, [FromQuery] string? idempotencyKey, [FromQuery] Guid? triggerNodeId, CancellationToken ct)
     {
         // A caller-supplied idempotency key makes the inbound event id stable across retries,
         // so re-POSTing the same key dedupes to a single run instead of starting another.
-        InboundEvent evt = ManualChannel.Event(workflowRefId, payload, idempotencyKey, default);
+        InboundEvent evt = ManualChannel.Event(workflowRefId, payload, idempotencyKey, default, triggerNodeId);
 
-        // A workflow may carry more than one manual trigger, so the event can start more than one run.
+        // A workflow may carry more than one manual trigger, so without a triggerNodeId the event can
+        // start more than one run.
         TriggerDispatchResult result;
         try
         {
