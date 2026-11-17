@@ -10,7 +10,12 @@ namespace Wbskt.Workflow.Providers;
 
 internal sealed class RunCountersProvider : BaseSqlProvider, IRunCountersProvider
 {
-    public RunCountersProvider(IConfiguration configuration) : base(configuration) { }
+    private readonly TimeProvider _clock;
+
+    public RunCountersProvider(IConfiguration configuration, TimeProvider? clock = null) : base(configuration)
+    {
+        _clock = clock ?? TimeProvider.System;
+    }
 
     public async Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct)
     {
@@ -61,6 +66,7 @@ internal sealed class RunCountersProvider : BaseSqlProvider, IRunCountersProvide
             {
                 p.AddWithValue("@RunId", runId);
                 p.AddWithValue("@Cost", cost);
+                p.Add("@NowUtc", SqlDbType.DateTime2).Value = _clock.GetUtcNow().UtcDateTime;
             },
             r => new CreditCharge(r.GetDecimal(0), r.GetDecimal(1)),
             ct
