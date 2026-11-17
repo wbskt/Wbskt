@@ -188,6 +188,14 @@ public sealed class MqttGateway : IHostedService
 
         // Nothing a client publishes is routed: its own messages go to its session, anything else nowhere.
         args.ProcessPublish = false;
+
+        // A will: the server publishes it for a client whose connection was lost, after its last read.
+        // The binding says a will goes nowhere, so it is not taken as a message from the client.
+        if (connection.Guard is { ReadEnded: true })
+        {
+            _logger.LogDebug("Dropped the will of client {ClientRefId}.", args.ClientId);
+            return;
+        }
         if (args.ApplicationMessage.Topic != connection.UpTopic)
         {
             _logger.LogWarning("Client {ClientRefId} published to {Topic}, which is not its own; dropped.", args.ClientId, args.ApplicationMessage.Topic);

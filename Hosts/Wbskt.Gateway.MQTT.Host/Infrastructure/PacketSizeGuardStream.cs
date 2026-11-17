@@ -19,6 +19,7 @@ public sealed class PacketSizeGuardStream : Stream
     private int _lengthBytes;
     private int _remainingLength;
     private int _bodyLeft;
+    private bool _readEnded;
 
     public PacketSizeGuardStream(Stream inner, int maxPacketBytes)
     {
@@ -39,6 +40,12 @@ public sealed class PacketSizeGuardStream : Stream
     /// <summary>Set once a packet over the limit was refused; the connection then ends.</summary>
     public bool Exceeded { get; private set; }
 
+    /// <summary>
+    /// Set once the client's side of the connection has ended: a read found the end of the stream or
+    /// failed. Anything published for the client after that is the server's doing, its will.
+    /// </summary>
+    public bool ReadEnded => Volatile.Read(ref _readEnded);
+
     public override bool CanRead => true;
 
     public override bool CanWrite => true;
@@ -55,9 +62,16 @@ public sealed class PacketSizeGuardStream : Stream
 
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
     {
-        var read = await _inner.ReadAsync(buffer, cancellationToken);
-        Inspect(buffer.Span[..read]);
-        return read;
+        try
+        {
+            var read = await _inner.ReadAsync(buffer, cancellationToken);
+            return Inspected(buffer.Span[..read]);
+        }
+        catch
+        {
+            Volatile.Write(ref _readEnded, true);
+            throw;
+        }
     }
 
     public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
@@ -65,9 +79,16 @@ public sealed class PacketSizeGuardStream : Stream
 
     public override int Read(byte[] buffer, int offset, int count)
     {
-        var read = _inner.Read(buffer, offset, count);
-        Inspect(buffer.AsSpan(offset, read));
-        return read;
+        try
+        {
+            var read = _inner.Read(buffer, offset, count);
+            return Inspected(buffer.AsSpan(offset, read));
+        }
+        catch
+        {
+            Volatile.Write(ref _readEnded, true);
+            throw;
+        }
     }
 
     public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) =>
@@ -97,6 +118,17 @@ public sealed class PacketSizeGuardStream : Stream
     }
 
     public override ValueTask DisposeAsync() => _inner.DisposeAsync();
+
+    private int Inspected(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.IsEmpty)
+        {
+            Volatile.Write(ref _readEnded, true);
+        }
+
+        Inspect(bytes);
+        return bytes.Length;
+    }
 
     private void Inspect(ReadOnlySpan<byte> bytes)
     {
