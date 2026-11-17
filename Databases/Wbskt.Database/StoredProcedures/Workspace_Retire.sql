@@ -27,6 +27,21 @@ BEGIN
 
     BEGIN TRANSACTION;
 
+    -- Lock order, the same as every procedure it can meet: clients before policies
+    -- (Client_UpdateStatuses), and drafts, then workflows, then registrations
+    -- (WorkflowDefinition_Delete, WorkflowDraft_Save, WorkflowDefinition_Publish). It is a rare
+    -- collision, a request in flight in a workspace just deleted, but taking them the other way round
+    -- made one of the two a deadlock victim.
+    --
+    -- The clients are only locked here and revoked after the policies are disabled: a Client_Create
+    -- that already holds its policy row inserts its client before the policy can be disabled, and the
+    -- revoke below still finds it.
+    DECLARE @LockedClients INT;
+    SELECT @LockedClients = COUNT(*)
+    FROM dbo.Clients WITH (UPDLOCK, ROWLOCK)
+    WHERE WorkspaceId = @WorkspaceId
+      AND Status IN (0, 1);
+
     UPDATE dbo.RegistrationPolicies
     SET IsEnabled = 0
     WHERE WorkspaceId = @WorkspaceId
@@ -37,6 +52,19 @@ BEGIN
     OUTPUT INSERTED.Id, INSERTED.RefId, INSERTED.PolicyId INTO @Revoked
     WHERE WorkspaceId = @WorkspaceId
       AND Status IN (0, 1); -- Pending, Registered; Revoked and Rejected already cannot connect
+
+    DECLARE @LockedDrafts INT;
+    SELECT @LockedDrafts = COUNT(*)
+    FROM dbo.WorkflowDrafts WITH (UPDLOCK, HOLDLOCK)
+    WHERE WorkspaceId = @WorkspaceId;
+
+    -- No version stays live; the workflows keep their place in history as Disabled.
+    UPDATE dbo.Workflows
+    SET State = 2,
+        LiveDefinitionId = NULL,
+        StateChangedAt = SYSUTCDATETIME()
+    WHERE WorkspaceId = @WorkspaceId
+      AND State = 1;
 
     INSERT INTO @Definitions (Id)
     SELECT Id FROM dbo.WorkflowDefinitions WHERE WorkspaceId = @WorkspaceId;
@@ -59,14 +87,6 @@ BEGIN
     FROM dbo.TriggerDispatchOutcomes TDO
     WHERE TDO.WorkflowRefId IN (
         SELECT WD.RefId FROM dbo.WorkflowDefinitions WD INNER JOIN @Definitions D ON D.Id = WD.Id);
-
-    -- No version stays live; the workflows keep their place in history as Disabled.
-    UPDATE dbo.Workflows
-    SET State = 2,
-        LiveDefinitionId = NULL,
-        StateChangedAt = SYSUTCDATETIME()
-    WHERE WorkspaceId = @WorkspaceId
-      AND State = 1;
 
     -- Integrations are deleted, not disabled: each holds a credential for an outside account, and
     -- nothing about a deleted workspace's history needs it.
