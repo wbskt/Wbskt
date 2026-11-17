@@ -33,7 +33,7 @@ internal sealed class AuthServiceClient : IAuthServiceClient
         }
 
         var generation = _cache.Generation;
-        var result = await ResolveWithAuthServiceAsync(workspaceRef, cancellationToken);
+        var result = await ResolveWithAuthServiceAsync(workspaceRef, accessToken: null, cancellationToken);
         if (result.IsSuccess && userId is not null)
         {
             _cache.Set(userId.Value, workspaceRef, result.Value, generation);
@@ -42,15 +42,26 @@ internal sealed class AuthServiceClient : IAuthServiceClient
         return result;
     }
 
-    private async Task<Result<WorkspaceAccess>> ResolveWithAuthServiceAsync(Guid workspaceRef, CancellationToken cancellationToken)
+    public Task<Result<WorkspaceAccess>> ResolveWorkspaceForTokenAsync(string accessToken, Guid workspaceRef, CancellationToken cancellationToken = default) =>
+        ResolveWithAuthServiceAsync(workspaceRef, accessToken, cancellationToken);
+
+    // Without a token the request's own is forwarded (AuthenticationForwardingHandler).
+    private async Task<Result<WorkspaceAccess>> ResolveWithAuthServiceAsync(Guid workspaceRef, string? accessToken, CancellationToken cancellationToken)
     {
         _logger.LogDebug("Attempting to resolve workspace reference: '{WorkspaceRef}' via Auth Service", workspaceRef);
 
         try
         {
-            var request = new ResolveWorkspaceRequest(workspaceRef);
+            using var request = new HttpRequestMessage(HttpMethod.Post, "/" + InternalRoutes.ResolveWorkspace)
+            {
+                Content = JsonContent.Create(new ResolveWorkspaceRequest(workspaceRef))
+            };
+            if (accessToken is not null)
+            {
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+            }
 
-            var response = await _httpClient.PostAsJsonAsync("/" + InternalRoutes.ResolveWorkspace, request, cancellationToken);
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {

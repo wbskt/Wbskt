@@ -23,6 +23,12 @@ public interface IAuthServiceClient : IUserIdLookup
     /// Fails with PERMISSION_UNAUTHORIZED when any is missing.
     /// </summary>
     Task<Result<int>> ResolveWorkspaceAsync(Guid workspaceRef, IReadOnlyCollection<PermissionSlug> requiredPermissions, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Resolves a workspace for the user <paramref name="accessToken"/> names, outside any request, and
+    /// past the cache: for checking a long-lived connection's access again after it may have changed.
+    /// </summary>
+    Task<Result<WorkspaceAccess>> ResolveWorkspaceForTokenAsync(string accessToken, Guid workspaceRef, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
