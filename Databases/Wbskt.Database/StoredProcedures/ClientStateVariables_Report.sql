@@ -4,13 +4,15 @@
 -- already holds a value from a later report.
 -- Reports are consumed in no fixed order (retries, and a client's buffer sent after it reconnects), so
 -- @ReportedAt, when the client sent the report, decides: a variable is not set back by an older one.
+-- A caller that passes none (a host from before it was kept, during a rolling deploy) stores a value
+-- with no time, which any later report may replace.
 -- UpdatedAt is bumped on every applied value: it drives the console's freshness display ("4s ago").
 -- A new name is stored only while the client has fewer than @MaxPerClient variables, so a client
 -- cannot grow the table without bound by varying names; earlier names in the report win the last places.
 CREATE PROCEDURE dbo.ClientStateVariables_Report
     @ClientId INT,
     @Variables dbo.ClientStateVariableTableType READONLY,
-    @ReportedAt DATETIME2(3),
+    @ReportedAt DATETIME2(3) = NULL,
     @MaxPerClient INT = 200
 AS
 BEGIN
