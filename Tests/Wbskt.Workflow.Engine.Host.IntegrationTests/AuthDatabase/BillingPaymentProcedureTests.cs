@@ -399,6 +399,29 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
     }
 
     [SkippableFact]
+    public async Task Review_leaves_out_an_ended_subscription_while_another_keeps_the_plan()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int resubscribed = await CreateTenantAsync("Pro");
+        int refundedOnly = await CreateTenantAsync("Pro");
+        int otherPlan = await CreateTenantAsync("Pro");
+        foreach (int tenantId in new[] { resubscribed, refundedOnly, otherPlan })
+        {
+            await UpsertAsync(tenantId, $"sub_{Guid.NewGuid():N}", "expired", Now.AddDays(-40), periodEnd: Now.AddDays(-10));
+        }
+
+        await UpsertAsync(resubscribed, $"sub_{Guid.NewGuid():N}", "active", Now.AddDays(-5));
+        await UpsertAsync(refundedOnly, $"sub_{Guid.NewGuid():N}", "active", Now.AddDays(-5), refundedThrough: Now.AddMonths(2));
+        await UpsertAsync(otherPlan, $"sub_{Guid.NewGuid():N}", "active", Now.AddDays(-5), plan: "Maker");
+
+        IReadOnlyCollection<int> listed = await GetToReviewAsync(Now, pastDueSince: Now.AddDays(-7));
+
+        Assert.DoesNotContain(resubscribed, listed);
+        Assert.Contains(refundedOnly, listed);
+        Assert.Contains(otherPlan, listed);
+    }
+
+    [SkippableFact]
     public async Task A_credit_pack_is_recorded_and_refunded_once_each_with_its_event()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
