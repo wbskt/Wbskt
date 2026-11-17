@@ -270,6 +270,8 @@ public sealed class ActionTemplatesTests
     public async Task Send_to_client_sends_the_filled_in_payload()
     {
         var publisher = new Mock<IClientCommandPublisher>();
+        publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CommandPublishOutcome.Sent);
         var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>(), TestTemplates.Create());
         var node = new SendClientMessageNode
         {

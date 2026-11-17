@@ -50,9 +50,10 @@ public sealed class ClientCommandPublisherTests
     [Fact]
     public async Task A_command_to_a_connected_client_is_addressed_to_the_host_holding_it()
     {
-        await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, true, HostId))
+        CommandPublishOutcome outcome = await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, true, HostId))
             .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", ExpiresIn, null, CancellationToken.None);
 
+        Assert.Equal(CommandPublishOutcome.Sent, outcome);
         Assert.NotNull(_sent);
         Assert.Equal(ClientRefId, _sent!.ClientRefId);
         Assert.Equal(ClientId, _sent.ClientId);
@@ -96,9 +97,10 @@ public sealed class ClientCommandPublisherTests
     [Fact]
     public async Task A_command_to_an_offline_client_with_a_full_queue_is_reported_as_failed_at_once()
     {
-        await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, false, null), new CommandQueueOptions { MaxPerClient = 0 })
+        CommandPublishOutcome outcome = await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, false, null), new CommandQueueOptions { MaxPerClient = 0 })
             .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", ExpiresIn, null, CancellationToken.None);
 
+        Assert.Equal(CommandPublishOutcome.Refused(ClientCommandPublisher.QueueFullReason), outcome);
         Assert.Empty(_queue.Rows);
         Assert.Equal(ClientCommandPublisher.QueueFullReason, _failed!.Reason);
         // The step waiting on this command is woken by the failure, so it carries the command's id.
@@ -108,9 +110,10 @@ public sealed class ClientCommandPublisherTests
     [Fact]
     public async Task A_command_to_an_offline_client_that_is_not_registered_is_reported_as_failed_at_once()
     {
-        await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, false, null, ClientStatus.Revoked))
+        CommandPublishOutcome outcome = await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, false, null, ClientStatus.Revoked))
             .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", ExpiresIn, null, CancellationToken.None);
 
+        Assert.False(outcome.Accepted);
         Assert.Empty(_queue.Rows);
         Assert.Equal(ClientCommandPublisher.InactiveReason, _failed!.Reason);
     }
