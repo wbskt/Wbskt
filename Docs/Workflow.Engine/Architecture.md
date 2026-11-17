@@ -13,7 +13,7 @@ see [Features.md](Features.md); for the patterns behind the code, see
 | `Wbskt.Workflow.Builder` | `WorkflowBuilder`, a fluent C# API for building definitions in tests and examples. |
 | `Hosts/Wbskt.Workflow.Engine.Host` | The engine process: inbound adapters (bus consumers), controllers, hosted services, leadership, middleware. |
 | `Models/Wbskt.Workflow.Engine.Contracts` | The HTTP contracts of the engine's inbound API, shared with the management host. |
-| `Hosts/Wbskt.Management.Host/Services/Workflow` | Publishing, versioning, rollback and trigger registration (`WorkflowLifecycleService`, `TriggerRegistrationService`). |
+| `Hosts/Wbskt.Management.Host/Services/Workflow` | Publishing, versioning, enabling and disabling (`WorkflowLifecycleService`); trigger plans come from `ITriggerPlanner` in `Wbskt.Workflow`. |
 | `Tools/Wbskt.Workflow.Exporter` | Writes the example workflows to JSON with the builder. |
 
 ## 2. Where the engine sits
@@ -149,24 +149,35 @@ executor stamps `trigger` and `triggeredAt` and continues.
 `PendingTriggerEventDrainer` replays one queued event each time a run finishes. It re-mints the
 event id as `{id}:drain:{rowId}` so the replay gets its own trigger-start key.
 
-### 4.4 Publishing and trigger registrations
+### 4.4 Publishing, enabling and trigger registrations
+
+A workflow has one row in `dbo.Workflows` with its `State` (1 Enabled, 2 Disabled, 3 Deprecated,
+4 Deleted) and `LiveDefinitionId`, the one version runs start on. Versions are immutable rows in
+`dbo.WorkflowDefinitions`; publishing adds one and does not by itself make it live.
 
 Publishing happens in the management host (`WorkflowLifecycleService`):
 
 1. `WorkflowValidator.Validate` (see [Features.md §13](Features.md#13-validation)) and a check that
    every referenced integration exists in the workspace.
-2. `WorkflowDefinition_Publish` inserts the next version under `HOLDLOCK` and enforces
-   `Workflows:MaxPerWorkspace` (100).
-3. The previous version is deprecated and `TriggerRegistrationService.OnPublishedAsync` deletes and
-   re-writes the registrations. Each trigger node's channel produces a `TriggerRegistrationSpec`
-   (match key, filter, secret hash); schedule triggers also get a `ScheduledFires` row.
-4. If registration fails, the publish is compensated: the new version's registrations are removed,
-   the new version is deleted (or left with no triggers if a run already references it), and the
-   previous version is restored.
-5. `WorkflowDefinitionChangedEvent` and `WorkflowPublishedEvent` are announced.
+2. `WorkflowDefinition_Publish` inserts the next version under `HOLDLOCK`, enforces
+   `Workflows:MaxPerWorkspace` (100), and creates the `Workflows` row (Disabled) on a first publish.
+   `WorkflowPublishedEvent` is announced.
+3. With `enable: true` the version is then enabled as below. A refused enable leaves it published
+   and not live.
 
-Rollback publishes an older definition as a new version. Deprecate removes a workflow's
-registrations; Reinstate re-enables the version and registers its triggers again.
+Enabling (`Workflow_Enable`) is the only way a version becomes live. `ITriggerPlanner` turns the
+version's trigger nodes into a `TriggerPlan` (each channel's registration: match key, filter, secret
+hash; and a `ScheduledFires` row per schedule trigger), and the procedure, in one transaction under
+the workflow row's lock, replaces the workflow's registrations and schedules with the plan, drops
+queued events for trigger nodes the new version does not have, and points `LiveDefinitionId` at it.
+Disabling (`Workflow_Disable`, also used by deprecate) removes them all; a disable can also
+cancel the runs going. Reinstate (`Workflow_Reinstate`) takes a deprecated workflow back to Disabled. Each change
+announces `WorkflowDefinitionChangedEvent` (the engine drops its cached registrations) and
+`WorkflowEnabledEvent` or `WorkflowDisabledEvent`.
+
+`Run_Start` refuses a non-test run of anything but the live version of an Enabled workflow (50036),
+so a registration the engine still holds in cache after a disable starts nothing; the dispatcher
+settles that delivery as having no registration. A test run is refused only for a deleted workflow.
 
 ## 5. Execution: pump, loop, handlers
 
