@@ -19,7 +19,8 @@ public sealed class InboundMessageDispatcher
 
     public InboundMessageDispatcher(IEnumerable<IInboundMessageHandler> handlers, ClientMessageHandler clientMessages, GatewayMetrics metrics, ILogger<InboundMessageDispatcher> logger)
     {
-        _systemHandlers = handlers.ToDictionary(h => h.Type, StringComparer.Ordinal);
+        // The protocol matches types ignoring case, so SYS.ACK is an ack, not an unknown system type.
+        _systemHandlers = handlers.ToDictionary(h => h.Type, MessageTypes.Comparer);
         _clientMessages = clientMessages;
         _metrics = metrics;
         _logger = logger;
@@ -55,7 +56,11 @@ public sealed class InboundMessageDispatcher
 
         // A Free account past its monthly messages: the client's own messages go through one a minute.
         // Not counted towards the budget's disconnect: a device that keeps its usual pace is slowed, not cut off.
-        if (!MessageTypes.IsSystem(message.Type) && context.Allowance?.TryTake() == false)
+        // Capabilities are let through like sys.*: one a connection, and without them the console
+        // cannot offer the client's commands.
+        if (!MessageTypes.IsSystem(message.Type)
+            && !MessageTypes.Comparer.Equals(message.Type, MessageTypes.Capabilities)
+            && context.Allowance?.TryTake() == false)
         {
             _metrics.Dropped("allowance");
             if (context.Allowance.ConsecutiveHeldBack == 1)
