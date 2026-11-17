@@ -218,7 +218,7 @@ public static class Program
         builder.Services.AddWorkflowManagementServices(builder.Configuration);
 
         // Event Bus & Logging
-        var dbEventLoggingBusConfig = builder.Services.AddDatabaseEventLogging(builder.Configuration);
+        var dbEventLoggingBusConfig = builder.Services.AddDatabaseEventLogging(builder.Configuration, role);
 
         builder.Services.AddRabbitMqEventBus(builder.Configuration, 
             configureBus: configurator =>

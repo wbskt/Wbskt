@@ -1,6 +1,10 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Wbskt.Management.Host.Extensions;
+using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Controllers;
 using Wbskt.Management.Host.Hosting;
 
@@ -46,6 +50,23 @@ public sealed class HostRoleTests
         controllers.Where(t => HostRole.ClientAuth.Serves(t))
             .Should().BeEquivalentTo([typeof(ClientAuthController), typeof(ClientRegistrationsController)]);
         controllers.Should().OnlyContain(t => HostRole.All.Serves(t));
+    }
+
+    /// <summary>
+    /// #781: event log retention is a periodic job, so a client-auth instance, which runs none of them,
+    /// does not run it either.
+    /// </summary>
+    [Theory]
+    [InlineData(HostRole.All, true)]
+    [InlineData(HostRole.ClientAuth, false)]
+    public void Event_log_retention_runs_only_on_a_full_instance(HostRole role, bool runs)
+    {
+        var services = new ServiceCollection();
+
+        services.AddDatabaseEventLogging(Config(null), role);
+
+        services.Any(d => d.ServiceType == typeof(IHostedService) && d.ImplementationType == typeof(EventLogRetentionService))
+            .Should().Be(runs);
     }
 
     /// <summary>
