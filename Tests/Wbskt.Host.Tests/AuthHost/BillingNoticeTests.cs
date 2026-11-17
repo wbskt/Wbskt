@@ -141,6 +141,19 @@ public sealed class BillingNoticeTests
     }
 
     [Fact]
+    public async Task A_downgrade_from_negotiated_limits_states_the_limits_the_tenant_had()
+    {
+        await Consumer().Consume(Context(new TenantPlanChangedEvent(TenantId, Guid.NewGuid(), PlanCode.Pro, PlanCode.Business, 7)
+        {
+            CreatedAtUtc = Now,
+            PreviousLimitOverrides = new PlanLimitOverrides { Clients = 5_000 }
+        }));
+
+        var sent = Assert.Single(_sent);
+        Assert.Contains("Clients: 5,000 → 500", sent.Mail.HtmlBody);
+    }
+
+    [Fact]
     public void A_downgrade_names_the_limits_that_drop_and_when_older_history_goes()
     {
         BillingNotice notice = BillingNotices.Downgraded(PlanCode.Pro, PlanCatalog.BuiltIn[PlanCode.Pro], PlanCode.Maker, PlanCatalog.BuiltIn[PlanCode.Maker], 5, Now.AddDays(30));

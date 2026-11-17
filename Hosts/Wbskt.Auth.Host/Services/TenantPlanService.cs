@@ -77,7 +77,8 @@ internal sealed class TenantPlanService(ITenantPlanProvider plans, ITenantBillin
             WorkspaceIds = await audit.OfTenantAsync(current.TenantId, cancellationToken),
             Source = source,
             EndsAt = endsAt?.ToUtcOffset(),
-            LimitOverrides = overrides
+            LimitOverrides = overrides,
+            PreviousLimitOverrides = current.LimitOverrides
         };
 
         TenantPlan? updated = await plans.SetAsync(current.TenantId, request.PlanCode, overrides, current.PlanRevision, source, endsAt, OutboxMessage.Create(changedEvent), cancellationToken);

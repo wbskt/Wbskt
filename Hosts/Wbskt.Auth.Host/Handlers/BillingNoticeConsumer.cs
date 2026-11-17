@@ -94,7 +94,7 @@ internal sealed class BillingNoticeConsumer(
         int retentionGraceDays = configuration.GetValue("Billing:RetentionGraceDays", 30);
         var notice = BillingNotices.Downgraded(
             e.PreviousPlanCode,
-            catalog.LimitsFor(e.PreviousPlanCode),
+            catalog.LimitsFor(e.PreviousPlanCode, e.PreviousLimitOverrides),
             e.PlanCode,
             catalog.LimitsFor(e.PlanCode, e.LimitOverrides),
             e.PlanRevision,
