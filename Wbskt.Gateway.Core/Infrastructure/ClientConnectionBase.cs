@@ -10,14 +10,22 @@ namespace Wbskt.Gateway.Core.Infrastructure;
 public abstract class ClientConnectionBase : IClientConnection
 {
     private readonly object _gate = new();
+    private readonly TimeProvider _time;
 
     // The sys.ping waiting for its pong; only the latest one counts.
     private (string Id, DateTime SentAt)? _pendingPing;
 
     public required int ClientId { get; init; }
     public required int WorkspaceId { get; init; }
-    public DateTime EstablishedAtUtc { get; init; } = DateTime.UtcNow;
+    public DateTime EstablishedAtUtc { get; init; }
     public required DateTime TokenIssuedAtUtc { get; init; }
+
+    /// <param name="time">The host's clock, for when the connection was made and pings were sent.</param>
+    protected ClientConnectionBase(TimeProvider time)
+    {
+        _time = time;
+        EstablishedAtUtc = time.GetUtcNow().UtcDateTime;
+    }
 
     public abstract bool IsOpen { get; }
 
@@ -26,7 +34,7 @@ public abstract class ClientConnectionBase : IClientConnection
     public Task SendPingAsync(CancellationToken cancellationToken)
     {
         var id = Guid.NewGuid().ToString("N");
-        var sentAt = DateTime.UtcNow;
+        var sentAt = _time.GetUtcNow().UtcDateTime;
         lock (_gate)
         {
             _pendingPing = (id, sentAt);

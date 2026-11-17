@@ -26,15 +26,18 @@ internal sealed class SocketHandler : ISocketHandler
     private readonly ClientSessions _sessions;
     private readonly ILogger<SocketHandler> _logger;
     private readonly IHostApplicationLifetime _appLifetime;
+    private readonly TimeProvider _time;
 
     public SocketHandler(
         ClientSessions sessions,
         ILogger<SocketHandler> logger,
-        IHostApplicationLifetime appLifetime)
+        IHostApplicationLifetime appLifetime,
+        TimeProvider time)
     {
         _sessions = sessions;
         _logger = logger;
         _appLifetime = appLifetime;
+        _time = time;
     }
 
     public async Task HandleAsync(HttpContext context)
@@ -68,7 +71,7 @@ internal sealed class SocketHandler : ISocketHandler
         }
 
         using var webSocket = await context.WebSockets.AcceptWebSocketAsync(offered.Count > 0 ? WebSocketBinding.Subprotocol : null);
-        using var connection = new ClientConnection
+        using var connection = new ClientConnection(_time)
         {
             Socket = webSocket,
             ClientId = identity.ClientId,

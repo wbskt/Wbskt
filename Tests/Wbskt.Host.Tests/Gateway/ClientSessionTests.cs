@@ -37,7 +37,7 @@ public sealed class ClientSessionTests
     private ClientSessions Sessions(MessageBudgetOptions? budget = null)
     {
         var metrics = new GatewayMetrics(GatewayTransport.WebSocket);
-        var dispatcher = new InboundMessageDispatcher([], new ClientMessageHandler(_bus.Object), metrics, NullLogger<InboundMessageDispatcher>.Instance);
+        var dispatcher = new InboundMessageDispatcher([], new ClientMessageHandler(_bus.Object, TimeProvider.System), metrics, NullLogger<InboundMessageDispatcher>.Instance);
         var lifetime = new Mock<IHostApplicationLifetime>();
         lifetime.SetupGet(x => x.ApplicationStopping).Returns(_stopping.Token);
         return new ClientSessions(_connections, _gate.Object, _bus.Object, new BusInstanceId(ThisHost), metrics, dispatcher,

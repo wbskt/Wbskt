@@ -17,7 +17,7 @@ public sealed class ClientAccessGateTests
     {
         // Redis cannot answer: this host's own list decides.
         _redis.Setup(x => x.IsRevokedAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).ReturnsAsync((bool?)null);
-        _gate = new ClientAccessGate(new RevocationCache(), _redis.Object, _connections.Object);
+        _gate = new ClientAccessGate(new RevocationCache(TimeProvider.System), _redis.Object, _connections.Object);
     }
 
     [Fact]

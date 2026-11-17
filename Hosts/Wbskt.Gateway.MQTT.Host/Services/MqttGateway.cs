@@ -31,6 +31,7 @@ public sealed class MqttGateway : IHostedService
     private readonly IHostApplicationLifetime _lifetime;
     private readonly ILogger<MqttGateway> _logger;
     private readonly MqttServer _server;
+    private readonly TimeProvider _time;
     private readonly ConcurrentDictionary<MqttConnection, Task> _running = new();
     private readonly ConcurrentDictionary<EndPoint, MqttConnection> _accepted = new();
 
@@ -43,8 +44,10 @@ public sealed class MqttGateway : IHostedService
         IOptions<MqttGatewayOptions> options,
         IHostApplicationLifetime lifetime,
         MqttNetLoggerBridge mqttLogger,
-        ILogger<MqttGateway> logger)
+        ILogger<MqttGateway> logger,
+        TimeProvider time)
     {
+        _time = time;
         _sessions = sessions;
         _authenticator = authenticator;
         _options = options.Value;
@@ -107,7 +110,7 @@ public sealed class MqttGateway : IHostedService
         }
 
         Listener.Authenticated(args.ChannelAdapter);
-        var connection = new MqttConnection(_server, login.Admission, _options.InboxCapacity)
+        var connection = new MqttConnection(_server, login.Admission, _options.InboxCapacity, _time)
         {
             Guard = Listener.GuardOf(args.ChannelAdapter)
         };
