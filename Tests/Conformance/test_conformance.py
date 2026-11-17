@@ -133,6 +133,20 @@ async def test_keeps_the_token_while_the_client_is_revoked(api, socket_server, c
     assert set(socket_server.upgrade_tokens) == {"token-1"}
 
 
+async def test_logs_in_again_once_the_token_is_within_a_minute_of_expiry(api, socket_server, client):
+    # A token that expires in 30 s is already inside the last minute, so it is never offered again.
+    api.expires_in = 30
+    harness = await client()
+    await harness.expect("connected")
+    first = await socket_server.wait_connections(1)
+    await first.close(1000)
+
+    await socket_server.wait_connections(2, timeout=RECONNECT)
+
+    assert len(api.logins) == 2
+    assert socket_server.upgrade_tokens[-1] == "token-2"
+
+
 async def test_waits_for_retry_after_when_throttled(api, socket_server, client):
     api.login_answers = [(429, {"code": "TOO_MANY_REQUESTS"}, {"Retry-After": "2"})]
     harness = await client()
@@ -158,11 +172,20 @@ async def test_reconnects_after_each_close_code(api, socket_server, client, code
     # 1001 asks for a spread of up to 30 s, and 4003 for a wait of 30-60 s from an SDK that can read
     # the code; the others for the usual schedule.
     timeout = {1001: 40.0, 4003: 70.0}.get(code, RECONNECT)
+    closed_at = asyncio.get_running_loop().time()
     await socket_server.wait_connections(2, timeout=timeout)
+    waited = asyncio.get_running_loop().time() - closed_at
     await harness.expect("connected")
-    # After 4002 (revoked) an SDK that can read the code logs in again; one that can't reuses its token.
-    if code != 4002:
+    reads_codes = await harness.reads_close_codes()
+    # After 4002 (revoked) an SDK that can read the code drops its token and logs in again; one that
+    # can't reuses its token.
+    if code == 4002 and reads_codes:
+        assert len(api.logins) == 2
+    elif code != 4002:
         assert len(api.logins) == 1
+    # After 4003 (throttled) an SDK that can read the code waits 30-60 s.
+    if code == 4003 and reads_codes:
+        assert waited >= 29.0
 
 
 async def test_a_second_connection_supersedes_the_first(api, socket_server, client):
@@ -333,6 +356,19 @@ async def test_refuses_to_send_a_message_over_64_kb(api, socket_server, client):
     frame = await socket_server.next_of("marker")
 
     assert frame["type"] == "marker"
+    assert not socket_server.close_codes
+
+
+async def test_sends_a_message_just_under_64_kb(api, socket_server, client):
+    harness = await client()
+    await harness.expect("connected")
+    await socket_server.next_of("capabilities")
+
+    # Two strings, as above; with the envelope and sentAt the frame stays under the limit.
+    await harness.command("send", type="photo", payload={"a": "x" * 31 * 1024, "b": "x" * 31 * 1024})
+    frame = await socket_server.next_of("photo")
+
+    assert len(frame["payload"]["a"]) == 31 * 1024
     assert not socket_server.close_codes
 
 

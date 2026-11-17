@@ -30,6 +30,9 @@ BUDGET_PER_SECOND = 10.0
 BUDGET_BURST = 100
 BUDGET_CLOSE_AFTER_DROPPED = 500
 CLOSE_SUPERSEDED = 4001
+CLOSE_TOO_BIG = 1009
+# A message is at most 64 KB, as UTF-8 (ClientProtocol.MaxMessageBytes); the gateway ends the connection for a bigger one.
+MAX_MESSAGE_BYTES = 64 * 1024
 CLOSE_THROTTLED = 4003
 # The one close code a client sends of its own: closing to install a firmware update.
 CLOSE_UPDATING = 4000
@@ -44,6 +47,8 @@ class FakeApi:
         self.registered_status = 1
         # Answers for the next logins, before the normal 200.
         self.login_answers: List[Answer] = []
+        # The lifetime the normal 200 gives a token, in seconds.
+        self.expires_in = 3600
         self.known: Dict[str, str] = {}
         # Which client each issued token belongs to; the socket reads it to supersede connections.
         self.token_clients: Dict[str, str] = {}
@@ -67,7 +72,7 @@ class FakeApi:
                     return 401, {"code": "CLIENT_UNAUTHORIZED"}, {}
                 token = f"token-{len(self.logins)}"
                 self.token_clients[token] = str(body.get("clientRefId"))
-                return 200, {"accessToken": token, "expiresIn": 3600}, {}
+                return 200, {"accessToken": token, "expiresIn": self.expires_in}, {}
             return 404, {}, {}
 
     def forget_all_clients(self) -> None:
@@ -202,6 +207,10 @@ class FakeSocket:
             async for raw in ws:
                 if not isinstance(raw, str):
                     continue
+                if len(raw.encode("utf-8")) > MAX_MESSAGE_BYTES:
+                    self.close_codes[index] = CLOSE_TOO_BIG
+                    await ws.close(CLOSE_TOO_BIG, f"Messages are limited to {MAX_MESSAGE_BYTES} bytes.")
+                    return
                 if not budget.try_take():
                     self.dropped += 1
                     if budget.consecutive_dropped >= BUDGET_CLOSE_AFTER_DROPPED:

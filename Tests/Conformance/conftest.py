@@ -70,6 +70,13 @@ class Harness:
             if event["event"] == name and all(event.get(k) == v for k, v in match.items()):
                 return event
 
+    async def reads_close_codes(self) -> bool:
+        """Whether the SDK says it can tell close codes apart, on its started event ("closeCodes": true)."""
+        started = next((e for e in self.log if e["event"] == "started"), None)
+        if started is None:
+            started = await self.expect("started")
+        return started.get("closeCodes") is True
+
     async def stop(self) -> None:
         if self.process is None or self.process.returncode is not None:
             return
