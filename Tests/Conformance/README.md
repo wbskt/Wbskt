@@ -7,7 +7,7 @@ an item on one of those two checklists:
 
 | Checklist | Scenarios |
 |---|---|
-| Message model | registering once, pending approval, registering again, reusing the token, `Retry-After`, `capabilities` first, ping and pong, command acks, expired commands, plain messages, a throwing handler and malformed frames, `sentAt` and the offline backlog, pacing a large backlog under the message budget, reserved types, a message over 64 KB |
+| Message model | registering once, pending approval, registering again, reusing the token, logging in again inside a token's last minute, `Retry-After`, `capabilities` first, ping and pong, command acks, expired commands, plain messages, a throwing handler and malformed frames, `sentAt` and the offline backlog, pacing a large backlog under the message budget, reserved types, a message over 64 KB and one just under it |
 | Firmware updates (optional) | listing `ota`, rejecting while off, an expired update, plain `http`, accepted → downloading → installed |
 | WebSocket binding | the subprotocol and bearer token, renewing after a 401 on the upgrade, keeping the token while the gateway is down or the client is revoked (403 `CLIENT_REVOKED`), reconnecting after each close code (1000, 1001, 1008, 1009, 4001–4003), a second connection superseding the first |
 
@@ -22,7 +22,8 @@ does unprompted:
   subprotocols with 400 `SOCKET_PROTOCOL_UNSUPPORTED`, as Problem Details;
 - closes a client's older connection with 4001 when it connects again;
 - enforces the default message budget (10 a second, burst 100, closed with 4003 after 500 drops in a
-  row) and counts what it dropped.
+  row) and counts what it dropped;
+- closes with 1009 a message over 64 KB as UTF-8.
 
 `nightly-conformance.yml` runs `test_live.py` against the real hosts every night, so the fake and the
 gateway can't drift apart unnoticed: the scenarios there need no misbehaviour on cue and check what the
@@ -78,7 +79,7 @@ may log there.
 
 | Line | When |
 |---|---|
-| `{"event":"started"}` | The client was started. |
+| `{"event":"started"}` | The client was started. Add `"closeCodes":true` when the SDK can tell close codes apart: the suite then also checks that it logs in again after 4002 and waits 30–60 s after 4003. |
 | `{"event":"connected"}` / `{"event":"disconnected"}` | The socket opened or closed. |
 | `{"event":"message","type":"…","payload":…,"commandId":"…"\|null}` | The SDK handed a message to the app. |
 | `{"event":"sent","type":"…"}` | `send` or `state` returned. After `send-many`, once, with `"count":N`. |
