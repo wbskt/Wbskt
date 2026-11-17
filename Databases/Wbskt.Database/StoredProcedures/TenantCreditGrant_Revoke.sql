@@ -12,8 +12,8 @@ BEGIN
     -- Lock order as dbo.TenantCreditGrants_Draw: the grant's IX_TenantCreditGrants_TenantId key, then
     -- its row. Updating by the unique key alone took the row first and then the index key the change
     -- has to rewrite, the reverse of a draw holding that key, and the two could deadlock.
-    DECLARE @Id INT, @TenantId INT;
-    SELECT @Id = Id, @TenantId = TenantId
+    DECLARE @Id INT, @TenantId INT, @ExpiresAt DATETIME2(3);
+    SELECT @Id = Id, @TenantId = TenantId, @ExpiresAt = ExpiresAt
     FROM dbo.TenantCreditGrants
     WHERE Source = @Source
       AND SourceRef = @SourceRef;
@@ -21,8 +21,9 @@ BEGIN
     BEGIN TRANSACTION;
 
     SELECT @Id = Id
-    FROM dbo.TenantCreditGrants WITH (UPDLOCK, HOLDLOCK, INDEX (IX_TenantCreditGrants_TenantId))
+    FROM dbo.TenantCreditGrants WITH (UPDLOCK, INDEX (IX_TenantCreditGrants_TenantId))
     WHERE TenantId = @TenantId
+      AND ExpiresAt = @ExpiresAt
       AND Id = @Id;
 
     UPDATE dbo.TenantCreditGrants
