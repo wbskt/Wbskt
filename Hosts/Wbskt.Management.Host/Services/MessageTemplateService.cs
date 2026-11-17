@@ -128,9 +128,15 @@ internal sealed class MessageTemplateService : IMessageTemplateService
             return (Result.Failure(Error.Validation("TEMPLATE_TYPE_RESERVED", "Message type is reserved for the platform protocol.")), null);
         }
 
-        if (string.IsNullOrWhiteSpace(request.PayloadJson) || request.PayloadJson.Length > ClientMessageRules.MaxPayloadChars)
+        if (string.IsNullOrWhiteSpace(request.PayloadJson))
         {
             return (Result.Failure(Error.Validation("TEMPLATE_PAYLOAD_INVALID", $"Payload must be 1-{ClientMessageRules.MaxPayloadChars} characters.")), null);
+        }
+
+        // The rule a send applies, so a template saved here can always be sent.
+        if (ClientMessageRules.Check(messageType, request.PayloadJson) is { } violation)
+        {
+            return (Result.Failure(Error.Validation("TEMPLATE_PAYLOAD_INVALID", violation.Message)), null);
         }
 
         try
