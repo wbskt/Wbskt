@@ -284,9 +284,13 @@ internal sealed class TenantBillingSync(
 
     private async Task<BillingSyncResult> GrantCreditPackAsync(ProviderPayment payment, decimal credits, CancellationToken ct)
     {
+        // A declined or abandoned payment took nothing, so there is nothing to grant and nothing to flag:
+        // set aside, it fired the alert for a payment that may have reached no tenant. One still processing
+        // is read again when its success is delivered.
         if (!payment.Succeeded)
         {
-            return BillingSyncResult.SetAside($"Payment {payment.Id} has not succeeded.");
+            logger.LogInformation("Payment {PaymentId} for a credit pack has not succeeded; nothing is granted for it.", payment.Id);
+            return BillingSyncResult.Done;
         }
 
         if (payment.TenantRef is not { } tenantRef || await plans.FindByRefIdAsync(tenantRef, ct) is not { } tenant)

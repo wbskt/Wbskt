@@ -487,13 +487,14 @@ public sealed class BillingPaymentsTests
     }
 
     [Fact]
-    public async Task A_failed_credit_pack_payment_grants_nothing()
+    public async Task A_failed_credit_pack_payment_grants_nothing_and_is_not_set_aside()
     {
         PaymentSays(new ProviderPayment("pay_1", false, "cus_1", TenantRef, null, [new PaymentLine("prod_boost", 1)], false, Now));
 
         var result = await Sync().SyncPaymentAsync("pay_1", CancellationToken.None);
 
-        Assert.NotNull(result.Reason);
+        // Set aside, a declined card fired the alert for a payment that may have reached no tenant.
+        Assert.Null(result.Reason);
         _billing.Verify(b => b.RecordCreditPurchaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<OutboxMessage>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
