@@ -112,9 +112,11 @@ public sealed class AdminTenantPlanSqlTests(AuthSqlFixture auth)
         await service.SetPlanAsync(tenantRef, new AdminSetTenantPlanRequest(Staff(Guid.NewGuid()), PlanCode.Pro, null, 0, DateTimeOffset.UtcNow.AddDays(30)), CancellationToken.None);
 
         var result = await service.EndStaffPlanAsync(tenantRef, new AdminEndStaffPlanRequest(Staff(Guid.NewGuid()), 1), CancellationToken.None);
+        var ended = DateTime.UtcNow;
 
+        // The end is stamped from the service's clock, so compare against that clock, not the SQL server's.
         Assert.True(result.IsSuccess);
-        Assert.Equal(1, await CountAsync("SELECT COUNT(*) FROM dbo.Tenants WHERE RefId = @Id AND PlanSource = N'Operator' AND PlanRevision = 2 AND PlanEndsAt <= SYSUTCDATETIME();", tenantRef));
+        Assert.Equal(1, await CountAsync("SELECT COUNT(*) FROM dbo.Tenants WHERE RefId = @Id AND PlanSource = N'Operator' AND PlanRevision = 2 AND PlanEndsAt <= @At;", tenantRef, ended));
         Assert.Equal(1, _review.Calls);
     }
 
@@ -130,12 +132,17 @@ public sealed class AdminTenantPlanSqlTests(AuthSqlFixture auth)
         return tenantRef;
     }
 
-    private async Task<int> CountAsync(string sql, Guid id)
+    private async Task<int> CountAsync(string sql, Guid id, DateTime? at = null)
     {
         await using var conn = new SqlConnection(auth.ConnectionString);
         await conn.OpenAsync();
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@Id", id);
+        if (at is { } value)
+        {
+            cmd.Parameters.Add("@At", System.Data.SqlDbType.DateTime2).Value = value;
+        }
+
         return (int)(await cmd.ExecuteScalarAsync())!;
     }
 
