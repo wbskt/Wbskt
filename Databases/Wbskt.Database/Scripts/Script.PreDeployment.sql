@@ -300,3 +300,22 @@ DROP PROCEDURE IF EXISTS dbo.ScheduledFire_Insert;
 GO
 DROP PROCEDURE IF EXISTS dbo.ScheduledFire_DeleteAllBy_WorkflowDefinitionId;
 GO
+/*
+--------------------------------------------------------------------------------------
+Pre-Deployment Script: drop procedures that left the project or lost their caller
+--------------------------------------------------------------------------------------
+ClientReadings_DeleteBefore, ClientStateVariable_Upsert and TriggerDispatchOutcome_Record were
+removed from the project (replaced by the plan-based readings sweep with its hourly roll-up,
+ClientStateVariables_Report and TriggerDispatchOutcome_RecordMany), and WorkflowDefinition_FindBy_RefId
+has no caller. DropObjectsNotInSource is off, so an upgraded database kept them while a fresh one
+did not: dropped here as Client_Verify is. ClientReadings_DeleteBefore is the one that mattered: run
+by hand it deleted readings by one global age, skipping the roll-up.
+*/
+DROP PROCEDURE IF EXISTS dbo.ClientReadings_DeleteBefore;
+GO
+DROP PROCEDURE IF EXISTS dbo.ClientStateVariable_Upsert;
+GO
+DROP PROCEDURE IF EXISTS dbo.TriggerDispatchOutcome_Record;
+GO
+DROP PROCEDURE IF EXISTS dbo.WorkflowDefinition_FindBy_RefId;
+GO

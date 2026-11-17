@@ -1,6 +1,6 @@
 -- Turns an account's sign-in on or off for staff. Sign-in and token refresh both refuse an inactive
 -- account; turning it off also revokes every live refresh token in the same transaction, so no session
--- outlives it. Unlike dbo.User_SetActive there is no last-administrator guard: staff act on the account
+-- outlives it. There is no last-administrator guard, as suspending a member has: staff act on the account
 -- across every tenant it belongs to, and a tenant whose only administrator is off keeps its data and
 -- gets its administrator back when sign-in is turned on again.
 CREATE PROCEDURE dbo.User_StaffSetActive

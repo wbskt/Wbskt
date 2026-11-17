@@ -163,7 +163,8 @@ member and every assignment but makes access resolution treat them as holding no
 tenant (`Permission_Verify`, `Permission_EffectiveSet`, `WorkspaceMember_Verify`), and hides the
 tenant and its workspaces from their lists. It takes effect on their next request, since access is
 resolved per request. Their account, sessions and other tenants are untouched; a tenant
-administrator cannot disable the account itself, which only an operator can (`dbo.User_SetActive`).
+administrator cannot disable the account itself, which only staff can, from the admin host
+(`dbo.User_StaffSetActive`).
 It refuses self-suspension (`AUTH_CANNOT_SUSPEND_SELF`) and suspending the last administrator
 (`THROW 50008`); a suspended administrator does not count toward the guard.
 

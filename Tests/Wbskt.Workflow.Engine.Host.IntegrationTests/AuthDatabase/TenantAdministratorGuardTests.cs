@@ -91,39 +91,6 @@ public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
     }
 
     [SkippableFact]
-    public async Task The_only_administrator_cannot_be_deactivated()
-    {
-        Skip.IfNot(fixture.IsAvailable, Skipped);
-        var (tenantId, ownerId, adminRoleId) = await CreateTenantAsync();
-
-        await AssertRejectedAsync(() => ExecAsync("dbo.User_SetActive", ("@Id", ownerId), ("@IsActive", false), ("@TenantId", tenantId)));
-        Assert.True(await ScalarAsync<bool>("SELECT IsActive FROM dbo.Users WHERE Id = @p0", ownerId));
-
-        // With a second administrator, deactivation goes through.
-        await AddMemberAsync(tenantId, adminRoleId);
-        await ExecAsync("dbo.User_SetActive", ("@Id", ownerId), ("@IsActive", false), ("@TenantId", tenantId));
-        Assert.False(await ScalarAsync<bool>("SELECT IsActive FROM dbo.Users WHERE Id = @p0", ownerId));
-    }
-
-    /// <summary>
-    /// The account is global, but the guard covers only the tenant the request is made in: every
-    /// registered user administers a tenant of their own, so guarding all of them would refuse to
-    /// deactivate nearly anyone. Tenant-scoped suspension is the fix for the wider blast radius.
-    /// </summary>
-    [SkippableFact]
-    public async Task Deactivation_is_guarded_only_in_the_tenant_it_is_requested_in()
-    {
-        Skip.IfNot(fixture.IsAvailable, Skipped);
-        var (tenantId, _, _) = await CreateTenantAsync();
-        var (_, elsewhereOwnerId, _) = await CreateTenantAsync();
-        await ExecSqlAsync("INSERT INTO dbo.TenantMembers (TenantId, UserId) VALUES (@p0, @p1);", tenantId, elsewhereOwnerId);
-
-        await ExecAsync("dbo.User_SetActive", ("@Id", elsewhereOwnerId), ("@IsActive", false), ("@TenantId", tenantId));
-
-        Assert.False(await ScalarAsync<bool>("SELECT IsActive FROM dbo.Users WHERE Id = @p0", elsewhereOwnerId));
-    }
-
-    [SkippableFact]
     public async Task The_only_administrator_cannot_be_suspended()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
