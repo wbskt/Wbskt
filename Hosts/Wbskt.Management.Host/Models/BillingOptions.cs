@@ -1,5 +1,6 @@
-using Wbskt.Models.Billing;
 using Wbskt.Infrastructure.Billing;
+using Wbskt.Models.Billing;
+
 namespace Wbskt.Management.Host.Models;
 
 /// <summary>The management host's part in billing.</summary>
