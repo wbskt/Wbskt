@@ -72,9 +72,18 @@ public sealed class MessageMeterIntegrationTests(SqlEdgeFixture fixture)
         Assert.Equal(new WorkspaceMessageAccount(busy, PlanCode.Maker, null, 2), accounts.Single(a => a.WorkspaceId == busy));
         Assert.Equal(new WorkspaceMessageAccount(quiet, PlanCode.Maker, new PlanLimitOverrides { MessagesPerMonth = 5 }, 2), accounts.Single(a => a.WorkspaceId == quiet));
         Assert.Equal(new WorkspaceMessageAccount(alone, PlanCode.Free, null, 1), accounts.Single(a => a.WorkspaceId == alone));
-        Assert.Equal([busy, quiet], (await provider.RecordNoticeAsync([busy, quiet], monthStart, 100, CancellationToken.None)).Order().Reverse());
-        Assert.Equal([alone], await provider.RecordNoticeAsync([busy, alone], monthStart, 100, CancellationToken.None));
-        Assert.Equal([busy], await provider.RecordNoticeAsync([busy], monthStart, 80, CancellationToken.None));
+        Assert.Equal([busy, quiet], (await provider.RecordNoticeAsync([new(busy, 2), new(quiet, 5)], monthStart, 100, CancellationToken.None)).Order().Reverse());
+        Assert.Equal([alone], await provider.RecordNoticeAsync([new(busy, 2), new(alone, 1)], monthStart, 100, CancellationToken.None));
+        Assert.Equal([busy], await provider.RecordNoticeAsync([new(busy, 2)], monthStart, 80, CancellationToken.None));
+
+        // A plan change within the month is a new allowance, and its notices are raised again.
+        Assert.Equal([busy], await provider.RecordNoticeAsync([new(busy, 9)], monthStart, 100, CancellationToken.None));
+        Assert.Empty(await provider.RecordNoticeAsync([new(busy, 9)], monthStart, 100, CancellationToken.None));
+
+        // Given back, it is raised again; the other allowance's record stays.
+        await provider.ReleaseNoticeAsync(new(busy, 9), monthStart, 100, CancellationToken.None);
+        Assert.Equal([busy], await provider.RecordNoticeAsync([new(busy, 9)], monthStart, 100, CancellationToken.None));
+        Assert.Empty(await provider.RecordNoticeAsync([new(busy, 2)], monthStart, 100, CancellationToken.None));
     }
 
     /// <summary>

@@ -329,8 +329,9 @@ included.
   platform as a whole nears the single VM's 300 msg/s, whatever the plans.
 - **Business is never throttled**; what it carries past the allowance is invoiced at $1 per million
   messages (see the overage report under Credits).
-- Each account is told once per workspace and month (`dbo.WorkspaceMessageLimit_Record`, keyed by the
-  share): `WorkspaceMessageLimitApproachingEvent` at 80% (skipped when a check finds it already past
+- Each account is told once per workspace, month and allowance (`dbo.WorkspaceMessageLimit_Record`,
+  keyed by the share and the allowance, so a plan change within the month is told again against the new
+  allowance; the email's period carries the allowance too): `WorkspaceMessageLimitApproachingEvent` at 80% (skipped when a check finds it already past
   100%), `WorkspaceMessageLimitReachedEvent` at 100% (`throttled` true on Free), and
   `WorkspaceMessagesThrottledEvent` when a paid plan reaches its throttle. The usage API reports
   `messages` with `throttled`. The auth host emails these (see Billing emails).

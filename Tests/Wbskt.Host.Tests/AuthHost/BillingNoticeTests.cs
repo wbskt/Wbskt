@@ -102,6 +102,18 @@ public sealed class BillingNoticeTests
     }
 
     [Fact]
+    public async Task A_new_message_allowance_within_the_month_is_told_again()
+    {
+        BillingNoticeConsumer consumer = Consumer();
+
+        await consumer.Consume(Context(new WorkspaceMessageLimitApproachingEvent(31, 1_500_000, 1_200_000) { CreatedAtUtc = Now }));
+        await consumer.Consume(Context(new WorkspaceMessageLimitApproachingEvent(31, 1_500_000, 1_300_000) { CreatedAtUtc = Now }));
+        await consumer.Consume(Context(new WorkspaceMessageLimitApproachingEvent(31, 10_000_000, 8_000_000) { CreatedAtUtc = Now }));
+
+        Assert.Equal(["2026-11:10000000", "2026-11:1500000"], _sent.Select(s => s.Period).Order());
+    }
+
+    [Fact]
     public async Task A_cap_is_its_workspaces_own_so_two_workspaces_each_hear_of_theirs()
     {
         BillingNoticeConsumer consumer = Consumer();
