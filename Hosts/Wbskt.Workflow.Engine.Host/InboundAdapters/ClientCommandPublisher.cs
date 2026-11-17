@@ -12,8 +12,8 @@ namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 /// <see cref="ClientCommandFailedEvent"/> if the client does not come back before the step's ack
 /// timeout, which is the command's expiry. A command that cannot be sent or queued at all is reported
 /// at once as a <see cref="ClientCommandFailedEvent"/>, which takes a waiting step out by its "failed"
-/// port, and answered as refused, which fails a step that does not wait, rather than dropped unseen. A broker that is down is thrown, for the step to fail and the run
-/// to retry.
+/// port, and answered as refused, which fails a step that does not wait, rather than dropped unseen.
+/// A broker that is down is thrown, for the step to fail and the run to retry.
 /// </summary>
 /// <remarks>
 /// The queue also covers a run started by a client's first message before its connection is recorded

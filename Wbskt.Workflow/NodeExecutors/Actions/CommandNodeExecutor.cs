@@ -64,8 +64,8 @@ internal sealed class CommandNodeExecutor(IClientCommandPublisher publisher, IBo
         }
 
         // Nothing waits for an answer here, so a command that never left must fail the step: carrying
-        // on would report a valve closed that was never told to close. Not retryable, as the client
-        // is unknown, unregistered or already has a full queue.
+        // on would report a valve closed that was never told to close. Not retryable: an unknown or
+        // unregistered client, a full queue or an invalid command does not clear a moment later.
         return outcome.Accepted
             ? new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>())
             : new NodeExecutionResult.Fail(CommandNotSentCode, outcome.RefusedReason ?? "The command was not sent.", false, null);
