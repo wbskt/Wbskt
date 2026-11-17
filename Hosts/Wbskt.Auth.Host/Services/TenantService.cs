@@ -36,13 +36,12 @@ internal sealed class TenantService : ITenantService
     public TenantService(
         ITenantProvider tenants,
         IAccessControlProvider accessControl,
-        IAccountProvider accounts,
         IWorkspaceProvider workspaceProvider,
         IEventBus eventBus,
         IAuthMailer mailer,
         ILogger<TenantService> logger,
         ITenantLimits limits,
-        IAuditWorkspaces? audit = null)
+        TenantAnnouncer announcer)
     {
         _limits = limits;
         _tenants = tenants;
@@ -51,7 +50,7 @@ internal sealed class TenantService : ITenantService
         _eventBus = eventBus;
         _mailer = mailer;
         _logger = logger;
-        _announcer = new TenantAnnouncer(accounts, eventBus, audit ?? AuditWorkspaces.None, logger);
+        _announcer = announcer;
     }
 
     public async Task<Result<IReadOnlyCollection<TenantResponse>>> GetTenantsForUserAsync(int callerId, CancellationToken cancellationToken = default)

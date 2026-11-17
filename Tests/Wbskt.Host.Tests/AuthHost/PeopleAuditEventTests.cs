@@ -42,12 +42,13 @@ public sealed class PeopleAuditEventTests
             .Callback<IEvent, CancellationToken>((e, _) => _published.Add(e))
             .Returns(Task.CompletedTask);
 
+        var announcer = new TenantAnnouncer(Mock.Of<IAccountProvider>(), bus.Object, _audit.Object, NullLogger<TenantAnnouncer>.Instance);
         _tenantService = new TenantService(
-            _tenants.Object, _accessControl.Object, Mock.Of<IAccountProvider>(), Mock.Of<IWorkspaceProvider>(), bus.Object, Mock.Of<IAuthMailer>(),
-            NullLogger<TenantService>.Instance, new FixedTenantLimits(), _audit.Object);
+            _tenants.Object, _accessControl.Object, Mock.Of<IWorkspaceProvider>(), bus.Object, Mock.Of<IAuthMailer>(),
+            NullLogger<TenantService>.Instance, new FixedTenantLimits(), announcer);
         _accessControlService = new AccessControlService(
-            _accessControl.Object, _tenants.Object, Mock.Of<IAccountProvider>(), Mock.Of<IWorkspaceProvider>(), bus.Object,
-            NullLogger<AccessControlService>.Instance, _audit.Object);
+            _accessControl.Object, _tenants.Object, Mock.Of<IWorkspaceProvider>(),
+            NullLogger<AccessControlService>.Instance, announcer);
     }
 
     [Fact]

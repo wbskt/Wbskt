@@ -34,16 +34,17 @@ internal sealed class AccountDeletionService : IAccountDeletionService
         IEventBus eventBus,
         IAccessTokenRevocation accessTokens,
         ILogger<AccountDeletionService> logger,
-        IAuditWorkspaces? audit = null)
+        IAuditWorkspaces audit,
+        TenantAnnouncer tenantAnnouncer)
     {
         _accounts = accounts;
         _billing = billing;
         _gateway = gateway;
         _eventBus = eventBus;
         _accessTokens = accessTokens;
-        _audit = audit ?? AuditWorkspaces.None;
+        _audit = audit;
         _logger = logger;
-        _tenantAnnouncer = new TenantAnnouncer(accounts, eventBus, _audit, logger);
+        _tenantAnnouncer = tenantAnnouncer;
     }
 
     public async Task<Result> DeleteAccountAsync(int userId, string password, string ipAddress, CancellationToken cancellationToken = default)
@@ -157,7 +158,7 @@ internal sealed class AccountDeletionService : IAccountDeletionService
     {
         try
         {
-            await _eventBus.PublishAsync(new UserPermissionsChangedEvent(user.Id, user.RefId), cancellationToken);
+            await _tenantAnnouncer.UserPermissionsChangedAsync(user, cancellationToken);
             foreach (var tenantId in leftTenantIds)
             {
                 await _tenantAnnouncer.ToTenantAsync(new MemberRemovedEvent(user.RefId), tenantId, cancellationToken);

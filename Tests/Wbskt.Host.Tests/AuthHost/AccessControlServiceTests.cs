@@ -45,8 +45,9 @@ public sealed class AccessControlServiceTests
         _accounts.Setup(p => p.GetByIdAsync(MemberId, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = MemberId, RefId = MemberRef });
 
         _service = new AccessControlService(
-            _accessControl.Object, _tenants.Object, _accounts.Object, _workspaces.Object, _bus,
-            NullLogger<AccessControlService>.Instance);
+            _accessControl.Object, _tenants.Object, _workspaces.Object,
+            NullLogger<AccessControlService>.Instance,
+            new TenantAnnouncer(_accounts.Object, _bus, AuditWorkspaces.None, NullLogger<TenantAnnouncer>.Instance));
     }
 
     // ---------------------------------------------------------------- roles and groups

@@ -38,8 +38,9 @@ public sealed class TenantServiceTests
         _accounts.Setup(p => p.GetByIdAsync(MemberId, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = MemberId, RefId = MemberRef });
 
         _service = new TenantService(
-            _tenants.Object, _accessControl.Object, _accounts.Object, _workspaces.Object, _bus, Mock.Of<IAuthMailer>(),
-            NullLogger<TenantService>.Instance, new FixedTenantLimits());
+            _tenants.Object, _accessControl.Object, _workspaces.Object, _bus, Mock.Of<IAuthMailer>(),
+            NullLogger<TenantService>.Instance, new FixedTenantLimits(),
+            new TenantAnnouncer(_accounts.Object, _bus, AuditWorkspaces.None, NullLogger<TenantAnnouncer>.Instance));
     }
 
     [Fact]

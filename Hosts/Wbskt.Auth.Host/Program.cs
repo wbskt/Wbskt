@@ -54,15 +54,18 @@ public static class Program
         builder.Services.AddScoped<IAccessControlProvider, AccessControlProvider>();
         builder.Services.AddUserIdLookup(sp => new AuthUserIdLookup(sp.GetRequiredService<IAccountProvider>()));
         // Sign-in, passwords and registration publish through the queued bus, so none of them waits
-        // on RabbitMQ; see QueuedEventBus. Every other service here keeps the real bus.
+        // on RabbitMQ; see QueuedEventBus. So does tenant administration, below.
         builder.Services.AddQueuedEventBus();
         builder.Services.AddScopedWithQueuedEvents<ISignInService, SignInService>();
         builder.Services.AddScopedWithQueuedEvents<IPasswordService, PasswordService>();
         builder.Services.AddScopedWithQueuedEvents<IRegistrationService, RegistrationService>();
         builder.Services.AddScopedWithQueuedEvents<IAccountDeletionService, AccountDeletionService>();
         builder.Services.AddScopedWithQueuedEvents<IAccountProfileService, AccountProfileService>();
-        builder.Services.AddScoped<ITenantService, TenantService>();
-        builder.Services.AddScoped<IAccessControlService, AccessControlService>();
+        // Tenant administration publishes once its change has committed, through the queued bus, so a
+        // broker outage cannot turn a change that happened into a 500 (TenantAnnouncer).
+        builder.Services.AddScopedWithQueuedEvents<TenantAnnouncer, TenantAnnouncer>();
+        builder.Services.AddScopedWithQueuedEvents<ITenantService, TenantService>();
+        builder.Services.AddScopedWithQueuedEvents<IAccessControlService, AccessControlService>();
         builder.Services.AddScoped<IWorkspaceProvider, WorkspaceProvider>();
         builder.Services.AddScoped<IWorkspaceService, WorkspaceService>();
         builder.Services.AddScoped<IWorkspaceAccessResolver, WorkspaceServiceAccessResolver>();
@@ -77,7 +80,7 @@ public static class Program
         builder.Services.AddScoped<IAdminTenantService, AdminTenantService>();
         builder.Services.AddScoped<IStaffUserProvider, StaffUserProvider>();
         builder.Services.AddScoped<IAdminUserService, AdminUserService>();
-        builder.Services.AddScoped<IAdminMemberService, AdminMemberService>();
+        builder.Services.AddScopedWithQueuedEvents<IAdminMemberService, AdminMemberService>();
         builder.Services.AddScoped<IOutboxWriter, OutboxWriter>();
         builder.Services.AddScoped<ITenantPlanReview, TenantPlanReview>();
         // Payments: the provider's checkout, portal and webhooks (Docs/Billing.md, Payments). Off until the

@@ -23,7 +23,7 @@ internal sealed class AdminMemberService(
     ITenantProvider tenants,
     IAccountProvider accounts,
     IEventBus eventBus,
-    IAuditWorkspaces audit,
+    TenantAnnouncer announcer,
     IStaffActionRunner runner,
     ILogger<AdminMemberService> logger)
     : IAdminMemberService
@@ -37,7 +37,7 @@ internal sealed class AdminMemberService(
     private static readonly Error MemberNotFound = Error.NotFound("MEMBER_NOT_FOUND", "That person is not a member of this tenant.");
     private static readonly Error LastAdministrator = Error.Conflict("TENANT_LAST_ADMINISTRATOR", "This would leave the tenant without an administrator. Make another member an administrator first.");
 
-    private readonly TenantAnnouncer _announcer = new(accounts, eventBus, audit, logger);
+    private readonly TenantAnnouncer _announcer = announcer;
 
     public async Task<Result<StaffActionResponse>> SetSuspendedAsync(Guid tenantRef, Guid userRef, AdminSetMemberSuspendedRequest request, CancellationToken cancellationToken)
     {

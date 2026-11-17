@@ -35,7 +35,8 @@ public sealed class AdminMemberServiceTests
         _audit.Setup(a => a.OfTenantAsync(TenantId, It.IsAny<CancellationToken>())).ReturnsAsync([3, 4]);
     }
 
-    private AdminMemberService Service() => new(_staff.Object, _tenants.Object, _accounts.Object, _bus.Object, _audit.Object, _runner,
+    private AdminMemberService Service() => new(_staff.Object, _tenants.Object, _accounts.Object, _bus.Object,
+        new TenantAnnouncer(_accounts.Object, _bus.Object, _audit.Object, NullLogger<TenantAnnouncer>.Instance), _runner,
         NullLogger<AdminMemberService>.Instance);
 
     [Fact]
