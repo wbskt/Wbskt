@@ -20,7 +20,6 @@ internal sealed class TenantBillingService(
 {
     private static readonly Error TenantNotFound = Error.Forbidden("TENANT_NOT_FOUND", "Tenant not found.");
     private static readonly Error NotConfigured = Error.Unavailable("BILLING_UNAVAILABLE", "Payments are not set up on this deployment.");
-    private static readonly Error ProviderDown = Error.Unavailable("BILLING_PROVIDER_UNAVAILABLE", "The payment provider could not be reached. Try again shortly.");
 
     public async Task<Result<Page<CreditPurchaseResponse>>> GetCreditPurchasesAsync(PageRequest page, DateTimeOffset? expiresAfter, CancellationToken ct)
     {
@@ -127,7 +126,7 @@ internal sealed class TenantBillingService(
         catch (HttpRequestException ex)
         {
             logger.LogWarning(ex, "{Provider} refused or could not take a checkout for tenant {TenantId}.", gateway.Name, tenantId);
-            return ProviderDown;
+            return ProviderFailure.ToError(ex);
         }
     }
 
@@ -182,7 +181,7 @@ internal sealed class TenantBillingService(
         catch (HttpRequestException ex)
         {
             logger.LogWarning(ex, "{Provider} refused or could not change subscription {SubscriptionId} of tenant {TenantId}.", gateway.Name, current.SubscriptionId, tenantId);
-            return ProviderDown;
+            return ProviderFailure.ToError(ex);
         }
 
         // The provider's webhooks follow, but the caller sees the change now. A failed upgrade charge
@@ -207,7 +206,9 @@ internal sealed class TenantBillingService(
     /// <summary>
     /// Moves the subscription up at once. A downgrade still scheduled would undo the upgrade at the
     /// period's end, so it is dropped first, and scheduled again if the upgrade does not go through, so
-    /// the customer does not renew on the plan they asked to leave.
+    /// the customer does not renew on the plan they asked to leave. An upgrade that timed out or met a
+    /// server error may have gone through, so the subscription is read first and the downgrade put back
+    /// only if it is still on its old product.
     /// </summary>
     private async Task UpgradeAsync(TenantSubscription current, string productId, CancellationToken ct)
     {
@@ -222,14 +223,33 @@ internal sealed class TenantBillingService(
         {
             await gateway.ChangePlanAsync(current.SubscriptionId, productId, PlanChangeTiming.Now, ct);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
-            if (options.Value.FindPlanProduct(scheduledPlan, scheduledInterval) is { } scheduledProduct)
+            if (options.Value.FindPlanProduct(scheduledPlan, scheduledInterval) is { } scheduledProduct
+                && (ProviderFailure.DidNothing(ex) || await StillOnAsync(current, productId)))
             {
                 await RescheduleAsync(current, scheduledProduct);
             }
 
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Whether the subscription has not moved to <paramref name="productId"/>. One that cannot be read is
+    /// taken as moved: putting the downgrade back over an upgrade that went through would undo it.
+    /// </summary>
+    private async Task<bool> StillOnAsync(TenantSubscription current, string productId)
+    {
+        try
+        {
+            return await gateway.FindSubscriptionAsync(current.SubscriptionId, CancellationToken.None) is not { } read || read.ProductId != productId;
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogError(ex, "Upgrade of subscription {SubscriptionId} of tenant {TenantId} got no clear answer and the subscription could not be read back; its scheduled move to {Plan} {Interval} was not put back. Check it with the provider.",
+                current.SubscriptionId, current.TenantId, current.ScheduledPlan, current.ScheduledInterval);
+            return false;
         }
     }
 
@@ -275,7 +295,7 @@ internal sealed class TenantBillingService(
         catch (HttpRequestException ex)
         {
             logger.LogWarning(ex, "{Provider} refused or could not open a portal for tenant {TenantId}.", gateway.Name, tenantId);
-            return ProviderDown;
+            return ProviderFailure.ToError(ex);
         }
     }
 

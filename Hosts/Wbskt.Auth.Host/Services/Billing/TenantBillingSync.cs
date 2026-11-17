@@ -1,4 +1,3 @@
-using System.Net;
 using Microsoft.Extensions.Options;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
@@ -251,7 +250,7 @@ internal sealed class TenantBillingSync(
             metrics.RecordBillingRefund("done");
             logger.LogWarning("Refunded payment {PaymentId} of duplicate subscription {SubscriptionId} of tenant {TenantId}.", payment.Id, duplicate.SubscriptionId, duplicate.TenantId);
         }
-        catch (HttpRequestException refused) when (DidNothing(refused))
+        catch (HttpRequestException refused) when (ProviderFailure.DidNothing(refused))
         {
             metrics.RecordBillingRefund("refused");
             await ReleaseRefundClaimAsync(duplicate, payment, refused);
@@ -266,10 +265,6 @@ internal sealed class TenantBillingSync(
             throw;
         }
     }
-
-    private static bool DidNothing(HttpRequestException ex) =>
-        ex.HttpRequestError == HttpRequestError.ConnectionError
-        || ex.StatusCode is { } status && (int)status is >= 400 and < 500 && status is not (HttpStatusCode.Conflict or HttpStatusCode.UnprocessableEntity);
 
     /// <summary>
     /// Gives back a refund claim after the provider refused the refund. A failure to give it back is logged,
