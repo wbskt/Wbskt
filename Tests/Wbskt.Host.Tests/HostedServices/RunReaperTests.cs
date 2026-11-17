@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -17,7 +18,7 @@ public sealed class RunReaperTests
         var runProvider = new RecordingRunProvider([]);
         var cancellationService = new RecordingRunCancellationService();
         var finalizer = new RecordingRunFinalizer();
-        var reaper = new RunReaper(new FixedClock(), leadership, WorkerTestServices.Scopes(runProvider, cancellationService, finalizer), NullLogger<RunReaper>.Instance, WorkerTestServices.Options());
+        RunReaper reaper = CreateReaper(leadership, runProvider, Branches(), cancellationService, finalizer);
 
         // Act
         await reaper.TickAsync(CancellationToken.None);
@@ -30,39 +31,47 @@ public sealed class RunReaperTests
     }
 
     [Fact]
-    public async Task Tick_requests_cancellation_and_finalizes_each_stuck_run()
+    public async Task Tick_finalizes_runs_with_no_work_left_without_cancelling_them()
     {
-        // Arrange
-        var runs = new[]
-        {
-            CreateRun(51),
-            CreateRun(52)
-        };
-        var leadership = new FixedLeadershipGate(true);
-        var runProvider = new RecordingRunProvider(runs);
+        // Arrange: the engine stopped after the last branch ended and before the run was finalized.
+        var runProvider = new RecordingRunProvider([CreateRun(51), CreateRun(52, RunStatus.Cancelling), CreateRun(53, RunStatus.Failing)]);
         var cancellationService = new RecordingRunCancellationService();
         var finalizer = new RecordingRunFinalizer();
-        var reaper = new RunReaper(new FixedClock(), leadership, WorkerTestServices.Scopes(runProvider, cancellationService, finalizer), NullLogger<RunReaper>.Instance, WorkerTestServices.Options());
+        RunReaper reaper = CreateReaper(new FixedLeadershipGate(true), runProvider, Branches((51, BranchStatus.Completed), (51, BranchStatus.Failed)), cancellationService, finalizer);
 
         // Act
         await reaper.TickAsync(CancellationToken.None);
 
-        // Assert
-        Assert.Equal(1, runProvider.GetStuckRunsCalls);
+        // Assert: the finalizer takes the status from the branches, as the normal path would have.
         Assert.Equal((new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc), 100), runProvider.LastRequest);
-        Assert.Equal([(51L, "REAPER_TIMEOUT"), (52L, "REAPER_TIMEOUT")], cancellationService.Requests);
-        Assert.Equal([51L, 52L], finalizer.FinalizedRunIds);
+        Assert.Empty(cancellationService.Requests);
+        Assert.Equal([51L, 52L, 53L], finalizer.FinalizedRunIds);
+    }
+
+    [Fact]
+    public async Task Tick_times_out_a_running_run_whose_branches_all_ended_cancelled()
+    {
+        // Arrange
+        var runProvider = new RecordingRunProvider([CreateRun(61)]);
+        var cancellationService = new RecordingRunCancellationService();
+        var finalizer = new RecordingRunFinalizer();
+        RunReaper reaper = CreateReaper(new FixedLeadershipGate(true), runProvider, Branches((61, BranchStatus.Cancelled)), cancellationService, finalizer);
+
+        // Act
+        await reaper.TickAsync(CancellationToken.None);
+
+        // Assert: nothing earned an outcome, so it must not finalize as Succeeded.
+        Assert.Equal([(61L, SettledRunSweeper.ReaperTimeoutReason)], cancellationService.Requests);
+        Assert.Equal([61L], finalizer.FinalizedRunIds);
     }
 
     [Fact]
     public async Task Tick_does_nothing_when_no_stuck_runs()
     {
         // Arrange
-        var leadership = new FixedLeadershipGate(true);
-        var runProvider = new RecordingRunProvider([]);
         var cancellationService = new RecordingRunCancellationService();
         var finalizer = new RecordingRunFinalizer();
-        var reaper = new RunReaper(new FixedClock(), leadership, WorkerTestServices.Scopes(runProvider, cancellationService, finalizer), NullLogger<RunReaper>.Instance, WorkerTestServices.Options());
+        RunReaper reaper = CreateReaper(new FixedLeadershipGate(true), new RecordingRunProvider([]), Branches(), cancellationService, finalizer);
 
         // Act
         await reaper.TickAsync(CancellationToken.None);
@@ -72,7 +81,61 @@ public sealed class RunReaperTests
         Assert.Empty(finalizer.FinalizedRunIds);
     }
 
-    private static RunRow CreateRun(int id)
+    [Fact]
+    public async Task The_sweep_reads_further_batches_and_stops_on_runs_that_did_not_move()
+    {
+        // Arrange: a full batch that the finalizer could not move comes back on the next read.
+        var runProvider = new RecordingRunProvider([CreateRun(71), CreateRun(72)]);
+        var finalizer = new RecordingRunFinalizer();
+        var sweeper = new SettledRunSweeper(runProvider, Branches((71, BranchStatus.Completed), (72, BranchStatus.Completed)), new RecordingRunCancellationService(), finalizer);
+
+        // Act
+        int finalized = await sweeper.FinalizeAsync(new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc), batchSize: 2, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, finalized);
+        Assert.Equal(2, runProvider.GetStuckRunsCalls);
+        Assert.Equal([71L, 72L], finalizer.FinalizedRunIds);
+    }
+
+    private static RunReaper CreateReaper(FixedLeadershipGate leadership, RecordingRunProvider runProvider, IBranchProvider branchProvider, RecordingRunCancellationService cancellationService, RecordingRunFinalizer finalizer)
+    {
+        var sweeper = new SettledRunSweeper(runProvider, branchProvider, cancellationService, finalizer);
+        return new RunReaper(new FixedClock(), leadership, WorkerTestServices.Scopes(sweeper), NullLogger<RunReaper>.Instance, WorkerTestServices.Options());
+    }
+
+    private static IBranchProvider Branches(params (int RunId, string Status)[] branches)
+    {
+        var provider = new Mock<IBranchProvider>();
+        provider.Setup(p => p.GetAllByRunIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((int runId, CancellationToken _) => branches
+                .Where(branch => branch.RunId == runId)
+                .Select((branch, index) => CreateBranch(index + 1, runId, branch.Status))
+                .ToArray());
+        return provider.Object;
+    }
+
+    private static BranchRow CreateBranch(int id, int runId, string status)
+    {
+        return new BranchRow
+        {
+            Id = id,
+            RefId = Guid.NewGuid(),
+            RunId = runId,
+            ParentBranchId = null,
+            ForkCohortId = null,
+            NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            Status = status,
+            PendingTakePort = null,
+            LocalJson = "{}",
+            LastOutputJson = null,
+            CreatedAt = new DateTime(2026, 5, 26, 11, 0, 0, DateTimeKind.Utc),
+            UpdatedAt = new DateTime(2026, 5, 26, 11, 0, 0, DateTimeKind.Utc),
+            RowVersion = []
+        };
+    }
+
+    private static RunRow CreateRun(int id, string status = RunStatus.Running)
     {
         return new RunRow
         {
@@ -83,7 +146,7 @@ public sealed class RunReaperTests
             WorkflowVersion = 1,
             TriggerNodeId = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
             CorrelationKey = "corr",
-            Status = "Running",
+            Status = status,
             StartedAt = new DateTime(2026, 5, 26, 11, 0, 0, DateTimeKind.Utc),
             CompletedAt = null,
             CancellationRequestedAt = null,

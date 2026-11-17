@@ -93,6 +93,31 @@ public sealed class RunRecoveryServiceTests
     }
 
     [Fact]
+    public async Task Start_finalizes_runs_whose_last_branch_ended_before_the_previous_leader_finalized_them()
+    {
+        // Arrange: the old leader ended the run's last branch and stopped before finalizing the run.
+        DateTime now = new(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc);
+        RunRow settled = CreateRunRow(91, RunStatus.Running);
+        var runs = new Mock<IRunProvider>();
+        runs.Setup(r => r.GetStuckRunsAsync(now, RunRecoveryService.SettledPageSize, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([settled]);
+        var branches = new Mock<IBranchProvider>();
+        branches.Setup(b => b.GetAllByRunIdAsync(91, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([CreateBranch(1, 91) with { Status = BranchStatus.Completed }]);
+        var cancellation = new Mock<IRunCancellationService>();
+        var finalizer = new Mock<IRunFinalizer>();
+        var sweeper = new SettledRunSweeper(runs.Object, branches.Object, cancellation.Object, finalizer.Object);
+        var service = new RunRecoveryService(WorkerTestServices.Scopes(new RecordingBranchProvider([]), sweeper), new RecordingRunDispatcher(), new RecordingLogger<RunRecoveryService>(), clock: new FixedClock(now));
+
+        // Act
+        await service.RecoverAsync([], CancellationToken.None);
+
+        // Assert: finalized at once, from its branches, rather than reaped as timed out half an hour later.
+        finalizer.Verify(f => f.FinalizeAsync(91, It.IsAny<CancellationToken>()), Times.Once);
+        cancellation.Verify(c => c.RequestCancellationAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task A_release_of_abandoned_claims_that_fails_faults_startup()
     {
         // Like a failed recovery: the inbound hub waits on Ready, so it must not open on claims left wedged.

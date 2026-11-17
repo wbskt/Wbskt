@@ -205,8 +205,9 @@ Run-level switches:
 
 * `failFast: true` fails the run on the first branch failure.
 * A run that spends its whole credit budget ends `OutOfCredits`.
-* A run that is still open after 30 minutes but has no branch that can make progress (nothing
-  active, nothing waiting on a bookmark) is failed by the reaper (`REAPER_TIMEOUT`).
+* A run left open with no branch that can make progress (nothing active, nothing waiting on a
+  bookmark) is finalized from its branches when the engine next starts, or by the reaper after
+  30 minutes. One whose branches all ended cancelled is ended by the reaper (`REAPER_TIMEOUT`).
 
 How the run's final status is chosen from its branches is in
 [Architecture.md §5.5](Architecture.md#55-ending-branches-and-runs). In short: all branches

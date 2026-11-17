@@ -307,6 +307,9 @@ inbound event is dispatched:
 * re-dispatches every `Active` branch with reason `Recovered`;
 * re-applies cancellation or failure for runs left in `Cancelling` or `Failing`, including runs
   whose only remaining branches are `Waiting`;
+* finalizes, from their branches, the runs with no bookmark and no `Active` or `Waiting` branch:
+  the previous leader ended their last branch but stopped before finalizing them
+  (`SettledRunSweeper`);
 * marks the engine Ready, which opens `InboundHub`.
 
 Waiting branches need nothing: their bookmarks are in SQL and the scheduler picks up any that fell
@@ -323,7 +326,7 @@ All run on the leader only.
 | `ScheduledFireTicker` | 1 s | Leases due `ScheduledFires` rows (for `LeaseDurationSeconds`, 120 s), fires the `schedule` channel and advances the next fire time by the cron (Cronos). |
 | `ClientPresenceTicker` | 1 s | Resolves presence checks: Fire, Stale or Pending. Gives up after 10 minutes. |
 | `ClientHoldTicker` | 1 s | Fires `client-hold` triggers whose filter has held for the configured time. |
-| `RunReaper` | 5 min | Fails runs older than `RunStuckThreshold` (30 min) that are not terminal but have no active branch and no bookmark (`REAPER_TIMEOUT`), and finalizes them. |
+| `RunReaper` | 5 min | Finalizes, from their branches, runs older than `RunStuckThreshold` (30 min) that are not terminal but have no active or waiting branch and no bookmark, as recovery does at start (`SettledRunSweeper`). Only a `Running` one with no completed or failed branch is cancelled first (`REAPER_TIMEOUT`). |
 | `HistoryRetentionGc` | 1 h | Deletes finished runs, with their history, past their workspace plan's `RunHistoryDays` (and any past 365 days). |
 | `IdempotencyKeyGc` | 1 h | Deletes idempotency keys older than 24 h. |
 | `CreditUsagePoster` | 10 s | Moves what runs consumed since their last post into `dbo.WorkspaceCreditUsage`, the ledger the plan's monthly credits are counted against (`Docs/Billing.md`). |

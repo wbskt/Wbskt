@@ -93,6 +93,7 @@ public static class Program
         services.AddScoped<IRunCompletedPublisher, EventBusRunCompletedPublisher>();
         services.AddSingleton<RunRefusalCoalescer>();
         services.AddSingleton<IRunRefusalReporter>(sp => sp.GetRequiredService<RunRefusalCoalescer>());
+        services.AddScoped<SettledRunSweeper>();
         services.AddSingleton<RunRecoveryService>();
         services.AddSingleton<IEngineStartupTracker>(sp => sp.GetRequiredService<RunRecoveryService>());
         // LeaderElectionService is registered first so LeadershipState is meaningful before any
