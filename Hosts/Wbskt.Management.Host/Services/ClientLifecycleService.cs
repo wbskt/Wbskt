@@ -99,11 +99,11 @@ internal sealed class ClientLifecycleService : IClientLifecycleService
                 {
                     await AnnounceStatusChangeAsync(workspaceId, change, status, cancellationToken);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    _logger.LogError("Client RefId {ClientRefId} changed status but announcing it failed. Error: {Message}", change.RefId, ex.Message);
-                    _logger.LogTrace(ex, "AnnounceStatusChangeAsync exception stack trace for ClientRefId {ClientRefId}", change.RefId);
-                    error = Error.Failure("CLIENT_UPDATE_ERROR", ex.Message);
+                    // The change is committed, so the client is listed as updated; one failed
+                    // announcement must not stop the rest of the list from being announced.
+                    _logger.LogError(ex, "Client RefId {ClientRefId} changed status but announcing it failed.", change.RefId);
                 }
             }
 

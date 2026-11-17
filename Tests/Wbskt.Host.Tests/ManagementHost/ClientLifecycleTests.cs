@@ -141,6 +141,27 @@ public sealed class ClientLifecycleTests
         harness.Bus.Verify(b => b.PublishAsync(It.IsAny<ClientStatusChangedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    /// <summary>
+    /// #781: the change is committed before it is announced, so a client whose announcement failed is
+    /// still updated, and the failure's text never reaches the response.
+    /// </summary>
+    [Fact]
+    public async Task A_batch_lists_a_client_whose_announcement_failed_as_updated()
+    {
+        var harness = new Harness();
+        var first = harness.AddClient(status: ClientStatus.Pending);
+        var second = harness.AddClient(status: ClientStatus.Pending);
+        harness.Bus
+            .Setup(b => b.PublishAsync(It.Is<ClientStatusChangedEvent>(e => e.ClientRefId == first.RefId), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("broker said no to amqp://internal-host"));
+
+        var result = await harness.Service.UpdateStatusesAsync(WorkspaceId, [first.RefId, second.RefId], ClientStatus.Registered);
+
+        result.Value.Updated.Should().Equal(first.RefId, second.RefId);
+        result.Value.Failed.Should().BeEmpty();
+        harness.Bus.Verify(b => b.PublishAsync(It.Is<ClientStatusChangedEvent>(e => e.ClientRefId == second.RefId), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     [Fact]
     public async Task Approving_one_client_past_the_plan_ceiling_is_a_conflict_naming_the_plans_number()
     {
