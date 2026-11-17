@@ -130,16 +130,18 @@ internal sealed class WorkspaceService : IWorkspaceService
 
         try
         {
-            var user = await _accounts.GetByIdAsync(await ResolveUserIdAsync(userRef, cancellationToken), cancellationToken);
-            await _workspaceProvider.RemoveUserFromWorkspaceAsync(workspaceId, user.Id, cancellationToken);
-            _logger.LogInformation("Removed user ID {UserId} from workspace ID: {WorkspaceId}", user.Id, workspaceId);
-            await AnnounceAsync(new WorkspaceMemberRemovedEvent(workspaceId, user.RefId), cancellationToken);
+            // A reference that names nobody and one that names someone outside the workspace answer
+            // alike, so the pair does not say whether a user exists anywhere.
+            var userId = await _accounts.FindIdByRefIdAsync(userRef, cancellationToken);
+            if (userId <= 0 || !await _workspaceProvider.RemoveUserFromWorkspaceAsync(workspaceId, userId, cancellationToken))
+            {
+                _logger.LogWarning("Remove member failed: user {UserRef} is not a member of workspace ID {WorkspaceId}", userRef, workspaceId);
+                return Result.Failure(Error.NotFound("USER_NOT_FOUND", "User not found."));
+            }
+
+            _logger.LogInformation("Removed user ID {UserId} from workspace ID: {WorkspaceId}", userId, workspaceId);
+            await AnnounceAsync(new WorkspaceMemberRemovedEvent(workspaceId, userRef), cancellationToken);
             return Result.Success();
-        }
-        catch (SecurityException ex)
-        {
-            _logger.LogWarning("Remove member failed: user {UserRef} not found. Error: {Message}", userRef, ex.Message);
-            return Result.Failure(Error.Forbidden("USER_NOT_FOUND", "User not found."));
         }
         catch (SqlException ex) when (ex.Number == 50006)
         {

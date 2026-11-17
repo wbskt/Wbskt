@@ -12,7 +12,8 @@ internal interface IWorkspaceProvider : IReferenceProvider
     Task<Guid> CreateWorkspaceAsync(string name, string description, int ownerId, int tenantId, int? workspaceLimit, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<Workspace>> GetWorkspacesForUserAsync(int userId, CancellationToken cancellationToken = default);
     Task AddUserToWorkspaceAsync(int workspaceId, int userId, CancellationToken cancellationToken = default);
-    Task RemoveUserFromWorkspaceAsync(int workspaceId, int userId, CancellationToken cancellationToken = default);
+    /// <summary>False when the user was not a member of the workspace.</summary>
+    Task<bool> RemoveUserFromWorkspaceAsync(int workspaceId, int userId, CancellationToken cancellationToken = default);
     Task<IPagedList<TenantMemberResponse>> GetWorkspaceMembersAsync(int workspaceId, int skip, int take, CancellationToken cancellationToken = default);
     Task<bool> VerifyWorkspaceMembershipAsync(int userId, int workspaceId, CancellationToken cancellationToken = default);
 

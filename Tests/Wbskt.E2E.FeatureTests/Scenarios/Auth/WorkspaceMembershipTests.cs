@@ -347,7 +347,7 @@ public sealed class WorkspaceMembershipTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task WS_MEM_20_RemovingAnUnknownUserRef_Returns403()
+    public async Task WS_MEM_20_RemovingAnUnknownUserRef_Returns404()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -355,8 +355,30 @@ public sealed class WorkspaceMembershipTests(ServicesFixture fixture)
 
         var response = await fixture.Auth.As(owner.Token).RemoveWorkspaceMemberRawAsync(workspaceRef, Guid.NewGuid());
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("USER_NOT_FOUND");
+    }
+
+    [SkippableFact]
+    public async Task WS_MEM_20b_RemovingSomeoneWhoIsNotAMember_Returns404LikeAnUnknownRef()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (owner, tenantRef, workspaceRef, member) = await ArrangeAsync();
+        var memberRef = (await fixture.FindTenantMemberRefAsync(owner.Token, tenantRef, member.Email))!.Value;
+        var stranger = await fixture.CreateUserAsync();
+        var strangerTenant = await fixture.GetTenantRefAsync(stranger.Token);
+        var strangerRef = (await fixture.FindTenantMemberRefAsync(stranger.Token, strangerTenant, stranger.Email))!.Value;
+
+        // In the tenant but not the workspace, and in another tenant altogether: no removal happened,
+        // and neither answer says more than an unknown reference does.
+        var tenantMember = await fixture.Auth.As(owner.Token).RemoveWorkspaceMemberRawAsync(workspaceRef, memberRef);
+        var outsider = await fixture.Auth.As(owner.Token).RemoveWorkspaceMemberRawAsync(workspaceRef, strangerRef);
+
+        tenantMember.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await ServicesFixture.ReadErrorCodeAsync(tenantMember)).Should().Be("USER_NOT_FOUND");
+        outsider.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await ServicesFixture.ReadErrorCodeAsync(outsider)).Should().Be("USER_NOT_FOUND");
     }
 
     [SkippableFact]
