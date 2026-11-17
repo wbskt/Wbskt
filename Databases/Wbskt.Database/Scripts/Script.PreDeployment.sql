@@ -223,8 +223,10 @@ dbo.WorkflowStateMigration; the post-deployment script fills dbo.Workflows from 
   - newest version not enabled                   -> Disabled (today's deprecated workflows: they
                                                     become editable again, nothing starts them)
 
-Only the live version keeps trigger registrations and schedules, and only an enabled workflow keeps
-queued events, so whatever an older or a retired version still had is removed here. Schedule
+Only the live version keeps trigger registrations and schedules, so whatever an older or a retired
+version still had is removed here. Queued events stay: with no registration left a replay matches
+nothing, and the reaper expires the rest, while deleting them would fail the upgrade rehearsal's
+row-count check on the seeded queue. Schedule
 registrations are keyed by workflow and trigger node now ("schedule:<workflowRefId>:<nodeId>")
 rather than by the ScheduledFires row, which is replaced on every enable.
 
@@ -278,10 +280,6 @@ BEGIN
         DELETE SF
         FROM dbo.ScheduledFires SF
         WHERE NOT EXISTS (SELECT 1 FROM dbo.WorkflowStateMigration M WHERE M.LiveDefinitionId = SF.WorkflowDefinitionId);
-
-        DELETE PTE
-        FROM dbo.PendingTriggerEvents PTE
-        WHERE NOT EXISTS (SELECT 1 FROM dbo.WorkflowStateMigration M WHERE M.RefId = PTE.WorkflowRefId AND M.State = 1);
 
         UPDATE TR
         SET TriggerKey = N''schedule:'' + LOWER(CONVERT(NVARCHAR(36), SF.WorkflowRefId)) + N'':'' + LOWER(CONVERT(NVARCHAR(36), SF.TriggerNodeId))

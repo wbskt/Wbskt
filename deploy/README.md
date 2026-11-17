@@ -790,8 +790,9 @@ first, and the post-deployment script writes it to `dbo.Workflows`:
 - A workflow whose newest version was enabled stays Enabled on that version.
 - Every other workflow (today's deprecated ones) becomes Disabled.
 
-Schedule triggers are re-keyed by workflow and node. Registrations, schedules and queued events left
-by versions that are no longer live are removed. After the deploy,
+Schedule triggers are re-keyed by workflow and node. Registrations and schedules left by versions
+that are no longer live are removed. Queued events stay: a replay with no registration left matches
+nothing, and the 24 h expiry clears the rest. After the deploy,
 `SELECT State, COUNT(*) FROM dbo.Workflows GROUP BY State` should match what the console showed before.
 
 ### Email verification is additive, and needs no flag
