@@ -160,7 +160,7 @@ public sealed class TenantServiceTests
         foreach (var result in new[] { removed, suspended })
         {
             Assert.Equal("USER_NOT_FOUND", result.Error.Code);
-            Assert.Equal(ErrorType.Forbidden, result.Error.Type);
+            Assert.Equal(ErrorType.NotFound, result.Error.Type);
         }
 
         _tenants.Verify(p => p.RemoveTenantMemberAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);

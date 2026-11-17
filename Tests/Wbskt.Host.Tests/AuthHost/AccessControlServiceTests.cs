@@ -41,7 +41,7 @@ public sealed class AccessControlServiceTests
         _tenants.Setup(p => p.FindUserIdByRefIdInTenantAsync(MemberRef, TenantId, It.IsAny<CancellationToken>())).ReturnsAsync(MemberId);
         _accessControl.Setup(p => p.FindRoleIdByRefIdAsync(RoleRef, TenantId, It.IsAny<CancellationToken>())).ReturnsAsync(RoleId);
         _accessControl.Setup(p => p.FindGroupIdByRefIdAsync(GroupRef, TenantId, It.IsAny<CancellationToken>())).ReturnsAsync(GroupId);
-        _workspaces.Setup(p => p.FindIdByRefIdAsync(WorkspaceRef, It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceId);
+        _workspaces.Setup(p => p.FindIdByRefIdInTenantAsync(WorkspaceRef, TenantId, It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceId);
         _accounts.Setup(p => p.GetByIdAsync(MemberId, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = MemberId, RefId = MemberRef });
 
         _service = new AccessControlService(
@@ -127,8 +127,31 @@ public sealed class AccessControlServiceTests
         var result = await _service.UpdateRoleAsync(TenantId, Guid.NewGuid(), new UpdateRoleRequest("Editors", null));
 
         Assert.Equal("ROLE_NOT_FOUND", result.Error.Code);
-        Assert.Equal(ErrorType.Forbidden, result.Error.Type);
+        Assert.Equal(ErrorType.NotFound, result.Error.Type);
         _accessControl.Verify(p => p.UpdateRoleAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>
+    /// The workspace is looked up within the tenant, so another tenant's reads exactly like one that
+    /// does not exist, and nothing reaches the procedure.
+    /// </summary>
+    [Fact]
+    public async Task An_assignment_to_another_tenants_workspace_reads_as_not_found()
+    {
+        var elsewhere = Guid.NewGuid();
+        _workspaces.Setup(p => p.FindIdByRefIdAsync(elsewhere, It.IsAny<CancellationToken>())).ReturnsAsync(99);
+
+        var assigned = await _service.AssignUserRoleAsync(TenantId, MemberRef, RoleRef, elsewhere);
+        var granted = await _service.GrantUserPermissionAsync(TenantId, MemberRef, new GrantPermissionRequest(PermissionNames.ClientsRead, false, elsewhere));
+
+        foreach (var result in new[] { assigned, granted })
+        {
+            Assert.Equal("WORKSPACE_NOT_FOUND", result.Error.Code);
+            Assert.Equal(ErrorType.NotFound, result.Error.Type);
+        }
+
+        _accessControl.Verify(p => p.AssignUserRoleAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Empty(_bus.Published);
     }
 
     [Fact]

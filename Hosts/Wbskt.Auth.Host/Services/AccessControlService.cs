@@ -91,7 +91,7 @@ internal sealed class AccessControlService : IAccessControlService
             var parentId = await _accessControl.FindGroupIdByRefIdAsync(request.ParentGroupRef.Value, tenantId, cancellationToken);
             if (parentId <= 0)
             {
-                return Result<GroupResponse>.Failure(Error.Forbidden("GROUP_NOT_FOUND", "Parent group not found in this tenant."));
+                return Result<GroupResponse>.Failure(TenantReferences.GroupNotFound);
             }
 
             parentGroupId = parentId;
@@ -226,7 +226,7 @@ internal sealed class AccessControlService : IAccessControlService
             return Result.Failure(resolved.Error);
         }
 
-        var workspace = await ResolveWorkspaceScopeAsync(request.WorkspaceRef, cancellationToken);
+        var workspace = await ResolveWorkspaceScopeAsync(tenantId, request.WorkspaceRef, cancellationToken);
         if (workspace.IsFailure)
         {
             return Result.Failure(workspace.Error);
@@ -247,7 +247,7 @@ internal sealed class AccessControlService : IAccessControlService
             return Result.Failure(resolved.Error);
         }
 
-        var workspace = await ResolveWorkspaceScopeAsync(workspaceRef, cancellationToken);
+        var workspace = await ResolveWorkspaceScopeAsync(tenantId, workspaceRef, cancellationToken);
         if (workspace.IsFailure)
         {
             return Result.Failure(workspace.Error);
@@ -279,16 +279,16 @@ internal sealed class AccessControlService : IAccessControlService
         var userId = await _tenants.FindUserIdByRefIdInTenantAsync(userRef, tenantId, cancellationToken);
         if (userId <= 0)
         {
-            return Result.Failure(Error.Forbidden("USER_NOT_FOUND", "User not found in this tenant."));
+            return Result.Failure(TenantReferences.UserNotFound);
         }
 
         var roleId = await _accessControl.FindRoleIdByRefIdAsync(roleRef, tenantId, cancellationToken);
         if (roleId <= 0)
         {
-            return Result.Failure(Error.Forbidden("ROLE_NOT_FOUND", "Role not found in this tenant."));
+            return Result.Failure(TenantReferences.RoleNotFound);
         }
 
-        var workspace = await ResolveWorkspaceScopeAsync(workspaceRef, cancellationToken);
+        var workspace = await ResolveWorkspaceScopeAsync(tenantId, workspaceRef, cancellationToken);
         if (workspace.IsFailure)
         {
             return Result.Failure(workspace.Error);
@@ -317,16 +317,16 @@ internal sealed class AccessControlService : IAccessControlService
         var groupId = await _accessControl.FindGroupIdByRefIdAsync(groupRef, tenantId, cancellationToken);
         if (groupId <= 0)
         {
-            return Result.Failure(Error.Forbidden("GROUP_NOT_FOUND", "Group not found in this tenant."));
+            return Result.Failure(TenantReferences.GroupNotFound);
         }
 
         var roleId = await _accessControl.FindRoleIdByRefIdAsync(roleRef, tenantId, cancellationToken);
         if (roleId <= 0)
         {
-            return Result.Failure(Error.Forbidden("ROLE_NOT_FOUND", "Role not found in this tenant."));
+            return Result.Failure(TenantReferences.RoleNotFound);
         }
 
-        var workspace = await ResolveWorkspaceScopeAsync(workspaceRef, cancellationToken);
+        var workspace = await ResolveWorkspaceScopeAsync(tenantId, workspaceRef, cancellationToken);
         if (workspace.IsFailure)
         {
             return Result.Failure(workspace.Error);
@@ -425,7 +425,7 @@ internal sealed class AccessControlService : IAccessControlService
         var roleId = await _accessControl.FindRoleIdByRefIdAsync(roleRef, tenantId, cancellationToken);
         if (roleId <= 0)
         {
-            return Result<ResolvedEntity>.Failure(Error.Forbidden("ROLE_NOT_FOUND", "Role not found in this tenant."));
+            return Result<ResolvedEntity>.Failure(TenantReferences.RoleNotFound);
         }
 
         return Result<ResolvedEntity>.Success(new ResolvedEntity(tenantId, roleId));
@@ -436,7 +436,7 @@ internal sealed class AccessControlService : IAccessControlService
         var groupId = await _accessControl.FindGroupIdByRefIdAsync(groupRef, tenantId, cancellationToken);
         if (groupId <= 0)
         {
-            return Result<ResolvedEntity>.Failure(Error.Forbidden("GROUP_NOT_FOUND", "Group not found in this tenant."));
+            return Result<ResolvedEntity>.Failure(TenantReferences.GroupNotFound);
         }
 
         return Result<ResolvedEntity>.Success(new ResolvedEntity(tenantId, groupId));
@@ -456,31 +456,22 @@ internal sealed class AccessControlService : IAccessControlService
         var groupId = await _accessControl.FindGroupIdByRefIdAsync(groupRef, tenantId, cancellationToken);
         if (groupId <= 0)
         {
-            return Result<(int, int, int)>.Failure(Error.Forbidden("GROUP_NOT_FOUND", "Group not found in this tenant."));
+            return Result<(int, int, int)>.Failure(TenantReferences.GroupNotFound);
         }
 
         return Result<(int, int, int)>.Success((tenantId, user.Value.EntityId, groupId));
     }
 
-    /// <summary>
-    /// Maps an optional workspace reference to an internal ID. A null reference means tenant-wide,
-    /// which is a valid scope rather than a missing value.
-    /// </summary>
-    private async Task<Result<int?>> ResolveWorkspaceScopeAsync(Guid? workspaceRef, CancellationToken cancellationToken)
+    /// <summary>The workspace an assignment is scoped to; no reference means tenant-wide, which is a scope rather than a missing value.</summary>
+    private async Task<Result<int?>> ResolveWorkspaceScopeAsync(int tenantId, Guid? workspaceRef, CancellationToken cancellationToken)
     {
-        if (!workspaceRef.HasValue)
+        if (workspaceRef is not { } reference)
         {
             return Result<int?>.Success(null);
         }
 
-        var workspaceId = await _workspaceProvider.FindIdByRefIdAsync(workspaceRef.Value, cancellationToken);
-        if (workspaceId <= 0)
-        {
-            return Result<int?>.Failure(Error.Forbidden("WORKSPACE_NOT_FOUND", "Workspace not found."));
-        }
-
-        // The stored procedures additionally reject a workspace outside the assignment's tenant.
-        return Result<int?>.Success(workspaceId);
+        var workspace = await TenantReferences.ResolveWorkspaceAsync(_workspaceProvider, tenantId, reference, cancellationToken);
+        return workspace.IsSuccess ? Result<int?>.Success(workspace.Value) : Result<int?>.Failure(workspace.Error);
     }
 
     /// <summary>

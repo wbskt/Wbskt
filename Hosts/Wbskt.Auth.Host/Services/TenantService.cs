@@ -197,7 +197,7 @@ internal sealed class TenantService : ITenantService
             var resolvedRoleId = await _accessControl.FindRoleIdByRefIdAsync(request.RoleRef.Value, tenantId, cancellationToken);
             if (resolvedRoleId <= 0)
             {
-                return Result<CreatedInvitationResponse>.Failure(Error.Forbidden("ROLE_NOT_FOUND", "Role not found in this tenant."));
+                return Result<CreatedInvitationResponse>.Failure(TenantReferences.RoleNotFound);
             }
 
             roleId = resolvedRoleId;
@@ -206,14 +206,13 @@ internal sealed class TenantService : ITenantService
         var workspaceIds = new List<int>();
         foreach (var workspaceRef in (request.WorkspaceRefs ?? []).Distinct())
         {
-            var workspaceId = await _workspaceProvider.FindIdByRefIdAsync(workspaceRef, cancellationToken);
-            if (workspaceId <= 0)
+            var workspace = await TenantReferences.ResolveWorkspaceAsync(_workspaceProvider, tenantId, workspaceRef, cancellationToken);
+            if (workspace.IsFailure)
             {
-                return Result<CreatedInvitationResponse>.Failure(Error.Forbidden("WORKSPACE_NOT_FOUND", "Workspace not found."));
+                return Result<CreatedInvitationResponse>.Failure(workspace.Error);
             }
 
-            // The procedure rejects a workspace outside this tenant (50017).
-            workspaceIds.Add(workspaceId);
+            workspaceIds.Add(workspace.Value);
         }
 
         var token = SecurityTokens.Generate();

@@ -414,7 +414,7 @@ The cross-service contract. Every workspace-scoped management-host request passe
 | ID | ± | Scenario | Expected |
 |---|---|---|---|
 | `INV_WS_01` | + | Invite naming one of two workspaces, register with it | The invitee resolves the named workspace (**200**) and not the other (**403**) |
-| `INV_WS_02` | − | Invite naming another tenant's workspace | **403** `WORKSPACE_NOT_FOUND`, the same as an unknown ref |
+| `INV_WS_02` | − | Invite naming another tenant's workspace | **404** `WORKSPACE_NOT_FOUND`, the same as an unknown ref |
 | `INV_WS_03` | + | Invite with the `User` role and a workspace | The invitee's effective permissions there include the five `*.read` slugs and no `manage`/`create` |
 | `WS_OWN_01` | + | Transfer to a tenant member outside the workspace | **204**; they can resolve it; removing them is now refused and removing the previous owner succeeds |
 | `WS_OWN_02` | − | Transfer to someone outside the tenant | **404** `USER_NOT_FOUND`; they gain nothing |
@@ -519,10 +519,10 @@ admin unless stated.
 | `ROLE_07` | − | Description of 256 characters | model-validation 400 |
 | `ROLE_08` | + | Rename a role | **204**; list reflects it |
 | `ROLE_09` | − | Rename onto an existing name | **409** `AUTH_ROLE_CONFLICT` |
-| `ROLE_10` | − | Update an unknown `roleRef` | **403** `ROLE_NOT_FOUND` |
+| `ROLE_10` | − | Update an unknown `roleRef` | **404** `ROLE_NOT_FOUND` |
 | `ROLE_11` | + | Delete a role | **204**; absent from the list |
 | `ROLE_12` | + | Deleting a role removes it from everyone who held it | A user assigned it loses the derived permissions on re-resolve |
-| `ROLE_13` | − | Delete an unknown `roleRef` | **403** `ROLE_NOT_FOUND` |
+| `ROLE_13` | − | Delete an unknown `roleRef` | **404** `ROLE_NOT_FOUND` |
 | `ROLE_13b` | − | Deny a permission on, or delete, the built-in Admin role | **409** `ROLE_BUILT_IN`; the role keeps every permission |
 | `ROLE_14` | − | Any role operation without `roles.manage` | **403** `PERMISSION_UNAUTHORIZED` |
 | `ROLE_15` | − | List roles without `roles.read` | **403** |
@@ -556,14 +556,14 @@ admin unless stated.
 | `GRP_02` | + | Create a nested group | **200**, `parentGroupRefId` echoes the parent |
 | `GRP_03` | + | Created group appears in the list | Present |
 | `GRP_04` | − | Duplicate name in the tenant | **409** `AUTH_GROUP_CONFLICT` |
-| `GRP_05` | − | Unknown `parentGroupRef` | **403** `GROUP_NOT_FOUND` |
+| `GRP_05` | − | Unknown `parentGroupRef` | **404** `GROUP_NOT_FOUND` |
 | `GRP_06` | − | Empty name | model-validation 400 |
 | `GRP_07` | + | Rename a group | **204** |
 | `GRP_08` | − | Rename onto an existing name | **409** |
 | `GRP_09` | + | Delete a leaf group | **204** |
 | `GRP_10` | − | Delete a group that has children | **400** `AUTH_OPERATION_REJECTED` ("Group has child groups") |
 | `GRP_11` | + | Delete the child, then the parent | Both **204** |
-| `GRP_12` | − | Delete an unknown `groupRef` | **403** `GROUP_NOT_FOUND` |
+| `GRP_12` | − | Delete an unknown `groupRef` | **404** `GROUP_NOT_FOUND` |
 | `GRP_13` | − | Any group operation without `users.manage` | **403** |
 | `GRP_14` | − | List groups without `users.read` | **403** |
 
@@ -577,9 +577,9 @@ admin unless stated.
 | `GRL_04` | + | **A group member inherits the role's permissions** | Add user to group → resolve shows the slugs |
 | `GRL_05` | + | Inheritance follows the parent chain | Role on the parent group reaches a member of the child group |
 | `GRL_06` | + | Workspace-scoped group role applies only there | Slug present in workspace A, absent in workspace B |
-| `GRL_07` | − | Assign with an unknown `roleRef` | **403** `ROLE_NOT_FOUND` |
-| `GRL_08` | − | Assign with an unknown `groupRef` | **403** `GROUP_NOT_FOUND` |
-| `GRL_09` | − | Assign with an unknown `workspaceRef` | **403** `WORKSPACE_NOT_FOUND` |
+| `GRL_07` | − | Assign with an unknown `roleRef` | **404** `ROLE_NOT_FOUND` |
+| `GRL_08` | − | Assign with an unknown `groupRef` | **404** `GROUP_NOT_FOUND` |
+| `GRL_09` | − | Assign with an unknown `workspaceRef` | **404** `WORKSPACE_NOT_FOUND` |
 | `GRL_10` | − | Assign with **no request body** | model-validation 400 — the body is currently mandatory even for a tenant-wide assignment |
 | `GRL_11` | + | Assign the same role twice | **204**, idempotent, no duplicate |
 | `GRL_12` | + | Remove the assignment (`?workspaceRef=` on the query string) | **204**; members lose the permissions |
@@ -601,19 +601,19 @@ admin unless stated.
 | `MEM_06` | + | List a user's roles | **200**, scope on each entry |
 | `MEM_07` | + | List a user's direct permissions | **200** with `slug`, `isDeny`, `workspaceRef` |
 | `MEM_08` | + | List a user's groups | **200** |
-| `MEM_09` | − | Any of `06`–`08` with an unknown `userRef` | **403** `USER_NOT_FOUND` |
+| `MEM_09` | − | Any of `06`–`08` with an unknown `userRef` | **404** `USER_NOT_FOUND` |
 | `MEM_10` | − | `06`/`07` without `roles.read` | **403** |
 | `MEM_11` | − | `08` without `users.read` | **403** |
 | `MEM_12` | + | Add a user to a group | **204**; appears in their groups |
 | `MEM_13` | + | Group membership grants the group's roles | Effective set gains the slugs |
 | `MEM_14` | + | Add to the same group twice | **204**, idempotent |
-| `MEM_15` | − | Add with an unknown `groupRef` | **403** `GROUP_NOT_FOUND` |
+| `MEM_15` | − | Add with an unknown `groupRef` | **404** `GROUP_NOT_FOUND` |
 | `MEM_16` | + | Remove from a group | **204**; permissions lost |
 | `MEM_17` | + | Remove when not a member | **204**, idempotent |
 | `MEM_18` | + | Assign a role tenant-wide | **204**; applies in every workspace of the tenant |
 | `MEM_19` | + | Assign a role workspace-scoped | **204**; applies only there |
-| `MEM_20` | − | Assign with an unknown `roleRef` | **403** `ROLE_NOT_FOUND` |
-| `MEM_21` | − | Assign with a `workspaceRef` from another tenant | **400** `AUTH_OPERATION_REJECTED` (SP guard 50002) |
+| `MEM_20` | − | Assign with an unknown `roleRef` | **404** `ROLE_NOT_FOUND` |
+| `MEM_21` | − | Assign with a `workspaceRef` from another tenant | **404** `WORKSPACE_NOT_FOUND`, the same as an unknown ref |
 | `MEM_22` | + | Remove a role assignment | **204**; permissions lost |
 | `MEM_23` | + | Tenant-wide and workspace-scoped assignments of the same role coexist | Removing one leaves the other |
 | `MEM_24` | + | Grant a direct user permission | **204**; visible in their permission list; in the effective set |
@@ -628,7 +628,7 @@ admin unless stated.
 | `MEM_33` | + | Lift the suspension | **204**; access returns exactly as it was |
 | `MEM_34` | + | Suspension is visible in the member list | `isSuspended: true`, `isActive: true` |
 | `MEM_35` | − | Suspend without `users.manage` | **403** |
-| `MEM_36` | − | Suspend an unknown `userRef` | **403** `USER_NOT_FOUND` |
+| `MEM_36` | − | Suspend an unknown `userRef` | **404** `USER_NOT_FOUND` |
 | `MEM_37` | − | An administrator suspends themselves | **400** `AUTH_CANNOT_SUSPEND_SELF`. The database also refuses any suspension that leaves the tenant with no administrator (50008). `MEM_37b`: the old `/active` route is gone |
 | `MEM_38` | − | A member with tenant-wide `users.manage` but not `roles.manage` adds themselves to a group that carries roles | **403** `PERMISSION_UNAUTHORIZED`; a group with no roles still answers **204** |
 | `MEM_39` | − | The same member invites an address with a `roleRef` | **403** `PERMISSION_UNAUTHORIZED`; without a `roleRef` the invitation is issued |
@@ -675,11 +675,11 @@ to already belong to the workspace's tenant, so the cross-boundary capture it de
 | ID | ± | Scenario | Expected |
 |---|---|---|---|
 | `ISO_01` | − | Tenant-A admin lists tenant B's roles | **403** `TENANT_NOT_FOUND` |
-| `ISO_02` | − | Tenant-A admin addresses a tenant-B `roleRef` under tenant A's route | **403** `ROLE_NOT_FOUND` |
-| `ISO_03` | − | Same for a `groupRef` | **403** `GROUP_NOT_FOUND` |
-| `ISO_04` | − | Same for a `userRef` | **403** `USER_NOT_FOUND` — an admin must not pull an outside user into their permission graph |
-| `ISO_05` | − | Assign a tenant-B workspace as the scope of a tenant-A assignment | **400** `AUTH_OPERATION_REJECTED` (SP guard 50002) |
-| `ISO_06` | − | Grant a tenant-B user a permission via tenant A's route | **403** `USER_NOT_FOUND` |
+| `ISO_02` | − | Tenant-A admin addresses a tenant-B `roleRef` under tenant A's route | **404** `ROLE_NOT_FOUND` |
+| `ISO_03` | − | Same for a `groupRef` | **404** `GROUP_NOT_FOUND` |
+| `ISO_04` | − | Same for a `userRef` | **404** `USER_NOT_FOUND` — an admin must not pull an outside user into their permission graph |
+| `ISO_05` | − | Assign a tenant-B workspace as the scope of a tenant-A assignment | **404** `WORKSPACE_NOT_FOUND`, the same as an unknown ref |
+| `ISO_06` | − | Grant a tenant-B user a permission via tenant A's route | **404** `USER_NOT_FOUND` |
 | `ISO_07` | − | Resolve a tenant-B workspace as a tenant-A user | **403** `WORKSPACE_UNAUTHORIZED` |
 | `ISO_08` | − | `GET /api/tenants` shows only the caller's tenants | Tenant B absent |
 | `ISO_09` | − | **`POST /api/workspaces/{a}/members` with a tenant-B user's email** | Currently **204** — `WorkspaceMember_Add` deliberately adds the user to the owning tenant. This is the one path that crosses the boundary `ISO_04` protects. Assert the behaviour as it stands and treat the design question separately |

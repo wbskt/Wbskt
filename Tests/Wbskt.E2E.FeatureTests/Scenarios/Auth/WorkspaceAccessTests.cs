@@ -45,7 +45,7 @@ public sealed class WorkspaceAccessTests(ServicesFixture fixture)
 
         var response = await InviteAsync(admin.Token, tenantRef, ServicesFixture.NewCredentials().Email, new { WorkspaceRefs = new[] { foreign } });
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("WORKSPACE_NOT_FOUND");
     }
 
