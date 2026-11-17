@@ -12,7 +12,7 @@ namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 /// <see cref="ClientCommandFailedEvent"/> if the client does not come back before the step's ack
 /// timeout, which is the command's expiry. A command that cannot be sent or queued at all is reported
 /// at once as a <see cref="ClientCommandFailedEvent"/>, which takes a waiting step out by its "failed"
-/// port, rather than dropped unseen. A broker that is down is thrown, for the step to fail and the run
+/// port, and answered as refused, which fails a step that does not wait, rather than dropped unseen. A broker that is down is thrown, for the step to fail and the run
 /// to retry.
 /// </summary>
 /// <remarks>
@@ -26,7 +26,7 @@ public sealed class ClientCommandPublisher(IClientCommandSender sender, IEventBu
     internal const string ExpiryInvalidReason = "The step's ack timeout is longer than a command may wait.";
     internal const string InactiveReason = "The client is offline and not registered, so the command cannot wait for it.";
 
-    public async Task PublishCommandAsync(Guid commandId, Guid clientRefId, int workspaceId, string command, string payload, TimeSpan expiresIn, CommandSender? sentBy, CancellationToken ct)
+    public async Task<CommandPublishOutcome> PublishCommandAsync(Guid commandId, Guid clientRefId, int workspaceId, string command, string payload, TimeSpan expiresIn, CommandSender? sentBy, CancellationToken ct)
     {
         var request = new ClientCommand(commandId, clientRefId, workspaceId, command, payload, clock.GetUtcNow().UtcDateTime + expiresIn);
         var result = await sender.SendAsync(request, e => Attribute(e, sentBy), ct);
@@ -44,10 +44,13 @@ public sealed class ClientCommandPublisher(IClientCommandSender sender, IEventBu
             _ => throw new ArgumentOutOfRangeException(nameof(result), result.Outcome, null)
         };
 
-        if (reason is not null)
+        if (reason is null)
         {
-            await eventBus.PublishAsync(new ClientCommandFailedEvent(clientRefId, result.ClientId, workspaceId, command, reason, commandId), ct);
+            return CommandPublishOutcome.Sent;
         }
+
+        await eventBus.PublishAsync(new ClientCommandFailedEvent(clientRefId, result.ClientId, workspaceId, command, reason, commandId), ct);
+        return CommandPublishOutcome.Refused(reason);
     }
 
     private static void Attribute(ActorEvent @event, CommandSender? sentBy)

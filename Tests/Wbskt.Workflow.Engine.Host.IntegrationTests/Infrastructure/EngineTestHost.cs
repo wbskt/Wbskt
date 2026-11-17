@@ -54,7 +54,7 @@ internal static class EngineTestHost
 /// </summary>
 internal sealed class NoopClientCommandPublisher : IClientCommandPublisher
 {
-    public Task PublishCommandAsync(
+    public Task<CommandPublishOutcome> PublishCommandAsync(
         Guid commandId,
         Guid clientRefId,
         int workspaceId,
@@ -62,7 +62,7 @@ internal sealed class NoopClientCommandPublisher : IClientCommandPublisher
         string payload,
         TimeSpan expiresIn,
         CommandSender? sentBy,
-        CancellationToken ct) => Task.CompletedTask;
+        CancellationToken ct) => Task.FromResult(CommandPublishOutcome.Sent);
 }
 
 /// <summary>No-op stand-in for the engine host's toast publisher, for the same reason.</summary>

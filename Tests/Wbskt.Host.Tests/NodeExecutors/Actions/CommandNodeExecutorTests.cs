@@ -18,7 +18,7 @@ public sealed class CommandNodeExecutorTests
     {
         var publisher = new Mock<IClientCommandPublisher>();
         publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(CommandPublishOutcome.Sent);
 
         var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>(), TestTemplates.Create());
         JsonElement payload = JsonSerializer.SerializeToElement(new { temperature = 22 });
@@ -45,7 +45,7 @@ public sealed class CommandNodeExecutorTests
     {
         var publisher = new Mock<IClientCommandPublisher>();
         publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(CommandPublishOutcome.Sent);
 
         var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>(), TestTemplates.Create());
         NodeContext ctx = BuildContext(ClientRefId.ToString(), "CloseVent", null);
@@ -92,6 +92,23 @@ public sealed class CommandNodeExecutorTests
         Assert.Equal("broker down", fail.Message);
         Assert.True(fail.Retryable);
         Assert.Same(exception, fail.Cause);
+    }
+
+    [Fact]
+    public async Task A_command_that_was_neither_sent_nor_queued_fails_a_step_that_does_not_wait()
+    {
+        // The step would otherwise carry on as if the client had been told.
+        var publisher = new Mock<IClientCommandPublisher>();
+        publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CommandPublishOutcome.Refused("The client is offline and not registered, so the command cannot wait for it."));
+        var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>(), TestTemplates.Create());
+
+        NodeExecutionResult result = await executor.ExecuteAsync(BuildContext(ClientRefId.ToString(), "CloseValve", null), CancellationToken.None);
+
+        var fail = Assert.IsType<NodeExecutionResult.Fail>(result);
+        Assert.Equal(CommandNodeExecutor.CommandNotSentCode, fail.ErrorCode);
+        Assert.Equal("The client is offline and not registered, so the command cannot wait for it.", fail.Message);
+        Assert.False(fail.Retryable);
     }
 
     [Fact]

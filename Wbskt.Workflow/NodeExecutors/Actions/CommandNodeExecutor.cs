@@ -17,7 +17,8 @@ namespace Wbskt.Workflow.NodeExecutors.Actions;
 /// <para>With <see cref="SendClientMessageConfig.AwaitAck"/> the step waits for the outcome: it parks
 /// on the command's id, sends once parked, and leaves by "acked" when the client acknowledges it,
 /// "failed" when the platform reports it undelivered or it could not be sent at all, or "timeout" when
-/// neither comes in time (the bookmark's TTL takes that port without running the step again).</para>
+/// neither comes in time (the bookmark's TTL takes that port without running the step again). Without
+/// it, a command that could not be sent or queued fails the step with COMMAND_NOT_SENT.</para>
 /// </summary>
 internal sealed class CommandNodeExecutor(IClientCommandPublisher publisher, IBookmarkResumer bookmarkResumer, ActionTemplates templates, TimeProvider? clock = null)
     : ParkingNodeExecutor(clock ?? TimeProvider.System)
@@ -25,6 +26,7 @@ internal sealed class CommandNodeExecutor(IClientCommandPublisher publisher, IBo
     public const string AckedPort = CommandChannel.Acked;
     public const string FailedPort = CommandChannel.Failed;
     public const string TimeoutPort = "timeout";
+    public const string CommandNotSentCode = "COMMAND_NOT_SENT";
 
     public override string Kind => NodeKind.ActionClientMessage;
 
@@ -51,15 +53,22 @@ internal sealed class CommandNodeExecutor(IClientCommandPublisher publisher, IBo
             return Park(ctx, config, clientRefId);
         }
 
+        CommandPublishOutcome outcome;
         try
         {
-            await SendAsync(ctx, config, Guid.NewGuid(), clientRefId, ct);
-            return new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>());
+            outcome = await SendAsync(ctx, config, Guid.NewGuid(), clientRefId, ct);
         }
         catch (Exception ex)
         {
             return new NodeExecutionResult.Fail("COMMAND_PUBLISH_ERROR", ex.Message, true, ex);
         }
+
+        // Nothing waits for an answer here, so a command that never left must fail the step: carrying
+        // on would report a valve closed that was never told to close. Not retryable, as the client
+        // is unknown, unregistered or already has a full queue.
+        return outcome.Accepted
+            ? new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>())
+            : new NodeExecutionResult.Fail(CommandNotSentCode, outcome.RefusedReason ?? "The command was not sent.", false, null);
     }
 
     // A wake is this step's answer only when it is for the command the step is waiting on. Anything
@@ -144,7 +153,7 @@ internal sealed class CommandNodeExecutor(IClientCommandPublisher publisher, IBo
         }
     }
 
-    private Task SendAsync(NodeContext ctx, SendClientMessageConfig config, Guid commandId, Guid clientRefId, CancellationToken ct)
+    private Task<CommandPublishOutcome> SendAsync(NodeContext ctx, SendClientMessageConfig config, Guid commandId, Guid clientRefId, CancellationToken ct)
     {
         string payload = config.Payload?.GetRawText() ?? "{}";
         return publisher.PublishCommandAsync(
