@@ -81,6 +81,10 @@ catalogue, `User` holds the reads for a workspace's resources (`clients.read`, `
 `templates.read`, `workflows.read`, `logs.read`) and is a starting point the administrator customises.
 Existing `User` roles that held nothing got the same reads once, on the deploy that introduced them;
 a `User` role an administrator has shaped, or empties later, is never touched again.
+`Admin` is fixed: granting, denying or removing one of its permissions, or deleting it, is refused
+with 409 `ROLE_BUILT_IN`. It can be renamed. Everything administration rests on (`users.manage`,
+`roles.manage`, `billing.manage`) is in it, so whoever holds it tenant-wide can always repair the
+rest; a deploy gives it each new permission and lifts any deny set on it before the rule.
 
 **Joining an existing tenant happens exactly one way — a redeemed invitation.** An administrator
 issues one against an email address (`POST /{tenantRef}/invitations`), and the invitee redeems it,

@@ -13,6 +13,13 @@ BEGIN
         THROW 50001, 'Role does not belong to the specified tenant.', 1;
     END
 
+    -- The Admin role holds every permission, so a tenant can always be administered: taking one away
+    -- (roles.manage, say) could leave nobody able to give it back.
+    IF EXISTS (SELECT 1 FROM dbo.Roles WHERE Id = @RoleId AND Kind = N'Admin')
+    BEGIN
+        THROW 50028, 'The built-in Admin role holds every permission and cannot be changed.', 1;
+    END
+
     DECLARE @PermissionId INT;
     SELECT @PermissionId = Id FROM dbo.Permissions WHERE Slug = @PermissionSlug;
 

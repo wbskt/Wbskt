@@ -14,6 +14,7 @@ public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
 {
     private const string Skipped = "SQL Server not reachable — skipping.";
     private const int LastAdministrator = 50008;
+    private const int BuiltInRole = 50028;
 
     [SkippableFact]
     public async Task The_only_administrator_cannot_lose_their_Admin_role()
@@ -39,27 +40,40 @@ public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
     }
 
     [SkippableFact]
-    public async Task The_Admin_role_cannot_be_deleted_from_under_the_only_administrator()
+    public async Task The_Admin_role_cannot_be_deleted_even_with_another_administrator()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
         var (tenantId, ownerId, adminRoleId) = await CreateTenantAsync();
+        int second = await AddMemberAsync(tenantId, roleId: null);
+        await ExecAsync("dbo.UserPermission_Grant",
+            ("@UserId", second), ("@PermissionSlug", "users.manage"), ("@IsDeny", false), ("@TenantId", tenantId));
 
-        await AssertRejectedAsync(() => ExecAsync("dbo.Role_Delete", ("@Id", adminRoleId), ("@TenantId", tenantId)));
+        await AssertBuiltInAsync(() => ExecAsync("dbo.Role_Delete", ("@Id", adminRoleId), ("@TenantId", tenantId)));
         Assert.True(await IsAdministratorAsync(tenantId, ownerId));
     }
 
-    [SkippableFact]
-    public async Task Admin_cannot_be_stripped_of_users_manage_by_removal_or_deny()
+    /// <summary>
+    /// Not only users.manage: losing roles.manage or billing.manage would leave nothing in the API able
+    /// to give it back, so no permission of the Admin role can be removed, denied or granted again.
+    /// </summary>
+    [SkippableTheory]
+    [InlineData("users.manage")]
+    [InlineData("roles.manage")]
+    [InlineData("billing.manage")]
+    public async Task The_Admin_roles_permissions_cannot_be_changed(string slug)
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
         var (tenantId, ownerId, adminRoleId) = await CreateTenantAsync();
 
-        await AssertRejectedAsync(() => ExecAsync("dbo.RolePermission_Remove",
-            ("@RoleId", adminRoleId), ("@PermissionSlug", "users.manage"), ("@TenantId", tenantId)));
-        await AssertRejectedAsync(() => ExecAsync("dbo.RolePermission_Grant",
-            ("@RoleId", adminRoleId), ("@PermissionSlug", "users.manage"), ("@IsDeny", true), ("@TenantId", tenantId)));
+        await AssertBuiltInAsync(() => ExecAsync("dbo.RolePermission_Remove",
+            ("@RoleId", adminRoleId), ("@PermissionSlug", slug), ("@TenantId", tenantId)));
+        await AssertBuiltInAsync(() => ExecAsync("dbo.RolePermission_Grant",
+            ("@RoleId", adminRoleId), ("@PermissionSlug", slug), ("@IsDeny", true), ("@TenantId", tenantId)));
 
         Assert.True(await IsAdministratorAsync(tenantId, ownerId));
+        Assert.Equal(1, await ScalarAsync<int>(
+            "SELECT COUNT(*) FROM dbo.RolePermissions RP INNER JOIN dbo.Permissions P ON P.Id = RP.PermissionId WHERE RP.RoleId = @p0 AND P.Slug = @p1 AND RP.IsDeny = 0;",
+            adminRoleId, slug));
     }
 
     [SkippableFact]
@@ -184,8 +198,9 @@ public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
             """, ownerId, tenantId);
         Assert.False(await IsAdministratorAsync(tenantId, ownerId));
 
+        int userRoleId = await ScalarAsync<int>("SELECT Id FROM dbo.Roles WHERE TenantId = @p0 AND Kind = N'User'", tenantId);
         await ExecAsync("dbo.RolePermission_Remove",
-            ("@RoleId", adminRoleId), ("@PermissionSlug", "roles.read"), ("@TenantId", tenantId));
+            ("@RoleId", userRoleId), ("@PermissionSlug", "clients.read"), ("@TenantId", tenantId));
     }
 
     /// <summary>
@@ -264,6 +279,12 @@ public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
     {
         var ex = await Assert.ThrowsAsync<SqlException>(action);
         Assert.Equal(LastAdministrator, ex.Number);
+    }
+
+    private static async Task AssertBuiltInAsync(Func<Task> action)
+    {
+        var ex = await Assert.ThrowsAsync<SqlException>(action);
+        Assert.Equal(BuiltInRole, ex.Number);
     }
 
     private static async Task<Exception?> AttemptAsync(Func<Task> action)

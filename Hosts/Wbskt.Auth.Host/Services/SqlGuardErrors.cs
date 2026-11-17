@@ -64,6 +64,9 @@ internal static class SqlGuardErrors
             // The caller already has a Free tenant to themselves (dbo.Tenant_Create).
             SqlException { Number: 50036 } => FreeTenantLimitReached,
 
+            // The built-in Admin role's permissions, and the role itself, cannot be changed.
+            SqlException { Number: 50028 } guard => Error.Conflict("ROLE_BUILT_IN", guard.Message),
+
             // Deleting an account: its owner is a tenant's only administrator (the message names the
             // tenants), or its tenants changed between reading and deleting.
             SqlException { Number: 50018 } guard => Error.Conflict("ACCOUNT_SOLE_ADMINISTRATOR", guard.Message),

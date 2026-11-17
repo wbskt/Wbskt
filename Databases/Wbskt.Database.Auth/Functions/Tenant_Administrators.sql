@@ -1,8 +1,10 @@
 -- The active members of a tenant who hold tenant-wide users.manage, which is what makes someone able
 -- to administer the tenant through the API. Every procedure that can take that away checks it before
 -- and after its change and refuses (THROW 50008) a change that would leave a tenant that had an
--- administrator with none. Every management endpoint needs tenant-wide users.manage *in that tenant*
--- to act, so nobody would be left who could grant it back.
+-- administrator with none. Adding and removing members, and assigning roles and permissions to them,
+-- need tenant-wide users.manage *in that tenant*, so nobody would be left who could grant it back.
+-- The other permission that administration rests on, roles.manage, cannot be lost this way: the
+-- built-in Admin role cannot be changed or deleted (THROW 50028), so whoever holds it holds both.
 --
 -- Those procedures first take an update lock on the tenant's row in dbo.Tenants and hold it for the
 -- transaction. Without it two concurrent removals would each read (under READ_COMMITTED_SNAPSHOT,
