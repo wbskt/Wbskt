@@ -51,7 +51,7 @@ public sealed class MqttGatewayTests : IAsyncLifetime
         }
 
         var metrics = new GatewayMetrics(GatewayTransport.Mqtt);
-        var dispatcher = new InboundMessageDispatcher([], new ClientMessageHandler(_bus.Object), metrics, NullLogger<InboundMessageDispatcher>.Instance);
+        var dispatcher = new InboundMessageDispatcher([], new ClientMessageHandler(_bus.Object, TimeProvider.System), metrics, NullLogger<InboundMessageDispatcher>.Instance);
         var lifetime = new Mock<IHostApplicationLifetime>();
         lifetime.SetupGet(x => x.ApplicationStopping).Returns(_stopping.Token);
         var sessions = new ClientSessions(_connections, _gate.Object, _bus.Object, new BusInstanceId("gateway-mqtt"), metrics, dispatcher,
@@ -60,7 +60,7 @@ public sealed class MqttGatewayTests : IAsyncLifetime
 
         var authenticator = new MqttConnectAuthenticator(sessions, trust, NullLogger<MqttConnectAuthenticator>.Instance);
         _gateway = new MqttGateway(sessions, authenticator, Options.Create(options), lifetime.Object,
-            new MqttNetLoggerBridge(NullLogger<MqttNetLoggerBridge>.Instance), NullLogger<MqttGateway>.Instance);
+            new MqttNetLoggerBridge(NullLogger<MqttNetLoggerBridge>.Instance), NullLogger<MqttGateway>.Instance, TimeProvider.System);
         await _gateway.StartAsync(CancellationToken.None);
     }
 

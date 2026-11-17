@@ -18,6 +18,10 @@ public sealed class ClientConnection : ClientConnectionBase, IDisposable
     private readonly SemaphoreSlim _sendLock = new(1, 1);
     private readonly CancellationTokenSource _closing = new();
 
+    public ClientConnection(TimeProvider time) : base(time)
+    {
+    }
+
     // Qualified: inside Wbskt.Gateway, a bare WebSocket names this host's own namespace.
     public required System.Net.WebSockets.WebSocket Socket { get; init; }
 

@@ -12,10 +12,12 @@ public sealed class ClientMessageHandler
     internal static readonly TimeSpan MaxSentAtClockAhead = TimeSpan.FromMinutes(1);
 
     private readonly IEventBus _eventBus;
+    private readonly TimeProvider _time;
 
-    public ClientMessageHandler(IEventBus eventBus)
+    public ClientMessageHandler(IEventBus eventBus, TimeProvider time)
     {
         _eventBus = eventBus;
+        _time = time;
     }
 
     public Task HandleAsync(InboundContext context, ProtocolMessage message, CancellationToken cancellationToken)
@@ -24,7 +26,7 @@ public sealed class ClientMessageHandler
         var payload = JsonSerializer.Serialize(message.Payload);
         return _eventBus.PublishAsync(new ClientMessageReceivedEvent(context.ClientRefId, connection.ClientId, connection.WorkspaceId, message.Type, payload)
         {
-            SentAtUtc = PlausibleSentAt(message.SentAt, DateTime.UtcNow)
+            SentAtUtc = PlausibleSentAt(message.SentAt, _time.GetUtcNow().UtcDateTime)
         }, cancellationToken);
     }
 

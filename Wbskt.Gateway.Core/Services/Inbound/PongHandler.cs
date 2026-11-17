@@ -10,11 +10,13 @@ public sealed class PongHandler : IInboundMessageHandler
 {
     private readonly IEventBus _eventBus;
     private readonly ILogger<PongHandler> _logger;
+    private readonly TimeProvider _time;
 
-    public PongHandler(IEventBus eventBus, ILogger<PongHandler> logger)
+    public PongHandler(IEventBus eventBus, ILogger<PongHandler> logger, TimeProvider time)
     {
         _eventBus = eventBus;
         _logger = logger;
+        _time = time;
     }
 
     public string Type => MessageTypes.Pong;
@@ -31,7 +33,7 @@ public sealed class PongHandler : IInboundMessageHandler
             return;
         }
 
-        var roundTripMs = (DateTime.UtcNow - sentAt).TotalMilliseconds;
+        var roundTripMs = (_time.GetUtcNow().UtcDateTime - sentAt).TotalMilliseconds;
         await _eventBus.PublishAsync(new ClientLatencyMeasuredEvent(context.ClientRefId, connection.ClientId, connection.WorkspaceId, roundTripMs), cancellationToken);
     }
 

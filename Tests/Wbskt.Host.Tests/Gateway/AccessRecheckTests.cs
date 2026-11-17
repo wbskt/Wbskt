@@ -14,7 +14,7 @@ public sealed class AccessRecheckTests
 {
     private static readonly DateTime IssuedAt = new(2026, 11, 12, 9, 0, 0, DateTimeKind.Utc);
     private readonly ConnectionManager _connections = new(NullLogger<ConnectionManager>.Instance);
-    private readonly RevocationCache _cache = new();
+    private readonly RevocationCache _cache = new(TimeProvider.System);
     private readonly Mock<IClientTokenCutoffs> _cutoffs = new();
 
     [Fact]

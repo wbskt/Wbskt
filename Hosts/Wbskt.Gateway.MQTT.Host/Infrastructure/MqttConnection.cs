@@ -32,7 +32,7 @@ public sealed class MqttConnection : ClientConnectionBase
     private DisconnectReason? _ended;
 
     [SetsRequiredMembers]
-    public MqttConnection(MqttServer server, ClientAdmission admission, int inboxCapacity)
+    public MqttConnection(MqttServer server, ClientAdmission admission, int inboxCapacity, TimeProvider time) : base(time)
     {
         if (!admission.IsAdmitted)
         {

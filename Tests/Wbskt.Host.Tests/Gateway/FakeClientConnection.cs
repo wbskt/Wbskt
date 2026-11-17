@@ -10,6 +10,10 @@ namespace Wbskt.Host.Tests.Gateway;
 /// </summary>
 internal sealed class FakeClientConnection : ClientConnectionBase
 {
+    public FakeClientConnection() : base(TimeProvider.System)
+    {
+    }
+
     private readonly ConcurrentQueue<string> _sent = new();
     private readonly ConcurrentQueue<CloseRequest> _closes = new();
     private readonly ConcurrentQueue<DisconnectReason> _transportCloses = new();

@@ -12,16 +12,29 @@ namespace Wbskt.Gateway.Core.Infrastructure;
 // client, once given the new secret, can sign in and connect straight away; a re-approval sets it to
 // that moment, so the client signs in afresh and a token from before it lost access, an old secret's
 // included, stays refused.
+//
+// An entry past its retention is dropped when it is read, and every few minutes on a write, so a
+// client revoked and never seen again does not stay in memory for the life of the host.
 internal sealed class RevocationCache : IRevocationCache
 {
     // Client JWT lifetime (60 min) + margin.
     private static readonly TimeSpan RetentionPeriod = TimeSpan.FromMinutes(70);
+    private static readonly TimeSpan PruneInterval = TimeSpan.FromMinutes(5);
 
     private readonly ConcurrentDictionary<Guid, Entry> _entries = new();
+    private readonly TimeProvider _time;
+    private long _nextPruneTicks;
+
+    public RevocationCache(TimeProvider time)
+    {
+        _time = time;
+    }
+
+    internal int Count => _entries.Count;
 
     public void Revoke(Guid clientRefId)
     {
-        _entries[clientRefId] = new Entry(DateTime.MaxValue, DateTime.UtcNow.Add(RetentionPeriod));
+        _entries[clientRefId] = new Entry(DateTime.MaxValue, KeepUntil());
     }
 
     public void RevokeIssuedBefore(Guid clientRefId, DateTime cutoff)
@@ -31,7 +44,7 @@ internal sealed class RevocationCache : IRevocationCache
         // minted with the old secret earlier in that second is accepted too. That is the same
         // one-second window access-token revocation in the auth host accepts.
         var truncated = TruncateToSecond(cutoff);
-        var keepUntil = DateTime.UtcNow.Add(RetentionPeriod);
+        var keepUntil = KeepUntil();
         _entries.AddOrUpdate(
             clientRefId,
             _ => new Entry(truncated, keepUntil),
@@ -40,7 +53,7 @@ internal sealed class RevocationCache : IRevocationCache
 
     public void Reinstate(Guid clientRefId, DateTime reinstatedAt)
     {
-        _entries[clientRefId] = new Entry(TruncateToSecond(reinstatedAt), DateTime.UtcNow.Add(RetentionPeriod));
+        _entries[clientRefId] = new Entry(TruncateToSecond(reinstatedAt), KeepUntil());
     }
 
     public bool IsRevoked(Guid clientRefId, DateTime issuedAt)
@@ -50,13 +63,34 @@ internal sealed class RevocationCache : IRevocationCache
             return false;
         }
 
-        if (entry.KeepUntil <= DateTime.UtcNow)
+        if (entry.KeepUntil <= Now())
         {
             _entries.TryRemove(clientRefId, out _);
             return false;
         }
 
         return issuedAt < entry.Cutoff;
+    }
+
+    private DateTime Now() => _time.GetUtcNow().UtcDateTime;
+
+    // Every write lands here, so pruning rides along with them, at most once per PruneInterval.
+    private DateTime KeepUntil()
+    {
+        var now = Now();
+        var due = Interlocked.Read(ref _nextPruneTicks);
+        if (now.Ticks >= due && Interlocked.CompareExchange(ref _nextPruneTicks, (now + PruneInterval).Ticks, due) == due)
+        {
+            foreach (var (clientRefId, entry) in _entries)
+            {
+                if (entry.KeepUntil <= now)
+                {
+                    _entries.TryRemove(new KeyValuePair<Guid, Entry>(clientRefId, entry));
+                }
+            }
+        }
+
+        return now.Add(RetentionPeriod);
     }
 
     private static DateTime TruncateToSecond(DateTime value) =>

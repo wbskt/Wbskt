@@ -29,11 +29,11 @@ public sealed class InboundMessageDispatcherTests
     {
         IInboundMessageHandler[] handlers =
         [
-            new PongHandler(_bus, NullLogger<PongHandler>.Instance),
+            new PongHandler(_bus, NullLogger<PongHandler>.Instance, TimeProvider.System),
             new AckHandler(_bus, NullLogger<AckHandler>.Instance),
             new OtaStatusHandler(_bus, NullLogger<OtaStatusHandler>.Instance)
         ];
-        _dispatcher = new InboundMessageDispatcher(handlers, new ClientMessageHandler(_bus), _metrics, NullLogger<InboundMessageDispatcher>.Instance);
+        _dispatcher = new InboundMessageDispatcher(handlers, new ClientMessageHandler(_bus, TimeProvider.System), _metrics, NullLogger<InboundMessageDispatcher>.Instance);
     }
 
     private Task Dispatch(string json) => _dispatcher.DispatchAsync(new InboundContext(ClientRefId, _connection), json, CancellationToken.None);
