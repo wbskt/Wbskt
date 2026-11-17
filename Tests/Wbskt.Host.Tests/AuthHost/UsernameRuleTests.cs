@@ -55,6 +55,26 @@ public sealed class UsernameRuleTests
         Assert.False(UsernameAttribute.IsWellFormed("ada" + char.ConvertFromUtf32(0x1F600)));
     }
 
+    /// <summary>
+    /// Devanagari and Tamil write vowels as combining signs, so a rule of letters alone refused
+    /// most names in them.
+    /// </summary>
+    [Fact]
+    public void A_name_written_with_vowel_signs_is_taken()
+    {
+        Assert.True(UsernameAttribute.IsWellFormed(new string([(char)0x0930, (char)0x093E, (char)0x092E])));
+        Assert.True(UsernameAttribute.IsWellFormed(new string([(char)0x0938, (char)0x0940, (char)0x0924, (char)0x093E])));
+        Assert.True(UsernameAttribute.IsWellFormed(new string([(char)0x0B95, (char)0x0BCD, (char)0x0B95, (char)0x0BBE])));
+    }
+
+    [Fact]
+    public void A_mark_on_a_letter_from_an_alphabet_with_look_alikes_is_refused()
+    {
+        Assert.False(UsernameAttribute.IsWellFormed("admin" + (char)0x0337));
+        Assert.False(UsernameAttribute.IsWellFormed((char)0x093E + "ada"));
+        Assert.False(UsernameAttribute.IsWellFormed(new string([(char)0x0930, ' ', (char)0x093E])));
+    }
+
     [Fact]
     public void A_decomposed_accent_reads_as_the_composed_letter()
     {

@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 using System.Text;
 
 namespace Wbskt.Auth.Models;
@@ -7,7 +8,9 @@ namespace Wbskt.Auth.Models;
 /// A username a reader cannot mistake for someone else's: letters of one alphabet, ASCII digits, and
 /// '.', '_', '-' or a single space between them. A Cyrillic "a" (U+0430) among Latin letters reads as
 /// a Latin one, so "admin" spelt with it would pass for an administrator in a member list. Chinese,
-/// Japanese and Korean count as one alphabet, since a name mixes their scripts.
+/// Japanese and Korean count as one alphabet, since a name mixes their scripts. Scripts written with
+/// combining vowel signs (Devanagari, Tamil, Thai, ...) keep them; the alphabets with look-alikes do not,
+/// since a mark that does not compose there only disguises the letter under it.
 /// </summary>
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Parameter)]
 public sealed class UsernameAttribute : ValidationAttribute
@@ -23,7 +26,7 @@ public sealed class UsernameAttribute : ValidationAttribute
     public static bool IsWellFormed(string username)
     {
         var name = username.Normalize(NormalizationForm.FormC);
-        if (name.Length == 0 || !char.IsLetterOrDigit(name[0]) || !char.IsLetterOrDigit(name[^1]))
+        if (name.Length == 0 || !char.IsLetterOrDigit(name[0]))
         {
             return false;
         }
@@ -32,10 +35,18 @@ public sealed class UsernameAttribute : ValidationAttribute
         var previous = 'a';
         foreach (var c in name)
         {
-            if (c is '.' or '_' or '-' or ' ')
+            if (IsSeparator(c))
             {
                 // One separator at a time: "a  b" and "a._b" are two names that read as one.
-                if (!char.IsLetterOrDigit(previous))
+                if (IsSeparator(previous))
+                {
+                    return false;
+                }
+            }
+            else if (IsMark(c))
+            {
+                // A vowel sign or virama belongs to the letter before it, in a script without look-alikes.
+                if (alphabet is not Alphabet.Other || !(char.IsLetter(previous) || IsMark(previous)))
                 {
                     return false;
                 }
@@ -52,15 +63,20 @@ public sealed class UsernameAttribute : ValidationAttribute
             }
             else if (!char.IsAsciiDigit(c))
             {
-                // Other digits (Arabic-Indic, fullwidth), marks, symbols, emoji and surrogates.
+                // Other digits (Arabic-Indic, fullwidth), symbols, emoji and surrogates.
                 return false;
             }
 
             previous = c;
         }
 
-        return true;
+        return !IsSeparator(previous);
     }
+
+    private static bool IsSeparator(char c) => c is '.' or '_' or '-' or ' ';
+
+    private static bool IsMark(char c) =>
+        char.GetUnicodeCategory(c) is UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark;
 
     private static Alphabet AlphabetOf(char c) => (int)c switch
     {
