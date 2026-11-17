@@ -80,6 +80,46 @@ public sealed class WorkspaceAccessProcedureTests(AuthSqlFixture fixture)
         // The previous owner is an ordinary member now, and can be removed.
         await ProcAsync("dbo.WorkspaceMember_Remove", ("@WorkspaceId", workspaceId), ("@UserId", ownerId));
         Assert.False(await IsWorkspaceMemberAsync(workspaceId, ownerId));
+
+        // The new owner holds Admin there, as a creator does, so they can administer what they own.
+        Assert.Equal(1, await ScalarAsync<int>("""
+            SELECT COUNT(*) FROM dbo.UserRoles UR INNER JOIN dbo.Roles R ON R.Id = UR.RoleId
+            WHERE UR.UserId = @p0 AND UR.WorkspaceId = @p1 AND R.Kind = N'Admin'
+            """, memberId, workspaceId));
+    }
+
+    [SkippableFact]
+    public async Task Ownership_moving_back_does_not_grant_Admin_twice()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var (tenantId, ownerId) = await CreateTenantAsync();
+        int workspaceId = await CreateWorkspaceAsync(tenantId, ownerId);
+        int memberId = await CreateUserAsync();
+        await ExecAsync("INSERT INTO dbo.TenantMembers (TenantId, UserId) VALUES (@p0, @p1)", tenantId, memberId);
+
+        await ProcAsync("dbo.Workspace_SetOwner", ("@WorkspaceId", workspaceId), ("@UserId", memberId));
+        await ProcAsync("dbo.Workspace_SetOwner", ("@WorkspaceId", workspaceId), ("@UserId", ownerId));
+        await ProcAsync("dbo.Workspace_SetOwner", ("@WorkspaceId", workspaceId), ("@UserId", memberId));
+
+        Assert.Equal(1, await ScalarAsync<int>("""
+            SELECT COUNT(*) FROM dbo.UserRoles UR INNER JOIN dbo.Roles R ON R.Id = UR.RoleId
+            WHERE UR.UserId = @p0 AND UR.WorkspaceId = @p1 AND R.Kind = N'Admin'
+            """, memberId, workspaceId));
+    }
+
+    [SkippableFact]
+    public async Task Ownership_cannot_move_to_a_suspended_member()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var (tenantId, ownerId) = await CreateTenantAsync();
+        int workspaceId = await CreateWorkspaceAsync(tenantId, ownerId);
+        int suspendedId = await CreateUserAsync();
+        await ExecAsync("INSERT INTO dbo.TenantMembers (TenantId, UserId, IsSuspended) VALUES (@p0, @p1, 1)", tenantId, suspendedId);
+
+        var ex = await Assert.ThrowsAsync<SqlException>(() => ProcAsync("dbo.Workspace_SetOwner", ("@WorkspaceId", workspaceId), ("@UserId", suspendedId)));
+
+        Assert.Equal(50009, ex.Number);
+        Assert.Equal(ownerId, await ScalarAsync<int>("SELECT OwnerUserId FROM dbo.Workspaces WHERE Id = @p0", workspaceId));
     }
 
     [SkippableFact]
