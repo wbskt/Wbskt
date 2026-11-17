@@ -7,8 +7,9 @@
 #
 #   1. BACKUP DATABASE inside the sql container, into a staging directory on the sql-data volume.
 #   2. RESTORE VERIFYONLY, then gzip the file out to BACKUP_DIR on the host and delete the staged
-#      copy - so the volume never accumulates backups it would lose along with
-#      the data.
+#      copy - so the volume never accumulates backups it would lose along with the data. A run that
+#      fails part way removes its staged copies on exit, and the next run removes any a killed run
+#      left behind.
 #   3. BACKUP_UPLOAD_CMD pushes BACKUP_DIR off the box.
 #
 # Stage 3 is mandatory. Without BACKUP_UPLOAD_CMD set, this script refuses to run rather than
@@ -73,6 +74,18 @@ load_env() {
     fi
 
     mkdir -p "$BACKUP_DIR"
+}
+
+# Only the staged copies this script names, one pattern per database: restore.sh stages its files in
+# the same directory, and a backup must never delete a restore in progress. Best effort, since it
+# also runs from the EXIT trap, where a failure must not replace the real exit status.
+clear_staging() {
+    local patterns=() db
+    for db in "${DATABASES[@]}"; do
+        patterns+=("$STAGING_DIR/${db}_*.bak")
+    done
+    docker compose exec -T sql sh -c "rm -f ${patterns[*]}" \
+        || log "warning: could not clear staged copies in $STAGING_DIR"
 }
 
 # `docker compose exec -T` rather than a bare `docker exec` so the container is resolved through
@@ -170,7 +183,19 @@ main() {
     docker compose ps --status running --services 2>/dev/null | grep -x sql > /dev/null \
         || die "the sql service is not running"
 
+    # Two runs at once (cron, and one started by hand after an alert) would each clear the other's
+    # staged copy below.
+    exec 9> "$BACKUP_DIR/.backup.lock"
+    flock -n 9 || die "another backup.sh is still running"
+
     docker compose exec -T sql mkdir -p "$STAGING_DIR" || die "could not create $STAGING_DIR"
+
+    # Each staged copy is the full size of its database, on the volume that holds the data, so one
+    # left by a failed or killed run is cleared before this run adds its own.
+    clear_staging
+    trap clear_staging EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
 
     report_sizes
 
