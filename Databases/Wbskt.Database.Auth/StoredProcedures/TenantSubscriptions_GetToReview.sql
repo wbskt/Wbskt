@@ -5,6 +5,9 @@
 --   renewal or its cancellation never reached us (the provider stops redelivering after about a day),
 --   so it is read again from the provider;
 -- * a plan an operator set, once its end date has passed.
+-- A tenant with another subscription that still keeps it on that plan (SubscriptionPlan.Decide: active,
+-- past due or on hold within the grace, cancelled but paid for, and not refunded) is not listed for an old
+-- one that ended: the review would read it from the provider every hour and change nothing.
 -- TenantBillingSync decides; a tenant it leaves alone is listed again next time.
 CREATE PROCEDURE dbo.TenantSubscriptions_GetToReview
     @Now          DATETIME2(3),
@@ -24,6 +27,17 @@ BEGIN
            OR (s.Status = N'cancelled' AND s.CurrentPeriodEnd <= @Now)
            OR  s.Status IN (N'expired', N'failed', N'paused')
            OR (s.Status = N'active' AND s.CurrentPeriodEnd < DATEADD(DAY, -1, @Now)))
+      AND NOT EXISTS (
+          SELECT 1
+          FROM dbo.TenantSubscriptions k
+          WHERE k.TenantId = s.TenantId
+            AND k.PlanCode = t.PlanCode
+            AND k.DuplicateAt IS NULL
+            AND NOT (k.Provider = s.Provider AND k.SubscriptionId = s.SubscriptionId)
+            AND (k.RefundedThrough IS NULL OR k.CurrentPeriodEnd > k.RefundedThrough)
+            AND (   (k.Status = N'active' AND k.CurrentPeriodEnd >= DATEADD(DAY, -1, @Now))
+                 OR (k.Status IN (N'past_due', N'on_hold') AND (k.PastDueSince IS NULL OR k.PastDueSince > @PastDueSince))
+                 OR (k.Status = N'cancelled' AND k.CurrentPeriodEnd > @Now)))
     UNION
     SELECT t.Id
     FROM dbo.Tenants t
