@@ -111,6 +111,11 @@ connection (too big, §5). The gateway lets a client send 10 messages a second s
 burst of 100; past that the excess is dropped, and after 500 drops in a row the connection is ended
 (throttled, §5).
 
+**Monthly allowance.** An account past its plan's monthly messages is slowed, not cut off: the gateway
+passes on one of each client's own messages a minute, `state.report` included, and drops the rest
+without telling the client. `sys.*` messages and `capabilities` always go through. Commands still
+reach the client.
+
 **Pacing.** A client sends at most 8 messages a second after a burst of 50
 (`ClientProtocol.SendPerSecond`, `ClientProtocol.SendBurst`), and that includes the offline backlog it
 flushes on reconnect. A message the gateway drops has still left the client, so an SDK that flushes a

@@ -89,6 +89,19 @@ public sealed class InboundMessageDispatcherTests
         _bus.Published.OfType<ClientCommandAckedEvent>().Should().ContainSingle();
     }
 
+    [Fact]
+    public async Task A_throttled_clients_capabilities_go_through()
+    {
+        var throttle = new MessageThrottle(TimeProvider.System);
+        throttle.Replace([2], DateTime.UtcNow);
+        var context = new InboundContext(ClientRefId, _connection) { Allowance = new ClientAllowance(throttle, 2, ClientRefId) };
+
+        await _dispatcher.DispatchAsync(context, """{"type":"temp.reading","payload":{}}""", CancellationToken.None);
+        await _dispatcher.DispatchAsync(context, """{"type":"capabilities","payload":{"commands":[]}}""", CancellationToken.None);
+
+        _bus.Published.OfType<ClientMessageReceivedEvent>().Select(e => e.Type).Should().Equal("temp.reading", "capabilities");
+    }
+
     [Theory]
     [InlineData("not json")]
     [InlineData("""{"payload":{}}""")]
@@ -120,6 +133,15 @@ public sealed class InboundMessageDispatcherTests
     public async Task An_ack_is_published_as_an_acked_command()
     {
         await Dispatch($$$"""{"type":"sys.ack","payload":{"commandId":"{{{CommandId}}}"}}""");
+
+        _bus.Published.Should().ContainSingle().Which.Should().BeOfType<ClientCommandAckedEvent>()
+            .Which.CommandId.Should().Be(CommandId);
+    }
+
+    [Fact]
+    public async Task A_system_type_is_matched_ignoring_case()
+    {
+        await Dispatch($$$"""{"type":"SYS.ACK","payload":{"commandId":"{{{CommandId}}}"}}""");
 
         _bus.Published.Should().ContainSingle().Which.Should().BeOfType<ClientCommandAckedEvent>()
             .Which.CommandId.Should().Be(CommandId);
