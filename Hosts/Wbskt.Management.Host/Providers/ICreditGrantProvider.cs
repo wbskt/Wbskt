@@ -5,6 +5,9 @@ namespace Wbskt.Management.Host.Providers;
 /// <summary>A tenant's credit grants (<c>dbo.TenantCreditGrants</c>): recorded, revoked and held as its payments change.</summary>
 public interface ICreditGrantProvider
 {
+    /// <summary>The grants made for <paramref name="sources"/>; a source with none is left out.</summary>
+    Task<IReadOnlyCollection<CreditGrantState>> GetBySourcesAsync(IReadOnlyCollection<CreditGrantSource> sources, CancellationToken ct);
+
     /// <summary>Records the grant once per source and reference; false when it was already recorded.</summary>
     Task<bool> InsertAsync(int tenantId, decimal credits, DateTime grantedAtUtc, DateTime expiresAtUtc, string source, string sourceRef, CancellationToken ct);
 

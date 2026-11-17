@@ -505,6 +505,27 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
         }
 
         Assert.Equal([(refunded, true, false, 0), (held, false, true, 1)], rows);
+
+        // Packs expired by @ExpiresAfter are left out; the two expire a year after Now.
+        Assert.Equal(2, await CountPageAsync(first - 1, Now.AddDays(364)));
+        Assert.Equal(0, await CountPageAsync(first - 1, Now.AddDays(365)));
+    }
+
+    private async Task<int> CountPageAsync(int afterId, DateTime expiresAfter)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = Procedure(conn, "dbo.TenantCreditPurchase_GetPage");
+        cmd.Parameters.AddWithValue("@AfterId", afterId);
+        cmd.Parameters.AddWithValue("@Take", 10);
+        cmd.Parameters.AddWithValue("@ExpiresAfter", expiresAfter);
+        int count = 0;
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            count++;
+        }
+
+        return count;
     }
 
     private async Task<(long Id, DateTime? ProcessedAt)> RecordWebhookAsync(string eventId)

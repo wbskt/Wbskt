@@ -1,3 +1,4 @@
+using System.Globalization;
 using Wbskt.Auth.Models;
 using Wbskt.Infrastructure;
 using Wbskt.Models;
@@ -10,9 +11,10 @@ namespace Wbskt.Management.Host.Services.Clients;
 /// </summary>
 internal sealed class CreditPurchasesClient(HttpClient httpClient) : ICreditPurchasesClient
 {
-    public async Task<Page<CreditPurchaseResponse>> GetPageAsync(string? cursor, CancellationToken cancellationToken)
+    public async Task<Page<CreditPurchaseResponse>> GetPageAsync(string? cursor, DateTimeOffset expiresAfter, CancellationToken cancellationToken)
     {
-        string query = $"limit={Paging.MaxPageSize}" + (cursor is null ? string.Empty : $"&cursor={Uri.EscapeDataString(cursor)}");
+        string query = $"limit={Paging.MaxPageSize}&expiresAfter={Uri.EscapeDataString(expiresAfter.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture))}"
+            + (cursor is null ? string.Empty : $"&cursor={Uri.EscapeDataString(cursor)}");
         using var response = await httpClient.GetAsync($"/{InternalRoutes.CreditPurchases}?{query}", cancellationToken);
         response.EnsureSuccessStatusCode();
 

@@ -25,10 +25,10 @@ public class InternalBillingController : ApiControllerBase
         _billingService = billingService;
     }
 
-    /// <summary>Every credit pack bought, with its refund and hold, a page at a time by id.</summary>
+    /// <summary>Every credit pack bought, or those still to expire after <c>expiresAfter</c>, with its refund and hold, a page at a time by id.</summary>
     [HttpGet(InternalRoutes.CreditPurchases)]
-    public async Task<ActionResult<Page<CreditPurchaseResponse>>> GetCreditPurchases([FromQuery] PageRequest page, CancellationToken cancellationToken)
+    public async Task<ActionResult<Page<CreditPurchaseResponse>>> GetCreditPurchases([FromQuery] PageRequest page, [FromQuery] DateTimeOffset? expiresAfter, CancellationToken cancellationToken)
     {
-        return MapResult(await _billingService.GetCreditPurchasesAsync(page, cancellationToken));
+        return MapResult(await _billingService.GetCreditPurchasesAsync(page, expiresAfter, cancellationToken));
     }
 }

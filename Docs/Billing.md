@@ -262,10 +262,12 @@ balance a start reads is always current. A revoked grant's drawn credits stay dr
 held stops counting.
 
 **Reconcile.** Grants reach the main database only through those events, so the management host's
-`CreditGrantReconcileWorker` (every `Billing:CreditGrantReconcileInterval`, 1 hour) reads every credit pack
-bought from the auth host (`GET /api/internal/billing/credit-purchases`, `dbo.TenantCreditPurchase_GetPage`)
-and makes the writes an event would have: the grant, its revocation and its latest hold or release. Each
-write is idempotent, so the reconcile and the events can meet in any order. Each repair is logged and
+`CreditGrantReconcileWorker` (every `Billing:CreditGrantReconcileInterval`, 1 hour) reads the credit packs
+bought that have not expired from the auth host (`GET /api/internal/billing/credit-purchases?expiresAfter=`,
+`dbo.TenantCreditPurchase_GetPage`); an expired grant counts for nothing, so there is nothing to repair on
+one. It compares each page with the grants in one read (`dbo.TenantCreditGrants_GetBySources`) and makes
+only the writes an event would have and the grant lacks: the grant, its revocation and its latest hold or
+release. Each write is idempotent, so the reconcile and the events can meet in any order. Each repair is logged and
 counted on `wbskt_management_credit_grants_repaired_total{change}`, which the `CreditGrantsRepaired`
 alert watches.
 

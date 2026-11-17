@@ -150,12 +150,13 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
         return tenantId is not null;
     }
 
-    public Task<IReadOnlyCollection<CreditPurchaseResponse>> GetCreditPurchasesAsync(int? afterId, int take, CancellationToken cancellationToken)
+    public Task<IReadOnlyCollection<CreditPurchaseResponse>> GetCreditPurchasesAsync(int? afterId, int take, DateTime? expiresAfterUtc, CancellationToken cancellationToken)
     {
         return ExecuteCollectionAsync("dbo.TenantCreditPurchase_GetPage", p =>
         {
             p.AddWithValue("@AfterId", (object?)afterId ?? DBNull.Value);
             p.AddWithValue("@Take", take);
+            p.Add("@ExpiresAfter", SqlDbType.DateTime2).Value = (object?)expiresAfterUtc ?? DBNull.Value;
         }, r =>
         {
             int refundedAt = r.GetOrdinal("RefundedAt");

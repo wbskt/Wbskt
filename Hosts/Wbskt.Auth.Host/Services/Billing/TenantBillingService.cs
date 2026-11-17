@@ -22,7 +22,7 @@ internal sealed class TenantBillingService(
     private static readonly Error NotConfigured = Error.Unavailable("BILLING_UNAVAILABLE", "Payments are not set up on this deployment.");
     private static readonly Error ProviderDown = Error.Unavailable("BILLING_PROVIDER_UNAVAILABLE", "The payment provider could not be reached. Try again shortly.");
 
-    public async Task<Result<Page<CreditPurchaseResponse>>> GetCreditPurchasesAsync(PageRequest page, CancellationToken ct)
+    public async Task<Result<Page<CreditPurchaseResponse>>> GetCreditPurchasesAsync(PageRequest page, DateTimeOffset? expiresAfter, CancellationToken ct)
     {
         Result<long?> after = page.AfterKey();
         if (after.IsFailure)
@@ -36,7 +36,7 @@ internal sealed class TenantBillingService(
         }
 
         int take = page.LimitOr(Paging.MaxPageSize);
-        IReadOnlyCollection<CreditPurchaseResponse> rows = await billing.GetCreditPurchasesAsync((int?)after.Value, take, ct);
+        IReadOnlyCollection<CreditPurchaseResponse> rows = await billing.GetCreditPurchasesAsync((int?)after.Value, take, expiresAfter?.UtcDateTime, ct);
         return new Page<CreditPurchaseResponse>
         {
             Items = rows,
