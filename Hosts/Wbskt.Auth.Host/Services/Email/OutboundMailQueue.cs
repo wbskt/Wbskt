@@ -9,9 +9,10 @@ namespace Wbskt.Auth.Host.Services.Email;
 /// <remarks>
 /// <b>Nothing here ever blocks a caller.</b> A full queue means the relay is wedged, and making a
 /// registration wait on that is the one thing this type exists to prevent. The surplus is refused
-/// instead, loudly — every message this host sends has a user-triggered way to ask for it again
+/// instead, loudly. Nearly every message this host sends has a user-triggered way to ask for it again
 /// (resend-verification, forgot-password, re-invite), so a refusal is recoverable where a stalled
-/// request is not.
+/// request is not. Mail the relay fails to take is not refused but tried again later
+/// (<see cref="MailRetryList"/>).
 /// <para>
 /// <b>FullMode.Wait despite never waiting</b>, which reads like a contradiction and is not. Only
 /// <c>WriteAsync</c> waits under this mode; <c>TryWrite</c> returns false immediately, which is the
@@ -45,5 +46,8 @@ internal sealed class OutboundMailQueue
     /// </summary>
     public bool TryWrite(OutboundMail mail) => _channel.Writer.TryWrite(mail);
 
-    public IAsyncEnumerable<OutboundMail> ReadAllAsync(CancellationToken ct) => _channel.Reader.ReadAllAsync(ct);
+    public bool TryRead([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out OutboundMail? mail) => _channel.Reader.TryRead(out mail);
+
+    /// <summary>Waits until a message can be read; false once nothing more will be written.</summary>
+    public ValueTask<bool> WaitToReadAsync(CancellationToken ct) => _channel.Reader.WaitToReadAsync(ct);
 }

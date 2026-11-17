@@ -138,6 +138,13 @@ public sealed class AuthMetrics : IWorkerTickMetrics, IDisposable
     public void ObserveMailQueueDepth(Func<int> depth) =>
         _meter.CreateObservableGauge("wbskt_auth_mail_queue_depth", depth);
 
+    /// <summary>
+    /// Reports how many messages the relay failed to take and wait to be tried again as
+    /// <c>wbskt_auth_mail_retry_depth</c>. Called once, by the dispatcher.
+    /// </summary>
+    public void ObserveMailRetryDepth(Func<int> depth) =>
+        _meter.CreateObservableGauge("wbskt_auth_mail_retry_depth", depth);
+
     public void RecordBreachCheck(string outcome) =>
         BreachChecks.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
 

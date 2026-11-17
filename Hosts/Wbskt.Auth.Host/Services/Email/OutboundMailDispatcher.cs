@@ -5,39 +5,50 @@ namespace Wbskt.Auth.Host.Services.Email;
 
 /// <summary>
 /// Drains <see cref="OutboundMailQueue"/> and hands each message to the relay, off the request path.
+/// A message the relay fails to take waits in <see cref="MailRetryList"/> and is tried again on a
+/// back-off, while the mail behind it goes out.
 /// </summary>
 internal sealed class OutboundMailDispatcher : BackgroundService
 {
     /// <summary>
-    /// Relays fail transiently — greylisting, a connection reset, a restart — far more often than
-    /// permanently, and the alternative to a retry here is losing the message. Two delays means three
-    /// attempts in total, bounded so a permanently broken relay cannot wedge the drain loop: this
-    /// loop is sequential, so every second spent retrying one message is a second the rest wait.
+    /// Relays fail transiently (greylisting, a connection reset, a restart, an outage of an hour) far
+    /// more often than permanently, and some mail, such as the notice that an address was changed, has
+    /// no way to be asked for again. So a failed message is tried again for about eight hours. A link in
+    /// it that has expired by then fails on its own, as an old link does.
     /// </summary>
-    private static readonly TimeSpan[] DefaultRetryDelays = [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(8)];
+    private static readonly TimeSpan[] DefaultRetryDelays =
+    [
+        TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(30),
+        TimeSpan.FromHours(1), TimeSpan.FromHours(2), TimeSpan.FromHours(4)
+    ];
 
     private readonly OutboundMailQueue _queue;
+    private readonly MailRetryList _retries = new();
     private readonly IEmailSender _sender;
     private readonly ILogger<OutboundMailDispatcher> _logger;
     private readonly AuthMetrics _metrics;
+    private readonly TimeProvider _time;
     private readonly IReadOnlyList<TimeSpan> _retryDelays;
 
     /// <remarks>
     /// <c>retryDelays</c> is overridable so the suite can exercise the retry ladder without waiting
-    /// ten seconds for it. DI never supplies it; production uses <see cref="DefaultRetryDelays"/>.
+    /// hours for it. DI never supplies it; production uses <see cref="DefaultRetryDelays"/>.
     /// </remarks>
     public OutboundMailDispatcher(
         OutboundMailQueue queue,
         IEmailSender sender,
         ILogger<OutboundMailDispatcher> logger,
         AuthMetrics metrics,
+        TimeProvider time,
         IReadOnlyList<TimeSpan>? retryDelays = null)
     {
         _queue = queue;
         _sender = sender;
         _logger = logger;
         _metrics = metrics;
+        _time = time;
         _retryDelays = retryDelays ?? DefaultRetryDelays;
+        metrics.ObserveMailRetryDepth(() => _retries.Count);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -52,72 +63,101 @@ internal sealed class OutboundMailDispatcher : BackgroundService
                 "and because sign-in requires a verified address, no new account will be usable.");
         }
 
-        await foreach (OutboundMail mail in _queue.ReadAllAsync(stoppingToken))
+        while (!stoppingToken.IsCancellationRequested)
         {
-            await SendWithRetryAsync(mail, stoppingToken);
+            if (_retries.TryTakeDue(_time.GetUtcNow(), out var due))
+            {
+                await SendAsync(due, stoppingToken);
+            }
+            else if (_queue.TryRead(out var mail))
+            {
+                await SendAsync(new PendingMail(mail, 0), stoppingToken);
+            }
+            else if (!await WaitForWorkAsync(stoppingToken))
+            {
+                return;
+            }
         }
     }
 
-    private async Task SendWithRetryAsync(OutboundMail mail, CancellationToken ct)
+    /// <summary>Waits for new mail or the next retry, whichever comes first; false once the queue is closed.</summary>
+    private async Task<bool> WaitForWorkAsync(CancellationToken stoppingToken)
+    {
+        if (_retries.NextDueIn(_time.GetUtcNow()) is not { } nextRetry)
+        {
+            return await _queue.WaitToReadAsync(stoppingToken);
+        }
+
+        using var retryDue = new CancellationTokenSource(nextRetry, _time);
+        using var wake = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, retryDue.Token);
+        try
+        {
+            return await _queue.WaitToReadAsync(wake.Token);
+        }
+        catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
+        {
+            return true;
+        }
+    }
+
+    private async Task SendAsync(PendingMail pending, CancellationToken ct)
     {
         // Never the address, only its fingerprint (EmailFingerprint), and never the subject, which can
         // carry a tenant's name; never the body either, which carries the token.
+        var mail = pending.Mail;
         string recipient = EmailFingerprint.Of(mail.To);
-        for (int attempt = 0; ; attempt++)
+        try
         {
-            try
-            {
-                await _sender.SendMultipartAsync(mail.To, mail.Subject, mail.TextBody, mail.HtmlBody, ct);
+            await _sender.SendMultipartAsync(mail.To, mail.Subject, mail.TextBody, mail.HtmlBody, ct);
 
-                // The relay took it; delivery from there is the relay's. Without this line a missing
-                // mail cannot be told apart from one that was never handed over.
-                _metrics.RecordMail(MailOutcome.Sent);
-                _logger.LogInformation("Mail {MailKind} to {RecipientFingerprint} accepted by the relay.", mail.Kind, recipient);
-                return;
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                // Shutdown. The message is lost; every one of them has a user-triggered way to be
-                // reissued, which is why that is acceptable and why nothing here blocks shutdown.
-                return;
-            }
-            catch (Exception ex) when (MailFailure.IsMalformedRecipient(ex, mail.To))
-            {
-                // Fails identically on every attempt. An operator finds the account by checking a
-                // suspect address against the fingerprint.
-                _metrics.RecordMail(MailOutcome.InvalidAddress);
-                _logger.LogWarning("Mail {MailKind} to {RecipientFingerprint} was not sent: the address is malformed.", mail.Kind, recipient);
-                return;
-            }
-            catch (Exception ex) when (MailFailure.IsPermanentRecipientRefusal(ex))
-            {
-                // The relay will not take this recipient, so trying again only delays the rest. One
-                // bad mailbox is not the relay failing, so it is counted apart and does not alert.
-                _metrics.RecordMail(MailOutcome.Rejected);
-                _logger.LogWarning("Mail {MailKind} to {RecipientFingerprint} was refused by the relay: {Failure}.", mail.Kind, recipient, MailFailure.Describe(ex));
-                return;
-            }
-            catch (Exception ex)
-            {
-                if (attempt >= _retryDelays.Count)
-                {
-                    _metrics.RecordMail(MailOutcome.Dropped);
-                    _logger.LogError("Mail {MailKind} to {RecipientFingerprint} was not sent after {Attempts} attempts: {Failure}.", mail.Kind, recipient, attempt + 1, MailFailure.Describe(ex));
-                    return;
-                }
-
-                _metrics.RecordMail(MailOutcome.Retried);
-                _logger.LogWarning("Mail {MailKind} to {RecipientFingerprint} failed on attempt {Attempt}; retrying: {Failure}.", mail.Kind, recipient, attempt + 1, MailFailure.Describe(ex));
-
-                try
-                {
-                    await Task.Delay(_retryDelays[attempt], ct);
-                }
-                catch (OperationCanceledException)
-                {
-                    return;
-                }
-            }
+            // The relay took it; delivery from there is the relay's. Without this line a missing
+            // mail cannot be told apart from one that was never handed over.
+            _metrics.RecordMail(MailOutcome.Sent);
+            _logger.LogInformation("Mail {MailKind} to {RecipientFingerprint} accepted by the relay.", mail.Kind, recipient);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Shutdown. The message is lost with the rest held in memory, and nothing here blocks shutdown.
+        }
+        catch (Exception ex) when (MailFailure.IsMalformedRecipient(ex, mail.To))
+        {
+            // Fails identically on every attempt. An operator finds the account by checking a
+            // suspect address against the fingerprint.
+            _metrics.RecordMail(MailOutcome.InvalidAddress);
+            _logger.LogWarning("Mail {MailKind} to {RecipientFingerprint} was not sent: the address is malformed.", mail.Kind, recipient);
+        }
+        catch (Exception ex) when (MailFailure.IsPermanentRecipientRefusal(ex))
+        {
+            // The relay will not take this recipient, so trying again cannot help. One bad mailbox is
+            // not the relay failing, so it is counted apart and does not alert.
+            _metrics.RecordMail(MailOutcome.Rejected);
+            _logger.LogWarning("Mail {MailKind} to {RecipientFingerprint} was refused by the relay: {Failure}.", mail.Kind, recipient, MailFailure.Describe(ex));
+        }
+        catch (Exception ex)
+        {
+            Retry(pending, recipient, ex);
+        }
+    }
+
+    private void Retry(PendingMail pending, string recipient, Exception failure)
+    {
+        var (mail, attempts) = (pending.Mail, pending.Attempts + 1);
+        if (attempts > _retryDelays.Count)
+        {
+            _metrics.RecordMail(MailOutcome.Dropped);
+            _logger.LogError("Mail {MailKind} to {RecipientFingerprint} was not sent after {Attempts} attempts: {Failure}.", mail.Kind, recipient, attempts, MailFailure.Describe(failure));
+            return;
+        }
+
+        var delay = _retryDelays[attempts - 1];
+        if (!_retries.TryAdd(pending with { Attempts = attempts }, _time.GetUtcNow() + delay))
+        {
+            _metrics.RecordMail(MailOutcome.Dropped);
+            _logger.LogError("Mail {MailKind} to {RecipientFingerprint} was not sent: {Waiting} messages already wait to be tried again. {Failure}.", mail.Kind, recipient, MailRetryList.Capacity, MailFailure.Describe(failure));
+            return;
+        }
+
+        _metrics.RecordMail(MailOutcome.Retried);
+        _logger.LogWarning("Mail {MailKind} to {RecipientFingerprint} failed on attempt {Attempt}; trying again in {Delay}: {Failure}.", mail.Kind, recipient, attempts, delay, MailFailure.Describe(failure));
     }
 }

@@ -85,13 +85,14 @@ groups:
           command: "docker compose logs --tail 200 engine"
 
       - alert: MailRelayDown
-        # The auth host gave up on at least two mails and sent none in 15 minutes: the relay is refusing
-        # everything (expired credential, sending limit, outage, or "relaying denied", which arrives as a
-        # refused recipient). Every confirmation, invitation and password reset goes this way, and sign-in
-        # needs a confirmed address, so nobody new can get in. Two, so one mistyped address at a quiet
-        # hour does not page.
+        # The auth host failed or gave up on mail at least twice and sent none in 15 minutes: the relay is
+        # refusing everything (expired credential, sending limit, outage, or "relaying denied", which
+        # arrives as a refused recipient). Every confirmation, invitation and password reset goes this way,
+        # and sign-in needs a confirmed address, so nobody new can get in. Failed attempts (retried) count,
+        # since a message is tried again for hours before it is given up on. Two, so one mistyped address
+        # at a quiet hour does not page.
         expr: |
-          sum(increase(wbskt_auth_mail_total{outcome=~"dropped|queue_full|rejected"}[15m])) >= 2
+          sum(increase(wbskt_auth_mail_total{outcome=~"retried|dropped|queue_full|rejected"}[15m])) >= 2
           and (sum(increase(wbskt_auth_mail_total{outcome="sent"}[15m])) or vector(0)) == 0
         labels:
           severity: page
@@ -102,20 +103,22 @@ groups:
             confirm their address, so they cannot sign in.
           action: >-
             The mail relay is refusing everything or cannot be reached: often an expired password, a sending
-            limit, or the provider being down. The auth host's "was not sent after" and "was refused by the
-            relay" log lines carry the relay's error code. If the SMTP_* settings in .env changed, fix them
+            limit, or the provider being down. The auth host's "failed on attempt", "was not sent" and "was
+            refused by the relay" log lines carry the relay's error code. Mail that failed is tried again
+            for about eight hours, so fixing the relay soon still delivers it. If the SMTP_* settings in .env changed, fix them
             and restart auth. This alert is mailed through that same relay, so it reaches anyone only when
             ALERT_WEBHOOK_URL is set too.
-          command: "docker compose logs --since 1h auth | grep -E \"was not sent after|refused by the relay\""
+          command: "docker compose logs --since 1h auth | grep -E \"failed on attempt|was not sent|refused by the relay\""
 
       - alert: MailFailing
-        # Some mail was given up on after its retries (about 10 seconds), or refused by a full queue,
-        # while other mail still went out: a relay blip, or a backlog building. Quiet while MailRelayDown
-        # holds (the same condition, repeated), so one outage notifies once.
+        # Some mail was given up on after its retries (about eight hours), or refused by a full queue or
+        # retry list, while other mail still went out: a relay refusing some mail for hours, or a backlog
+        # building. Quiet while MailRelayDown holds (the same condition, repeated), so one outage
+        # notifies once.
         expr: |
           sum(increase(wbskt_auth_mail_total{outcome=~"dropped|queue_full"}[15m])) > 0
           unless on() (
-            sum(increase(wbskt_auth_mail_total{outcome=~"dropped|queue_full|rejected"}[15m])) >= 2
+            sum(increase(wbskt_auth_mail_total{outcome=~"retried|dropped|queue_full|rejected"}[15m])) >= 2
             and (sum(increase(wbskt_auth_mail_total{outcome="sent"}[15m])) or vector(0)) == 0
           )
         labels:
