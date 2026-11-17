@@ -561,8 +561,8 @@ jobs:
   # (:latest, which deploy.yml moves only once a deploy from master has succeeded) builds both
   # databases, every table gets a row, and this commit's migrator upgrades them. Fails on possible
   # data loss, on a table that comes out with fewer rows, and on any difference left between the
-  # upgraded schema and this commit's DACPACs. See "Upgrade rehearsal" in deploy/README.md. Skipped for pull requests from forks, which
-  # get no token to pull the image with.
+  # upgraded schema and this commit's DACPACs. See "Upgrade rehearsal" in deploy/README.md. Skipped
+  # for pull requests from forks, which get no token to pull the image with.
   migration-rehearsal:
     needs: changes
     if: >-
