@@ -107,6 +107,41 @@ public sealed class MqttGatewayTests : IAsyncLifetime
         await Assert.ThrowsAsync<InvalidOperationException>(() => connection.SendAsync(new ProtocolMessage("cmd.relay", new { on = true }), CancellationToken.None));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_will_on_the_clients_own_topic_is_not_taken_as_its_message(bool dropped)
+    {
+        var client = new MqttClientFactory().CreateMqttClient();
+        _clients.Add(client);
+        var options = new MqttClientOptionsBuilder()
+            .WithTcpServer("127.0.0.1", _gateway.Listener.Port)
+            .WithClientId(ClientRefId.ToString())
+            .WithCredentials(ClientRefId.ToString(), Token(null))
+            .WithProtocolVersion(MqttProtocolVersion.V500)
+            .WithWillTopic(MqttBinding.UpTopic(ClientRefId))
+            .WithWillPayload("""{"type":"gone","payload":{}}""")
+            .Build();
+        await client.ConnectAsync(options);
+        await WaitUntilAsync(() => _connections.GetConnection(ClientRefId) is not null);
+        var connection = _connections.GetConnection(ClientRefId)!;
+
+        // Dropped: the connection is lost with no DISCONNECT, the case a will is for.
+        if (dropped)
+        {
+            client.Dispose();
+        }
+        else
+        {
+            await client.DisconnectAsync(new MqttClientDisconnectOptions { Reason = MqttClientDisconnectOptionsReason.DisconnectWithWillMessage });
+        }
+
+        await WaitUntilAsync(() => !connection.IsOpen);
+        await Task.Delay(200);
+
+        Assert.DoesNotContain(Published<ClientMessageReceivedEvent>(), e => e.Type == "gone");
+    }
+
     [Fact]
     public async Task A_token_that_does_not_validate_is_refused_as_a_bad_password()
     {
