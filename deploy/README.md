@@ -776,6 +776,21 @@ run. The column was written but never read, so nothing is lost but the column it
 Nothing is recoverable afterwards, so take a backup first — `deploy/scripts/backup.sh` — and confirm
 a client can still log in before moving on.
 
+### Workflow states need this flag, once
+
+Giving workflows a state and a live version (`dbo.Workflows`, #895) drops
+`WorkflowDefinitions.IsEnabled`, so the deploy carrying it also fails the incremental publish (and the
+upgrade rehearsal) until `MIGRATE_ALLOW_DATA_LOSS=true` is passed for that one run. sqlpackage plans
+the drop before the pre-deployment script runs, so dropping the column there does not avoid it.
+
+The pre-deployment script reads every workflow's state out of the column first, and the
+post-deployment script writes it to `dbo.Workflows`: a deleted workflow stays deleted, one whose
+newest version was enabled stays Enabled on that version, and every other one (today's deprecated
+workflows) becomes Disabled. Schedule triggers are re-keyed by workflow and node, and registrations,
+schedules and queued events left by versions that are no longer live are removed. Take a backup
+first, and after the deploy check that `SELECT State, COUNT(*) FROM dbo.Workflows GROUP BY State`
+matches what the console showed before.
+
 ### Email verification is additive, and needs no flag
 
 The change that added `Users.IsEmailVerified` adds a column and two tables, so an ordinary
