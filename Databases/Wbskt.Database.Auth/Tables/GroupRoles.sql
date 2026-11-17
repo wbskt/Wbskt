@@ -14,3 +14,9 @@ CREATE TABLE dbo.GroupRoles (
     CONSTRAINT FK_GroupRoles_Workspace FOREIGN KEY (WorkspaceId) REFERENCES dbo.Workspaces (Id)
 );
 GO
+
+-- For the deletes by workspace and by role and their foreign key checks, as on dbo.UserRoles.
+CREATE INDEX IX_GroupRoles_WorkspaceId ON dbo.GroupRoles (WorkspaceId);
+GO
+CREATE INDEX IX_GroupRoles_RoleId ON dbo.GroupRoles (RoleId);
+GO

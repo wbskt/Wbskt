@@ -38,3 +38,11 @@ CREATE UNIQUE INDEX UX_TenantInvitations_Pending
     ON dbo.TenantInvitations (TenantId, Email)
     WHERE AcceptedAt IS NULL AND RevokedAt IS NULL;
 GO
+
+-- Role_Delete clears RoleId on the invitations that name the role, and User_Delete revokes the ones
+-- sent to the account's address. Both run holding the tenant row, so a scan here stops on an
+-- invitation an accept has locked: seeks keep each to its own rows.
+CREATE INDEX IX_TenantInvitations_RoleId ON dbo.TenantInvitations (RoleId);
+GO
+CREATE INDEX IX_TenantInvitations_Email ON dbo.TenantInvitations (Email);
+GO
