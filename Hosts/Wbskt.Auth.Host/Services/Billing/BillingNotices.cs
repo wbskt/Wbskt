@@ -114,7 +114,7 @@ internal static class BillingNotices
                 $"{workspaceName} reached its credit cap in {name}",
                 [
                     $"The workspace {workspaceName} spent {Number(spent)} workflow credits in {name}, its cap of {Number(cap)}.",
-                    $"Its new runs were refused for the rest of {name}. They have run again since {resets}. If it needs more in a month, raise or remove the cap in the workspace's settings."
+                    $"Its new runs were refused for the rest of {name}, and have been allowed again since {resets}. If it needs more in a month, raise or remove the cap in the workspace's settings."
                 ]);
         }
 
