@@ -8,8 +8,8 @@ public interface IClientCommandPublisher
     /// acknowledgement, or the report that the command failed, carries <paramref name="commandId"/>.
     /// The client refuses the command once <paramref name="expiresIn"/> has passed, so it is never
     /// acted on after the step sending it has stopped waiting. A command that can be neither sent
-    /// nor queued (an unknown or inactive client, a full queue) is reported as failed and answered
-    /// as refused; a broker that is down is thrown.
+    /// nor queued (an unknown or inactive client, a full queue, an invalid command or expiry) is
+    /// reported as failed and answered as refused; a broker that is down is thrown.
     /// </summary>
     Task<CommandPublishOutcome> PublishCommandAsync(Guid commandId, Guid clientRefId, int workspaceId, string command, string payload, TimeSpan expiresIn, CommandSender? sentBy, CancellationToken ct);
 }
