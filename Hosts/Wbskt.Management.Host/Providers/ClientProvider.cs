@@ -351,7 +351,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
     }
 
     public async Task<IReadOnlyList<StateVariableUpsert>> ReportStateVariablesAsync(int clientId, IReadOnlyList<StateVariableValue> variables,
-        int maxPerClient, CancellationToken cancellationToken = default)
+        DateTime reportedAt, int maxPerClient, CancellationToken cancellationToken = default)
     {
         if (variables.Count == 0)
         {
@@ -374,6 +374,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             {
                 p.AddWithValue("@ClientId", clientId);
                 p.AddWithValue("@MaxPerClient", maxPerClient);
+                p.Add("@ReportedAt", SqlDbType.DateTime2).Value = reportedAt;
                 var parameter = p.AddWithValue("@Variables", table);
                 parameter.SqlDbType = SqlDbType.Structured;
                 parameter.TypeName = "dbo.ClientStateVariableTableType";
@@ -381,7 +382,8 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             reader => new StateVariableUpsert(
                 reader.GetString(reader.GetOrdinal("Name")),
                 reader.GetBoolean(reader.GetOrdinal("Stored")),
-                reader.IsDBNull(reader.GetOrdinal("OldValueJson")) ? null : reader.GetString(reader.GetOrdinal("OldValueJson"))),
+                reader.IsDBNull(reader.GetOrdinal("OldValueJson")) ? null : reader.GetString(reader.GetOrdinal("OldValueJson")),
+                reader.GetBoolean(reader.GetOrdinal("Stale"))),
             cancellationToken);
         return outcomes.ToList();
     }

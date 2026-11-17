@@ -89,9 +89,10 @@ public interface IClientProvider : IReferenceProvider
         string capabilitiesJson, string? systemJson, string? firmwareVersion, DateTime reportedAt, CancellationToken cancellationToken = default);
     /// <summary>
     /// Stores one state report's <paramref name="variables"/> (distinct by name) in one call, and returns
-    /// one outcome per variable in the same order. New names past <paramref name="maxPerClient"/> are refused.
+    /// one outcome per variable in the same order. New names past <paramref name="maxPerClient"/> are refused,
+    /// and a variable already set by a report sent after <paramref name="reportedAt"/> is left as it is.
     /// </summary>
     Task<IReadOnlyList<StateVariableUpsert>> ReportStateVariablesAsync(int clientId, IReadOnlyList<StateVariableValue> variables,
-        int maxPerClient, CancellationToken cancellationToken = default);
+        DateTime reportedAt, int maxPerClient, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<ClientStateVariable>> GetStateVariablesAsync(int clientId, CancellationToken cancellationToken = default);
 }

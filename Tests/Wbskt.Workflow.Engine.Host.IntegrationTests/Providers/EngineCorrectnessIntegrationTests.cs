@@ -152,13 +152,44 @@ public sealed class EngineCorrectnessIntegrationTests(SqlEdgeFixture fixture)
         // One report past the cap: the earlier new names take the places, in the order reported.
         Assert.Equal(
             [new StateVariableUpsert("b", true, null), new StateVariableUpsert("a", true, null), new StateVariableUpsert("c", false, null)],
-            await clients.ReportStateVariablesAsync(clientId, [Variable("b", "1"), Variable("a", "1"), Variable("c", "1")], maxPerClient: 2));
+            await clients.ReportStateVariablesAsync(clientId, [Variable("b", "1"), Variable("a", "1"), Variable("c", "1")], ReportedAt, maxPerClient: 2));
         // At the cap, a known name still updates, case-insensitively, and returns what it replaced.
         Assert.Equal(
             [new StateVariableUpsert("A", true, "1"), new StateVariableUpsert("d", false, null)],
-            await clients.ReportStateVariablesAsync(clientId, [Variable("A", "2"), Variable("d", "1")], maxPerClient: 2));
+            await clients.ReportStateVariablesAsync(clientId, [Variable("A", "2"), Variable("d", "1")], ReportedAt, maxPerClient: 2));
 
         Assert.Equal(2, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.ClientStateVariables WHERE ClientId = @p0", clientId));
+    }
+
+    /// <summary>
+    /// #781: <c>dbo.ClientStateVariables_Report</c> keeps a variable's value from the latest report the
+    /// client sent, whatever order reports arrive in. An older report sets back nothing, while a new
+    /// name in it is still stored.
+    /// </summary>
+    [SkippableFact]
+    public async Task An_older_state_report_does_not_set_a_variable_back()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int clientId = await ScalarAsync<int>("""
+            DECLARE @PolicyId INT;
+            INSERT INTO dbo.RegistrationPolicies (WorkspaceId, Pin, Name) VALUES (@p0, LEFT(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 20), N'order');
+            SET @PolicyId = SCOPE_IDENTITY();
+            INSERT INTO dbo.Clients (WorkspaceId, PolicyId, Name, SecretHash) OUTPUT INSERTED.Id
+            VALUES (@p0, @PolicyId, N'order', 0x00);
+            """, Random.Shared.Next(1_000_000, int.MaxValue));
+        var clients = new ClientProvider(ProviderFactory.BuildConfiguration(fixture.ConnectionString));
+
+        await clients.ReportStateVariablesAsync(clientId, [Variable("temp", "21")], ReportedAt, maxPerClient: 10);
+
+        Assert.Equal(
+            [new StateVariableUpsert("temp", false, null, Stale: true), new StateVariableUpsert("humidity", true, null)],
+            await clients.ReportStateVariablesAsync(clientId, [Variable("temp", "19"), Variable("humidity", "40")], ReportedAt.AddMinutes(-1), maxPerClient: 10));
+        Assert.Equal("21", await ScalarAsync<string>("SELECT ValueJson FROM dbo.ClientStateVariables WHERE ClientId = @p0 AND Name = N'temp'", clientId));
+
+        // The same time again, or a later one, applies.
+        Assert.Equal(
+            [new StateVariableUpsert("temp", true, "21")],
+            await clients.ReportStateVariablesAsync(clientId, [Variable("temp", "22")], ReportedAt, maxPerClient: 10));
     }
 
     /// <summary>
@@ -305,6 +336,8 @@ public sealed class EngineCorrectnessIntegrationTests(SqlEdgeFixture fixture)
         await reader.ReadAsync();
         return (reader.GetBoolean(reader.GetOrdinal("ShouldContinue")), reader.GetBoolean(reader.GetOrdinal("Abandoned")));
     }
+
+    private static readonly DateTime ReportedAt = new(2026, 11, 1, 12, 0, 0, DateTimeKind.Utc);
 
     private static StateVariableValue Variable(string name, string valueJson) => new(name, "number", valueJson);
 
