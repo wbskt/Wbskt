@@ -283,7 +283,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
 <script type="application/json" id="roadmap-data">
 {
  "asOf": "2026-11-17",
- "headline": "M2 backend has 6 pieces of real work left: two wait on you (the SDK release keys and the deleted-client call), the never-ending-runs epic (#594), and the housekeeping epic (#618), now down to one M3 item. The 11 Nov architecture review (#730) is 48 of 73 done: all 5 backend P1s and every backend and library P2 except two are merged (12 Nov), the last ones being the alerting and nightly fixes (#776 to #780, PR #842 to #849). Left from it: the Team headroom call that belongs to the pricing decision (#751), the Arduino install line, which waits on your OK to tag 0.9.0-beta.2 (#767), the console items (Amal) and the Post-launch small items. A second review on 15 Nov found eight more backend issues: seven are fixed and deployed (#868 to #881, PR #869 to #883), and month-end credit notices (#876) wait on a product call. Deploys reach production again, and now restart changed monitoring services themselves. On 16 Nov signup verification mail failed with SMTP 553: the relay refused the sender because SMTP_FROM_ADDRESS on the VM was still the no-reply@example.com placeholder (set it to no-reply@wbskt.com in compose/.env); the auth log now points at the sender settings (#888, PR #889).",
+ "headline": "M2 backend has 6 pieces of real work left: two wait on you (the SDK release keys and the deleted-client call), the never-ending-runs epic (#594), and the housekeeping epic (#618), now down to one M3 item. The 11 Nov architecture review (#730) is 49 of 73 done: all 5 backend P1s and every backend and library P2 except two are merged (12 Nov), the last ones being the alerting and nightly fixes (#776 to #780, PR #842 to #849). Team now throttles at 1.5x its messages, with a platform traffic alert in place of more headroom (#751, PR #902, 17 Nov). Left from it: the Arduino install line, which waits on you publishing the v0.9.0-beta.2 release (#767), the console items (Amal) and the Post-launch small items. A second review on 15 Nov found eight more backend issues: all eight are fixed (#868 to #881, PR #869 to #883), the last being credit notices for a limit reached just before a month ends, now sent late (#876, PR #901, 17 Nov). Deploys reach production again, and now restart changed monitoring services themselves. On 16 Nov signup verification mail failed with SMTP 553: the relay refused the sender because SMTP_FROM_ADDRESS on the VM was still the no-reply@example.com placeholder (set it to no-reply@wbskt.com in compose/.env); the auth log now points at the sender settings (#888, PR #889).",
  "milestones": [
   {
    "name": "M1 Hardening",
@@ -576,11 +576,12 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":895,"t":"Give workflows a state and a live version (backend)","s":"c","m":"M2","p":894,"a":["engine","management","db"],"x":"2026-11-17"},
   {"n":894,"t":"Workflow lifecycle: enable any version, disable, deprecate","s":"o","m":"M2","p":null,"a":["engine","management"]},
   {"n":891,"t":"Grafana thrashing the disk makes it unusable and SQL time out in production","s":"c","m":"M2","p":null,"a":["ops"],"x":"2026-11-16"},
+  {"n":886,"t":"Tempo thrashing the disk makes SQL time out in production","s":"c","m":"M2","p":null,"a":["ops"],"x":"2026-11-16"},
   {"n":888,"t":"Say when the mail relay refuses the sender, not just 553","s":"c","m":"M2","p":null,"a":["auth"],"x":"2026-11-16"},
   {"n":881,"t":"A run an old engine leader starts during a handover can be left with nothing driving it","s":"c","m":"M2","p":null,"a":["engine"],"x":"2026-11-15"},
   {"n":879,"t":"Alert on out-of-memory kills and exceptions, and on silent monitoring gaps","s":"c","m":"M2","p":null,"a":["ops"],"x":"2026-11-15"},
   {"n":877,"t":"Billing reconcile misses refunds and chargebacks of older payments","s":"c","m":"M2","p":null,"a":["auth"],"x":"2026-11-15"},
-  {"n":876,"t":"Credit notices owed at a month end are never sent","s":"o","m":"M2","p":null,"a":["auth"]},
+  {"n":876,"t":"Credit notices owed at a month end are never sent","s":"c","m":"M2","p":null,"a":["auth"],"x":"2026-11-17"},
   {"n":874,"t":"An event claim left Pending while the leader runs drops the event","s":"c","m":"M2","p":null,"a":["engine"],"x":"2026-11-15"},
   {"n":872,"t":"A woken branch whose dispatch is lost is still failed as BOOKMARK_LOST","s":"c","m":"M2","p":null,"a":["engine"],"x":"2026-11-15"},
   {"n":870,"t":"A busy credit charge times out instead of being retried","s":"c","m":"M2","p":null,"a":["db"],"x":"2026-11-15"},
@@ -638,7 +639,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":754,"t":"Ending one session or changing the password signs the user out everywhere","s":"c","m":"M3","p":730,"a":["auth"],"pr":"P2","sz":"S","x":"2026-11-12"},
   {"n":753,"t":"Registration tells whether an email is registered through a taken username","s":"c","m":"M3","p":730,"a":["auth"],"pr":"P2","sz":"S","x":"2026-11-12"},
   {"n":752,"t":"Cap the Free tenants one account can create","s":"c","m":"M3","p":730,"a":["auth"],"pr":"P2","sz":"S","x":"2026-11-12"},
-  {"n":751,"t":"Team at its 2x message headroom is past the single-VM database trigger","s":"o","m":"M3","p":730,"a":["auth"],"pr":"P2","sz":"S"},
+  {"n":751,"t":"Team at its 2x message headroom is past the single-VM database trigger","s":"c","m":"M3","p":730,"a":["auth"],"pr":"P2","sz":"S","x":"2026-11-17"},
   {"n":750,"t":"Check Dodo product prices against the plan catalogue","s":"c","m":"M3","p":730,"a":["auth"],"pr":"P2","sz":"M","x":"2026-11-12"},
   {"n":749,"t":"Subscription refund or chargeback drops the plan only when the payment lists the product","s":"c","m":"M3","p":730,"a":["auth"],"pr":"P2","sz":"S","x":"2026-11-12"},
   {"n":748,"t":"One Dodo customer per payer email lets a billing portal open another tenant's subscriptions","s":"c","m":"M3","p":730,"a":["auth"],"pr":"P2","sz":"M","x":"2026-11-12"},
@@ -906,10 +907,13 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":127,"t":"Reject breached passwords using the Have I Been Pwned range API","s":"c","m":"M2","p":175,"a":["auth"],"pr":"P2","sz":"S","x":"2026-11-03"}
  ],
  "merged": [
+  {"n":902,"t":"fix(management): throttle team at 1.5x its messages and alert on platform traffic","d":"2026-11-17"},
+  {"n":901,"t":"fix(engine): announce a credit limit reached just before a month ends","d":"2026-11-17"},
   {"n":899,"t":"fix(db): keep WorkflowDefinitions.IsEnabled so master can deploy again","d":"2026-11-17"},
   {"n":896,"t":"feat(workflow): give workflows a state and a live version","d":"2026-11-17"},
   {"n":892,"t":"fix(deploy): give grafana room to cache its own binary and plugins","d":"2026-11-16"},
   {"n":889,"t":"fix(auth): name a likely login failure when the relay refuses the sender","d":"2026-11-16"},
+  {"n":887,"t":"fix(deploy): stop tempo thrashing the disk and starving sql","d":"2026-11-16"},
   {"n":883,"t":"test(engine): race charges, starts, a post and a cap cut against each other","d":"2026-11-15"},
   {"n":882,"t":"fix(engine): drive runs an old leader started during a handover","d":"2026-11-15"},
   {"n":880,"t":"feat(deploy): alert on out-of-memory kills and silent monitoring gaps","d":"2026-11-15"},
