@@ -28,11 +28,13 @@ public sealed class WorkflowEngineClientTests
         var runRefId = Guid.NewGuid();
         var handler = new StubHttpHandler(HttpStatusCode.OK, Engine(InboundOutcome.StartedRun, runRefId));
         var client = new WorkflowEngineClient(BuildClient(handler));
-        var request = new StartRunRequest("manual-node", null);
+        var triggerNodeId = Guid.NewGuid();
+        var request = new StartRunRequest(triggerNodeId, null, "retry-1");
 
         await client.StartManualRunAsync(workflowRefId, request, CancellationToken.None);
 
-        Assert.Equal($"/api/inbound/manual/{workflowRefId}", handler.LastRequestUri?.PathAndQuery);
+        // The trigger goes on, so a workflow with two manual triggers starts the named one only.
+        Assert.Equal($"/api/inbound/manual/{workflowRefId}?idempotencyKey=retry-1&triggerNodeId={triggerNodeId}", handler.LastRequestUri?.PathAndQuery);
         Assert.Equal(HttpMethod.Post, handler.LastMethod);
     }
 
@@ -43,7 +45,7 @@ public sealed class WorkflowEngineClientTests
         var runRefId = Guid.NewGuid();
         var handler = new StubHttpHandler(HttpStatusCode.OK, Engine(InboundOutcome.StartedRun, runRefId));
         var client = new WorkflowEngineClient(BuildClient(handler));
-        var request = new StartRunRequest("node", null);
+        var request = new StartRunRequest(Guid.NewGuid(), null);
 
         StartRunResponse result = await client.StartManualRunAsync(workflowRefId, request, CancellationToken.None);
 
@@ -64,7 +66,7 @@ public sealed class WorkflowEngineClientTests
         var handler = new StubHttpHandler(HttpStatusCode.OK, Engine(engineOutcome));
         var client = new WorkflowEngineClient(BuildClient(handler));
 
-        StartRunResponse response = await client.StartManualRunAsync(workflowRefId, new StartRunRequest("node", null), CancellationToken.None);
+        StartRunResponse response = await client.StartManualRunAsync(workflowRefId, new StartRunRequest(Guid.NewGuid(), null), CancellationToken.None);
 
         Assert.Equal(expected, response.Outcome);
     }
@@ -81,7 +83,7 @@ public sealed class WorkflowEngineClientTests
             new JsonSerializerOptions(JsonSerializerDefaults.Web));
         var client = new WorkflowEngineClient(BuildClient(new StubHttpHandler(HttpStatusCode.OK, body)));
 
-        StartRunResponse response = await client.StartManualRunAsync(Guid.NewGuid(), new StartRunRequest("node", null), CancellationToken.None);
+        StartRunResponse response = await client.StartManualRunAsync(Guid.NewGuid(), new StartRunRequest(Guid.NewGuid(), null), CancellationToken.None);
 
         Assert.Equal(expected, response.Outcome);
     }
@@ -95,7 +97,7 @@ public sealed class WorkflowEngineClientTests
             new JsonSerializerOptions(JsonSerializerDefaults.Web));
         var client = new WorkflowEngineClient(BuildClient(new StubHttpHandler(HttpStatusCode.OK, body)));
 
-        StartRunResponse response = await client.StartManualRunAsync(Guid.NewGuid(), new StartRunRequest("node", null), CancellationToken.None);
+        StartRunResponse response = await client.StartManualRunAsync(Guid.NewGuid(), new StartRunRequest(Guid.NewGuid(), null), CancellationToken.None);
 
         Assert.Equal(StartRunOutcome.PlanRunLimitReached, response.Outcome);
     }
@@ -108,7 +110,7 @@ public sealed class WorkflowEngineClientTests
         var handler = new StubHttpHandler(HttpStatusCode.OK, Engine(InboundOutcome.StartedRun, runRefId));
         var client = new WorkflowEngineClient(BuildClient(handler));
 
-        StartRunResponse response = await client.StartManualRunAsync(workflowRefId, new StartRunRequest("node", null), CancellationToken.None);
+        StartRunResponse response = await client.StartManualRunAsync(workflowRefId, new StartRunRequest(Guid.NewGuid(), null), CancellationToken.None);
 
         Assert.Equal(StartRunOutcome.Started, response.Outcome);
         Assert.Equal(runRefId, response.RunRefId);

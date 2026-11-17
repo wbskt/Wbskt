@@ -48,7 +48,7 @@ public sealed class WorkflowRunServiceTests
         WorkflowIs(WorkflowState.Enabled);
         EngineAnswers(outcome);
 
-        var result = await Service.StartManualAsync(WorkspaceId, WorkflowRef, new StartRunRequest("manual", null), CancellationToken.None);
+        var result = await Service.StartManualAsync(WorkspaceId, WorkflowRef, new StartRunRequest(Guid.NewGuid(), null), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Outcome.Should().Be(outcome);
@@ -63,7 +63,7 @@ public sealed class WorkflowRunServiceTests
         WorkflowIs(WorkflowState.Enabled);
         EngineAnswers(outcome);
 
-        var result = await Service.StartManualAsync(WorkspaceId, WorkflowRef, new StartRunRequest("manual", null), CancellationToken.None);
+        var result = await Service.StartManualAsync(WorkspaceId, WorkflowRef, new StartRunRequest(Guid.NewGuid(), null), CancellationToken.None);
 
         result.Error.Code.Should().Be(code);
         result.Error.Type.Should().Be(ErrorType.Conflict);
@@ -80,7 +80,7 @@ public sealed class WorkflowRunServiceTests
         WorkflowIs(WorkflowState.Enabled);
         EngineAnswers(outcome);
 
-        var result = await Service.StartManualAsync(WorkspaceId, WorkflowRef, new StartRunRequest("manual", null), CancellationToken.None);
+        var result = await Service.StartManualAsync(WorkspaceId, WorkflowRef, new StartRunRequest(Guid.NewGuid(), null), CancellationToken.None);
 
         result.Error.Code.Should().Be(code);
         result.Error.Type.Should().Be(type);
@@ -92,7 +92,7 @@ public sealed class WorkflowRunServiceTests
     {
         WorkflowIs(WorkflowState.Disabled);
 
-        var result = await Service.StartManualAsync(WorkspaceId, WorkflowRef, new StartRunRequest("manual", null), CancellationToken.None);
+        var result = await Service.StartManualAsync(WorkspaceId, WorkflowRef, new StartRunRequest(Guid.NewGuid(), null), CancellationToken.None);
 
         result.Error.Code.Should().Be("WORKFLOW_DISABLED");
         result.Error.Type.Should().Be(ErrorType.Conflict);
@@ -105,7 +105,7 @@ public sealed class WorkflowRunServiceTests
     {
         WorkflowIs(WorkflowState.Deprecated);
 
-        var result = await Service.StartManualAsync(WorkspaceId, WorkflowRef, new StartRunRequest("manual", null), CancellationToken.None);
+        var result = await Service.StartManualAsync(WorkspaceId, WorkflowRef, new StartRunRequest(Guid.NewGuid(), null), CancellationToken.None);
 
         result.Error.Code.Should().Be("WORKFLOW_DEPRECATED");
         _engine.VerifyNoOtherCalls();
@@ -118,7 +118,7 @@ public sealed class WorkflowRunServiceTests
         _engine.Setup(e => e.StartManualRunAsync(WorkflowRef, It.IsAny<StartRunRequest>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new HttpRequestException("engine down"));
 
-        var start = () => Service.StartManualAsync(WorkspaceId, WorkflowRef, new StartRunRequest("manual", null), CancellationToken.None);
+        var start = () => Service.StartManualAsync(WorkspaceId, WorkflowRef, new StartRunRequest(Guid.NewGuid(), null), CancellationToken.None);
 
         await start.Should().ThrowAsync<HttpRequestException>();
     }

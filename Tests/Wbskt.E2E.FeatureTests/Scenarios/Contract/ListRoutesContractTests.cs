@@ -494,7 +494,7 @@ public sealed class ListRoutesContractTests(ServicesFixture fixture)
         var runs = new List<Guid>();
         for (var i = 0; i < count; i++)
         {
-            runs.Add((await f.StartManualRunAsync(ws.Token, ws.WorkspaceRef, workflow, trigger.ToString(), idempotencyKey: null)).RunRefId);
+            runs.Add((await f.StartManualRunAsync(ws.Token, ws.WorkspaceRef, workflow, trigger, idempotencyKey: null)).RunRefId);
         }
 
         return (workflow, runs);

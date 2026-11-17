@@ -688,11 +688,11 @@ public sealed class ServicesFixture : IDisposable
     /// Starts a manual run, optionally with an idempotency key (re-posting the same key dedupes), and
     /// returns the engine's answer: the run's RefId and whether it was started, deduplicated or queued.
     /// </summary>
-    public Task<StartRunResponse> StartManualRunAsync(string token, Guid workspaceRef, Guid workflowRefId, string triggerNodeId, string? idempotencyKey) =>
+    public Task<StartRunResponse> StartManualRunAsync(string token, Guid workspaceRef, Guid workflowRefId, Guid triggerNodeId, string? idempotencyKey) =>
         Management.As(token).StartRunAsync(workspaceRef, workflowRefId, new StartRunRequest(triggerNodeId, null, idempotencyKey));
 
     /// <summary>Asks for a manual run and returns the raw response, for callers that expect it may be refused.</summary>
-    public Task<HttpResponseMessage> StartManualRunRawAsync(string token, Guid workspaceRef, Guid workflowRefId, string triggerNodeId, string? idempotencyKey) =>
+    public Task<HttpResponseMessage> StartManualRunRawAsync(string token, Guid workspaceRef, Guid workflowRefId, Guid triggerNodeId, string? idempotencyKey) =>
         Management.As(token).StartRunRawAsync(workspaceRef, workflowRefId, new StartRunRequest(triggerNodeId, null, idempotencyKey));
 
     /// <summary>Reads a manual start's answer. The outcome is read whether the host writes it as a name or a number.</summary>
@@ -913,7 +913,7 @@ public sealed class ServicesFixture : IDisposable
             $"the manual trigger of workflow {workflowRefId} to start a run",
             async () =>
             {
-                using var resp = await StartManualRunRawAsync(token, workspaceRef, workflowRefId, triggerNodeId.ToString(), idempotencyKey: null);
+                using var resp = await StartManualRunRawAsync(token, workspaceRef, workflowRefId, triggerNodeId, idempotencyKey: null);
                 if (!resp.IsSuccessStatusCode)
                 {
                     return (false, Guid.Empty, $"HTTP {(int)resp.StatusCode} {await ReadErrorCodeAsync(resp)}");

@@ -65,7 +65,7 @@ public sealed class ListPagingTests(ServicesFixture fixture)
         // Three runs of the first workflow, so its own run list holds more than one page too.
         for (var i = 0; i < 3; i++)
         {
-            await fixture.StartManualRunAsync(token, workspace, workflows[0], triggers[0].ToString(), idempotencyKey: null);
+            await fixture.StartManualRunAsync(token, workspace, workflows[0], triggers[0], idempotencyKey: null);
         }
 
         var runs = new List<Guid>();

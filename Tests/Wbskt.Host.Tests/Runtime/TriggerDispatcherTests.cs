@@ -653,6 +653,24 @@ public sealed class TriggerDispatcherTests
     }
 
     [Fact]
+    public async Task An_event_that_names_its_trigger_starts_only_that_one()
+    {
+        // #787: Run now on a workflow with two manual triggers starts the one the caller chose.
+        var runStarter = new RecordingRunStarter([]);
+        Guid second = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(
+                CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel, id: 5),
+                CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel, id: 6) with { TriggerNodeId = second }),
+            runStarter: runStarter);
+
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent() with { ForTriggerNodeId = second }, CancellationToken.None);
+
+        Assert.Equal(1, runStarter.RunsCreated);
+        Assert.Equal(6L, Assert.Single(result.Registrations).RegistrationId);
+    }
+
+    [Fact]
     public async Task A_refusal_at_the_ceiling_is_reported_so_the_user_hears_of_it()
     {
         var registration = CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel);

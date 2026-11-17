@@ -38,7 +38,7 @@ public sealed class RunCeilingWarningE2ETests(ServicesFixture fixture)
             int started = 0;
             for (int i = 0; i < Ceiling + Refused; i++)
             {
-                var response = await fixture.StartManualRunRawAsync(token, workspaceRef, workflowRefId, triggerId.ToString(), $"ceiling-{i}");
+                var response = await fixture.StartManualRunRawAsync(token, workspaceRef, workflowRefId, triggerId, $"ceiling-{i}");
                 if (response.IsSuccessStatusCode && (await ServicesFixture.ReadStartRunResponseAsync(response)).Outcome == Wbskt.Management.Models.Workflow.StartRunOutcome.Started)
                 {
                     started++;

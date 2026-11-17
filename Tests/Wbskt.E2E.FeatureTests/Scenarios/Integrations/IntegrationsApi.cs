@@ -114,7 +114,7 @@ internal sealed class IntegrationsApi(ServicesFixture fixture)
     /// <summary>Starts a manual run and waits for it to finish, returning its RefId and final status.</summary>
     public async Task<(Guid RunRef, string Status)> RunToEndAsync(string token, Guid workspaceRef, Guid workflowRef, Guid triggerNodeId)
     {
-        await fixture.StartManualRunAsync(token, workspaceRef, workflowRef, triggerNodeId.ToString(), idempotencyKey: null);
+        await fixture.StartManualRunAsync(token, workspaceRef, workflowRef, triggerNodeId, idempotencyKey: null);
         var runRef = await fixture.WaitForFirstRunAsync(token, workspaceRef, workflowRef, TimeSpan.FromSeconds(30));
         runRef.Should().NotBe(Guid.Empty, "the manual start creates a run");
         var summary = await fixture.WaitForRunTerminalAsync(token, workspaceRef, runRef, TimeSpan.FromSeconds(60));

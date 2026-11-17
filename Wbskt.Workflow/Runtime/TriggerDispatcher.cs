@@ -80,6 +80,11 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
                 .Where(r => r.WorkflowRefId == replayFor.WorkflowRefId && r.TriggerNodeId == replayFor.TriggerNodeId)
                 .ToArray();
         }
+        else if (evt.ForTriggerNodeId is { } triggerNodeId)
+        {
+            // The caller named the trigger to start from (InboundEvent.ForTriggerNodeId).
+            registrations = registrations.Where(r => r.TriggerNodeId == triggerNodeId).ToArray();
+        }
 
         BookmarkMatchResult bookmarkMatch = await _bookmarkResumer.MatchInboundAsync(resolvedEvent, registrations.Count > 0, ct);
         if (bookmarkMatch.Matched)

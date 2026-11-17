@@ -28,6 +28,13 @@ public sealed record InboundEvent(
     public QueuedTrigger? ReplayFor { get; init; }
 
     /// <summary>
+    /// Set when the caller named the trigger to start from, as a manual run's <c>triggerNodeId</c>
+    /// does: of the registrations the event matches, only that trigger's is considered, so a workflow
+    /// with two manual triggers starts one run, not two.
+    /// </summary>
+    public Guid? ForTriggerNodeId { get; init; }
+
+    /// <summary>
     /// Set only by a parent's sub-workflow node starting its child. The parent already holds a place
     /// under the plan's active-run ceiling, so the child is started past it. Never read from
     /// JSON, so no inbound adapter (or a queued event's stored copy) can claim it.

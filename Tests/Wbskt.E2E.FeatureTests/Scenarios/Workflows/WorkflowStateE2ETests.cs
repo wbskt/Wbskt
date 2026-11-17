@@ -30,7 +30,7 @@ public sealed class WorkflowStateE2ETests(ServicesFixture fixture)
         workflow.State.Should().Be(WorkflowState.Disabled);
         workflow.LiveVersion.Should().BeNull();
 
-        using var run = await fixture.StartManualRunRawAsync(token, workspace, workflowRef, triggerId.ToString(), null);
+        using var run = await fixture.StartManualRunRawAsync(token, workspace, workflowRef, triggerId, null);
         run.StatusCode.Should().Be(HttpStatusCode.Conflict);
         (await ServicesFixture.ReadErrorCodeAsync(run)).Should().Be("WORKFLOW_DISABLED");
     }

@@ -45,8 +45,8 @@ public sealed class IdempotentManualStartE2ETests(ServicesFixture fixture)
 
         // Start the run twice with the SAME idempotency key.
         var idempotencyKey = $"e2e-idem-{Guid.NewGuid():N}";
-        var first = await fixture.StartManualRunAsync(token, workspaceRef, publishedRef, triggerNodeId.ToString(), idempotencyKey);
-        var second = await fixture.StartManualRunAsync(token, workspaceRef, publishedRef, triggerNodeId.ToString(), idempotencyKey);
+        var first = await fixture.StartManualRunAsync(token, workspaceRef, publishedRef, triggerNodeId, idempotencyKey);
+        var second = await fixture.StartManualRunAsync(token, workspaceRef, publishedRef, triggerNodeId, idempotencyKey);
 
         // A manual start is answered once the engine has dispatched it, so the answers are the signal
         // to wait for: the first started the run, and the second was recognised as a repeat of it

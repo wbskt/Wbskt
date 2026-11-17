@@ -20,7 +20,7 @@ internal sealed class WorkflowEngineClient : IWorkflowEngineClient
     public async Task<StartRunResponse> StartManualRunAsync(Guid workflowRefId, StartRunRequest request, CancellationToken ct)
     {
         object body = (object?)request.Payload ?? new { };
-        var response = await _httpClient.PostAsJsonAsync(EngineInboundApi.Manual(workflowRefId, request.IdempotencyKey), body, SerializerOptions, ct);
+        var response = await _httpClient.PostAsJsonAsync(EngineInboundApi.Manual(workflowRefId, request.IdempotencyKey, request.TriggerNodeId), body, SerializerOptions, ct);
         response.EnsureSuccessStatusCode();
 
         InboundResponse? engineResponse = await response.Content.ReadFromJsonAsync<InboundResponse>(SerializerOptions, ct);
