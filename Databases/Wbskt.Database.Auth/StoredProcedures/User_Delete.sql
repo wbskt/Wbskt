@@ -32,8 +32,8 @@ BEGIN
 
     -- Lock every tenant the user belongs to first, as every procedure that guards the last
     -- administrator does (see dbo.Tenant_Administrators), then read membership under the locks.
-    -- HOLDLOCK on the membership read as well: accepting an invitation does not lock the tenant row,
-    -- so without the key-range lock someone could join a tenant already judged to be the user's alone.
+    -- HOLDLOCK on the membership read as well: the key-range lock keeps anyone from joining a tenant
+    -- already judged to be the user's alone (accepting an invitation also takes the tenant row first).
     DECLARE @Locked INT;
     SELECT @Locked = COUNT(*)
     FROM dbo.Tenants T WITH (UPDLOCK, HOLDLOCK)
