@@ -114,7 +114,7 @@ public sealed class TenantGroupTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task GRP_05_UnknownParentGroupRef_Returns403()
+    public async Task GRP_05_UnknownParentGroupRef_Returns404()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -123,12 +123,12 @@ public sealed class TenantGroupTests(ServicesFixture fixture)
         var response = await CreateGroupAsync(
             admin.Token, tenantRef, $"e2e-orphan-{Guid.NewGuid():N}", Guid.NewGuid());
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("GROUP_NOT_FOUND");
     }
 
     [SkippableFact]
-    public async Task GRP_05b_ParentFromAnotherTenant_Returns403()
+    public async Task GRP_05b_ParentFromAnotherTenant_Returns404()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -141,7 +141,7 @@ public sealed class TenantGroupTests(ServicesFixture fixture)
         var response = await CreateGroupAsync(
             adminB.Token, tenantB, $"e2e-{Guid.NewGuid():N}", foreignGroup);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [SkippableFact]
@@ -251,7 +251,7 @@ public sealed class TenantGroupTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task GRP_12_DeletingAnUnknownGroup_Returns403()
+    public async Task GRP_12_DeletingAnUnknownGroup_Returns404()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -259,7 +259,7 @@ public sealed class TenantGroupTests(ServicesFixture fixture)
 
         var response = await fixture.Auth.As(admin.Token).DeleteGroupRawAsync(tenantRef, Guid.NewGuid());
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("GROUP_NOT_FOUND");
     }
 
@@ -414,7 +414,7 @@ public sealed class TenantGroupTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task GRL_07_AssignWithUnknownRoleRef_Returns403()
+    public async Task GRL_07_AssignWithUnknownRoleRef_Returns404()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -423,12 +423,12 @@ public sealed class TenantGroupTests(ServicesFixture fixture)
 
         var response = await fixture.Auth.As(admin.Token).AssignGroupRoleRawAsync(tenantRef, groupRef, Guid.NewGuid(), new AssignmentScopeRequest(WorkspaceRef: (Guid?)null));
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("ROLE_NOT_FOUND");
     }
 
     [SkippableFact]
-    public async Task GRL_08_AssignWithUnknownGroupRef_Returns403()
+    public async Task GRL_08_AssignWithUnknownGroupRef_Returns404()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -437,12 +437,12 @@ public sealed class TenantGroupTests(ServicesFixture fixture)
 
         var response = await fixture.Auth.As(admin.Token).AssignGroupRoleRawAsync(tenantRef, Guid.NewGuid(), roleRef, new AssignmentScopeRequest(WorkspaceRef: (Guid?)null));
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("GROUP_NOT_FOUND");
     }
 
     [SkippableFact]
-    public async Task GRL_09_AssignWithUnknownWorkspaceRef_Returns403()
+    public async Task GRL_09_AssignWithUnknownWorkspaceRef_Returns404()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -456,7 +456,7 @@ public sealed class TenantGroupTests(ServicesFixture fixture)
             admin.Token,
             new { WorkspaceRef = (Guid?)Guid.NewGuid() });
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("WORKSPACE_NOT_FOUND");
     }
 

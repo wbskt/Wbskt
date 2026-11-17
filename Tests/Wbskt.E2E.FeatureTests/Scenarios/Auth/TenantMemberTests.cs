@@ -182,7 +182,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task MEM_09_ReadBackForAnUnknownUserRef_Returns403()
+    public async Task MEM_09_ReadBackForAnUnknownUserRef_Returns404()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -190,7 +190,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
 
         var response = await fixture.Auth.As(admin.Token).GetMemberRolesRawAsync(tenantRef, Guid.NewGuid());
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("USER_NOT_FOUND");
     }
 
@@ -208,7 +208,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         // cannot reach an outside account and pull it into their tenant's permission graph.
         var response = await fixture.Auth.As(adminB.Token).GetMemberRolesRawAsync(tenantB, foreignMemberRef);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("USER_NOT_FOUND");
     }
 
@@ -298,7 +298,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task MEM_15_AddingToAnUnknownGroup_Returns403()
+    public async Task MEM_15_AddingToAnUnknownGroup_Returns404()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -307,7 +307,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
 
         var response = await fixture.Auth.As(admin.Token).AddMemberToGroupRawAsync(tenantRef, memberRef, Guid.NewGuid());
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("GROUP_NOT_FOUND");
     }
 
@@ -390,7 +390,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task MEM_20_AssignWithUnknownRoleRef_Returns403()
+    public async Task MEM_20_AssignWithUnknownRoleRef_Returns404()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -399,12 +399,12 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
 
         var response = await fixture.Auth.As(admin.Token).AssignMemberRoleRawAsync(tenantRef, memberRef, Guid.NewGuid(), new AssignmentScopeRequest(WorkspaceRef: (Guid?)null));
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("ROLE_NOT_FOUND");
     }
 
     [SkippableFact]
-    public async Task MEM_21_AssignScopedToAnotherTenantsWorkspace_IsRejected()
+    public async Task MEM_21_AssignScopedToAnotherTenantsWorkspace_ReadsAsNotFound()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -415,12 +415,12 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var (_, memberRef, _) = await ArrangeMemberAsync(adminB, tenantB);
         var roleRef = await fixture.CreateRoleAsync(adminB.Token, tenantB);
 
-        // The reference resolves — it is a real workspace — but the procedure refuses to scope a
-        // tenant-B assignment to a tenant-A workspace.
+        // A real workspace, but in another tenant: it answers exactly as an unknown reference does,
+        // so an assignment cannot be used to learn which workspace references exist elsewhere.
         var response = await fixture.Auth.As(adminB.Token).AssignMemberRoleRawAsync(tenantB, memberRef, roleRef, new AssignmentScopeRequest(WorkspaceRef: (Guid?)foreignWorkspace));
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("AUTH_OPERATION_REJECTED");
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("WORKSPACE_NOT_FOUND");
     }
 
     [SkippableFact]
@@ -683,7 +683,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task MEM_36_SuspendingAnUnknownUserRef_Returns403()
+    public async Task MEM_36_SuspendingAnUnknownUserRef_Returns404()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -691,7 +691,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
 
         var response = await fixture.SetMemberSuspendedAsync(admin.Token, tenantRef, Guid.NewGuid(), isSuspended: true);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("USER_NOT_FOUND");
     }
 

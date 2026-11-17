@@ -187,7 +187,7 @@ public sealed class TenantRoleTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task ROLE_10_UpdatingAnUnknownRole_Returns403()
+    public async Task ROLE_10_UpdatingAnUnknownRole_Returns404()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -199,7 +199,7 @@ public sealed class TenantRoleTests(ServicesFixture fixture)
             admin.Token,
             new { Name = "whatever", Description = (string?)null });
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("ROLE_NOT_FOUND");
     }
 
@@ -252,7 +252,7 @@ public sealed class TenantRoleTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task ROLE_13_DeletingAnUnknownRole_Returns403()
+    public async Task ROLE_13_DeletingAnUnknownRole_Returns404()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -260,7 +260,7 @@ public sealed class TenantRoleTests(ServicesFixture fixture)
 
         var response = await fixture.Auth.As(admin.Token).DeleteRoleRawAsync(tenantRef, Guid.NewGuid());
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [SkippableFact]
@@ -353,7 +353,7 @@ public sealed class TenantRoleTests(ServicesFixture fixture)
         // Reference resolution is tenant-scoped, so B cannot reach into A's graph by guessing a ref.
         var response = await fixture.Auth.As(adminB.Token).DeleteRoleRawAsync(tenantB, foreignRole);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("ROLE_NOT_FOUND");
     }
 

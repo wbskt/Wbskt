@@ -60,7 +60,11 @@ Two conventions run through every table below:
   the caller belongs to, an unknown resource reference and another workspace's both answer 404
   `<RESOURCE>_NOT_FOUND`, so the two cannot be told apart. 403 inside a workspace only ever means
   a missing permission. See "The ID Boundary" in [Coding.Conventions.md](Coding.Conventions.md).
-  (Endpoints still being moved to this rule are tracked in #233.)
+  (Endpoints still being moved to this rule are tracked in #233.) The same holds under
+  `/api/tenants/{tenantRef}`: an unknown tenant or one the caller is not in is 403
+  `TENANT_NOT_FOUND`, and inside it a role, group, member or workspace reference that names
+  nothing, or names another tenant's, is 404 (`ROLE_NOT_FOUND`, `GROUP_NOT_FOUND`,
+  `USER_NOT_FOUND`, `WORKSPACE_NOT_FOUND`).
 
 ---
 
@@ -261,7 +265,7 @@ not in the API docs): 204 once stored and acted on (or set aside), 401 `BILLING_
 | Endpoint | Permission | What it does |
 |---|---|---|
 | `GET {tenantRef}/invitations` | `users.read` | Lists outstanding invitations. |
-| `POST {tenantRef}/invitations` | `users.manage`, and `roles.manage` with a `roleRef` | Issues one against an email address and mails the invitee a link. Optional `roleRef` (granted tenant-wide, so it also needs `roles.manage`; 403 `PERMISSION_UNAUTHORIZED` without it) and `workspaceRefs` (up to 50 workspaces of this tenant the invitee joins on acceptance; one outside it is 403 `WORKSPACE_NOT_FOUND`). Still returns the raw token **once**, so an administrator can deliver it by hand when mail is not an option. The listing returns each invitation's `workspaceRefs`. 409 `PLAN_MEMBER_LIMIT_REACHED` when the tenant already has as many members as its plan allows. |
+| `POST {tenantRef}/invitations` | `users.manage`, and `roles.manage` with a `roleRef` | Issues one against an email address and mails the invitee a link. Optional `roleRef` (granted tenant-wide, so it also needs `roles.manage`; 403 `PERMISSION_UNAUTHORIZED` without it) and `workspaceRefs` (up to 50 workspaces of this tenant the invitee joins on acceptance; one outside it, or unknown, is 404 `WORKSPACE_NOT_FOUND`). Still returns the raw token **once**, so an administrator can deliver it by hand when mail is not an option. The listing returns each invitation's `workspaceRefs`. 409 `PLAN_MEMBER_LIMIT_REACHED` when the tenant already has as many members as its plan allows. |
 | `DELETE {tenantRef}/invitations/{invitationRef}` | `users.manage` | Revokes an unredeemed invitation. |
 
 **Roles and their permissions**

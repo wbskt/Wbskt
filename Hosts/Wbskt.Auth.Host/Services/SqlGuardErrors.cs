@@ -51,9 +51,8 @@ internal static class SqlGuardErrors
             // is not observable from outside.
             SqlException { Number: 50011 } => InvalidInvitation,
 
-            // A workspace in another tenant reads exactly like one that does not exist, so an
-            // invitation cannot be used to learn which workspace references are real elsewhere.
-            SqlException { Number: 50017 } => Error.Forbidden("WORKSPACE_NOT_FOUND", "Workspace not found."),
+            // A workspace that left the tenant after it was looked up reads like one that never was in it.
+            SqlException { Number: 50017 } => TenantReferences.WorkspaceNotFound,
 
             SqlException { Number: 50012 } => Error.Conflict("AUTH_ALREADY_MEMBER", "That user is already a member of this tenant."),
 
