@@ -16,6 +16,9 @@ namespace Wbskt.Gateway.MQTT.Host.Services;
 /// </summary>
 public sealed class MqttConnectAuthenticator
 {
+    /// <summary>The longest keep alive a client may ask for, in seconds.</summary>
+    public const int MaxKeepAliveSeconds = 300;
+
     private readonly ClientSessions _sessions;
     private readonly JwtTrust _trust;
     private readonly ILogger<MqttConnectAuthenticator> _logger;
@@ -32,6 +35,19 @@ public sealed class MqttConnectAuthenticator
         if (request.ProtocolVersion is not (MqttProtocolVersion.V311 or MqttProtocolVersion.V500))
         {
             return MqttLogin.Refuse(MqttConnectReasonCode.UnsupportedProtocolVersion);
+        }
+
+        // The keep alive is how the gateway learns a client has gone: in production its TCP probe
+        // reaches only Traefik, so a client with none, or one of hours, would stay online long after
+        // its power or network was lost. MQTT 3.1.1 has no way to answer with a shorter one, and no code
+        // for this: MQTTnet would turn 0x83 into "unacceptable protocol version", which sends a client
+        // to the wrong fix, so it gets "identifier rejected", the 3.1.1 code for a client to correct.
+        if (request.KeepAliveSeconds is not (> 0 and <= MaxKeepAliveSeconds))
+        {
+            _logger.LogInformation("Refusing an MQTT connection asking for a keep alive of {KeepAlive} s.", request.KeepAliveSeconds ?? 0);
+            return MqttLogin.Refuse(request.ProtocolVersion == MqttProtocolVersion.V500
+                ? MqttConnectReasonCode.ImplementationSpecificError
+                : MqttConnectReasonCode.ClientIdentifierNotValid);
         }
 
         // A CONNECT that cannot name a client is refused before its token costs a signature check. Only

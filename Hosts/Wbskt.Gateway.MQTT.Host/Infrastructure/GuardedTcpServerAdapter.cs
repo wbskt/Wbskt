@@ -97,8 +97,9 @@ public sealed class GuardedTcpServerAdapter : IMqttServerAdapter
         MqttChannelAdapter? adapter = null;
         try
         {
-            // Notices a peer that vanished without a FIN (power or Wi-Fi lost) even when its MQTT
-            // keep-alive is off, so it does not stay "online" until the OS gives up on its own.
+            // Notices a peer that vanished without a FIN (power or Wi-Fi lost) where nothing sits in
+            // between. Behind Traefik it reaches only the proxy, so the MQTT keep alive, which CONNECT
+            // requires (MqttConnectAuthenticator), is what notices there.
             // Inside the try: a peer that reset straight after the accept makes these throw.
             socket.NoDelay = true;
             socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
