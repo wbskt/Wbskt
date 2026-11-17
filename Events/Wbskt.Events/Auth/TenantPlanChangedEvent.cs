@@ -13,6 +13,8 @@ namespace Wbskt.Events.Auth;
 /// still leave the latest plan; its periodic sync repairs a copy the event never reached. Logged in
 /// each of the tenant's workspaces, where <see cref="Source"/>, <see cref="EndsAt"/> and
 /// <see cref="LimitOverrides"/> say who set the plan, until when, and what was negotiated.
+/// <see cref="PreviousLimitOverrides"/> are the overrides the tenant had before, so a downgrade's notice
+/// states the limits it actually had rather than its old plan's catalogue row.
 /// </summary>
 [EventCriticality(EventCriticality.Warning)]
 public sealed record TenantPlanChangedEvent(int TenantId, Guid TenantRefId, PlanCode PlanCode, PlanCode PreviousPlanCode, int PlanRevision)
@@ -25,4 +27,6 @@ public sealed record TenantPlanChangedEvent(int TenantId, Guid TenantRefId, Plan
     public DateTimeOffset? EndsAt { get; init; }
 
     public PlanLimitOverrides? LimitOverrides { get; init; }
+
+    public PlanLimitOverrides? PreviousLimitOverrides { get; init; }
 }
