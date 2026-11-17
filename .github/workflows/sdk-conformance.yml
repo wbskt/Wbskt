@@ -1,7 +1,8 @@
 name: SDK conformance
 
-# Runs the client protocol checklist (Tests/Conformance) against the .NET SDK from wbskt/Wbskt.DotNet
-# and the Python SDK from wbskt/Wbskt.Python, so a change to the suite is checked against both.
+# Runs the client protocol checklist (Tests/Conformance) against the .NET SDK from wbskt/Wbskt.DotNet,
+# the Python SDK from wbskt/Wbskt.Python and the Arduino library from wbskt/Wbskt.Arduino (built for
+# Linux over its shims), so a change to the suite or the protocol docs is checked against all three.
 # The suite fakes the API and socket hosts, so no database, broker or Wbskt host is started.
 
 on:
@@ -11,12 +12,16 @@ on:
       - 'Tests/Conformance/**'
       - 'Docs/Client.Protocol.md'
       - 'Docs/Client.Protocol.WebSocket.md'
+      - 'Docs/Client.Protocol.MQTT.md'
       - '.github/workflows/sdk-conformance.yml'
   push:
     branches: [master]
     paths:
       - 'Clients/Wbskt.Protocol/**'
       - 'Tests/Conformance/**'
+      - 'Docs/Client.Protocol.md'
+      - 'Docs/Client.Protocol.WebSocket.md'
+      - 'Docs/Client.Protocol.MQTT.md'
       - '.github/workflows/sdk-conformance.yml'
 
 permissions:
@@ -33,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sdk: [python, dotnet]
+        sdk: [python, dotnet, arduino]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
@@ -47,8 +52,14 @@ jobs:
         id: sdk-ref
         env:
           BRANCH: ${{ github.head_ref }}
-          REPO: ${{ matrix.sdk == 'python' && 'wbskt/Wbskt.Python' || 'wbskt/Wbskt.DotNet' }}
+          SDK: ${{ matrix.sdk }}
         run: |
+          case "$SDK" in
+            python) REPO=wbskt/Wbskt.Python ;;
+            dotnet) REPO=wbskt/Wbskt.DotNet ;;
+            arduino) REPO=wbskt/Wbskt.Arduino ;;
+            *) echo "::error::no repository for SDK '$SDK'" && exit 1 ;;
+          esac
           ref=master
           if [[ -n "$BRANCH" ]] && git ls-remote --exit-code --heads "https://github.com/$REPO.git" "$BRANCH" > /dev/null; then
             ref="$BRANCH"
@@ -77,5 +88,15 @@ jobs:
         run: |
           dotnet build "$GITHUB_WORKSPACE/sdk/conformance/Wbskt.Conformance.Harness" -c Release -o "$RUNNER_TEMP/harness" --nologo -v q
           echo "WBSKT_HARNESS=dotnet $RUNNER_TEMP/harness/Wbskt.Conformance.Harness.dll" >> "$GITHUB_ENV"
+
+      # The library's own sources compiled for Linux, as its ci.yml builds them. Its ESP32 scenarios
+      # (test_esp32.py) run beside the shared suite, since they need this harness's fixtures.
+      - name: Arduino harness
+        if: matrix.sdk == 'arduino'
+        run: |
+          git clone --depth 1 --branch v7.4.2 https://github.com/bblanchon/ArduinoJson "$GITHUB_WORKSPACE/sdk/test/host/ArduinoJson"
+          make -C "$GITHUB_WORKSPACE/sdk/test/conformance"
+          cp "$GITHUB_WORKSPACE/sdk/test/conformance/test_esp32.py" .
+          echo "WBSKT_HARNESS=$GITHUB_WORKSPACE/sdk/test/conformance/wbskt-harness" >> "$GITHUB_ENV"
 
       - run: python -m pytest -v
