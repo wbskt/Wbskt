@@ -95,6 +95,20 @@ public sealed class MqttGatewayTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_client_cannot_unsubscribe_from_its_down_topic()
+    {
+        var received = new TaskCompletionSource<MqttApplicationMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var client = await ConnectAsync(onMessage: m => received.TrySetResult(m));
+        await WaitUntilAsync(() => _connections.GetConnection(ClientRefId) is not null);
+
+        var result = await client.UnsubscribeAsync(MqttBinding.DownTopic(ClientRefId));
+        await _connections.GetConnection(ClientRefId)!.SendAsync(new ProtocolMessage("cmd.relay", new { on = true }), CancellationToken.None);
+
+        Assert.Equal(MqttClientUnsubscribeResultCode.NotAuthorized, Assert.Single(result.Items).ResultCode);
+        Assert.Equal(MqttBinding.DownTopic(ClientRefId), (await received.Task.WaitAsync(Patience)).Topic);
+    }
+
+    [Fact]
     public async Task A_send_after_the_client_left_fails_instead_of_vanishing()
     {
         var client = await ConnectAsync();

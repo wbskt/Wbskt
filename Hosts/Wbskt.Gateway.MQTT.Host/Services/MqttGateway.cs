@@ -13,7 +13,8 @@ namespace Wbskt.Gateway.MQTT.Host.Services;
 
 /// <summary>
 /// The MQTT transport: an embedded MQTTnet server that is not a broker. It wires the server's events:
-/// CONNECT goes to <see cref="MqttConnectAuthenticator"/>, each client is held to its own two topics,
+/// CONNECT goes to <see cref="MqttConnectAuthenticator"/>, each client is held to its own two topics and
+/// cannot leave its down topic,
 /// every PUBLISH goes to the client's session instead of being routed, and a disconnect is classified
 /// by <see cref="MqttDisconnectClassifier"/>. Who may connect and what a session means (registering the client,
 /// announcing it, budgeting and routing its messages, recording its end) is Gateway.Core's
@@ -60,6 +61,7 @@ public sealed class MqttGateway : IHostedService
         _server.ClientDisconnectedAsync += EndConnectionAsync;
         _server.InterceptingPublishAsync += ReceivePublishAsync;
         _server.InterceptingSubscriptionAsync += CheckSubscriptionAsync;
+        _server.InterceptingUnsubscriptionAsync += KeepDownTopicAsync;
     }
 
     internal GuardedTcpServerAdapter Listener { get; }
@@ -216,6 +218,21 @@ public sealed class MqttGateway : IHostedService
         _logger.LogWarning("Client {MqttClientId} asked to subscribe to {Topic}, which is not its own; refused.", args.ClientId, args.TopicFilter.Topic);
         args.ProcessSubscription = false;
         args.Response.ReasonCode = MqttSubscribeReasonCode.NotAuthorized;
+        return Task.CompletedTask;
+    }
+
+    // The gateway subscribes a client to its down topic itself, and commands go nowhere without it:
+    // a send to an unsubscribed client is dropped by the server with no error, so the sender would hear
+    // "delivered" for a command the client never got. The subscription stays for the connection.
+    private Task KeepDownTopicAsync(InterceptingUnsubscriptionEventArgs args)
+    {
+        if (ConnectionOf(args.SessionItems) is { } connection && args.Topic == connection.DownTopic)
+        {
+            _logger.LogInformation("Client {ClientRefId} asked to unsubscribe from its down topic; refused.", args.ClientId);
+            args.ProcessUnsubscription = false;
+            args.Response.ReasonCode = MqttUnsubscribeReasonCode.NotAuthorized;
+        }
+
         return Task.CompletedTask;
     }
 
