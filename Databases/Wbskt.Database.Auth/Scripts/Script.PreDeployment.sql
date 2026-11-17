@@ -146,3 +146,10 @@ BEGIN
           WHERE NOT EXISTS (SELECT 1 FROM dbo.Workspaces w WHERE w.Id = Ids.Id);');
 END
 GO
+
+-- User_SetActive left the project: staff turn an account's sign-in on and off with
+-- User_StaffSetActive (the admin host), and a tenant administrator suspends a member instead. The
+-- publish leaves a procedure that is not in the model in place (DropObjectsNotInSource is off), so
+-- it is dropped here, which is a no-op on a fresh database.
+DROP PROCEDURE IF EXISTS dbo.User_SetActive;
+GO

@@ -117,7 +117,7 @@ For each inbound event:
 6. **Record.** `TriggerOutcomeLog` writes each registration's outcome to
    `dbo.TriggerDispatchOutcomes` against its workflow and trigger node, with the message type and
    the run it started. `ClientHoldRecorder` does the same for a hold trigger (`Held` when its filter
-   matched, `Filtered` when not). `TriggerDispatchOutcome_Record` keeps only the newest 20 per node,
+   matched, `Filtered` when not). `TriggerDispatchOutcome_RecordMany` keeps only the newest 20 per node,
    so the table is bounded by the number of triggers, not by traffic. A failed write is logged and
    never fails the dispatch. Management reads it at `GET …/workflows/{ref}/triggers/{nodeId}/recent`,
    with the node's hold state. An event that matched no registration has no workflow to be shown

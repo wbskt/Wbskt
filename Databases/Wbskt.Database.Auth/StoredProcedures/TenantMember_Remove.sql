@@ -3,8 +3,8 @@
 -- cascade, so that re-inviting someone later does not silently restore the access they had before.
 --
 -- The user's account, and their membership of any other tenant, are untouched. This is the
--- offboarding operation; disabling the account itself is User_SetActive and locks them out of every
--- tenant, including their own.
+-- offboarding operation; disabling the account itself is staff's User_StaffSetActive and locks them
+-- out of every tenant, including their own.
 --
 -- Workspaces they owned in this tenant transfer to @NewOwnerUserId, who is added as a member of each
 -- if they were not already. Leaving OwnerUserId pointing at a non-member would strand those
