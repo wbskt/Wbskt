@@ -4,6 +4,7 @@
 CREATE TABLE dbo.WorkflowRunSequences
 (
     WorkflowRefId UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
-    LastNumber    INT              NOT NULL
+    LastNumber    INT              NOT NULL,
+    CreatedAt     DATETIME2(3)     NOT NULL CONSTRAINT DF_WorkflowRunSequences_CreatedAt DEFAULT SYSUTCDATETIME()
 );
 GO

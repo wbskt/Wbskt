@@ -25,7 +25,7 @@ BEGIN
     INSERT INTO dbo.ClientMessageTypes (ClientId, Type, MessageCount, FirstSeenAt, LastSeenAt, SamplePayload)
     SELECT n.ClientId, n.Type, n.MessageCount, n.LastSeenAt, n.LastSeenAt, n.SamplePayload
     FROM (
-        SELECT r.*, ROW_NUMBER() OVER (PARTITION BY r.ClientId ORDER BY r.LastSeenAt DESC) AS Position
+        SELECT r.ClientId, r.Type, r.MessageCount, r.LastSeenAt, r.SamplePayload, ROW_NUMBER() OVER (PARTITION BY r.ClientId ORDER BY r.LastSeenAt DESC) AS Position
         FROM @Rows r
         WHERE NOT EXISTS (SELECT 1 FROM dbo.ClientMessageTypes t WHERE t.ClientId = r.ClientId AND t.Type = r.Type)
           AND EXISTS (SELECT 1 FROM dbo.Clients c WHERE c.Id = r.ClientId)
