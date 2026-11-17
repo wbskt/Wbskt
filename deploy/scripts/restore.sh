@@ -24,6 +24,7 @@ readonly CONTAINER_DIR=/var/opt/mssql/backups
 BACKUP_FILE=""
 TARGET_DB=""
 FORCE=false
+STAGED=""
 
 die() {
     echo "restore: $*" >&2
@@ -76,6 +77,15 @@ sqlcmd() {
         -S localhost -U sa -P "$SQL_SA_PASSWORD" -C -b -Q "$1"
 }
 
+# The staged copy is the full size of the database, on the volume that holds the live data files, so
+# it goes however the script ends. Best effort, since it also runs from the EXIT trap.
+remove_staged() {
+    if [[ -n "$STAGED" ]]; then
+        docker compose exec -T sql rm -f "$STAGED" || log "warning: could not remove $STAGED"
+        STAGED=""
+    fi
+}
+
 # Headerless, pipe-separated, trimmed - so the output can be parsed rather than read.
 sqlcmd_rows() {
     docker compose exec -T sql /opt/mssql-tools18/bin/sqlcmd \
@@ -87,7 +97,7 @@ main() {
     load_env
     cd "$COMPOSE_DIR"
 
-    local base stamp staged
+    local base stamp
     base="$(basename "$BACKUP_FILE" .gz)"
     stamp="$(date -u +%Y%m%d%H%M%S)"
 
@@ -97,23 +107,31 @@ main() {
         log "no --target given; restoring into scratch database $TARGET_DB"
     fi
 
-    staged="$CONTAINER_DIR/restore_${stamp}_${base}"
-
     docker compose exec -T sql mkdir -p "$CONTAINER_DIR" || die "could not create $CONTAINER_DIR"
+
+    # A copy a killed restore left behind. Only a day old or more, so a restore running beside this
+    # one keeps its file; backup.sh's staged copies are named for their database and never match.
+    docker compose exec -T sql find "$CONTAINER_DIR" -maxdepth 1 -name 'restore_*' -mmin +1440 -delete \
+        || log "warning: could not clear old staged restores in $CONTAINER_DIR"
+
+    STAGED="$CONTAINER_DIR/restore_${stamp}_${base}"
+    trap remove_staged EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
     # Streamed in, so the staged file is written by the container's own mssql user. `docker compose
     # cp` keeps the host file's owner and its 0640 mode, which SQL Server then cannot read. A .gz is
     # decompressed on the way, so the host never holds the full-size copy.
     if [[ "$BACKUP_FILE" == *.gz ]]; then
-        gzip -dc "$BACKUP_FILE" | docker compose exec -T sql sh -c "cat > '${staged}'" \
+        gzip -dc "$BACKUP_FILE" | docker compose exec -T sql sh -c "cat > '${STAGED}'" \
             || die "could not decompress the backup into the container"
     else
-        docker compose exec -T sql sh -c "cat > '${staged}'" < "$BACKUP_FILE" \
+        docker compose exec -T sql sh -c "cat > '${STAGED}'" < "$BACKUP_FILE" \
             || die "could not copy the backup into the container"
     fi
 
     # Verify before touching any database, so a corrupt file fails here rather than half way
     # through overwriting something.
-    sqlcmd "RESTORE VERIFYONLY FROM DISK = N'${staged}' WITH CHECKSUM;" \
+    sqlcmd "RESTORE VERIFYONLY FROM DISK = N'${STAGED}' WITH CHECKSUM;" \
         || die "the backup did not verify; refusing to restore from it"
 
     if [[ "$FORCE" != true ]]; then
@@ -146,7 +164,7 @@ main() {
             move_clauses+=", MOVE N'${logical}' TO N'/var/opt/mssql/data/${TARGET_DB}_data${data_index}.mdf'"
             data_index=$((data_index + 1))
         fi
-    done < <(sqlcmd_rows "SET NOCOUNT ON; RESTORE FILELISTONLY FROM DISK = N'${staged}';")
+    done < <(sqlcmd_rows "SET NOCOUNT ON; RESTORE FILELISTONLY FROM DISK = N'${STAGED}';")
 
     [[ -n "$move_clauses" ]] || die "could not read the file list from the backup"
 
@@ -163,7 +181,7 @@ main() {
 
     log "restoring into $TARGET_DB"
     if ! sqlcmd "${exclusive}
-                 RESTORE DATABASE [${TARGET_DB}] FROM DISK = N'${staged}' WITH REPLACE, RECOVERY${move_clauses}, STATS = 25;"; then
+                 RESTORE DATABASE [${TARGET_DB}] FROM DISK = N'${STAGED}' WITH REPLACE, RECOVERY${move_clauses}, STATS = 25;"; then
         if [[ -n "$exclusive" ]]; then
             sqlcmd "IF DB_ID(N'${TARGET_DB}') IS NOT NULL ALTER DATABASE [${TARGET_DB}] SET MULTI_USER;" \
                 || log "warning: could not return $TARGET_DB to MULTI_USER; run ALTER DATABASE [$TARGET_DB] SET MULTI_USER by hand"
@@ -171,7 +189,7 @@ main() {
         die "RESTORE DATABASE failed"
     fi
 
-    docker compose exec -T sql rm -f "$staged" || log "warning: could not remove $staged"
+    remove_staged
 
     log "row counts in $TARGET_DB - compare these against the live database:"
     sqlcmd "USE [${TARGET_DB}];
