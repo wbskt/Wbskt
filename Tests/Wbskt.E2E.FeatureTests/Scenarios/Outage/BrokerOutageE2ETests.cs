@@ -14,8 +14,9 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Outage;
 /// <para>
 /// What the code promises while it is gone: a command or a ping is the publish itself, so the
 /// management host answers 503 <c>EVENT_BUS_UNAVAILABLE</c> with <c>Retry-After</c> rather than
-/// reporting something sent that was not (ClientCommandService, ClientCommandSender). Sign-in puts its
-/// events on the queued bus (QueuedEventBus in the auth host), so it does not wait on the broker. The
+/// reporting something sent that was not (ClientCommandService, ClientCommandSender). Sign-in and tenant
+/// administration put their events on the queued bus (QueuedEventBus in the auth host), so neither waits
+/// on the broker. The
 /// public webhook callback is sent to the engine's durable queue, and when the broker cannot take it
 /// the answer is 503 with <c>Retry-After</c> (PublicCallbackController): nothing is held in the
 /// management host, so a delivery made during the outage is not queued to drain later; it is the
@@ -82,6 +83,8 @@ public sealed class BrokerOutageE2ETests(ServicesFixture fixture)
         await fixture.FireWebhookUntilRunAsync(token, workspaceRef, publishedRef, path, TimeSpan.FromSeconds(60), new { marker = "before-the-outage" });
 
         var duringMarker = $"during-{Guid.NewGuid():N}";
+        var tenantRef = await fixture.GetTenantRefAsync(token);
+        var roleRef = await fixture.CreateRoleAsync(token, tenantRef);
 
         await OutageControl.RunWithRestoreAsync(OutageControl.BrokerStart, async () =>
         {
@@ -107,6 +110,13 @@ public sealed class BrokerOutageE2ETests(ServicesFixture fixture)
             using (var login = await fixture.Auth.LoginRawAsync(new LoginRequest(workspace.User.Email, workspace.User.Password)))
             {
                 login.StatusCode.Should().Be(HttpStatusCode.OK, "sign-in queues its events instead of waiting on the broker");
+            }
+
+            // Tenant administration commits first and queues its events (TenantAnnouncer), so a change
+            // that happened is not reported as a 500, and the access-change announcement still goes out.
+            using (var grant = await fixture.Auth.As(token).GrantRolePermissionRawAsync(tenantRef, roleRef, new GrantRolePermissionRequest(Slug: "logs.read", IsDeny: false)))
+            {
+                grant.IsSuccessStatusCode.Should().BeTrue("a committed role change queues its events instead of failing on the broker");
             }
 
             // The issue this pass was written for expected the delivery to be held and drained later;

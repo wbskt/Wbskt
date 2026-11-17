@@ -171,7 +171,8 @@ public sealed class AccountDeletionServiceTests
     }
 
     private AccountDeletionService Service() =>
-        new(_accounts.Object, _billing.Object, _gateway.Object, _bus.Object, _accessTokens.Object, NullLogger<AccountDeletionService>.Instance);
+        new(_accounts.Object, _billing.Object, _gateway.Object, _bus.Object, _accessTokens.Object, NullLogger<AccountDeletionService>.Instance,
+            AuditWorkspaces.None, new TenantAnnouncer(_accounts.Object, _bus.Object, AuditWorkspaces.None, NullLogger<TenantAnnouncer>.Instance));
 
     private static TenantSubscription Subscription(string id) =>
         new(5, "dodo", id, "cus_1", "prod_maker_m", PlanCode.Maker, BillingInterval.Monthly, SubscriptionStatus.Active, DateTime.UtcNow.AddDays(20), false, null, null);

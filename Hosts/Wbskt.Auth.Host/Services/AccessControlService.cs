@@ -13,25 +13,21 @@ internal sealed class AccessControlService : IAccessControlService
     private readonly IAccessControlProvider _accessControl;
     private readonly ITenantProvider _tenants;
     private readonly IWorkspaceProvider _workspaceProvider;
-    private readonly IEventBus _eventBus;
     private readonly ILogger<AccessControlService> _logger;
     private readonly TenantAnnouncer _announcer;
 
     public AccessControlService(
         IAccessControlProvider accessControl,
         ITenantProvider tenants,
-        IAccountProvider accounts,
         IWorkspaceProvider workspaceProvider,
-        IEventBus eventBus,
         ILogger<AccessControlService> logger,
-        IAuditWorkspaces? audit = null)
+        TenantAnnouncer announcer)
     {
         _accessControl = accessControl;
         _tenants = tenants;
         _workspaceProvider = workspaceProvider;
-        _eventBus = eventBus;
         _logger = logger;
-        _announcer = new TenantAnnouncer(accounts, eventBus, audit ?? AuditWorkspaces.None, logger);
+        _announcer = announcer;
     }
 
     // ----- Roles -------------------------------------------------------------------------------
@@ -76,7 +72,7 @@ internal sealed class AccessControlService : IAccessControlService
             await _accessControl.DeleteRoleAsync(resolved.Value.EntityId, resolved.Value.TenantId, cancellationToken);
 
             // The role's permissions are gone, so anyone who held it has a different effective set now.
-            await _eventBus.PublishAsync(new RolePermissionsChangedEvent(resolved.Value.EntityId), cancellationToken);
+            await _announcer.RolePermissionsChangedAsync(resolved.Value.EntityId, cancellationToken);
         });
     }
 
@@ -347,7 +343,7 @@ internal sealed class AccessControlService : IAccessControlService
                 await _accessControl.RemoveGroupRoleAsync(groupId, roleId, tenantId, workspace.Value, cancellationToken);
             }
 
-            await _eventBus.PublishAsync(new RolePermissionsChangedEvent(roleId), cancellationToken);
+            await _announcer.RolePermissionsChangedAsync(roleId, cancellationToken);
         });
     }
 
@@ -497,7 +493,7 @@ internal sealed class AccessControlService : IAccessControlService
         await change();
         var after = await _accessControl.GetRolePermissionsAsync(role.EntityId, cancellationToken);
 
-        await _eventBus.PublishAsync(new RolePermissionsChangedEvent(role.EntityId), cancellationToken);
+        await _announcer.RolePermissionsChangedAsync(role.EntityId, cancellationToken);
 
         var (was, now) = (Describe(before), Describe(after));
         if (was != now)

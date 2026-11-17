@@ -31,12 +31,13 @@ public sealed class AdminMemberSqlTests(AuthSqlFixture auth)
             .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:AuthDBConnection"] = auth.ConnectionString })
             .Build();
         var runner = new StaffActionRunner(new StaffAuditProvider(configuration, "AuthDBConnection"), NullLogger<StaffActionRunner>.Instance);
+        var accounts = new AccountProvider(configuration);
         return new AdminMemberService(
             new StaffUserProvider(configuration),
             new TenantProvider(configuration),
-            new AccountProvider(configuration),
+            accounts,
             _bus,
-            new AuditWorkspaces(new WorkspaceProvider(configuration), NullLogger<AuditWorkspaces>.Instance),
+            new TenantAnnouncer(accounts, _bus, new AuditWorkspaces(new WorkspaceProvider(configuration), NullLogger<AuditWorkspaces>.Instance), NullLogger<TenantAnnouncer>.Instance),
             runner,
             NullLogger<AdminMemberService>.Instance);
     }
