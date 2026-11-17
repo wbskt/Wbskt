@@ -170,10 +170,10 @@ BEGIN
 END
 GO
 
--- 6. Fill dbo.Workflows from the state the pre-deployment script captured while
--- WorkflowDefinitions.IsEnabled still existed, then drop the capture and the tombstone table it
--- replaces (DropObjectsNotInSource is off, so the diff leaves WorkflowDeletions in place). Runs once:
--- the capture exists only on the deploy that dropped IsEnabled.
+-- 6. Fill dbo.Workflows from the state the pre-deployment script captured from
+-- WorkflowDefinitions.IsEnabled and dbo.WorkflowDeletions, then drop the capture and the tombstone
+-- table it replaces (DropObjectsNotInSource is off, so the diff leaves WorkflowDeletions in place).
+-- Runs once: the capture exists only on the deploy that still had WorkflowDeletions.
 IF OBJECT_ID('dbo.WorkflowStateMigration', 'U') IS NOT NULL
 BEGIN
     EXEC sp_executesql N'

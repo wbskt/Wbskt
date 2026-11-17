@@ -6,6 +6,10 @@ CREATE TABLE dbo.WorkflowDefinitions
     WorkspaceId     INT              NOT NULL,
     Name            NVARCHAR(200)    NOT NULL,
     Description     NVARCHAR(2000)   NULL,
+    -- Unused since dbo.Workflows holds the state (#895), and not to be read: it no longer says whether
+    -- a version is live. Kept because dropping a column from a table with rows trips the deploy's
+    -- data-loss guard, which also stops the image build (#898).
+    IsEnabled       BIT              NOT NULL DEFAULT 1,
     DefinitionJson  NVARCHAR(MAX)    NOT NULL,
     PublishedBy     INT              NOT NULL,
     CreatedAt       DATETIME2(3)     NOT NULL DEFAULT SYSUTCDATETIME(),

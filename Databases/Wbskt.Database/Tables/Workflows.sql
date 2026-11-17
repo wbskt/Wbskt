@@ -21,7 +21,7 @@ CREATE TABLE dbo.Workflows
     CreatedAt        DATETIME2(3)     NOT NULL CONSTRAINT DF_Workflows_CreatedAt DEFAULT SYSUTCDATETIME(),
 
     CONSTRAINT PK_Workflows PRIMARY KEY (RefId),
-    CONSTRAINT CK_Workflows_State CHECK (State BETWEEN 1 AND 4),
+    CONSTRAINT CK_Workflows_State CHECK (State >= 1 AND State <= 4),
     CONSTRAINT CK_Workflows_LiveOnlyWhenEnabled CHECK ((State = 1 AND LiveDefinitionId IS NOT NULL) OR (State <> 1 AND LiveDefinitionId IS NULL)),
     CONSTRAINT FK_Workflows_LiveDefinition
         FOREIGN KEY (LiveDefinitionId) REFERENCES dbo.WorkflowDefinitions (Id)
