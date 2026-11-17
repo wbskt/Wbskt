@@ -448,6 +448,47 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
+    public async Task An_allowance_notice_is_worked_out_against_the_allowance_its_month_was_posted_under()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int tenantId = NewId();
+        int workspaceId = NewId();
+        await AddAccountAsync(workspaceId, tenantId, creditsPerMonth: 10m);
+        await StartAsync(await CreateDefinitionAsync(workspaceId), startCost: 11m);
+        await PostAsync();
+        await ExecuteAsync("UPDATE dbo.WorkspaceAccounts SET CreditsPerMonth = 100 WHERE WorkspaceId = @Id", workspaceId);
+
+        (await ProviderFactory.CreditUsage(fixture.ConnectionString).GetDueNoticesAsync(ThisMonth, CancellationToken.None))
+            .Should().ContainSingle(n => n.TenantId == tenantId)
+            .Which.Should().Be(new CreditNotice(CreditNoticeKind.Allowance, workspaceId, tenantId, 10m, 11m, 100, 0), "a plan changed after the month's last post does not rewrite it");
+    }
+
+    [SkippableFact]
+    public async Task A_cap_told_about_a_later_month_or_changed_after_its_month_owes_nothing_for_it()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int settled = NewId();
+        int changed = NewId();
+        foreach (int workspaceId in new[] { settled, changed })
+        {
+            WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+            await SetCapAsync(workspaceId, 10m);
+            await StartAsync(wd, startCost: 9m);
+        }
+
+        await PostAsync();
+        var credits = ProviderFactory.CreditUsage(fixture.ConnectionString);
+        CreditNotice owed = (await credits.GetDueNoticesAsync(ThisMonth, CancellationToken.None)).Single(n => n.WorkspaceId == settled);
+        await credits.MarkNotifiedAsync(owed, ThisMonth.AddMonths(1), 80, CancellationToken.None);
+        await ExecuteAsync("UPDATE dbo.WorkspaceCreditCaps SET UpdatedAt = DATEADD(MONTH, 1, UpdatedAt) WHERE WorkspaceId = @Id", changed);
+
+        (await credits.GetDueNoticesAsync(ThisMonth, CancellationToken.None))
+            .Should().NotContain(n => n.WorkspaceId == settled || n.WorkspaceId == changed);
+    }
+
+    [SkippableFact]
     public async Task Usage_counts_the_accounts_workspaces_and_splits_out_this_ones_share()
     {
         Skip.IfNot(fixture.IsAvailable, SkipReason);
@@ -544,6 +585,15 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@Id", id);
         return (decimal)(await command.ExecuteScalarAsync())!;
+    }
+
+    private async Task ExecuteAsync(string sql, int id)
+    {
+        await using var connection = new SqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@Id", id);
+        await command.ExecuteNonQueryAsync();
     }
 
     private async Task<DateTime?> RetiredAtAsync(int workspaceId)

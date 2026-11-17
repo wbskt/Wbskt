@@ -292,9 +292,40 @@ public sealed class BillingNoticeTests
     }
 
     [Fact]
+    public async Task A_limit_reached_last_month_is_told_in_the_past_tense_for_that_month()
+    {
+        BillingNoticeConsumer consumer = Consumer();
+        var october = new DateOnly(2026, 10, 1);
+
+        await consumer.Consume(Context(new TenantCreditAllowanceReachedEvent(31, TenantId, 100, 2000m, 2000m, october) { CreatedAtUtc = Now }));
+        await consumer.Consume(Context(new WorkspaceCreditCapReachedEvent(31, 100, 500m, 500m, october) { CreatedAtUtc = Now }));
+        await consumer.Consume(Context(new TenantCreditAllowanceReachedEvent(31, TenantId, 100, 2000m, 2000m) { CreatedAtUtc = Now }));
+
+        Assert.Equal(["2026-10", "2026-10:31", "2026-11"], _sent.Where(s => s.To == "owner@example.com").Select(s => s.Period).Order());
+        var allowance = _sent.Single(s => s.Period == "2026-10");
+        Assert.Equal("Your account used all of its workflow credits in October 2026", allowance.Mail.Subject);
+        Assert.Contains("started again on 1 November 2026", allowance.Mail.HtmlBody);
+        Assert.DoesNotContain("this month", allowance.Mail.HtmlBody);
+        var cap = _sent.Single(s => s.Period == "2026-10:31");
+        Assert.Equal("<Greenhouse> reached its monthly credit cap in October 2026", cap.Mail.Subject);
+        Assert.Contains("refused for the rest of October 2026", cap.Mail.HtmlBody);
+        Assert.DoesNotContain("are refused until", cap.Mail.HtmlBody);
+    }
+
+    [Fact]
+    public void A_business_account_hears_last_months_overage_is_invoiced()
+    {
+        BillingNotice notice = BillingNotices.CreditAllowance(PlanCode.Business, 100, 600_000m, 700_000m, new DateOnly(2026, 10, 1), Now);
+
+        Assert.Equal("2026-10", notice.PeriodKey);
+        Assert.Contains(notice.Paragraphs, p => p.Contains("invoiced for October 2026 at $0.50 per 1,000 credits"));
+        Assert.Contains(notice.Paragraphs, p => p.Contains("your contract includes"));
+    }
+
+    [Fact]
     public void The_email_encodes_what_the_tenant_wrote_and_links_to_the_billing_page()
     {
-        BillingNotice notice = BillingNotices.CreditCap(31, "<script>x</script>", 100, 500m, 500m, Now);
+        BillingNotice notice = BillingNotices.CreditCap(31, "<script>x</script>", 100, 500m, 500m, default, Now);
 
         OutboundMail mail = AuthEmailTemplates.Billing(new AuthEmailOptions(), "owner@example.com", "owner", notice, "https://console.example/billing");
 

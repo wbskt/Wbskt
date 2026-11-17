@@ -17,7 +17,9 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 /// of its cap (<see cref="WorkspaceCreditCapReachedEvent"/>) and each tenant that reached 80% or 100% of
 /// its plan's monthly credits (<see cref="TenantCreditAllowanceReachedEvent"/>), from what the ledger holds
 /// and what was already announced (<c>dbo.CreditNotices_GetDue</c>), marking each only once it is
-/// published. Runs on the active engine only.
+/// published. For the first <see cref="LateNoticeWindow"/> of a month it also announces the month before
+/// reaching 100% when that was posted but not yet told, with that month on the event. Runs on the active
+/// engine only.
 /// </summary>
 public sealed class CreditUsagePoster(
     TimeProvider clock,
@@ -33,10 +35,14 @@ public sealed class CreditUsagePoster(
 
     // Notices are looked for after one that could not be published, at most once a minute after ticks
     // that posted, and at least every five minutes, which also finds those owed for credits
-    // Run_DeleteRetired posted. The check reads every capped workspace and this month's tenants, so it
+    // Run_DeleteRetired posted. The check reads every capped workspace and the month's tenants, so it
     // does not run on every ten-second tick.
     internal static readonly TimeSpan NoticeCheckAfterPost = TimeSpan.FromMinutes(1);
     internal static readonly TimeSpan NoticeCheckInterval = TimeSpan.FromMinutes(5);
+
+    // A crossing posted in a month's last minutes, or owed across a broker outage over midnight on the 1st,
+    // is still announced for that month this long into the next (#876).
+    internal static readonly TimeSpan LateNoticeWindow = TimeSpan.FromDays(7);
 
     // A notice still refused after this many checks in a row is logged as an error rather than a warning.
     internal const int NoticeFailuresBeforeError = 10;
@@ -88,13 +94,34 @@ public sealed class CreditUsagePoster(
 
         // Owed until a pass gets through every notice, so a failed read or mark is looked at again next tick.
         _noticesOwed = true;
+
+        // The month just ended goes first and must be settled before this one moves: a cap records the
+        // one month it was last told about, and CreditNotices_GetDue counts a later month's mark as this one settled.
+        bool lastMonthMayBeOwed = nowUtc < monthStart.ToDateTime(TimeOnly.MinValue) + LateNoticeWindow;
+        if (lastMonthMayBeOwed && !await AnnounceMonthAsync(credits, eventBus, monthStart.AddMonths(-1), ended: true, ct))
+        {
+            return;
+        }
+
+        if (!await AnnounceMonthAsync(credits, eventBus, monthStart, ended: false, ct))
+        {
+            return;
+        }
+
+        _noticesOwed = false;
+        _noticeFailures = 0;
+    }
+
+    private async Task<bool> AnnounceMonthAsync(ICreditUsageProvider credits, IEventBus eventBus, DateOnly monthStart, bool ended, CancellationToken ct)
+    {
         foreach (CreditNotice notice in await credits.GetDueNoticesAsync(monthStart, ct))
         {
-            foreach (int percent in notice.Owed())
+            IReadOnlyCollection<int> owed = ended ? notice.OwedAfterMonthEnd() : notice.Owed();
+            foreach (int percent in owed)
             {
                 try
                 {
-                    await eventBus.PublishAsync(EventFor(notice, percent), ct);
+                    await eventBus.PublishAsync(EventFor(notice, percent, monthStart), ct);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -102,23 +129,28 @@ public sealed class CreditUsagePoster(
                     _logger.Log(
                         _noticeFailures >= NoticeFailuresBeforeError ? LogLevel.Error : LogLevel.Warning,
                         ex,
-                        "Could not publish the {Percent}% credit {Kind} notice for workspace {WorkspaceId} ({Failures} checks in a row); it is tried again on the next tick",
-                        percent, notice.Kind, notice.WorkspaceId, _noticeFailures);
-                    return;
+                        "Could not publish the {Percent}% credit {Kind} notice for workspace {WorkspaceId} for {Month:yyyy-MM} ({Failures} checks in a row); it is tried again on the next tick",
+                        percent, notice.Kind, notice.WorkspaceId, monthStart, _noticeFailures);
+                    return false;
                 }
 
                 await credits.MarkNotifiedAsync(notice, monthStart, percent, ct);
             }
+
+            // An ended month's 80% has nothing left to warn of, so it is settled without a notice.
+            if (ended && owed.Count == 0)
+            {
+                await credits.MarkNotifiedAsync(notice, monthStart, notice.Level, ct);
+            }
         }
 
-        _noticesOwed = false;
-        _noticeFailures = 0;
+        return true;
     }
 
-    private static IEvent EventFor(CreditNotice notice, int percent) => notice switch
+    private static IEvent EventFor(CreditNotice notice, int percent, DateOnly monthStart) => notice switch
     {
-        { Kind: CreditNoticeKind.Cap } => new WorkspaceCreditCapReachedEvent(notice.WorkspaceId, percent, notice.Limit, notice.Spent),
-        { Kind: CreditNoticeKind.Allowance, TenantId: { } tenantId } => new TenantCreditAllowanceReachedEvent(notice.WorkspaceId, tenantId, percent, notice.Limit, notice.Spent),
+        { Kind: CreditNoticeKind.Cap } => new WorkspaceCreditCapReachedEvent(notice.WorkspaceId, percent, notice.Limit, notice.Spent, monthStart),
+        { Kind: CreditNoticeKind.Allowance, TenantId: { } tenantId } => new TenantCreditAllowanceReachedEvent(notice.WorkspaceId, tenantId, percent, notice.Limit, notice.Spent, monthStart),
         _ => throw new InvalidOperationException($"A {notice.Kind} credit notice for workspace {notice.WorkspaceId} has no tenant.")
     };
 }

@@ -12,7 +12,12 @@ namespace Wbskt.Events.Billing;
 /// that posted the most this month.
 /// </summary>
 /// <param name="CreditsPerMonth">The plan's allowance when it was crossed.</param>
-/// <param name="CreditsSpent">What the tenant had posted this month when the notice was sent.</param>
+/// <param name="CreditsSpent">What the tenant had posted that month when the notice was sent.</param>
+/// <param name="MonthStart">
+/// The month the allowance was reached in. Usually the month the event is sent in; the month before when
+/// the crossing was posted just before it ended and announced after. Default on an event sent before it was
+/// carried, which means the month of <see cref="BaseEvent.CreatedAtUtc"/>.
+/// </param>
 [EventCriticality(EventCriticality.Warning)]
-public sealed record TenantCreditAllowanceReachedEvent(int WorkspaceId, int TenantId, int Percent, decimal CreditsPerMonth, decimal CreditsSpent)
+public sealed record TenantCreditAllowanceReachedEvent(int WorkspaceId, int TenantId, int Percent, decimal CreditsPerMonth, decimal CreditsSpent, DateOnly MonthStart = default)
     : BaseEvent, IWorkspaceContext;

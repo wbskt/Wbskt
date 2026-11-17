@@ -39,7 +39,7 @@ internal sealed class BillingNoticeConsumer(
     {
         TenantCreditAllowanceReachedEvent e = context.Message;
         PlanCode plan = (await plans.FindByIdAsync(e.TenantId, context.CancellationToken))?.PlanCode ?? PlanCode.Free;
-        await notifier.NotifyAsync(e.TenantId, BillingNotices.CreditAllowance(plan, e.Percent, e.CreditsPerMonth, e.CreditsSpent, e.CreatedAtUtc), context.CancellationToken);
+        await notifier.NotifyAsync(e.TenantId, BillingNotices.CreditAllowance(plan, e.Percent, e.CreditsPerMonth, e.CreditsSpent, e.MonthStart, e.CreatedAtUtc), context.CancellationToken);
     }
 
     public async Task Consume(ConsumeContext<WorkspaceCreditCapReachedEvent> context)
@@ -51,7 +51,7 @@ internal sealed class BillingNoticeConsumer(
         }
 
         string name = (await workspaces.FindByIdAsync(e.WorkspaceId, context.CancellationToken))?.Name ?? "A workspace";
-        await notifier.NotifyAsync(account.TenantId, BillingNotices.CreditCap(e.WorkspaceId, name, e.Percent, e.MonthlyCreditCap, e.CreditsSpent, e.CreatedAtUtc), context.CancellationToken);
+        await notifier.NotifyAsync(account.TenantId, BillingNotices.CreditCap(e.WorkspaceId, name, e.Percent, e.MonthlyCreditCap, e.CreditsSpent, e.MonthStart, e.CreatedAtUtc), context.CancellationToken);
     }
 
     public async Task Consume(ConsumeContext<WorkspaceMessageLimitApproachingEvent> context)
