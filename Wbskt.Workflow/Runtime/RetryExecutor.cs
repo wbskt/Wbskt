@@ -86,6 +86,7 @@ internal static class RetryExecutor
         RetryNotification? onRetry = null,
         CreditChargeNotification? onCharge = null,
         bool isResumeVisit = false,
+        bool isRecoveredVisit = false,
         int firstAttempt = 1,
         TimeSpan? retryParkThreshold = null)
     {
@@ -156,6 +157,12 @@ internal static class RetryExecutor
                 }
             }
 
+            // An attempt is paid for before its node runs, so one found already claimed (Pending, by a run
+            // that stopped mid-node in a crash or a deploy) was paid for then. A replay-safe node claims
+            // no key, so for it the branch's recovery stands in, on the attempt it was recovered at.
+            bool paidBefore = existingRow is not null
+                || (isReplaySafe && isRecoveredVisit && attempt == startAttempt);
+
             Guid claimToken = Guid.NewGuid();
             if (!isReplaySafe && idempotencyKeyProvider != null)
             {
@@ -165,26 +172,31 @@ internal static class RetryExecutor
                         keyValue, (int)context.RunId, claimToken, node.NodeId, attempt, ct);
 
                     // Another claimant got there first. If it has already finished, its outcome is
-                    // returned; if it was Pending, we continue to run the executor.
-                    if (existingRow.BranchRefId != claimToken && CachedOutcome(existingRow) is { } claimed)
+                    // returned; if it was Pending, we continue to run the executor, on its payment.
+                    if (existingRow.BranchRefId != claimToken)
                     {
-                        if (await RetryCachedAsync(claimed) is not { } replayed)
+                        paidBefore = true;
+                        if (CachedOutcome(existingRow) is { } claimed)
                         {
-                            continue;
-                        }
+                            if (await RetryCachedAsync(claimed) is not { } replayed)
+                            {
+                                continue;
+                            }
 
-                        return replayed;
+                            return replayed;
+                        }
                     }
                 }
             }
 
             // A parked node runs twice: once to park, and again when its wake arrives, to read what woke
             // it and move on. Only the first is work the author asked for; charging the resume visit
-            // billed every Delay, AwaitSignal, WaitForHttp and SubWorkflow twice.
-            if (!isResumeVisit)
+            // billed every Delay, AwaitSignal, WaitForHttp and SubWorkflow twice. A free node makes no
+            // charge either: with nothing to add, the call could only refuse it for money already spent,
+            // which the next paid node is refused for anyway.
+            decimal cost = isResumeVisit || paidBefore ? 0m : creditCostCalculator.Calculate(node);
+            if (cost > 0m)
             {
-                decimal cost = creditCostCalculator.Calculate(node);
-
                 // Atomic budget-checked charge (2.2): the SP re-validates the budget under the
                 // same row lock as the increment, so this is a single round-trip with no
                 // check-then-act race between concurrent branches on the same run.
