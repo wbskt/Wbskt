@@ -8,7 +8,9 @@ BEGIN
     -- the same message twice. Each MessageId is written once per workspace (a message about a
     -- tenant's people is logged in each of its workspaces); rows without one are always written.
     WITH Incoming AS (
-        SELECT *, ROW_NUMBER() OVER (PARTITION BY MessageId, WorkspaceId ORDER BY (SELECT NULL)) AS Copy
+        SELECT
+            EventId, EventData, CreatedAtUtc, WorkspaceId, PolicyRefId, ClientRefId, WorkflowRefId, PolicyId, ClientId, WorkflowId, UserId, UserRefId, MessageId, Source, ClientAddress, UserAgent,
+            ROW_NUMBER() OVER (PARTITION BY MessageId, WorkspaceId ORDER BY (SELECT NULL)) AS Copy
         FROM @Logs
     )
     INSERT INTO dbo.EventLogs (EventId, EventData, CreatedAt, WorkspaceId, PolicyRefId, ClientRefId, WorkflowRefId, PolicyId, ClientId, WorkflowId, UserId, UserRefId, MessageId, Source, ClientAddress, UserAgent)

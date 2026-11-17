@@ -8,6 +8,7 @@ CREATE TABLE dbo.ClientMessageTypes (
     FirstSeenAt   DATETIME2(3)   NOT NULL,
     LastSeenAt    DATETIME2(3)   NOT NULL,
     SamplePayload NVARCHAR(4000) NULL, -- the latest payload that fitted, as the client sent it
+    CreatedAt     DATETIME2(3)   NOT NULL CONSTRAINT DF_ClientMessageTypes_CreatedAt DEFAULT SYSUTCDATETIME(),
 
     -- Constraints
     CONSTRAINT PK_ClientMessageTypes         PRIMARY KEY (ClientId, Type),

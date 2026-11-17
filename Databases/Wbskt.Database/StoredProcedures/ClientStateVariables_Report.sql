@@ -33,7 +33,7 @@ BEGIN
     OUTPUT inserted.Name, NULL INTO @Result (Name, OldValueJson)
     SELECT @ClientId, n.Name, n.DataType, n.ValueJson
     FROM (
-        SELECT v.*, ROW_NUMBER() OVER (ORDER BY v.Ordinal) AS Position
+        SELECT v.Name, v.DataType, v.ValueJson, ROW_NUMBER() OVER (ORDER BY v.Ordinal) AS Position
         FROM @Variables v
         WHERE NOT EXISTS (SELECT 1 FROM @Result r WHERE r.Name = v.Name)
     ) n
