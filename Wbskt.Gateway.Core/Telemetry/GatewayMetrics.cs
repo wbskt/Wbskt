@@ -19,11 +19,14 @@ public sealed class GatewayMetrics : IWorkerTickMetrics, IDisposable
     public const string MeterName = "Wbskt.Gateway";
 
     private readonly Meter _meter = new(MeterName);
+
+    internal Meter Meter => _meter;
     private readonly KeyValuePair<string, object?> _transport;
     private readonly UpDownCounter<long> _open;
     private readonly Counter<long> _connects;
     private readonly Counter<long> _disconnects;
     private readonly Counter<long> _dropped;
+    private readonly Counter<long> _received;
     private readonly Counter<long> _recheckClosed;
     private readonly Counter<long> _workerTicks;
 
@@ -34,6 +37,7 @@ public sealed class GatewayMetrics : IWorkerTickMetrics, IDisposable
         _connects = _meter.CreateCounter<long>("wbskt_socket_connects_total");
         _disconnects = _meter.CreateCounter<long>("wbskt_socket_disconnects_total");
         _dropped = _meter.CreateCounter<long>("wbskt_socket_messages_dropped_total");
+        _received = _meter.CreateCounter<long>("wbskt_client_messages_received_total");
         _recheckClosed = _meter.CreateCounter<long>("wbskt_socket_access_recheck_closed_total");
         _workerTicks = _meter.CreateCounter<long>("wbskt_gateway_worker_ticks_total");
 
@@ -52,6 +56,15 @@ public sealed class GatewayMetrics : IWorkerTickMetrics, IDisposable
     {
         _open.Add(-1, _transport);
         _disconnects.Add(1, _transport, new KeyValuePair<string, object?>("reason", reason.Tag()));
+    }
+
+    /// <summary>
+    /// A client's own message was handed on. Summed across gateways it is the platform's sustained traffic,
+    /// which PlatformMessageRateHigh holds against the single-VM trigger (#751).
+    /// </summary>
+    public void Received()
+    {
+        _received.Add(1, _transport);
     }
 
     /// <summary>A client message was not passed on: over budget, or not a valid envelope.</summary>

@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -21,6 +22,7 @@ public sealed class InboundMessageDispatcherTests
 
     private readonly RecordingEventBus _bus = new();
     private readonly FakeClientConnection _connection = new() { ClientId = 1, WorkspaceId = 2, TokenIssuedAtUtc = DateTime.UtcNow };
+    private readonly GatewayMetrics _metrics = new(GatewayTransport.WebSocket);
     private readonly InboundMessageDispatcher _dispatcher;
 
     public InboundMessageDispatcherTests()
@@ -31,7 +33,7 @@ public sealed class InboundMessageDispatcherTests
             new AckHandler(_bus, NullLogger<AckHandler>.Instance),
             new OtaStatusHandler(_bus, NullLogger<OtaStatusHandler>.Instance)
         ];
-        _dispatcher = new InboundMessageDispatcher(handlers, new ClientMessageHandler(_bus), new GatewayMetrics(GatewayTransport.WebSocket), NullLogger<InboundMessageDispatcher>.Instance);
+        _dispatcher = new InboundMessageDispatcher(handlers, new ClientMessageHandler(_bus), _metrics, NullLogger<InboundMessageDispatcher>.Instance);
     }
 
     private Task Dispatch(string json) => _dispatcher.DispatchAsync(new InboundContext(ClientRefId, _connection), json, CancellationToken.None);
@@ -46,6 +48,30 @@ public sealed class InboundMessageDispatcherTests
         received.Payload.Should().Be("""{"c":21.5}""");
         received.ClientId.Should().Be(1);
         received.WorkspaceId.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Only_a_client_message_handed_on_counts_as_received()
+    {
+        var counted = new List<(long Value, string? Transport)>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            // Only this test's own instance: other gateway tests count on the same meter name in parallel.
+            if (ReferenceEquals(instrument.Meter, _metrics.Meter) && instrument.Name == "wbskt_client_messages_received_total")
+            {
+                l.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
+            counted.Add((value, tags.ToArray().Single(t => t.Key == "transport").Value as string)));
+        listener.Start();
+
+        await Dispatch("""{"type":"temp.reading","payload":{"c":21.5}}""");
+        await Dispatch($$$"""{"type":"sys.ack","payload":{"commandId":"{{{CommandId}}}"}}""");
+        await Dispatch($$$"""{"type":"{{{new string('t', MessageTypes.MaxTypeLength + 1)}}}","payload":{}}""");
+
+        counted.Should().Equal((1L, GatewayTransport.WebSocket.Name));
     }
 
     [Fact]

@@ -16,7 +16,7 @@ namespace Wbskt.Management.Host.Services.Billing;
 /// (<see cref="MessageThrottleSnapshot"/>, the whole list every time), and announces each workspace once a
 /// month as it passes 80% (<see cref="WorkspaceMessageLimitApproachingEvent"/>), 100%
 /// (<see cref="WorkspaceMessageLimitReachedEvent"/>) and, on Maker, Pro and Team, the throttle at
-/// <see cref="BillingOptions.PaidMessageThrottleMultiple"/> times it (<see cref="WorkspaceMessagesThrottledEvent"/>).
+/// its plan's <see cref="BillingOptions.PaidMessageThrottleMultiples"/> times it (<see cref="WorkspaceMessagesThrottledEvent"/>).
 /// </summary>
 public sealed class MessageAllowanceMonitor(
     IMessageAllowanceProvider allowance,
@@ -30,9 +30,11 @@ public sealed class MessageAllowanceMonitor(
     private const int WarningPercent = 80;
     private const int ReachedPercent = 100;
 
-    private readonly decimal _paidThrottleMultiple = options.Value.PaidMessageThrottleMultiple;
+    // The throttle notice's record: a key, not a share, since each plan is throttled at its own multiple.
+    // 200 is what every paid plan used when the multiple was one number, so a month under way keeps its records.
+    private const int ThrottledNotice = 200;
 
-    private int ThrottledPercent => (int)(_paidThrottleMultiple * 100);
+    private readonly BillingOptions _billing = options.Value;
 
     public async Task CheckAsync(CancellationToken ct)
     {
@@ -46,7 +48,7 @@ public sealed class MessageAllowanceMonitor(
             .Select(u => new MessageAllowanceUsage(
                 u.Account,
                 u.Limits.MessagesPerMonth,
-                MessageAllowance.ThrottleAt(u.Account.PlanCode, u.Limits.MessagesPerMonth, _paidThrottleMultiple)))
+                MessageAllowance.ThrottleAt(u.Account.PlanCode, u.Limits.MessagesPerMonth, _billing.PaidMessageThrottleMultipleFor(u.Account.PlanCode))))
             .ToList();
 
         List<MessageAllowanceUsage> throttled = usages.Where(u => u.IsThrottled).ToList();
@@ -76,12 +78,12 @@ public sealed class MessageAllowanceMonitor(
 
         // A Free account's throttle starts at its allowance and is announced with it above.
         List<MessageAllowanceUsage> paidThrottled = throttled.Where(u => u.Account.PlanCode != PlanCode.Free).ToList();
-        IReadOnlyCollection<int> newlyThrottled = await RecordAsync(paidThrottled, monthStart, ThrottledPercent, ct);
+        IReadOnlyCollection<int> newlyThrottled = await RecordAsync(paidThrottled, monthStart, ThrottledNotice, ct);
         foreach (MessageAllowanceUsage usage in paidThrottled.Where(u => newlyThrottled.Contains(u.Account.WorkspaceId)))
         {
             logger.LogWarning("Workspace {WorkspaceId} carried {Used} messages this month, {Multiple} times its plan's {Limit}; its clients are throttled until the 1st.",
-                usage.Account.WorkspaceId, usage.Used, _paidThrottleMultiple, usage.Allowance);
-            await AnnounceAsync(new WorkspaceMessagesThrottledEvent(usage.Account.WorkspaceId, usage.Allowance, (long)usage.ThrottleAt!.Value, usage.Used), monthStart, ThrottledPercent, ct);
+                usage.Account.WorkspaceId, usage.Used, _billing.PaidMessageThrottleMultipleFor(usage.Account.PlanCode), usage.Allowance);
+            await AnnounceAsync(new WorkspaceMessagesThrottledEvent(usage.Account.WorkspaceId, usage.Allowance, (long)usage.ThrottleAt!.Value, usage.Used), monthStart, ThrottledNotice, ct);
         }
     }
 
