@@ -57,8 +57,11 @@ internal interface ITenantBillingProvider
     /// <summary>Marks a credit pack refunded and queues its revocation, once. False when there was nothing to refund.</summary>
     Task<bool> RefundCreditPurchaseAsync(string provider, string paymentId, DateTime refundedAt, OutboxMessage revoked, CancellationToken cancellationToken);
 
-    /// <summary>Credit packs bought, in id order after <paramref name="afterId"/>, for the main database's reconcile.</summary>
-    Task<IReadOnlyCollection<CreditPurchaseResponse>> GetCreditPurchasesAsync(int? afterId, int take, CancellationToken cancellationToken);
+    /// <summary>
+    /// Credit packs bought, in id order after <paramref name="afterId"/>, for the main database's reconcile;
+    /// only those expiring after <paramref name="expiresAfterUtc"/> when it is given.
+    /// </summary>
+    Task<IReadOnlyCollection<CreditPurchaseResponse>> GetCreditPurchasesAsync(int? afterId, int take, DateTime? expiresAfterUtc, CancellationToken cancellationToken);
 
     Task<TenantCreditPurchase?> FindCreditPurchaseAsync(string provider, string paymentId, CancellationToken cancellationToken);
 

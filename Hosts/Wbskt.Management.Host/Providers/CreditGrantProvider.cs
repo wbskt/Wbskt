@@ -1,4 +1,5 @@
 using System.Data;
+using System.Text.Json;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
 
@@ -7,6 +8,23 @@ namespace Wbskt.Management.Host.Providers;
 internal sealed class CreditGrantProvider : BaseSqlProvider, ICreditGrantProvider
 {
     public CreditGrantProvider(IConfiguration configuration) : base(configuration) { }
+
+    public async Task<IReadOnlyCollection<CreditGrantState>> GetBySourcesAsync(IReadOnlyCollection<CreditGrantSource> sources, CancellationToken ct)
+    {
+        if (sources.Count == 0)
+        {
+            return [];
+        }
+
+        return await ExecuteCollectionAsync("dbo.TenantCreditGrants_GetBySources",
+            p => p.Add("@Sources", SqlDbType.NVarChar, -1).Value = JsonSerializer.Serialize(sources),
+            r => new CreditGrantState(
+                r.GetString(r.GetOrdinal("Source")),
+                r.GetString(r.GetOrdinal("SourceRef")),
+                r.GetBoolean(r.GetOrdinal("Revoked")),
+                r.GetInt32(r.GetOrdinal("HoldRevision"))),
+            ct);
+    }
 
     public async Task<bool> InsertAsync(int tenantId, decimal credits, DateTime grantedAtUtc, DateTime expiresAtUtc, string source, string sourceRef, CancellationToken ct)
     {

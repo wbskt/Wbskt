@@ -538,7 +538,7 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
     {
         public Wbskt.Auth.Models.CreditPurchaseResponse Purchase { get; set; } = purchase;
 
-        public Task<Wbskt.Models.Page<Wbskt.Auth.Models.CreditPurchaseResponse>> GetPageAsync(string? cursor, CancellationToken cancellationToken) =>
+        public Task<Wbskt.Models.Page<Wbskt.Auth.Models.CreditPurchaseResponse>> GetPageAsync(string? cursor, DateTimeOffset expiresAfter, CancellationToken cancellationToken) =>
             Task.FromResult(new Wbskt.Models.Page<Wbskt.Auth.Models.CreditPurchaseResponse> { Items = [Purchase], NextCursor = null });
     }
 
