@@ -229,6 +229,29 @@ public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
     }
 
     /// <summary>
+    /// A shared tenant outlives a member's account, and with it the billing notices addressed to them: one
+    /// not yet sent is dropped, and one sent keeps its row without the address.
+    /// </summary>
+    [SkippableFact]
+    public async Task Deleting_an_account_takes_its_address_out_of_a_shared_tenants_billing_mail()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var (tenantId, _, _) = await CreateTenantAsync();
+        int member = await AddMemberAsync(tenantId, null);
+        string email = await ScalarAsync<string>("SELECT Email FROM dbo.Users WHERE Id = @p0", member);
+        await ExecSqlAsync("""
+            INSERT INTO dbo.BillingNoticeMails (TenantId, Kind, PeriodKey, ToAddress, Subject, HtmlBody, SentAt)
+            VALUES (@p0, N'test', N'unsent', @p1, N's', N'b', NULL),
+                   (@p0, N'test', N'sent', @p1, N's', N'b', SYSUTCDATETIME());
+            """, tenantId, email);
+
+        await ExecAsync("dbo.User_Delete", ("@UserId", member), ("@DeletedWorkspaces", "[]"));
+
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.BillingNoticeMails WHERE TenantId = @p0 AND PeriodKey = N'unsent'", tenantId));
+        Assert.EndsWith("@deleted.invalid", await ScalarAsync<string>("SELECT ToAddress FROM dbo.BillingNoticeMails WHERE TenantId = @p0 AND PeriodKey = N'sent'", tenantId));
+    }
+
+    /// <summary>
     /// <c>dbo.GroupRole_Verify</c>: a group carries roles when it or any group above it has one, since
     /// members inherit their ancestors' roles. Adding to such a group needs roles.manage.
     /// </summary>

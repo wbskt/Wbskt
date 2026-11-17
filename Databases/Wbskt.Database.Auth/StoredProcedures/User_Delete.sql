@@ -140,6 +140,18 @@ BEGIN
         Email = @Placeholder + N'@deleted.invalid'
     WHERE Email = @Email;
 
+    -- Billing notices addressed to the account in a tenant it shared: one not yet sent is not sent to an
+    -- address that is no longer anyone's, and one already sent or given up keeps its row until the purge
+    -- without the address.
+    DELETE FROM dbo.BillingNoticeMails
+    WHERE ToAddress = @Email
+      AND SentAt IS NULL
+      AND GaveUpAt IS NULL;
+
+    UPDATE dbo.BillingNoticeMails
+    SET ToAddress = @Placeholder + N'@deleted.invalid'
+    WHERE ToAddress = @Email;
+
     UPDATE dbo.Users
     SET Username = @Placeholder,
         Email = @Placeholder + N'@deleted.invalid',
