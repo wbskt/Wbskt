@@ -572,6 +572,16 @@
           "legendFormat": "queued",
           "refId": "B",
           "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(wbskt_auth_mail_retry_depth)",
+          "legendFormat": "waiting to retry",
+          "refId": "C",
+          "range": true
         }
       ],
       "options": {

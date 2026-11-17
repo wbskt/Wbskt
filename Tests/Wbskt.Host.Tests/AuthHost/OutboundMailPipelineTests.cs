@@ -131,8 +131,8 @@ public sealed class OutboundMailPipelineTests
 
         await sender.WaitForAttemptsAsync(3);
 
-        // The loop is sequential, so an unbounded retry on one message would stall every message
-        // behind it. Give the dispatcher room to make a fourth attempt if it were going to.
+        // The ladder is two delays, so the third failure is the last. Give the dispatcher room to
+        // make a fourth attempt if it were going to.
         await Task.Delay(150);
         Assert.Equal(3, sender.Attempts);
     }
@@ -309,6 +309,27 @@ public sealed class OutboundMailPipelineTests
     }
 
     /// <summary>
+    /// #781: a failed message waits for its retry on the side, so the mail behind it goes out at once,
+    /// and it is tried again when it is due rather than given up on after a few seconds.
+    /// </summary>
+    [Fact]
+    public async Task A_failed_message_waits_aside_while_the_next_goes_out_and_is_tried_when_due()
+    {
+        var sender = new ScriptedSender(failures: 1, () => new IOException("relay restarting"));
+        await using var harness = new DispatcherHarness(sender, retryDelays: [TimeSpan.FromMilliseconds(300)]);
+
+        await harness.StartAsync();
+        harness.Queue.TryWrite(Message("first@example.test"));
+        harness.Queue.TryWrite(Message("second@example.test"));
+
+        await sender.WaitForAttemptsAsync(2);
+        Assert.Equal(["first@example.test", "second@example.test"], sender.Recipients.Take(2));
+
+        await sender.WaitForAttemptsAsync(3);
+        Assert.Equal(["first@example.test", "second@example.test", "first@example.test"], sender.Recipients);
+    }
+
+    /// <summary>
     /// One wedged message must not become a stuck queue. The next one goes out regardless.
     /// </summary>
     [Fact]
@@ -387,26 +408,7 @@ public sealed class OutboundMailPipelineTests
             NullLogger<QueuedAuthMailer>.Instance,
             metrics ?? new AuthMetrics());
 
-    private static bool TryDrain(OutboundMailQueue queue, out OutboundMail? mail)
-    {
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
-        try
-        {
-            var enumerator = queue.ReadAllAsync(cts.Token).GetAsyncEnumerator(cts.Token);
-            if (enumerator.MoveNextAsync().AsTask().GetAwaiter().GetResult())
-            {
-                mail = enumerator.Current;
-                return true;
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Nothing queued within the window.
-        }
-
-        mail = null;
-        return false;
-    }
+    private static bool TryDrain(OutboundMailQueue queue, out OutboundMail? mail) => queue.TryRead(out mail);
 
     /// <summary>The outcome of every mail one <see cref="AuthMetrics"/> counts from now on, skipping the zeros it starts at.</summary>
     private sealed class MailOutcomes : IDisposable
@@ -484,7 +486,7 @@ public sealed class OutboundMailPipelineTests
     {
         private readonly OutboundMailDispatcher _dispatcher;
 
-        public DispatcherHarness(ScriptedSender sender, ILogger<OutboundMailDispatcher>? logger = null)
+        public DispatcherHarness(ScriptedSender sender, ILogger<OutboundMailDispatcher>? logger = null, IReadOnlyList<TimeSpan>? retryDelays = null)
         {
             Queue = new OutboundMailQueue();
             _dispatcher = new OutboundMailDispatcher(
@@ -492,7 +494,8 @@ public sealed class OutboundMailPipelineTests
                 sender,
                 logger ?? NullLogger<OutboundMailDispatcher>.Instance,
                 Metrics,
-                retryDelays: [TimeSpan.Zero, TimeSpan.Zero]);
+                TimeProvider.System,
+                retryDelays ?? [TimeSpan.Zero, TimeSpan.Zero]);
         }
 
         public OutboundMailQueue Queue { get; }
