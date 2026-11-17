@@ -427,6 +427,23 @@ groups:
             The same steps as the near-limit warning, now urgent: shrink the file if it is free space, or
             cut readings retention and move off Express. See "SQL Server edition" in deploy/README.md.
 
+      - alert: PlatformMessageRateHigh
+        # Every gateway's client messages, held against the hosting plan's single-VM trigger of about 300
+        # sustained msg/s (#751). Like DatabaseNearExpressLimit it is a planning alarm: it says the move
+        # to the next stack is due, from a measured number rather than a count of Team accounts.
+        expr: sum(rate(wbskt_client_messages_received_total[30m])) > 250
+        for: 6h
+        labels:
+          severity: warn
+        annotations:
+          summary: "Clients have sent {{ $value | humanize }} messages a second for six hours, near the single VM's 300"
+          impact: >-
+            Nothing is failing yet. Past about 300 a second the one VM and its SQL Server Express database
+            fall behind: the traffic tables grow toward Express's 10 GB and the hosts' queues back up.
+          action: >-
+            Plan the move off the single VM now (the hosting plan in the project files). Meanwhile see which
+            accounts carry the traffic in the Grafana overview, and whether one is near its plan's throttle.
+
       - alert: EngineNotReporting
         # Held back while the collector is down: OtelCollectorDown is the one cause then.
         expr: |

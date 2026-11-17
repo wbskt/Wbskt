@@ -313,9 +313,13 @@ included.
   older than 5 minutes is ignored, so a management outage lets messages through rather than throttling
   an account that has since upgraded. The list is empty again on the 1st.
 - **Maker, Pro and Team carry on past their allowance**, with no overage charge, so a customer never sees a
-  surprise bill. Only at `Billing:PaidMessageThrottleMultiple` (2) times it are they throttled the same
-  way as Free, which stops one account loading the hosts without end. The multiple is a setting so
-  pricing can move it.
+  surprise bill. Only at their plan's multiple of it (`Billing:PaidMessageThrottleMultiples`: 2 for Maker
+  and Pro, 1.5 for Team) are they throttled the same way as Free, which stops one account loading the
+  hosts without end. Team's is lower because one Team account at 2x (154 msg/s, about 5 GB of traffic
+  rows) would fill the single VM's Express database by itself (#751). Each is a setting so pricing can
+  move it; a plan left out keeps its default. The throttle notice is recorded under one key (200) for
+  every plan, so a changed multiple never announces it twice. `PlatformMessageRateHigh` warns when the
+  platform as a whole nears the single VM's 300 msg/s, whatever the plans.
 - **Business is never throttled**; what it carries past the allowance is invoiced at $1 per million
   messages (see the overage report under Credits).
 - Each account is told once per workspace and month (`dbo.WorkspaceMessageLimit_Record`, keyed by the

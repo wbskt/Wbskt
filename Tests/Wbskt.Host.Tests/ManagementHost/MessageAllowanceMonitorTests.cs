@@ -19,6 +19,7 @@ public sealed class MessageAllowanceMonitorTests
     private static readonly long Free = PlanCatalog.BuiltIn[PlanCode.Free].MessagesPerMonth;
     private static readonly long Maker = PlanCatalog.BuiltIn[PlanCode.Maker].MessagesPerMonth;
     private static readonly long Pro = PlanCatalog.BuiltIn[PlanCode.Pro].MessagesPerMonth;
+    private static readonly long Team = PlanCatalog.BuiltIn[PlanCode.Team].MessagesPerMonth;
     private static readonly long Business = PlanCatalog.BuiltIn[PlanCode.Business].MessagesPerMonth;
 
     private readonly Mock<IMessageAllowanceProvider> _allowance = new();
@@ -72,17 +73,31 @@ public sealed class MessageAllowanceMonitorTests
     }
 
     [Fact]
-    public async Task Business_is_never_throttled_and_a_changed_multiple_moves_the_paid_throttle()
+    public async Task Business_is_never_throttled_and_a_changed_multiple_moves_only_its_plans_throttle()
     {
         Accounts(
             new WorkspaceMessageAccount(1, PlanCode.Business, null, Business * 10),
-            new WorkspaceMessageAccount(2, PlanCode.Pro, null, Pro * 3 / 2));
+            new WorkspaceMessageAccount(2, PlanCode.Pro, null, Pro * 3 / 2),
+            new WorkspaceMessageAccount(3, PlanCode.Maker, null, Maker * 3 / 2));
 
-        await Monitor(paidMultiple: 1.5m).CheckAsync(CancellationToken.None);
+        await Monitor(new() { [PlanCode.Pro] = 1.5m }).CheckAsync(CancellationToken.None);
 
         Assert.Equal([2], _snapshot!.WorkspaceIds);
         Assert.Contains(Undated(new WorkspaceMessagesThrottledEvent(2, Pro, Pro * 3 / 2, Pro * 3 / 2)), _events.Select(Undated));
-        _allowance.Verify(x => x.RecordNoticeAsync(It.Is<IReadOnlyCollection<int>>(ids => ids.SequenceEqual(new[] { 2 })), November, 150, It.IsAny<CancellationToken>()));
+        _allowance.Verify(x => x.RecordNoticeAsync(It.Is<IReadOnlyCollection<int>>(ids => ids.SequenceEqual(new[] { 2 })), November, 200, It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task Team_is_throttled_at_one_and_a_half_times_its_allowance()
+    {
+        Accounts(
+            new WorkspaceMessageAccount(1, PlanCode.Team, null, Team * 3 / 2 - 1),
+            new WorkspaceMessageAccount(2, PlanCode.Team, null, Team * 3 / 2));
+
+        await Monitor().CheckAsync(CancellationToken.None);
+
+        Assert.Equal([2], _snapshot!.WorkspaceIds);
+        Assert.Contains(Undated(new WorkspaceMessagesThrottledEvent(2, Team, Team * 3 / 2, Team * 3 / 2)), _events.Select(Undated));
     }
 
     [Fact]
@@ -138,9 +153,17 @@ public sealed class MessageAllowanceMonitorTests
     private void Accounts(params WorkspaceMessageAccount[] accounts) =>
         _allowance.Setup(x => x.GetAccountsAsync(November, It.IsAny<CancellationToken>())).ReturnsAsync(accounts);
 
-    private MessageAllowanceMonitor Monitor(decimal paidMultiple = MessageAllowance.DefaultPaidThrottleMultiple) =>
-        new(_allowance.Object, new PlanCatalog(Options.Create(new PlanCatalogOptions())), _publisher.Object, _bus.Object, new FixedClock(),
-            Options.Create(new BillingOptions { PaidMessageThrottleMultiple = paidMultiple }), NullLogger<MessageAllowanceMonitor>.Instance);
+    private MessageAllowanceMonitor Monitor(Dictionary<PlanCode, decimal>? multiples = null)
+    {
+        var billing = new BillingOptions();
+        foreach ((PlanCode plan, decimal multiple) in multiples ?? [])
+        {
+            billing.PaidMessageThrottleMultiples[plan] = multiple;
+        }
+
+        return new(_allowance.Object, new PlanCatalog(Options.Create(new PlanCatalogOptions())), _publisher.Object, _bus.Object, new FixedClock(),
+            Options.Create(billing), NullLogger<MessageAllowanceMonitor>.Instance);
+    }
 
     private static IEvent Undated(IEvent e) => e switch
     {

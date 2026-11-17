@@ -1,3 +1,5 @@
+using Wbskt.Models.Billing;
+using Wbskt.Infrastructure.Billing;
 namespace Wbskt.Management.Host.Models;
 
 /// <summary>The management host's part in billing.</summary>
@@ -41,9 +43,19 @@ public sealed class BillingOptions
 
     /// <summary>
     /// How many times its monthly message allowance a Maker, Pro or Team account may carry before its clients
-    /// are held to Free's one message a minute until the 1st. Paid plans are never charged for overage, so
-    /// this only stops one account from loading the hosts without end. Must be more than 1 (checked at
-    /// start). Free is throttled at 1x; Business never is.
+    /// are held to Free's one message a minute until the 1st, by plan
+    /// (<c>Billing:PaidMessageThrottleMultiples:Team</c>). Paid plans are never charged for overage, so this
+    /// only stops one account from loading the hosts without end. A plan left out keeps its default
+    /// (<see cref="MessageAllowance.DefaultPaidThrottleMultiples"/>); each must be more than 1 and name a paid
+    /// self-serve plan (checked at start). Free is throttled at 1x; Business never is.
     /// </summary>
-    public decimal PaidMessageThrottleMultiple { get; set; } = Wbskt.Infrastructure.Billing.MessageAllowance.DefaultPaidThrottleMultiple;
+    public Dictionary<PlanCode, decimal> PaidMessageThrottleMultiples { get; set; } = new(MessageAllowance.DefaultPaidThrottleMultiples);
+
+    /// <summary>The multiple <paramref name="plan"/> is throttled at; 1 for Free and Business, which ignore it.</summary>
+    public decimal PaidMessageThrottleMultipleFor(PlanCode plan) =>
+        PaidMessageThrottleMultiples.TryGetValue(plan, out decimal multiple) ? multiple : 1m;
+
+    /// <summary>True when every multiple names a plan that has one and is more than 1.</summary>
+    public bool PaidMessageThrottleMultiplesAreValid() =>
+        PaidMessageThrottleMultiples.All(p => MessageAllowance.DefaultPaidThrottleMultiples.ContainsKey(p.Key) && p.Value > 1);
 }

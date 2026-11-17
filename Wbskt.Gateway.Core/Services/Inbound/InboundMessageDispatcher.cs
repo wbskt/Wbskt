@@ -80,6 +80,7 @@ public sealed class InboundMessageDispatcher
             else
             {
                 await _clientMessages.HandleAsync(context, message, bounded.Token);
+                _metrics.Received();
             }
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)

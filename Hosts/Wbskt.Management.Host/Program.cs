@@ -107,7 +107,7 @@ public static class Program
         // 100% notice, so its own announcement would never go out.
         builder.Services.AddOptions<BillingOptions>()
             .Bind(builder.Configuration.GetSection(BillingOptions.SectionName))
-            .Validate(o => o.PaidMessageThrottleMultiple > 1, "Billing:PaidMessageThrottleMultiple must be more than 1.")
+            .Validate(o => o.PaidMessageThrottleMultiplesAreValid(), "Billing:PaidMessageThrottleMultiples must name only Maker, Pro or Team, each more than 1.")
             .ValidateOnStart();
         builder.Services.AddScoped<WorkspaceAccountSync>();
         builder.Services.AddScoped<IWorkspaceCreditCapProvider, WorkspaceCreditCapProvider>();

@@ -555,6 +555,7 @@ dashboard otherwise). The template and the zone are read at start, so after chan
 | `RevokeMissedByGateway` | a gateway missed a client revoke event and its access re-check closed the connection |
 | `BackupMissing` / `BackupNeverReported` | no successful backup for 26 hours |
 | `BackupFailed` | `backup.sh` failed (raised immediately by `scripts/alert.sh`) |
+| `PlatformMessageRateHigh` | clients across every gateway sent over 250 messages a second for 6 hours, near the single VM's 300 (warn) |
 | `DatabaseNearExpressLimit` | a database's data files pass 8 GiB of the Express edition's 10 GB (pushed nightly by `backup.sh`) |
 | `DatabaseAtExpressLimit` | a database's data files pass 9 GiB; Express refuses writes at 10 GB (pages) |
 | `DiskAlmostFull` | any real filesystem on the VM has under 15% free for 10 minutes |
