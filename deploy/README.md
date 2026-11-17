@@ -934,7 +934,9 @@ Three stages, because a backup that never leaves the machine is not a backup:
    the non-root `mssql` user the image runs as. Not `WITH COMPRESSION`: Express refuses it.
 2. `RESTORE VERIFYONLY WITH CHECKSUM`, then the file is gzipped on its way out to `BACKUP_DIR` on
    the host (`<database>_<stamp>.bak.gz`) and the staged copy deleted. A backup that does not
-   verify is treated as no backup at all.
+   verify is treated as no backup at all. A run that fails part way still removes its staged
+   copies on exit, the next run clears any a killed run left, and a lock keeps two runs from
+   overlapping. `restore.sh` removes its staged file however it ends too.
 3. `BACKUP_UPLOAD_CMD` pushes `BACKUP_DIR` off the box.
 
 **Stage 3 is mandatory.** Without `BACKUP_UPLOAD_CMD` set, `backup.sh` refuses to run rather than
