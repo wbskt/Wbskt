@@ -189,9 +189,13 @@ public sealed class WorkflowTestRunService : IWorkflowTestRunService
                 : Result<Guid>.Failure(Error.Validation("TEST_RUN_TRIGGER_NOT_FOUND", $"The workflow has no trigger step {nodeId}."));
         }
 
-        return triggers.Count == 1
-            ? Result<Guid>.Success(triggers[0].NodeId)
-            : Result<Guid>.Failure(Error.Validation("TEST_RUN_TRIGGER_REQUIRED", "The workflow has more than one trigger. Name the one to start from in triggerNodeId."));
+        // A draft can have steps and no trigger yet: validation only warns of it (NO_TRIGGERS).
+        return triggers.Count switch
+        {
+            0 => Result<Guid>.Failure(Error.Validation("TEST_RUN_NO_TRIGGER", "Add a trigger before a test run.")),
+            1 => Result<Guid>.Success(triggers[0].NodeId),
+            _ => Result<Guid>.Failure(Error.Validation("TEST_RUN_TRIGGER_REQUIRED", "The workflow has more than one trigger. Name the one to start from in triggerNodeId."))
+        };
     }
 
     private static WorkflowDefinition Deserialize(string json, Guid workflowRefId) =>
