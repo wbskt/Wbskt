@@ -100,28 +100,33 @@ public sealed class ClientMetadataIngestionHandler : IConsumer<ClientMessageRece
             .OrderBy(entry => entry.Value.Order)
             .Select(entry => new StateVariableValue(entry.Key, GetDataType(entry.Value.Value.ValueKind), entry.Value.Value.GetRawText()))
             .ToList();
-        var outcomes = await _clientProvider.ReportStateVariablesAsync(message.ClientId, variables, MaxStateVariablesPerClient, cancellationToken);
+        // Reports can be consumed out of order, so each value carries when the client sent it. Never
+        // later than it arrived: a clock running ahead would otherwise hold its variables until then.
+        var receivedAt = message.CreatedAtUtc;
+        var sentAt = message.SentAtUtc is { } sent && sent < receivedAt ? sent : receivedAt;
+        var outcomes = await _clientProvider.ReportStateVariablesAsync(message.ClientId, variables, sentAt, MaxStateVariablesPerClient, cancellationToken);
 
         var readings = new List<ClientReadingValue>();
         for (var i = 0; i < variables.Count; i++)
         {
             var variable = variables[i];
             var outcome = outcomes[i];
-            if (!outcome.Stored)
+            if (!outcome.Stored && !outcome.Stale)
             {
                 _logger.LogWarning("Client {ClientRefId} is at its state variable limit; ignoring new variable '{Name}'.", message.ClientRefId, variable.Name);
                 continue;
             }
 
             // Numbers also go to the readings history, so they can be charted over time. Only for a
-            // variable that was stored: the cap on variables also caps how many series a client makes.
+            // variable that is stored: the cap on variables also caps how many series a client makes.
+            // An older report's reading still belongs in the history, at the time it was taken.
             var value = reported[variable.Name].Value;
             if (value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number) && double.IsFinite(number))
             {
                 readings.Add(new ClientReadingValue(variable.Name, number));
             }
 
-            if (outcome.OldValueJson != variable.ValueJson)
+            if (outcome.Stored && outcome.OldValueJson != variable.ValueJson)
             {
                 await _eventBus.PublishAsync(
                     new ClientPropertyUpdatedEvent(message.ClientRefId, message.ClientId, message.WorkspaceId, variable.Name, outcome.OldValueJson, variable.ValueJson),
@@ -132,8 +137,6 @@ public sealed class ClientMetadataIngestionHandler : IConsumer<ClientMessageRece
         if (readings.Count > 0)
         {
             // A buffered report counts at the time the client took it, not when it was finally sent.
-            var receivedAt = message.CreatedAtUtc;
-            var sentAt = message.SentAtUtc ?? receivedAt;
             var isLate = receivedAt - sentAt > LateThreshold;
             await _readingProvider.InsertAsync(message.ClientId, sentAt, receivedAt, isLate, readings, cancellationToken);
         }

@@ -8,6 +8,7 @@ CREATE TABLE dbo.ClientStateVariables (
     DataType  NVARCHAR(20)  NOT NULL, -- JSON value kind: number | string | boolean | object | array | null
     ValueJson NVARCHAR(MAX) NOT NULL,
     UpdatedAt DATETIME2(3)  NOT NULL  DEFAULT SYSUTCDATETIME(),
+    ReportedAt DATETIME2(3) NULL,     -- when the client sent the report holding this value; an older one is not applied
 
     -- Constraints
     CONSTRAINT PK_ClientStateVariables             PRIMARY KEY (Id),

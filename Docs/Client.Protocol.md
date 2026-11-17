@@ -138,7 +138,7 @@ the connection is back and `capabilities` has gone out. Never let a new message 
 | `sys.pong` | client → server | `{ "originalTimestamp": <ping's timestamp>, "id": <ping's id> }` | The server times the round trip on its own clock, so this works over any transport, whatever keepalive the transport has of its own. |
 | `sys.ack` | client → server | `{ "commandId": "…" }`, or with `"type"` and `"refused": "expired"` | See §4.3. |
 | `capabilities` | client → server | below | Send first on every connection. |
-| `state.report` | client → server | `{ "<name>": <value>, … }` | The state variables that changed. Numbers are kept as readings for charts. |
+| `state.report` | client → server | `{ "<name>": <value>, … }` | The state variables that changed. Numbers are kept as readings for charts. A variable keeps the value of the latest report by `sentAt` (one after it arrived counts as when it arrived), so a buffered report sent after reconnecting does not set back a newer value. |
 | `sys.ota.update` | server → client | `{ "url": "https://…", "sha256": "<64 hex>", "version"?: "…", "size"?: <bytes> }` | Optional (§4.4). A command: acked, and refused when expired, as in §4.3. |
 | `sys.ota.status` | client → server | `{ "commandId": "…", "state": "…", "progress"?: 0–100, "version"?: "…", "error"?: "…" }` | Optional (§4.4). How an update is going. |
 
