@@ -308,6 +308,8 @@ public static class Program
             manager.FeatureProviders.Add(new HostRoleControllerFeatureProvider(role));
         });
         builder.Services.AddWbsktJson();
+        builder.Services.AddSingleton<LiveFeedConnections>();
+        builder.Services.AddHostedService<LiveFeedAccessRecheck>();
         var signalRBuilder = builder.Services.AddSignalR().AddJsonProtocol(options => SignalRPayloadPrivacy.Apply(options.PayloadSerializerOptions));
 
         var redisConnectionString = builder.Configuration.GetConnectionString("Redis");

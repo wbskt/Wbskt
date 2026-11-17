@@ -88,10 +88,17 @@ internal sealed class WorkspaceAccessCache : IHostedService, IDisposable
     /// </summary>
     public long Generation => Interlocked.Read(ref _generation);
 
+    /// <summary>
+    /// Raised after every <see cref="Clear"/>: someone's access may have changed. Raised on whichever
+    /// thread noticed, so a handler hands the work off rather than doing it there.
+    /// </summary>
+    public event Action? Cleared;
+
     public void Clear()
     {
         Interlocked.Increment(ref _generation);
         _cache.Clear();
+        Cleared?.Invoke();
     }
 
     public bool TryGet(int userId, Guid workspaceRef, out WorkspaceAccess? access)

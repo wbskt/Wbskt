@@ -11,27 +11,36 @@ namespace Wbskt.Management.Host.Hubs;
 [Authorize]
 public class NotificationHub : Hub
 {
-    /// <summary>
-    /// Reference-to-internal-ID map for the workspaces this connection has joined, held in
-    /// <see cref="HubCallerContext.Items"/> so it lives as long as the connection does.
-    /// <see cref="LeaveWorkspace"/> reads it rather than resolving again — see there for why.
-    /// </summary>
-    private const string JoinedWorkspacesKey = "joined-workspaces";
-
-    /// <summary>Reference-to-internal-ID map for the clients this connection watches; see <see cref="LeaveClient"/>.</summary>
-    private const string JoinedClientsKey = "joined-clients";
-
     /// <summary>Client method for <see cref="ClientFeedSkipped"/>.</summary>
     internal const string ClientFeedSkippedMethod = "OnClientFeedSkipped";
 
     /// <summary>Client method for <see cref="Wbskt.Management.Models.WorkspaceMessageRate"/>, sent to the workspace group.</summary>
     internal const string WorkspaceMessageRateMethod = "OnWorkspaceMessageRateEvent";
 
+    private readonly LiveFeedConnections _connections;
     private readonly ILogger<NotificationHub> _logger;
 
-    public NotificationHub(ILogger<NotificationHub> logger)
+    public NotificationHub(LiveFeedConnections connections, ILogger<NotificationHub> logger)
     {
+        _connections = connections;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Records the connection and the token it opened with, so the feeds it joins can be checked again
+    /// when access changes (<see cref="LiveFeedAccessRecheck"/>).
+    /// </summary>
+    public override Task OnConnectedAsync()
+    {
+        var httpContext = Context.GetHttpContext();
+        _connections.Open(Context.ConnectionId, httpContext is null ? null : AuthenticationForwardingHandler.TokenOf(httpContext));
+        return base.OnConnectedAsync();
+    }
+
+    public override Task OnDisconnectedAsync(Exception? exception)
+    {
+        _connections.Close(Context.ConnectionId);
+        return base.OnDisconnectedAsync(exception);
     }
 
     /// <summary>
@@ -127,7 +136,7 @@ public class NotificationHub : Hub
             throw new HubException(CallerSafeMessage(clientIdResult.Error));
         }
 
-        JoinedClients[parsedClientRef] = clientIdResult.Value;
+        JoinedClients[parsedClientRef] = new WatchedClient(parsedWorkspaceRef, clientIdResult.Value);
         await Groups.AddToGroupAsync(Context.ConnectionId, ClientGroupName(clientIdResult.Value));
     }
 
@@ -142,12 +151,12 @@ public class NotificationHub : Hub
             throw new HubException("Client reference is not a valid identifier.");
         }
 
-        if (!JoinedClients.TryRemove(parsedClientRef, out var clientId))
+        if (!JoinedClients.TryRemove(parsedClientRef, out var watched))
         {
             return;
         }
 
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, ClientGroupName(clientId));
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, ClientGroupName(watched.ClientId));
     }
 
     /// <summary>The broadcast group for a workspace. Must stay in sync with <c>SignalRForwardingHandler</c>.</summary>
@@ -156,22 +165,14 @@ public class NotificationHub : Hub
     /// <summary>The group for one client's live traffic. Must stay in sync with <c>SignalRForwardingHandler</c>.</summary>
     internal static string ClientGroupName(int clientId) => $"client:{clientId}";
 
-    private ConcurrentDictionary<Guid, int> JoinedWorkspaces => ConnectionMap(JoinedWorkspacesKey);
+    // What this connection joined, which LeaveWorkspace and LeaveClient read rather than resolving
+    // again (see there for why), and which the access recheck reads to take away what it may no longer.
+    private LiveFeedConnection Connection =>
+        _connections.Find(Context.ConnectionId) ?? _connections.Open(Context.ConnectionId, null);
 
-    private ConcurrentDictionary<Guid, int> JoinedClients => ConnectionMap(JoinedClientsKey);
+    private ConcurrentDictionary<Guid, int> JoinedWorkspaces => Connection.Workspaces;
 
-    private ConcurrentDictionary<Guid, int> ConnectionMap(string key)
-    {
-        // Concurrent because a client may have several invocations in flight on one connection.
-        if (Context.Items.TryGetValue(key, out var existing) && existing is ConcurrentDictionary<Guid, int> joined)
-        {
-            return joined;
-        }
-
-        var created = new ConcurrentDictionary<Guid, int>();
-        Context.Items[key] = created;
-        return created;
-    }
+    private ConcurrentDictionary<Guid, WatchedClient> JoinedClients => Connection.Clients;
 
     /// <summary>
     /// Mirrors <c>ApiControllerBase</c>: an <see cref="ErrorType.Failure"/> message is typically raw
