@@ -8,7 +8,7 @@ namespace Wbskt.Host.Tests.HostedServices;
 internal static class WorkerTestServices
 {
     /// <summary>
-    /// A real container holding each double under every interface it implements, so a worker resolves
+    /// A real container holding each double under its own type and every interface it implements, so a worker resolves
     /// its dependencies from a scope exactly as it does in the engine.
     /// </summary>
     public static IServiceScopeFactory Scopes(params object[] doubles)
@@ -16,6 +16,7 @@ internal static class WorkerTestServices
         var services = new ServiceCollection();
         foreach (object instance in doubles)
         {
+            services.AddSingleton(instance.GetType(), instance);
             foreach (Type contract in instance.GetType().GetInterfaces())
             {
                 services.AddSingleton(contract, instance);

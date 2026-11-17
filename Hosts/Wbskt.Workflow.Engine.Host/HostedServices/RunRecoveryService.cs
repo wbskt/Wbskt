@@ -38,6 +38,9 @@ public sealed class RunRecoveryService : IEngineStartupTracker
     /// <summary>The page size <see cref="CollectWokenAsync"/> reads woken branches in.</summary>
     internal const int WokenPageSize = 1_000;
 
+    /// <summary>The batch size <see cref="RecoverAsync"/> finalizes runs with no work left in.</summary>
+    internal const int SettledPageSize = 100;
+
     /// <summary>
     /// Releases the inbound-event and trigger-start claims a stopped engine left Pending, so the broker's
     /// redelivery of each event reclaims it rather than dropping it as a duplicate, and settles the trigger
@@ -170,6 +173,8 @@ public sealed class RunRecoveryService : IEngineStartupTracker
                 await ReapplyStopsAsync(runProvider, runCancellationService, reappliedRunIds, ct);
             }
 
+            await FinalizeSettledRunsAsync(scope.ServiceProvider, ct);
+
             // Each woken branch carries its wake (a payload, a TTL port, or a passed deadline), so this
             // does what the lost dispatch would have. One of a run that is stopping is ended by the
             // branch loop's own stop check, as any branch of such a run is.
@@ -230,6 +235,34 @@ public sealed class RunRecoveryService : IEngineStartupTracker
         if (recovered > 0)
         {
             _logger.LogWarning("Recovered {Count} Active branches the previous leader left while it was stopping.", recovered);
+        }
+    }
+
+    /// <summary>
+    /// Finalizes the runs whose last branch ended but whose finalize the previous leader never reached,
+    /// at once rather than after the reaper's threshold, so they end with the status their branches
+    /// earned instead of sitting Running and being reaped as timed out. A failure is logged and left to
+    /// the reaper, which sweeps the same runs.
+    /// </summary>
+    private async Task FinalizeSettledRunsAsync(IServiceProvider services, CancellationToken ct)
+    {
+        var sweeper = services.GetService<SettledRunSweeper>();
+        if (sweeper is null)
+        {
+            return;
+        }
+
+        try
+        {
+            int finalized = await sweeper.FinalizeAsync(_clock.GetUtcNow().UtcDateTime, SettledPageSize, ct);
+            if (finalized > 0)
+            {
+                _logger.LogWarning("Finalized {Count} runs whose last branch ended before the previous leader finalized them.", finalized);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Failed to finalize the runs with no work left during startup recovery; the reaper will.");
         }
     }
 
