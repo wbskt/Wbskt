@@ -343,9 +343,10 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
  "work": {
   "894": {
    "state": "progress",
-   "why": "Workflows get a state (Enabled, Disabled, Deprecated) and one live version that can be any published version, so a workflow can be paused without deprecating it and an earlier version brought back without republishing it. Backend merged (#895, PR #896, 17 Nov). Its first deploy was blocked: dropping WorkflowDefinitions.IsEnabled failed the upgrade rehearsal, which also skips the image build. The column is kept, unused, and the deploy needs no flag (#898 for a reviewed way to drop columns). The console part is Amal's, from the handoff notes in PR #896.",
+   "why": "Workflows get a state (Enabled, Disabled, Deprecated) and one live version that can be any published version, so a workflow can be paused without deprecating it and an earlier version brought back without republishing it. Backend merged (#895, PR #896, 17 Nov). Deployed 17 Nov after PR #899: dropping WorkflowDefinitions.IsEnabled had failed the upgrade rehearsal, which also skips the image build, so the column is kept, unused (#898 for a reviewed way to drop columns). The console part is Amal's, from the handoff notes in PR #896.",
    "prs": [
-    896
+    896,
+    899
    ]
   },
   "851": {
@@ -905,6 +906,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":127,"t":"Reject breached passwords using the Have I Been Pwned range API","s":"c","m":"M2","p":175,"a":["auth"],"pr":"P2","sz":"S","x":"2026-11-03"}
  ],
  "merged": [
+  {"n":899,"t":"fix(db): keep WorkflowDefinitions.IsEnabled so master can deploy again","d":"2026-11-17"},
   {"n":896,"t":"feat(workflow): give workflows a state and a live version","d":"2026-11-17"},
   {"n":892,"t":"fix(deploy): give grafana room to cache its own binary and plugins","d":"2026-11-16"},
   {"n":889,"t":"fix(auth): name a likely login failure when the relay refuses the sender","d":"2026-11-16"},
