@@ -43,4 +43,10 @@ ENV HOST_DLL=${HOST_DLL}
 ENV ASPNETCORE_HTTP_PORTS=8080
 EXPOSE 8080
 
+# The aspnet image's unprivileged "app" user. Both ports the hosts listen on (8080, and 1883 for the
+# MQTT gateway) are above 1024, /Config is mounted read-only, and the one folder a host creates at
+# start is under that user's home, so nothing needs root. The published files stay root-owned and
+# read-only to it.
+USER $APP_UID
+
 ENTRYPOINT ["/bin/sh", "-c", "exec dotnet \"$HOST_DLL\""]
