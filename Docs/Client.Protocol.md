@@ -113,8 +113,8 @@ burst of 100; past that the excess is dropped, and after 500 drops in a row the 
 
 **Monthly allowance.** An account past its plan's monthly messages is slowed, not cut off: the gateway
 passes on one of each client's own messages a minute, `state.report` included, and drops the rest
-without telling the client. `sys.*` messages and `capabilities` always go through. Commands still
-reach the client.
+without telling the client. `sys.*` messages always go through, and so does a connection's first
+`capabilities` (one sent again counts as the client's own). Commands still reach the client.
 
 **Pacing.** A client sends at most 8 messages a second after a burst of 50
 (`ClientProtocol.SendPerSecond`, `ClientProtocol.SendBurst`), and that includes the offline backlog it

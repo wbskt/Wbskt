@@ -90,7 +90,7 @@ public sealed class InboundMessageDispatcherTests
     }
 
     [Fact]
-    public async Task A_throttled_clients_capabilities_go_through()
+    public async Task A_throttled_clients_first_capabilities_go_through_and_later_ones_count()
     {
         var throttle = new MessageThrottle(TimeProvider.System);
         throttle.Replace([2], DateTime.UtcNow);
@@ -98,8 +98,10 @@ public sealed class InboundMessageDispatcherTests
 
         await _dispatcher.DispatchAsync(context, """{"type":"temp.reading","payload":{}}""", CancellationToken.None);
         await _dispatcher.DispatchAsync(context, """{"type":"capabilities","payload":{"commands":[]}}""", CancellationToken.None);
+        await _dispatcher.DispatchAsync(context, """{"type":"Capabilities","payload":{"commands":[]}}""", CancellationToken.None);
 
         _bus.Published.OfType<ClientMessageReceivedEvent>().Select(e => e.Type).Should().Equal("temp.reading", "capabilities");
+        context.Allowance.ConsecutiveHeldBack.Should().Be(1);
     }
 
     [Theory]
