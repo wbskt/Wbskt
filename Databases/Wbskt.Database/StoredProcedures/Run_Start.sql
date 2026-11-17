@@ -233,9 +233,10 @@ BEGIN
             -- A sub-workflow child spends from its root run's budget (dbo.RunCounters.BudgetRunId): its
             -- parent was checked against the plan when it started, so a parent never fails halfway
             -- because its child was refused. Its own CreditBudget shows the budget it shares. Its start
-            -- charge goes on the root like its later charges, taken whether or not the root has room, as
-            -- a charge already made cannot be refused. The root's counter row is locked here, before the
-            -- child's is written, the order RunCounters_TryCharge takes them in.
+            -- is paid by the parent's sub-workflow step, through the budget check every charge takes, so
+            -- the engine passes it no @StartCost. One from an engine on the earlier build still goes on
+            -- the root whether or not the root has room. The root's counter row is locked here, before
+            -- the child's is written, the order RunCounters_TryCharge takes them in.
             DECLARE @BudgetRunId INT;
             IF @ParentRunRefId IS NOT NULL
             BEGIN

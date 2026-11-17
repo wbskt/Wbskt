@@ -84,6 +84,20 @@ public sealed class CreditCostCalculatorTests
         Assert.Equal(0m, calculator.Calculate(new WebhookTriggerNode { NodeId = Guid.NewGuid(), Name = "t", Ports = [], Config = new Wbskt.Workflow.Abstraction.Models.Triggers.WebhookTriggerConfig { Path = "orders" } }));
     }
 
+    [Fact]
+    public void A_sub_workflow_step_also_pays_for_the_run_it_starts()
+    {
+        // The child's start is charged here, through the step's budget-checked charge, so a child
+        // started at the budget's edge cannot take the root, or the workspace's cap, past it.
+        var calculator = new DefaultCreditCostCalculator(Options.Create(new CreditCostOptions
+        {
+            RunStartCost = 2.5m,
+            PerKind = new Dictionary<string, decimal> { [NodeKind.ControlSubWorkflow] = 3m }
+        }));
+
+        Assert.Equal(5.5m, calculator.Calculate(new SubWorkflowNode { NodeId = Guid.NewGuid(), Name = "child", Ports = [], Config = new SubWorkflowConfig { WorkflowRefId = Guid.NewGuid() } }));
+    }
+
     private sealed record UnpricedNode : BaseNode
     {
         public override string Kind => "action:notPricedYet";

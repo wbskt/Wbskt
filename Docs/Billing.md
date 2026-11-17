@@ -190,7 +190,9 @@ a month is billed for the whole month's use against its contract; there is no pr
 
 Starts that take a place already held (a queued event's replay, a run replacing those it cancels) skip
 the limit on runs going at once, but not the month's credits: a replay after the credits ran out is
-refused like any other start. A sub-workflow child is not checked at all. It spends from its root run's
+refused like any other start. A sub-workflow child is not checked at all. Its start is paid by the
+sub-workflow step that starts it, which costs the step's price plus a run's start in one budget-checked
+charge, so children started at the edge of a budget or a cap cannot pass it. It spends from its root run's
 budget (`dbo.RunCounters.BudgetRunId`): its charges add to its own `CreditsConsumed`, which is what is
 posted, and to the root's `ChildCreditsConsumed`, and `dbo.RunCounters_TryCharge` holds the root's own
 and its children's charges together to the root's budget. A parent is never failed halfway because the

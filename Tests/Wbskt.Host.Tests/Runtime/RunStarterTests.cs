@@ -280,6 +280,9 @@ public sealed class RunStarterTests
         Assert.True(result.Created);
         Assert.Null(runProvider.Credits);
         Assert.Equal(parent, runProvider.CreatedRun!.ParentRunRefId);
+
+        // The parent's sub-workflow step paid for this start, under the parent's budget check.
+        Assert.Equal(0m, runProvider.CreatedRun.StartCost);
     }
 
     [Fact]

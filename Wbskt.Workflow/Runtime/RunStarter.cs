@@ -94,6 +94,9 @@ internal sealed class RunStarter : IRunStarter
             // month's credits and the workspace cap; a replay or a replacement run is new work.
             PlanCredits? credits = parentRunRefId is null ? plan.Credits : null;
 
+            // A sub-workflow child's start was paid by its parent's step (DefaultCreditCostCalculator).
+            decimal startCost = parentRunRefId is null ? _runStartCost : 0m;
+
             // In practice the dispatcher has always set this by now - it normalizes the event per
             // registration before starting a run. The fallback is kept because this is a public entry point
             // on the runtime: a caller reaching it another way would otherwise persist a null correlation
@@ -136,7 +139,7 @@ internal sealed class RunStarter : IRunStarter
                         CreatedAt = nowUtc,
                         ParentRunRefId = parentRunRefId,
                         IsTest = isTest,
-                        StartCost = _runStartCost
+                        StartCost = startCost
                     },
                     // RunId 0: Run_Start inserts the root branch under the run it has just created.
                     BranchRow.New(rootBranchRefId, 0, Guid.Parse(triggerNodeId), localJson, nowUtc),
@@ -198,9 +201,9 @@ internal sealed class RunStarter : IRunStarter
 
             // The start charge went into the counters with the run, so it is counted here and not again
             // on a recovered start above, which charged nothing new.
-            if (_runStartCost > 0)
+            if (startCost > 0)
             {
-                _workflowMetrics?.RecordCreditsConsumed(definition.RefId.ToString(), (double)_runStartCost, definition.WorkspaceId);
+                _workflowMetrics?.RecordCreditsConsumed(definition.RefId.ToString(), (double)startCost, definition.WorkspaceId);
             }
 
             await _journal.AppendAsync(
