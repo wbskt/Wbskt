@@ -53,6 +53,8 @@ jobs:
       contents: read
       # The last step opens an issue when a deploy fails, so a failure is not left to be noticed.
       issues: write
+      # Moves :latest to the images a successful deploy put in place.
+      packages: write
     steps:
       # Only for the issue scripts; the deploy itself runs from the VM's own checkout.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -134,6 +136,38 @@ jobs:
             -o UserKnownHostsFile="$RUNNER_TEMP/known_hosts" \
             "$DEPLOY_USER@$DEPLOY_HOST" \
             "$DEPLOY_PATH/deploy/scripts/deploy.sh" "${args[@]}" | tee "$RUNNER_TEMP/deploy.log"
+
+      # :latest means what production runs: the migrator the upgrade rehearsal starts from, and what a
+      # compose file with no IMAGE_TAG pulls. So it moves here, once deploy.sh has succeeded, for a
+      # deploy from master only, and only for the images that deploy put in place (client-auth runs
+      # the management image; the migrator only when migrations ran). A failure to move it is reported
+      # but does not fail a deploy that happened: the rehearsal then starts from an older migrator.
+      - name: Move :latest to what production now runs
+        if: success() && github.ref == 'refs/heads/master'
+        continue-on-error: true
+        env:
+          TAG: ${{ inputs.tag }}
+          SERVICES: ${{ inputs.services }}
+          SKIP_MIGRATIONS: ${{ inputs.skip_migrations }}
+          OWNER: ${{ github.repository_owner }}
+          ACTOR: ${{ github.actor }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prefix="ghcr.io/$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')/wbskt"
+          images=()
+          for service in ${SERVICES:-auth management gateway-ws gateway-mqtt engine}; do
+            [[ "$service" == client-auth ]] && service=management
+            [[ " ${images[*]} " == *" $service "* ]] || images+=("$service")
+          done
+          [[ "$SKIP_MIGRATIONS" == "true" ]] || images+=(migrator)
+          printf '%s\n' "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          for image in "${images[@]}"; do
+            echo "$prefix-$image:latest -> $TAG"
+            if ! docker buildx imagetools create --tag "$prefix-$image:latest" "$prefix-$image:$TAG"; then
+              echo "::error::could not move $prefix-$image:latest to $TAG"
+              exit 1
+            fi
+          done
 
       # deploy.sh brings the supporting services in line itself, but recreating sql, rabbitmq, redis
       # or traefik drops connections, so it only names them. Keep an issue open while any is behind.

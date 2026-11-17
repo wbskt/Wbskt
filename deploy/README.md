@@ -72,7 +72,9 @@ Dashboard  push to master ─> build-and-deploy.yml ─> ghcr.io/wbskt/wbskt-con
 ```
 
 Six images per backend commit — `wbskt-auth`, `wbskt-management`, `wbskt-gateway-ws`,
-`wbskt-gateway-mqtt`, `wbskt-engine`, `wbskt-migrator` — each tagged `sha-<short-commit>` and `latest`. The console is a sixth,
+`wbskt-gateway-mqtt`, `wbskt-engine`, `wbskt-migrator` — each tagged `sha-<short-commit>`. `latest` names
+what production runs: `deploy.yml` moves it to the images a deploy from master put in place, once that
+deploy has succeeded, and nothing else moves it. The console is a sixth,
 published on the Dashboard repo's own cadence and tracked by its own `CONSOLE_IMAGE_TAG`.
 
 Every push to master deploys itself: once the tests, E2E, the upgrade rehearsal (below, under
@@ -686,9 +688,8 @@ production is about to get, in the `migration-rehearsal` job of `build-images.ym
 (`rehearsal/rehearse.sh`). The image jobs, and so the deploy, wait on it. Pull requests from forks
 skip it, since they get no token to pull the image, so their first rehearsal is the master push.
 
-1. `wbskt-migrator:latest` builds both databases in a fresh SQL Server. That is the migrator the
-   last green master build published, which is what production last ran unless a deploy since then
-   failed or is still waiting for approval.
+1. `wbskt-migrator:latest` builds both databases in a fresh SQL Server. That is the migrator of the
+   last deploy from master that succeeded with migrations on: what production last ran.
 2. `rehearsal/seed-every-table.sql` puts a row in every empty table. It is generic, because the
    schema it seeds is the previous release's: each column gets a value of its type, foreign keys
    take a row from the table they reference, and a table whose constraints refuse it is left empty
