@@ -5,6 +5,9 @@ namespace Wbskt.Workflow.Engine;
 // leadership as in-memory state means those readers never need a DB round trip per check.
 public sealed class LeadershipState
 {
+    // Work stops this long before the lease row expires, so it stops before a standby could win it.
+    private static readonly TimeSpan SafetyMargin = TimeSpan.FromSeconds(5);
+
     private volatile bool _isLeader;
     private volatile bool _busStarted;
     private DateTime _leaseValidUntilUtc;
@@ -17,6 +20,9 @@ public sealed class LeadershipState
     // Completes the first time this instance becomes leader; EngineLeadershipCoordinator awaits
     // it once to know when to start the bus and run recovery.
     public Task WhenLeaderAsync() => _becameLeaderTcs.Task;
+
+    // True while this instance leads and its lease has more than the safety margin left at nowUtc.
+    public bool HoldsLeaseAt(DateTime nowUtc) => _isLeader && nowUtc < _leaseValidUntilUtc - SafetyMargin;
 
     public void SetLeader(DateTime leaseValidUntilUtc)
     {

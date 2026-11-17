@@ -65,6 +65,40 @@ public sealed class EngineLeaseLifecycleTests
     }
 
     [Fact]
+    public async Task A_leader_keeps_the_role_through_a_renewal_that_throws_while_the_lease_has_time_left()
+    {
+        // One SQL timeout must not restart the only engine: two more renewals fit before the lease ends.
+        var state = new LeadershipState();
+        state.SetLeader(DateTime.UtcNow.AddSeconds(30));
+        var lifetime = new Mock<IHostApplicationLifetime>();
+        (Mock<ILeaseProvider> lease, Task attempted) = ThrowingLease();
+        var service = CreateElectionService(lease.Object, state, lifetime.Object);
+
+        await service.StartAsync(CancellationToken.None);
+        await attempted.WaitAsync(TimeSpan.FromSeconds(5));
+        await service.StopAsync(CancellationToken.None);
+
+        Assert.True(state.IsLeader);
+        lifetime.Verify(l => l.StopApplication(), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_leader_stops_once_a_renewal_throws_inside_the_safety_margin()
+    {
+        var state = new LeadershipState();
+        state.SetLeader(DateTime.UtcNow.AddSeconds(2));
+        var lifetime = new Mock<IHostApplicationLifetime>();
+        (Mock<ILeaseProvider> lease, Task attempted) = ThrowingLease();
+        var service = CreateElectionService(lease.Object, state, lifetime.Object);
+
+        await service.StartAsync(CancellationToken.None);
+        await attempted.WaitAsync(TimeSpan.FromSeconds(5));
+        await service.StopAsync(CancellationToken.None);
+
+        lifetime.Verify(l => l.StopApplication(), Times.AtLeastOnce);
+    }
+
+    [Fact]
     public async Task A_leader_whose_recovery_fails_logs_critical_stops_and_still_releases_the_lease()
     {
         var events = new ConcurrentQueue<string>();
@@ -188,15 +222,25 @@ public sealed class EngineLeaseLifecycleTests
         Assert.Equal(["woken-read", "claims-released", "bus-started", "dispatch-81"], steps);
     }
 
-    private static LeaderElectionService CreateElectionService(ILeaseProvider lease, LeadershipState state) =>
+    private static LeaderElectionService CreateElectionService(ILeaseProvider lease, LeadershipState state, IHostApplicationLifetime? lifetime = null) =>
         new(
             WorkerTestServices.Scopes(lease),
             new FixedHostIdentity(),
             state,
             TimeProvider.System,
-            Mock.Of<IHostApplicationLifetime>(),
+            lifetime ?? Mock.Of<IHostApplicationLifetime>(),
             NullLogger<LeaderElectionService>.Instance,
             WorkerTestServices.Options(new WorkflowEngineOptions { LeaderElectionRenewInterval = TimeSpan.FromMilliseconds(50) }));
+
+    private static (Mock<ILeaseProvider> Lease, Task Attempted) ThrowingLease()
+    {
+        var attempted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var lease = new Mock<ILeaseProvider>();
+        lease.Setup(l => l.TryAcquireAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Callback(() => attempted.TrySetResult())
+            .ThrowsAsync(new TimeoutException("SQL timeout"));
+        return (lease, attempted.Task);
+    }
 
     private sealed class FixedHostIdentity : IHostIdentity
     {

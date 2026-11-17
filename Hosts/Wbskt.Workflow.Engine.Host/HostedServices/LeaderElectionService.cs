@@ -8,8 +8,9 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
 // Registered first (see Program.cs) so LeadershipState is meaningful before any other hosted
 // service starts checking ILeadershipGate.IsActive. Renews the engine-leader lease on a fixed
-// interval; a leader that fails to renew stops the process rather than risk two engines running
-// active work at once - `restart: unless-stopped` brings it back as a standby.
+// interval. A leader whose lease went to another holder, or that could not renew before the lease
+// ran out, stops the process rather than risk two engines running active work at once -
+// `restart: unless-stopped` brings it back as a standby.
 public sealed class LeaderElectionService : BackgroundService
 {
     private const string EngineLeaderLease = "engine-leader";
@@ -106,9 +107,18 @@ public sealed class LeaderElectionService : BackgroundService
         }
         catch (Exception ex)
         {
+            // A renewal that throws (a timeout, a deadlock victim) did not hand the lease to anyone:
+            // keep the role and try again next tick while the lease still has time on it. The gate
+            // already stops the periodic work at the same margin, so stop only once that has passed.
+            if (_leadershipState.HoldsLeaseAt(_clock.GetUtcNow().UtcDateTime))
+            {
+                _logger.LogWarning(ex, "Failed to renew the engine-leader lease; keeping the role until it expires and retrying.");
+                return;
+            }
+
             if (_leadershipState.IsLeader)
             {
-                _logger.LogCritical(ex, "Failed to renew the engine-leader lease; stopping so this instance rejoins as standby.");
+                _logger.LogCritical(ex, "Could not renew the engine-leader lease before it expired; stopping so this instance rejoins as standby.");
                 _appLifetime.StopApplication();
                 return;
             }
