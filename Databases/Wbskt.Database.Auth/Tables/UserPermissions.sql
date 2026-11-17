@@ -14,3 +14,7 @@ CREATE TABLE dbo.UserPermissions
     CONSTRAINT FK_UserPermissions_Workspace FOREIGN KEY (WorkspaceId) REFERENCES dbo.Workspaces(Id)
 )
 GO
+
+-- For the delete by workspace and its foreign key check, as on dbo.UserRoles.
+CREATE INDEX IX_UserPermissions_WorkspaceId ON dbo.UserPermissions (WorkspaceId);
+GO

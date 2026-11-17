@@ -12,3 +12,8 @@ CREATE TABLE dbo.TenantMembers (
     CONSTRAINT FK_TenantMembers_Users FOREIGN KEY (UserId) REFERENCES dbo.Users(Id) ON DELETE CASCADE
 );
 GO
+
+-- The key leads with the tenant. Tenant_GetForUser and User_Delete read a person's memberships by
+-- UserId, and the cascade from a user delete looks them up the same way.
+CREATE INDEX IX_TenantMembers_UserId ON dbo.TenantMembers (UserId);
+GO

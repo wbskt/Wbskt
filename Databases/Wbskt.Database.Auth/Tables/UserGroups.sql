@@ -7,3 +7,7 @@ CREATE TABLE dbo.UserGroups
     CONSTRAINT FK_UserGroups_Group FOREIGN KEY (GroupId) REFERENCES dbo.Groups(Id)
 )
 GO
+
+-- Group_Delete removes a group's members by GroupId, the key's second column.
+CREATE INDEX IX_UserGroups_GroupId ON dbo.UserGroups (GroupId);
+GO
