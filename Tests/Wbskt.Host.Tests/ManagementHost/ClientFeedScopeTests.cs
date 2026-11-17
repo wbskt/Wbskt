@@ -25,7 +25,7 @@ public sealed class ClientFeedScopeTests
     {
         var scoped = ForwardedEvents().Where(t => Notify(t).Scope == NotifyScope.Client).ToList();
 
-        scoped.Should().Contain([typeof(ClientMessageReceivedEvent), typeof(ClientCommandDeliveredEvent), typeof(ClientCommandAckedEvent)]);
+        scoped.Should().Contain([typeof(ClientMessageReceivedEvent), typeof(ClientCommandDeliveredEvent), typeof(ClientCommandAckedEvent), typeof(ClientPropertyUpdatedEvent)]);
         scoped.Should().AllSatisfy(t => typeof(IClientContext).IsAssignableFrom(t).Should().BeTrue(t.Name));
     }
 
