@@ -547,7 +547,7 @@ fresh token and join their workspaces again; a group joined on the old connectio
 |---|---|---|
 | `JoinWorkspace(workspaceRef)` | `workspace.join` | Subscribes the connection to the workspace's event feed. Resolves the reference to the internal ID the broadcast group is keyed by, and records the mapping on the connection. |
 | `LeaveWorkspace(workspaceRef)` | none | Unsubscribes, using the mapping the join recorded. Deliberately ungated: a permission check here could only fail *after* a successful join — membership removed, or the permission revoked — and failing it would strand the connection in a group it can no longer ask to leave. |
-| `JoinClient(workspaceRef, clientRef)` | `workspace.join` + `logs.read` | Subscribes the connection to one client's live traffic: the events marked `NotifyScope.Client` (message received, command, delivered, acked, failed, ping). The same permission as reading its comms history. A client in another workspace fails like one that doesn't exist. |
+| `JoinClient(workspaceRef, clientRef)` | `workspace.join` + `logs.read` | Subscribes the connection to one client's live traffic: the events marked `NotifyScope.Client` (message received, command, delivered, acked, failed, ping, state variable changed). The same permission as reading its comms history. A client in another workspace fails like one that doesn't exist. |
 | `LeaveClient(clientRef)` | none | Stops that client's traffic, using the mapping the join recorded; ungated for the same reason as `LeaveWorkspace`. |
 
 Per-client traffic is **not** sent to the workspace group: only connections that called `JoinClient`
