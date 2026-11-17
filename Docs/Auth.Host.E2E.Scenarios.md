@@ -400,7 +400,8 @@ The cross-service contract. Every workspace-scoped management-host request passe
 | `WS_MEM_17` | − | List by a member lacking `users.read` | **403** |
 | `WS_MEM_18` | + | Remove a member | **204**; gone from the list; they can no longer resolve |
 | `WS_MEM_19` | − | Remove the **owner** | **400** `WORKSPACE_OWNER_PROTECTED` — a workspace with no owner cannot be administered |
-| `WS_MEM_20` | − | Remove an unknown `userRef` | **403** `USER_NOT_FOUND` |
+| `WS_MEM_20` | − | Remove an unknown `userRef` | **404** `USER_NOT_FOUND` |
+| `WS_MEM_20b` | − | Remove a tenant member who is not in the workspace, or another tenant's user | **404** `USER_NOT_FOUND`, as for an unknown ref; nothing is announced |
 | `WS_MEM_21` | − | Remove by a member lacking `users.manage` | **403** |
 | `WS_MEM_22` | + | Removal also drops assignments scoped to that workspace | Re-add the user; their old workspace-scoped role is gone |
 | `WS_MEM_23` | + | Members list exposes `refId` only, never the integer `Id` | Response has no `id` field |

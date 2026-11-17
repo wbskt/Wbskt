@@ -54,9 +54,9 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
         }, cancellationToken);
     }
 
-    public async Task RemoveUserFromWorkspaceAsync(int workspaceId, int userId, CancellationToken cancellationToken = default)
+    public async Task<bool> RemoveUserFromWorkspaceAsync(int workspaceId, int userId, CancellationToken cancellationToken = default)
     {
-        await ExecuteNonQueryAsync("dbo.WorkspaceMember_Remove", p =>
+        return await ExecuteScalarAsync<bool>("dbo.WorkspaceMember_Remove", p =>
         {
             p.AddWithValue("@WorkspaceId", workspaceId);
             p.AddWithValue("@UserId", userId);
