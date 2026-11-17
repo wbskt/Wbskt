@@ -35,6 +35,7 @@ public sealed class ManagementHostDiTests
         services.AddSingleton(Mock.Of<IEventBus>());
         services.AddSingleton(Mock.Of<ICommandSender>());
         services.AddSingleton(Mock.Of<IWorkflowEngineClient>());
+        services.AddSingleton(Mock.Of<IEngineIntegrationClient>());
         services.AddScoped<IWorkflowEngineGateway, WorkflowEngineGateway>();
         services.AddScoped<IIntegrationProvider, IntegrationProvider>();
         services.AddScoped<IntegrationReferenceCheck>();

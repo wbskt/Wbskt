@@ -26,8 +26,9 @@ namespace Wbskt.Infrastructure.Middlewares;
 /// </para>
 /// <para>
 /// A host that calls another through Traefik's backend entrypoint (management → engine on
-/// <c>http://traefik:8081</c>) sends forwarded headers too, so an internal route on such a host would be
-/// refused. None is today; one that is added (#787) must be called directly instead.
+/// <c>http://traefik:8081</c>) sends forwarded headers too, so an internal route on such a host is
+/// refused that way and is called directly instead, as the engine's integration routes are
+/// (<c>http://engine:8080</c>).
 /// </para>
 /// </remarks>
 public sealed class InternalRouteGuardMiddleware

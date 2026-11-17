@@ -2,21 +2,10 @@ using System.Text.Json;
 
 namespace Wbskt.Workflow.Engine.Contracts;
 
-/// <summary>
-/// The engine's integration endpoints, which only the management host calls (with the same
-/// <see cref="EngineInboundApi.ApiKeyHeader"/> key). The engine alone holds the master key, so
-/// sealing a credential and trying one out both happen there; management stores and serves what
-/// comes back and never sees a secret in the clear after the request that carried it.
-/// Unlike <see cref="EngineInboundApi"/> these do not start runs, so any engine replica answers them.
-/// </summary>
-public static class EngineIntegrationsApi
-{
-    public const string SealRoute = "internal/integrations/seal";
-
-    public const string TestRoute = "internal/integrations/test";
-
-    public const string TelegramChatsRoute = "internal/integrations/telegram/chats";
-}
+// The contracts of the engine's integration endpoints (InternalRoutes.EngineIntegrations*), which only
+// the management host calls, with the EngineInboundApi.ApiKeyHeader key. The engine alone holds the
+// master key, so sealing a credential and trying one out both happen there; management stores and
+// serves what comes back and never sees a secret in the clear after the request that carried it.
 
 /// <summary>A secret as stored: the sealed bytes and the master key that sealed them.</summary>
 public sealed record SealedSecret(byte[] Ciphertext, byte KeyId);

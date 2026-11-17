@@ -618,7 +618,7 @@ public sealed class IntegrationServiceTests
         }
 
         public Mock<IIntegrationProvider> Provider { get; } = new();
-        public Mock<IWorkflowEngineClient> Engine { get; } = new();
+        public Mock<IEngineIntegrationClient> Engine { get; } = new();
         public Mock<IEventBus> Bus { get; } = new();
         public IntegrationService Service { get; }
 

@@ -19,7 +19,7 @@ namespace Wbskt.Management.Host.Services.Integrations;
 
 internal sealed class IntegrationService(
     IIntegrationProvider provider,
-    IWorkflowEngineClient engine,
+    IEngineIntegrationClient engine,
     IIdentityService identityService,
     IEventBus eventBus,
     IConfiguration configuration,
