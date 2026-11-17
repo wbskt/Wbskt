@@ -14,7 +14,7 @@ namespace Wbskt.Management.Host.Services.Billing;
 /// Compares each account's client messages this month (the meter <c>dbo.ClientTraffic_InsertBatch</c>
 /// keeps) with its plan's allowance. It tells every socket host which workspaces to throttle
 /// (<see cref="MessageThrottleSnapshot"/>, the whole list every time), and announces each workspace once a
-/// month as it passes 80% (<see cref="WorkspaceMessageLimitApproachingEvent"/>), 100%
+/// month and allowance as it passes 80% (<see cref="WorkspaceMessageLimitApproachingEvent"/>), 100%
 /// (<see cref="WorkspaceMessageLimitReachedEvent"/>) and, on Maker, Pro and Team, the throttle at
 /// its plan's <see cref="BillingOptions.PaidMessageThrottleMultiples"/> times it (<see cref="WorkspaceMessagesThrottledEvent"/>).
 /// </summary>
@@ -65,7 +65,7 @@ public sealed class MessageAllowanceMonitor(
         {
             logger.LogInformation("Workspace {WorkspaceId} has carried {Used} of its plan's {Limit} messages this month.",
                 usage.Account.WorkspaceId, usage.Used, usage.Allowance);
-            await AnnounceAsync(new WorkspaceMessageLimitApproachingEvent(usage.Account.WorkspaceId, usage.Allowance, usage.Used), monthStart, WarningPercent, ct);
+            await AnnounceAsync(new WorkspaceMessageLimitApproachingEvent(usage.Account.WorkspaceId, usage.Allowance, usage.Used), usage.Allowance, monthStart, WarningPercent, ct);
         }
 
         IReadOnlyCollection<int> newlyReached = await RecordAsync(reached, monthStart, ReachedPercent, ct);
@@ -73,7 +73,7 @@ public sealed class MessageAllowanceMonitor(
         {
             logger.LogInformation("Workspace {WorkspaceId} reached its plan's {Limit} messages this month ({Used}); throttled: {Throttled}.",
                 usage.Account.WorkspaceId, usage.Allowance, usage.Used, usage.IsThrottled);
-            await AnnounceAsync(new WorkspaceMessageLimitReachedEvent(usage.Account.WorkspaceId, usage.Allowance, usage.Used, usage.IsThrottled), monthStart, ReachedPercent, ct);
+            await AnnounceAsync(new WorkspaceMessageLimitReachedEvent(usage.Account.WorkspaceId, usage.Allowance, usage.Used, usage.IsThrottled), usage.Allowance, monthStart, ReachedPercent, ct);
         }
 
         // A Free account's throttle starts at its allowance and is announced with it above.
@@ -83,7 +83,7 @@ public sealed class MessageAllowanceMonitor(
         {
             logger.LogWarning("Workspace {WorkspaceId} carried {Used} messages this month, {Multiple} times its plan's {Limit}; its clients are throttled until the 1st.",
                 usage.Account.WorkspaceId, usage.Used, _billing.PaidMessageThrottleMultipleFor(usage.Account.PlanCode), usage.Allowance);
-            await AnnounceAsync(new WorkspaceMessagesThrottledEvent(usage.Account.WorkspaceId, usage.Allowance, (long)usage.ThrottleAt!.Value, usage.Used), monthStart, ThrottledNotice, ct);
+            await AnnounceAsync(new WorkspaceMessagesThrottledEvent(usage.Account.WorkspaceId, usage.Allowance, (long)usage.ThrottleAt!.Value, usage.Used), usage.Allowance, monthStart, ThrottledNotice, ct);
         }
     }
 
@@ -91,7 +91,7 @@ public sealed class MessageAllowanceMonitor(
     /// Publishes a notice already recorded. One that cannot be published is given back, so the next check
     /// raises it again rather than the account never hearing of it; the auth host sends each once.
     /// </summary>
-    private async Task AnnounceAsync<TEvent>(TEvent notice, DateOnly monthStart, int percent, CancellationToken ct)
+    private async Task AnnounceAsync<TEvent>(TEvent notice, long allowanceOf, DateOnly monthStart, int percent, CancellationToken ct)
         where TEvent : IWorkspaceContext
     {
         try
@@ -101,10 +101,10 @@ public sealed class MessageAllowanceMonitor(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Could not announce {Notice} for workspace {WorkspaceId}; it is raised again on the next check.", typeof(TEvent).Name, notice.WorkspaceId);
-            await allowance.ReleaseNoticeAsync(notice.WorkspaceId, monthStart, percent, CancellationToken.None);
+            await allowance.ReleaseNoticeAsync(new MessageLimitNotice(notice.WorkspaceId, allowanceOf), monthStart, percent, CancellationToken.None);
         }
     }
 
     private Task<IReadOnlyCollection<int>> RecordAsync(List<MessageAllowanceUsage> usages, DateOnly monthStart, int percent, CancellationToken ct) =>
-        allowance.RecordNoticeAsync(usages.Select(u => u.Account.WorkspaceId).ToList(), monthStart, percent, ct);
+        allowance.RecordNoticeAsync(usages.Select(u => new MessageLimitNotice(u.Account.WorkspaceId, u.Allowance)).ToList(), monthStart, percent, ct);
 }

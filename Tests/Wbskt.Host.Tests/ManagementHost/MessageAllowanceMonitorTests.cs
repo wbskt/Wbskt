@@ -42,8 +42,8 @@ public sealed class MessageAllowanceMonitorTests
         _bus.Setup(x => x.PublishAsync(It.IsAny<WorkspaceMessagesThrottledEvent>(), It.IsAny<CancellationToken>()))
             .Callback<WorkspaceMessagesThrottledEvent, CancellationToken>((e, _) => _events.Add(e))
             .Returns(Task.CompletedTask);
-        _allowance.Setup(x => x.RecordNoticeAsync(It.IsAny<IReadOnlyCollection<int>>(), November, It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IReadOnlyCollection<int> ids, DateOnly _, int _, CancellationToken _) => ids);
+        _allowance.Setup(x => x.RecordNoticeAsync(It.IsAny<IReadOnlyCollection<MessageLimitNotice>>(), November, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyCollection<MessageLimitNotice> notices, DateOnly _, int _, CancellationToken _) => notices.Select(n => n.WorkspaceId).ToList());
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public sealed class MessageAllowanceMonitorTests
 
         Assert.Equal([2], _snapshot!.WorkspaceIds);
         Assert.Contains(Undated(new WorkspaceMessagesThrottledEvent(2, Pro, Pro * 3 / 2, Pro * 3 / 2)), _events.Select(Undated));
-        _allowance.Verify(x => x.RecordNoticeAsync(It.Is<IReadOnlyCollection<int>>(ids => ids.SequenceEqual(new[] { 2 })), November, 200, It.IsAny<CancellationToken>()));
+        _allowance.Verify(x => x.RecordNoticeAsync(It.Is<IReadOnlyCollection<MessageLimitNotice>>(notices => notices.SequenceEqual(new[] { new MessageLimitNotice(2, Pro) })), November, 200, It.IsAny<CancellationToken>()));
     }
 
     [Fact]
@@ -115,7 +115,7 @@ public sealed class MessageAllowanceMonitorTests
     public async Task A_workspace_already_announced_this_month_is_not_announced_again_but_stays_throttled()
     {
         Accounts(new WorkspaceMessageAccount(1, PlanCode.Free, null, Free + 10));
-        _allowance.Setup(x => x.RecordNoticeAsync(It.IsAny<IReadOnlyCollection<int>>(), November, It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        _allowance.Setup(x => x.RecordNoticeAsync(It.IsAny<IReadOnlyCollection<MessageLimitNotice>>(), November, It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
 
         await Monitor().CheckAsync(CancellationToken.None);
 
@@ -134,8 +134,8 @@ public sealed class MessageAllowanceMonitorTests
 
         await Monitor().CheckAsync(CancellationToken.None);
 
-        _allowance.Verify(x => x.ReleaseNoticeAsync(1, November, 100, It.IsAny<CancellationToken>()), Times.Once);
-        _allowance.Verify(x => x.ReleaseNoticeAsync(2, It.IsAny<DateOnly>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        _allowance.Verify(x => x.ReleaseNoticeAsync(new MessageLimitNotice(1, Free), November, 100, It.IsAny<CancellationToken>()), Times.Once);
+        _allowance.Verify(x => x.ReleaseNoticeAsync(It.Is<MessageLimitNotice>(n => n.WorkspaceId == 2), It.IsAny<DateOnly>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
         Assert.Equal([2], _events.OfType<WorkspaceMessageLimitReachedEvent>().Select(e => e.WorkspaceId));
     }
 

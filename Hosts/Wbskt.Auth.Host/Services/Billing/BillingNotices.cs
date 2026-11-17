@@ -136,7 +136,7 @@ internal static class BillingNotices
     }
 
     public static BillingNotice MessagesApproaching(PlanCode plan, long allowance, long used, DateTime at) =>
-        new(BillingNoticeKind.Messages80, Month(at),
+        new(BillingNoticeKind.Messages80, MessagesKey(at, allowance),
             "Your account has carried 80% of this month's messages",
             "80% of this month's messages are used",
             [
@@ -150,7 +150,7 @@ internal static class BillingNotices
             ]);
 
     public static BillingNotice MessagesReached(PlanCode plan, long allowance, long used, bool throttled, DateTime at) =>
-        new(BillingNoticeKind.Messages100, Month(at),
+        new(BillingNoticeKind.Messages100, MessagesKey(at, allowance),
             "Your account has carried this month's messages",
             "This month's messages are used",
             [
@@ -164,7 +164,7 @@ internal static class BillingNotices
             ]);
 
     public static BillingNotice MessagesThrottled(PlanCode plan, long allowance, long throttledAt, long used, DateTime at) =>
-        new(BillingNoticeKind.MessagesThrottled, Month(at),
+        new(BillingNoticeKind.MessagesThrottled, MessagesKey(at, allowance),
             "Your account's clients are now slowed",
             "Your clients are slowed until the 1st",
             [
@@ -251,6 +251,9 @@ internal static class BillingNotices
         $"{subscriptionId}:{pastDueSince.ToString("yyyy-MM-ddTHH:mm:ss.fff", Invariant)}";
 
     private static string Month(DateTime at) => at.ToString("yyyy-MM", Invariant);
+
+    // The allowance is part of the period, so a plan change within the month is told again against the new one.
+    private static string MessagesKey(DateTime at, long allowance) => $"{Month(at)}:{allowance.ToString(Invariant)}";
 
     private static string MonthName(DateTime month) => month.ToString("MMMM yyyy", Invariant);
 

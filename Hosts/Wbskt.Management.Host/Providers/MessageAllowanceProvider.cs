@@ -1,4 +1,5 @@
 using System.Data;
+using System.Text.Json;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Billing;
 using Wbskt.Management.Host.Models;
@@ -28,9 +29,9 @@ internal sealed class MessageAllowanceProvider : BaseSqlProvider, IMessageAllowa
             ct);
     }
 
-    public async Task<IReadOnlyCollection<int>> RecordNoticeAsync(IReadOnlyCollection<int> workspaceIds, DateOnly monthStart, int percent, CancellationToken ct)
+    public async Task<IReadOnlyCollection<int>> RecordNoticeAsync(IReadOnlyCollection<MessageLimitNotice> notices, DateOnly monthStart, int percent, CancellationToken ct)
     {
-        if (workspaceIds.Count == 0)
+        if (notices.Count == 0)
         {
             return [];
         }
@@ -39,7 +40,7 @@ internal sealed class MessageAllowanceProvider : BaseSqlProvider, IMessageAllowa
             "dbo.WorkspaceMessageLimit_Record",
             p =>
             {
-                p.Add("@WorkspaceIds", SqlDbType.NVarChar, -1).Value = string.Join(',', workspaceIds);
+                p.Add("@Notices", SqlDbType.NVarChar, -1).Value = JsonSerializer.Serialize(notices);
                 p.Add("@MonthStart", SqlDbType.Date).Value = monthStart.ToDateTime(TimeOnly.MinValue);
                 p.Add("@Percent", SqlDbType.Int).Value = percent;
             },
@@ -47,15 +48,16 @@ internal sealed class MessageAllowanceProvider : BaseSqlProvider, IMessageAllowa
             ct);
     }
 
-    public async Task ReleaseNoticeAsync(int workspaceId, DateOnly monthStart, int percent, CancellationToken ct)
+    public async Task ReleaseNoticeAsync(MessageLimitNotice notice, DateOnly monthStart, int percent, CancellationToken ct)
     {
         await ExecuteNonQueryAsync(
             "dbo.WorkspaceMessageLimit_Release",
             p =>
             {
-                p.Add("@WorkspaceId", SqlDbType.Int).Value = workspaceId;
+                p.Add("@WorkspaceId", SqlDbType.Int).Value = notice.WorkspaceId;
                 p.Add("@MonthStart", SqlDbType.Date).Value = monthStart.ToDateTime(TimeOnly.MinValue);
                 p.Add("@Percent", SqlDbType.Int).Value = percent;
+                p.Add("@Allowance", SqlDbType.BigInt).Value = notice.Allowance;
             },
             ct);
     }
