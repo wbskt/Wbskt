@@ -19,6 +19,12 @@ public sealed class MqttGatewayOptions
     /// <summary>Messages a client may have published that its session has not read yet, before its packets wait.</summary>
     public int InboxCapacity { get; set; } = 32;
 
+    /// <summary>How long a new connection has to send its CONNECT before it is closed, in seconds.</summary>
+    public int ConnectTimeoutSeconds { get; set; } = 10;
+
+    /// <summary>Connections that have not yet authenticated, at most; one past it is closed as it is accepted.</summary>
+    public int MaxUnauthenticatedConnections { get; set; } = 1000;
+
     /// <summary>The largest packet a client may send: one message and its MQTT framing.</summary>
     public int MaxPacketBytes => ClientProtocol.MaxMessageBytes + PacketOverheadBytes;
 }

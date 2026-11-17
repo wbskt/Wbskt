@@ -11,22 +11,27 @@ namespace Wbskt.Gateway.MQTT.Host.Infrastructure;
 
 /// <summary>
 /// The MQTT server's TCP listener, in place of MQTTnet's own so that every connection's bytes pass
-/// through a <see cref="PacketSizeGuardStream"/>. TLS is not here: Traefik ends it in front of the
-/// host, as it does for the WebSocket gateway.
+/// through a <see cref="PacketSizeGuardStream"/>, and so that connections that have not authenticated
+/// are capped: each holds a socket and a buffer, and nothing else limits how many are opened. TLS is
+/// not here: Traefik ends it in front of the host, as it does for the WebSocket gateway.
 /// </summary>
 public sealed class GuardedTcpServerAdapter : IMqttServerAdapter
 {
     private readonly int _port;
     private readonly int _maxPacketBytes;
+    private readonly int _maxUnauthenticated;
     private readonly ConcurrentDictionary<IMqttChannelAdapter, PacketSizeGuardStream> _guards = new();
+    private readonly ConcurrentDictionary<IMqttChannelAdapter, UnauthenticatedSlot> _unauthenticated = new();
+    private int _unauthenticatedCount;
     private readonly CancellationTokenSource _stopping = new();
     private Socket? _listener;
     private Task _accepting = Task.CompletedTask;
 
-    public GuardedTcpServerAdapter(int port, int maxPacketBytes)
+    public GuardedTcpServerAdapter(int port, int maxPacketBytes, int maxUnauthenticated)
     {
         _port = port;
         _maxPacketBytes = maxPacketBytes;
+        _maxUnauthenticated = maxUnauthenticated;
     }
 
     public Func<IMqttChannelAdapter, Task>? ClientHandler { get; set; }
@@ -36,6 +41,18 @@ public sealed class GuardedTcpServerAdapter : IMqttServerAdapter
 
     /// <summary>The guard reading a connection, while it is open.</summary>
     public PacketSizeGuardStream? GuardOf(IMqttChannelAdapter channel) => _guards.GetValueOrDefault(channel);
+
+    /// <summary>Connections accepted that have not yet authenticated.</summary>
+    public int UnauthenticatedCount => Volatile.Read(ref _unauthenticatedCount);
+
+    /// <summary>The connection's CONNECT was accepted: it no longer counts against the unauthenticated cap.</summary>
+    public void Authenticated(IMqttChannelAdapter channel)
+    {
+        if (_unauthenticated.TryRemove(channel, out var slot))
+        {
+            slot.Release();
+        }
+    }
 
     public Task StartAsync(MqttServerOptions options, IMqttNetLogger logger)
     {
@@ -87,11 +104,19 @@ public sealed class GuardedTcpServerAdapter : IMqttServerAdapter
                 continue;
             }
 
-            _ = Task.Run(() => ServeAsync(socket, logger));
+            var slot = new UnauthenticatedSlot(this);
+            if (!slot.Taken)
+            {
+                // Over the cap: closed before it costs a buffer. A legitimate client retries on its schedule.
+                socket.Dispose();
+                continue;
+            }
+
+            _ = Task.Run(() => ServeAsync(socket, slot, logger));
         }
     }
 
-    private async Task ServeAsync(Socket socket, IMqttNetLogger logger)
+    private async Task ServeAsync(Socket socket, UnauthenticatedSlot slot, IMqttNetLogger logger)
     {
         PacketSizeGuardStream? guard = null;
         MqttChannelAdapter? adapter = null;
@@ -111,6 +136,7 @@ public sealed class GuardedTcpServerAdapter : IMqttServerAdapter
             var channel = new MqttTcpChannel(guard, localEndPoint: socket.LocalEndPoint!, remoteEndPoint: socket.RemoteEndPoint!, clientCertificate: null);
             adapter = new MqttChannelAdapter(channel, new MqttPacketFormatterAdapter(new MqttBufferWriter(4096, 65535)), logger);
             _guards[adapter] = guard;
+            _unauthenticated[adapter] = slot;
             if (ClientHandler is { } handler)
             {
                 await handler(adapter);
@@ -122,9 +148,11 @@ public sealed class GuardedTcpServerAdapter : IMqttServerAdapter
         }
         finally
         {
+            slot.Release();
             if (adapter is not null)
             {
                 _guards.TryRemove(adapter, out _);
+                _unauthenticated.TryRemove(adapter, out _);
                 adapter.Dispose();
             }
 
@@ -135,6 +163,36 @@ public sealed class GuardedTcpServerAdapter : IMqttServerAdapter
             else
             {
                 socket.Dispose();
+            }
+        }
+    }
+
+    // One accepted connection's place under the cap, given back once: when it authenticates or ends.
+    private sealed class UnauthenticatedSlot
+    {
+        private readonly GuardedTcpServerAdapter _owner;
+        private int _held;
+
+        public UnauthenticatedSlot(GuardedTcpServerAdapter owner)
+        {
+            _owner = owner;
+            if (Interlocked.Increment(ref owner._unauthenticatedCount) <= owner._maxUnauthenticated)
+            {
+                _held = 1;
+            }
+            else
+            {
+                Interlocked.Decrement(ref owner._unauthenticatedCount);
+            }
+        }
+
+        public bool Taken => Volatile.Read(ref _held) == 1;
+
+        public void Release()
+        {
+            if (Interlocked.Exchange(ref _held, 0) == 1)
+            {
+                Interlocked.Decrement(ref _owner._unauthenticatedCount);
             }
         }
     }
