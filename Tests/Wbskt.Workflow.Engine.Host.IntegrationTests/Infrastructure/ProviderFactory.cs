@@ -25,6 +25,9 @@ internal static class ProviderFactory
     public static RunRetentionProvider RunRetention(string connectionString)
         => new(BuildConfiguration(connectionString));
 
+    public static WorkflowStateProvider WorkflowState(string connectionString)
+        => new(BuildConfiguration(connectionString));
+
     public static WorkflowDraftProvider WorkflowDraft(string connectionString)
         => new(BuildConfiguration(connectionString));
 

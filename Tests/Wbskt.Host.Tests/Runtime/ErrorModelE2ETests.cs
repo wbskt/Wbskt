@@ -26,7 +26,6 @@ public sealed class ErrorModelE2ETests
             9,
             "error-model-e2e",
             null,
-            true,
             [
                 new TestNode { NodeId = rootNodeId, Name = "root", Ports = Array.Empty<PortDefinition>(), KindValue = "test:fork" },
                 new SendClientMessageNode { NodeId = sendNodeId, Name = "send", Ports = [new PortDefinition { PortId = "next", Direction = PortDirection.Output, Label = "Next" }], Config = new SendClientMessageConfig { ClientRef = "client-1", Type = "DoThing" } },
@@ -354,9 +353,7 @@ public sealed class ErrorModelE2ETests
         public Task<WorkflowDefinitionRow?> FindCurrentByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, CancellationToken ct) => throw new NotSupportedException();
         public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef> integrationRefs, CancellationToken ct) => throw new NotSupportedException();
-        public Task DeprecateAsync(int id, CancellationToken ct) => throw new NotSupportedException();
         public Task<bool> DeleteUnreferencedAsync(int id, CancellationToken ct) => Task.FromResult(true);
-        public Task SetEnabledAsync(int id, bool isEnabled, CancellationToken ct) => Task.CompletedTask;
     }
 
     private sealed class NoOpTriggerRegistrationProvider : ITriggerRegistrationProvider
@@ -429,9 +426,4 @@ public sealed class ErrorModelE2ETests
         public DateTime UtcNow => new(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc);
     }
 }
-
-
-
-
-
 

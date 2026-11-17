@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models.Bookmarks;
 using Wbskt.Workflow.Abstraction.Models.Expressions;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
@@ -34,7 +35,11 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 /// Raises the child's completion event again once the parent has parked, for a child that ended first.
 /// Optional so the executor's unit tests need no stub.
 /// </param>
-internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runProvider, TimeProvider clock, IExpressionEvaluator? evaluator = null, IOptions<WorkflowEngineOptions>? options = null, ISubWorkflowCompletionHook? completionHook = null) : ParkingNodeExecutor(clock)
+/// <param name="workflowStates">
+/// Says why a child did not start when it is disabled or deprecated. Optional so the executor's unit tests
+/// need no stub; without it such a child fails as not started.
+/// </param>
+internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runProvider, TimeProvider clock, IExpressionEvaluator? evaluator = null, IOptions<WorkflowEngineOptions>? options = null, ISubWorkflowCompletionHook? completionHook = null, IWorkflowStateProvider? workflowStates = null) : ParkingNodeExecutor(clock)
 {
     private readonly int _maxDepth = options?.Value.MaxSubWorkflowDepth ?? new WorkflowEngineOptions().MaxSubWorkflowDepth;
 
@@ -123,6 +128,21 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
 
         if (!result.RunId.HasValue)
         {
+            // Only a live version has a manual trigger, so a child taken out of service matches nothing.
+            // Said by name rather than as a missing trigger, since enabling the child is the fix.
+            WorkflowStateRow? child = workflowStates is null ? null : await workflowStates.FindAsync(childRefId, ctx.Branch.WorkspaceId, ct);
+            if (child is { State: WorkflowState.Disabled or WorkflowState.Deprecated })
+            {
+                bool disabled = child.State == WorkflowState.Disabled;
+                return new NodeExecutionResult.Fail(
+                    disabled ? "SUBWORKFLOW_CHILD_DISABLED" : "SUBWORKFLOW_CHILD_DEPRECATED",
+                    disabled
+                        ? $"Child workflow '{childRefId}' did not start: it is disabled. Enable a version of it to call it."
+                        : $"Child workflow '{childRefId}' did not start: it is deprecated. Reinstate it and enable a version to call it.",
+                    false,
+                    null);
+            }
+
             return new NodeExecutionResult.Fail(
                 "SUBWORKFLOW_NOT_STARTED",
                 $"Child workflow '{childRefId}' did not start (is a manual trigger published?). Outcome: {result.Outcome}.",

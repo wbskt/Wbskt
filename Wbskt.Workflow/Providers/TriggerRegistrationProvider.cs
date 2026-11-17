@@ -13,29 +13,6 @@ internal sealed class TriggerRegistrationProvider : BaseSqlProvider, ITriggerReg
 {
     public TriggerRegistrationProvider(IConfiguration configuration) : base(configuration) { }
 
-    public async Task<TriggerRegistrationRow> InsertAsync(TriggerRegistrationRow row, CancellationToken ct)
-    {
-        return await ExecuteSingleAsync(
-            "dbo.TriggerRegistration_Insert",
-            p =>
-            {
-                p.AddWithValue("@WorkflowDefinitionId", row.WorkflowDefinitionId);
-                p.AddWithValue("@WorkflowRefId", row.WorkflowRefId);
-                p.AddWithValue("@WorkflowVersion", row.WorkflowVersion);
-                p.AddWithValue("@TriggerNodeId", row.TriggerNodeId);
-                p.AddWithValue("@TriggerKind", row.TriggerKind);
-                p.AddWithValue("@TriggerKey", row.TriggerKey);
-                p.AddWithValue("@CorrelationExpression", (object?)row.CorrelationExpression ?? DBNull.Value);
-                p.AddWithValue("@ConcurrencyPolicy", (object?)row.ConcurrencyPolicy ?? DBNull.Value);
-                p.AddWithValue("@FilterExpression", (object?)row.FilterExpression ?? DBNull.Value);
-                p.AddWithValue("@WebhookSecret", (object?)row.WebhookSecret ?? DBNull.Value);
-            },
-            Map,
-            new InvalidOperationException("TriggerRegistration_Insert did not return a row."),
-            ct
-        );
-    }
-
     public async Task<IReadOnlyCollection<TriggerRegistrationRow>> GetActiveByChannelKeysAsync(string channelKind, IReadOnlyCollection<string> channelKeys, CancellationToken ct)
     {
         if (channelKeys == null || channelKeys.Count == 0)
@@ -53,15 +30,6 @@ internal sealed class TriggerRegistrationProvider : BaseSqlProvider, ITriggerReg
                 p.AddWithValue("@KeysJson", jsonKeys);
             },
             Map,
-            ct
-        );
-    }
-
-    public async Task DeleteAllByWorkflowDefinitionIdAsync(int workflowDefinitionId, CancellationToken ct)
-    {
-        await ExecuteNonQueryAsync(
-            "dbo.TriggerRegistration_DeleteAllBy_WorkflowDefinitionId",
-            p => p.AddWithValue("@WorkflowDefinitionId", workflowDefinitionId),
             ct
         );
     }

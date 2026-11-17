@@ -12,7 +12,6 @@ BEGIN
     INNER JOIN dbo.WorkflowDefinitions WD ON WD.Id = TR.WorkflowDefinitionId
     WHERE TR.TriggerKind = N'presence'
       AND TR.TriggerKey LIKE @KeyPrefix + N'%'
-      AND WD.WorkspaceId = @WorkspaceId
-      AND WD.IsEnabled = 1;
+      AND WD.WorkspaceId = @WorkspaceId;
 END;
 GO

@@ -169,3 +169,23 @@ BEGIN
     EXEC (N'GRANT SELECT ON SCHEMA::[admin] TO [wbskt_admin_reader]');
 END
 GO
+
+-- 6. Fill dbo.Workflows from the state the pre-deployment script captured while
+-- WorkflowDefinitions.IsEnabled still existed, then drop the capture and the tombstone table it
+-- replaces (DropObjectsNotInSource is off, so the diff leaves WorkflowDeletions in place). Runs once:
+-- the capture exists only on the deploy that dropped IsEnabled.
+IF OBJECT_ID('dbo.WorkflowStateMigration', 'U') IS NOT NULL
+BEGIN
+    EXEC sp_executesql N'
+        INSERT INTO dbo.Workflows (RefId, WorkspaceId, State, LiveDefinitionId, StateChangedBy, StateChangedAt, CreatedAt)
+        SELECT M.RefId, M.WorkspaceId, M.State, M.LiveDefinitionId, M.StateChangedBy, M.StateChangedAt, M.CreatedAt
+        FROM dbo.WorkflowStateMigration M
+        WHERE NOT EXISTS (SELECT 1 FROM dbo.Workflows W WHERE W.RefId = M.RefId);
+
+        PRINT ''>>> Workflows: created '' + CAST(@@ROWCOUNT AS NVARCHAR(20)) + '' workflow row(s)'';
+
+        DROP TABLE dbo.WorkflowStateMigration;';
+END
+GO
+DROP TABLE IF EXISTS dbo.WorkflowDeletions;
+GO

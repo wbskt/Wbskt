@@ -70,7 +70,6 @@ public sealed class WorkflowDefinitionCacheTests
             99,
             name,
             null,
-            true,
             [
                 new ManualTriggerNode { NodeId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Name = "start", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Out" }], Config = new ManualTriggerConfig() },
                 new LogicGateNode { NodeId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), Name = "logic", Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "next", Direction = PortDirection.Output, Label = "Next" }], Config = new LogicGateConfig { Condition = LogicConditionJsonConverter.FromLegacyString("true") } }
@@ -92,7 +91,6 @@ public sealed class WorkflowDefinitionCacheTests
             WorkspaceId = definition.WorkspaceId,
             Name = definition.Name,
             Description = definition.Description,
-            IsEnabled = definition.IsEnabled,
             DefinitionJson = JsonSerializer.Serialize(definition, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
             PublishedBy = definition.PublishedBy,
             CreatedAt = definition.CreatedAt
@@ -142,13 +140,7 @@ public sealed class WorkflowDefinitionCacheTests
             throw new NotSupportedException();
         }
 
-        public Task DeprecateAsync(int id, CancellationToken ct)
-        {
-            throw new NotSupportedException();
-        }
-
         public Task<bool> DeleteUnreferencedAsync(int id, CancellationToken ct) => throw new NotSupportedException();
 
-        public Task SetEnabledAsync(int id, bool isEnabled, CancellationToken ct) => throw new NotSupportedException();
     }
 }

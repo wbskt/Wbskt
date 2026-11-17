@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Wbskt.Infrastructure;
 using Wbskt.Models;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Integrations;
 using Wbskt.Workflow.Abstraction.Providers;
 
@@ -91,7 +92,6 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
                 p.AddWithValue("@WorkspaceId", row.WorkspaceId);
                 p.AddWithValue("@Name", row.Name);
                 p.AddWithValue("@Description", (object?)row.Description ?? DBNull.Value);
-                p.AddWithValue("@IsEnabled", row.IsEnabled);
                 p.AddWithValue("@DefinitionJson", row.DefinitionJson);
                 p.AddWithValue("@PublishedBy", row.PublishedBy);
                 var refsParameter = p.AddWithValue("@IntegrationRefs", refs);
@@ -143,25 +143,9 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
                 TriggerNodeKinds = reader.IsDBNull(reader.GetOrdinal("TriggerKinds"))
                     ? []
                     : reader.GetString(reader.GetOrdinal("TriggerKinds")).Split(',', StringSplitOptions.RemoveEmptyEntries),
-                Draft = MapDraftSummary(reader)
-            },
-            ct
-        );
-    }
-
-    public async Task DeprecateAsync(int id, CancellationToken ct)
-    {
-        await SetEnabledAsync(id, false, ct);
-    }
-
-    public async Task SetEnabledAsync(int id, bool isEnabled, CancellationToken ct)
-    {
-        await ExecuteNonQueryAsync(
-            "dbo.WorkflowDefinition_UpdateIsEnabled",
-            p =>
-            {
-                p.AddWithValue("@Id", id);
-                p.AddWithValue("@IsEnabled", isEnabled);
+                Draft = MapDraftSummary(reader),
+                State = (WorkflowState)reader.GetByte(reader.GetOrdinal("State")),
+                LiveVersion = reader.IsDBNull(reader.GetOrdinal("LiveVersion")) ? null : reader.GetInt32(reader.GetOrdinal("LiveVersion"))
             },
             ct
         );
@@ -192,7 +176,7 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
                 Version = reader.GetInt32(reader.GetOrdinal("Version")),
                 Name = reader.GetString(reader.GetOrdinal("Name")),
                 Description = reader.IsDBNull(reader.GetOrdinal("Description")) ? null : reader.GetString(reader.GetOrdinal("Description")),
-                IsEnabled = reader.GetBoolean(reader.GetOrdinal("IsEnabled")),
+                IsLive = reader.GetBoolean(reader.GetOrdinal("IsLive")),
                 PublishedBy = reader.GetInt32(reader.GetOrdinal("PublishedBy")),
                 CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
                 RunCount = reader.GetInt64(reader.GetOrdinal("RunCount"))
@@ -253,7 +237,6 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
             WorkspaceId = reader.GetInt32(reader.GetOrdinal("WorkspaceId")),
             Name = reader.GetString(reader.GetOrdinal("Name")),
             Description = reader.IsDBNull(reader.GetOrdinal("Description")) ? null : reader.GetString(reader.GetOrdinal("Description")),
-            IsEnabled = reader.GetBoolean(reader.GetOrdinal("IsEnabled")),
             DefinitionJson = reader.GetString(reader.GetOrdinal("DefinitionJson")),
             PublishedBy = reader.GetInt32(reader.GetOrdinal("PublishedBy")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),

@@ -32,14 +32,13 @@ public static class WorkflowServiceCollectionExtensions
 
     public static IServiceCollection AddWorkflowManagementServices(this IServiceCollection services, IConfiguration configuration)
     {
-        // Only what management reads or writes: definitions, drafts and their trigger registrations (with the
-        // schedule rows a registration writes), and the run, branch, history and shared-variable reads
+        // Only what management reads or writes: definitions, drafts and the workflow's state (which carries
+        // the live version's trigger registrations and schedules with it), and the run, branch, history and shared-variable reads
         // behind the console, with each trigger's recent outcomes. Bookmarks, idempotency keys, pending
         // trigger events, joins, leases, counters and retention are the engine's alone.
         services.AddSingleton<IWorkflowDefinitionProvider, WorkflowDefinitionProvider>();
         services.AddSingleton<IWorkflowDraftProvider, WorkflowDraftProvider>();
-        services.AddScoped<ITriggerRegistrationProvider, TriggerRegistrationProvider>();
-        services.AddScoped<IScheduledFireProvider, ScheduledFireProvider>();
+        services.AddSingleton<IWorkflowStateProvider, WorkflowStateProvider>();
         services.AddScoped<IRunProvider, RunProvider>();
         services.AddScoped<IBranchProvider, BranchProvider>();
         services.AddScoped<IHistoryEventProvider, HistoryEventProvider>();
@@ -47,7 +46,7 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<ITriggerDispatchOutcomeProvider, TriggerDispatchOutcomeProvider>();
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<ITriggerChannelRegistry>(TriggerChannelRegistry.Default);
-        services.AddScoped<ITriggerRegistrationService, TriggerRegistrationService>();
+        services.AddSingleton<ITriggerPlanner, TriggerPlanner>();
 
         // No IRunCancellationService, token registry or definition cache: the engine is the only writer
         // of run state, so management asks it to cancel (a CancelWorkflowRun command) rather than running
@@ -62,6 +61,7 @@ public static class WorkflowServiceCollectionExtensions
     public static IServiceCollection AddWorkflowProviders(this IServiceCollection services)
     {
         services.AddSingleton<IWorkflowDefinitionProvider, WorkflowDefinitionProvider>();
+        services.AddSingleton<IWorkflowStateProvider, WorkflowStateProvider>();
         services.AddScoped<ITriggerRegistrationProvider, TriggerRegistrationProvider>();
         services.AddScoped<IRunProvider, RunProvider>();
         services.AddScoped<IRunCountersProvider, RunCountersProvider>();
@@ -210,7 +210,6 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<IInboundHub, InboundHub>();
         services.AddScoped<ISubWorkflowCompletionHook, SubWorkflowCompletionHook>();
         services.AddScoped<IPendingTriggerEventDrainer, PendingTriggerEventDrainer>();
-        services.AddScoped<ITriggerRegistrationService, TriggerRegistrationService>();
         services.TryAddSingleton<IEngineStartupTracker, CompletedEngineStartupTracker>();
 
         return services;

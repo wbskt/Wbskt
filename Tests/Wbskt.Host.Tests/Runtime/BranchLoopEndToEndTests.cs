@@ -27,7 +27,6 @@ public sealed class BranchLoopEndToEndTests
             9,
             "happy-path",
             null,
-            true,
             [
                 new ManualTriggerNode { NodeId = triggerNodeId, Name = "start", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Out" }], Config = new ManualTriggerConfig { Description = "manual start" } },
                 new LogicGateNode { NodeId = logicNodeId, Name = "logic", Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "next", Direction = PortDirection.Output, Label = "Next" }], Config = new LogicGateConfig { Condition = LogicConditionJsonConverter.FromLegacyString("true") } }
@@ -229,7 +228,6 @@ public sealed class BranchLoopEndToEndTests
         }
         public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct) => throw new NotSupportedException();
 
-
         public Task<Wbskt.Models.IPagedList<WorkflowDefinitionRow>> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct) => Task.FromResult<Wbskt.Models.IPagedList<WorkflowDefinitionRow>>(new Wbskt.Models.PagedList<WorkflowDefinitionRow>(Array.Empty<WorkflowDefinitionRow>(), 0));
         public Task<int?> FindByRefIdVersionAsync(Guid refId, int version, CancellationToken ct) => throw new NotSupportedException();
 
@@ -243,7 +241,6 @@ public sealed class BranchLoopEndToEndTests
                 WorkspaceId = _definition.WorkspaceId,
                 Name = _definition.Name,
                 Description = _definition.Description,
-                IsEnabled = _definition.IsEnabled,
                 DefinitionJson = JsonSerializer.Serialize(_definition, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
                 PublishedBy = _definition.PublishedBy,
                 CreatedAt = _definition.CreatedAt
@@ -254,9 +251,7 @@ public sealed class BranchLoopEndToEndTests
         public Task<WorkflowDefinitionRow?> FindCurrentByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, CancellationToken ct) => throw new NotSupportedException();
         public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef> integrationRefs, CancellationToken ct) => throw new NotSupportedException();
-        public Task DeprecateAsync(int id, CancellationToken ct) => throw new NotSupportedException();
         public Task<bool> DeleteUnreferencedAsync(int id, CancellationToken ct) => Task.FromResult(true);
-        public Task SetEnabledAsync(int id, bool isEnabled, CancellationToken ct) => Task.CompletedTask;
     }
 
     private sealed class FixedClock : TimeProvider
@@ -282,9 +277,4 @@ public sealed class BranchLoopEndToEndTests
         }
     }
 }
-
-
-
-
-
 

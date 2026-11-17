@@ -5,6 +5,7 @@ using Wbskt.Management.Host.Services.Integrations;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Models;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Validation;
 
@@ -24,7 +25,7 @@ public sealed class WorkflowListTriggerKindsTests
                 Row("Nightly", ["trigger:schedule", "trigger:webhook"]),
                 Row("Empty", [])
             ], 3));
-        var queries = new WorkflowQueryService(provider.Object, new WorkflowValidator(), new IntegrationReferenceCheck(Mock.Of<IIntegrationProvider>()), Mock.Of<ILogger<WorkflowQueryService>>());
+        var queries = new WorkflowQueryService(provider.Object, Mock.Of<IWorkflowStateProvider>(), new WorkflowValidator(), new IntegrationReferenceCheck(Mock.Of<IIntegrationProvider>()), Mock.Of<ILogger<WorkflowQueryService>>());
 
         var page = (await queries.GetAllSummariesAsync(1, 0, 100, CancellationToken.None)).Value;
 
@@ -45,10 +46,11 @@ public sealed class WorkflowListTriggerKindsTests
         WorkspaceId = 1,
         Name = name,
         Description = null,
-        IsEnabled = true,
         DefinitionJson = "{}",
         PublishedBy = 1,
         CreatedAt = DateTime.UtcNow,
-        TriggerNodeKinds = kinds
+        TriggerNodeKinds = kinds,
+        State = WorkflowState.Enabled,
+        LiveVersion = 1,
     };
 }

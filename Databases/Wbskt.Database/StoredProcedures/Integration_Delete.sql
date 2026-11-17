@@ -1,10 +1,10 @@
--- Deletes an integration unless a published workflow's current version sends through it. The row
--- is locked first, and WorkflowDefinition_Publish takes the same lock on every integration it
--- references, so a publish cannot add a use between the check and the delete.
+-- Deletes an integration unless a workflow's live version sends through it. The row is locked
+-- first, and WorkflowDefinition_Publish and Workflow_Enable take the same lock on every integration
+-- they reference, so neither can add a live use between the check and the delete.
 --
--- Returns the blocking uses (published current versions) when it refused, and no rows when it
--- deleted (or there was nothing left to delete). Deprecated uses do not block: their refs go with the row, and
--- reinstating such a workflow is refused because the integration it names is gone.
+-- Returns the blocking uses (live versions) when it refused, and no rows when it deleted (or there
+-- was nothing left to delete). A use in a version that is not live does not block: its refs go with
+-- the row, and enabling that version is refused because the integration it names is gone.
 CREATE PROCEDURE dbo.Integration_Delete
     @Id          INT,
     @WorkspaceId INT
@@ -21,13 +21,13 @@ BEGIN
         RETURN;
     END
 
-    IF EXISTS (SELECT 1 FROM dbo.IntegrationUsages WHERE IntegrationId = @Id AND IsEnabled = 1)
+    IF EXISTS (SELECT 1 FROM dbo.IntegrationUsages WHERE IntegrationId = @Id AND IsLive = 1)
     BEGIN
         COMMIT TRAN;
 
-        SELECT WorkflowRefId, WorkflowName, NodeId, NodeName, IsEnabled
+        SELECT WorkflowRefId, WorkflowName, NodeId, NodeName, IsLive
         FROM dbo.IntegrationUsages
-        WHERE IntegrationId = @Id AND IsEnabled = 1
+        WHERE IntegrationId = @Id AND IsLive = 1
         ORDER BY WorkflowName, NodeName;
         RETURN;
     END

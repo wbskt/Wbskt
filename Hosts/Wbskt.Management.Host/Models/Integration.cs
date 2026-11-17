@@ -30,5 +30,5 @@ public sealed class Integration : IWorkspaceOwned
     public int UsageSteps { get; init; }
 }
 
-/// <summary>A step of a live workflow's current version that sends through an integration.</summary>
-public sealed record IntegrationUse(Guid WorkflowRefId, string WorkflowName, Guid NodeId, string NodeName, bool IsEnabled);
+/// <summary>A step that sends through an integration, in a live version or a workflow out of service's newest; only a live use blocks a delete.</summary>
+public sealed record IntegrationUse(Guid WorkflowRefId, string WorkflowName, Guid NodeId, string NodeName, bool IsLive);

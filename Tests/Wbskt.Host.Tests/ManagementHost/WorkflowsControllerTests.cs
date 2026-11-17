@@ -1,5 +1,7 @@
 using Moq;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.Extensions.Logging;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Workflow;
@@ -10,6 +12,7 @@ using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Primitives.Constants;
 using Wbskt.Primitives.Models;
+using Wbskt.Workflow.Abstraction.Enums;
 
 namespace Wbskt.Host.Tests.ManagementHost;
 
@@ -23,8 +26,8 @@ public sealed class WorkflowsControllerTests
     {
         var service = new Mock<IWorkflowLifecycleService>();
         var engineClient = new Mock<IWorkflowEngineGateway>();
-        var request = new WorkflowPublishRequest(Guid.NewGuid(), "Greenhouse", "desc", null!);
-        var expected = new WorkflowPublishResponse(request.RefId, 1, "Published");
+        var request = new WorkflowPublishRequest(Guid.NewGuid(), "Greenhouse", "desc", null!, Enable: true);
+        var expected = new WorkflowPublishResponse(request.RefId, 1, WorkflowState.Enabled, 1);
         service.Setup(x => x.PublishAsync(WorkspaceId, WorkspaceRef, request, It.IsAny<CancellationToken>())).ReturnsAsync(Result<WorkflowPublishResponse>.Success(expected));
         var controller = new WorkflowsController(Mock.Of<IWorkflowQueryService>(), service.Object, new WorkflowRunService(Mock.Of<IWorkflowQueryService>(), Mock.Of<IWorkflowRunQueryService>(), engineClient.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunService>>()));
 
@@ -41,7 +44,7 @@ public sealed class WorkflowsControllerTests
         var service = new Mock<IWorkflowQueryService>();
         var engineClient = new Mock<IWorkflowEngineGateway>();
         var refId = Guid.NewGuid();
-        var expected = new WorkflowDefinitionDto(refId, 2, "Published", "Workflow", "desc", null!, DateTime.UtcNow);
+        var expected = new WorkflowDefinitionDto(refId, 2, WorkflowState.Enabled, 2, "Workflow", "desc", null!, DateTime.UtcNow);
         service.Setup(x => x.GetCurrentAsync(WorkspaceId, refId, It.IsAny<CancellationToken>())).ReturnsAsync(Result<WorkflowDefinitionDto>.Success(expected));
         var controller = new WorkflowsController(service.Object, Mock.Of<IWorkflowLifecycleService>(), new WorkflowRunService(service.Object, Mock.Of<IWorkflowRunQueryService>(), engineClient.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunService>>()));
 
@@ -58,7 +61,7 @@ public sealed class WorkflowsControllerTests
         var service = new Mock<IWorkflowQueryService>();
         var engineClient = new Mock<IWorkflowEngineGateway>();
         var refId = Guid.NewGuid();
-        var expected = new WorkflowDefinitionDto(refId, 3, "Published", "Workflow", null, null!, DateTime.UtcNow);
+        var expected = new WorkflowDefinitionDto(refId, 3, WorkflowState.Enabled, 3, "Workflow", null, null!, DateTime.UtcNow);
         service.Setup(x => x.GetVersionAsync(WorkspaceId, refId, 3, It.IsAny<CancellationToken>())).ReturnsAsync(Result<WorkflowDefinitionDto>.Success(expected));
         var controller = new WorkflowsController(service.Object, Mock.Of<IWorkflowLifecycleService>(), new WorkflowRunService(service.Object, Mock.Of<IWorkflowRunQueryService>(), engineClient.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunService>>()));
 
@@ -70,18 +73,55 @@ public sealed class WorkflowsControllerTests
     }
 
     [Fact]
-    public async Task Deprecate_resolves_workspace_with_delete_permission_and_delegates()
+    public async Task Enable_delegates_the_version_and_returns_the_new_state()
     {
         var service = new Mock<IWorkflowLifecycleService>();
-        var engineClient = new Mock<IWorkflowEngineGateway>();
         var refId = Guid.NewGuid();
-        service.Setup(x => x.DeprecateAsync(WorkspaceId, refId, It.IsAny<CancellationToken>())).ReturnsAsync(Result.Success());
-        var controller = new WorkflowsController(Mock.Of<IWorkflowQueryService>(), service.Object, new WorkflowRunService(Mock.Of<IWorkflowQueryService>(), Mock.Of<IWorkflowRunQueryService>(), engineClient.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunService>>()));
+        var expected = new WorkflowStateResponse(refId, WorkflowState.Enabled, 3);
+        service.Setup(x => x.EnableAsync(WorkspaceId, WorkspaceRef, refId, 3, It.IsAny<CancellationToken>())).ReturnsAsync(Result<WorkflowStateResponse>.Success(expected));
 
-        var result = await controller.Deprecate(WorkspaceId, refId, CancellationToken.None);
+        var actual = await Controller(service).Enable(WorkspaceRef, WorkspaceId, refId, new WorkflowEnableRequest(3), CancellationToken.None);
 
-        Assert.IsType<NoContentResult>(result);
-        service.Verify(x => x.DeprecateAsync(WorkspaceId, refId, It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(expected, Assert.IsType<OkObjectResult>(actual.Result).Value);
+    }
+
+    [Fact]
+    public async Task Disable_passes_whether_to_cancel_running_runs()
+    {
+        var service = new Mock<IWorkflowLifecycleService>();
+        var refId = Guid.NewGuid();
+        var expected = new WorkflowStateResponse(refId, WorkflowState.Disabled, null, CancelledRuns: 2);
+        service.Setup(x => x.DisableAsync(WorkspaceId, refId, true, It.IsAny<CancellationToken>())).ReturnsAsync(Result<WorkflowStateResponse>.Success(expected));
+
+        var actual = await Controller(service).Disable(WorkspaceId, refId, new WorkflowDisableRequest(CancelRunningRuns: true), CancellationToken.None);
+
+        Assert.Equal(expected, Assert.IsType<OkObjectResult>(actual.Result).Value);
+    }
+
+    [Fact]
+    public async Task Enable_that_the_service_refuses_answers_its_error()
+    {
+        var service = new Mock<IWorkflowLifecycleService>();
+        var refId = Guid.NewGuid();
+        service.Setup(x => x.EnableAsync(WorkspaceId, WorkspaceRef, refId, 1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<WorkflowStateResponse>.Failure(Error.Conflict("WORKFLOW_DEPRECATED", "deprecated")));
+
+        var actual = await Controller(service).Enable(WorkspaceRef, WorkspaceId, refId, new WorkflowEnableRequest(1), CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status409Conflict, Assert.IsAssignableFrom<IStatusCodeActionResult>(actual.Result).StatusCode);
+    }
+
+    [Fact]
+    public async Task Deprecate_delegates_and_returns_the_new_state()
+    {
+        var service = new Mock<IWorkflowLifecycleService>();
+        var refId = Guid.NewGuid();
+        var expected = new WorkflowStateResponse(refId, WorkflowState.Deprecated, null);
+        service.Setup(x => x.DeprecateAsync(WorkspaceId, refId, It.IsAny<CancellationToken>())).ReturnsAsync(Result<WorkflowStateResponse>.Success(expected));
+
+        var actual = await Controller(service).Deprecate(WorkspaceId, refId, CancellationToken.None);
+
+        Assert.Equal(expected, Assert.IsType<OkObjectResult>(actual.Result).Value);
     }
 
     [Fact]
@@ -92,7 +132,7 @@ public sealed class WorkflowsControllerTests
         var workflowRefId = Guid.NewGuid();
         var runRefId = Guid.NewGuid();
         service.Setup(x => x.GetCurrentAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<WorkflowDefinitionDto>.Success(new WorkflowDefinitionDto(workflowRefId, 1, "Published", "Workflow", null, null!, DateTime.UtcNow)));
+            .ReturnsAsync(Result<WorkflowDefinitionDto>.Success(new WorkflowDefinitionDto(workflowRefId, 1, WorkflowState.Enabled, 1, "Workflow", null, null!, DateTime.UtcNow)));
         var expected = new StartRunResponse(runRefId);
         engineClient.Setup(x => x.StartManualRunAsync(workflowRefId, It.IsAny<StartRunRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expected);
@@ -119,7 +159,7 @@ public sealed class WorkflowsControllerTests
         var engineClient = new Mock<IWorkflowEngineGateway>();
         var workflowRefId = Guid.NewGuid();
         service.Setup(x => x.GetCurrentAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<WorkflowDefinitionDto>.Success(new WorkflowDefinitionDto(workflowRefId, 1, "Published", "Workflow", null, null!, DateTime.UtcNow)));
+            .ReturnsAsync(Result<WorkflowDefinitionDto>.Success(new WorkflowDefinitionDto(workflowRefId, 1, WorkflowState.Enabled, 1, "Workflow", null, null!, DateTime.UtcNow)));
         engineClient.Setup(x => x.StartManualRunAsync(workflowRefId, It.IsAny<StartRunRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new StartRunResponse(Guid.Empty, StartRunOutcome.Dropped));
         var bus = new Mock<IEventBus>();
@@ -129,4 +169,7 @@ public sealed class WorkflowsControllerTests
 
         bus.VerifyNoOtherCalls();
     }
+
+    private static WorkflowsController Controller(Mock<IWorkflowLifecycleService> lifecycle) =>
+        new(Mock.Of<IWorkflowQueryService>(), lifecycle.Object, new WorkflowRunService(Mock.Of<IWorkflowQueryService>(), Mock.Of<IWorkflowRunQueryService>(), Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunService>>()));
 }

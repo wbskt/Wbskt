@@ -82,7 +82,7 @@ public sealed class EventBusRunLifecyclePublisherTests
     private static IWorkflowDefinitionCache CreateCache()
     {
         var definition = new WorkflowDefinition(
-            WorkflowRefId, 1, WorkspaceId, "test", null, true, [], [], [], DateTime.UtcNow, 1);
+            WorkflowRefId, 1, WorkspaceId, "test", null, [], [], [], DateTime.UtcNow, 1);
         var cache = new Mock<IWorkflowDefinitionCache>();
         cache.Setup(c => c.GetAsync(WorkflowDefinitionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(definition);

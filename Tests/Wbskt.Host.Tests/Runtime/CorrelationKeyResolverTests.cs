@@ -9,7 +9,7 @@ public sealed class CorrelationKeyResolverTests
 {
     [Theory]
     [InlineData("client", "client:serial-1:telemetry", "clientRefId", "serial-1", "messageType", "telemetry")]
-    [InlineData("schedule", "schedule:fire-1", "scheduledFireId", "fire-1", null, null)]
+    [InlineData("schedule", "schedule:44444444-4444-4444-4444-444444444444:55555555-5555-5555-5555-555555555555", "definitionRefId", "44444444-4444-4444-4444-444444444444", "triggerNodeId", "55555555-5555-5555-5555-555555555555")]
     [InlineData("webhook", "webhook:99999999-9999-9999-9999-999999999999:/hooks/intake", "webhookPath", "/hooks/intake", "workspaceRefId", "99999999-9999-9999-9999-999999999999")]
     [InlineData("manual", "manual:11111111-1111-1111-1111-111111111111", "workflowDefinitionRefId", "11111111-1111-1111-1111-111111111111", null, null)]
     [InlineData("signal", "signal:operator-ack:22222222-2222-2222-2222-222222222222", "signalName", "operator-ack", "scopeRunRefId", "22222222-2222-2222-2222-222222222222")]

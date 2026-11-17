@@ -23,6 +23,7 @@ internal sealed class RunStarter : IRunStarter
     private const int PlanCreditLimitError = 50033; // THROW in dbo.Run_Start
     private const int WorkspaceCreditCapError = 50034; // THROW in dbo.Run_Start
     private const int StartBusyError = 50035; // THROW in dbo.Run_Start
+    private const int NotLiveError = 50036; // THROW in dbo.Run_Start
 
     // Tries of a start that times out waiting for its tenant's or workspace's lock, and the pause after
     // each but the last: contention clears in well under a second unless a burst keeps it held.
@@ -146,6 +147,13 @@ internal sealed class RunStarter : IRunStarter
                     credits,
                     ct), ct);
             }
+            catch (SqlException ex) when (ex.Number == NotLiveError)
+            {
+                // The trigger was matched before a disable or a switch of the live version committed.
+                _logger?.LogInformation("Workflow {WorkflowRefId} version {Version} is no longer live; not started for {Channel}",
+                    definition.RefId, definition.Version, triggerEvent.ChannelKind);
+                throw new WorkflowNotLiveException(definition.RefId, workflowDefinitionId);
+            }
             catch (SqlException ex) when (ex.Number == ActiveRunConflictError)
             {
                 throw new ActiveRunConflictException(correlationKey);
@@ -226,7 +234,7 @@ internal sealed class RunStarter : IRunStarter
 
             return new RunStartResult(createdRun.Id, createdRun.RefId, started.RootBranchId, true);
         }
-        catch (Exception ex) when (ex is not PlanRunLimitException and not PlanCreditLimitException and not WorkspaceCreditCapException and not ActiveRunConflictException and not TestRunActiveException and not RunStartBusyException)
+        catch (Exception ex) when (ex is not PlanRunLimitException and not PlanCreditLimitException and not WorkspaceCreditCapException and not ActiveRunConflictException and not TestRunActiveException and not RunStartBusyException and not WorkflowNotLiveException)
         {
             _logger?.LogError(ex, "Failed to start run for workflow definition {WorkflowDefinitionId} and trigger {TriggerNodeId}", workflowDefinitionId, triggerNodeId);
             throw;

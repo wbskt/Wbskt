@@ -34,7 +34,8 @@ public sealed class WorkflowReadEndpointTests(ServicesFixture fixture)
 
         version.RefId.Should().Be(workflowRef);
         version.Version.Should().Be(1);
-        version.Status.Should().Be("Published");
+        version.State.Should().Be(WorkflowState.Enabled);
+        version.LiveVersion.Should().Be(1);
         version.Definition.Nodes.Should().NotBeEmpty();
     }
 

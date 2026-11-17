@@ -85,7 +85,7 @@ public sealed class WorkflowCeilingIntegrationTests(SqlEdgeFixture fixture)
         WorkspaceId = workspaceId,
         Name = "ceiling-test",
         Description = null,
-        IsEnabled = true,
+       
         DefinitionJson = """{"nodes":[],"edges":[]}""",
         PublishedBy = 1,
         CreatedAt = DateTime.UtcNow

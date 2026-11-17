@@ -1,4 +1,4 @@
--- Deletes a workflow: tombstones its RefId (dbo.WorkflowDeletions), disables every version, and
+-- Deletes a workflow: sets its dbo.Workflows row to Deleted (State 4) with no live version, and
 -- removes its trigger and schedule registrations, any queued trigger events and the triggers'
 -- recent outcomes, exactly as Workspace_Retire does for a whole workspace. Version rows and runs
 -- stay, so history is readable.
@@ -6,7 +6,7 @@
 -- Scoped by workspace. Returns nothing when the workflow is not in @WorkspaceId or is already
 -- deleted; otherwise one row per thing the caller must still act on outside the database:
 --   Kind 'run'        - a run still in progress; request its cancellation.
---   Kind 'definition' - a version disabled here; evict it from definition caches.
+--   Kind 'definition' - a version of the workflow; evict it from definition caches.
 CREATE PROCEDURE dbo.WorkflowDefinition_Delete
     @RefId       UNIQUEIDENTIFIER,
     @WorkspaceId INT,
@@ -21,28 +21,37 @@ BEGIN
     BEGIN TRANSACTION;
 
     -- The draft's row first, the order WorkflowDraft_Save takes it in, so a save racing the delete
-    -- waits for it instead of deadlocking on the versions disabled below.
+    -- waits for it instead of deadlocking on the workflow row taken below.
     DECLARE @LockedDraftRevision INT;
     SELECT @LockedDraftRevision = Revision
       FROM dbo.WorkflowDrafts WITH (UPDLOCK, HOLDLOCK)
      WHERE RefId = @RefId;
 
-    -- The same lock WorkflowDefinition_Publish takes, so a publish racing the delete either lands
-    -- first (and its version is disabled here) or sees the tombstone and is refused.
-    INSERT INTO @Definitions (Id)
-    SELECT Id
-    FROM dbo.WorkflowDefinitions WITH (HOLDLOCK, UPDLOCK)
-    WHERE RefId = @RefId AND WorkspaceId = @WorkspaceId;
+    -- Then the workflow's row, the lock WorkflowDefinition_Publish and Workflow_Enable take, so a
+    -- publish or enable racing the delete either lands first or sees Deleted and is refused.
+    DECLARE @State TINYINT;
+    SELECT @State = State
+      FROM dbo.Workflows WITH (UPDLOCK, HOLDLOCK)
+     WHERE RefId = @RefId
+       AND WorkspaceId = @WorkspaceId;
 
-    IF NOT EXISTS (SELECT 1 FROM @Definitions)
-       OR EXISTS (SELECT 1 FROM dbo.WorkflowDeletions WHERE RefId = @RefId)
+    IF @State IS NULL OR @State = 4
     BEGIN
         COMMIT TRANSACTION;
         RETURN;
     END
 
-    INSERT INTO dbo.WorkflowDeletions (RefId, WorkspaceId, DeletedBy)
-    VALUES (@RefId, @WorkspaceId, @DeletedBy);
+    INSERT INTO @Definitions (Id)
+    SELECT Id
+    FROM dbo.WorkflowDefinitions
+    WHERE RefId = @RefId AND WorkspaceId = @WorkspaceId;
+
+    UPDATE dbo.Workflows
+       SET State = 4,
+           LiveDefinitionId = NULL,
+           StateChangedBy = @DeletedBy,
+           StateChangedAt = SYSUTCDATETIME()
+     WHERE RefId = @RefId;
 
     DELETE TR
     FROM dbo.TriggerRegistrations TR
@@ -60,12 +69,6 @@ BEGIN
 
     DELETE FROM dbo.WorkflowDrafts
     WHERE RefId = @RefId;
-
-    UPDATE WD
-    SET IsEnabled = 0
-    FROM dbo.WorkflowDefinitions WD
-    INNER JOIN @Definitions D ON D.Id = WD.Id
-    WHERE WD.IsEnabled = 1;
 
     COMMIT TRANSACTION;
 

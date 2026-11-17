@@ -10,8 +10,7 @@ public abstract class TriggerChannel : ITriggerChannel
 
     public abstract string CorrelationKey(InboundEvent evt);
 
-    public virtual Task<TriggerRegistrationSpec?> RegisterAsync(BaseNode node, TriggerPublication publication, CancellationToken ct) =>
-        Task.FromResult<TriggerRegistrationSpec?>(null);
+    public virtual TriggerRegistrationSpec? Plan(BaseNode node, TriggerPublication publication) => null;
 
     protected static JsonElement Json<T>(T value) => JsonSerializer.SerializeToElement(value);
 

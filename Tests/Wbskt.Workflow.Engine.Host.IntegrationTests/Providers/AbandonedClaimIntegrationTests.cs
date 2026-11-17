@@ -161,9 +161,9 @@ public sealed class AbandonedClaimIntegrationTests(SqlEdgeFixture fixture)
         WorkflowDefinitionRow wd = await ProviderFactory.WorkflowDefinition(fixture.ConnectionString).InsertAsync(new WorkflowDefinitionRow
         {
             Id = 0, RefId = Guid.NewGuid(), Version = 1, WorkspaceId = 1,
-            Name = $"IT-WD-CLAIM-{Guid.NewGuid():N}", Description = null, IsEnabled = true,
+            Name = $"IT-WD-CLAIM-{Guid.NewGuid():N}", Description = null,
             DefinitionJson = """{"nodes":[],"edges":[]}""", PublishedBy = 1, CreatedAt = DateTime.UtcNow
-        }, CancellationToken.None);
+        }, CancellationToken.None).LiveAsync(fixture.ConnectionString);
 
         return await ProviderFactory.Run(fixture.ConnectionString).CreateAsync(new RunRow
         {

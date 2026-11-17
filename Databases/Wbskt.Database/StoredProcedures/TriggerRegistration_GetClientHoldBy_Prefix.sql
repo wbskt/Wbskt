@@ -26,7 +26,6 @@ BEGIN
     WHERE TR.TriggerKind = N'client-hold'
       AND (LEFT(TR.TriggerKey, LEN(@TypePrefix)) = @TypePrefix
            OR LEFT(TR.TriggerKey, LEN(@WildcardPrefix)) = @WildcardPrefix)
-      AND WD.WorkspaceId = @WorkspaceId
-      AND WD.IsEnabled = 1;
+      AND WD.WorkspaceId = @WorkspaceId;
 END;
 GO

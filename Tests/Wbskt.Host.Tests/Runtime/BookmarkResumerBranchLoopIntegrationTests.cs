@@ -30,7 +30,6 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
             9,
             "bookmark-e2e",
             null,
-            true,
             [new TestNode { NodeId = nodeId, Name = "wait", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
             [],
             [],
@@ -153,7 +152,6 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
             9,
             "await-loop-e2e",
             null,
-            true,
             [wait],
             [new Edge((awaitId, "timeout"), (awaitId, "in"))],
             [],
@@ -238,7 +236,6 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
             9,
             "command-ack-e2e",
             null,
-            true,
             [step],
             // Each exit leads to its own (absent) node, so where the branch ends says which it took.
             ExitTargets.Select(exit => new Edge((nodeId, exit.Key), (exit.Value, "in"))).ToArray(),
@@ -552,7 +549,6 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
                 WorkspaceId = _definition.WorkspaceId,
                 Name = _definition.Name,
                 Description = _definition.Description,
-                IsEnabled = _definition.IsEnabled,
                 DefinitionJson = JsonSerializer.Serialize(_definition, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
                 PublishedBy = _definition.PublishedBy,
                 CreatedAt = _definition.CreatedAt
@@ -564,9 +560,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
         public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef> integrationRefs, CancellationToken ct) => InsertAsync(row, ct);
 
         public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, CancellationToken ct) => throw new NotSupportedException();
-        public Task DeprecateAsync(int id, CancellationToken ct) => throw new NotSupportedException();
         public Task<bool> DeleteUnreferencedAsync(int id, CancellationToken ct) => Task.FromResult(true);
-        public Task SetEnabledAsync(int id, bool isEnabled, CancellationToken ct) => Task.CompletedTask;
         public Task<IdempotencyKeyRow> UpsertPendingAsync(string keyValue, int runId, Guid branchRefId, Guid nodeId, int attempt, CancellationToken ct)
         {
             if (!IdempotencyKeys.TryGetValue(keyValue, out IdempotencyKeyRow? row))
@@ -617,9 +611,4 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
         public Guid NewId() => _ids.Count > 0 ? _ids.Dequeue() : Guid.NewGuid();
     }
 }
-
-
-
-
-
 

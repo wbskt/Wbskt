@@ -87,10 +87,10 @@ public sealed class PendingTriggerEventGuardIntegrationTests(SqlEdgeFixture fixt
         {
             Id = 0, RefId = Guid.NewGuid(), Version = 0, WorkspaceId = 1,
             Name = $"IT-WD-PTG-{Guid.NewGuid():N}",
-            Description = null, IsEnabled = true,
+            Description = null,
             DefinitionJson = """{"nodes":[],"edges":[]}""",
             PublishedBy = 1, CreatedAt = DateTime.UtcNow
-        }, CancellationToken.None);
+        }, CancellationToken.None).LiveAsync(fixture.ConnectionString);
 
         return await ActiveRunSeeder.StartAsync(fixture.ConnectionString, wd.Id, wd.RefId, Guid.NewGuid(), $"client-{Guid.NewGuid():N}");
     }

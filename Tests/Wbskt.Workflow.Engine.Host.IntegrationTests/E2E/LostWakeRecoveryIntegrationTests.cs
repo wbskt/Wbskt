@@ -137,13 +137,13 @@ public sealed class LostWakeRecoveryIntegrationTests(SqlEdgeFixture fixture)
         await scope.ServiceProvider.GetRequiredService<IBranchLoop>().RunAsync(runId, branchId, BranchExecutionReason.Recovered, CancellationToken.None);
     }
 
-    private static async Task<(long RunId, long BranchId)> ParkAsync(IServiceProvider services, string waitNode)
+    private async Task<(long RunId, long BranchId)> ParkAsync(IServiceProvider services, string waitNode)
     {
         Guid workflowRefId = Guid.NewGuid();
         string definitionJson = $$"""
             {
               "workflowRefId": "{{workflowRefId}}", "version": 1, "workspaceId": 1, "name": "IT-LostWake",
-              "description": null, "isEnabled": true,
+              "description": null,
               "nodes": [
                 {{Node(TriggerNodeId, "trigger:manual", "{}")}},
                 {{waitNode}},
@@ -163,8 +163,8 @@ public sealed class LostWakeRecoveryIntegrationTests(SqlEdgeFixture fixture)
         WorkflowDefinitionRow wd = await services.GetRequiredService<IWorkflowDefinitionProvider>().InsertAsync(new WorkflowDefinitionRow
         {
             Id = 0, RefId = workflowRefId, Version = 0, WorkspaceId = 1, Name = $"IT-LostWake-{workflowRefId:N}",
-            Description = null, IsEnabled = true, DefinitionJson = definitionJson, PublishedBy = 1, CreatedAt = DateTime.UtcNow
-        }, CancellationToken.None);
+            Description = null, DefinitionJson = definitionJson, PublishedBy = 1, CreatedAt = DateTime.UtcNow
+        }, CancellationToken.None).LiveAsync(fixture.ConnectionString);
 
         await using AsyncServiceScope scope = services.CreateAsyncScope();
         (long runId, _, long branchId, _) = await scope.ServiceProvider.GetRequiredService<IRunStarter>().StartAsync(

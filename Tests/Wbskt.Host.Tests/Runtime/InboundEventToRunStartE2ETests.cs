@@ -97,7 +97,6 @@ public sealed class InboundEventToRunStartE2ETests
             9,
             "e2e",
             null,
-            true,
             [
                 new ClientTriggerNode { NodeId = triggerNodeId, Name = "client", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" }], Config = new ClientTriggerConfig { ClientRef = "client-serial-1", Type = "telemetry", CorrelationKey = null, ConcurrencyPolicy = WorkflowConcurrencyPolicy.AllowParallel } },
                 new LogicGateNode { NodeId = logicNodeId, Name = "logic", Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "next", Direction = PortDirection.Output, Label = "Next" }], Config = new LogicGateConfig { Condition = LogicConditionJsonConverter.FromLegacyString("true") } },
@@ -359,7 +358,6 @@ public sealed class InboundEventToRunStartE2ETests
         }
         public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct) => throw new NotSupportedException();
 
-
         public Task<int?> FindByRefIdVersionAsync(Guid refId, int version, CancellationToken ct) => Task.FromResult<int?>(_definition.WorkflowRefId == refId && _definition.Version == version ? 42 : null);
         public Task<WorkflowDefinitionRow> GetByIdAsync(int id, CancellationToken ct) => Task.FromResult(ToRow(id));
         public Task<WorkflowDefinitionRow?> FindRowByRefIdVersionAsync(Guid refId, int version, CancellationToken ct) => Task.FromResult(ToRow(42));
@@ -367,9 +365,7 @@ public sealed class InboundEventToRunStartE2ETests
         public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef> integrationRefs, CancellationToken ct) => InsertAsync(row, ct);
 
         public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, CancellationToken ct) => throw new NotSupportedException();
-        public Task DeprecateAsync(int id, CancellationToken ct) => throw new NotSupportedException();
         public Task<bool> DeleteUnreferencedAsync(int id, CancellationToken ct) => Task.FromResult(true);
-        public Task SetEnabledAsync(int id, bool isEnabled, CancellationToken ct) => Task.CompletedTask;
 
         public Task<TriggerRegistrationRow> InsertAsync(TriggerRegistrationRow row, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<TriggerRegistrationRow>> GetActiveByChannelKeysAsync(string channelKind, IReadOnlyCollection<string> channelKeys, CancellationToken ct)
@@ -467,7 +463,6 @@ public sealed class InboundEventToRunStartE2ETests
                 WorkspaceId = _definition.WorkspaceId,
                 Name = _definition.Name,
                 Description = _definition.Description,
-                IsEnabled = _definition.IsEnabled,
                 DefinitionJson = JsonSerializer.Serialize(_definition, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
                 PublishedBy = _definition.PublishedBy,
                 CreatedAt = _definition.CreatedAt
@@ -475,9 +470,4 @@ public sealed class InboundEventToRunStartE2ETests
         }
     }
 }
-
-
-
-
-
 

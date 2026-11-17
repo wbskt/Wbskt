@@ -7,6 +7,7 @@ using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Management.Models.Workflow;
+using Wbskt.Workflow.Abstraction.Enums;
 
 namespace Wbskt.Host.Tests.ManagementHost;
 
@@ -26,10 +27,10 @@ public sealed class WorkflowRunServiceTests
 
     private WorkflowRunService Service => new(_definitions.Object, _runs.Object, _engine.Object, _bus.Object, NullLogger<WorkflowRunService>.Instance);
 
-    private void WorkflowIs(string status)
+    private void WorkflowIs(WorkflowState state)
     {
         _definitions.Setup(d => d.GetCurrentAsync(WorkspaceId, WorkflowRef, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<WorkflowDefinitionDto>.Success(new WorkflowDefinitionDto(WorkflowRef, 1, status, "wf", null, null!, DateTime.UtcNow)));
+            .ReturnsAsync(Result<WorkflowDefinitionDto>.Success(new WorkflowDefinitionDto(WorkflowRef, 1, state, state == WorkflowState.Enabled ? 1 : null, "wf", null, null!, DateTime.UtcNow)));
     }
 
     private void EngineAnswers(StartRunOutcome outcome)
@@ -44,7 +45,7 @@ public sealed class WorkflowRunServiceTests
     [InlineData(StartRunOutcome.Duplicate)]
     public async Task A_run_the_engine_took_succeeds_and_is_announced(StartRunOutcome outcome)
     {
-        WorkflowIs("Published");
+        WorkflowIs(WorkflowState.Enabled);
         EngineAnswers(outcome);
 
         var result = await Service.StartManualAsync(WorkspaceId, WorkflowRef, new StartRunRequest("manual", null), CancellationToken.None);
@@ -59,7 +60,7 @@ public sealed class WorkflowRunServiceTests
     [InlineData(StartRunOutcome.NoManualTrigger, "WORKFLOW_HAS_NO_MANUAL_TRIGGER")]
     public async Task A_run_the_engine_refused_is_a_409_and_announces_nothing(StartRunOutcome outcome, string code)
     {
-        WorkflowIs("Published");
+        WorkflowIs(WorkflowState.Enabled);
         EngineAnswers(outcome);
 
         var result = await Service.StartManualAsync(WorkspaceId, WorkflowRef, new StartRunRequest("manual", null), CancellationToken.None);
@@ -76,7 +77,7 @@ public sealed class WorkflowRunServiceTests
     [InlineData(StartRunOutcome.Busy, "WORKSPACE_BUSY", ErrorType.Unavailable)]
     public async Task A_run_the_plan_refused_names_the_limit_as_the_test_run_does(StartRunOutcome outcome, string code, ErrorType type)
     {
-        WorkflowIs("Published");
+        WorkflowIs(WorkflowState.Enabled);
         EngineAnswers(outcome);
 
         var result = await Service.StartManualAsync(WorkspaceId, WorkflowRef, new StartRunRequest("manual", null), CancellationToken.None);
@@ -87,9 +88,22 @@ public sealed class WorkflowRunServiceTests
     }
 
     [Fact]
+    public async Task A_disabled_workflow_is_a_409_and_the_engine_is_not_asked()
+    {
+        WorkflowIs(WorkflowState.Disabled);
+
+        var result = await Service.StartManualAsync(WorkspaceId, WorkflowRef, new StartRunRequest("manual", null), CancellationToken.None);
+
+        result.Error.Code.Should().Be("WORKFLOW_DISABLED");
+        result.Error.Type.Should().Be(ErrorType.Conflict);
+        _engine.VerifyNoOtherCalls();
+        _bus.VerifyNoOtherCalls();
+    }
+
+    [Fact]
     public async Task A_deprecated_workflow_is_a_409_and_the_engine_is_not_asked()
     {
-        WorkflowIs("Deprecated");
+        WorkflowIs(WorkflowState.Deprecated);
 
         var result = await Service.StartManualAsync(WorkspaceId, WorkflowRef, new StartRunRequest("manual", null), CancellationToken.None);
 
@@ -100,7 +114,7 @@ public sealed class WorkflowRunServiceTests
     [Fact]
     public async Task An_engine_that_fails_is_a_fault_not_a_result()
     {
-        WorkflowIs("Published");
+        WorkflowIs(WorkflowState.Enabled);
         _engine.Setup(e => e.StartManualRunAsync(WorkflowRef, It.IsAny<StartRunRequest>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new HttpRequestException("engine down"));
 

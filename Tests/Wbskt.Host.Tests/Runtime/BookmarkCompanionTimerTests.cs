@@ -127,7 +127,6 @@ public sealed class BookmarkCompanionTimerTests
             9,
             "ttl-single-row",
             null,
-            true,
             [new TestNode { NodeId = nodeId, Name = "wait", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
             [],
             [],

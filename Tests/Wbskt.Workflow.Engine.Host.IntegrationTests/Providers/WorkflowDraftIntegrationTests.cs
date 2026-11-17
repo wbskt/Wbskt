@@ -181,7 +181,7 @@ public sealed class WorkflowDraftIntegrationTests(SqlEdgeFixture fixture)
         WorkspaceId = workspaceId,
         Name = "draft-test",
         Description = null,
-        IsEnabled = true,
+       
         DefinitionJson = """{"nodes":[],"edges":[]}""",
         PublishedBy = 1,
         CreatedAt = DateTime.UtcNow

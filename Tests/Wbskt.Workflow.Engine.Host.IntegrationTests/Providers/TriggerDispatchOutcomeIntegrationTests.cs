@@ -103,7 +103,7 @@ public sealed class TriggerDispatchOutcomeIntegrationTests(SqlEdgeFixture fixtur
     {
         await ProcAsync("dbo.WorkflowDefinition_Publish",
             ("@RefId", workflowRef), ("@WorkspaceId", workspaceId), ("@Name", "wf"), ("@Description", ""),
-            ("@IsEnabled", true), ("@DefinitionJson", "{}"), ("@PublishedBy", 1));
+            ("@DefinitionJson", "{}"), ("@PublishedBy", 1));
         await using var conn = await OpenAsync();
         await using var cmd = new SqlCommand("SELECT Id FROM dbo.WorkflowDefinitions WHERE RefId = @p0", conn);
         cmd.Parameters.AddWithValue("@p0", workflowRef);
@@ -112,13 +112,11 @@ public sealed class TriggerDispatchOutcomeIntegrationTests(SqlEdgeFixture fixtur
 
     private async Task<string> RegisterHoldAsync(Guid workflowRef, Guid node)
     {
-        int definitionId = await PublishAsync(workflowRef, Random.Shared.Next(1_000_000, int.MaxValue));
+        int workspaceId = Random.Shared.Next(1_000_000, int.MaxValue);
+        await PublishAsync(workflowRef, workspaceId);
         string key = ClientHoldTriggerKey.Build(Guid.NewGuid(), "temperature", 600, workflowRef, node);
-        await ProcAsync("dbo.TriggerRegistration_Insert",
-            ("@WorkflowDefinitionId", definitionId), ("@WorkflowRefId", workflowRef), ("@WorkflowVersion", 1),
-            ("@TriggerNodeId", node), ("@TriggerKind", ClientHoldTriggerKey.TriggerKind), ("@TriggerKey", key),
-            ("@CorrelationExpression", DBNull.Value), ("@ConcurrencyPolicy", "Queue"),
-            ("@FilterExpression", "{\"kind\":\"literal\",\"value\":true}"));
+        await LiveWorkflows.EnableAsync(fixture.ConnectionString, workflowRef, workspaceId,
+            plan: LiveWorkflows.Registration(node, ClientHoldTriggerKey.TriggerKind, key, filterExpression: "{\"kind\":\"literal\",\"value\":true}"));
         return key;
     }
 

@@ -51,7 +51,7 @@ public sealed class WorkflowDeletionIntegrationTests(SqlEdgeFixture fixture)
         Assert.Equal(0, await CountAsync("SELECT COUNT(*) FROM dbo.TriggerRegistrations WHERE WorkflowRefId = @p0", refId));
         Assert.Equal(0, await CountAsync("SELECT COUNT(*) FROM dbo.ScheduledFires WHERE WorkflowRefId = @p0", refId));
         Assert.Equal(0, await CountAsync("SELECT COUNT(*) FROM dbo.PendingTriggerEvents WHERE WorkflowRefId = @p0", refId));
-        Assert.Equal(0, await CountAsync("SELECT COUNT(*) FROM dbo.WorkflowDefinitions WHERE RefId = @p0 AND IsEnabled = 1", refId));
+        Assert.Equal(1, await CountAsync("SELECT COUNT(*) FROM dbo.Workflows WHERE RefId = @p0 AND State = 4 AND LiveDefinitionId IS NULL", refId));
 
         // Gone from current reads and the version list, but the version a run points at still reads.
         Assert.Null(await provider.FindCurrentByRefIdAsync(refId, CancellationToken.None));
@@ -77,7 +77,7 @@ public sealed class WorkflowDeletionIntegrationTests(SqlEdgeFixture fixture)
         WorkspaceId = workspaceId,
         Name = "delete-test",
         Description = null,
-        IsEnabled = true,
+       
         DefinitionJson = """{"nodes":[],"edges":[]}""",
         PublishedBy = 1,
         CreatedAt = DateTime.UtcNow

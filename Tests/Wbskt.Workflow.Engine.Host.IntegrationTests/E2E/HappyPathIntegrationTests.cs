@@ -29,7 +29,6 @@ public sealed class HappyPathIntegrationTests(SqlEdgeFixture fixture, ITestOutpu
           "workspaceId": 1,
           "name": "IT-E2E-Smoke",
           "description": null,
-          "isEnabled": true,
           "nodes": [
             {
               "nodeId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
@@ -77,11 +76,11 @@ public sealed class HappyPathIntegrationTests(SqlEdgeFixture fixture, ITestOutpu
             WorkspaceId = 1,
             Name = $"IT-E2E-{workflowRefId:N}",
             Description = null,
-            IsEnabled = true,
+           
             DefinitionJson = definitionJson,
             PublishedBy = 1,
             CreatedAt = DateTime.UtcNow
-        }, CancellationToken.None);
+        }, CancellationToken.None).LiveAsync(fixture.ConnectionString);
 
         output.WriteLine($"Published workflow Id={wd.Id} RefId={wd.RefId} Version={wd.Version}");
 
@@ -155,9 +154,9 @@ public sealed class HappyPathIntegrationTests(SqlEdgeFixture fixture, ITestOutpu
         {
             Id = 0, RefId = workflowRefId, Version = 0, WorkspaceId = 1,
             Name = $"IT-E2E-Hist-{workflowRefId:N}",
-            Description = null, IsEnabled = true,
+            Description = null,
             DefinitionJson = definitionJson, PublishedBy = 1, CreatedAt = DateTime.UtcNow
-        }, CancellationToken.None);
+        }, CancellationToken.None).LiveAsync(fixture.ConnectionString);
 
         using AsyncServiceScope scope = sp.CreateAsyncScope();
         var runStarter = scope.ServiceProvider.GetRequiredService<IRunStarter>();

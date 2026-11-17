@@ -120,6 +120,10 @@ public sealed class WorkflowDraftService : IWorkflowDraftService
         {
             return Result<WorkflowDraftDto>.Failure(WorkflowDraftErrors.Deleted);
         }
+        catch (SqlException ex) when (ex.Number == WorkflowLifecycleErrors.IsDeprecated)
+        {
+            return Result<WorkflowDraftDto>.Failure(WorkflowLifecycleErrors.WorkflowDeprecated);
+        }
 
         return Result<WorkflowDraftDto>.Success(await MapAsync(row, ct));
     }
@@ -164,7 +168,7 @@ public sealed class WorkflowDraftService : IWorkflowDraftService
         return await _lifecycleService.PublishAsync(
             workspaceId,
             workspaceRef,
-            new WorkflowPublishRequest(refId, row.Name, row.Description, Deserialize(row)),
+            new WorkflowPublishRequest(refId, row.Name, row.Description, Deserialize(row), request.Enable),
             guards,
             ct);
     }

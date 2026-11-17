@@ -42,6 +42,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
     private readonly IRunProvider _runProvider;
     private readonly IBranchProvider _branchProvider;
     private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
+    private readonly IWorkflowStateProvider _states;
     private readonly ILogger<WorkflowRunQueryService> _logger;
     private readonly IWorkflowDraftProvider? _draftProvider;
 
@@ -49,6 +50,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
         IRunProvider runProvider,
         IBranchProvider branchProvider,
         IWorkflowDefinitionProvider workflowDefinitionProvider,
+        IWorkflowStateProvider states,
         ILogger<WorkflowRunQueryService> logger,
         IWorkflowDraftProvider? draftProvider = null)
     {
@@ -56,6 +58,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
         _runProvider = runProvider;
         _branchProvider = branchProvider;
         _workflowDefinitionProvider = workflowDefinitionProvider;
+        _states = states;
         _logger = logger;
     }
 
@@ -342,17 +345,18 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
         WorkflowDefinition definition = JsonSerializer.Deserialize<WorkflowDefinition>(row.DefinitionJson, DefinitionJson)
             ?? throw new InvalidOperationException($"Could not deserialize the definition run '{runRefId}' ran.");
 
-        // A test copy is no published version, whatever its IsEnabled says.
-        string status = row.IsTestCopy ? "Test" : row.IsEnabled ? "Published" : "Deprecated";
+        WorkflowStateRow? state = await _states.FindAsync(row.RefId, workspaceId, ct);
 
         return Result<WorkflowDefinitionDto>.Success(new WorkflowDefinitionDto(
             row.RefId,
             row.Version,
-            status,
+            state?.State,
+            state?.LiveVersion,
             row.Name,
             row.Description,
             definition with { WorkspaceId = row.WorkspaceId, PublishedBy = row.PublishedBy },
-            row.CreatedAt.ToUtcOffset()));
+            row.CreatedAt.ToUtcOffset(),
+            row.IsTestCopy));
     }
 
     public async Task<Result<int>> ResolveCancellableRunAsync(int workspaceId, Guid runRefId, CancellationToken ct)

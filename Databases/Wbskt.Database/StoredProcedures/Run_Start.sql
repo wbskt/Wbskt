@@ -48,6 +48,29 @@ BEGIN
         BEGIN TRY
             BEGIN TRANSACTION;
 
+            -- A run started by a test run's sub-workflow step is a test run too, so a test never shows in
+            -- the child workflow's stats. Only a test started by hand is held to one at a time below.
+            DECLARE @RunIsTest BIT = @IsTest;
+            IF @IsTest = 0 AND @ParentRunRefId IS NOT NULL
+                SELECT @RunIsTest = IsTest FROM dbo.Runs WHERE RefId = @ParentRunRefId;
+
+            -- Only the live version of an enabled workflow starts runs. The trigger was matched before this
+            -- call, so a disable or another version's enable may have landed since. The shared lock is held
+            -- to commit and taken before every other lock here: Workflow_Disable, which updates this row
+            -- first, then waits for this run to commit and finds it among the runs it cancels. A test run
+            -- may use any version, or a draft never published, but never one of a deleted workflow.
+            DECLARE @State TINYINT;
+            DECLARE @LiveDefinitionId INT;
+            SELECT @State = State, @LiveDefinitionId = LiveDefinitionId
+            FROM dbo.Workflows WITH (HOLDLOCK)
+            WHERE RefId = @WorkflowRefId;
+
+            IF @RunIsTest = 0 AND (@State IS NULL OR @State <> 1 OR @LiveDefinitionId <> @WorkflowDefinitionId)
+                THROW 50036, 'This version of the workflow is not live.', 1;
+
+            IF @RunIsTest = 1 AND @State = 4
+                THROW 50022, 'The workflow was deleted.', 1;
+
             -- The concurrency policy read the active runs before this call; another event with the
             -- same key may have started one since (#467). Checked again under a lock per workflow,
             -- trigger and key so concurrent starts take turns. ActiveRunGuard: 1 refuses while any run
@@ -73,12 +96,6 @@ BEGIN
                     THROW 50028, 'A run is already active for this trigger and correlation key.', 1;
             END
 
-            -- A run started by a test run's sub-workflow step is a test run too, so a test never shows in
-            -- the child workflow's stats. Only a test started by hand is held to one at a time below.
-            DECLARE @RunIsTest BIT = @IsTest;
-            IF @IsTest = 0 AND @ParentRunRefId IS NOT NULL
-                SELECT @RunIsTest = IsTest FROM dbo.Runs WHERE RefId = @ParentRunRefId;
-
             -- One test run at a time per workflow, so a test that waits or loops cannot pile up behind the
             -- author's next click. Counted under a lock per workflow, taken in the same order as the others.
             IF @IsTest = 1
@@ -96,11 +113,6 @@ BEGIN
                              AND IsTest = 1
                              AND Status IN (N'Running', N'Failing', N'Cancelling'))
                     THROW 50029, 'A test run of this workflow is already going.', 1;
-
-                -- A deleted workflow's runs were cancelled with it; a test copy made just before must not
-                -- start one after. WorkflowDefinition_Delete writes the tombstone before it reads the runs.
-                IF EXISTS (SELECT 1 FROM dbo.WorkflowDeletions WHERE RefId = @WorkflowRefId)
-                    THROW 50022, 'The workflow was deleted.', 1;
             END
 
             -- The caller's tenant came from its own copy of the workspace's account; this database's

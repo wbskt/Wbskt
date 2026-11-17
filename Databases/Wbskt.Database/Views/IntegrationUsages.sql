@@ -1,6 +1,7 @@
--- The steps that use an integration in each live workflow's current version: the newest version
--- of a workflow that has not been deleted. Status follows that version's IsEnabled, so a workflow
--- whose current version is deprecated reads as a deprecated use (which does not block a delete).
+-- The steps that use an integration in each workflow that still exists: in the live version when
+-- the workflow is Enabled (IsLive = 1), and otherwise in its newest version, the one an author
+-- would enable next (IsLive = 0). Only a live use blocks deleting the integration; enabling a
+-- version that names a deleted integration is refused instead.
 CREATE VIEW dbo.IntegrationUsages
 AS
 SELECT
@@ -11,10 +12,11 @@ SELECT
     WD.RefId     AS WorkflowRefId,
     WD.Name      AS WorkflowName,
     WD.Version,
-    WD.IsEnabled
+    CAST(CASE WHEN W.State = 1 THEN 1 ELSE 0 END AS BIT) AS IsLive
 FROM dbo.WorkflowIntegrationRefs R
 INNER JOIN dbo.WorkflowDefinitions WD ON WD.Id = R.WorkflowDefinitionId
+INNER JOIN dbo.Workflows W ON W.RefId = WD.RefId AND W.State IN (1, 2, 3)
 WHERE WD.Kind = N'Version'
-  AND WD.Version = (SELECT MAX(V.Version) FROM dbo.WorkflowDefinitions V WHERE V.RefId = WD.RefId AND V.Kind = N'Version')
-  AND NOT EXISTS (SELECT 1 FROM dbo.WorkflowDeletions D WHERE D.RefId = WD.RefId);
+  AND ((W.State = 1 AND WD.Id = W.LiveDefinitionId)
+       OR (W.State <> 1 AND WD.Version = (SELECT MAX(V.Version) FROM dbo.WorkflowDefinitions V WHERE V.RefId = WD.RefId AND V.Kind = N'Version')));
 GO

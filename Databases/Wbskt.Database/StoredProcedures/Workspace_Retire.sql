@@ -60,10 +60,13 @@ BEGIN
     WHERE TDO.WorkflowRefId IN (
         SELECT WD.RefId FROM dbo.WorkflowDefinitions WD INNER JOIN @Definitions D ON D.Id = WD.Id);
 
-    UPDATE dbo.WorkflowDefinitions
-    SET IsEnabled = 0
+    -- No version stays live; the workflows keep their place in history as Disabled.
+    UPDATE dbo.Workflows
+    SET State = 2,
+        LiveDefinitionId = NULL,
+        StateChangedAt = SYSUTCDATETIME()
     WHERE WorkspaceId = @WorkspaceId
-      AND IsEnabled = 1;
+      AND State = 1;
 
     -- Integrations are deleted, not disabled: each holds a credential for an outside account, and
     -- nothing about a deleted workspace's history needs it.

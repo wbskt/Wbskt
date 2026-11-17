@@ -42,15 +42,15 @@ public sealed class PresenceChannel : TriggerChannel
     public override string CorrelationKey(InboundEvent evt) =>
         $"{Name}:{Required(evt, "clientRefId")}:{Required(evt, "state")}";
 
-    public override Task<TriggerRegistrationSpec?> RegisterAsync(BaseNode node, TriggerPublication publication, CancellationToken ct)
+    public override TriggerRegistrationSpec? Plan(BaseNode node, TriggerPublication publication)
     {
         if (node is not ClientPresenceTriggerNode trigger)
         {
-            return Task.FromResult<TriggerRegistrationSpec?>(null);
+            return null;
         }
 
         ClientPresenceTriggerConfig config = trigger.Config;
-        string key = ClientPresenceTriggerKey.Build(Guid.Parse(config.ClientRef), config.State, config.ForSeconds, publication.Definition.RefId, trigger.NodeId);
-        return Task.FromResult<TriggerRegistrationSpec?>(new TriggerRegistrationSpec(key, config.ConcurrencyPolicy, config.CorrelationKey));
+        string key = ClientPresenceTriggerKey.Build(Guid.Parse(config.ClientRef), config.State, config.ForSeconds, publication.WorkflowRefId, trigger.NodeId);
+        return new TriggerRegistrationSpec(key, config.ConcurrencyPolicy, config.CorrelationKey);
     }
 }

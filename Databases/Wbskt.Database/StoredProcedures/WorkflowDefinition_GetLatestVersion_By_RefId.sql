@@ -11,7 +11,6 @@ BEGIN
         WorkspaceId,
         Name,
         Description,
-        IsEnabled,
         DefinitionJson,
         PublishedBy,
         CreatedAt
@@ -19,7 +18,7 @@ BEGIN
     WHERE RefId = @RefId
       AND Kind = N'Version'
       -- A deleted workflow has no current version: reads, runs and publishes by RefId all stop here.
-      AND NOT EXISTS (SELECT 1 FROM dbo.WorkflowDeletions WDel WHERE WDel.RefId = @RefId)
+      AND NOT EXISTS (SELECT 1 FROM dbo.Workflows W WHERE W.RefId = @RefId AND W.State = 4)
     ORDER BY Version DESC;
 END;
 GO

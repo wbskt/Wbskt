@@ -27,7 +27,7 @@ public sealed class WorkflowLifecycleTests(ServicesFixture fixture)
 
         var versions = await fixture.Management.As(token).GetWorkflowVersionsAsync(workspace, refId);
 
-        versions.Items.Select(v => (v.Version, v.Status)).Should().Equal((2, "Published"), (1, "Superseded"));
+        versions.Items.Select(v => (v.Version, v.IsLive)).Should().Equal((2, true), (1, false));
     }
 
     [SkippableFact]
@@ -137,7 +137,7 @@ public sealed class WorkflowLifecycleTests(ServicesFixture fixture)
             .AddWebhookTrigger(path, WorkflowConcurrencyPolicy.AllowParallel, out _)
             .AddDelay(TimeSpan.FromMilliseconds(10))
             .BuildAndValidate();
-        return fixture.Management.As(token).PublishWorkflowRawAsync(workspace, new WorkflowPublishRequest(refId, $"E2E-Lifecycle-{refId:N}", null, definition));
+        return fixture.Management.As(token).PublishWorkflowRawAsync(workspace, new WorkflowPublishRequest(refId, $"E2E-Lifecycle-{refId:N}", null, definition, Enable: true));
     }
 
     private static async Task<HttpResponseMessage> SendKeyedWebhookAsync(Guid workspace, string path, string key)

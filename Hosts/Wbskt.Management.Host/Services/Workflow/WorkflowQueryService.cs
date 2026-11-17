@@ -20,6 +20,7 @@ public sealed class WorkflowQueryService : IWorkflowQueryService
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
     private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
+    private readonly IWorkflowStateProvider _states;
     private readonly WorkflowValidator _validator;
     private readonly IntegrationReferenceCheck _integrationCheck;
     private readonly ClientReferenceCheck? _clientCheck;
@@ -27,6 +28,7 @@ public sealed class WorkflowQueryService : IWorkflowQueryService
 
     public WorkflowQueryService(
         IWorkflowDefinitionProvider workflowDefinitionProvider,
+        IWorkflowStateProvider states,
         WorkflowValidator validator,
         IntegrationReferenceCheck integrationCheck,
         ILogger<WorkflowQueryService> logger,
@@ -35,6 +37,7 @@ public sealed class WorkflowQueryService : IWorkflowQueryService
         _integrationCheck = integrationCheck;
         _clientCheck = clientCheck;
         _workflowDefinitionProvider = workflowDefinitionProvider;
+        _states = states;
         _validator = validator;
         _logger = logger;
     }
@@ -68,7 +71,7 @@ public sealed class WorkflowQueryService : IWorkflowQueryService
         var load = await WorkflowOwnershipCheck.LoadCurrentAsync(_workflowDefinitionProvider, _logger, workspaceId, refId, ct);
         return load.IsFailure
             ? Result<WorkflowDefinitionDto>.Failure(load.Error)
-            : Result<WorkflowDefinitionDto>.Success(Map(load.Value));
+            : Result<WorkflowDefinitionDto>.Success(Map(load.Value, await _states.FindAsync(refId, workspaceId, ct)));
     }
 
     public async Task<Result<WorkflowDefinitionDto>> GetVersionAsync(int workspaceId, Guid refId, int version, CancellationToken ct)
@@ -87,7 +90,7 @@ public sealed class WorkflowQueryService : IWorkflowQueryService
             return Result<WorkflowDefinitionDto>.Failure(ensureWorkspaceResult.Error);
         }
 
-        return Result<WorkflowDefinitionDto>.Success(Map(row));
+        return Result<WorkflowDefinitionDto>.Success(Map(row, await _states.FindAsync(refId, workspaceId, ct)));
     }
 
     public async Task<Result<IReadOnlyList<WorkflowVersionDto>>> GetVersionsAsync(int workspaceId, Guid refId, CancellationToken ct)
@@ -102,11 +105,9 @@ public sealed class WorkflowQueryService : IWorkflowQueryService
             return Result<IReadOnlyList<WorkflowVersionDto>>.Failure(WorkspaceOwnership.WorkflowNotFound);
         }
 
-        // Only the newest version can be live; an older one was superseded when the next was published.
-        int current = rows.Max(r => r.Version);
         var versions = rows.Select(r => new WorkflowVersionDto(
             r.Version,
-            r.Version != current ? "Superseded" : r.IsEnabled ? "Published" : "Deprecated",
+            r.IsLive,
             r.Name,
             r.Description,
             r.RunCount,
@@ -125,7 +126,8 @@ public sealed class WorkflowQueryService : IWorkflowQueryService
         var dtos = result.Select(row => new WorkflowSummaryDto(
             row.RefId,
             row.Version,
-            row.IsEnabled ? "Published" : "Deprecated",
+            row.State ?? throw new InvalidOperationException($"The summary of workflow '{row.RefId}' carries no state."),
+            row.LiveVersion,
             row.Name,
             row.Description,
             row.CreatedAt.ToUtcOffset(),
@@ -144,7 +146,7 @@ public sealed class WorkflowQueryService : IWorkflowQueryService
         return await WorkflowOwnershipCheck.EnsureCurrentAsync(_workflowDefinitionProvider, _logger, workspaceId, workflowRefId, ct);
     }
 
-    private static WorkflowDefinitionDto Map(WorkflowDefinitionRow row)
+    private static WorkflowDefinitionDto Map(WorkflowDefinitionRow row, WorkflowStateRow? state)
     {
         WorkflowDefinition definition = JsonSerializer.Deserialize<WorkflowDefinition>(row.DefinitionJson, SerializerOptions)
             ?? throw new InvalidOperationException($"Could not deserialize workflow definition for '{row.RefId}'");
@@ -154,7 +156,8 @@ public sealed class WorkflowQueryService : IWorkflowQueryService
         return new WorkflowDefinitionDto(
             row.RefId,
             row.Version,
-            row.IsEnabled ? "Published" : "Deprecated",
+            state?.State,
+            state?.LiveVersion,
             row.Name,
             row.Description,
             definition,

@@ -274,7 +274,6 @@ public sealed class ParallelForEachNodeExecutorTests
             9,
             "pfe-test",
             null,
-            true,
             nodes,
             edges,
             [],

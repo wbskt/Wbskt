@@ -3,6 +3,7 @@ using Wbskt.Events.Workflow;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Models.Workflow;
+using Wbskt.Workflow.Abstraction.Enums;
 
 namespace Wbskt.Management.Host.Services.Workflow;
 
@@ -38,13 +39,20 @@ public sealed class WorkflowRunService : IWorkflowRunService
             return Result<StartRunResponse>.Failure(workflowResult.Error);
         }
 
-        // A deprecated workflow still resolves as "current" (the lookup returns the latest version
-        // regardless of IsEnabled), but its triggers were deregistered - so the engine would find no
-        // registration and the caller would get an opaque failure. Say so plainly instead.
-        if (workflowResult.Value.Status != "Published")
+        // Only a live version has a manual trigger registered, so the engine would find nothing for a
+        // workflow out of service and the caller would get an opaque failure. Say so plainly instead.
+        switch (workflowResult.Value.State)
         {
-            _logger.LogInformation("Rejected manual run for deprecated workflow '{RefId}'", workflowRefId);
-            return Result<StartRunResponse>.Failure(Error.Conflict("WORKFLOW_DEPRECATED", $"Workflow '{workflowRefId}' is deprecated and cannot be started."));
+            case WorkflowState.Disabled:
+                _logger.LogInformation("Rejected manual run for disabled workflow '{RefId}'", workflowRefId);
+                return Result<StartRunResponse>.Failure(Error.Conflict("WORKFLOW_DISABLED", $"Workflow '{workflowRefId}' is disabled. Enable a version of it to run it."));
+
+            case WorkflowState.Deprecated:
+                _logger.LogInformation("Rejected manual run for deprecated workflow '{RefId}'", workflowRefId);
+                return Result<StartRunResponse>.Failure(WorkflowLifecycleErrors.WorkflowDeprecated);
+
+            case null:
+                return Result<StartRunResponse>.Failure(WorkspaceOwnership.WorkflowNotFound);
         }
 
         StartRunResponse response = await _engine.StartManualRunAsync(workflowRefId, request, ct);

@@ -83,7 +83,7 @@ public sealed class ForkNodeExecutorTests
     }
 
     private static WorkflowDefinition Definition(IReadOnlyCollection<BaseNode> nodes, IReadOnlyCollection<Edge> edges) =>
-        new(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), 1, 9, "fork-test", null, true, nodes, edges, [], DateTime.UtcNow, 7);
+        new(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), 1, 9, "fork-test", null, nodes, edges, [], DateTime.UtcNow, 7);
 
     private static ForkNode Fork(Guid nodeId, params string[] branches) => new()
     {

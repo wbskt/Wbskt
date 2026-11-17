@@ -5,6 +5,7 @@ using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Providers;
 
@@ -25,7 +26,7 @@ public sealed class WorkflowDraftServiceTests
         _query.Setup(x => x.ValidateAsync(WorkspaceId, It.IsAny<WorkflowDefinition?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new WorkflowValidationResponse(true, []));
         _lifecycle.Setup(x => x.PublishAsync(WorkspaceId, WorkspaceRef, It.IsAny<WorkflowPublishRequest>(), It.IsAny<WorkflowPublishGuards>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<WorkflowPublishResponse>.Success(new WorkflowPublishResponse(RefId, 5, "Published")));
+            .ReturnsAsync(Result<WorkflowPublishResponse>.Success(new WorkflowPublishResponse(RefId, 5, WorkflowState.Disabled, null)));
     }
 
     [Fact]
@@ -33,13 +34,13 @@ public sealed class WorkflowDraftServiceTests
     {
         Draft(revision: 3, baseVersion: 4, currentVersion: 4);
 
-        var result = await Service().PublishAsync(WorkspaceId, WorkspaceRef, RefId, new WorkflowDraftPublishRequest(3), CancellationToken.None);
+        var result = await Service().PublishAsync(WorkspaceId, WorkspaceRef, RefId, new WorkflowDraftPublishRequest(3, Enable: true), CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         _lifecycle.Verify(x => x.PublishAsync(
             WorkspaceId,
             WorkspaceRef,
-            It.Is<WorkflowPublishRequest>(r => r.RefId == RefId && r.Name == "Draft name"),
+            It.Is<WorkflowPublishRequest>(r => r.RefId == RefId && r.Name == "Draft name" && r.Enable),
             new WorkflowPublishGuards(4, 3),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -49,7 +50,7 @@ public sealed class WorkflowDraftServiceTests
     {
         Draft(revision: 1, baseVersion: null, currentVersion: null);
 
-        await Service().PublishAsync(WorkspaceId, WorkspaceRef, RefId, new WorkflowDraftPublishRequest(1), CancellationToken.None);
+        await Service().PublishAsync(WorkspaceId, WorkspaceRef, RefId, new WorkflowDraftPublishRequest(1, Enable: false), CancellationToken.None);
 
         _lifecycle.Verify(x => x.PublishAsync(WorkspaceId, WorkspaceRef, It.IsAny<WorkflowPublishRequest>(), new WorkflowPublishGuards(0, 1), It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -59,11 +60,11 @@ public sealed class WorkflowDraftServiceTests
     {
         Draft(revision: 2, baseVersion: 4, currentVersion: 5);
 
-        var refused = await Service().PublishAsync(WorkspaceId, WorkspaceRef, RefId, new WorkflowDraftPublishRequest(2), CancellationToken.None);
+        var refused = await Service().PublishAsync(WorkspaceId, WorkspaceRef, RefId, new WorkflowDraftPublishRequest(2, Enable: false), CancellationToken.None);
         Assert.Equal("WORKFLOW_DRAFT_OUTDATED", refused.Error.Code);
         Assert.Equal(ErrorType.Conflict, refused.Error.Type);
 
-        var forced = await Service().PublishAsync(WorkspaceId, WorkspaceRef, RefId, new WorkflowDraftPublishRequest(2, Force: true), CancellationToken.None);
+        var forced = await Service().PublishAsync(WorkspaceId, WorkspaceRef, RefId, new WorkflowDraftPublishRequest(2, Enable: false, Force: true), CancellationToken.None);
         Assert.True(forced.IsSuccess);
         _lifecycle.Verify(x => x.PublishAsync(WorkspaceId, WorkspaceRef, It.IsAny<WorkflowPublishRequest>(), new WorkflowPublishGuards(null, 2), It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -73,7 +74,7 @@ public sealed class WorkflowDraftServiceTests
     {
         Draft(revision: 4, baseVersion: 1, currentVersion: 1);
 
-        var result = await Service().PublishAsync(WorkspaceId, WorkspaceRef, RefId, new WorkflowDraftPublishRequest(3), CancellationToken.None);
+        var result = await Service().PublishAsync(WorkspaceId, WorkspaceRef, RefId, new WorkflowDraftPublishRequest(3, Enable: false), CancellationToken.None);
 
         Assert.Equal("WORKFLOW_DRAFT_CONFLICT", result.Error.Code);
         _lifecycle.VerifyNoOtherCalls();
@@ -82,7 +83,7 @@ public sealed class WorkflowDraftServiceTests
     [Fact]
     public async Task Publishing_without_a_draft_is_not_found()
     {
-        var result = await Service().PublishAsync(WorkspaceId, WorkspaceRef, RefId, new WorkflowDraftPublishRequest(1), CancellationToken.None);
+        var result = await Service().PublishAsync(WorkspaceId, WorkspaceRef, RefId, new WorkflowDraftPublishRequest(1, Enable: false), CancellationToken.None);
 
         Assert.Equal("WORKFLOW_DRAFT_NOT_FOUND", result.Error.Code);
     }
@@ -138,7 +139,7 @@ public sealed class WorkflowDraftServiceTests
             Revision = revision,
             Name = "Draft name",
             Description = null,
-            DefinitionJson = $$"""{"workflowRefId":"{{RefId}}","version":0,"name":"Draft name","isEnabled":true,"nodes":[],"edges":[],"sharedVariableSchema":[],"createdAt":"2026-11-08T00:00:00Z"}""",
+            DefinitionJson = $$"""{"workflowRefId":"{{RefId}}","version":0,"name":"Draft name","nodes":[],"edges":[],"sharedVariableSchema":[],"createdAt":"2026-11-08T00:00:00Z"}""",
             CreatedBy = 9,
             CreatedAt = DateTime.UtcNow,
             UpdatedBy = 9,

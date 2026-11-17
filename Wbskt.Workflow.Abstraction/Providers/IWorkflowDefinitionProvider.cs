@@ -40,12 +40,10 @@ public interface IWorkflowDefinitionProvider
         throw new NotSupportedException("This provider does not write test copies.");
 
     Task<IPagedList<WorkflowDefinitionRow>> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct);
-    Task DeprecateAsync(int id, CancellationToken ct);
 
     /// <summary>
-    /// Removes a definition row that nothing references. Compensation for a publish that inserted the
-    /// row and then failed before its triggers were registered; a definition with runs against it is
-    /// history and is never deleted. Returns true when the row was removed.
+    /// Removes a definition row that nothing references: a test copy whose run never started. A
+    /// definition with runs against it is history and is never deleted. Returns true when the row was removed.
     /// </summary>
     Task<bool> DeleteUnreferencedAsync(int id, CancellationToken ct);
 
@@ -56,12 +54,9 @@ public interface IWorkflowDefinitionProvider
     Task<IReadOnlyCollection<WorkflowVersionRow>> GetVersionsAsync(Guid refId, int workspaceId, CancellationToken ct);
 
     /// <summary>
-    /// Deletes a workflow (<c>WorkflowDefinition_Delete</c>): tombstones its RefId, disables every
-    /// version and removes its triggers. Null when there was nothing in <paramref name="workspaceId"/>
+    /// Deletes a workflow (<c>WorkflowDefinition_Delete</c>): marks it Deleted, with no live version,
+    /// and removes its triggers. Null when there was nothing in <paramref name="workspaceId"/>
     /// to delete; otherwise the runs to cancel and the definitions to evict from caches.
     /// </summary>
     Task<WorkflowDeletion?> DeleteAsync(Guid refId, int workspaceId, int deletedBy, CancellationToken ct);
-
-    /// <summary>Enables or disables a definition (<c>WorkflowDefinition_UpdateIsEnabled</c>).</summary>
-    Task SetEnabledAsync(int id, bool isEnabled, CancellationToken ct);
 }

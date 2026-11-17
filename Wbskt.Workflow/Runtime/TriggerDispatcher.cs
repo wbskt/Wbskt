@@ -343,6 +343,13 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
                 started = await _runStarter.StartAsync(registration.WorkflowDefinitionId, registration.TriggerNodeId.ToString(), normalizedEvent, startKey, ct, exemptFromCeiling, activeRunGuard);
                 break;
             }
+            catch (WorkflowNotLiveException)
+            {
+                // Matched just before the workflow was disabled or another version made live. Settled as
+                // unmatched, which is what the event would have been a moment later, so a redelivery does
+                // not start it either.
+                return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.NoRegistration, null, correlationValue), null);
+            }
             catch (PlanRunLimitException ex)
             {
                 // Thrown away for good, so the user is told: the event itself cannot say so to anyone.

@@ -92,7 +92,6 @@ public sealed class TriggerActivityServiceTests
         WorkspaceId = workspaceId,
         Name = "wf",
         Description = null,
-        IsEnabled = true,
         DefinitionJson = "{\"nodes\":[],\"edges\":[]}",
         PublishedBy = 1,
         CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)

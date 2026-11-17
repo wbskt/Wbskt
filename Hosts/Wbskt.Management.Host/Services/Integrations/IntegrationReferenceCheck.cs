@@ -16,7 +16,7 @@ public sealed record IntegrationReferences(IReadOnlyList<ValidationIssue> Issues
 /// The half of validating a definition that needs the workspace: every integration a step names is
 /// one of the workspace's, of the type the step sends through, and (for Call a URL) used where its
 /// credential may go. <see cref="WorkflowValidator"/> checks everything the definition alone can
-/// answer; this runs after it on publish, rollback, reinstate and draft validation. The publish
+/// answer; this runs after it on publish, enable and draft validation. The publish
 /// procedure checks existence again under lock, so a delete racing a publish cannot slip between.
 /// </summary>
 public sealed class IntegrationReferenceCheck(IIntegrationProvider integrations)

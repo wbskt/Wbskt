@@ -27,7 +27,7 @@ public sealed class WorkspaceRetirementIntegrationTests(SqlEdgeFixture fixture)
         Assert.False(await ScalarAsync<bool>("SELECT IsEnabled FROM dbo.RegistrationPolicies WHERE Id = @p0", ws.PolicyId));
         Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Clients WHERE WorkspaceId = @p0 AND Status IN (0, 1)", ws.WorkspaceId));
         Assert.Equal(3, await ScalarAsync<byte>("SELECT Status FROM dbo.Clients WHERE Id = @p0", ws.RejectedClientId));
-        Assert.False(await ScalarAsync<bool>("SELECT IsEnabled FROM dbo.WorkflowDefinitions WHERE Id = @p0", ws.DefinitionId));
+        Assert.Equal(2, await ScalarAsync<byte>("SELECT State FROM dbo.Workflows WHERE RefId = @p0 AND LiveDefinitionId IS NULL", ws.WorkflowRefId));
         Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.TriggerRegistrations WHERE WorkflowDefinitionId = @p0", ws.DefinitionId));
         Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.ScheduledFires WHERE WorkflowDefinitionId = @p0", ws.DefinitionId));
         Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.PendingTriggerEvents WHERE WorkflowRefId = @p0", ws.WorkflowRefId));
@@ -117,8 +117,12 @@ public sealed class WorkspaceRetirementIntegrationTests(SqlEdgeFixture fixture)
             INSERT INTO dbo.WorkflowDefinitions (RefId, Version, WorkspaceId, Name, DefinitionJson, PublishedBy)
             OUTPUT INSERTED.Id VALUES (NEWID(), 1, @p0, 'live-test', '{}', 1);
             """, workflowOnly);
+        await ExecAsync("""
+            INSERT INTO dbo.Workflows (RefId, WorkspaceId, State, LiveDefinitionId, StateChangedBy)
+            SELECT RefId, WorkspaceId, 1, Id, 1 FROM dbo.WorkflowDefinitions WHERE Id = @p0;
+            """, definitionId);
         Assert.True(await Provider().HasLiveContentAsync(workflowOnly));
-        await ExecAsync("UPDATE dbo.WorkflowDefinitions SET IsEnabled = 0 WHERE Id = @p0", definitionId);
+        await ExecAsync("UPDATE W SET State = 2, LiveDefinitionId = NULL FROM dbo.Workflows W JOIN dbo.WorkflowDefinitions D ON D.RefId = W.RefId WHERE D.Id = @p0", definitionId);
         Assert.False(await Provider().HasLiveContentAsync(workflowOnly));
     }
 
@@ -268,6 +272,10 @@ public sealed class WorkspaceRetirementIntegrationTests(SqlEdgeFixture fixture)
             INSERT INTO dbo.WorkflowDefinitions (RefId, Version, WorkspaceId, Name, DefinitionJson, PublishedBy)
             OUTPUT INSERTED.Id VALUES (@p0, 1, @p1, 'retire-test', '{}', 1);
             """, workflowRefId, workspaceId);
+        await ExecAsync("""
+            INSERT INTO dbo.Workflows (RefId, WorkspaceId, State, LiveDefinitionId, StateChangedBy)
+            VALUES (@p0, @p1, 1, @p2, 1);
+            """, workflowRefId, workspaceId, definitionId);
 
         await ExecAsync("""
             INSERT INTO dbo.TriggerRegistrations (WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, TriggerKind, TriggerKey)

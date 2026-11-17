@@ -32,7 +32,7 @@ internal static class BranchResultTestData
         bool runCompensationOnFailure = false,
         bool failFast = false)
     {
-        return new WorkflowDefinition(WorkflowRefId, 1, 9, "branch-results", null, true, nodes, edges, [], Now, 7, runCompensationOnFailure, failFast);
+        return new WorkflowDefinition(WorkflowRefId, 1, 9, "branch-results", null, nodes, edges, [], Now, 7, runCompensationOnFailure, failFast);
     }
 
     public static RunRow Run() => new()
