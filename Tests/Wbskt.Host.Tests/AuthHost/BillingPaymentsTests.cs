@@ -881,13 +881,106 @@ public sealed class BillingPaymentsTests
         {
             PlanCode = PlanCode.Maker, ProductId = "prod_maker_y", Interval = BillingInterval.Yearly, ScheduledPlan = PlanCode.Maker, ScheduledInterval = BillingInterval.Monthly, ScheduledAt = Now.UtcDateTime.AddDays(10)
         });
-        _gateway.Setup(g => g.ChangePlanAsync("sub_1", "prod_pro_m", PlanChangeTiming.Now, It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("card declined"));
+        _gateway.Setup(g => g.ChangePlanAsync("sub_1", "prod_pro_m", PlanChangeTiming.Now, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("card declined", null, HttpStatusCode.PaymentRequired));
+
+        var result = await Billing().ChangePlanAsync(9, new ChangePlanRequest(PlanCode.Pro, BillingInterval.Monthly), CancellationToken.None);
+
+        Assert.Equal("BILLING_PROVIDER_REFUSED", result.Error.Code);
+        Assert.Equal(ErrorType.Conflict, result.Error.Type);
+        _gateway.Verify(g => g.CancelScheduledChangeAsync("sub_1", It.IsAny<CancellationToken>()), Times.Once);
+        _gateway.Verify(g => g.ChangePlanAsync("sub_1", "prod_maker_m", PlanChangeTiming.AtPeriodEnd, It.IsAny<CancellationToken>()), Times.Once);
+        _gateway.Verify(g => g.FindSubscriptionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never, "a refusal did nothing, so there is nothing to read");
+    }
+
+    [Theory]
+    [InlineData("prod_maker_y", true)]
+    [InlineData("prod_pro_m", false)]
+    public async Task An_upgrade_that_timed_out_puts_back_the_downgrade_only_if_it_did_not_go_through(string productAfter, bool putBack)
+    {
+        _stored.Add(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(10)) with
+        {
+            PlanCode = PlanCode.Maker, ProductId = "prod_maker_y", Interval = BillingInterval.Yearly, ScheduledPlan = PlanCode.Maker, ScheduledInterval = BillingInterval.Monthly, ScheduledAt = Now.UtcDateTime.AddDays(10)
+        });
+        _gateway.Setup(g => g.ChangePlanAsync("sub_1", "prod_pro_m", PlanChangeTiming.Now, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("no answer", new TimeoutException()));
+        ProviderSays(new ProviderSubscription("sub_1", SubscriptionStatus.Active, productAfter, "cus_1", TenantRef, Now.AddDays(30), false));
 
         var result = await Billing().ChangePlanAsync(9, new ChangePlanRequest(PlanCode.Pro, BillingInterval.Monthly), CancellationToken.None);
 
         Assert.Equal("BILLING_PROVIDER_UNAVAILABLE", result.Error.Code);
-        _gateway.Verify(g => g.CancelScheduledChangeAsync("sub_1", It.IsAny<CancellationToken>()), Times.Once);
-        _gateway.Verify(g => g.ChangePlanAsync("sub_1", "prod_maker_m", PlanChangeTiming.AtPeriodEnd, It.IsAny<CancellationToken>()), Times.Once);
+        _gateway.Verify(g => g.ChangePlanAsync("sub_1", "prod_maker_m", PlanChangeTiming.AtPeriodEnd, It.IsAny<CancellationToken>()), putBack ? Times.Once() : Times.Never());
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest, "BILLING_PROVIDER_REFUSED")]
+    [InlineData(HttpStatusCode.UnprocessableEntity, "BILLING_PROVIDER_REFUSED")]
+    [InlineData(HttpStatusCode.Unauthorized, "BILLING_PROVIDER_UNAVAILABLE")]
+    [InlineData(HttpStatusCode.TooManyRequests, "BILLING_PROVIDER_UNAVAILABLE")]
+    [InlineData(HttpStatusCode.BadGateway, "BILLING_PROVIDER_UNAVAILABLE")]
+    public async Task A_provider_refusal_is_a_conflict_and_anything_else_a_503(HttpStatusCode status, string code)
+    {
+        _accounts.Setup(a => a.GetByIdAsync(4, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = 4, Email = "a@example.com", Username = "ann" });
+        _gateway.Setup(g => g.CreateCheckoutAsync(It.IsAny<BillingCheckout>(), It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("no", null, status));
+
+        var result = await Billing().CheckoutAsync(9, 4, new BillingCheckoutRequest(PlanCode.Maker, BillingInterval.Monthly), CancellationToken.None);
+
+        Assert.Equal(code, result.Error.Code);
+    }
+
+    [Fact]
+    public async Task A_provider_that_does_not_answer_in_time_is_a_provider_failure_and_a_cancelled_caller_is_not()
+    {
+        using var invoker = new HttpMessageInvoker(new ProviderTimeoutHandler(TimeSpan.FromMilliseconds(50)) { InnerHandler = new HangingHandler() });
+
+        var timedOut = await Assert.ThrowsAsync<HttpRequestException>(() => invoker.SendAsync(new HttpRequestMessage(HttpMethod.Get, "https://provider.test/subscriptions/sub_1"), CancellationToken.None));
+        Assert.IsType<TimeoutException>(timedOut.InnerException);
+
+        using var caller = new CancellationTokenSource(TimeSpan.FromMilliseconds(20));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => invoker.SendAsync(new HttpRequestMessage(HttpMethod.Get, "https://provider.test/subscriptions/sub_1"), caller.Token));
+    }
+
+    [Fact]
+    public async Task A_body_that_never_finishes_is_timed_out_too()
+    {
+        using var invoker = new HttpMessageInvoker(new ProviderTimeoutHandler(TimeSpan.FromMilliseconds(50)) { InnerHandler = new HangingBodyHandler() });
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => invoker.SendAsync(new HttpRequestMessage(HttpMethod.Get, "https://provider.test/subscriptions/sub_1"), CancellationToken.None));
+    }
+
+    private sealed class HangingBodyHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage { Content = new StreamContent(new HangingStream()) });
+    }
+
+    private sealed class HangingStream : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            return 0;
+        }
+    }
+
+    private sealed class HangingHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            return new HttpResponseMessage();
+        }
     }
 
     [Fact]

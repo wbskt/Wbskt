@@ -89,12 +89,14 @@ public static class Program
         builder.Services.AddHttpClient<IPaymentGateway, DodoPaymentGateway>(client =>
         {
             client.BaseAddress = dodoOptions.ResolveBaseAddress();
-            client.Timeout = TimeSpan.FromSeconds(30);
+
+            // The handler times calls out instead, as a provider failure the callers handle (a 503).
+            client.Timeout = Timeout.InfiniteTimeSpan;
             if (dodoOptions.ApiKey is { } apiKey)
             {
                 client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
             }
-        });
+        }).AddHttpMessageHandler(() => new ProviderTimeoutHandler(TimeSpan.FromSeconds(30)));
         builder.Services.AddScoped<ITenantBillingProvider, TenantBillingProvider>();
         builder.Services.AddScoped<TenantBillingSync>();
         builder.Services.AddScoped<ITenantBillingService, TenantBillingService>();
