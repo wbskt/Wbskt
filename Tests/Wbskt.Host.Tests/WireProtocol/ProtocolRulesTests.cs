@@ -46,6 +46,33 @@ public sealed class ProtocolRulesTests
     }
 
     [Fact]
+    public void A_payload_that_escapes_past_a_socket_message_is_refused()
+    {
+        // Every quote is written as \", so this is twice its length on the wire.
+        var quotes = new string('"', ClientMessageRules.MaxPayloadChars);
+
+        Assert.Equal(ClientMessageRule.PayloadSize, ClientMessageRules.Check("led.set", quotes)?.Rule);
+        Assert.Equal(ClientMessageRule.PayloadSize, ClientMessageRules.CheckPlatformCommand(MessageTypes.OtaUpdate, quotes)?.Rule);
+    }
+
+    [Fact]
+    public void A_payload_is_measured_as_utf8_not_as_escapes()
+    {
+        var accents = new string('é', 20_000);
+
+        Assert.Null(ClientMessageRules.Check("led.set", accents));
+        Assert.Contains(accents, ProtocolJson.Serialize(new ProtocolMessage("led.set", accents)));
+    }
+
+    [Fact]
+    public void A_payload_too_long_for_a_socket_message_in_utf8_is_refused()
+    {
+        var wide = new string('漢', 30_000);
+
+        Assert.Equal(ClientMessageRule.PayloadSize, ClientMessageRules.Check("led.set", wide)?.Rule);
+    }
+
+    [Fact]
     public void The_register_and_login_calls_keep_their_wire_names()
     {
         var web = new JsonSerializerOptions(JsonSerializerDefaults.Web);

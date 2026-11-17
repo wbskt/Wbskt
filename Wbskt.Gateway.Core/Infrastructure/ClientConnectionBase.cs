@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Wbskt.Protocol;
 
 namespace Wbskt.Gateway.Core.Infrastructure;
@@ -54,7 +53,7 @@ public abstract class ClientConnectionBase : IClientConnection
 
     public Task SendAsync(ProtocolMessage message, CancellationToken cancellationToken)
     {
-        return SendTextAsync(JsonSerializer.Serialize(message), cancellationToken);
+        return SendTextAsync(ProtocolJson.Serialize(message), cancellationToken);
     }
 
     public async Task<bool> RequestCloseAsync(DisconnectReason reason, string description)

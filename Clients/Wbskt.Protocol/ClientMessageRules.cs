@@ -10,8 +10,15 @@ public static class ClientMessageRules
 {
     public const int MaxTypeLength = MessageTypes.MaxTypeLength;
 
-    /// <summary>Half the 64 KB socket message cap, leaving room for the envelope.</summary>
+    /// <summary>
+    /// Half the 64 KB message cap, leaving room for the envelope. A payload under it can still be refused:
+    /// what counts is the message as it is sent, escaped, which <see cref="Check"/> measures as well.
+    /// </summary>
     public const int MaxPayloadChars = ClientProtocol.MaxMessageBytes / 2;
+
+    // The longest an envelope's other fields can be: a commandId and an expiresAt are on every command.
+    private static readonly string LongestCommandId = Guid.Empty.ToString();
+    private static readonly DateTimeOffset LongestExpiresAt = DateTimeOffset.MaxValue;
 
     public static bool IsReserved(string messageType) => MessageTypes.IsReserved(messageType);
 
@@ -34,12 +41,7 @@ public static class ClientMessageRules
             return new ClientMessageViolation(ClientMessageRule.TypeReserved, $"Message type '{messageType}' is reserved for the platform protocol.");
         }
 
-        if (payload is { Length: > MaxPayloadChars })
-        {
-            return new ClientMessageViolation(ClientMessageRule.PayloadSize, $"Message payload is limited to {MaxPayloadChars} characters.");
-        }
-
-        return null;
+        return CheckPayload(messageType, payload);
     }
 
     /// <summary>
@@ -54,13 +56,29 @@ public static class ClientMessageRules
             return new ClientMessageViolation(ClientMessageRule.TypeReserved, $"Message type '{messageType}' is not a platform command.");
         }
 
+        return CheckPayload(messageType, payload);
+    }
+
+    private static ClientMessageViolation? CheckPayload(string messageType, string? payload)
+    {
         if (payload is { Length: > MaxPayloadChars })
         {
             return new ClientMessageViolation(ClientMessageRule.PayloadSize, $"Message payload is limited to {MaxPayloadChars} characters.");
         }
 
+        // A payload goes out as a JSON string, so every quote, backslash and control character in it is
+        // escaped, and 32,768 quotes are 64 KB before the envelope. Measured as sent; a platform
+        // command's object payload is never longer than its text escaped as a string.
+        if (payload is not null && WireBytes(messageType, payload) > ClientProtocol.MaxMessageBytes)
+        {
+            return new ClientMessageViolation(ClientMessageRule.PayloadSize, $"Message payload is too large: escaped as it is sent, the message would be over {ClientProtocol.MaxMessageBytes} bytes.");
+        }
+
         return null;
     }
+
+    private static int WireBytes(string messageType, string payload) =>
+        ProtocolJson.ByteCount(new ProtocolMessage(messageType, payload, LongestCommandId) { ExpiresAt = LongestExpiresAt });
 }
 
 public enum ClientMessageRule
