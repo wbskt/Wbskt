@@ -39,7 +39,8 @@ public sealed class RequeueClientCommandConsumer : IConsumer<RequeueClientComman
             announcement);
 
         // Past the per-client limit: the command was accepted once already.
-        if (!await _queue.QueueAsync(command, announcement, int.MaxValue, message.ReturnedByHostId, context.CancellationToken))
+        var handBack = message.ReturnedByHostId is { } hostId ? new CommandHandBack(hostId, message.ReturnedAtUtc) : null;
+        if (!await _queue.QueueAsync(command, announcement, int.MaxValue, handBack, context.CancellationToken))
         {
             _logger.LogInformation("Command '{CommandId}' was not put back in the queue: client '{ClientRefId}' no longer exists.", message.CommandId, message.ClientRefId);
         }

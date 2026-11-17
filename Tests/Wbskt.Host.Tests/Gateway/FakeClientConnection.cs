@@ -21,6 +21,9 @@ internal sealed class FakeClientConnection : ClientConnectionBase
     /// <summary>Thrown by every send, as by a socket that went away.</summary>
     public Exception? SendFailure { get; set; }
 
+    /// <summary>A failed send also closes the connection, as a socket that dropped mid-send does.</summary>
+    public bool ClosesOnSendFailure { get; set; }
+
     public IReadOnlyList<string> Sent => [.. _sent];
 
     /// <summary>Every close the transport was asked for; <see cref="ClientConnectionBase"/> asks it at most once.</summary>
@@ -36,6 +39,7 @@ internal sealed class FakeClientConnection : ClientConnectionBase
     {
         if (SendFailure is not null)
         {
+            Open &= !ClosesOnSendFailure;
             return Task.FromException(SendFailure);
         }
 

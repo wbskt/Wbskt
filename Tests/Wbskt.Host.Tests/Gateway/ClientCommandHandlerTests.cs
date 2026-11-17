@@ -171,6 +171,21 @@ public sealed class ClientCommandHandlerTests
     }
 
     [Fact]
+    public async Task A_send_that_fails_because_the_connection_dropped_goes_back_to_the_queue_with_when()
+    {
+        _connection.SendFailure = new ObjectDisposedException("System.Net.WebSockets.ManagedWebSocket");
+        _connection.ClosesOnSendFailure = true;
+        Connected();
+
+        await CreateHandler().Consume(Context());
+
+        _commands.Verify(x => x.SendAsync(
+            It.Is<RequeueClientCommand>(c => c.CommandId == CommandId && c.ReturnedByHostId == ThisHost && c.ReturnedAtUtc == Now.UtcDateTime),
+            It.IsAny<CancellationToken>()), Times.Once);
+        _bus.Verify(x => x.PublishAsync(It.IsAny<ClientCommandFailedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task A_sent_command_whose_delivery_cannot_be_announced_is_not_failed_or_retried()
     {
         // Throwing here would make the bus retry the message and send the command to the client twice.

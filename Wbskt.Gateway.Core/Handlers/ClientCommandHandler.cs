@@ -68,6 +68,14 @@ public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
         {
             await HandleCommandAsync(connection, command, context.CancellationToken);
         }
+        catch (Exception ex) when (!connection.IsOpen && command.TargetHostId != null)
+        {
+            // The connection dropped while the command was going out: the same drop as finding it gone
+            // a moment earlier, so the same answer, back to the queue for the next connect.
+            _logger.LogInformation("Command {CommandId} for {ClientRefId} could not be sent: the connection closed. {Message}", command.CommandId, command.ClientRefId, ex.Message);
+            await RequeueAsync(command, context.CancellationToken);
+            return;
+        }
         catch (Exception ex)
         {
             // The exception's text is internal ("Cannot access a disposed object"); the event log and
@@ -107,7 +115,7 @@ public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
             new RequeueClientCommand(
                 command.ClientRefId, command.ClientId, command.WorkspaceId, command.Type, command.Payload, commandId, command.ExpiresAtUtc,
                 command.ActorUserId, command.ActorUserRefId, command.ActorSource, command.ActorWorkflowRefId, command.ActorRunRefId,
-                command.TargetHostId),
+                command.TargetHostId, _timeProvider.GetUtcNow().UtcDateTime),
             ct);
     }
 
