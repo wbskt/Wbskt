@@ -19,8 +19,6 @@ public sealed class GatewayMetrics : IWorkerTickMetrics, IDisposable
     public const string MeterName = "Wbskt.Gateway";
 
     private readonly Meter _meter = new(MeterName);
-
-    internal Meter Meter => _meter;
     private readonly KeyValuePair<string, object?> _transport;
     private readonly UpDownCounter<long> _open;
     private readonly Counter<long> _connects;
@@ -29,6 +27,8 @@ public sealed class GatewayMetrics : IWorkerTickMetrics, IDisposable
     private readonly Counter<long> _received;
     private readonly Counter<long> _recheckClosed;
     private readonly Counter<long> _workerTicks;
+
+    internal Meter Meter => _meter;
 
     public GatewayMetrics(GatewayTransport transport)
     {
