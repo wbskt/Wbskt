@@ -7,8 +7,8 @@
 -- at anyone in particular.
 --
 -- @MemberLimit is the tenant's plan's limit on members (NULL is none). Joining past it raises 50031;
--- someone already a member joins nothing, so is never refused. The tenant's row is locked before the
--- count, so concurrent acceptances one short of the limit take turns.
+-- someone already a member joins nothing, so is never refused. The tenant's row is locked first,
+-- before the invitation's, so concurrent acceptances one short of the limit take turns.
 --
 -- An unknown token, a spent one and a mismatched address all raise the same error. They are the
 -- same answer to the caller -- distinguishing them would let a holder of one tenant's token probe
@@ -27,15 +27,23 @@ BEGIN
 
     DECLARE @InvitationId INT, @RoleId INT;
 
+    -- Lock order: the tenant row, then the invitation row. Role_Delete and User_Delete hold the
+    -- tenant row and then write invitations, so taking the invitation first deadlocked against them.
+    -- The tenant is read from the invitation without a lock (an invitation never changes tenant),
+    -- and the locked read below is what decides whether the invitation is still good.
+    DECLARE @InvitedTenantId INT = (SELECT TenantId FROM dbo.TenantInvitations WHERE TokenHash = @TokenHash);
+
+    SELECT @TenantId = Id FROM dbo.Tenants WITH (UPDLOCK, HOLDLOCK) WHERE Id = @InvitedTenantId;
+
     -- UPDLOCK/HOLDLOCK: two concurrent redemptions of the same token must not both pass the
     -- AcceptedAt IS NULL test. The row is held for the duration of the transaction, so the second
     -- one reads the accepted row and fails the guard below.
     SELECT @InvitationId = I.Id,
-           @TenantId = I.TenantId,
            @RoleId = I.RoleId
     FROM dbo.TenantInvitations I WITH (UPDLOCK, HOLDLOCK)
     INNER JOIN dbo.Users U ON U.Id = @UserId
     WHERE I.TokenHash = @TokenHash
+      AND I.TenantId = @InvitedTenantId
       AND I.AcceptedAt IS NULL
       AND I.RevokedAt IS NULL
       AND I.ExpiresAt > SYSUTCDATETIME()
@@ -47,16 +55,13 @@ BEGIN
         THROW 50011, 'Invitation is not valid.', 1;
     END
 
+    -- The tenant row is held, so concurrent acceptances one short of the limit take turns.
     IF @MemberLimit IS NOT NULL
        AND NOT EXISTS (SELECT 1 FROM dbo.TenantMembers WHERE TenantId = @TenantId AND UserId = @UserId)
+       AND (SELECT COUNT(*) FROM dbo.TenantMembers WHERE TenantId = @TenantId) >= @MemberLimit
     BEGIN
-        SELECT @TenantId = Id FROM dbo.Tenants WITH (UPDLOCK, ROWLOCK) WHERE Id = @TenantId;
-
-        IF (SELECT COUNT(*) FROM dbo.TenantMembers WHERE TenantId = @TenantId) >= @MemberLimit
-        BEGIN
-            ROLLBACK TRANSACTION;
-            THROW 50031, 'The plan has reached its member limit.', 1;
-        END
+        ROLLBACK TRANSACTION;
+        THROW 50031, 'The plan has reached its member limit.', 1;
     END
 
     UPDATE dbo.TenantInvitations
