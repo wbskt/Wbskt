@@ -7,6 +7,7 @@ namespace Wbskt.Auth.Models;
 public record RegisterRequest(
     [Required]
     [StringLength(50, MinimumLength = 3)]
+    [Username]
     string Username,
 
     [Required]

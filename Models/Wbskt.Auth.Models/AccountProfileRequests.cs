@@ -8,6 +8,7 @@ namespace Wbskt.Auth.Models;
 /// </summary>
 public record UpdateAccountRequest(
     [StringLength(50, MinimumLength = 3)]
+    [Username]
     string? Username = null);
 
 /// <summary>A new address for the account, confirmed with the password.</summary>

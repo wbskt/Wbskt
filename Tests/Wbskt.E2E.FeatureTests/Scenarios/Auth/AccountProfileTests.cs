@@ -51,7 +51,7 @@ public sealed class AccountProfileTests(ServicesFixture fixture)
         var user = await fixture.CreateUserAsync();
         var other = await fixture.CreateUserAsync();
 
-        var reserved = await fixture.SendAsync(HttpMethod.Patch, AccountUrl, user.Token, new UpdateAccountRequest("Adm1n_"));
+        var reserved = await fixture.SendAsync(HttpMethod.Patch, AccountUrl, user.Token, new UpdateAccountRequest("Adm1n"));
         reserved.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await ServicesFixture.ReadErrorCodeAsync(reserved)).Should().Be("USERNAME_RESERVED");
 
@@ -119,6 +119,24 @@ public sealed class AccountProfileTests(ServicesFixture fixture)
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("USERNAME_RESERVED");
+    }
+
+    [SkippableFact]
+    public async Task AUTH_PROF_07_SignUpOrRename_MixingAlphabets_IsRefused()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        // "admin" with a Cyrillic first letter: it reads as the Latin name, so it is not anyone's own.
+        var lookAlike = $"{(char)0x0430}dmin";
+        var user = await fixture.CreateUserAsync();
+
+        var signUp = await fixture.RegisterAsync(lookAlike, $"e2e-{Guid.NewGuid():N}"[..12] + "@test.local", "a long enough password");
+        var rename = await fixture.SendAsync(HttpMethod.Patch, AccountUrl, user.Token, new UpdateAccountRequest(lookAlike));
+
+        signUp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ServicesFixture.ReadErrorCodeAsync(signUp)).Should().Be("VALIDATION_FAILED");
+        rename.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ServicesFixture.ReadErrorCodeAsync(rename)).Should().Be("VALIDATION_FAILED");
     }
 
     private static string? NameClaimOf(string jwt)
