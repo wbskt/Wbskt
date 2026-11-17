@@ -29,8 +29,16 @@ internal sealed class DefaultCreditCostCalculator : ICreditCostCalculator
         // credit before its first real node. Excluded here by category rather than priced at zero in the
         // table, which keeps the table's rule that every kind it prices costs something - and a trigger
         // stays free even if configuration names it.
-        return NodeKinds.TryGet(node.Kind, out NodeKindDescriptor? descriptor) && descriptor.Category == NodeCategory.Trigger
-            ? 0m
+        if (NodeKinds.TryGet(node.Kind, out NodeKindDescriptor? descriptor) && descriptor.Category == NodeCategory.Trigger)
+        {
+            return 0m;
+        }
+
+        // A sub-workflow step pays for the run it starts too, through the step's budget-checked charge:
+        // the child's start, added to the root's spend as the child was created, could pass the budget
+        // and the workspace's cap by one start for every child started at the edge.
+        return node.Kind == NodeKind.ControlSubWorkflow
+            ? _options.CostFor(node.Kind) + _options.RunStartCost
             : _options.CostFor(node.Kind);
     }
 }
