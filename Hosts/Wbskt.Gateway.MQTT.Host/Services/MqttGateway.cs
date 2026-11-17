@@ -51,9 +51,13 @@ public sealed class MqttGateway : IHostedService
         _lifetime = lifetime;
         _logger = logger;
 
-        Listener = new GuardedTcpServerAdapter(_options.Port, _options.MaxPacketBytes);
+        Listener = new GuardedTcpServerAdapter(_options.Port, _options.MaxPacketBytes, _options.MaxUnauthenticatedConnections);
+
+        // The communication timeout is how long the server waits for a new connection's CONNECT, so a
+        // connection that opens and says nothing is closed instead of being held.
         var serverOptions = new MqttServerOptionsBuilder()
             .WithPersistentSessions(false)
+            .WithDefaultCommunicationTimeout(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds))
             .Build();
         _server = new MqttServerFactory().CreateMqttServer(serverOptions, [Listener], mqttLogger);
         _server.ValidatingConnectionAsync += ValidateConnectionAsync;
@@ -102,6 +106,7 @@ public sealed class MqttGateway : IHostedService
             return;
         }
 
+        Listener.Authenticated(args.ChannelAdapter);
         var connection = new MqttConnection(_server, login.Admission, _options.InboxCapacity)
         {
             Guard = Listener.GuardOf(args.ChannelAdapter)

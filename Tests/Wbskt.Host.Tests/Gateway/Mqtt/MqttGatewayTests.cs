@@ -40,8 +40,16 @@ public sealed class MqttGatewayTests : IAsyncLifetime
     private readonly List<IMqttClient> _clients = [];
     private MqttGateway _gateway = null!;
 
-    public async Task InitializeAsync()
+    public Task InitializeAsync() => StartGatewayAsync(new MqttGatewayOptions { Port = 0 });
+
+    // Replaces the running gateway with one built from these options.
+    private async Task StartGatewayAsync(MqttGatewayOptions options)
     {
+        if (_gateway is not null)
+        {
+            await _gateway.StopAsync(CancellationToken.None);
+        }
+
         var metrics = new GatewayMetrics(GatewayTransport.Mqtt);
         var dispatcher = new InboundMessageDispatcher([], new ClientMessageHandler(_bus.Object), metrics, NullLogger<InboundMessageDispatcher>.Instance);
         var lifetime = new Mock<IHostApplicationLifetime>();
@@ -51,7 +59,7 @@ public sealed class MqttGatewayTests : IAsyncLifetime
         var trust = JwtTrust.Local(JwtIssuers.Management, JwtAudiences.Socket, _keys.PublishedKeys);
 
         var authenticator = new MqttConnectAuthenticator(sessions, trust, NullLogger<MqttConnectAuthenticator>.Instance);
-        _gateway = new MqttGateway(sessions, authenticator, Options.Create(new MqttGatewayOptions { Port = 0 }), lifetime.Object,
+        _gateway = new MqttGateway(sessions, authenticator, Options.Create(options), lifetime.Object,
             new MqttNetLoggerBridge(NullLogger<MqttNetLoggerBridge>.Instance), NullLogger<MqttGateway>.Instance);
         await _gateway.StartAsync(CancellationToken.None);
     }
@@ -343,6 +351,38 @@ public sealed class MqttGatewayTests : IAsyncLifetime
 
         var read = await stream.ReadAsync(new byte[16]).AsTask().WaitAsync(Patience);
         Assert.Equal(0, read);
+    }
+
+    [Fact]
+    public async Task A_connection_that_never_sends_connect_is_closed()
+    {
+        await StartGatewayAsync(new MqttGatewayOptions { Port = 0, ConnectTimeoutSeconds = 1 });
+        using var tcp = new TcpClient();
+        await tcp.ConnectAsync("127.0.0.1", _gateway.Listener.Port);
+
+        var read = await tcp.GetStream().ReadAsync(new byte[16]).AsTask().WaitAsync(Patience);
+
+        Assert.Equal(0, read);
+    }
+
+    [Fact]
+    public async Task Connections_past_the_unauthenticated_cap_are_closed_and_a_login_frees_its_place()
+    {
+        await StartGatewayAsync(new MqttGatewayOptions { Port = 0, MaxUnauthenticatedConnections = 1 });
+        using var silent = new TcpClient();
+        await silent.ConnectAsync("127.0.0.1", _gateway.Listener.Port);
+        await WaitUntilAsync(() => _gateway.Listener.UnauthenticatedCount == 1);
+
+        using var over = new TcpClient();
+        await over.ConnectAsync("127.0.0.1", _gateway.Listener.Port);
+        Assert.Equal(0, await over.GetStream().ReadAsync(new byte[16]).AsTask().WaitAsync(Patience));
+
+        silent.Close();
+        await WaitUntilAsync(() => _gateway.Listener.UnauthenticatedCount == 0);
+        var client = await ConnectAsync();
+
+        Assert.True(client.IsConnected);
+        Assert.Equal(0, _gateway.Listener.UnauthenticatedCount);
     }
 
     [Fact]
