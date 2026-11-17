@@ -1,5 +1,5 @@
 -- Where a command for this client goes: its workspace (the sender's must match) and the socket host
--- holding its connection, and its status (only a registered client may have commands wait for it).
+-- holding its connection and when that host saw it connect, and its status (only a registered client may have commands wait for it).
 -- No row when the client does not exist.
 CREATE PROCEDURE dbo.Client_GetCommandTargetBy_RefId
     @RefId UNIQUEIDENTIFIER
@@ -12,6 +12,7 @@ BEGIN
         WorkspaceId,
         IsConnected,
         ConnectedHostId,
+        ConnectedAt,
         Status
     FROM dbo.Clients
     WHERE RefId = @RefId;

@@ -9,7 +9,8 @@ namespace Wbskt.Events.Client;
 /// socket host keeps no state of its own, so it hands the whole command back, with who sent it.
 /// Consumed from one shared queue, so exactly one management instance queues it.
 /// <see cref="ReturnedByHostId"/> is the socket host handing it back, so the management host doesn't
-/// deliver it straight back there while presence still names that host.
+/// deliver it straight back there while presence still names that host, and <see cref="ReturnedAtUtc"/>
+/// is when, on that host's clock, so a client that has since reconnected to it gets it at once.
 /// </summary>
 public sealed record RequeueClientCommand(
     Guid ClientRefId,
@@ -24,7 +25,8 @@ public sealed record RequeueClientCommand(
     EventSource? ActorSource,
     Guid? ActorWorkflowRefId,
     Guid? ActorRunRefId,
-    string? ReturnedByHostId = null) : ICommand
+    string? ReturnedByHostId = null,
+    DateTime? ReturnedAtUtc = null) : ICommand
 {
     public static string QueueName => "client-command-requeue";
 }

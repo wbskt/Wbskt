@@ -112,8 +112,8 @@ public sealed class ClientCommandQueueTests
         var command = new QueuedCommand(Guid.NewGuid(), ClientId, ClientRefId, WorkspaceId, "led.set", "{}", Now.AddHours(1));
         var announcement = new ClientCommandQueuedEvent(ClientRefId, ClientId, WorkspaceId, "led.set", "{}", command.CommandId, command.ExpiresAtUtc);
 
-        Assert.True(await Queue.QueueAsync(command, announcement, 5, returnedByHostId: null, CancellationToken.None));
-        Assert.True(await Queue.QueueAsync(command, announcement, 5, returnedByHostId: null, CancellationToken.None));
+        Assert.True(await Queue.QueueAsync(command, announcement, 5, handBack: null, CancellationToken.None));
+        Assert.True(await Queue.QueueAsync(command, announcement, 5, handBack: null, CancellationToken.None));
 
         Assert.Single(_store.Rows);
         _bus.Verify(b => b.PublishAsync(It.IsAny<ClientCommandQueuedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
@@ -131,10 +131,27 @@ public sealed class ClientCommandQueueTests
         var command = new QueuedCommand(Guid.NewGuid(), ClientId, ClientRefId, WorkspaceId, "led.set", "{}", Now.AddHours(1));
         var announcement = new ClientCommandQueuedEvent(ClientRefId, ClientId, WorkspaceId, "led.set", "{}", command.CommandId, command.ExpiresAtUtc);
 
-        Assert.True(await Queue.QueueAsync(command, announcement, int.MaxValue, returnedBy, CancellationToken.None));
+        Assert.True(await Queue.QueueAsync(command, announcement, int.MaxValue, returnedBy is null ? null : new CommandHandBack(returnedBy, Now), CancellationToken.None));
 
         Assert.Equal(delivered, _published.OfType<ClientCommandEvent>().Count());
         Assert.Equal(1 - delivered, _store.Rows.Count);
+    }
+
+    [Theory]
+    [InlineData(-1, 0)]
+    [InlineData(0, 0)]
+    [InlineData(1, 1)]
+    public async Task A_hand_back_reaches_a_client_that_reconnected_to_the_same_host_after_it(int connectedAfterSeconds, int delivered)
+    {
+        var returnedAt = Now.AddMinutes(-1);
+        _targets.Setup(t => t.FindAsync(ClientRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ClientCommandTarget(ClientId, WorkspaceId, IsConnected: true, HostId: "socket-a", ConnectedAtUtc: returnedAt.AddSeconds(connectedAfterSeconds)));
+        var command = new QueuedCommand(Guid.NewGuid(), ClientId, ClientRefId, WorkspaceId, "led.set", "{}", Now.AddHours(1));
+        var announcement = new ClientCommandQueuedEvent(ClientRefId, ClientId, WorkspaceId, "led.set", "{}", command.CommandId, command.ExpiresAtUtc);
+
+        Assert.True(await Queue.QueueAsync(command, announcement, int.MaxValue, new CommandHandBack("socket-a", returnedAt), CancellationToken.None));
+
+        Assert.Equal(delivered, _published.OfType<ClientCommandEvent>().Count());
     }
 
     private sealed class FixedClock(DateTime utcNow) : TimeProvider

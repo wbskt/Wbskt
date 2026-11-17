@@ -48,11 +48,12 @@ public sealed class ClientCommandQueue(
     /// Queues the command and announces it with <paramref name="announcement"/>, which names who sent
     /// it. False, with nothing queued or announced, when the client already has
     /// <paramref name="maxPerClient"/> commands waiting. A command already waiting (a retried
-    /// hand-back) is true, and is not announced again. <paramref name="returnedByHostId"/>, for a
-    /// hand-back, is the socket host that no longer had the client: the command is not delivered
-    /// straight back there, even while presence still names it, and waits for the next connect.
+    /// hand-back) is true, and is not announced again. <paramref name="handBack"/>, for a command a
+    /// socket host returned because it no longer had the client: the command is not delivered straight
+    /// back to that host while presence still names the connection it lost, and waits for the next
+    /// connect. A connection presence shows starting after the hand-back is a new one, and gets it.
     /// </summary>
-    public async Task<bool> QueueAsync(QueuedCommand command, ClientCommandQueuedEvent announcement, int maxPerClient, string? returnedByHostId, CancellationToken ct)
+    public async Task<bool> QueueAsync(QueuedCommand command, ClientCommandQueuedEvent announcement, int maxPerClient, CommandHandBack? handBack, CancellationToken ct)
     {
         var outcome = await store.EnqueueAsync(command, maxPerClient, ct);
         if (outcome != EnqueueOutcome.Queued)
@@ -78,7 +79,7 @@ public sealed class ClientCommandQueue(
         var target = await targets.FindAsync(command.ClientRefId, ct);
         if (target is { IsConnected: true, HostId: { Length: > 0 } hostId })
         {
-            if (string.Equals(hostId, returnedByHostId, StringComparison.Ordinal))
+            if (handBack is not null && string.Equals(hostId, handBack.HostId, StringComparison.Ordinal) && !ConnectedSince(target, handBack))
             {
                 // Presence is stale: the disconnect hasn't landed, or was lost (the host's presence
                 // snapshot repairs that). Delivering now would loop the command between the two hosts.
@@ -92,6 +93,11 @@ public sealed class ClientCommandQueue(
 
         return true;
     }
+
+    // Both times are the returning host's own, so they compare without clock skew. A hand-back from
+    // before the time was carried, or a connect whose time is unknown, is taken as the lost connection.
+    private static bool ConnectedSince(ClientCommandTarget target, CommandHandBack handBack) =>
+        handBack.AtUtc is { } returnedAt && target.ConnectedAtUtc is { } connectedAt && connectedAt > returnedAt;
 
     /// <summary>
     /// Sends the client's waiting commands, oldest first, addressed to the socket host now holding it.
@@ -169,3 +175,6 @@ public sealed class ClientCommandQueue(
         }
     }
 }
+
+/// <summary>A socket host handing back a command because the client's connection had gone, and when, on its clock.</summary>
+public sealed record CommandHandBack(string HostId, DateTime? AtUtc);
