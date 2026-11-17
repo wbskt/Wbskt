@@ -1390,8 +1390,8 @@
       },
       "IntegrationUsedBy": {
         "properties": {
-          "status": {
-            "type": "string"
+          "isLive": {
+            "type": "boolean"
           },
           "stepId": {
             "format": "uuid",
@@ -1413,7 +1413,7 @@
           "workflowName",
           "stepId",
           "stepName",
-          "status"
+          "isLive"
         ],
         "type": "object"
       },
@@ -3109,9 +3109,6 @@
             "default": false,
             "type": "boolean"
           },
-          "isEnabled": {
-            "type": "boolean"
-          },
           "name": {
             "type": "string"
           },
@@ -3146,7 +3143,6 @@
           "version",
           "name",
           "description",
-          "isEnabled",
           "nodes",
           "edges",
           "sharedVariableSchema",
@@ -3168,6 +3164,19 @@
               "string"
             ]
           },
+          "isTestCopy": {
+            "default": false,
+            "type": "boolean"
+          },
+          "liveVersion": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
           "name": {
             "type": "string"
           },
@@ -3175,8 +3184,15 @@
             "format": "uuid",
             "type": "string"
           },
-          "status": {
-            "type": "string"
+          "state": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkflowState"
+              }
+            ]
           },
           "version": {
             "format": "int32",
@@ -3190,12 +3206,22 @@
         "required": [
           "refId",
           "version",
-          "status",
+          "state",
+          "liveVersion",
           "name",
           "description",
           "definition",
           "createdAt"
         ],
+        "type": "object"
+      },
+      "WorkflowDisableRequest": {
+        "properties": {
+          "cancelRunningRuns": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
         "type": "object"
       },
       "WorkflowDraftDto": {
@@ -3318,6 +3344,9 @@
       },
       "WorkflowDraftPublishRequest": {
         "properties": {
+          "enable": {
+            "type": "boolean"
+          },
           "force": {
             "default": false,
             "type": "boolean"
@@ -3332,7 +3361,8 @@
           }
         },
         "required": [
-          "revision"
+          "revision",
+          "enable"
         ],
         "type": "object"
       },
@@ -3435,6 +3465,22 @@
         ],
         "type": "object"
       },
+      "WorkflowEnableRequest": {
+        "properties": {
+          "version": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "type": "object"
+      },
       "WorkflowPublishRequest": {
         "properties": {
           "definition": {
@@ -3445,6 +3491,9 @@
               "null",
               "string"
             ]
+          },
+          "enable": {
+            "type": "boolean"
           },
           "name": {
             "type": "string"
@@ -3458,18 +3507,28 @@
           "refId",
           "name",
           "description",
-          "definition"
+          "definition",
+          "enable"
         ],
         "type": "object"
       },
       "WorkflowPublishResponse": {
         "properties": {
+          "liveVersion": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
           "refId": {
             "format": "uuid",
             "type": "string"
           },
-          "status": {
-            "type": "string"
+          "state": {
+            "$ref": "#/components/schemas/WorkflowState"
           },
           "version": {
             "format": "int32",
@@ -3483,7 +3542,8 @@
         "required": [
           "refId",
           "version",
-          "status"
+          "state",
+          "liveVersion"
         ],
         "type": "object"
       },
@@ -3582,6 +3642,57 @@
         ],
         "type": "object"
       },
+      "WorkflowState": {
+        "enum": [
+          "Enabled",
+          "Disabled",
+          "Deprecated"
+        ]
+      },
+      "WorkflowStateResponse": {
+        "properties": {
+          "cancelledRuns": {
+            "default": 0,
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "droppedQueuedEvents": {
+            "default": 0,
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "liveVersion": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "refId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/WorkflowState"
+          }
+        },
+        "required": [
+          "refId",
+          "state",
+          "liveVersion"
+        ],
+        "type": "object"
+      },
       "WorkflowStatsResponse": {
         "properties": {
           "counts": {
@@ -3662,6 +3773,15 @@
               }
             ]
           },
+          "liveVersion": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
           "name": {
             "type": "string"
           },
@@ -3669,8 +3789,8 @@
             "format": "uuid",
             "type": "string"
           },
-          "status": {
-            "type": "string"
+          "state": {
+            "$ref": "#/components/schemas/WorkflowState"
           },
           "triggerKinds": {
             "items": {
@@ -3693,7 +3813,8 @@
         "required": [
           "refId",
           "version",
-          "status",
+          "state",
+          "liveVersion",
           "name",
           "description",
           "createdAt"
@@ -3733,6 +3854,17 @@
         ],
         "type": "object"
       },
+      "WorkflowValidationRequest": {
+        "properties": {
+          "definition": {
+            "$ref": "#/components/schemas/WorkflowDefinition"
+          }
+        },
+        "required": [
+          "definition"
+        ],
+        "type": "object"
+      },
       "WorkflowValidationResponse": {
         "properties": {
           "isValid": {
@@ -3762,6 +3894,9 @@
               "string"
             ]
           },
+          "isLive": {
+            "type": "boolean"
+          },
           "name": {
             "type": "string"
           },
@@ -3772,9 +3907,6 @@
               "integer",
               "string"
             ]
-          },
-          "status": {
-            "type": "string"
           },
           "version": {
             "format": "int32",
@@ -3787,7 +3919,7 @@
         },
         "required": [
           "version",
-          "status",
+          "isLive",
           "name",
           "description",
           "runCount",
@@ -7266,17 +7398,17 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/WorkflowPublishRequest"
+                "$ref": "#/components/schemas/WorkflowValidationRequest"
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/WorkflowPublishRequest"
+                "$ref": "#/components/schemas/WorkflowValidationRequest"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/WorkflowPublishRequest"
+                "$ref": "#/components/schemas/WorkflowValidationRequest"
               }
             }
           },
@@ -7412,6 +7544,92 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowStateResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowStateResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowStateResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "Workflows"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/disable": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflowRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspaceRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowDisableRequest"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowDisableRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowDisableRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowStateResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowStateResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowStateResponse"
+                }
+              }
+            },
             "description": "OK"
           }
         },
@@ -7647,7 +7865,7 @@
         ]
       }
     },
-    "/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/reinstate": {
+    "/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/enable": {
       "post": {
         "parameters": [
           {
@@ -7669,8 +7887,45 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowEnableRequest"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowEnableRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowEnableRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowStateResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowStateResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowStateResponse"
+                }
+              }
+            },
             "description": "OK"
           }
         },
@@ -7679,18 +7934,9 @@
         ]
       }
     },
-    "/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/rollback/{version}": {
+    "/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/reinstate": {
       "post": {
         "parameters": [
-          {
-            "in": "path",
-            "name": "workspaceRef",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          },
           {
             "in": "path",
             "name": "workflowRef",
@@ -7702,12 +7948,11 @@
           },
           {
             "in": "path",
-            "name": "version",
+            "name": "workspaceRef",
             "required": true,
             "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": "integer"
+              "format": "uuid",
+              "type": "string"
             }
           }
         ],
@@ -7716,17 +7961,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/WorkflowPublishResponse"
+                  "$ref": "#/components/schemas/WorkflowStateResponse"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/WorkflowPublishResponse"
+                  "$ref": "#/components/schemas/WorkflowStateResponse"
                 }
               },
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/WorkflowPublishResponse"
+                  "$ref": "#/components/schemas/WorkflowStateResponse"
                 }
               }
             },

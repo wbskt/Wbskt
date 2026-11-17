@@ -10,7 +10,7 @@ A workflow definition is JSON (camelCase). Each publish stores a new immutable v
 | Field | Meaning |
 |---|---|
 | `workflowRefId`, `version` | Identity. `version` is assigned at publish. |
-| `name`, `description`, `isEnabled` | Display and on/off. |
+| `name`, `description` | Display. Whether the workflow is on, and on which version, is not in the definition: it is the workflow's state (`dbo.Workflows`), changed by enable and disable. |
 | `nodes` | Each node has `nodeId` (GUID), `kind`, `name`, `ports` and a kind-specific `config`. Action nodes may add `retry` and `onFailure`. |
 | `edges` | `{ "from": [nodeId, portId], "to": [nodeId, "in"] }`. At most one edge leaves each output port. |
 | `sharedVariableSchema` | Declared shared variables: `name`, `type` (`Counter`, `Number`, `String`, `Bool`, `Json`), `default`. |
