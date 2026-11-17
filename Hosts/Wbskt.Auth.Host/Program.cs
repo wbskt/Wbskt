@@ -62,10 +62,11 @@ public static class Program
         builder.Services.AddScopedWithQueuedEvents<IAccountDeletionService, AccountDeletionService>();
         builder.Services.AddScopedWithQueuedEvents<IAccountProfileService, AccountProfileService>();
         // Tenant administration publishes once its change has committed, through the queued bus, so a
-        // broker outage cannot turn a change that happened into a 500 (TenantAnnouncer).
+        // broker outage cannot turn a change that happened into a 500. Access control publishes only
+        // through TenantAnnouncer, so it has no bus of its own.
         builder.Services.AddScopedWithQueuedEvents<TenantAnnouncer, TenantAnnouncer>();
         builder.Services.AddScopedWithQueuedEvents<ITenantService, TenantService>();
-        builder.Services.AddScopedWithQueuedEvents<IAccessControlService, AccessControlService>();
+        builder.Services.AddScoped<IAccessControlService, AccessControlService>();
         builder.Services.AddScoped<IWorkspaceProvider, WorkspaceProvider>();
         builder.Services.AddScoped<IWorkspaceService, WorkspaceService>();
         builder.Services.AddScoped<IWorkspaceAccessResolver, WorkspaceServiceAccessResolver>();
