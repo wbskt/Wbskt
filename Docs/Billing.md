@@ -126,6 +126,11 @@ reads its delta, so a repeated or retried post adds nothing, and the ledger adds
 runs consumed. `dbo.Run_DeleteRetired` posts anything a run had left before deleting it, so the ledger
 outlives the runs.
 
+A step is charged before each attempt it makes, so retries by its policy are each paid for. A step the
+engine was running when it stopped (a crash, or a deploy) is not charged again when its branch is
+recovered: a step with an effect outside the run finds its attempt already claimed, and a replay-safe step
+is known by the recovery. A free step (cost 0) makes no charge at all.
+
 `dbo.Run_Start` works out what the tenant has left of its credits for the calendar month (UTC): the plan's
 `CreditsPerMonth` less what the plan itself has covered (the ledger less what was drawn from grants as it
 was posted, `dbo.TenantCreditMonths`), never below zero, plus what the tenant's grants still hold, less

@@ -812,6 +812,76 @@ public sealed class RetryExecutorTests
         Assert.Equal(0, executor.AttemptCount);
     }
 
+    /// <summary>
+    /// #782: an attempt is paid for before it runs, so one a stopped engine left claimed (Pending) was
+    /// paid for then. Running it again after the crash or deploy charges nothing more.
+    /// </summary>
+    [Fact]
+    public async Task An_attempt_a_stopped_engine_left_claimed_runs_again_without_a_second_charge()
+    {
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] });
+        var executor = new RecordingExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+        var keys = new Mock<IIdempotencyKeyProvider>();
+        keys.Setup(p => p.GetByKeyAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string key, CancellationToken _) => new IdempotencyKeyRow
+            {
+                Id = 1, KeyValue = key, RunId = 42, BranchRefId = Guid.NewGuid(), NodeId = node.NodeId, Attempt = 1, Status = "Pending", CreatedAt = DateTime.UtcNow, ResultJson = null, ErrorJson = null, CompletedAt = null
+            });
+        var counters = new Mock<IRunCountersProvider>();
+
+        NodeExecutionResult result = await RetryExecutor.RunWithRetryAsync(
+            node, CreateContext(), executor, new TestNodeExecutionServices(keys.Object), new FixedClock(), CancellationToken.None,
+            counters.Object, new DefaultCreditCostCalculator(), isRecoveredVisit: true);
+
+        Assert.IsType<NodeExecutionResult.Terminal>(result);
+        Assert.Equal(1, executor.AttemptCount);
+        counters.Verify(p => p.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>A replay-safe node claims no key, so the branch's recovery is what says it was paid for.</summary>
+    [Theory]
+    [InlineData(true, 0)]
+    [InlineData(false, 1)]
+    public async Task A_replay_safe_node_is_charged_again_only_when_its_branch_was_not_recovered(bool recovered, int charges)
+    {
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] });
+        var executor = new Mock<INodeExecutor>();
+        executor.Setup(e => e.IsReplaySafe(It.IsAny<BaseNode>())).Returns(true);
+        executor.Setup(e => e.ExecuteAsync(It.IsAny<NodeContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+        var counters = new Mock<IRunCountersProvider>();
+        counters.Setup(p => p.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>())).ReturnsAsync(new CreditCharge(1m, 100m));
+
+        NodeExecutionResult result = await RetryExecutor.RunWithRetryAsync(
+            node, CreateContext(), executor.Object, new TestNodeExecutionServices(), new FixedClock(), CancellationToken.None,
+            counters.Object, new DefaultCreditCostCalculator(), isRecoveredVisit: recovered);
+
+        Assert.IsType<NodeExecutionResult.Terminal>(result);
+        counters.Verify(p => p.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>()), Times.Exactly(charges));
+    }
+
+    /// <summary>
+    /// #782: a free node has nothing to add, so it makes no charge round trip, and money a run already
+    /// spent past its budget does not stop it (the next paid node is refused).
+    /// </summary>
+    [Fact]
+    public async Task A_free_node_runs_without_a_charge()
+    {
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] });
+        var executor = new RecordingExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+        var free = new Mock<ICreditCostCalculator>();
+        free.Setup(c => c.Calculate(It.IsAny<BaseNode>())).Returns(0m);
+        var counters = new Mock<IRunCountersProvider>();
+        counters.Setup(p => p.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>())).ReturnsAsync((CreditCharge?)null);
+
+        NodeExecutionResult result = await RetryExecutor.RunWithRetryAsync(
+            node, CreateContext(), executor, new TestNodeExecutionServices(), new FixedClock(), CancellationToken.None,
+            counters.Object, free.Object);
+
+        Assert.IsType<NodeExecutionResult.Terminal>(result);
+        counters.Verify(p => p.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Fact]
     public async Task RunWithRetryAsync_charges_via_single_atomic_call_and_executes_when_charge_succeeds()
     {

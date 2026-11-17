@@ -115,6 +115,9 @@ internal sealed class BranchLoop : IBranchLoop
             ct);
         _logger?.LogDebug("Started branch loop for run {RunId} branch {BranchId} reason {Reason}", runId, branchId, reason);
 
+        // A branch recovered after a crash or a deploy was stopped in the node it is at, which was paid
+        // for before it ran; only the first node this dispatch runs can be that one.
+        bool recovering = reason == BranchExecutionReason.Recovered;
         long step = 0;
         while (true)
         {
@@ -150,7 +153,8 @@ internal sealed class BranchLoop : IBranchLoop
             }
             else
             {
-                result = await ExecuteNodeAsync(runId, branchId, runRow, branchRow, definition, node, branchContext, parkedAttempt, linkedToken, ct);
+                result = await ExecuteNodeAsync(runId, branchId, runRow, branchRow, definition, node, branchContext, parkedAttempt, recovering, linkedToken, ct);
+                recovering = false;
                 if (result is null)
                 {
                     // Host shutdown interrupted the executor; the branch stays Active for recovery.
@@ -219,6 +223,7 @@ internal sealed class BranchLoop : IBranchLoop
         BaseNode node,
         BranchContext branchContext,
         int? parkedAttempt,
+        bool isRecoveredVisit,
         CancellationToken linkedToken,
         CancellationToken ct)
     {
@@ -272,6 +277,7 @@ internal sealed class BranchLoop : IBranchLoop
                 // history volume for a number that belongs on the outcome event anyway.
                 onCharge: cost => creditsCharged += cost,
                 isResumeVisit: isResumeVisit,
+                isRecoveredVisit: isRecoveredVisit,
                 firstAttempt: parkedAttempt ?? 1,
                 retryParkThreshold: _retryParkThreshold);
         }
