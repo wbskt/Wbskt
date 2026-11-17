@@ -33,6 +33,7 @@ public sealed class AdminTenantPlanSqlTests(AuthSqlFixture auth)
         var audit = new AuditWorkspaces(new WorkspaceProvider(configuration), NullLogger<AuditWorkspaces>.Instance);
         var plans = new TenantPlanService(
             tenants,
+            new TenantBillingProvider(configuration),
             new AuditWorkspaces(new WorkspaceProvider(configuration), NullLogger<AuditWorkspaces>.Instance),
             NullLogger<TenantPlanService>.Instance);
         var runner = new StaffActionRunner(new StaffAuditProvider(configuration, "AuthDBConnection"), NullLogger<StaffActionRunner>.Instance);

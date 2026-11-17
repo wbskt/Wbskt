@@ -519,6 +519,12 @@ operator's limit overrides. This is how a Business plan is sold: the operator se
 negotiated overrides and the contract's end date in one call. Each change is in every workspace's audit
 log as `TenantPlanChangedEvent`, with the plan's source, end date and overrides.
 
+A tenant moving to Business from a self-serve plan still has its subscription, which would go on charging
+beside the contract. **Cancel it in the provider's dashboard first.** Putting an operator's plan on a tenant
+with a subscription still billing is refused, 409 `PLAN_SUBSCRIPTION_BILLING` naming the subscription,
+unless the request sets `keepSubscription` (as for a short staff plan given on top of what the tenant pays
+for). Changing an operator's plan already on, its limits or its end, is not asked about again.
+
 **Deleting an account** (`POST /api/auth/account/delete`) cancels, with the provider, every subscription
 still billing of the tenants the account is the only member of, before anything is deleted, since those
 tenants go with it. If the provider cannot be reached, or payments are off while such a subscription
