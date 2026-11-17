@@ -624,8 +624,9 @@ engine is never exposed publicly and the manual/signal channels never get a publ
 | `PUT /api/v1/workspaces/{workspaceRef}/credit-cap` | `billing.manage` | Sets the workspace's monthly credit cap, `{ monthlyCreditCap }`, or removes it with null. A ceiling on what it may spend of the account's shared credits in a calendar month (UTC), not a reservation: the caps of an account's workspaces may add up to more than it has. **200** `{ monthlyCreditCap, creditsSpentThisMonth, capReached }`; `capReached` true means the workspace already spent that much, so its new runs are refused from now on. Setting a cap also holds the workspace's runs already going to it: each one's next charge past what it has spent is extended only from what the cap has left. Below 0 or above 10^12 is **400** `WORKSPACE_CREDIT_CAP_INVALID`; **503** `WORKSPACE_CREDIT_CAP_BUSY` (with `Retry-After`) when the workspace's starts and charges hold the cap's lock for more than five seconds. Raises `WorkspaceCreditCapSetEvent`. |
 
 A workspace whose spend reaches 80% and then 100% of its cap raises `WorkspaceCreditCapReachedEvent`
-(Warning, `OnWorkspaceCreditCapReachedEvent { percent, monthlyCreditCap, creditsSpent, createdAtUtc }`)
-once per threshold. A run refused for the cap is **409** `WORKSPACE_CREDIT_CAP_REACHED` on a test run,
+(Warning, `OnWorkspaceCreditCapReachedEvent { percent, monthlyCreditCap, creditsSpent, monthStart, createdAtUtc }`)
+once per threshold. `monthStart` (`yyyy-MM-dd`) is the month it was reached in: the month before
+`createdAtUtc`'s when a 100% crossing at a month's end is announced in the first days of the next. A run refused for the cap is **409** `WORKSPACE_CREDIT_CAP_REACHED` on a test run,
 and `Refused` (reported with `reason: WorkspaceCreditCap`) for a trigger.
 
 An account found over its monthly messages raises `WorkspaceMessageLimitReachedEvent` once per workspace

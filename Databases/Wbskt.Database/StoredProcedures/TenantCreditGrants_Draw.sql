@@ -49,6 +49,7 @@ BEGIN
 
     UPDATE m
     SET Posted = m.Posted + p.Credits,
+        Allowance = p.Allowance,
         UpdatedAt = SYSUTCDATETIME()
     OUTPUT inserted.TenantId, deleted.Posted - deleted.Drawn, inserted.Posted - inserted.Drawn, NULL INTO @Steps (TenantId, Before, After, Excess)
     FROM dbo.TenantCreditMonths m

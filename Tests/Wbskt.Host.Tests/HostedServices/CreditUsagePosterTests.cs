@@ -63,6 +63,60 @@ public sealed class CreditUsagePosterTests
     }
 
     [Fact]
+    public async Task Early_in_a_month_last_months_limit_is_announced_for_that_month_and_its_warning_settled_quietly()
+    {
+        var lastMonth = new DateOnly(2026, 5, 1);
+        var provider = new RecordingCreditUsageProvider([], due: [new CreditNotice(CreditNoticeKind.Cap, 9, null, 100m, 85m, 80, 0)], lastMonthDue: [
+            new CreditNotice(CreditNoticeKind.Allowance, 12, 1, 1000m, 1000m, 100, 0),
+            new CreditNotice(CreditNoticeKind.Cap, 7, null, 100m, 90m, 80, 0)
+        ]) { CurrentMonth = new DateOnly(2026, 6, 1) };
+        var bus = new RecordingEventBus();
+
+        await Poster(provider, bus, isLeader: true, new SettableClock { Now = new DateTime(2026, 6, 2, 0, 1, 0, DateTimeKind.Utc) }).TickAsync(CancellationToken.None);
+
+        Assert.Equal(
+            [(1, 100, lastMonth)],
+            bus.Published.OfType<TenantCreditAllowanceReachedEvent>().Select(e => (e.TenantId, e.Percent, e.MonthStart)));
+        Assert.Equal(
+            [(9, 80, new DateOnly(2026, 6, 1))],
+            bus.Published.OfType<WorkspaceCreditCapReachedEvent>().Select(e => (e.WorkspaceId, e.Percent, e.MonthStart)));
+        Assert.Equal(
+            [(CreditNoticeKind.Allowance, 1, 100, lastMonth), (CreditNoticeKind.Cap, 7, 80, lastMonth), (CreditNoticeKind.Cap, 9, 80, new DateOnly(2026, 6, 1))],
+            provider.Marked.Zip(provider.MarkedMonths, (m, month) => (m.Kind, m.Id, m.Percent, month)));
+    }
+
+    [Fact]
+    public async Task This_month_waits_while_last_months_notice_is_refused()
+    {
+        var provider = new RecordingCreditUsageProvider([], due: [new CreditNotice(CreditNoticeKind.Cap, 9, null, 100m, 85m, 80, 0)], lastMonthDue: [
+            new CreditNotice(CreditNoticeKind.Cap, 7, null, 100m, 100m, 100, 80)
+        ]) { CurrentMonth = new DateOnly(2026, 6, 1) };
+        var bus = new RecordingEventBus(failures: 1);
+        var clock = new SettableClock { Now = new DateTime(2026, 6, 1, 0, 0, 30, DateTimeKind.Utc) };
+        CreditUsagePoster poster = Poster(provider, bus, isLeader: true, clock);
+
+        await poster.TickAsync(CancellationToken.None);
+        int markedAfterRefusal = provider.Marked.Count;
+        clock.Now += TimeSpan.FromSeconds(10);
+        await poster.TickAsync(CancellationToken.None);
+
+        Assert.Equal(0, markedAfterRefusal);
+        Assert.Equal([(7, 100), (9, 80)], bus.Published.OfType<WorkspaceCreditCapReachedEvent>().Select(e => (e.WorkspaceId, e.Percent)));
+    }
+
+    [Fact]
+    public async Task Last_month_is_not_read_once_the_late_window_has_passed()
+    {
+        var provider = new RecordingCreditUsageProvider([], lastMonthDue: [new CreditNotice(CreditNoticeKind.Cap, 7, null, 100m, 100m, 100, 0)]) { CurrentMonth = new DateOnly(2026, 6, 1) };
+        var bus = new RecordingEventBus();
+
+        await Poster(provider, bus, isLeader: true, new SettableClock { Now = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc) + CreditUsagePoster.LateNoticeWindow }).TickAsync(CancellationToken.None);
+
+        Assert.Empty(bus.Published);
+        Assert.Equal([new DateOnly(2026, 6, 1)], provider.MonthsRead);
+    }
+
+    [Fact]
     public async Task A_notice_the_broker_refuses_stays_unmarked_and_is_tried_on_the_next_tick()
     {
         var provider = new RecordingCreditUsageProvider([], [new CreditNotice(CreditNoticeKind.Allowance, 11, 1, 1000m, 850m, 80, 0)]);
@@ -156,7 +210,12 @@ public sealed class CreditUsagePosterTests
         }
     }
 
-    private sealed class RecordingCreditUsageProvider(IReadOnlyCollection<WorkspaceCreditPost>[] posts, IReadOnlyCollection<CreditNotice>? due = null, int markFailures = 0) : ICreditUsageProvider
+    // Notices in due are owed for the month being checked; those in lastMonthDue for any earlier one.
+    private sealed class RecordingCreditUsageProvider(
+        IReadOnlyCollection<WorkspaceCreditPost>[] posts,
+        IReadOnlyCollection<CreditNotice>? due = null,
+        int markFailures = 0,
+        IReadOnlyCollection<CreditNotice>? lastMonthDue = null) : ICreditUsageProvider
     {
         private readonly Queue<IReadOnlyCollection<WorkspaceCreditPost>> _posts = new(posts);
         private int _markFailures = markFailures;
@@ -169,6 +228,10 @@ public sealed class CreditUsagePosterTests
 
         public int NoticeChecks { get; private set; }
 
+        public List<DateOnly> MonthsRead { get; } = [];
+
+        public DateOnly CurrentMonth { get; init; } = new DateOnly(Now.Year, Now.Month, 1);
+
         public Task<IReadOnlyCollection<WorkspaceCreditPost>> PostAsync(DateOnly day, int batchSize, CancellationToken ct)
         {
             Calls.Add((day, batchSize));
@@ -177,9 +240,15 @@ public sealed class CreditUsagePosterTests
 
         public Task<IReadOnlyCollection<CreditNotice>> GetDueNoticesAsync(DateOnly monthStart, CancellationToken ct)
         {
-            NoticeChecks++;
-            IReadOnlyCollection<CreditNotice> owed = (due ?? [])
-                .Select(n => n with { Notified = Marked.Where(m => m.Kind == n.Kind && m.Id == IdOf(n)).Select(m => m.Percent).DefaultIfEmpty(n.Notified).Max() })
+            MonthsRead.Add(monthStart);
+            bool current = monthStart == CurrentMonth;
+            if (current)
+            {
+                NoticeChecks++;
+            }
+
+            IReadOnlyCollection<CreditNotice> owed = ((current ? due : lastMonthDue) ?? [])
+                .Select(n => n with { Notified = Marked.Zip(MarkedMonths).Where(m => m.First.Kind == n.Kind && m.First.Id == IdOf(n) && m.Second == monthStart).Select(m => m.First.Percent).DefaultIfEmpty(n.Notified).Max() })
                 .Where(n => n.Level > n.Notified)
                 .ToArray();
             return Task.FromResult(owed);

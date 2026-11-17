@@ -19,4 +19,10 @@ public sealed record CreditNotice(CreditNoticeKind Kind, int WorkspaceId, int? T
 
     /// <summary>The thresholds owed a notice, lowest first.</summary>
     public IReadOnlyCollection<int> Owed() => Thresholds.Where(percent => percent > Notified && percent <= Level).ToArray();
+
+    /// <summary>
+    /// The thresholds owed a notice once its month is over: only reaching the limit, which still means
+    /// something (packs were drawn, runs refused, overage invoiced). An 80% warning has nothing left to warn of.
+    /// </summary>
+    public IReadOnlyCollection<int> OwedAfterMonthEnd() => Level >= 100 && Notified < 100 ? [100] : [];
 }

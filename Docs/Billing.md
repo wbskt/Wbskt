@@ -596,8 +596,19 @@ notice still refused after ten checks in a row is logged as an error. Raising a 
 announced against it, so the new cap's thresholds are announced as they are reached (the emails stay once
 a month); a plan upgrade does not, as the allowance's emails would not go out again anyway. After the
 deploy that added these columns, a notice already sent this month is published once more: the auth host
-sends no second email, but the console shows the toast again and the audit log has one more row. A
-notice owed at the end of a month and still not published when the month turns is dropped. Not the in-memory mail queue sign-in mail uses: a billing notice is never asked
+sends no second email, but the console shows the toast again and the audit log has one more row.
+
+A month that is over is still looked at for its first 7 days (`CreditUsagePoster.LateNoticeWindow`): a
+crossing posted in its last minutes, or owed across a broker outage over midnight on the 1st (#876). The
+poster settles that month before it marks the new one, since a cap records only the last month it was told
+about, and `CreditNotices_GetDue` counts a cap told about a later month as told about this one. Only
+reaching 100% is announced late; an 80% warning has nothing left to warn of and is marked without one.
+The month's spend no longer moves (credits are posted on the day they are posted), and it is read against
+the limit as it stood: a cap changed since the month ended is left out, and an allowance is the one the
+month's last post was drawn under (`TenantCreditMonths.Allowance`). The events carry the month
+(`MonthStart`), and the auth host keys the email to it and words it in the past tense ("used all of its
+workflow credits in October 2026", "its new runs were refused for the rest of October"). An event without
+the month, sent before it was carried, means the month it was sent in. Not the in-memory mail queue sign-in mail uses: a billing notice is never asked
 for again, so one lost there would never be sent. `BillingNoticeMailSender` (every minute) leases due
 emails to one auth instance at a time and hands them to the relay; one refused is tried again after 1
 minute, 5, 30, 2 hours and 12 hours, then given up and logged as an error. Sent ones are removed after 30

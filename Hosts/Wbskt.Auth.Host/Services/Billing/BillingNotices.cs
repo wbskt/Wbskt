@@ -14,17 +14,28 @@ internal static class BillingNotices
 {
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
-    public static BillingNotice CreditAllowance(PlanCode plan, int percent, decimal allowance, decimal used, DateTime at)
+    /// <summary>
+    /// <paramref name="reachedIn"/> is the month the allowance was reached in, or default for the month of
+    /// <paramref name="at"/>. Reaching it in a month already over (posted just before it ended and announced
+    /// after) is told in the past tense, keyed to that month (#876).
+    /// </summary>
+    public static BillingNotice CreditAllowance(PlanCode plan, int percent, decimal allowance, decimal used, DateOnly reachedIn, DateTime at)
     {
-        string month = Month(at);
-        string resets = Date(NextMonth(at));
+        DateTime month = MonthOf(reachedIn, at);
+        if (percent >= 100 && month < StartOfMonth(at))
+        {
+            return LateCreditAllowance(plan, allowance, used, month);
+        }
+
+        string key = Month(month);
+        string resets = Date(NextMonth(month));
         if (plan == PlanCode.Business)
         {
-            return BusinessCreditAllowance(percent, allowance, used, month, resets);
+            return BusinessCreditAllowance(percent, allowance, used, key, resets);
         }
 
         return percent >= 100
-            ? new BillingNotice(BillingNoticeKind.CreditAllowance100, month,
+            ? new BillingNotice(BillingNoticeKind.CreditAllowance100, key,
                 "Your account has used this month's workflow credits",
                 "This month's workflow credits are used",
                 [
@@ -32,7 +43,7 @@ internal static class BillingNotices
                     $"New runs now draw on the credit packs you have bought. With none left, new runs are refused until {resets}, when the allowance starts again.",
                     "To keep runs going, buy a credit pack or move to a larger plan."
                 ])
-            : new BillingNotice(BillingNoticeKind.CreditAllowance80, month,
+            : new BillingNotice(BillingNoticeKind.CreditAllowance80, key,
                 $"Your account has used {percent}% of this month's workflow credits",
                 $"{percent}% of this month's workflow credits are used",
                 [
@@ -45,7 +56,6 @@ internal static class BillingNotices
     // Business runs carry on past the allowance and the overage is invoiced, so its notices say what it will cost.
     private static BillingNotice BusinessCreditAllowance(int percent, decimal allowance, decimal used, string month, string resets)
     {
-        string rate = $"${BusinessContract.UsdPerThousandExtraCredits.ToString("0.00", Invariant)} per 1,000 credits";
         string ceiling = Number(allowance * BusinessContract.CreditOverageMultiple);
         return percent >= 100
             ? new BillingNotice(BillingNoticeKind.CreditAllowance100, month,
@@ -53,7 +63,7 @@ internal static class BillingNotices
                 "This month's workflow credits are used",
                 [
                     $"Your account's workspaces have used {Number(used)} workflow credits this month, all {Number(allowance)} your contract includes.",
-                    $"Runs carry on. Credits past the allowance come from your credit packs first, then are invoiced at {rate} under your contract, up to {ceiling} credits in all this month. Past that, new runs are refused until {resets}.",
+                    $"Runs carry on. Credits past the allowance come from your credit packs first, then are invoiced at {OverageRate()} under your contract, up to {ceiling} credits in all this month. Past that, new runs are refused until {resets}.",
                     "If you expect to need more every month, reply to resize your contract."
                 ])
             : new BillingNotice(BillingNoticeKind.CreditAllowance80, month,
@@ -61,15 +71,53 @@ internal static class BillingNotices
                 $"{percent}% of this month's workflow credits are used",
                 [
                     $"Your account's workspaces have used {Number(used)} of the {Number(allowance)} workflow credits your contract includes this month.",
-                    $"Past the allowance runs carry on, invoiced at {rate}, up to {ceiling} credits in all this month; new runs are refused past that until {resets}.",
+                    $"Past the allowance runs carry on, invoiced at {OverageRate()}, up to {ceiling} credits in all this month; new runs are refused past that until {resets}.",
                     "If you expect to need more every month, reply to resize your contract."
                 ]);
     }
 
-    public static BillingNotice CreditCap(int workspaceId, string workspaceName, int percent, decimal cap, decimal spent, DateTime at)
+    // Nothing is left to warn of, so it says what happened and what it meant, and that the month has started again.
+    private static BillingNotice LateCreditAllowance(PlanCode plan, decimal allowance, decimal used, DateTime month)
     {
-        string key = $"{Month(at)}:{workspaceId.ToString(Invariant)}";
-        string resets = Date(NextMonth(at));
+        string name = MonthName(month);
+        string restarted = Date(NextMonth(month));
+        string past = plan == PlanCode.Business
+            ? $"Credits past it came from your credit packs first, then are invoiced for {name} at {OverageRate()} under your contract."
+            : "Runs past it drew on the credit packs you have bought, and were refused once none were left.";
+        string next = plan == PlanCode.Business
+            ? "If you expect to need more every month, reply to resize your contract."
+            : "If you often need more, a larger plan includes more credits each month.";
+        return new BillingNotice(BillingNoticeKind.CreditAllowance100, Month(month),
+            $"Your account used all of its workflow credits in {name}",
+            $"{name}'s workflow credits were used",
+            [
+                $"By the end of {name} your account's workspaces had used {Number(used)} workflow credits, all {Number(allowance)} your {(plan == PlanCode.Business ? "contract" : "plan")} includes.",
+                past,
+                $"The allowance started again on {restarted}. {next}"
+            ]);
+    }
+
+    /// <summary>
+    /// <paramref name="reachedIn"/> is the month the cap was reached in, or default for the month of
+    /// <paramref name="at"/>; a month already over is told in the past tense (#876).
+    /// </summary>
+    public static BillingNotice CreditCap(int workspaceId, string workspaceName, int percent, decimal cap, decimal spent, DateOnly reachedIn, DateTime at)
+    {
+        DateTime month = MonthOf(reachedIn, at);
+        string key = $"{Month(month)}:{workspaceId.ToString(Invariant)}";
+        string resets = Date(NextMonth(month));
+        if (percent >= 100 && month < StartOfMonth(at))
+        {
+            string name = MonthName(month);
+            return new BillingNotice(BillingNoticeKind.CreditCap100, key,
+                $"{workspaceName} reached its monthly credit cap in {name}",
+                $"{workspaceName} reached its credit cap in {name}",
+                [
+                    $"The workspace {workspaceName} spent {Number(spent)} workflow credits in {name}, its cap of {Number(cap)}.",
+                    $"Its new runs were refused for the rest of {name}. They have run again since {resets}. If it needs more in a month, raise or remove the cap in the workspace's settings."
+                ]);
+        }
+
         return percent >= 100
             ? new BillingNotice(BillingNoticeKind.CreditCap100, key,
                 $"{workspaceName} reached its monthly credit cap",
@@ -204,7 +252,18 @@ internal static class BillingNotices
 
     private static string Month(DateTime at) => at.ToString("yyyy-MM", Invariant);
 
-    private static DateTime NextMonth(DateTime at) => new DateTime(at.Year, at.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(1);
+    private static string MonthName(DateTime month) => month.ToString("MMMM yyyy", Invariant);
+
+    // The first of the month something happened in: the one it names, or else the month of at.
+    private static DateTime MonthOf(DateOnly month, DateTime at) =>
+        month == default ? StartOfMonth(at) : month.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+
+    private static DateTime StartOfMonth(DateTime at) => new(at.Year, at.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+
+    private static string OverageRate() =>
+        $"${BusinessContract.UsdPerThousandExtraCredits.ToString("0.00", Invariant)} per 1,000 credits";
+
+    private static DateTime NextMonth(DateTime at) => StartOfMonth(at).AddMonths(1);
 
     private static string Date(DateTime at) => at.ToString("d MMMM yyyy", Invariant);
 

@@ -16,6 +16,10 @@ CREATE TABLE dbo.TenantCreditMonths
     -- month. Raised by TenantCreditMonth_MarkNotified only after the notice is published, so a notice the
     -- broker refused, or one owed when the engine stopped, is still found by CreditNotices_GetDue.
     NotifiedPercent INT      NOT NULL CONSTRAINT DF_TenantCreditMonths_NotifiedPercent DEFAULT 0,
+    -- The plan's allowance the month's last post was drawn under. Once the month is over the live copy
+    -- may name a later plan, so a notice still owed for it is worked out against this one (#876). NULL
+    -- on a month whose last post came before it was kept.
+    Allowance  DECIMAL(18,4) NULL,
     CONSTRAINT PK_TenantCreditMonths PRIMARY KEY (TenantId, MonthStart),
     CONSTRAINT CK_TenantCreditMonths_Drawn CHECK (Drawn >= 0 AND Drawn <= Posted)
 );
@@ -24,5 +28,5 @@ GO
 -- CreditNotices_GetDue reads one month's rows every few minutes; the key leads with TenantId.
 CREATE NONCLUSTERED INDEX IX_TenantCreditMonths_MonthStart
     ON dbo.TenantCreditMonths (MonthStart)
-    INCLUDE (Posted, NotifiedPercent);
+    INCLUDE (Posted, NotifiedPercent, Allowance);
 GO

@@ -5,6 +5,12 @@
 -- and marks it after the publish, so a notice lost to a refused publish, an engine stopping between the
 -- post and the publish, or credits posted by Run_DeleteRetired, is found again here.
 -- Spend is what the ledger holds, as the posts saw it: the unposted credits are announced once posted.
+--
+-- A month that is over is read too, for a crossing posted before it ended and not yet announced (#876).
+-- Credits are posted on the day they are posted, so its spend no longer moves. It is read against the
+-- limit as it stood: a cap changed since the month ended is left out, and an allowance is the one its
+-- last post was drawn under. A cap told about a later month counts as told about this one: the engine
+-- settles a month before the next, so a later mark means this one was settled or given up.
 CREATE PROCEDURE dbo.CreditNotices_GetDue
     @MonthStart DATE
 AS
@@ -30,15 +36,19 @@ BEGIN
     CROSS APPLY (SELECT CASE WHEN s.Spent >= c.MonthlyCreditCap THEN 100
                              WHEN s.Spent >= c.MonthlyCreditCap * 0.8 THEN 80
                              ELSE 0 END AS Level) l
-    CROSS APPLY (SELECT CASE WHEN c.NotifiedMonthStart = @MonthStart THEN c.NotifiedPercent ELSE 0 END AS Notified) n
+    CROSS APPLY (SELECT CASE WHEN c.NotifiedMonthStart = @MonthStart THEN c.NotifiedPercent
+                             WHEN c.NotifiedMonthStart > @MonthStart THEN 100
+                             ELSE 0 END AS Notified) n
     WHERE c.MonthlyCreditCap > 0
+      AND c.UpdatedAt < @MonthEnd
       AND l.Level > n.Notified
 
     UNION ALL
 
-    -- The allowance is the tenant's plan's from a live copy of its account, or from a deleted
-    -- workspace's copy (which keeps the one it last had) when none is live, as RunCredits_Post and
-    -- Run_DeleteRetired take it; the notice names the live workspace that posted the most this
+    -- The allowance is the one the month's last post was drawn under; for a month posted before that
+    -- was kept, the tenant's plan's from a live copy of its account, or from a deleted workspace's copy
+    -- (which keeps the one it last had) when none is live, as RunCredits_Post and Run_DeleteRetired
+    -- take it. The notice names the live workspace that posted the most this
     -- month, or a deleted one only when none is left. Read through IX_TenantCreditMonths_MonthStart.
     SELECT
         N'Allowance',
@@ -49,7 +59,8 @@ BEGIN
         l.Level,
         m.NotifiedPercent
     FROM dbo.TenantCreditMonths m
-    CROSS APPLY (SELECT COALESCE(MAX(CASE WHEN wa.RetiredAt IS NULL THEN wa.CreditsPerMonth END),
+    CROSS APPLY (SELECT COALESCE(m.Allowance,
+                                 MAX(CASE WHEN wa.RetiredAt IS NULL THEN wa.CreditsPerMonth END),
                                  MAX(wa.CreditsPerMonth)) AS Allowance
                  FROM dbo.WorkspaceAccounts wa
                  WHERE wa.TenantId = m.TenantId) a
