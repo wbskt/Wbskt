@@ -26,7 +26,7 @@ gateway ends a 3.1.1 client's connection (§4) the client sees only the connecti
 | User name | The client's `clientRefId` again. |
 | Password | The `accessToken` login returned (model §2). |
 | Clean session / clean start | Set. The gateway keeps no session between connections, whatever is asked. |
-| Keep alive | Any; 30 to 60 seconds is a good default. The gateway also probes the TCP connection on its own. |
+| Keep alive | 1 to 300 seconds; 30 to 60 is a good default. It is how the gateway learns a client has gone, so 0 (off) or longer than 300 is refused. |
 | Will | Ignored: a will message goes nowhere. The gateway announces a client that drops off on its own. |
 
 The gateway answers CONNACK with:
@@ -37,6 +37,7 @@ The gateway answers CONNACK with:
 | 0x86 Bad user name or password | The token did not validate (expired, signed by another key, not a client token), or the user name is not the token's client. | Drop the token and log in again (model §2). |
 | 0x87 Not authorized | The client lost access after this token was issued: revoked, deleted, or its secret rotated. | Keep the token and retry on the reconnect schedule (model §5); once it expires, login reports what happened. |
 | 0x85 Client identifier not valid | The client id is not the token's client, or is not in the usual lower-case form. | A client bug, not something to retry. |
+| 0x83 Implementation specific error | The keep alive is 0 or over 300 seconds. MQTT 3.1.1 has no code for it and sees 0x02 identifier rejected. | A client bug, not something to retry. |
 | 0x84 Unsupported protocol version | MQTT 3.1 or another version this gateway does not speak. | Use 3.1.1 or 5. |
 | 0x88 Server unavailable, or no answer | The gateway cannot check tokens right now, or is restarting. | Keep the token and retry on the reconnect schedule. |
 

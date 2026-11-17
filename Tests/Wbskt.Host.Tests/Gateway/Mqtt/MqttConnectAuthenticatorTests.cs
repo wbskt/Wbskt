@@ -50,6 +50,26 @@ public sealed class MqttConnectAuthenticatorTests : IDisposable
         Assert.Equal(MqttConnectReasonCode.Success, login.ReasonCode);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0)]
+    [InlineData(MqttConnectAuthenticator.MaxKeepAliveSeconds + 1)]
+    public async Task A_client_without_a_keep_alive_or_with_one_too_long_is_refused(int? keepAlive)
+    {
+        var login = await AuthenticateAsync(keepAlive: keepAlive);
+
+        Assert.False(login.IsAccepted);
+        Assert.Equal(MqttConnectReasonCode.ImplementationSpecificError, login.ReasonCode);
+    }
+
+    [Fact]
+    public async Task The_longest_keep_alive_is_accepted()
+    {
+        var login = await AuthenticateAsync(keepAlive: MqttConnectAuthenticator.MaxKeepAliveSeconds);
+
+        Assert.True(login.IsAccepted);
+    }
+
     [Fact]
     public async Task An_mqtt_31_client_is_refused_as_unsupported()
     {
@@ -137,9 +157,10 @@ public sealed class MqttConnectAuthenticatorTests : IDisposable
         MqttProtocolVersion version = MqttProtocolVersion.V500,
         string? clientId = null,
         string? userName = null,
-        string? token = null) =>
+        string? token = null,
+        int? keepAlive = 60) =>
         _authenticator.AuthenticateAsync(
-            new MqttConnectRequest(version, clientId ?? ClientRefId.ToString(), userName ?? ClientRefId.ToString(), token ?? Token()),
+            new MqttConnectRequest(version, clientId ?? ClientRefId.ToString(), userName ?? ClientRefId.ToString(), token ?? Token(), keepAlive),
             CancellationToken.None);
 
     private string Token() =>

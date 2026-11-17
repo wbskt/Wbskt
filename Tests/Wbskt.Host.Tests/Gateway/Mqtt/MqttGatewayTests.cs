@@ -142,6 +142,27 @@ public sealed class MqttGatewayTests : IAsyncLifetime
         Assert.DoesNotContain(Published<ClientMessageReceivedEvent>(), e => e.Type == "gone");
     }
 
+    [Theory]
+    [InlineData(MqttProtocolVersion.V500, MqttClientConnectResultCode.ImplementationSpecificError)]
+    [InlineData(MqttProtocolVersion.V311, MqttClientConnectResultCode.ClientIdentifierNotValid)]
+    public async Task A_client_with_keep_alive_off_is_refused(MqttProtocolVersion version, MqttClientConnectResultCode expected)
+    {
+        var client = new MqttClientFactory().CreateMqttClient();
+        _clients.Add(client);
+        var options = new MqttClientOptionsBuilder()
+            .WithTcpServer("127.0.0.1", _gateway.Listener.Port)
+            .WithClientId(ClientRefId.ToString())
+            .WithCredentials(ClientRefId.ToString(), Token(null))
+            .WithProtocolVersion(version)
+            .WithKeepAlivePeriod(TimeSpan.Zero)
+            .Build();
+
+        var result = await client.ConnectAsync(options);
+
+        Assert.False(client.IsConnected);
+        Assert.Equal(expected, result.ResultCode);
+    }
+
     [Fact]
     public async Task A_token_that_does_not_validate_is_refused_as_a_bad_password()
     {

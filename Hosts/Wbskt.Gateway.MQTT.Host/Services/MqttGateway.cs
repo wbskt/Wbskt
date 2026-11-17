@@ -93,7 +93,7 @@ public sealed class MqttGateway : IHostedService
     private async Task ValidateConnectionAsync(ValidatingConnectionEventArgs args)
     {
         var login = await _authenticator.AuthenticateAsync(
-            new MqttConnectRequest(args.ProtocolVersion, args.ClientId, args.UserName, args.Password), args.CancellationToken);
+            new MqttConnectRequest(args.ProtocolVersion, args.ClientId, args.UserName, args.Password, args.KeepAlivePeriod), args.CancellationToken);
         if (!login.IsAccepted)
         {
             args.ReasonCode = login.ReasonCode;
