@@ -342,8 +342,8 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
  ],
  "work": {
   "894": {
-   "state": "you",
-   "why": "Workflows get a state (Enabled, Disabled, Deprecated) and one live version that can be any published version, so a workflow can be paused without deprecating it and an earlier version brought back without republishing it. Backend merged (#895, PR #896, 17 Nov). Its deploy needs the migrator run once with MIGRATE_ALLOW_DATA_LOSS=true (deploy/README.md, \"Workflow states need this flag, once\"), then the deploy job re-run. The console part is Amal's, from the handoff notes in PR #896.",
+   "state": "progress",
+   "why": "Workflows get a state (Enabled, Disabled, Deprecated) and one live version that can be any published version, so a workflow can be paused without deprecating it and an earlier version brought back without republishing it. Backend merged (#895, PR #896, 17 Nov). Its first deploy was blocked: dropping WorkflowDefinitions.IsEnabled failed the upgrade rehearsal, which also skips the image build. The column is kept, unused, and the deploy needs no flag (#898 for a reviewed way to drop columns). The console part is Amal's, from the handoff notes in PR #896.",
    "prs": [
     896
    ]
