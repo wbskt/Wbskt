@@ -104,6 +104,18 @@ public sealed class WorkflowTestRunServiceTests
     }
 
     [Fact]
+    public async Task A_draft_with_no_trigger_is_told_to_add_one()
+    {
+        // Not "more than one trigger", which sent the caller looking for a second that does not exist.
+        Draft(baseVersion: null);
+
+        var result = await Service().StartAsync(WorkspaceId, RefId, new StartTestRunRequest(TestRunSource.Draft), CancellationToken.None);
+
+        Assert.Equal("TEST_RUN_NO_TRIGGER", result.Error.Code);
+        _definitions.Verify(x => x.InsertTestCopyAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task With_two_triggers_the_caller_names_one()
     {
         Draft(baseVersion: null, TriggerA, TriggerB);
