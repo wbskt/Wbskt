@@ -118,6 +118,7 @@ main() {
     trap remove_staged EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
+
     # Streamed in, so the staged file is written by the container's own mssql user. `docker compose
     # cp` keeps the host file's owner and its 0640 mode, which SQL Server then cannot read. A .gz is
     # decompressed on the way, so the host never holds the full-size copy.
