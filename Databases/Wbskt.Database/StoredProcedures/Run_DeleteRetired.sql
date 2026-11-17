@@ -50,7 +50,8 @@ BEGIN
     -- Credits a run consumed after its last post go to the ledger before its counter is deleted, so the
     -- ledger still adds up to what every run consumed. Same lock order as RunCredits_Post.
     DECLARE @Moved TABLE (RunId INT NOT NULL PRIMARY KEY, Credits DECIMAL(18,4) NOT NULL);
-    DECLARE @Today DATE = CAST(SYSUTCDATETIME() AS DATE);
+    -- The day and the month are the engine's (@NowUtc), as for the cutoff above and in RunCredits_Post.
+    DECLARE @Today DATE = CAST(@NowUtc AS DATE);
 
     UPDATE rc
     SET PostedCredits = rc.CreditsConsumed,
@@ -100,8 +101,7 @@ BEGIN
     IF EXISTS (SELECT 1 FROM @Posts)
     BEGIN
         DECLARE @TodayMonth DATE = DATEFROMPARTS(YEAR(@Today), MONTH(@Today), 1);
-        DECLARE @Now DATETIME2(3) = SYSUTCDATETIME();
-        EXEC dbo.TenantCreditGrants_Draw @Posts = @Posts, @MonthStart = @TodayMonth, @At = @Now;
+        EXEC dbo.TenantCreditGrants_Draw @Posts = @Posts, @MonthStart = @TodayMonth, @At = @NowUtc;
     END
 
     DELETE FROM dbo.HistoryEvents  WHERE RunId IN (SELECT Id FROM @Runs);

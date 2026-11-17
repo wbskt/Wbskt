@@ -1,6 +1,9 @@
 CREATE PROCEDURE dbo.RunCounters_TryCharge
-    @RunId INT,
-    @Cost  DECIMAL(18,4)
+    @RunId  INT,
+    @Cost   DECIMAL(18,4),
+    -- The engine's clock (TimeProvider), which decides the month a lease is extended in, as it decides
+    -- the month Run_Start reads. NULL, from an engine still on the earlier build, reads the SQL clock.
+    @NowUtc DATETIME2(3) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -91,7 +94,7 @@ BEGIN
             -- RunCredits_Post locks counter rows in its own order, and reading the others' counters while
             -- holding the root's could meet it the other way round. The root's spent and reserved parts
             -- add up to the same whether a charge lands on it meanwhile or not, so the figures hold.
-            DECLARE @Now DATETIME2(3) = SYSUTCDATETIME();
+            DECLARE @Now DATETIME2(3) = COALESCE(@NowUtc, SYSUTCDATETIME());
             DECLARE @TenantLeft DECIMAL(18,4);
             IF @Allowance IS NOT NULL
                 SET @TenantLeft = (SELECT Credits FROM dbo.TenantCreditsLeft(@WorkspaceId, @TenantId, @Allowance, @Now));

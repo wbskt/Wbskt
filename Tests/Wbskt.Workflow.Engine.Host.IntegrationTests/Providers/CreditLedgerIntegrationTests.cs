@@ -60,6 +60,7 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         await ProviderFactory.RunRetention(fixture.ConnectionString).DeleteRetiredRunsAsync(new DateTime(2001, 1, 1), [new RunHistoryRetention(PlanCode.Free, 36_500)], new DateTime(2001, 1, 1), 100, CancellationToken.None);
 
         (await LedgerAsync(workspaceId)).Should().Be(5m);
+        (await LedgerDayAsync(workspaceId)).Should().Be(new DateTime(2001, 1, 1), "the ledger day is the engine's, not the SQL clock's");
     }
 
     [SkippableFact]
@@ -347,7 +348,8 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         await ProviderFactory.Run(fixture.ConnectionString).SetTerminalAsync(runId, RunStatus.Succeeded.ToString(), new DateTime(2000, 1, 1), CancellationToken.None);
         await SetCapAsync(workspaceId, 10m);
 
-        await ProviderFactory.RunRetention(fixture.ConnectionString).DeleteRetiredRunsAsync(new DateTime(2001, 1, 1), [new RunHistoryRetention(PlanCode.Free, 36_500)], new DateTime(2001, 1, 1), 100, CancellationToken.None);
+        // Posted on the engine's day (#782), which is this month's.
+        await ProviderFactory.RunRetention(fixture.ConnectionString).DeleteRetiredRunsAsync(DateTime.UtcNow, [new RunHistoryRetention(PlanCode.Free, 36_500)], new DateTime(2001, 1, 1), 100, CancellationToken.None);
 
         (await ProviderFactory.CreditUsage(fixture.ConnectionString).GetDueNoticesAsync(ThisMonth, CancellationToken.None))
             .Should().ContainSingle(n => n.WorkspaceId == workspaceId)
@@ -596,7 +598,16 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         await command.ExecuteNonQueryAsync();
     }
 
-    private async Task<DateTime?> RetiredAtAsync(int workspaceId)
+    private async Task<DateTime?> LedgerDayAsync(int workspaceId)
+    {
+        await using var connection = new SqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new SqlCommand("SELECT MAX(Day) FROM dbo.WorkspaceCreditUsage WHERE WorkspaceId = @Id", connection);
+        command.Parameters.AddWithValue("@Id", workspaceId);
+        return await command.ExecuteScalarAsync() as DateTime?;
+    }
+
+        private async Task<DateTime?> RetiredAtAsync(int workspaceId)
     {
         await using var connection = new SqlConnection(fixture.ConnectionString);
         await connection.OpenAsync();
