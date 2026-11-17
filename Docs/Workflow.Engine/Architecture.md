@@ -36,8 +36,10 @@ Engine instances run **active/standby**. Exactly one instance (the leader) consu
 executes branches and runs background workers; the others wait.
 
 * `LeaderElectionService` holds the `engine-leader` row in `dbo.Leases` (`Lease_TryAcquire`),
-  renewing every 10 s with a 30 s TTL, and releases it on shutdown. A leader that fails to renew
-  stops the application rather than risk two leaders.
+  renewing every 10 s with a 30 s TTL, and releases it on shutdown. A renewal that throws keeps the
+  role and is retried on the next tick while the lease has more than the 5 s safety margin left; a
+  leader whose lease went to another holder, or that could not renew before the margin, stops the
+  application rather than risk two leaders.
 * `LeadershipState` is the in-memory view of that lease. `LeadershipGate` reports active only when
   this instance is leader, the bus has started, and the lease is valid with a 5 s safety margin.
 * `EngineLeadershipCoordinator` starts MassTransit only after this instance becomes leader (the
