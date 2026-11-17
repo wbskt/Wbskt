@@ -14,3 +14,10 @@ CREATE TABLE dbo.WorkspaceMessageUsage
     CONSTRAINT PK_WorkspaceMessageUsage PRIMARY KEY (WorkspaceId, Day)
 );
 GO
+
+-- WorkspaceMessageUsage_GetAccounts sums the current month for every workspace each minute; the key
+-- leads with WorkspaceId, so without this it read the whole ledger.
+CREATE NONCLUSTERED INDEX IX_WorkspaceMessageUsage_Day
+    ON dbo.WorkspaceMessageUsage (Day)
+    INCLUDE (WorkspaceId, Inbound, Outbound);
+GO

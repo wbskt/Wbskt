@@ -24,9 +24,20 @@ CREATE TABLE dbo.Clients (
 GO
 
 -- Indexes
+-- Status second: a policy's registered-client count (Client_Create, Client_UpdateStatuses) reads only
+-- the key.
 CREATE INDEX IX_Clients_PolicyId
-    ON dbo.Clients (PolicyId);
+    ON dbo.Clients (PolicyId, Status);
 GO
+-- Status second for the plan's registered-client count pooled across a tenant's workspaces
+-- (Client_GetCountBy_Account, WorkspaceUsage_GetSummary).
 CREATE INDEX IX_Clients_WorkspaceId
-    ON dbo.Clients (WorkspaceId); -- Recommended for multi-tenant querying
+    ON dbo.Clients (WorkspaceId, Status);
+GO
+-- The presence sweeps (Client_ExpirePresence every minute, Client_ReconcilePresenceBy_HostId for every
+-- host snapshot) touch only connected clients; without this each scanned and update-locked every row.
+CREATE INDEX IX_Clients_Connected
+    ON dbo.Clients (ConnectedHostId)
+    INCLUDE (ConnectedAt, RefId, WorkspaceId)
+    WHERE IsConnected = 1;
 GO
