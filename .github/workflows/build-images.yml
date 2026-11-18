@@ -629,6 +629,31 @@ jobs:
           path: rehearsal-out/
           if-no-files-found: ignore
 
+  # Starts the stack from the production Dockerfile (deploy/compose/docker-compose.e2e.yml) and waits
+  # for every host to answer /healthz. The E2E jobs run the hosts from source, so a fault only the
+  # image has, such as a path its unprivileged user cannot write (/app/Wbskt, #926), would otherwise
+  # first show when the deploy starts it in production.
+  image-start:
+    needs: changes
+    if: needs.changes.outputs.hosts == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # For the development certificate the wrapper exports for the hosts' HTTPS ports.
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          global-json-file: global.json
+
+      - name: Start every host from its image
+        run: Tests/Wbskt.E2E.FeatureTests/e2e-up.sh
+
+      - name: Container state and logs
+        if: failure()
+        run: |
+          Tests/Wbskt.E2E.FeatureTests/e2e-up.sh ps -a
+          Tests/Wbskt.E2E.FeatureTests/e2e-up.sh logs --tail 100
+
   meta:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
@@ -646,7 +671,7 @@ jobs:
           echo "prefix=ghcr.io/$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')/wbskt" >> "$GITHUB_OUTPUT"
 
   hosts:
-    needs: [meta, test, integration, scan, e2e, e2e-shards, migration-rehearsal]
+    needs: [meta, test, integration, scan, e2e, e2e-shards, migration-rehearsal, image-start]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
@@ -700,7 +725,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
   migrator:
-    needs: [meta, test, integration, scan, e2e, e2e-shards, migration-rehearsal]
+    needs: [meta, test, integration, scan, e2e, e2e-shards, migration-rehearsal, image-start]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
