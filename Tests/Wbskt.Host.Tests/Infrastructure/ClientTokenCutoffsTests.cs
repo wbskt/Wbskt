@@ -24,8 +24,8 @@ public sealed class ClientTokenCutoffsTests
         await cutoffs.RevokeAsync(ClientRef);
 
         database.Verify(d => d.StringSetAsync(
-            (RedisKey)$"wbskt:client-cutoff:{ClientRef}", (RedisValue)long.MaxValue, ClientTokenCutoffs.Retention,
-            It.IsAny<bool>(), It.IsAny<When>(), It.IsAny<CommandFlags>()), Times.Once);
+            (RedisKey)$"wbskt:client-cutoff:{ClientRef}", (RedisValue)long.MaxValue, (Expiration)ClientTokenCutoffs.Retention,
+            It.IsAny<ValueCondition>(), It.IsAny<CommandFlags>()), Times.Once);
         Assert.True(ClientTokenCutoffs.Retention > ClientTokenCutoffs.TokenLifetime);
     }
 
@@ -51,8 +51,8 @@ public sealed class ClientTokenCutoffsTests
         await cutoffs.ReinstateAsync(ClientRef, Moment);
 
         database.Verify(d => d.StringSetAsync(
-            (RedisKey)$"wbskt:client-cutoff:{ClientRef}", (RedisValue)MomentSeconds, ClientTokenCutoffs.Retention,
-            It.IsAny<bool>(), It.IsAny<When>(), It.IsAny<CommandFlags>()), Times.Once);
+            (RedisKey)$"wbskt:client-cutoff:{ClientRef}", (RedisValue)MomentSeconds, (Expiration)ClientTokenCutoffs.Retention,
+            It.IsAny<ValueCondition>(), It.IsAny<CommandFlags>()), Times.Once);
     }
 
     [Theory]
@@ -110,7 +110,7 @@ public sealed class ClientTokenCutoffsTests
         var (cutoffs, database) = Create();
         var gone = new RedisConnectionException(ConnectionFailureType.SocketFailure, "gone");
         database.Setup(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>())).ThrowsAsync(gone);
-        database.Setup(d => d.StringSetAsync(It.IsAny<RedisKey>(), It.IsAny<RedisValue>(), It.IsAny<TimeSpan?>(), It.IsAny<bool>(), It.IsAny<When>(), It.IsAny<CommandFlags>()))
+        database.Setup(d => d.StringSetAsync(It.IsAny<RedisKey>(), It.IsAny<RedisValue>(), It.IsAny<Expiration>(), It.IsAny<ValueCondition>(), It.IsAny<CommandFlags>()))
             .ThrowsAsync(gone);
 
         Assert.Null(await cutoffs.IsRevokedAsync(ClientRef, Moment));
