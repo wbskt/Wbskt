@@ -8,6 +8,8 @@
 
     <ItemGroup>
       <PackageReference Include="Microsoft.Data.SqlClient" />
+      <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
+      <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" VersionOverride="8.23.0" />
       <PackageReference Include="System.Security.Cryptography.Pkcs" />
       <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
     </ItemGroup>

@@ -20,6 +20,7 @@
     <PackageReference Include="JsonPath.Net" />
     <PackageReference Include="MailKit" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Http" />
   </ItemGroup>
 

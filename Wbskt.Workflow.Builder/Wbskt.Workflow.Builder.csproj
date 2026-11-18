@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
     <ProjectReference Include="..\Wbskt.Workflow.Abstraction\Wbskt.Workflow.Abstraction.csproj" />
     <ProjectReference Include="..\Wbskt.Primitives\Wbskt.Primitives.csproj" />
   </ItemGroup>
