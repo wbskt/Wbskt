@@ -614,6 +614,26 @@ groups:
             node-exporter, the small container that reports disk space, is down. Start it again.
           command: "docker compose up -d node-exporter"
 
+      - alert: ProductionUnreachable
+        # node, cadvisor and rabbitmq-node are production's exporters (prometheus-entrypoint.sh keeps
+        # them so when monitoring runs on a VM of its own). All three silent at once is the production
+        # VM gone, or the network to it, rather than one exporter down.
+        expr: |
+          absent(up{job="node"} == 1)
+          and absent(up{job="cadvisor"} == 1)
+          and absent(up{job="rabbitmq-node"} == 1)
+        for: 3m
+        labels:
+          severity: page
+        annotations:
+          summary: "The production VM is not answering"
+          impact: >-
+            Customers probably cannot reach the console or the API, and devices cannot connect.
+          action: >-
+            Check that the production VM is running in the Azure portal and that you can SSH to it. If it
+            is up, check the network between the two VMs (the NSG rules for ports 9100, 8080 and 15692).
+          command: "docker compose ps"
+
       - alert: OtelCollectorDown
         # Every host sends traces, metrics and logs through it, so while it is down EngineNotReporting
         # and the workflow alerts go quiet too. It has no Docker healthcheck to show this instead.

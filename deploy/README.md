@@ -499,8 +499,9 @@ from the WebSocket gateway, across the bus, into the engine and the management h
 trace and span ids, and Grafana links the two both ways. `docker compose logs` keeps working too:
 the hosts still write to stdout, now rotated (20 MB x 5 per container).
 
-None of it is publicly routed. Grafana, Alertmanager and the Pushgateway listen on the VM's
-loopback only, as do SQL Server (1433) and the RabbitMQ management UI (15672):
+None of it is publicly routed. On one VM, Grafana, Alertmanager and the Pushgateway listen on the
+VM's loopback only, as do SQL Server (1433) and the RabbitMQ management UI (15672). The stack can
+also run on a VM of its own; see [Monitoring on its own VM](#monitoring-on-its-own-vm).
 
 ```bash
 ssh -L 3000:127.0.0.1:3000 -L 9093:127.0.0.1:9093 <vm>
@@ -624,6 +625,77 @@ Pushgateway. That timestamp is what lets `BackupMissing` catch the failure no co
 which is cron not running the script at all. The Pushgateway keeps what it was sent on the
 `pushgateway-data` volume, so restarting it does not blank the timestamp. On a VM that predates the
 volume, `docker compose up -d pushgateway` once creates it; the next nightly run fills it.
+
+## Monitoring on its own VM
+
+The monitoring stack (otel-collector, Prometheus, Alertmanager, the Pushgateway, Loki, Tempo, Grafana)
+is defined in `compose/monitoring.yml`. `docker-compose.yml` extends it, so on one VM nothing changes:
+those services run beside production while the `monitoring` profile is on, which is `.env`'s
+`COMPOSE_PROFILES=monitoring` (and `deploy.sh`'s default when `.env` has no such line). `node-exporter`
+and `cadvisor` have no profile: each VM reports on itself.
+
+On a VM of its own, monitoring keeps reading and alerting when production is down, and Tempo, Loki and
+Grafana reading their data back from disk no longer starve SQL Server (#886, #891). Its cost is that
+telemetry crosses the network, which is asynchronous and allowed to drop a point.
+
+**Network.** Put both VMs in one Azure VNet and use the private addresses only; open nothing new to the
+internet. In the NSGs:
+
+| From | To | Ports |
+|---|---|---|
+| monitoring VM | production VM | 9100 (node-exporter), 8080 (cAdvisor), 15692 (RabbitMQ metrics) |
+| production VM | monitoring VM | 4317 (OTLP), 9091 (Pushgateway), 9093 (Alertmanager) |
+
+**`.env` on the production VM** (the full file, as today):
+
+```bash
+COMPOSE_PROFILES=                                    # empty: no monitoring service here
+OTEL_ENDPOINT=http://<monitoring private address>:4317
+METRICS_BIND_ADDRESS=<production private address>    # publishes 9100, 8080 and 15692 on it
+BACKUP_METRICS_URL=http://<monitoring private address>:9091
+ALERTMANAGER_URL=http://<monitoring private address>:9093
+```
+
+**`.env` on the monitoring VM** needs only the Observability section and the `SMTP_*` relay settings,
+none of production's secrets:
+
+```bash
+COMPOSE_FILE=monitoring.yml
+PROD_HOST_ADDRESS=<production private address>       # Prometheus scrapes production there
+MONITORING_BIND_ADDRESS=<monitoring private address> # publishes 4317, 9091 and 9093 on it
+GRAFANA_ADMIN_PASSWORD=...
+```
+
+With `PROD_HOST_ADDRESS` set, `observability/prometheus-entrypoint.sh` points the `rabbitmq`,
+`rabbitmq-node`, `node` and `cadvisor` jobs at the production VM, and scrapes the monitoring VM's own
+exporters as `node-monitoring` and `cadvisor-monitoring`. The jobs without a suffix keep meaning
+production, so `NodeExporterDown`, `CadvisorDown` and `RabbitMQMetricsDown` keep their meaning, and
+`ProductionUnreachable` pages when all of production's exporters fall silent at once. Grafana stays on
+the monitoring VM's loopback (`ssh -L 3000:127.0.0.1:3000 <monitoring VM>`); Alertmanager listens on
+its private address, so tunnel to that (`-L 9093:<monitoring private address>:9093`).
+
+**Deploys.** Set the repository secret `MONITORING_HOST` to the monitoring VM's address (the same user,
+path and deploy key as `DEPLOY_HOST`, and both host keys in `DEPLOY_KNOWN_HOSTS`). After each
+production deploy, the Deploy workflow runs `deploy.sh --monitoring --tag <tag>` there, which resets the
+checkout to the same commit and recreates whichever monitoring service changed. `deploy.sh` refuses
+host deploys on a VM whose `.env` names `monitoring.yml`, and `--monitoring` on one that does not.
+
+**Moving an existing single VM's monitoring off** (production keeps running throughout):
+
+1. On the monitoring VM: Docker, this repo checked out at the same commit, and the `.env` above. Then
+   `docker compose up -d` in `deploy/compose`.
+2. On the production VM, add its lines above to `.env`, then recreate the hosts so they send OTLP to
+   the new collector, and the three exporters so they publish their ports:
+   `docker compose up -d --no-build --no-deps --force-recreate auth management client-auth gateway-ws gateway-mqtt engine rabbitmq node-exporter cadvisor`.
+   Recreating `rabbitmq` drops every connection for a few seconds; do it at a quiet time.
+3. Check Grafana on the monitoring VM shows the hosts' logs and metrics, and that the `node`, `cadvisor`
+   and `rabbitmq` targets are up (Prometheus → Status → Targets).
+4. Stop the old monitoring containers on the production VM:
+   `docker compose --profile monitoring stop otel-collector prometheus alertmanager pushgateway loki tempo grafana`,
+   then `rm` them. Their volumes hold the old history; remove them once you no longer need it.
+
+Moving production to another VM at the same time is the restore in [Backups](#backups) plus moving the
+public IP; do that first, then this.
 
 ## Scaling
 
