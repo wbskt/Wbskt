@@ -932,13 +932,15 @@ public sealed class BillingPaymentsTests
     [Fact]
     public async Task A_provider_that_does_not_answer_in_time_is_a_provider_failure_and_a_cancelled_caller_is_not()
     {
-        using var invoker = new HttpMessageInvoker(new ProviderTimeoutHandler(TimeSpan.FromMilliseconds(50)) { InnerHandler = new HangingHandler() });
+        using var quick = new HttpMessageInvoker(new ProviderTimeoutHandler(TimeSpan.FromMilliseconds(50)) { InnerHandler = new HangingHandler() });
 
-        var timedOut = await Assert.ThrowsAsync<HttpRequestException>(() => invoker.SendAsync(new HttpRequestMessage(HttpMethod.Get, "https://provider.test/subscriptions/sub_1"), CancellationToken.None));
+        var timedOut = await Assert.ThrowsAsync<HttpRequestException>(() => quick.SendAsync(new HttpRequestMessage(HttpMethod.Get, "https://provider.test/subscriptions/sub_1"), CancellationToken.None));
         Assert.IsType<TimeoutException>(timedOut.InnerException);
 
+        // A provider timeout far beyond the caller's, so a busy runner cannot fire the two out of order.
+        using var patient = new HttpMessageInvoker(new ProviderTimeoutHandler(TimeSpan.FromHours(1)) { InnerHandler = new HangingHandler() });
         using var caller = new CancellationTokenSource(TimeSpan.FromMilliseconds(20));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => invoker.SendAsync(new HttpRequestMessage(HttpMethod.Get, "https://provider.test/subscriptions/sub_1"), caller.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => patient.SendAsync(new HttpRequestMessage(HttpMethod.Get, "https://provider.test/subscriptions/sub_1"), caller.Token));
     }
 
     [Fact]
