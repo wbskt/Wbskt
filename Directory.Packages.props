@@ -55,7 +55,7 @@
     <!-- Coverage collector for the "XPlat Code Coverage" data collector that CI passes to dotnet test -->
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <!-- DO NOT UPGRADE "FluentAssertions" TO v8+ IT IS PAID AND NOT APACHE LICENSE -->
-    <PackageVersion Include="FluentAssertions" Version="7.2.2" />
+    <PackageVersion Include="FluentAssertions" Version="8.11.0" />
   </ItemGroup>
   <ItemGroup>
     <!-- SERILOG -->
