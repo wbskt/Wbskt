@@ -66,6 +66,9 @@ compose() {
 export_dev_cert() {
   rm -f "$E2E_DEV_CERT_DIR/aspnetcore-dev.pfx"
   dotnet dev-certs https -ep "$E2E_DEV_CERT_DIR/aspnetcore-dev.pfx" -p "$E2E_DEV_CERT_PASSWORD" > /dev/null
+  # Exported readable by its owner only; the hosts run as the image's unprivileged user, not as you.
+  # A development certificate, behind a development password.
+  chmod 644 "$E2E_DEV_CERT_DIR/aspnetcore-dev.pfx"
 }
 
 wait_for() {
