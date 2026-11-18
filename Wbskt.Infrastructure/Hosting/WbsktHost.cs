@@ -25,6 +25,16 @@ namespace Wbskt.Infrastructure.Hosting;
 public static class WbsktHost
 {
     /// <summary>
+    /// The folder a host keeps its own files in (its log file): <c>Wbskt</c> under the user's
+    /// config folder, which is created if it is missing. Without <c>Create</c>, .NET answers an empty
+    /// string for a config folder that does not exist yet, and the path silently becomes the working
+    /// directory, which the container's unprivileged user cannot write.
+    /// </summary>
+    public static readonly string DataFolder = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.Create),
+        Application.AppFolderName);
+
+    /// <summary>
     /// Traefik's pinned addresses on the edge and backend networks in deploy/compose/docker-compose.yml,
     /// used when <c>ForwardedHeaders:KnownProxies</c> is not set.
     /// </summary>
@@ -37,8 +47,7 @@ public static class WbsktHost
     /// <param name="program">The host's <c>Program</c>; its namespace names the log.</param>
     public static WebApplicationBuilder CreateBuilder(Type program, string[] args, params string[] configurationFiles)
     {
-        string programDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Application.AppFolderName);
-        Environment.SetEnvironmentVariable(Logging.LogPath, programDataPath);
+        Environment.SetEnvironmentVariable(Logging.LogPath, DataFolder);
         Environment.SetEnvironmentVariable(Logging.LogName, program.Namespace);
 
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
