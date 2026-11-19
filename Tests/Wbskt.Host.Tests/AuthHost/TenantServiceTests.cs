@@ -41,7 +41,7 @@ public sealed class TenantServiceTests
         _service = new TenantService(
             _tenants.Object, _accessControl.Object, _workspaces.Object, _bus, Mock.Of<IAuthMailer>(),
             NullLogger<TenantService>.Instance, new FixedTenantLimits(),
-            new TenantAnnouncer(_accounts.Object, _bus, AuditWorkspaces.None, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance));
+            new TenantAnnouncer(_accounts.Object, _bus, AuditWorkspaces.None, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance), TimeProvider.System);
     }
 
     [Fact]

@@ -32,6 +32,7 @@ internal sealed class TenantService : ITenantService
     private readonly ILogger<TenantService> _logger;
     private readonly TenantAnnouncer _announcer;
     private readonly ITenantLimits _limits;
+    private readonly TimeProvider _time;
 
     public TenantService(
         ITenantProvider tenants,
@@ -41,8 +42,10 @@ internal sealed class TenantService : ITenantService
         IAuthMailer mailer,
         ILogger<TenantService> logger,
         ITenantLimits limits,
-        TenantAnnouncer announcer)
+        TenantAnnouncer announcer,
+        TimeProvider time)
     {
+        _time = time;
         _limits = limits;
         _tenants = tenants;
         _accessControl = accessControl;
@@ -216,7 +219,7 @@ internal sealed class TenantService : ITenantService
         }
 
         var token = SecurityTokens.Generate();
-        var expiresAt = DateTime.UtcNow.Add(InvitationLifetime);
+        var expiresAt = _time.GetUtcNow().UtcDateTime.Add(InvitationLifetime);
         var limits = await _limits.ForTenantAsync(tenantId, cancellationToken);
 
         Result<CreatedInvitationResponse> result = await GuardAsync("CreateInvitation", async () =>

@@ -30,12 +30,13 @@ internal sealed class ClientLifecycleService : IClientLifecycleService
         IEventBus eventBus,
         IClientTokenCutoffs cutoffs,
         ILogger<ClientLifecycleService> logger,
-        IWorkspacePlans plans)
+        IWorkspacePlans plans,
+        TimeProvider time)
     {
         _plans = plans;
         _clientProvider = clientProvider;
         _eventBus = eventBus;
-        _access = new ClientAccessRevoker(eventBus, cutoffs);
+        _access = new ClientAccessRevoker(eventBus, cutoffs, time);
         _logger = logger;
     }
 

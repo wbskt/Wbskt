@@ -116,7 +116,7 @@ public sealed class WorkspaceDeletedHandlerTests
     }
 
     private static WorkspaceDeletedHandler Handler(IWorkspaceRetirementProvider provider, IEventBus bus, IWorkflowEngineGateway engine, IClientTokenCutoffs cutoffs) =>
-        new(new WorkspaceRetirer(provider, bus, engine, cutoffs, NullLogger<WorkspaceRetirer>.Instance));
+        new(new WorkspaceRetirer(provider, bus, engine, cutoffs, NullLogger<WorkspaceRetirer>.Instance, TimeProvider.System));
 
     private static ConsumeContext<WorkspaceDeletedEvent> Context()
     {

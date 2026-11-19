@@ -239,10 +239,10 @@ public sealed class PlanSeatLimitTests
 
     private WorkspaceService Workspaces(IEventBus? bus = null) => new(
         _workspaces.Object, Mock.Of<IAccountProvider>(), _tenants.Object, _access.Object,
-        bus ?? Mock.Of<IEventBus>(), NullLogger<WorkspaceService>.Instance, new AuthMetrics(), new FixedTenantLimits(Limits));
+        bus ?? Mock.Of<IEventBus>(), NullLogger<WorkspaceService>.Instance, new AuthMetrics(), new FixedTenantLimits(Limits), TimeProvider.System);
 
     private TenantService Tenants() => new(
         _tenants.Object, Mock.Of<IAccessControlProvider>(), _workspaces.Object, Mock.Of<IEventBus>(), Mock.Of<IAuthMailer>(),
         NullLogger<TenantService>.Instance, new FixedTenantLimits(Limits),
-        new TenantAnnouncer(Mock.Of<IAccountProvider>(), Mock.Of<IEventBus>(), AuditWorkspaces.None, new RecordingAccessChanges().Changes, NullLogger<TenantAnnouncer>.Instance));
+        new TenantAnnouncer(Mock.Of<IAccountProvider>(), Mock.Of<IEventBus>(), AuditWorkspaces.None, new RecordingAccessChanges().Changes, NullLogger<TenantAnnouncer>.Instance), TimeProvider.System);
 }

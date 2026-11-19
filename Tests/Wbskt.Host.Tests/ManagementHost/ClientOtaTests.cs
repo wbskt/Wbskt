@@ -38,7 +38,7 @@ public sealed class ClientOtaTests
     private ClientsController CreateController()
     {
         var commands = new ClientCommandService(_clients.Object, TestClientCommands.Sender(_targets.Object, _bus.Object, _queue), _queue, _bus.Object,
-            Microsoft.Extensions.Options.Options.Create(new CommandQueueOptions()), NullLogger<ClientCommandService>.Instance, new Wbskt.Management.Host.Telemetry.ManagementMetrics());
+            Microsoft.Extensions.Options.Options.Create(new CommandQueueOptions()), NullLogger<ClientCommandService>.Instance, new Wbskt.Management.Host.Telemetry.ManagementMetrics(), TimeProvider.System);
         return new ClientsController(_clients.Object, Mock.Of<IClientLifecycleService>(), commands, Mock.Of<IRegistrationPolicyService>(), Mock.Of<IEventLogService>())
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }

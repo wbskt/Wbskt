@@ -35,6 +35,7 @@ internal sealed class WorkspaceService : IWorkspaceService
     private readonly ILogger<WorkspaceService> _logger;
     private readonly AuthMetrics _metrics;
     private readonly ITenantLimits _limits;
+    private readonly TimeProvider _time;
 
     public WorkspaceService(
         IWorkspaceProvider workspaceProvider,
@@ -44,8 +45,10 @@ internal sealed class WorkspaceService : IWorkspaceService
         IEventBus eventBus,
         ILogger<WorkspaceService> logger,
         AuthMetrics metrics,
-        ITenantLimits limits)
+        ITenantLimits limits,
+        TimeProvider time)
     {
+        _time = time;
         _limits = limits;
         _workspaceProvider = workspaceProvider;
         _accounts = accounts;
@@ -83,7 +86,7 @@ internal sealed class WorkspaceService : IWorkspaceService
 
         var workspaceId = await _workspaceProvider.FindIdByRefIdAsync(refId, cancellationToken);
         await AnnounceAsync(new WorkspaceCreatedEvent(workspaceId, refId, request.Name), cancellationToken);
-        return Result<WorkspaceResponse>.Success(new WorkspaceResponse(refId, request.Name, request.Description, DateTime.UtcNow.ToUtcOffset(), tenant.RefId));
+        return Result<WorkspaceResponse>.Success(new WorkspaceResponse(refId, request.Name, request.Description, _time.GetUtcNow(), tenant.RefId));
     }
 
     public async Task<Result<IReadOnlyCollection<WorkspaceResponse>>> GetWorkspacesForUserAsync(int userId, CancellationToken cancellationToken = default)

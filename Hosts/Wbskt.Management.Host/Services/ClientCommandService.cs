@@ -50,11 +50,11 @@ public sealed class ClientCommandService : IClientCommandService
         IOptions<CommandQueueOptions> queueOptions,
         ILogger<ClientCommandService> logger,
         ManagementMetrics metrics,
+        TimeProvider clock,
         IIdentityService? identity = null,
-        IRequestOriginAccessor? requestOrigin = null,
-        TimeProvider? clock = null)
+        IRequestOriginAccessor? requestOrigin = null)
     {
-        _clock = clock ?? TimeProvider.System;
+        _clock = clock;
         _clientService = clientService;
         _sender = sender;
         _queue = queue;

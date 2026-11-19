@@ -43,7 +43,7 @@ public sealed class PeopleAuditEventTests
         var announcer = new TenantAnnouncer(Mock.Of<IAccountProvider>(), bus.Object, _audit.Object, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance);
         _tenantService = new TenantService(
             _tenants.Object, _accessControl.Object, Mock.Of<IWorkspaceProvider>(), bus.Object, Mock.Of<IAuthMailer>(),
-            NullLogger<TenantService>.Instance, new FixedTenantLimits(), announcer);
+            NullLogger<TenantService>.Instance, new FixedTenantLimits(), announcer, TimeProvider.System);
         _accessControlService = new AccessControlService(
             _accessControl.Object, _tenants.Object, Mock.Of<IWorkspaceProvider>(),
             NullLogger<AccessControlService>.Instance, announcer);

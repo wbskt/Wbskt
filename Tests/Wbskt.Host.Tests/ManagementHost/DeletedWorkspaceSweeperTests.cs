@@ -274,7 +274,7 @@ public sealed class DeletedWorkspaceSweeperTests : IDisposable
         var services = new ServiceCollection()
             .AddSingleton(_auth.Object)
             .AddSingleton(_provider.Object)
-            .AddSingleton(new WorkspaceRetirer(_provider.Object, _bus.Object, _engine.Object, Mock.Of<IClientTokenCutoffs>(), NullLogger<WorkspaceRetirer>.Instance))
+            .AddSingleton(new WorkspaceRetirer(_provider.Object, _bus.Object, _engine.Object, Mock.Of<IClientTokenCutoffs>(), NullLogger<WorkspaceRetirer>.Instance, TimeProvider.System))
             .AddSingleton<IWorkerTickMetrics>(_metrics)
             .BuildServiceProvider();
 

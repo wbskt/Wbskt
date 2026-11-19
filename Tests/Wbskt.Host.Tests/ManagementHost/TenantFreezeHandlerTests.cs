@@ -49,7 +49,7 @@ public sealed class TenantFreezeHandlerTests
 
     private WorkspaceFreezer Freezer() => new(
         new WorkspaceAccountSync(_auth.Object, _accounts.Object, Mock.Of<IWorkspacePlans>(), NullLogger<WorkspaceAccountSync>.Instance),
-        _provider.Object, _bus.Object, _engine.Object, _cutoffs.Object, NullLogger<WorkspaceFreezer>.Instance);
+        _provider.Object, _bus.Object, _engine.Object, _cutoffs.Object, NullLogger<WorkspaceFreezer>.Instance, TimeProvider.System);
 
     [Fact]
     public async Task A_freeze_is_copied_before_each_workspace_is_stopped()

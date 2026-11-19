@@ -24,11 +24,11 @@ internal sealed class ClientAccessRevoker
     private readonly IClientTokenCutoffs _cutoffs;
     private readonly TimeProvider _time;
 
-    public ClientAccessRevoker(IEventBus eventBus, IClientTokenCutoffs cutoffs, TimeProvider? time = null)
+    public ClientAccessRevoker(IEventBus eventBus, IClientTokenCutoffs cutoffs, TimeProvider time)
     {
         _eventBus = eventBus;
         _cutoffs = cutoffs;
-        _time = time ?? TimeProvider.System;
+        _time = time;
     }
 
     /// <summary>
