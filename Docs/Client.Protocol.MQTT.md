@@ -59,8 +59,11 @@ code: the client sees the connection drop. A message over 64 KB in a packet that
 0x95.
 
 Messages are delivered at most once (QoS 0) towards the client. A client may publish at QoS 0 or 1;
-QoS 1 gets a PUBACK, but delivery is still confirmed by the model's own `sys.ack` for commands, not by
-MQTT. Retained messages are ignored and never stored. A publish to any other topic is dropped
+QoS 1 gets a PUBACK, which means only that the gateway read the packet. A message is checked after the
+PUBACK against the client's message budget and its account's monthly allowance, and handed to the
+platform's message bus; one over the budget or the allowance, or one that arrives while the bus is
+down, is dropped after its PUBACK (model §4 says what a throttled account drops). Delivery of a
+command is confirmed by the model's own `sys.ack`, not by MQTT. Retained messages are ignored and never stored. A publish to any other topic is dropped
 (PUBACK 0x87 at QoS 1), and a subscription to any other topic is refused (SUBACK 0x87).
 
 ## 3. Keepalive
