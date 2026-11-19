@@ -11,7 +11,7 @@ internal static class RunStartErrors
 
     public static readonly Error PlanCreditLimitReached = Error.Conflict(
         "PLAN_CREDIT_LIMIT_REACHED",
-        "The plan has used its workflow credits for this month. Runs start again on the 1st, or after an upgrade.");
+        "The account has used this month's workflow credits. Buy a credit pack or move to a larger plan to start runs now, or wait for the 1st.");
 
     public static readonly Error WorkspaceCreditCapReached = Error.Conflict(
         "WORKSPACE_CREDIT_CAP_REACHED",
