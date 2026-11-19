@@ -6,30 +6,11 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Same shape and the same windowing rule as Run_GetStatsBy_WorkflowRefId: on CreatedAt, so this is
-    -- "runs started in this period". Runs carry no workspace of their own - it lives on the definition -
-    -- so this joins through WorkflowDefinitionId, which IX_Runs_WorkflowDefinitionId_Id covers. The join
-    -- is 1:1 (a run points at exactly one definition row), so nothing fans out.
+    -- Same shape as Run_GetStatsBy_WorkflowRefId, over the same window (dbo.RunsInWindow).
     WITH Windowed AS
     (
-        SELECT
-            r.Status,
-            -- Parked: still Running, with every live branch waiting on a delay, signal or call.
-            CASE
-                WHEN r.Status = N'Running'
-                 AND EXISTS (SELECT 1 FROM dbo.RunParked(r.Id))
-                THEN 1 ELSE 0
-            END AS IsWaiting,
-            CASE
-                WHEN r.CompletedAt IS NULL THEN NULL
-                ELSE DATEDIFF_BIG(MILLISECOND, r.StartedAt, r.CompletedAt)
-            END AS DurationMs
-        FROM dbo.Runs r
-        INNER JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
-        WHERE d.WorkspaceId = @WorkspaceId
-          AND r.CreatedAt >= @FromUtc
-          AND r.CreatedAt < @ToUtc
-          AND r.IsTest = 0
+        SELECT w.Status, w.IsWaiting, w.DurationMs
+        FROM dbo.RunsInWindow(@WorkspaceId, NULL, @FromUtc, @ToUtc) w
     ),
     Durations AS
     (

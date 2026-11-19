@@ -6,28 +6,11 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Windowed on CreatedAt, so "runs started in this period" - not "runs that finished in it".
-    -- A long run started before the window would otherwise appear or vanish depending on when it
-    -- happened to complete.
+    -- The runs started in the window (dbo.RunsInWindow says why on CreatedAt).
     WITH Windowed AS
     (
-        SELECT
-            Status,
-            -- Parked: still Running, with every live branch waiting on a delay, signal or call.
-            CASE
-                WHEN Status = N'Running'
-                 AND EXISTS (SELECT 1 FROM dbo.RunParked(Runs.Id))
-                THEN 1 ELSE 0
-            END AS IsWaiting,
-            CASE
-                WHEN CompletedAt IS NULL THEN NULL
-                ELSE DATEDIFF_BIG(MILLISECOND, StartedAt, CompletedAt)
-            END AS DurationMs
-        FROM dbo.Runs
-        WHERE WorkflowRefId = @WorkflowRefId
-          AND CreatedAt >= @FromUtc
-          AND CreatedAt < @ToUtc
-          AND IsTest = 0
+        SELECT w.Status, w.IsWaiting, w.DurationMs
+        FROM dbo.RunsInWindow(NULL, @WorkflowRefId, @FromUtc, @ToUtc) w
     ),
     Durations AS
     (
