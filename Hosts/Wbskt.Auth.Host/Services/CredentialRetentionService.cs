@@ -103,12 +103,19 @@ public sealed class CredentialRetentionService : PeriodicWorker
             batch = await provider.GetUnconfirmedAccountsAsync(createdBeforeUtc, nowUtc, afterId, UnconfirmedBatchSize, cancellationToken);
             foreach (var userId in batch)
             {
-                if (await deletion.DeleteUnconfirmedAsync(userId, createdBeforeUtc, cancellationToken))
-                {
-                    deleted++;
-                }
-
                 afterId = Math.Max(afterId, userId);
+                try
+                {
+                    if (await deletion.DeleteUnconfirmedAsync(userId, createdBeforeUtc, cancellationToken))
+                    {
+                        deleted++;
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // One account that cannot be deleted must not keep every later one: it is tried again next tick.
+                    Logger.LogError(ex, "Could not delete unconfirmed account {UserId}.", userId);
+                }
             }
         }
         while (batch.Count == UnconfirmedBatchSize);
