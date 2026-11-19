@@ -23,6 +23,35 @@ tests:
               impact: "None. It is never emailed: it goes only to the dead man's switch (ALERT_DEADMANS_URL), so a service outside the VM notices when alerts stop being sent."
               summary: "The alerting pipeline is working; this alert always fires"
 
+  # The email receiver keeps failing: AlertNotificationsFailing, named for it. A failure that stopped
+  # more than 30 minutes ago is quiet.
+  - interval: 1m
+    input_series:
+      - series: 'alertmanager_notifications_failed_total{job="alertmanager", integration="email", reason="other"}'
+        values: '0+1x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AlertNotificationsFailing
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              integration: email
+            exp_annotations:
+              summary: "Alerts are failing to be delivered by email"
+              impact: "Alerts sent by this channel are not reaching anyone, so the problems they report could go unnoticed. The dead man's switch stops being pinged while this lasts, so the outside service reports it too."
+              action: "Read Alertmanager's log for the receiver's error: often an expired SMTP password or a webhook URL that was revoked. Fix ALERT_EMAIL_TO, ALERT_WEBHOOK_URL, ALERT_DEADMANS_URL or the SMTP_* settings in .env, then recreate alertmanager."
+              command: "docker compose logs --since 1h alertmanager | grep -i notify"
+  - interval: 1m
+    input_series:
+      - series: 'alertmanager_notifications_failed_total{job="alertmanager", integration="email", reason="other"}'
+        values: '0+1x5 5x60'
+      - series: 'alertmanager_notifications_failed_total{job="alertmanager", integration="webhook", reason="other"}'
+        values: '0x60'
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: AlertNotificationsFailing
+        exp_alerts: []
+
   # Mail keeps failing and none is sent: MailRelayDown. Failures with mail still going out: quiet.
   - interval: 1m
     input_series:

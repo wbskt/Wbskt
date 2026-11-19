@@ -692,6 +692,7 @@ const ALERTS = [
  ['CadvisorDown','VM','Prometheus cannot scrape cAdvisor, so the container alerts cannot fire'],
  ['RabbitMQMetricsDown','Bus','Prometheus cannot scrape RabbitMQ, so the queue and broker alerts cannot fire'],
  ['PrometheusRulesFailing','Telemetry','An alert rule failed to evaluate in 30 minutes'],
+ ['AlertNotificationsFailing','Telemetry','Alertmanager failed to deliver alerts by email or webhook in 30 minutes (page); Watchdog is held back meanwhile, so the dead man\'s switch trips'],
  ['RabbitMQMemoryAlarm','Bus','RabbitMQ’s memory alarm is on, so every publish is blocked (page)'],
  ['OtelCollectorDown','Telemetry','Prometheus cannot scrape the OpenTelemetry collector for 5 minutes, so no host telemetry is arriving'],
 ];

@@ -98,6 +98,13 @@ sed "s|__ALERT_TIMEZONE__|$timezone|g" /etc/alertmanager/alert-email.tmpl > "$em
         printf '      - url: %s\n' "$(q "$ALERT_WEBHOOK_URL")"
         echo "        send_resolved: true"
     fi
+
+    # A receiver that keeps failing stops the Watchdog pings, so the dead man's switch reports a
+    # broken alert channel even when every channel is broken and AlertNotificationsFailing itself
+    # reaches nobody.
+    echo "inhibit_rules:"
+    echo "  - source_matchers: ['alertname=\"AlertNotificationsFailing\"']"
+    echo "    target_matchers: ['alertname=\"Watchdog\"']"
 } > "$config"
 
 if [ -z "$receivers" ]; then
