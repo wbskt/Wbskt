@@ -1076,8 +1076,8 @@ If `sql-data` is the large volume, check the transaction logs:
 docker exec wbskt-sql bash -c '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -W -Q "SELECT DB_NAME(database_id) AS db, type_desc, size/128 AS mb FROM sys.master_files ORDER BY size DESC; SELECT name, recovery_model_desc, log_reuse_wait_desc FROM sys.databases"'
 ```
 
-Both databases use `SIMPLE` recovery (set in their `.sqlproj`), because `backup.sh` takes only full
-backups. Under `FULL` with no `BACKUP LOG`, a log waits on `LOG_BACKUP` and grows forever; in
+The platform's two databases use `SIMPLE` recovery (set in their `.sqlproj`; the admin one is set in
+wbskt.admin), because `backup.sh` takes only full backups. Under `FULL` with no `BACKUP LOG`, a log waits on `LOG_BACKUP` and grows forever; in
 November 2026 that reached 10 GB of a 29 GB disk (#1045). A log that grew before the switch keeps its
 size until it is shrunk once: `USE [<db>]; CHECKPOINT; DBCC SHRINKFILE (2, 512);`.
 
