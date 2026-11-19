@@ -37,7 +37,15 @@ public sealed class CsvFileResult : IActionResult
         disposition.SetHttpFileName(_fileName);
         response.Headers.ContentDisposition = disposition.ToString();
 
-        await WriteAsync(response.Body, _export, context.HttpContext.RequestAborted);
+        var aborted = context.HttpContext.RequestAborted;
+        try
+        {
+            await WriteAsync(response.Body, _export, aborted);
+        }
+        catch (OperationCanceledException) when (aborted.IsCancellationRequested)
+        {
+            // The caller stopped the download; nothing is wrong here, and nobody is left to tell.
+        }
     }
 
     /// <summary>Writes the header and the rows to <paramref name="body"/>; returns how many rows were written.</summary>
