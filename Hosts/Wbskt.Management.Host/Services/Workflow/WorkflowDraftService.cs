@@ -22,6 +22,7 @@ public sealed class WorkflowDraftService : IWorkflowDraftService
 
     public const int DefaultMaxNewDraftsPerWorkspace = 50;
 
+    private readonly TimeProvider _clock;
     private readonly IWorkflowDraftProvider _drafts;
     private readonly IWorkflowQueryService _queryService;
     private readonly IWorkflowLifecycleService _lifecycleService;
@@ -35,8 +36,10 @@ public sealed class WorkflowDraftService : IWorkflowDraftService
         IWorkflowLifecycleService lifecycleService,
         IIdentityService identityService,
         ILogger<WorkflowDraftService> logger,
-        IConfiguration? configuration = null)
+        IConfiguration? configuration = null,
+        TimeProvider? clock = null)
     {
+        _clock = clock ?? TimeProvider.System;
         _drafts = drafts;
         _queryService = queryService;
         _lifecycleService = lifecycleService;
@@ -91,7 +94,7 @@ public sealed class WorkflowDraftService : IWorkflowDraftService
             workspaceId,
             request.Name,
             request.Description,
-            JsonSerializer.Serialize(request.Definition, SerializerOptions),
+            JsonSerializer.Serialize(AuthoredDefinitions.From(refId, request, _clock.GetUtcNow().UtcDateTime), SerializerOptions),
             user.UserId,
             user.UserRefId);
 
@@ -168,9 +171,15 @@ public sealed class WorkflowDraftService : IWorkflowDraftService
         return await _lifecycleService.PublishAsync(
             workspaceId,
             workspaceRef,
-            new WorkflowPublishRequest(refId, row.Name, row.Description, Deserialize(row), request.Enable),
+            ToPublish(refId, row, request.Enable),
             guards,
             ct);
+    }
+
+    private static WorkflowPublishRequest ToPublish(Guid refId, WorkflowDraftRow row, bool enable)
+    {
+        WorkflowDefinition draft = Deserialize(row);
+        return new WorkflowPublishRequest(refId, row.Name, row.Description, draft.Nodes, draft.Edges, enable, draft.SharedVariableSchema, draft.CreditBudget, draft.FailFast);
     }
 
     private static bool IsOutdated(WorkflowDraftRow row) => row.CurrentVersion != row.BaseVersion;

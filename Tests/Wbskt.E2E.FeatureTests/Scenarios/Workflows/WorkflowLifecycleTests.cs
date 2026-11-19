@@ -120,6 +120,32 @@ public sealed class WorkflowLifecycleTests(ServicesFixture fixture)
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    [SkippableFact]
+    public async Task WF_PUB_01_TheEarlierNestedBody_StillPublishesAndValidates_ForOneRelease()
+    {
+        // Deprecated shape, dropped in the release after (#1059): the definition nested whole, with its
+        // own id, name and time, and no top-level nodes.
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (token, workspace) = await fixture.RegisterAndLoginUserAsync();
+        var refId = Guid.NewGuid();
+        WorkflowDefinition definition = new WorkflowBuilder("Made-up name", Guid.NewGuid())
+            .AddWebhookTrigger($"hook-{Guid.NewGuid():N}", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddDelay(TimeSpan.FromMilliseconds(10))
+            .BuildAndValidate();
+        var management = fixture.Management.As(token);
+
+        var validation = await management.ValidateWorkflowAsync(workspace, new WorkflowValidationRequest(null!, null, null!, null!) { Definition = definition });
+        using var published = await management.PublishWorkflowRawAsync(workspace, new WorkflowPublishRequest(refId, $"E2E-Nested-{refId:N}", null, null!, null!, Enable: true) { Definition = definition });
+
+        validation.IsValid.Should().BeTrue();
+        published.StatusCode.Should().Be(HttpStatusCode.OK, await published.Content.ReadAsStringAsync());
+        var stored = await management.GetWorkflowAsync(workspace, refId);
+        stored.Name.Should().Be($"E2E-Nested-{refId:N}");
+        stored.Definition.Name.Should().Be(stored.Name);
+        stored.Definition.WorkflowRefId.Should().Be(refId);
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────────────────
 
     private async Task<(Guid RefId, string Path)> PublishWebhookWorkflowAsync(string token, Guid workspace, Guid? refId = null)
@@ -137,7 +163,7 @@ public sealed class WorkflowLifecycleTests(ServicesFixture fixture)
             .AddWebhookTrigger(path, WorkflowConcurrencyPolicy.AllowParallel, out _)
             .AddDelay(TimeSpan.FromMilliseconds(10))
             .BuildAndValidate();
-        return fixture.Management.As(token).PublishWorkflowRawAsync(workspace, new WorkflowPublishRequest(refId, $"E2E-Lifecycle-{refId:N}", null, definition, Enable: true));
+        return fixture.Management.As(token).PublishWorkflowRawAsync(workspace, WorkflowRequests.Publish(refId, $"E2E-Lifecycle-{refId:N}", definition));
     }
 
     private static async Task<HttpResponseMessage> SendKeyedWebhookAsync(Guid workspace, string path, string key)

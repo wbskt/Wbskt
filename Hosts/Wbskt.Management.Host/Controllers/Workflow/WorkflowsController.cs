@@ -47,7 +47,7 @@ public sealed class WorkflowsController : ApiControllerBase
     {
         // An invalid definition is a successful answer to "is this valid?" - 200 with IsValid false,
         // not an HTTP error.
-        return Ok(await _queryService.ValidateAsync(workspaceId, request.Definition, ct));
+        return Ok(await _queryService.ValidateAsync(workspaceId, request, ct));
     }
 
     [HttpGet]

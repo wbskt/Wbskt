@@ -122,6 +122,39 @@ public sealed class WorkflowLifecycleServiceTests
         Assert.Equal(42, submitted.WorkspaceId);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Publish_stores_the_requests_id_and_name_and_the_servers_time_whatever_the_body_says(bool nested)
+    {
+        // The nested body is the earlier shape, kept for one release (#1059); its own id, name and time
+        // were made up by the console and are not stored.
+        var now = new DateTimeOffset(2026, 11, 19, 10, 0, 0, TimeSpan.Zero);
+        var h = new Harness(clock: new FixedClock(now));
+        WorkflowDefinition sent = Fixture() with { WorkflowRefId = Guid.NewGuid(), Name = "made up", CreatedAt = new DateTime(2001, 1, 1) };
+        WorkflowPublishRequest request = nested
+            ? new WorkflowPublishRequest(Guid.NewGuid(), "Vent control", null, null!, null!, false) { Definition = sent }
+            : new WorkflowPublishRequest(Guid.NewGuid(), "Vent control", null, sent.Nodes, sent.Edges, false, sent.SharedVariableSchema, 12m, true);
+        WorkflowDefinitionRow? submitted = null;
+        h.Definitions.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<IReadOnlyCollection<WorkflowIntegrationRef>>(), It.IsAny<int?>(), It.IsAny<WorkflowPublishGuards>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((WorkflowDefinitionRow row, IReadOnlyCollection<WorkflowIntegrationRef> _, int? _, WorkflowPublishGuards _, CancellationToken _) => { submitted = row; return row with { Id = 6, Version = 1 }; });
+
+        var response = await h.Service.PublishAsync(WorkspaceId, Guid.NewGuid(), request, CancellationToken.None);
+
+        Assert.True(response.IsSuccess);
+        Assert.Equal(now.UtcDateTime, submitted!.CreatedAt);
+        WorkflowDefinition stored = JsonSerializer.Deserialize<WorkflowDefinition>(submitted.DefinitionJson, JsonOptions)!;
+        Assert.Equal(request.RefId, stored.WorkflowRefId);
+        Assert.Equal("Vent control", stored.Name);
+        Assert.Equal(now.UtcDateTime, stored.CreatedAt);
+        Assert.Equal(sent.Nodes.Count, stored.Nodes.Count);
+        if (!nested)
+        {
+            Assert.Equal(12m, stored.CreditBudget);
+            Assert.True(stored.FailFast);
+        }
+    }
+
     [Fact]
     public async Task Publish_does_not_treat_a_database_error_as_a_missing_workflow()
     {
@@ -153,7 +186,7 @@ public sealed class WorkflowLifecycleServiceTests
     {
         var h = new Harness();
 
-        var response = await h.Service.PublishAsync(WorkspaceId, Guid.NewGuid(), new WorkflowPublishRequest(Guid.NewGuid(), "Invalid", null, null!, true), CancellationToken.None);
+        var response = await h.Service.PublishAsync(WorkspaceId, Guid.NewGuid(), new WorkflowPublishRequest(Guid.NewGuid(), "Invalid", null, null!, null!, true), CancellationToken.None);
 
         Assert.Equal(ErrorType.Validation, response.Error.Type);
         h.VerifyNothingInserted();
@@ -413,7 +446,7 @@ public sealed class WorkflowLifecycleServiceTests
     private static WorkflowPublishRequest PublishRequest(bool enable)
     {
         WorkflowDefinition definition = Fixture();
-        return new WorkflowPublishRequest(definition.WorkflowRefId, "Vent control + escalation", null, definition, enable);
+        return new WorkflowPublishRequest(definition.WorkflowRefId, "Vent control + escalation", null, definition.Nodes, definition.Edges, enable, definition.SharedVariableSchema, definition.CreditBudget, definition.FailFast);
     }
 
     private static WorkflowDefinitionRow Row(int id, Guid refId, int version, int workspaceId = WorkspaceId) => new()
@@ -429,6 +462,11 @@ public sealed class WorkflowLifecycleServiceTests
         CreatedAt = DateTime.UtcNow
     };
 
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
+
     private sealed class Harness
     {
         public Mock<IWorkflowDefinitionProvider> Definitions { get; } = new();
@@ -437,7 +475,7 @@ public sealed class WorkflowLifecycleServiceTests
         public Mock<IEventBus> Bus { get; } = new();
         public WorkflowLifecycleService Service { get; }
 
-        public Harness(IConfiguration? configuration = null)
+        public Harness(IConfiguration? configuration = null, TimeProvider? clock = null)
         {
             var identity = new Mock<IIdentityService>();
             identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(UserId));
@@ -451,7 +489,8 @@ public sealed class WorkflowLifecycleServiceTests
                 Engine.Object,
                 Bus.Object,
                 Mock.Of<ILogger<WorkflowLifecycleService>>(),
-                configuration);
+                configuration,
+                clock: clock);
         }
 
         public void InsertReturns(int id, int version)

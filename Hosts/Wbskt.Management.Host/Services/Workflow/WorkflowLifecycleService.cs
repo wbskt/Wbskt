@@ -34,6 +34,7 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
     private const string DeletedCancellationReason = "Workflow deleted.";
     private const string DisabledCancellationReason = "Workflow disabled.";
 
+    private readonly TimeProvider _clock;
     private readonly IWorkflowDefinitionProvider _definitions;
     private readonly IWorkflowStateProvider _states;
     private readonly ITriggerPlanner _planner;
@@ -59,8 +60,10 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
         ILogger<WorkflowLifecycleService> logger,
         IConfiguration? configuration = null,
         ClientReferenceCheck? clientCheck = null,
-        SubWorkflowReferenceCheck? subWorkflowCheck = null)
+        SubWorkflowReferenceCheck? subWorkflowCheck = null,
+        TimeProvider? clock = null)
     {
+        _clock = clock ?? TimeProvider.System;
         _definitions = definitions;
         _states = states;
         _planner = planner;
@@ -89,10 +92,17 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
     {
         _logger.LogInformation("Publishing workflow '{WorkflowName}' (RefId: '{RefId}') in WorkspaceId: {WorkspaceId}, enable: {Enable}", request.Name, request.RefId, workspaceId, request.Enable);
 
-        Result<IntegrationReferences> check = await CheckAsync(workspaceId, request.RefId, request.Definition, ct);
+        DateTime now = _clock.GetUtcNow().UtcDateTime;
+        WorkflowDefinition? definition = AuthoredDefinitions.From(request, now);
+        Result<IntegrationReferences> check = await CheckAsync(workspaceId, request.RefId, definition, ct);
         if (check.IsFailure)
         {
             return Result<WorkflowPublishResponse>.Failure(check.Error);
+        }
+
+        if (definition is null)
+        {
+            throw new InvalidOperationException("The validator passed a publish with no definition.");
         }
 
         // Only a genuine "no such workflow" means this is the first version. A database fault
@@ -118,9 +128,9 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
                 WorkspaceId = workspaceId,
                 Name = request.Name,
                 Description = request.Description,
-                DefinitionJson = JsonSerializer.Serialize(request.Definition with { WorkspaceId = workspaceId }, SerializerOptions),
+                DefinitionJson = JsonSerializer.Serialize(definition with { WorkspaceId = workspaceId }, SerializerOptions),
                 PublishedBy = CurrentUserId,
-                CreatedAt = request.Definition.CreatedAt
+                CreatedAt = now
             }, check.Value.Refs, MaxPerWorkspace, guards, ct);
         }
         catch (SqlException ex) when (ex.Number == WorkflowLifecycleErrors.VersionMoved)
@@ -162,7 +172,7 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
 
         // A second step on purpose: a version published but not live is a valid state, so a refused
         // enable leaves the previous live version running and the new one waiting to be enabled.
-        Result<WorkflowStateResponse> enabled = await EnableCoreAsync(workspaceId, workspaceRef, inserted, request.Definition, check.Value, ct);
+        Result<WorkflowStateResponse> enabled = await EnableCoreAsync(workspaceId, workspaceRef, inserted, definition, check.Value, ct);
         if (enabled.IsFailure)
         {
             _logger.LogWarning("Workflow '{RefId}' version {Version} was published but not made live: {Code}", inserted.RefId, inserted.Version, enabled.Error.Code);

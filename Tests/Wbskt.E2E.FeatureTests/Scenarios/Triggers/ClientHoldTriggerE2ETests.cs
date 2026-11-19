@@ -184,9 +184,9 @@ public sealed class ClientHoldTriggerE2ETests(ServicesFixture fixture)
             .AddClientTrigger((clientRefId ?? Guid.NewGuid()).ToString(), type, WorkflowConcurrencyPolicy.AllowParallel, null, out _, filter: filter, holdSeconds: holdSeconds)
             .AddDelay(TimeSpan.FromMilliseconds(10))
             .Build();
-        var request = new WorkflowPublishRequest(workflowRefId, name, null, definition, Enable: true);
+        var request = WorkflowRequests.Publish(workflowRefId, name, definition);
         var management = fixture.Management.As(token);
-        var validation = await management.ValidateWorkflowAsync(workspaceRef, new WorkflowValidationRequest(definition));
+        var validation = await management.ValidateWorkflowAsync(workspaceRef, WorkflowRequests.Validate(definition));
         var publish = await management.PublishWorkflowRawAsync(workspaceRef, request);
         return (validation, publish);
     }

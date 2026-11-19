@@ -99,7 +99,7 @@ internal sealed class IntegrationsApi(ServicesFixture fixture)
     }
 
     public Task<HttpResponseMessage> PublishRawAsync(string token, Guid workspaceRef, WorkflowDefinition definition) =>
-        As(token).PublishWorkflowRawAsync(workspaceRef, new WorkflowPublishRequest(definition.WorkflowRefId, definition.Name, null, definition, Enable: true));
+        As(token).PublishWorkflowRawAsync(workspaceRef, WorkflowRequests.Publish(definition.WorkflowRefId, definition.Name, definition));
 
     public async Task<Guid> PublishAsync(string token, Guid workspaceRef, WorkflowDefinition definition)
     {
@@ -109,7 +109,7 @@ internal sealed class IntegrationsApi(ServicesFixture fixture)
     }
 
     public Task<WorkflowValidationResponse> ValidateAsync(string token, Guid workspaceRef, WorkflowDefinition definition) =>
-        As(token).ValidateWorkflowAsync(workspaceRef, new WorkflowValidationRequest(definition));
+        As(token).ValidateWorkflowAsync(workspaceRef, WorkflowRequests.Validate(definition));
 
     /// <summary>Starts a manual run and waits for it to finish, returning its RefId and final status.</summary>
     public async Task<(Guid RunRef, string Status)> RunToEndAsync(string token, Guid workspaceRef, Guid workflowRef, Guid triggerNodeId)
