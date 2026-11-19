@@ -37,6 +37,12 @@ public record RunRow
     /// </summary>
     public int Number { get; init; }
 
+    /// <summary>
+    /// The workspace the run belongs to. Read only where the result set carries it (the read by RefId);
+    /// null elsewhere.
+    /// </summary>
+    public int? WorkspaceId { get; init; }
+
     /// <summary>Started from the workflow page's Test run, against a test copy of the definition.</summary>
     public bool IsTest { get; init; }
 

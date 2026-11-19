@@ -8,9 +8,6 @@ public interface IWorkflowDefinitionProvider
 {
     Task<WorkflowDefinitionRow> GetByIdAsync(int id, CancellationToken ct);
 
-    /// <summary>The workspace of definition <paramref name="id"/>, without reading its JSON. Null when there is no such row.</summary>
-    async Task<int?> FindWorkspaceIdAsync(int id, CancellationToken ct) => (await GetByIdAsync(id, ct)).WorkspaceId;
-
     /// <summary>The definitions with these ids, in one read. Ids with no row are left out.</summary>
     async Task<IReadOnlyCollection<WorkflowDefinitionRow>> GetByIdsAsync(IReadOnlyCollection<int> ids, CancellationToken ct)
     {

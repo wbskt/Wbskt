@@ -420,9 +420,8 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
     }
 
     /// <summary>
-    /// The run, when <paramref name="workspaceId"/> owns it. A run carries no workspace of its own; it
-    /// belongs to the workspace of the definition it ran, read by Id rather than by version so a test
-    /// run (whose copy is no version) resolves too.
+    /// The run, when <paramref name="workspaceId"/> owns it, judged by the workspace the run row
+    /// carries, so ownership costs no second read.
     /// </summary>
     private async Task<Result<RunRow>> LoadRunAsync(int workspaceId, Guid runRefId, CancellationToken ct)
     {
@@ -432,8 +431,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
             return Result<RunRow>.Failure(WorkspaceOwnership.RunNotFound);
         }
 
-        // Only the workspace is needed here; the definition's JSON is read when the definition is asked for.
-        if (await _workflowDefinitionProvider.FindWorkspaceIdAsync(run.WorkflowDefinitionId, ct) != workspaceId)
+        if (run.WorkspaceId != workspaceId)
         {
             _logger.LogWarning("Run '{RunRefId}' is not in WorkspaceId: {WorkspaceId}", runRefId, workspaceId);
             return Result<RunRow>.Failure(WorkspaceOwnership.RunNotFound);

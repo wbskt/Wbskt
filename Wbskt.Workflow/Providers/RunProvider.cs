@@ -557,12 +557,13 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
             ParentRunRefId = TryGetOrdinal(reader, "ParentRunRefId") is { } parentOrdinal && !reader.IsDBNull(parentOrdinal) ? reader.GetGuid(parentOrdinal) : null,
             OutputJson = TryGetOrdinal(reader, "OutputJson") is { } outputOrdinal && !reader.IsDBNull(outputOrdinal) ? reader.GetString(outputOrdinal) : null,
             Number = TryGetOrdinal(reader, "Number") is { } numberOrdinal ? reader.GetInt32(numberOrdinal) : 0,
-            IsTest = TryGetOrdinal(reader, "IsTest") is { } isTestOrdinal && reader.GetBoolean(isTestOrdinal)
+            IsTest = TryGetOrdinal(reader, "IsTest") is { } isTestOrdinal && reader.GetBoolean(isTestOrdinal),
+            WorkspaceId = TryGetOrdinal(reader, "WorkspaceId") is { } workspaceOrdinal && !reader.IsDBNull(workspaceOrdinal) ? reader.GetInt32(workspaceOrdinal) : null
         };
     }
 
     // The run-list procs leave OutputJson out (it is unbounded and no page shows it), and only the procs
-    // behind the run pages return Number and IsTest, so these are read only where the result set carries them
+    // behind the run pages return Number and IsTest (and the read by RefId the workspace), so these are read only where the result set carries them
     // rather than making every proc return them.
     private static int? TryGetOrdinal(DbDataReader reader, string column)
     {
