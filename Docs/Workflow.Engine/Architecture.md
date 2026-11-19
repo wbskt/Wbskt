@@ -64,7 +64,7 @@ bus consumer / controller ─► IInboundHub ─► TriggerDispatcher ─┬─�
 
 | Adapter | Source | Channel |
 |---|---|---|
-| `ClientPayloadReceivedConsumer` | `ClientMessageReceivedEvent` | `client`; also records hold state via `ClientHoldRecorder`. A message sent more than 30 s before it was received is treated as late. |
+| `ClientPayloadReceivedConsumer` | `ClientMessageReceivedEvent` | `client`; also records hold state via `ClientHoldRecorder`, skipping the write when the message does not match a hold the leader last left clear (`ClientHoldStateCache`). A message sent more than 30 s before it was received is treated as late. |
 | `ClientConnectedConsumer`, `ClientDisconnectedConsumer` | presence events | Not dispatched directly: `ClientPresenceParker` records presence checks that `ClientPresenceTicker` later fires. |
 | `CommandOutcomeConsumer` | `ClientCommandAckedEvent`, `ClientCommandFailedEvent` | `command` (wakes a `clientMessage` waiting for its ack). |
 | `InboundCallbackConsumer` | `InboundCallback` command | `webhook` (start) or `http-wake` (wake). |

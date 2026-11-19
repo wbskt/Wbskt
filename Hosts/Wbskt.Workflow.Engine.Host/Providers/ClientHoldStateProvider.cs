@@ -25,9 +25,9 @@ internal sealed class ClientHoldStateProvider : BaseSqlProvider, IClientHoldStat
         );
     }
 
-    public async Task RecordAsync(string triggerKey, bool matches, DateTime eventAt, int holdSeconds, string payload, CancellationToken ct)
+    public async Task<string?> RecordAsync(string triggerKey, bool matches, DateTime eventAt, int holdSeconds, string? payload, CancellationToken ct)
     {
-        await ExecuteNonQueryAsync(
+        return await ExecuteScalarAsync<string>(
             "dbo.ClientHoldState_Record",
             p =>
             {
@@ -37,7 +37,7 @@ internal sealed class ClientHoldStateProvider : BaseSqlProvider, IClientHoldStat
                 // 1/300 s, and two messages a few milliseconds apart could swap order.
                 p.Add("@EventAt", SqlDbType.DateTime2).Value = eventAt;
                 p.AddWithValue("@HoldSeconds", holdSeconds);
-                p.AddWithValue("@Payload", payload);
+                p.AddWithValue("@Payload", (object?)payload ?? DBNull.Value);
             },
             ct
         );

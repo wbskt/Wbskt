@@ -8,7 +8,7 @@ namespace Wbskt.Host.Tests.InboundAdapters;
 internal sealed class RecordingHoldStateProvider(params TriggerRegistrationRow[] registrations) : IClientHoldStateProvider
 {
     public List<(Guid ClientRefId, string MessageType, int WorkspaceId)> Lookups { get; } = [];
-    public List<(string TriggerKey, bool Matches, DateTime EventAt, int HoldSeconds, string Payload)> Records { get; } = [];
+    public List<(string TriggerKey, bool Matches, DateTime EventAt, int HoldSeconds, string? Payload)> Records { get; } = [];
     public List<ClientHoldStateRow> Due { get; init; } = [];
     public List<(int Id, DateTime SinceAt)> Fired { get; } = [];
     public List<int> Deleted { get; } = [];
@@ -22,10 +22,10 @@ internal sealed class RecordingHoldStateProvider(params TriggerRegistrationRow[]
         return Task.FromResult<IReadOnlyCollection<TriggerRegistrationRow>>(registrations);
     }
 
-    public Task RecordAsync(string triggerKey, bool matches, DateTime eventAt, int holdSeconds, string payload, CancellationToken ct)
+    public Task<string?> RecordAsync(string triggerKey, bool matches, DateTime eventAt, int holdSeconds, string? payload, CancellationToken ct)
     {
         Records.Add((triggerKey, matches, eventAt, holdSeconds, payload));
-        return Task.CompletedTask;
+        return Task.FromResult<string?>(matches ? "holding" : ClientHoldStateCache.ClearState);
     }
 
     public Task<IReadOnlyCollection<ClientHoldStateRow>> LeaseDueAsync(int leaseSec, int batch, CancellationToken ct) =>

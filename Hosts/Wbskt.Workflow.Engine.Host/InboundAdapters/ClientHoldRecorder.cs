@@ -25,7 +25,8 @@ public sealed class ClientHoldRecorder(
     IClientHoldStateProvider provider,
     ITriggerFilterEvaluator filterEvaluator,
     ITriggerRegistrationCache registrationCache,
-    TriggerOutcomeLog? outcomeLog = null)
+    TriggerOutcomeLog? outcomeLog = null,
+    ClientHoldStateCache? holdStates = null)
 {
     public async Task RecordAsync(InboundEvent message, Guid clientRefId, string messageType, int workspaceId, DateTime sentAtUtc, CancellationToken ct)
     {
@@ -41,7 +42,7 @@ public sealed class ClientHoldRecorder(
             return;
         }
 
-        string payload = JsonSerializer.Serialize(message.Payload);
+        string? payload = null;
         foreach (TriggerRegistrationRow registration in registrations)
         {
             if (!ClientHoldTriggerKey.TryGetHoldSeconds(registration.TriggerKey, out int holdSeconds))
@@ -50,7 +51,25 @@ public sealed class ClientHoldRecorder(
             }
 
             bool matches = await filterEvaluator.PassesAsync(registration, message, ct);
-            await provider.RecordAsync(registration.TriggerKey, matches, sentAtUtc, holdSeconds, payload, ct);
+            if (matches)
+            {
+                payload ??= JsonSerializer.Serialize(message.Payload);
+            }
+
+            string? matchedPayload = payload;
+            if (holdStates is null)
+            {
+                await provider.RecordAsync(registration.TriggerKey, matches, sentAtUtc, holdSeconds, matchedPayload, ct);
+            }
+            else
+            {
+                await holdStates.RecordAsync(
+                    registration.TriggerKey,
+                    matches,
+                    token => provider.RecordAsync(registration.TriggerKey, matches, sentAtUtc, holdSeconds, matchedPayload, token),
+                    ct);
+            }
+
             if (outcomeLog is not null)
             {
                 string outcome = matches ? TriggerDispatchOutcomeRow.HeldOutcome : nameof(TriggerDispatchOutcome.Filtered);

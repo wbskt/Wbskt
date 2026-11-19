@@ -94,6 +94,7 @@ public static class Program
         services.AddScoped<ClientPresenceParker>();
         services.AddScoped<IClientHoldStateProvider, ClientHoldStateProvider>();
         services.AddScoped<ClientHoldRecorder>();
+        services.AddSingleton<ClientHoldStateCache>();
         services.AddScoped<IClientCommandPublisher, ClientCommandPublisher>();
         services.AddScoped<IToastPublisher, ToastPublisher>();
         services.AddScoped<IVariableWritePublisher, VariableWritePublisher>();

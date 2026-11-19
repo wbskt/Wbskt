@@ -1,12 +1,14 @@
 -- Records one client message against one hold trigger. @Matches is whether the trigger's filter
 -- passed on it. A matching message starts a hold (or refreshes the payload of one in progress); a
--- message that does not match clears it, which also re-arms a trigger that already fired.
+-- message that does not match clears it, which also re-arms a trigger that already fired. Returns
+-- the trigger's state after it, which the engine keeps so it can skip a non-matching message for a
+-- trigger already clear. @Payload is read only when @Matches is 1.
 CREATE PROCEDURE dbo.ClientHoldState_Record
     @TriggerKey  NVARCHAR(400),
     @Matches     BIT,
     @EventAt     DATETIME2(3),
     @HoldSeconds INT,
-    @Payload     NVARCHAR(MAX)
+    @Payload     NVARCHAR(MAX) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -56,5 +58,9 @@ BEGIN
     END;
 
     COMMIT TRANSACTION;
+
+    SELECT State
+    FROM dbo.ClientHoldStates
+    WHERE TriggerKey = @TriggerKey;
 END;
 GO
