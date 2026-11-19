@@ -282,6 +282,7 @@ And, if it takes firmware updates (§4.4), when it:
 - [ ] closes with the binding's "updating" code when it drops its connection to download.
 
 It also conforms to each binding it speaks; see that binding's checklist
-([WebSocket](Client.Protocol.WebSocket.md#5-conformance-checklist)).
+([WebSocket](Client.Protocol.WebSocket.md#5-conformance-checklist),
+[MQTT](Client.Protocol.MQTT.md#5-conformance-checklist)).
 
 The .NET SDK ([wbskt/Wbskt.DotNet](https://github.com/wbskt/Wbskt.DotNet)) is the reference implementation.
