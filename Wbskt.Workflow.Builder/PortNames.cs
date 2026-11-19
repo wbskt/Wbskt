@@ -11,4 +11,6 @@ public static class PortNames
     public const string Empty = "empty";
     public const string Error = "error";
     public const string Timeout = "timeout";
+    public const string Acked = "acked";
+    public const string Failed = "failed";
 }

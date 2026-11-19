@@ -136,19 +136,55 @@ public sealed class WorkflowBuilder
         return this;
     }
 
-    public WorkflowBuilder AddClientMessage(string clientRef, string messageType, string? name = null)
+    /// <param name="awaitAck">
+    /// Wait for the client's acknowledgement. The step then leaves by <c>acked</c>, <c>failed</c> or
+    /// <c>timeout</c>; the head moves to <c>acked</c>, and the other two are wired with <see cref="Connect"/>.
+    /// </param>
+    public WorkflowBuilder AddClientMessage(string clientRef, string messageType, string? name = null, JsonElement? payload = null, bool awaitAck = false, TimeSpan? ackTimeout = null)
     {
         var id = Guid.NewGuid();
+        List<PortDefinition> ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }];
+        ports.AddRange(awaitAck
+            ? [
+                new PortDefinition { PortId = PortNames.Acked, Direction = PortDirection.Output, Label = "Acked" },
+                new PortDefinition { PortId = PortNames.Failed, Direction = PortDirection.Output, Label = "Failed" },
+                new PortDefinition { PortId = PortNames.Timeout, Direction = PortDirection.Output, Label = "Timeout" }
+            ]
+            : [new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }]);
+
         _nodes.Add(new SendClientMessageNode {
             NodeId = id,
             Name = name ?? messageType,
-            Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
-            Config = new SendClientMessageConfig { ClientRef = clientRef, Type = messageType, Payload = null },
+            Ports = ports,
+            Config = new SendClientMessageConfig { ClientRef = clientRef, Type = messageType, Payload = payload, AwaitAck = awaitAck, AckTimeout = ackTimeout },
             Retry = null,
             OnFailure = null });
 
         ConnectToHead(id, PortNames.In);
-        _head = (id, PortNames.Default);
+        _head = (id, awaitAck ? PortNames.Acked : PortNames.Default);
+        return this;
+    }
+
+    /// <summary>Gives the last step added a retry policy. Only action steps retry.</summary>
+    public WorkflowBuilder WithRetry(RetryPolicy retry) => ReplaceLastAction(action => action with { Retry = retry });
+
+    /// <summary>
+    /// Says what the last step added does once it has failed (and used up its retries). ContinueOnError
+    /// leaves by an <c>error</c> port, so one is added; wire it with <see cref="Connect"/>.
+    /// </summary>
+    public WorkflowBuilder WithOnFailure(OnFailureConfig onFailure) => ReplaceLastAction(action =>
+        onFailure.Outcome == ErrorOutcome.ContinueOnError && action.Ports.All(port => port.PortId != PortNames.Error)
+            ? action with { OnFailure = onFailure, Ports = [.. action.Ports, new PortDefinition { PortId = PortNames.Error, Direction = PortDirection.Output, Label = "Error" }] }
+            : action with { OnFailure = onFailure });
+
+    private WorkflowBuilder ReplaceLastAction(Func<BaseActionNode, BaseActionNode> change)
+    {
+        if (_nodes.Count == 0 || _nodes[^1] is not BaseActionNode action)
+        {
+            throw new InvalidOperationException("Retry and on-failure settings apply to an action step; add one first.");
+        }
+
+        _nodes[^1] = change(action);
         return this;
     }
 
@@ -364,13 +400,15 @@ public sealed class WorkflowBuilder
         return this;
     }
 
-    public WorkflowBuilder AddEnd()
+    /// <param name="output">What a parent that started this run as a sub-workflow reads as <c>childResult.output</c>.</param>
+    public WorkflowBuilder AddEnd(WorkflowExpression? output = null)
     {
         var id = Guid.NewGuid();
         _nodes.Add(new EndNode {
             NodeId = id,
             Name = "End",
-            Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }] });
+            Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }],
+            Config = output is null ? null : new EndConfig { Output = output } });
 
         ConnectToHead(id, PortNames.In);
         _head = null;
