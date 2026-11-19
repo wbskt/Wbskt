@@ -8,7 +8,7 @@ namespace Wbskt.Host.Tests.Billing;
 
 /// <summary>
 /// Docs/Billing.Plans.json is the plan ladder as the code has it: each plan's built-in limits and its
-/// self-serve prices. The website's plans table and the billing docs page are copied from it rather than
+/// self-serve prices, the credit packs, and the Business contract's rates. The website's plans table and the billing docs page are copied from it rather than
 /// typed again, so this fails when the code moves and the file does not. Run with WBSKT_UPDATE_SNAPSHOTS=1
 /// to rewrite it, and commit the file with the change.
 /// </summary>
@@ -57,9 +57,21 @@ public sealed class PlanSnapshotTests
             });
         }
 
+        var packs = new JsonArray();
+        foreach ((string name, CreditPack pack) in CreditPackPrices.Packs.OrderBy(p => p.Value.Credits))
+        {
+            packs.Add(new JsonObject
+            {
+                ["name"] = name,
+                ["credits"] = pack.Credits,
+                ["usd"] = pack.Usd
+            });
+        }
+
         var document = new JsonObject
         {
             ["plans"] = plans,
+            ["creditPacks"] = packs,
             ["business"] = new JsonObject
             {
                 ["minimumClients"] = BusinessContract.MinimumClients,
