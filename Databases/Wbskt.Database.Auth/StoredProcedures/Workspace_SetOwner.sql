@@ -1,12 +1,11 @@
--- Hands a workspace to another member of its tenant. The new owner is added to the workspace if they
--- were not in it, since an owner who is not a member cannot reach what they own. The previous owner
--- stays a member; removing them is a separate, ordinary member removal now that they can be removed.
--- Like a workspace's creator (Workspace_Create), the new owner gets the tenant's Admin role scoped to
--- the workspace unless they hold it there or tenant-wide, so the owner can administer what they own.
+-- Hands a workspace to another member of its tenant, through dbo.WorkspaceOwner_Grant (membership, the
+-- Admin role there, and the ownership event in the outbox). The previous owner stays a member; removing
+-- them is a separate, ordinary member removal. Returns the previous owner's reference.
 -- A suspended member cannot act in the tenant, so is refused like someone outside it.
 CREATE PROCEDURE dbo.Workspace_SetOwner
     @WorkspaceId INT,
-    @UserId INT
+    @UserId INT,
+    @PreviousOwnerRefId UNIQUEIDENTIFIER = NULL OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -28,29 +27,13 @@ BEGIN
         THROW 50009, 'User is not a member of the tenant that owns this workspace.', 1;
     END
 
-    IF NOT EXISTS (SELECT 1 FROM dbo.WorkspaceMembers WHERE WorkspaceId = @WorkspaceId AND UserId = @UserId)
-    BEGIN
-        INSERT INTO dbo.WorkspaceMembers (WorkspaceId, UserId)
-        VALUES (@WorkspaceId, @UserId);
-    END
+    SET @PreviousOwnerRefId = (
+        SELECT U.RefId
+        FROM dbo.Workspaces W
+        INNER JOIN dbo.Users U ON U.Id = W.OwnerUserId
+        WHERE W.Id = @WorkspaceId);
 
-    UPDATE dbo.Workspaces
-    SET OwnerUserId = @UserId
-    WHERE Id = @WorkspaceId;
-
-    DECLARE @AdminRoleId INT = (SELECT Id FROM dbo.Roles WHERE TenantId = @TenantId AND Kind = N'Admin');
-    IF @AdminRoleId IS NOT NULL
-        AND NOT EXISTS (
-            SELECT 1
-            FROM dbo.UserRoles
-            WHERE UserId = @UserId
-              AND RoleId = @AdminRoleId
-              AND TenantId = @TenantId
-              AND (WorkspaceId = @WorkspaceId OR WorkspaceId IS NULL))
-    BEGIN
-        INSERT INTO dbo.UserRoles (UserId, RoleId, TenantId, WorkspaceId)
-        VALUES (@UserId, @AdminRoleId, @TenantId, @WorkspaceId);
-    END
+    EXEC dbo.WorkspaceOwner_Grant @WorkspaceId = @WorkspaceId, @UserId = @UserId, @TenantId = @TenantId, @Announce = 0;
 
     COMMIT TRANSACTION;
 END

@@ -7,7 +7,7 @@
 -- out of every tenant, including their own.
 --
 -- Workspaces they owned in this tenant transfer to @NewOwnerUserId, who is added as a member of each
--- if they were not already. Leaving OwnerUserId pointing at a non-member would strand those
+-- if they were not already and given its Admin role, as an explicit transfer would. Leaving OwnerUserId pointing at a non-member would strand those
 -- workspaces: access resolution gates on a WorkspaceMembers row before it evaluates any permission,
 -- so a workspace with no member holding users.manage cannot be administered or deleted by anyone,
 -- tenant-wide administrator included.
@@ -49,18 +49,21 @@ BEGIN
         THROW 50008, 'Cannot remove the last administrator of a tenant.', 1;
     END
 
-    -- Ownership transfers before the membership rows are cleared, so the receiving administrator is
-    -- a member of every workspace they inherit.
-    INSERT INTO dbo.WorkspaceMembers (WorkspaceId, UserId)
-    SELECT W.Id, @NewOwnerUserId
-    FROM dbo.Workspaces W
-    WHERE W.TenantId = @TenantId
-      AND W.OwnerUserId = @UserId
-      AND NOT EXISTS (SELECT 1 FROM dbo.WorkspaceMembers WM WHERE WM.WorkspaceId = W.Id AND WM.UserId = @NewOwnerUserId);
-
-    UPDATE dbo.Workspaces
-    SET OwnerUserId = @NewOwnerUserId
-    WHERE TenantId = @TenantId AND OwnerUserId = @UserId;
+    -- Ownership transfers before the membership rows are cleared, the same way an explicit transfer
+    -- does (dbo.WorkspaceOwner_Grant): the receiving administrator becomes a member of each workspace
+    -- they inherit and holds its Admin role, and each hand-over is queued for the audit log.
+    DECLARE @HandedOver INT;
+    DECLARE owned CURSOR LOCAL FAST_FORWARD FOR
+        SELECT Id FROM dbo.Workspaces WHERE TenantId = @TenantId AND OwnerUserId = @UserId;
+    OPEN owned;
+    FETCH NEXT FROM owned INTO @HandedOver;
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+        EXEC dbo.WorkspaceOwner_Grant @WorkspaceId = @HandedOver, @UserId = @NewOwnerUserId, @TenantId = @TenantId, @Announce = 1;
+        FETCH NEXT FROM owned INTO @HandedOver;
+    END
+    CLOSE owned;
+    DEALLOCATE owned;
 
     DELETE FROM dbo.UserRoles WHERE UserId = @UserId AND TenantId = @TenantId;
     DELETE FROM dbo.UserPermissions WHERE UserId = @UserId AND TenantId = @TenantId;

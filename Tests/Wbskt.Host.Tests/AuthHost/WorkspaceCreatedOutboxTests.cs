@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Moq;
 using Wbskt.Auth.Host.Services;
+using Wbskt.Events.Abstractions;
 using Wbskt.Events.Auth;
 using Wbskt.Infrastructure.Security;
 
@@ -36,5 +37,27 @@ public sealed class WorkspaceCreatedOutboxTests
 
         using var payload = JsonDocument.Parse(message.Payload);
         Assert.Equal(caller!.UserRefId, payload.RootElement.GetProperty("actorUserRefId").GetGuid());
+    }
+}
+
+/// <summary>
+/// dbo.WorkspaceOwner_Grant builds the ownership event's JSON itself, for a workspace a member left
+/// behind. This is the shape it writes; the outbox must read it back as the event.
+/// </summary>
+public sealed class WorkspaceHandOverPayloadTests
+{
+    [Fact]
+    public void The_hand_over_written_by_the_database_reads_back_as_the_event()
+    {
+        const string payload = """
+            {"workspaceId":12,"newOwnerRefId":"6F9619FF-8B86-D011-B42D-00C04FC964FF","changes":[{"field":"owner","before":"0f8fad5b-d9cb-469f-a165-70867728950e","after":"6f9619ff-8b86-d011-b42d-00c04fc964ff"}],"createdAtUtc":"2026-11-19T10:00:00.123Z"}
+            """;
+
+        var handedOver = JsonSerializer.Deserialize<WorkspaceOwnershipTransferredEvent>(payload, Wbskt.Infrastructure.Events.Outbox.OutboxMessage.JsonOptions)!;
+
+        Assert.Equal(12, handedOver.WorkspaceId);
+        Assert.Equal(Guid.Parse("6f9619ff-8b86-d011-b42d-00c04fc964ff"), handedOver.NewOwnerRefId);
+        Assert.Equal(new FieldChange("owner", "0f8fad5b-d9cb-469f-a165-70867728950e", "6f9619ff-8b86-d011-b42d-00c04fc964ff"), Assert.Single(handedOver.Changes!));
+        Assert.Equal(new DateTime(2026, 11, 19, 10, 0, 0, 123, DateTimeKind.Utc), handedOver.CreatedAtUtc);
     }
 }

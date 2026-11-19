@@ -89,6 +89,36 @@ public sealed class WorkspaceAccessProcedureTests(AuthSqlFixture fixture)
     }
 
     [SkippableFact]
+    public async Task A_workspace_left_behind_by_a_removed_member_gives_its_new_owner_Admin_and_is_logged()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var (tenantId, ownerId) = await CreateTenantAsync();
+        int workspaceId = await CreateWorkspaceAsync(tenantId, ownerId);
+
+        // Another administrator, so the removal leaves one, and the member receiving the workspace.
+        int otherAdminId = await CreateUserAsync();
+        int receiverId = await CreateUserAsync();
+        await ExecAsync("""
+            INSERT INTO dbo.TenantMembers (TenantId, UserId) VALUES (@p0, @p1), (@p0, @p2);
+            INSERT INTO dbo.UserRoles (UserId, RoleId, TenantId, WorkspaceId)
+            SELECT @p1, Id, @p0, NULL FROM dbo.Roles WHERE TenantId = @p0 AND Kind = N'Admin';
+            """, tenantId, otherAdminId, receiverId);
+
+        await ProcAsync("dbo.TenantMember_Remove", ("@TenantId", tenantId), ("@UserId", ownerId), ("@NewOwnerUserId", receiverId));
+
+        Assert.Equal(receiverId, await ScalarAsync<int>("SELECT OwnerUserId FROM dbo.Workspaces WHERE Id = @p0", workspaceId));
+        Assert.Equal(1, await ScalarAsync<int>("""
+            SELECT COUNT(*) FROM dbo.UserRoles UR INNER JOIN dbo.Roles R ON R.Id = UR.RoleId
+            WHERE UR.UserId = @p0 AND UR.WorkspaceId = @p1 AND R.Kind = N'Admin'
+            """, receiverId, workspaceId));
+        Assert.Equal(1, await ScalarAsync<int>("""
+            SELECT COUNT(*) FROM dbo.OutboxMessages
+            WHERE MessageType = N'Wbskt.Events.Auth.WorkspaceOwnershipTransferredEvent'
+              AND JSON_VALUE(Payload, '$.workspaceId') = CONVERT(NVARCHAR(20), @p0)
+            """, workspaceId));
+    }
+
+    [SkippableFact]
     public async Task Ownership_moving_back_does_not_grant_Admin_twice()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
