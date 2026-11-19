@@ -927,6 +927,21 @@ public sealed class BillingPaymentsTests
     }
 
     [Fact]
+    public async Task An_upgrade_is_refused_while_wbskt_has_set_the_plan()
+    {
+        // Moved by staff to a contract plan, still subscribed: an upgrade would charge a proration and
+        // leave the tenant on the contract until it ends.
+        Tenant = Tenant with { PlanCode = PlanCode.Business, Source = PlanSource.Operator, EndsAt = Now.UtcDateTime.AddDays(30) };
+        _stored.Add(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(10)) with { PlanCode = PlanCode.Maker, Interval = BillingInterval.Monthly });
+        ProviderSays(new ProviderSubscription("sub_1", SubscriptionStatus.Active, _options.Plans[PlanCode.Maker][BillingInterval.Monthly], "cus_1", TenantRef, Now.AddDays(10), false));
+
+        var result = await Billing().ChangePlanAsync(9, new ChangePlanRequest(PlanCode.Pro, BillingInterval.Monthly), CancellationToken.None);
+
+        Assert.Equal("BILLING_PLAN_SET_BY_OPERATOR", result.Error.Code);
+        _gateway.Verify(g => g.ChangePlanAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<PlanChangeTiming>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task A_scheduled_downgrade_shows_on_the_billing_read_and_asking_for_the_current_plan_drops_it()
     {
         _stored.Add(Subscription(SubscriptionStatus.Active, Now.UtcDateTime.AddDays(10)));

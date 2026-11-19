@@ -173,6 +173,13 @@ internal sealed class TenantBillingService(
         bool same = current.PlanCode == request.Plan && current.Interval == request.Interval;
         bool upgrade = request.Plan > current.PlanCode
             || (request.Plan == current.PlanCode && current.Interval == BillingInterval.Monthly && request.Interval == BillingInterval.Yearly);
+
+        // An upgrade is charged now, but the plan Wbskt set stays until it ends, so it would be paid for
+        // and change nothing, as a checkout would. A downgrade takes effect at the period's end and is left.
+        if (upgrade && await plans.FindByIdAsync(tenantId, ct) is { } tenant && tenant.IsOperatorPlanAt(clock.GetUtcNow().UtcDateTime))
+        {
+            return PlanSetByOperator;
+        }
         try
         {
             if (same)
