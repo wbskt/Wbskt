@@ -9,5 +9,7 @@ public interface IAdminMemberService
 {
     Task<Result<StaffActionResponse>> SetSuspendedAsync(Guid tenantRef, Guid userRef, AdminSetMemberSuspendedRequest request, CancellationToken cancellationToken);
 
+    Task<Result<StaffActionResponse>> RepairAdministratorAsync(Guid tenantRef, Guid userRef, AdminRepairAdministratorRequest request, CancellationToken cancellationToken);
+
     Task<Result<StaffActionResponse>> RemoveAsync(Guid tenantRef, Guid userRef, AdminRemoveMemberRequest request, CancellationToken cancellationToken);
 }

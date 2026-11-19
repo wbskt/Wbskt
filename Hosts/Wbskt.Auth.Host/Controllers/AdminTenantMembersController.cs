@@ -32,6 +32,13 @@ public class AdminTenantMembersController : ApiControllerBase
         return MapResult(await _adminMemberService.SetSuspendedAsync(tenantRef, userRef, request, cancellationToken));
     }
 
+    /// <summary>Makes the member an administrator of this tenant; 409 when they are suspended or cannot sign in.</summary>
+    [HttpPost(InternalRoutes.AdminTenantMemberRepairAdministrator)]
+    public async Task<ActionResult<StaffActionResponse>> RepairAdministrator(Guid tenantRef, Guid userRef, [FromBody] AdminRepairAdministratorRequest request, CancellationToken cancellationToken)
+    {
+        return MapResult(await _adminMemberService.RepairAdministratorAsync(tenantRef, userRef, request, cancellationToken));
+    }
+
     /// <summary>Removes the member from this tenant; 409 when that would leave it without an administrator or them in no tenant.</summary>
     [HttpPost(InternalRoutes.AdminTenantMemberRemove)]
     public async Task<ActionResult<StaffActionResponse>> Remove(Guid tenantRef, Guid userRef, [FromBody] AdminRemoveMemberRequest request, CancellationToken cancellationToken)

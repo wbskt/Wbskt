@@ -81,3 +81,9 @@ public sealed record AdminSetMemberSuspendedRequest(StaffChange Staff, bool Susp
 /// roles there go, and workspaces they owned pass to another of its administrators.
 /// </summary>
 public sealed record AdminRemoveMemberRequest(StaffChange Staff);
+
+/// <summary>
+/// Makes a member an administrator of the tenant (<c>InternalRoutes.AdminTenantMemberRepairAdministrator</c>):
+/// its Admin role tenant-wide, and their own tenant-wide denies of users.manage and roles.manage removed.
+/// </summary>
+public sealed record AdminRepairAdministratorRequest(StaffChange Staff);

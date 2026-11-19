@@ -33,6 +33,7 @@ internal sealed class AdminMemberService(
     public const string SuspendAction = "SuspendMember";
     public const string RestoreAction = "RestoreMember";
     public const string RemoveAction = "RemoveMember";
+    public const string RepairAdministratorAction = "RepairAdministrator";
     public const string TargetKind = "Account";
 
     private static readonly Error TenantNotFound = Error.NotFound("TENANT_NOT_FOUND", "No tenant has that RefId.");
@@ -83,6 +84,46 @@ internal sealed class AdminMemberService(
                     AdminUserService.StaffAddress,
                     $"UserId: {user.Id}, TenantId: {tenantId}"), CancellationToken.None);
             }
+        });
+        return result;
+    }
+
+    public async Task<Result<StaffActionResponse>> RepairAdministratorAsync(Guid tenantRef, Guid userRef, AdminRepairAdministratorRequest request, CancellationToken cancellationToken)
+    {
+        var target = await FindAsync(tenantRef, userRef, cancellationToken);
+        if (target.IsFailure)
+        {
+            return target.Error;
+        }
+
+        var (tenantId, user) = target.Value;
+        var adminRoleRef = Guid.Empty;
+        var result = await runner.RunAsync(request.Staff, Action(RepairAdministratorAction, tenantRef, user), async ct =>
+        {
+            try
+            {
+                adminRoleRef = await staff.RepairAdministratorAsync(tenantId, user.Id, ct);
+                return Result.Success();
+            }
+            catch (SqlException ex) when (ex.Number is 50016)
+            {
+                return Result.Failure(MemberNotFound);
+            }
+            catch (SqlException ex) when (ex.Number is 50048)
+            {
+                return Result.Failure(Error.Conflict("MEMBER_CANNOT_ACT", "This member is suspended here or their sign-in is off, so they could not act as administrator. Lift that first."));
+            }
+        }, cancellationToken);
+
+        await AfterCommitAsync(result, async () =>
+        {
+            _announcer.AccessChanged();
+            await _announcer.ToTenantAsync(new MemberRoleAssignedEvent(userRef, adminRoleRef, null) { ActorSource = EventSource.Support }, tenantId, CancellationToken.None);
+            await eventBus.PublishAsync(new SecurityAlertEvent(
+                "AdministratorRepaired",
+                $"User ID {user.Id} was made an administrator of tenant ID {tenantId} by staff member {request.Staff.StaffName.Trim()}.",
+                AdminUserService.StaffAddress,
+                $"UserId: {user.Id}, TenantId: {tenantId}"), CancellationToken.None);
         });
         return result;
     }
