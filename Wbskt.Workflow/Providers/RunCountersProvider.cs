@@ -17,16 +17,6 @@ internal sealed class RunCountersProvider : BaseSqlProvider, IRunCountersProvide
         _clock = clock ?? TimeProvider.System;
     }
 
-    public async Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct)
-    {
-        return await ExecuteSingleAsync(
-            "dbo.RunCounters_GetBy_RunId",
-            p => p.AddWithValue("@RunId", runId),
-            Map,
-            new KeyNotFoundException($"Run counters for RunId={runId} not found."),
-            ct
-        );
-    }
 
     public async Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct)
     {

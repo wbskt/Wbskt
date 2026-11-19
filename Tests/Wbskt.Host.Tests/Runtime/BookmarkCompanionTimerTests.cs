@@ -194,11 +194,6 @@ public sealed class BookmarkCompanionTimerTests
         };
 
         public Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct) => throw new NotSupportedException();
-        public Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct)
-        {
-            _byRefId[row.RefId] = row;
-            return Task.FromResult(row);
-        }
         public Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct) => Task.FromResult(_byRefId.Values.Single(row => row.Id == branchId));
         public Task<BranchRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult(_byRefId[refId]);
         public Task<IReadOnlyCollection<BranchRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BranchRow>>(_byRefId.Values.ToArray());
@@ -214,8 +209,6 @@ public sealed class BookmarkCompanionTimerTests
 
     private sealed class StubRunProvider : IRunProvider
     {
-        public Task<RunRow> CreateAsync(RunRow row, CancellationToken ct) => throw new NotSupportedException();
-        public Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<RunRow> GetByIdAsync(long runId, CancellationToken ct)
         {
             return Task.FromResult(new RunRow
@@ -253,16 +246,6 @@ public sealed class BookmarkCompanionTimerTests
 
     private sealed class StubRunCountersProvider : IRunCountersProvider
     {
-        public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct)
-        {
-            return Task.FromResult(new RunCountersRow
-            {
-                RunId = runId,
-                ActiveBranchCount = 1,
-                CreditsConsumed = 0m,
-                UpdatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc)
-            });
-        }
 
         public Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => Task.FromResult(1);
         public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => Task.FromResult(1);
@@ -283,8 +266,6 @@ public sealed class BookmarkCompanionTimerTests
             return Task.FromResult(row);
         }
 
-        public Task<BookmarkRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult(_bookmarks.Single(row => row.RefId == refId));
-        public Task<BookmarkRow> GetByIdAsync(long bookmarkId, CancellationToken ct) => Task.FromResult(_bookmarks.Single(row => row.Id == bookmarkId));
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeysAsync(IReadOnlyCollection<string> matchKeys, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(_bookmarks.Where(row => matchKeys.Contains(row.MatchKey)).ToArray());
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(_bookmarks.Where(row => row.RunId == runId).ToArray());
 
@@ -304,13 +285,6 @@ public sealed class BookmarkCompanionTimerTests
             return Task.FromResult<IReadOnlyCollection<BookmarkRow>>(due);
         }
 
-        public Task DeleteAsync(Guid refId, CancellationToken ct)
-        {
-            _bookmarks.RemoveAll(row => row.RefId == refId);
-            return Task.CompletedTask;
-        }
-
-        public Task<long> CountAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task<int> DeleteOrphansAsync(CancellationToken ct) => Task.FromResult(0);
         public Task DeleteAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
     }

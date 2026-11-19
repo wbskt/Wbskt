@@ -399,11 +399,6 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
         private Dictionary<string, IdempotencyKeyRow> IdempotencyKeys { get; } = [];
 
         public Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct) => throw new NotSupportedException();
-        public Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct)
-        {
-            Branches[row.Id] = row;
-            return Task.FromResult(row);
-        }
         public Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct) => Task.FromResult(Branches[branchId]);
         public Task<BranchRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult(Branches.Values.Single(branch => branch.RefId == refId));
         public Task<IReadOnlyCollection<BranchRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BranchRow>>(Branches.Values.ToArray());
@@ -423,8 +418,6 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
             return Task.FromResult(updated);
         }
 
-        Task<RunRow> IRunProvider.CreateAsync(RunRow row, CancellationToken ct) => throw new NotSupportedException();
-        public Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         Task<RunRow> IRunProvider.GetByIdAsync(long runId, CancellationToken ct) => Task.FromResult(Runs[runId]);
         Task<RunRow?> IRunProvider.FindRowByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct) => throw new NotSupportedException();
@@ -442,17 +435,6 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
             RunRow updated = Runs[runId] with { Status = status, CompletedAt = completedAt };
             Runs[runId] = updated;
             return Task.FromResult((true, updated));
-        }
-
-        public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct)
-        {
-            return Task.FromResult(new RunCountersRow
-            {
-                RunId = runId,
-                ActiveBranchCount = _activeBranches,
-                CreditsConsumed = 0m,
-                UpdatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc)
-            });
         }
 
         public Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct)
@@ -475,8 +457,6 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
             return Task.FromResult(row);
         }
 
-        Task<BookmarkRow> IBookmarkProvider.GetByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult(Bookmarks.Single(bookmark => bookmark.RefId == refId));
-        Task<BookmarkRow> IBookmarkProvider.GetByIdAsync(long bookmarkId, CancellationToken ct) => Task.FromResult(Bookmarks.Single(bookmark => bookmark.Id == bookmarkId));
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeysAsync(IReadOnlyCollection<string> matchKeys, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(Bookmarks.Where(bookmark => matchKeys.Contains(bookmark.MatchKey)).ToArray());
         Task<IReadOnlyCollection<BookmarkRow>> IBookmarkProvider.GetAllByRunIdAsync(int runId, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(Bookmarks.Where(bookmark => bookmark.RunId == runId).ToArray());
         public Task<bool> TryClaimAsync(Guid refId, CancellationToken ct)
@@ -516,13 +496,6 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
             return Task.FromResult<IReadOnlyCollection<BookmarkRow>>(due);
         }
 
-        public Task DeleteAsync(Guid refId, CancellationToken ct)
-        {
-            Bookmarks.RemoveAll(bookmark => bookmark.RefId == refId);
-            return Task.CompletedTask;
-        }
-
-        public Task<long> CountAsync(CancellationToken ct) => Task.FromResult((long)Bookmarks.Count);
         public Task<int> DeleteOrphansAsync(CancellationToken ct) => Task.FromResult(0);
         public Task DeleteAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
         public List<HistoryEventRow> History { get; } = [];
@@ -535,7 +508,6 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
         public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<Wbskt.Models.IPagedList<WorkflowDefinitionRow>> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct) => Task.FromResult<Wbskt.Models.IPagedList<WorkflowDefinitionRow>>(new Wbskt.Models.PagedList<WorkflowDefinitionRow>(Array.Empty<WorkflowDefinitionRow>(), 0));
-        public Task<int?> FindByRefIdVersionAsync(Guid refId, int version, CancellationToken ct) => throw new NotSupportedException();
         public Task<WorkflowDefinitionRow> GetByIdAsync(int id, CancellationToken ct)
         {
             return Task.FromResult(new WorkflowDefinitionRow

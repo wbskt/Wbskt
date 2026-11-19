@@ -37,8 +37,7 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
         root.RunId.Should().Be(started.Run.Id);
         root.Status.Should().Be(BranchStatus.Active);
         root.LocalJson.Should().Be(branch.LocalJson);
-        RunCountersRow counters = await ProviderFactory.RunCounters(fixture.ConnectionString).GetByRunIdAsync(started.Run.Id, CancellationToken.None);
-        counters.ActiveBranchCount.Should().Be(1);
+        (await CounterAsync("ActiveBranchCount", started.Run.Id)).Should().Be(1);
     }
 
     [SkippableFact]
@@ -51,8 +50,7 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
 
         RunStartRow started = await ProviderFactory.Run(fixture.ConnectionString).StartAsync(run with { StartCost = 1m }, branch, null, CancellationToken.None);
 
-        RunCountersRow counters = await ProviderFactory.RunCounters(fixture.ConnectionString).GetByRunIdAsync(started.Run.Id, CancellationToken.None);
-        counters.CreditsConsumed.Should().Be(1m);
+        (await CounterAsync("CreditsConsumed", started.Run.Id)).Should().Be(1m);
     }
 
     [SkippableFact]
@@ -568,5 +566,15 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
             RowVersion = Array.Empty<byte>()
         };
         return (run, branch);
+    }
+
+    // RunCounters has no reader in the engine beyond its own procedures, so the test reads the column.
+    private async Task<decimal> CounterAsync(string column, int runId)
+    {
+        await using var connection = new SqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new SqlCommand($"SELECT CAST({column} AS DECIMAL(18, 4)) FROM dbo.RunCounters WHERE RunId = @RunId", connection);
+        command.Parameters.AddWithValue("@RunId", runId);
+        return (decimal)(await command.ExecuteScalarAsync())!;
     }
 }

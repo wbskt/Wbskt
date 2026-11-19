@@ -4,7 +4,6 @@ using Entities;
 
 public interface IRunCountersProvider
 {
-    Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct);
     Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct);
     Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct);
     /// <summary>

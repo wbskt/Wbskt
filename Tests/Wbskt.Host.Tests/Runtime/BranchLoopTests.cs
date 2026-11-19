@@ -877,9 +877,9 @@ public sealed class BranchLoopTests
             new NoOpJoinAggregatorProvider());
     }
 
-    private static async Task ParkForRetryAsync(RecordingBranchProvider branchProvider, string localJson)
+    private static void ParkForRetry(RecordingBranchProvider branchProvider, string localJson)
     {
-        await branchProvider.UpsertAsync(branchProvider.CurrentBranch with { Status = BranchStatus.Waiting, LocalJson = localJson }, CancellationToken.None);
+        branchProvider.Put(branchProvider.CurrentBranch with { Status = BranchStatus.Waiting, LocalJson = localJson });
     }
 
     [Fact]
@@ -912,7 +912,7 @@ public sealed class BranchLoopTests
     public async Task A_woken_retry_park_runs_the_next_attempt_is_charged_and_drops_the_attempt_on_success()
     {
         var branchProvider = new RecordingBranchProvider(RetryNodeId);
-        await ParkForRetryAsync(branchProvider, "{\"__retry_attempt\":2,\"keep\":1}");
+        ParkForRetry(branchProvider, "{\"__retry_attempt\":2,\"keep\":1}");
         var runCounters = new StubRunCountersProvider();
         var executor = new ScriptedExecutor(
             new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>()),
@@ -937,7 +937,7 @@ public sealed class BranchLoopTests
     public async Task A_woken_retry_park_that_fails_again_journals_the_retry_and_parks_for_the_attempt_after()
     {
         var branchProvider = new RecordingBranchProvider(RetryNodeId);
-        await ParkForRetryAsync(branchProvider, "{\"__retry_attempt\":2}");
+        ParkForRetry(branchProvider, "{\"__retry_attempt\":2}");
         var runCounters = new StubRunCountersProvider();
         var history = new RecordingHistoryEventProvider();
         var executor = new ScriptedExecutor(new NodeExecutionResult.Fail("E_RETRY", "again", true, null));
@@ -956,7 +956,7 @@ public sealed class BranchLoopTests
     public async Task A_woken_retry_parks_last_attempt_failing_fails_the_branch()
     {
         var branchProvider = new RecordingBranchProvider(RetryNodeId);
-        await ParkForRetryAsync(branchProvider, "{\"__retry_attempt\":3}");
+        ParkForRetry(branchProvider, "{\"__retry_attempt\":3}");
         var executor = new ScriptedExecutor(new NodeExecutionResult.Fail("E_RETRY", "still", true, null));
         BranchLoop loop = CreateRetryLoop(branchProvider, new StubRunCountersProvider(), new RecordingBookmarkProvider(), new RecordingHistoryEventProvider(), executor);
 
@@ -971,7 +971,7 @@ public sealed class BranchLoopTests
     public async Task The_resume_visit_of_a_nodes_own_park_is_still_not_charged()
     {
         var branchProvider = new RecordingBranchProvider(RetryNodeId);
-        await ParkForRetryAsync(branchProvider, "{}");
+        ParkForRetry(branchProvider, "{}");
         var runCounters = new StubRunCountersProvider();
         var executor = new ScriptedExecutor(
             new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>()),
@@ -991,7 +991,7 @@ public sealed class BranchLoopTests
         // Left in place, the marker would make the node's own resume visit read as a retry wake: charged,
         // and started from the retried attempt.
         var branchProvider = new RecordingBranchProvider(RetryNodeId);
-        await ParkForRetryAsync(branchProvider, "{\"__retry_attempt\":2}");
+        ParkForRetry(branchProvider, "{\"__retry_attempt\":2}");
         var bookmarks = new RecordingBookmarkProvider();
         var executor = new ScriptedExecutor(
             new NodeExecutionResult.WaitForBookmark(new SignalWakeCondition("ack", "corr-42"), new Dictionary<string, JsonElement>()));
@@ -2038,7 +2038,6 @@ public sealed class BranchLoopTests
     {
         public List<int> IncrementCalls { get; } = [];
 
-        public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
         public Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct)
         {
             IncrementCalls.Add(delta);
@@ -2126,10 +2125,9 @@ public sealed class BranchLoopTests
             return Task.FromResult(created);
         }
 
-        public Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct)
+        public void Put(BranchRow row)
         {
             _rows[row.Id] = row;
-            return Task.FromResult(row);
         }
 
         public Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct)
@@ -2199,10 +2197,6 @@ public sealed class BranchLoopTests
 
         public List<(long RunId, string FromStatus, string ToStatus)> TransitionRequests { get; } = [];
 
-        public Task<RunRow> CreateAsync(RunRow row, CancellationToken ct) => throw new NotSupportedException();
-
-        public Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
-
         public Task<RunRow> GetByIdAsync(long runId, CancellationToken ct)
         {
             return Task.FromResult(new RunRow
@@ -2259,17 +2253,6 @@ public sealed class BranchLoopTests
 
         public List<int> DecrementCalls { get; } = [];
 
-        public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct)
-        {
-            return Task.FromResult(new RunCountersRow
-            {
-                RunId = runId,
-                ActiveBranchCount = 0,
-                CreditsConsumed = 0m,
-                UpdatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc)
-            });
-        }
-
         public Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct)
         {
             IncrementCalls.Add(delta);
@@ -2305,14 +2288,10 @@ public sealed class BranchLoopTests
             return Task.FromResult(row);
         }
 
-        public Task<BookmarkRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<BookmarkRow> GetByIdAsync(long bookmarkId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
         public Task<bool> TryClaimAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(DateTime nowUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
-        public Task DeleteAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteSiblingsAsync(long runId, long branchId, long excludeBookmarkId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<long> CountAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task<int> DeleteOrphansAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
     }

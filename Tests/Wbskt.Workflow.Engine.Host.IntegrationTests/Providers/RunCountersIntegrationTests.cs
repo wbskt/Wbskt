@@ -22,8 +22,7 @@ public sealed class RunCountersIntegrationTests(SqlEdgeFixture fixture)
             PublishedBy = 1, CreatedAt = DateTime.UtcNow
         }, CancellationToken.None).LiveAsync(fixture.ConnectionString);
 
-        var runProvider = ProviderFactory.Run(fixture.ConnectionString);
-        RunRow run = await runProvider.CreateAsync(new RunRow
+        RunRow run = await ActiveRunSeeder.StartWithNoLiveWorkAsync(fixture.ConnectionString, new RunRow
         {
             Id = 0, RefId = Guid.NewGuid(),
             WorkflowDefinitionId = wd.Id,
@@ -38,7 +37,7 @@ public sealed class RunCountersIntegrationTests(SqlEdgeFixture fixture)
             CancellationReason = null,
             CreditBudget = 0m,
             CreatedAt = DateTime.UtcNow
-        }, CancellationToken.None);
+        });
 
         return run.Id;
     }

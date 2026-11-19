@@ -15,19 +15,6 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
 {
     public WorkflowDefinitionProvider(IConfiguration configuration) : base(configuration) { }
 
-    public async Task<int?> FindByRefIdVersionAsync(Guid refId, int version, CancellationToken ct)
-    {
-        var result = await ExecuteScalarAsync<object>(
-            "dbo.WorkflowDefinition_FindBy_RefId_Version",
-            p =>
-            {
-                p.AddWithValue("@RefId", refId);
-                p.AddWithValue("@Version", version);
-            },
-            ct
-        );
-        return result is int id ? id : (result == null ? null : Convert.ToInt32(result));
-    }
 
     public async Task<int?> FindWorkspaceIdAsync(int id, CancellationToken ct)
     {

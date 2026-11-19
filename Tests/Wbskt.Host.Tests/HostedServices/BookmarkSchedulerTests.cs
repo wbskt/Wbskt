@@ -193,12 +193,6 @@ public sealed class BookmarkSchedulerTests
         public List<BranchRow> Upserted { get; } = [];
 
         public Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct) => throw new NotSupportedException();
-        public Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct)
-        {
-            _rows[row.RefId] = row;
-            Upserted.Add(row);
-            return Task.FromResult(row);
-        }
         public Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct) => throw new NotSupportedException();
         public Task<BranchRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult(_rows[refId]);
         public Task<IReadOnlyCollection<BranchRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
@@ -212,8 +206,6 @@ public sealed class BookmarkSchedulerTests
         public int LastBatchSize { get; private set; }
 
         public Task<BookmarkRow> CreateAsync(BookmarkRow row, CancellationToken ct) => throw new NotSupportedException();
-        public Task<BookmarkRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<BookmarkRow> GetByIdAsync(long bookmarkId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
         public Task<bool> TryClaimAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(DateTime nowUtc, int batchSize, CancellationToken ct)
@@ -222,8 +214,6 @@ public sealed class BookmarkSchedulerTests
             LastBatchSize = batchSize;
             return Task.FromResult(dueBookmarks);
         }
-        public Task DeleteAsync(Guid refId, CancellationToken ct) => Task.CompletedTask;
-        public Task<long> CountAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task<int> DeleteOrphansAsync(CancellationToken ct) => Task.FromResult(0);
         public Task DeleteAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
     }

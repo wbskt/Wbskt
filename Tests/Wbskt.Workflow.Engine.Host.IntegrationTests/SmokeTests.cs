@@ -61,11 +61,9 @@ public sealed class SmokeTests(SqlEdgeFixture fixture)
             "WorkflowDefinition_GetLatestVersion_By_RefId",
             "WorkflowDefinition_GetBy_Ids",
             "WorkflowDefinition_FindWorkspaceIdBy_Id",
-            "Run_Create",
             "Run_SetTerminal",
             "RunCounters_IncrementActiveBranches",
             "RunCounters_DecrementActiveBranches",
-            "Branch_Upsert",
             "Branch_GetBy_RefId",
             "Bookmark_Create",
             // Bookmark_GetDue was replaced by the atomic claim pair when bookmarks moved to the

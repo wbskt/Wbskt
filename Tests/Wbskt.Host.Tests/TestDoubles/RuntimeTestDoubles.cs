@@ -97,8 +97,6 @@ internal sealed class NoOpJoinAggregatorProvider : IJoinAggregatorProvider
 /// <summary>Run counters with an unlimited budget: every charge succeeds, nothing is left running.</summary>
 internal sealed class UnlimitedRunCountersProvider : IRunCountersProvider
 {
-    public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct) =>
-        Task.FromResult(new RunCountersRow { RunId = runId, ActiveBranchCount = 0, CreditsConsumed = 0m, UpdatedAt = DateTime.UtcNow });
 
     public Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => Task.FromResult(0);
 

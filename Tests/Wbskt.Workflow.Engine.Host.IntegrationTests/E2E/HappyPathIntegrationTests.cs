@@ -111,7 +111,7 @@ public sealed class HappyPathIntegrationTests(SqlEdgeFixture fixture, ITestOutpu
         output.WriteLine($"Started run RunId={runId} BranchId={branchId}");
 
         // No manual RunCounters seeding here. This used to increment the active-branch count by one,
-        // compensating for a RunStarter that did not - it now does: Run_Create seeds the counter row
+        // compensating for a RunStarter that did not - it now does: Run_Start seeds the counter row
         // and StartAsync increments it for the initial branch. Doing it again left the count at 2, so
         // completing the single branch decremented to 1 rather than 0, RunFinalizer never fired, and
         // the run sat in Running forever.

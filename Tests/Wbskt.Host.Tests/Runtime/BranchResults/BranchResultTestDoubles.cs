@@ -199,8 +199,6 @@ internal sealed class RecordingBranchProvider(List<string> log, BranchRow curren
         return Task.FromResult(Current);
     }
 
-    public Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct) => throw new NotSupportedException();
-
     public Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct) => throw new NotSupportedException();
 
     public Task<BranchRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
@@ -252,8 +250,6 @@ internal sealed class RecordingRunCountersProvider(List<string> log) : IRunCount
         log.Add($"increment:{runId}:{delta}");
         return Task.FromResult(delta);
     }
-
-    public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
 
     public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct)
     {

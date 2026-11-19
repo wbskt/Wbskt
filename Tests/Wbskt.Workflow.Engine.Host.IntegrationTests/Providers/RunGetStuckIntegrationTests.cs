@@ -10,7 +10,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 [Collection("SqlEdge")]
 public sealed class RunGetStuckIntegrationTests(SqlEdgeFixture fixture)
 {
-    // Runs.CreatedAt is the server's SYSUTCDATETIME() (Run_Create does not take it), so a run made a
+    // Runs.CreatedAt is the server's SYSUTCDATETIME() (Run_Start does not take it), so a run made a
     // moment ago can share its millisecond with DateTime.UtcNow and fail "CreatedAt < @CutoffUtc".
     // A cutoff a minute ahead is past every run these tests create.
     private static DateTime PastEveryRun() => DateTime.UtcNow.AddMinutes(1);
@@ -27,8 +27,7 @@ public sealed class RunGetStuckIntegrationTests(SqlEdgeFixture fixture)
             PublishedBy = 1, CreatedAt = DateTime.UtcNow
         }, CancellationToken.None).LiveAsync(fixture.ConnectionString);
 
-        var runProvider = ProviderFactory.Run(fixture.ConnectionString);
-        RunRow run = await runProvider.CreateAsync(new RunRow
+        RunRow run = await ActiveRunSeeder.StartWithNoLiveWorkAsync(fixture.ConnectionString, new RunRow
         {
             Id = 0, RefId = Guid.NewGuid(),
             WorkflowDefinitionId = wd.Id,
@@ -43,7 +42,7 @@ public sealed class RunGetStuckIntegrationTests(SqlEdgeFixture fixture)
             CancellationReason = null,
             CreditBudget = 0m,
             CreatedAt = createdAt
-        }, CancellationToken.None);
+        });
 
         return (wd, run);
     }

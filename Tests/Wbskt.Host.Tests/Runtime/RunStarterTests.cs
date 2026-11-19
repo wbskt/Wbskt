@@ -510,8 +510,6 @@ public sealed class RunStarterTests
             return StartAsync(run, rootBranch, triggerStartKey, ct);
         }
 
-        public Task<RunRow> CreateAsync(RunRow row, CancellationToken ct) => throw new NotSupportedException();
-
         public Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, CancellationToken ct)
         {
             operations.Add("run");
@@ -526,7 +524,6 @@ public sealed class RunStarterTests
             return Task.FromResult(new RunStartRow(CreatedRun, 801, true));
         }
 
-        public Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<RunRow> GetByIdAsync(long runId, CancellationToken ct) => throw new NotSupportedException();
         public Task<RunRow?> FindRowByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct) => throw new NotSupportedException();
@@ -560,7 +557,6 @@ public sealed class RunStarterTests
         public Task<IReadOnlyCollection<WorkflowVersionRow>> GetVersionsAsync(Guid refId, int workspaceId, CancellationToken ct) => throw new NotSupportedException();
         public Task<WorkflowDeletion?> DeleteAsync(Guid refId, int workspaceId, int deletedBy, CancellationToken ct) => throw new NotSupportedException();
         public Task<Wbskt.Models.IPagedList<WorkflowDefinitionRow>> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct) => Task.FromResult<Wbskt.Models.IPagedList<WorkflowDefinitionRow>>(new Wbskt.Models.PagedList<WorkflowDefinitionRow>(Array.Empty<WorkflowDefinitionRow>(), 0));
-        public Task<int?> FindByRefIdVersionAsync(Guid refId, int version, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<WorkflowDefinitionRow> GetByIdAsync(int id, CancellationToken ct)
         {

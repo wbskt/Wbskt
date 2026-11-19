@@ -181,8 +181,6 @@ public sealed class RunReaperTests
         public int GetStuckRunsCalls { get; private set; }
         public (DateTime CutoffUtc, int BatchSize)? LastRequest { get; private set; }
 
-        public Task<RunRow> CreateAsync(RunRow row, CancellationToken ct) => throw new NotSupportedException();
-        public Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<RunRow> GetByIdAsync(long runId, CancellationToken ct) => throw new NotSupportedException();
         public Task<RunRow?> FindRowByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct) => throw new NotSupportedException();
