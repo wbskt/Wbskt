@@ -54,7 +54,8 @@ public sealed class AccountServiceTests
         // Addressed in a different case: the address match ignores it, as the database does.
         harness.Tenants.Setup(p => p.FindInvitationByTokenHashAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new InvitationLookup(invitationRef, Guid.NewGuid(), "Acme", "Someone@Example.TEST", DateTime.UtcNow.AddDays(1), IsLive: true));
-        harness.Accounts.Setup(p => p.InsertUserAsync(It.IsAny<User>(), It.IsAny<CancellationToken>())).Callback<User, CancellationToken>((u, _) => { u.Id = 42; u.RefId = UserRef; }).ReturnsAsync(42);
+        User? inserted = null;
+        harness.Accounts.Setup(p => p.InsertUserAsync(It.IsAny<User>(), It.IsAny<CancellationToken>())).Callback<User, CancellationToken>((u, _) => { inserted = u; u.Id = 42; u.RefId = UserRef; }).ReturnsAsync(42);
         harness.Accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
         harness.Accounts.Setup(p => p.FindByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
         harness.Tenants.Setup(p => p.AcceptInvitationAsync(It.IsAny<byte[]>(), 42, It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(9);
@@ -62,6 +63,12 @@ public sealed class AccountServiceTests
         var result = await harness.Registration.RegisterUserAsync("someone", Email, Password, "invitation-token");
 
         Assert.True(result.IsSuccess);
+
+        // The invitation's link proved the address, so it is not confirmed a second time.
+        Assert.True(inserted!.IsEmailVerified);
+        harness.Accounts.Verify(p => p.CreateEmailVerificationTokenAsync(It.IsAny<int>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+        var verified = Assert.Single(harness.Bus.Published.OfType<EmailVerifiedEvent>());
+        Assert.Equal((42, UserRef), (verified.UserId, verified.UserRefId));
         harness.Tenants.Verify(p => p.CreateTenantAsync("someone's Tenant", null, 42, It.IsAny<string>(), It.IsAny<Wbskt.Infrastructure.Events.Outbox.OutboxMessage>(), It.IsAny<CancellationToken>()), Times.Once);
         harness.Tenants.Verify(p => p.AcceptInvitationAsync(It.Is<byte[]>(h => h.SequenceEqual(SecurityTokens.Hash("invitation-token"))), 42, It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Once);
         var accepted = Assert.Single(harness.Bus.Published.OfType<InvitationAcceptedEvent>());
@@ -70,10 +77,10 @@ public sealed class AccountServiceTests
 
     /// <summary>
     /// The invitation was revoked or redeemed between the check and the redemption. The account exists
-    /// by then, and cannot sign in without confirming its address, so the link must already be out.
+    /// by then, its address proved by the invitation's link, so it can sign in and be invited again.
     /// </summary>
     [Fact]
-    public async Task An_invitation_lost_after_the_account_is_made_still_leaves_a_confirmation_link()
+    public async Task An_invitation_lost_after_the_account_is_made_still_leaves_an_account_that_can_sign_in()
     {
         var harness = new Harness();
         harness.Tenants.Setup(p => p.FindInvitationByTokenHashAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
@@ -88,8 +95,8 @@ public sealed class AccountServiceTests
 
         Assert.Equal("INVITATION_INVALID", result.Error.Code);
         Assert.Contains("account was created", result.Error.Message);
-        harness.Accounts.Verify(p => p.CreateEmailVerificationTokenAsync(42, It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
-        Assert.IsType<UserRegisteredEvent>(Assert.Single(harness.Bus.Published));
+        Assert.Contains("Sign in", result.Error.Message);
+        Assert.Equal([typeof(UserRegisteredEvent), typeof(EmailVerifiedEvent)], harness.Bus.Published.Select(e => e.GetType()));
     }
 
     [Fact]

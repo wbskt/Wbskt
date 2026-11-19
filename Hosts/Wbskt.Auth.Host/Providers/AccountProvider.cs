@@ -56,6 +56,7 @@ internal sealed class AccountProvider : BaseSqlProvider, IAccountProvider
             p.AddWithValue("@Username", user.Username);
             p.AddWithValue("@Email", user.Email);
             p.AddWithValue("@PasswordHash", user.PasswordHash);
+            p.AddWithValue("@IsEmailVerified", user.IsEmailVerified);
             p.Add("@Id", SqlDbType.Int).Direction = ParameterDirection.Output;
             p.Add("@RefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
         }, cancellationToken);

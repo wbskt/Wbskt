@@ -25,12 +25,12 @@ internal sealed class RegistrationService : IRegistrationService
 
     private static readonly Error InvitationLostAfterSignUp = SqlGuardErrors.InvalidInvitation with
     {
-        Message = "Your account was created and a confirmation link was sent to your address, but the invitation can no longer be used. Confirm your address, sign in, and ask for a new invitation."
+        Message = "Your account was created, but the invitation can no longer be used. Sign in and ask for a new invitation."
     };
 
     private static readonly Error NoSeatAfterSignUp = SqlGuardErrors.PlanMemberLimitReached with
     {
-        Message = "Your account was created and a confirmation link was sent to your address, but the team that invited you has no room for another member. Confirm your address and sign in; they can invite you again once they make room."
+        Message = "Your account was created, but the team that invited you has no room for another member. Sign in; they can invite you again once they make room."
     };
 
     private static readonly Error UsernameConflict = Error.Conflict("AUTH_USERNAME_CONFLICT", "That username is already taken.");
@@ -127,10 +127,14 @@ internal sealed class RegistrationService : IRegistrationService
 
         try
         {
+            // An invitation is only sent to the address it names, and ValidateInvitationAsync has
+            // checked it names this one, so following its link proved the address: it is not
+            // confirmed a second time, even if the invitation is then lost below.
             var user = new User
             {
                 Username = username,
-                Email = email
+                Email = email,
+                IsEmailVerified = invitation is not null
             };
 
             user.PasswordHash = await _hashing.HashAsync(password, cancellationToken);
@@ -145,18 +149,25 @@ internal sealed class RegistrationService : IRegistrationService
             var tenantRefId = await _tenants.CreateTenantAsync($"{username}'s Tenant", null, userId, DefaultWorkspaceName, _workspaceCreated.For(DefaultWorkspaceName), cancellationToken);
             _logger.LogInformation("Created tenant {TenantRefId} for new user ID {UserId}", tenantRefId, userId);
 
-            // The account exists and is unusable until this link is followed. Issued as its own step
-            // rather than inside a transaction with the rows above, because there is no ambient
-            // transaction here to join - the user insert and Tenant_Create are already separate calls,
-            // and Tenant_Create is the only one that is atomic internally. If this step or the mail
-            // fails, resend-verification is the way back, which is why it is anonymous.
+            // An account the invitation did not prove is unusable until this link is followed. Issued as
+            // its own step rather than inside a transaction with the rows above, because there is no
+            // ambient transaction here to join - the user insert and Tenant_Create are already separate
+            // calls, and Tenant_Create is the only one that is atomic internally. If this step or the
+            // mail fails, resend-verification is the way back, which is why it is anonymous.
             //
-            // Always sent: the address had no account a moment ago, so nothing has been mailed to
+            // Always sent then: the address had no account a moment ago, so nothing has been mailed to
             // it. Still counted, so a resend straight after signing up waits out the cooldown.
-            await _mailCooldown.TryAcquireAsync(user.Email, MailKind.EmailVerification);
-            await IssueEmailVerificationAsync(user, cancellationToken);
+            if (!user.IsEmailVerified)
+            {
+                await _mailCooldown.TryAcquireAsync(user.Email, MailKind.EmailVerification);
+                await IssueEmailVerificationAsync(user, cancellationToken);
+            }
 
             await _eventBus.PublishAsync(new UserRegisteredEvent(userId, user.RefId, username, email), cancellationToken);
+            if (user.IsEmailVerified)
+            {
+                await _announcer.AnnounceAsync(new EmailVerifiedEvent(userId, user.RefId), null, cancellationToken);
+            }
 
             // After the confirmation link, not before: the invitation can fail here, and an account
             // whose link was never sent could not sign in, ask for a new invitation, or register again.
@@ -164,8 +175,9 @@ internal sealed class RegistrationService : IRegistrationService
             {
                 // Re-validated authoritatively inside the procedure. Between the check above and here
                 // the invitation could have been revoked or redeemed, or the tenant filled up, in which
-                // case this throws and registration answers with the reason. The account, its own
-                // tenant and its confirmation link survive, so the user can sign in and be invited again.
+                // case this throws and registration answers with the reason. The account and its own
+                // tenant survive, confirmed by the invitation's link, so the user can sign in and be
+                // invited again.
                 var limits = await _limits.ForTenantAsync(invitation.TenantRef, cancellationToken);
                 var joined = await _tenants.AcceptInvitationAsync(SecurityTokens.Hash(invitationToken), userId, limits.Members, cancellationToken);
                 _logger.LogInformation("New user ID {UserId} joined tenant ID {TenantId} by invitation", userId, joined);
@@ -181,9 +193,9 @@ internal sealed class RegistrationService : IRegistrationService
         catch (Exception ex)
         {
             // The invitation was revoked or redeemed between the pre-check and the redemption. The
-            // account, its own tenant and its confirmation link exist, so this is the caller's problem
-            // to retry with a fresh invitation, not a server fault — 400, matching the pre-check, with
-            // a message that says the account was made.
+            // account and its own tenant exist, its address confirmed by the invitation, so this is the
+            // caller's problem to retry with a fresh invitation, not a server fault — 400, matching the
+            // pre-check, with a message that says the account was made.
             if (ex is SqlException { Number: 50011 })
             {
                 _logger.LogWarning("Registration for {Username} completed but the invitation was no longer redeemable", username);
@@ -192,7 +204,7 @@ internal sealed class RegistrationService : IRegistrationService
             }
 
             // The inviting tenant's plan has no room for another member. As above, the account survives
-            // with its confirmation link; the inviter has to make room and invite again.
+            // confirmed by the invitation; the inviter has to make room and invite again.
             if (ex is SqlException { Number: 50031 })
             {
                 _logger.LogWarning("Registration for {Username} completed but the inviting tenant is at its plan's member limit", username);

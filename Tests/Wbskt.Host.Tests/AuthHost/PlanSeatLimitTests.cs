@@ -237,8 +237,9 @@ public sealed class PlanSeatLimitTests
         Assert.Contains("account was created", result.Error.Message);
         harness.Tenants.Verify(p => p.CreateTenantAsync("someone's Tenant", null, 42, It.IsAny<string>(), It.IsAny<Wbskt.Infrastructure.Events.Outbox.OutboxMessage>(), It.IsAny<CancellationToken>()), Times.Once);
 
-        // The account cannot sign in without confirming its address, so the link goes out regardless.
-        harness.Accounts.Verify(p => p.CreateEmailVerificationTokenAsync(42, It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+        // The invitation's link proved the address, so the account can sign in and be invited again.
+        harness.Accounts.Verify(p => p.InsertUserAsync(It.Is<User>(u => u.IsEmailVerified), It.IsAny<CancellationToken>()), Times.Once);
+        harness.Accounts.Verify(p => p.CreateEmailVerificationTokenAsync(It.IsAny<int>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private WorkspaceService Workspaces(IEventBus? bus = null) => new(

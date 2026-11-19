@@ -6,7 +6,11 @@ CREATE PROCEDURE dbo.User_Create
     @Email NVARCHAR(100),
     @PasswordHash NVARCHAR(255),
     @Id INT OUTPUT,
-    @RefId UNIQUEIDENTIFIER = NULL OUTPUT
+    @RefId UNIQUEIDENTIFIER = NULL OUTPUT,
+    -- Set for a sign-up that redeems an invitation sent to this address: following the invitation's
+    -- link already proved the address, so it is not confirmed a second time. Optional, so a host
+    -- before it still creates an unconfirmed account.
+    @IsEmailVerified BIT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -29,12 +33,14 @@ BEGIN
     INSERT INTO dbo.Users (
         Username,
         Email,
-        PasswordHash
+        PasswordHash,
+        IsEmailVerified
     )
     VALUES (
         @Username,
         @Email,
-        @PasswordHash
+        @PasswordHash,
+        @IsEmailVerified
     );
 
     SET @Id = SCOPE_IDENTITY();
