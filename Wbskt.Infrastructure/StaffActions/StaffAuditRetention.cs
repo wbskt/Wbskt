@@ -24,7 +24,10 @@ public sealed class StaffAuditRetention(IServiceScopeFactory scopeFactory, TimeP
     protected override async Task RunOnceAsync(IServiceProvider services, CancellationToken ct)
     {
         var audit = services.GetRequiredService<IStaffAuditProvider>();
-        var before = time.GetUtcNow().UtcDateTime.AddYears(-Years);
+
+        // A day short of the trigger's cutoff: the trigger reads SQL Server's clock, and a host clock a little
+        // ahead of it would otherwise ask for a row the trigger still keeps, refusing the whole batch.
+        var before = time.GetUtcNow().UtcDateTime.AddYears(-Years).AddDays(-1);
         long total = 0;
         int deleted;
         do
