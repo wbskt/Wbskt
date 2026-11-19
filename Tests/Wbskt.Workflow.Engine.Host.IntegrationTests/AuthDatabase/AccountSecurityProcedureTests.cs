@@ -52,6 +52,51 @@ public sealed class AccountSecurityProcedureTests(AuthSqlFixture fixture)
     }
 
     [SkippableFact]
+    public async Task Attempts_never_settled_lock_the_account_instead_of_refusing_it_for_good()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int userId = await CreateUserAsync();
+
+        // Three reservations whose host went away before settling them.
+        for (int i = 0; i < 3; i++)
+        {
+            Assert.True(await BeginAsync(userId, maxFailures: 3, lockoutSeconds: 900));
+        }
+
+        // Still recent: they may yet be settled, so the next attempt is only refused.
+        Assert.False(await BeginAsync(userId, maxFailures: 3, lockoutSeconds: 900));
+        Assert.Equal(3, await ScalarAsync<int>("SELECT FailedLoginCount FROM dbo.Users WHERE Id = @p0 AND LockedUntil IS NULL", userId));
+
+        // Two minutes on, nothing can settle them any more.
+        await ScalarAsync<int>("UPDATE dbo.Users SET PasswordCheckReservedAt = DATEADD(MINUTE, -3, SYSUTCDATETIME()) OUTPUT INSERTED.Id WHERE Id = @p0", userId);
+        Assert.False(await BeginAsync(userId, maxFailures: 3, lockoutSeconds: 900));
+
+        // An ordinary lock now: it lapses, and a browser the account knows still gets through it.
+        Assert.Equal(0, await ScalarAsync<int>("SELECT FailedLoginCount FROM dbo.Users WHERE Id = @p0", userId));
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Users WHERE Id = @p0 AND LockedUntil > DATEADD(SECOND, 500, SYSUTCDATETIME())", userId));
+        Assert.False(await BeginAsync(userId, maxFailures: 3, lockoutSeconds: 900));
+        Assert.True(await BeginAsync(userId, maxFailures: 3, throughLock: true, lockoutSeconds: 900));
+    }
+
+    [SkippableFact]
+    public async Task Wrong_passwords_in_flight_at_the_limit_lock_when_settled_not_when_refused()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int userId = await CreateUserAsync();
+
+        // Three wrong guesses in parallel and a fourth: the fourth is refused, and the lock (and the
+        // owner's mail) comes from the guess settled at the limit.
+        for (int i = 0; i < 3; i++)
+        {
+            Assert.True(await BeginAsync(userId, maxFailures: 3, lockoutSeconds: 900));
+        }
+
+        Assert.False(await BeginAsync(userId, maxFailures: 3, lockoutSeconds: 900));
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Users WHERE Id = @p0 AND LockedUntil IS NULL", userId));
+        Assert.NotNull(await EndAsync(userId, succeeded: false, maxFailures: 3));
+    }
+
+    [SkippableFact]
     public async Task A_right_password_gives_its_slot_back()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
@@ -208,13 +253,14 @@ public sealed class AccountSecurityProcedureTests(AuthSqlFixture fixture)
         return await EndAsync(userId, succeeded: false, maxFailures);
     }
 
-    private async Task<bool> BeginAsync(int userId, int maxFailures, bool throughLock = false)
+    private async Task<bool> BeginAsync(int userId, int maxFailures, bool throughLock = false, int? lockoutSeconds = null)
     {
         await using var conn = await OpenAsync();
         await using var cmd = new SqlCommand("dbo.User_BeginPasswordCheck", conn) { CommandType = CommandType.StoredProcedure };
         cmd.Parameters.AddWithValue("@UserId", userId);
         cmd.Parameters.AddWithValue("@MaxFailures", maxFailures);
         cmd.Parameters.AddWithValue("@ThroughLock", throughLock);
+        cmd.Parameters.AddWithValue("@LockoutSeconds", (object?)lockoutSeconds ?? DBNull.Value);
         return (bool)(await cmd.ExecuteScalarAsync())!;
     }
 

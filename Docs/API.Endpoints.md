@@ -219,7 +219,7 @@ Each account is locked for 15 minutes after 10 wrong passwords, counted wherever
 typed (sign-in, `change-password`, `account/change-email` and `account/delete`) and wherever they
 come from — the per-IP limiter cannot see a guesser spread over many addresses. An attempt is counted
 before its password is checked and given back if it was right, so parallel guesses cannot all slip
-in before the count reaches the limit; once ten are counted or in flight the rest are refused. While locked, sign-in answers exactly as for a wrong password, so a lock does not
+in before the count reaches the limit; once ten are counted or in flight the rest are refused. Attempts reserved and never settled (a host stopped mid-check) are not left refusing the account for good: once none has been reserved for two minutes, the next attempt turns them into an ordinary 15-minute lock, which sends no mail since no password was found wrong. While locked, sign-in answers exactly as for a wrong password, so a lock does not
 confirm the address has an account. A successful sign-in resets the count; a password reset or
 change lifts a lock. Sessions issued before the lock keep working. The failure that locks the account
 mails its owner (when, from which IP, and a link to reset), at most once an hour and outside the

@@ -31,6 +31,11 @@ CREATE TABLE dbo.Users (
     UpdatedAt         DATETIME2(3) NULL,
     UsernameChangedAt DATETIME2(3) NULL,
 
+    -- When User_BeginPasswordCheck last reserved an attempt. Its backstop locks an account whose count
+    -- is at the limit only once this is old enough that no reserved attempt can still be settled, so
+    -- attempts in flight are refused rather than turned into a lock.
+    PasswordCheckReservedAt DATETIME2(3) NULL,
+
     -- Constraints
     CONSTRAINT PK_Users          PRIMARY KEY (Id),
     CONSTRAINT UQ_Users_RefId    UNIQUE (RefId),

@@ -49,9 +49,9 @@ internal sealed class AccountCredentials(
     /// </summary>
     public async Task<PasswordCheck> CheckAsync(User user, string password, string ipAddress, string? deviceToken, CancellationToken cancellationToken)
     {
-        var reserved = await accounts.BeginPasswordCheckAsync(user.Id, AccountLockout.MaxFailedLogins, throughLock: false, cancellationToken)
+        var reserved = await BeginAsync(user.Id, throughLock: false, cancellationToken)
             || (await IsKnownDeviceAsync(user.Id, deviceToken, cancellationToken)
-                && await accounts.BeginPasswordCheckAsync(user.Id, AccountLockout.MaxFailedLogins, throughLock: true, cancellationToken));
+                && await BeginAsync(user.Id, throughLock: true, cancellationToken));
 
         if (!reserved)
         {
@@ -60,15 +60,31 @@ internal sealed class AccountCredentials(
             return PasswordCheck.Locked;
         }
 
-        var result = await hashing.VerifyAsync(user, password, cancellationToken);
-        if (result == PasswordVerificationResult.Failed)
+        // The reservation counts as a failure until it is settled, so it is settled even when the caller
+        // goes away or a call faults; one left counted would bring the account closer to a lock.
+        var settled = false;
+        try
         {
-            await RecordWrongPasswordAsync(user, ipAddress, cancellationToken);
-            return PasswordCheck.Wrong;
-        }
+            var result = await hashing.VerifyAsync(user, password, cancellationToken);
+            if (result == PasswordVerificationResult.Failed)
+            {
+                var lockedUntil = await EndAsync(user.Id, succeeded: false);
+                settled = true;
+                await ReportLockAsync(user, lockedUntil, ipAddress, cancellationToken);
+                return PasswordCheck.Wrong;
+            }
 
-        await accounts.EndPasswordCheckAsync(user.Id, succeeded: true, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, cancellationToken);
-        return result == PasswordVerificationResult.SuccessRehashNeeded ? PasswordCheck.VerifiedNeedsRehash : PasswordCheck.Verified;
+            await EndAsync(user.Id, succeeded: true);
+            settled = true;
+            return result == PasswordVerificationResult.SuccessRehashNeeded ? PasswordCheck.VerifiedNeedsRehash : PasswordCheck.Verified;
+        }
+        finally
+        {
+            if (!settled)
+            {
+                await GiveBackAsync(user.Id);
+            }
+        }
     }
 
     /// <summary>
@@ -114,12 +130,39 @@ internal sealed class AccountCredentials(
     private async Task<bool> IsKnownDeviceAsync(int userId, string? deviceToken, CancellationToken cancellationToken) =>
         !string.IsNullOrEmpty(deviceToken) && await sessions.IsKnownDeviceAsync(userId, deviceToken, cancellationToken);
 
+    private async Task<bool> BeginAsync(int userId, bool throughLock, CancellationToken cancellationToken) =>
+        await accounts.BeginPasswordCheckAsync(userId, AccountLockout.MaxFailedLogins, throughLock, AccountLockout.LoginLockout, cancellationToken);
+
     /// <summary>
-    /// Leaves the attempt counted, and raises an alert and mails the owner when it locked the account.
+    /// Not cancellable: once the password has been tested its attempt is settled, whether or not the
+    /// caller is still waiting for the answer.
     /// </summary>
-    private async Task RecordWrongPasswordAsync(User user, string ipAddress, CancellationToken cancellationToken)
+    private async Task<DateTime?> EndAsync(int userId, bool succeeded) =>
+        await accounts.EndPasswordCheckAsync(userId, succeeded, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, CancellationToken.None);
+
+    /// <summary>
+    /// Gives back an attempt that was never settled. The caller got no answer, so nothing was learned
+    /// from it and it does not count.
+    /// </summary>
+    private async Task GiveBackAsync(int userId)
     {
-        var lockedUntil = await accounts.EndPasswordCheckAsync(user.Id, succeeded: false, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, cancellationToken);
+        try
+        {
+            await EndAsync(userId, succeeded: true);
+        }
+        catch (Exception ex)
+        {
+            // The fault that left it unsettled is the one to surface; the lock check turns a count left
+            // at the limit into a lock that lapses.
+            logger.LogWarning(ex, "Could not give back an unsettled password attempt for user {UserId}", userId);
+        }
+    }
+
+    /// <summary>
+    /// Raises an alert and mails the owner when the wrong password locked the account.
+    /// </summary>
+    private async Task ReportLockAsync(User user, DateTime? lockedUntil, string ipAddress, CancellationToken cancellationToken)
+    {
         if (lockedUntil is not { } until)
         {
             return;
