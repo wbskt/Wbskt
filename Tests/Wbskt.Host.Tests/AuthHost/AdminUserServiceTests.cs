@@ -192,6 +192,41 @@ public sealed class AdminUserServiceTests
     }
 
     [Fact]
+    public async Task A_mistyped_address_is_corrected_and_the_new_one_is_sent_a_link()
+    {
+        _user.Email = "alice@gmial.test";
+
+        var result = await Service().CorrectEmailAsync(_user.RefId, new AdminCorrectUserEmailRequest(Staff, " alice@gmail.test "), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(new StaffAction(AdminUserService.CorrectEmailAction, AdminUserService.TargetKind, _user.RefId, "From alice@gmial.test to alice@gmail.test"), _runner.Action);
+        _staffUsers.Verify(s => s.CorrectUnverifiedEmailAsync(42, "alice@gmail.test", It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()));
+        _mailer.Verify(m => m.QueueEmailVerificationAsync("alice@gmail.test", "alice", It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()));
+        _bus.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task A_verified_address_is_never_changed_by_staff()
+    {
+        _user.IsEmailVerified = true;
+
+        var result = await Service().CorrectEmailAsync(_user.RefId, new AdminCorrectUserEmailRequest(Staff, "other@example.test"), CancellationToken.None);
+
+        Assert.Equal("EMAIL_ALREADY_VERIFIED", result.Error.Code);
+        _staffUsers.VerifyNoOtherCalls();
+        _mailer.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task Correcting_to_the_same_address_is_refused()
+    {
+        var result = await Service().CorrectEmailAsync(_user.RefId, new AdminCorrectUserEmailRequest(Staff, "ALICE@example.test"), CancellationToken.None);
+
+        Assert.Equal("EMAIL_UNCHANGED", result.Error.Code);
+        _staffUsers.VerifyNoOtherCalls();
+    }
+
+    [Fact]
     public async Task Asking_for_the_sign_in_it_already_has_is_refused()
     {
         var result = await Service().SetSignInAsync(_user.RefId, new AdminSetUserSignInRequest(Staff, true), CancellationToken.None);

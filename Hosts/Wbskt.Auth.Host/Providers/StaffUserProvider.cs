@@ -19,6 +19,17 @@ internal sealed class StaffUserProvider(IConfiguration configuration) : BaseSqlP
         }, cancellationToken);
     }
 
+    public Task CorrectUnverifiedEmailAsync(int userId, string email, byte[] tokenHash, DateTime expiresAt, CancellationToken cancellationToken)
+    {
+        return ExecuteNonQueryAsync("dbo.User_StaffCorrectEmail", p =>
+        {
+            p.AddWithValue("@Id", userId);
+            p.AddWithValue("@Email", email);
+            p.AddWithValue("@TokenHash", tokenHash);
+            p.AddWithValue("@ExpiresAt", expiresAt);
+        }, cancellationToken);
+    }
+
     public Task<int> FindTenantIdByRefIdAsync(Guid tenantRef, CancellationToken cancellationToken)
     {
         return ExecuteScalarAsync<int>("dbo.Tenant_FindBy_RefId", p => p.AddWithValue("@RefId", tenantRef), cancellationToken);

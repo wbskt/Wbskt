@@ -10,6 +10,14 @@ internal interface IStaffUserProvider
     Task SetActiveAsync(int userId, bool isActive, string revokedByIp, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Moves a never-verified account to <paramref name="email"/>, unverified, spends every outstanding
+    /// verification link and pending address change, and issues a new verification token, in one
+    /// transaction. Throws <c>SqlException</c> 50046 when the address is verified by now, 50047 when
+    /// another account holds the new one.
+    /// </summary>
+    Task CorrectUnverifiedEmailAsync(int userId, string email, byte[] tokenHash, DateTime expiresAt, CancellationToken cancellationToken);
+
+    /// <summary>
     /// The tenant's id, or 0. Not scoped to a member, unlike <see cref="ITenantProvider"/>'s lookups,
     /// because staff act on every tenant; only the admin key reaches the routes that use it.
     /// </summary>
