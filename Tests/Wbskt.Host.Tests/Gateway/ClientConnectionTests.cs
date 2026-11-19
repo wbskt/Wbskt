@@ -94,6 +94,28 @@ public sealed class ClientConnectionTests
         socket.Verify(x => x.CloseOutputAsync(It.IsAny<WebSocketCloseStatus>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Fact]
+    public async Task A_send_to_a_client_that_stopped_reading_gives_up_and_closes_the_connection_as_an_error()
+    {
+        var socket = new Mock<System.Net.WebSockets.WebSocket>();
+        socket.SetupGet(x => x.State).Returns(WebSocketState.Open);
+        socket.Setup(x => x.CloseOutputAsync(It.IsAny<WebSocketCloseStatus>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        socket.Setup(x => x.SendAsync(It.IsAny<ArraySegment<byte>>(), WebSocketMessageType.Text, true, It.IsAny<CancellationToken>()))
+            .Returns((ArraySegment<byte> _, WebSocketMessageType _, bool _, CancellationToken token) => Task.Delay(Timeout.Infinite, token));
+        using var connection = new ClientConnection(new ShortTimers()) { Socket = socket.Object, ClientId = 1, WorkspaceId = 2, TokenIssuedAtUtc = DateTime.UtcNow };
+
+        await Assert.ThrowsAsync<TimeoutException>(() => connection.SendPingAsync(CancellationToken.None));
+
+        Assert.Equal(DisconnectReason.Error, connection.CloseRequest?.Reason);
+    }
+
+    // Every timer fires after a few milliseconds, so a ten-second bound is reached at once.
+    private sealed class ShortTimers : TimeProvider
+    {
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period) =>
+            System.CreateTimer(callback, state, dueTime == Timeout.InfiniteTimeSpan ? dueTime : TimeSpan.FromMilliseconds(20), period);
+    }
+
     private static (ClientConnection Connection, Mock<System.Net.WebSockets.WebSocket> Socket) Connection()
     {
         var socket = new Mock<System.Net.WebSockets.WebSocket>();
