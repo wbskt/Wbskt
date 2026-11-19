@@ -20,11 +20,7 @@ BEGIN
 
     IF @IsActive = 0
     BEGIN
-        UPDATE dbo.RefreshTokens
-        SET Revoked = SYSUTCDATETIME(),
-            RevokedByIp = @RevokedByIp
-        WHERE UserId = @Id
-          AND Revoked IS NULL;
+        EXEC dbo.RefreshTokens_EndAllForUser @UserId = @Id, @RevokedByIp = @RevokedByIp;
     END
 
     COMMIT TRANSACTION;

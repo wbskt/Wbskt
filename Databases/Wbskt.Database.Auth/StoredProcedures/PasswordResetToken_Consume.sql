@@ -65,11 +65,7 @@ BEGIN
     FROM dbo.Users
     WHERE Id = @UserId;
 
-    UPDATE dbo.RefreshTokens
-    SET Revoked = SYSUTCDATETIME(),
-        RevokedByIp = @RevokedByIp
-    WHERE UserId = @UserId
-      AND Revoked IS NULL;
+    EXEC dbo.RefreshTokens_EndAllForUser @UserId = @UserId, @RevokedByIp = @RevokedByIp;
 
     COMMIT TRANSACTION;
 END

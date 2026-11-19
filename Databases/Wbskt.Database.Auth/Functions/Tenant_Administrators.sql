@@ -8,7 +8,9 @@
 --
 -- Those procedures first take an update lock on the tenant's row in dbo.Tenants and hold it for the
 -- transaction. Without it two concurrent removals would each read (under READ_COMMITTED_SNAPSHOT,
--- without blocking) the other administrator as still present, and both commit.
+-- without blocking) the other administrator as still present, and both commit. The lock and both
+-- checks are dbo.Tenant_LockAdministered and dbo.Tenant_AssertAdministered; TenantMember_Remove, whose
+-- check is about the member it removes, takes the same lock itself.
 --
 -- Whether a member holds each of the two is dbo.User_EffectivePermissions, the same precedence every
 -- permission check uses, over tenant-wide assignments only.
