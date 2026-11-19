@@ -19,6 +19,11 @@
 # One-time VM setup: `docker login ghcr.io` with a PAT carrying only read:packages, and a
 # deploy/compose/.env filled in from .env.example.
 #
+# A deploy runs detached from whoever started it (see detach_and_follow): the caller only follows its
+# log, so a dropped ssh session, a job timeout or Ctrl-C stops the watching, never the deploy. Every
+# mode, from every repo, takes one lock on the VM (see take_deploy_lock), so a console or admin deploy
+# never runs during a backend one: they rewrite the same .env and prune each other's images.
+#
 # Everything lives in functions called from main() at the bottom, so bash parses the whole file
 # before executing any of it - see sync_and_reexec for why that matters.
 set -euo pipefail
@@ -37,6 +42,17 @@ readonly HEALTH_TIMEOUT_SECONDS=240
 # fails layer extraction halfway through a pull; failing here instead says why, and still happens
 # before any container has been stopped.
 readonly MIN_FREE_GB=3
+# One lock for every mode. /run/lock is world-writable and cleared at boot, so a lock left by a deploy
+# the VM restarted under cannot hold the next one.
+readonly LOCK_FILE=/run/lock/wbskt-deploy.lock
+# How long a deploy waits for one already running. A backend deploy with a long migration takes most
+# of an hour (MIGRATE_COMMAND_TIMEOUT is 30 minutes a statement), so this outlasts it.
+readonly LOCK_WAIT_SECONDS=3600
+# Each deploy's log and exit status, the last LOGS_KEPT of them.
+readonly STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/wbskt-deploy"
+readonly LOGS_KEPT=20
+# Tries of each image pull. A registry that answers one token request with EOF failed whole deploys.
+readonly PULL_ATTEMPTS=3
 
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 readonly SCRIPT_PATH
@@ -193,8 +209,72 @@ sync_and_reexec() {
     WBSKT_DEPLOY_SYNCED=1 exec bash "$SCRIPT_PATH" "$@"
 }
 
+# Starts this deploy again in a session of its own, with its output in a log under STATE_DIR, and
+# follows that log until it ends; then exits with the deploy's own status. The deploy is not a child
+# of the ssh session (setsid, nohup), so when the session drops - the job timed out, the network went,
+# someone pressed Ctrl-C - it carries on and finishes, rather than stopping between a migration and
+# the hosts that need it. Its log stays on the VM for whoever looks next.
+detach_and_follow() {
+    local stamp log status pid old
+
+    mkdir -p "$STATE_DIR"
+    stamp="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+    log="$STATE_DIR/deploy-$stamp.log"
+    status="$STATE_DIR/deploy-$stamp.status"
+
+    # --wait keeps setsid until the deploy ends, so its pid is the one to follow even if it forked.
+    WBSKT_DEPLOY_DETACHED=1 WBSKT_DEPLOY_STATUS="$status" \
+        nohup setsid --wait bash "$SCRIPT_PATH" "$@" > "$log" 2>&1 < /dev/null &
+    pid=$!
+    echo "==> deploying in the background (pid $pid); the log is $log on the VM"
+
+    while read -r old; do
+        rm -f "$old" "${old%.log}.status"
+    done < <(ls -1t "$STATE_DIR"/deploy-*.log 2>/dev/null | tail -n +$((LOGS_KEPT + 1)))
+
+    tail -n +1 -f --pid="$pid" "$log" || true
+    wait "$pid" || true
+
+    [[ -s "$status" ]] || die "the deploy ended without recording how; see $log"
+    exit "$(cat "$status")"
+}
+
+# Holds LOCK_FILE for the rest of the deploy, on fd 8. The fd survives the exec in sync_and_reexec, and
+# WBSKT_DEPLOY_LOCKED tells the new script it already holds the lock: opening the file again would
+# close the fd and let the lock go.
+take_deploy_lock() {
+    if [[ "${WBSKT_DEPLOY_LOCKED:-}" == 1 ]]; then
+        return
+    fi
+
+    exec 8> "$LOCK_FILE"
+    if ! flock -n 8; then
+        echo "==> another deploy is running on this VM; waiting for it (up to $((LOCK_WAIT_SECONDS / 60)) minutes)"
+        flock -w "$LOCK_WAIT_SECONDS" 8 || die "another deploy held the lock for $((LOCK_WAIT_SECONDS / 60)) minutes; nothing was changed"
+    fi
+    export WBSKT_DEPLOY_LOCKED=1
+}
+
+# Pulls with docker compose, trying again after a pause: one failed token request from the registry
+# should not fail a release. Nothing has been stopped or written when this gives up.
+pull_images() {
+    local attempt
+    for attempt in $(seq 1 "$PULL_ATTEMPTS"); do
+        if docker compose "$@"; then
+            return 0
+        fi
+        if (( attempt < PULL_ATTEMPTS )); then
+            echo "==> pull failed (attempt $attempt of $PULL_ATTEMPTS); trying again in $((attempt * 10))s"
+            sleep $((attempt * 10))
+        fi
+    done
+    die "could not pull the images after $PULL_ATTEMPTS attempts; nothing was stopped and .env is unchanged"
+}
+
 # Persisted rather than just exported, so a later bare `docker compose ps/up` on the VM refers to
-# the same images this deploy started.
+# the same images this deploy started. Written only once the images are pulled (and migrated for),
+# just before the first container is started on them: until then compose reads the tag from the
+# environment, so .env keeps naming what is running if the deploy stops before that.
 set_env_var() {
     local key="$1" value="$2"
     if grep -q "^${key}=" "$ENV_FILE"; then
@@ -318,15 +398,16 @@ Fill it in from .env.example and deploy again."
 # migration to consider - just swap the tag and recreate the one container.
 deploy_console() {
     cd "$COMPOSE_DIR"
+    export CONSOLE_IMAGE_TAG="$CONSOLE_TAG"
     require_complete_env
-    set_env_var CONSOLE_IMAGE_TAG "$CONSOLE_TAG"
 
     free_disk_space
 
     echo "==> pulling console at $CONSOLE_TAG"
-    docker compose pull console
+    pull_images pull console
 
     echo "==> starting console"
+    set_env_var CONSOLE_IMAGE_TAG "$CONSOLE_TAG"
     docker compose up -d --no-build --no-deps console
 
     wait_for_health
@@ -351,17 +432,18 @@ deploy_admin() {
     export COMPOSE_PROFILES=admin
     require_complete_env
     require_admin_env
-    set_env_var ADMIN_IMAGE_TAG "$ADMIN_TAG"
+    export ADMIN_IMAGE_TAG="$ADMIN_TAG"
 
     free_disk_space
 
     echo "==> pulling admin and admin-migrator at $ADMIN_TAG"
-    docker compose pull admin admin-migrator
+    pull_images pull admin admin-migrator
 
     echo "==> migrating the admin database"
     docker compose run --rm --no-deps admin-migrator
 
     echo "==> starting admin"
+    set_env_var ADMIN_IMAGE_TAG "$ADMIN_TAG"
     docker compose up -d --no-build --no-deps admin
 
     wait_for_health admin
@@ -370,15 +452,15 @@ deploy_admin() {
 
 deploy_backend() {
     cd "$COMPOSE_DIR"
+    export IMAGE_TAG="$TAG"
     require_complete_env
-    set_env_var IMAGE_TAG "$TAG"
 
     # Before anything is stopped or pulled: refuse deploys Compose cannot complete.
     assert_no_network_recreation
     free_disk_space
 
     echo "==> pulling ${SERVICES[*]} at $TAG"
-    docker compose pull "${SERVICES[@]}"
+    pull_images pull "${SERVICES[@]}"
 
     if [[ "$SKIP_MIGRATIONS" == true ]]; then
         echo "==> SKIPPING migrations (--skip-migrations)"
@@ -395,7 +477,7 @@ deploy_backend() {
         echo "==> running incremental database migration"
         # The dependency wait --no-deps gives up: sql must be up and healthy, as after a VM reboot.
         wait_for_health sql
-        docker compose --profile migrate pull migrator
+        pull_images --profile migrate pull migrator
         MIGRATE_FRESH=false MIGRATE_ALLOW_DATA_LOSS=false \
             docker compose --profile migrate run --rm --no-deps migrator
     fi
@@ -406,6 +488,7 @@ deploy_backend() {
     # the rest (management among them) are touched.
     local -a rest=()
     local svc
+    set_env_var IMAGE_TAG "$TAG"
     if [[ " ${SERVICES[*]} " == *" client-auth "* && " ${SERVICES[*]} " == *" management "* ]]; then
         echo "==> starting client-auth before management"
         start_services client-auth
@@ -525,19 +608,34 @@ start_services() {
 main() {
     parse_args "$@"
 
+    # Validated before detaching, so a mistyped argument is answered to the caller directly.
     if [[ -n "$CONSOLE_TAG" ]]; then
         validate_console
+    elif [[ -n "$ADMIN_TAG" ]]; then
+        validate_admin
+    else
+        validate_backend
+    fi
+
+    if [[ "${WBSKT_DEPLOY_DETACHED:-}" != 1 ]]; then
+        detach_and_follow "$@"
+    fi
+
+    # Read by detach_and_follow once this ends. An exec (sync_and_reexec) runs no trap, and the new
+    # script sets its own.
+    trap 'echo "$?" > "$WBSKT_DEPLOY_STATUS"' EXIT
+    take_deploy_lock
+
+    if [[ -n "$CONSOLE_TAG" ]]; then
         deploy_console
         return
     fi
 
     if [[ -n "$ADMIN_TAG" ]]; then
-        validate_admin
         deploy_admin
         return
     fi
 
-    validate_backend
     if [[ "${WBSKT_DEPLOY_SYNCED:-}" != "1" ]]; then
         sync_and_reexec "$@"
     fi
