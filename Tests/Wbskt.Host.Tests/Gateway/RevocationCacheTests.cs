@@ -74,7 +74,7 @@ public sealed class RevocationCacheTests
         var clientRefId = Guid.NewGuid();
         cache.Revoke(clientRefId);
 
-        clock.Now = clock.Now.AddMinutes(71);
+        clock.Now = clock.Now + RevocationCache.RetentionPeriod + TimeSpan.FromSeconds(1);
 
         cache.IsRevoked(clientRefId, clock.Now).Should().BeFalse();
         cache.Count.Should().Be(0);
@@ -88,10 +88,31 @@ public sealed class RevocationCacheTests
         cache.Revoke(Guid.NewGuid());
         cache.Revoke(Guid.NewGuid());
 
-        clock.Now = clock.Now.AddMinutes(71);
+        clock.Now = clock.Now + RevocationCache.RetentionPeriod + TimeSpan.FromSeconds(1);
         cache.Revoke(Guid.NewGuid());
 
         cache.Count.Should().Be(1);
+    }
+
+    [Fact]
+    public void An_entry_lives_exactly_as_long_as_the_cutoff_it_mirrors_and_no_longer_than_a_token()
+    {
+        RevocationCache.RetentionPeriod.Should().Be(Wbskt.Infrastructure.Security.ClientTokenCutoffs.Retention);
+        RevocationCache.RetentionPeriod.Should().BeGreaterThan(Wbskt.Infrastructure.Security.ClientTokenCutoffs.TokenLifetime);
+    }
+
+    [Fact]
+    public void An_entry_inside_its_retention_still_refuses()
+    {
+        var clock = new SteppedClock(new DateTime(2026, 10, 3, 12, 0, 0, DateTimeKind.Utc));
+        var cache = new RevocationCache(clock);
+        var clientRefId = Guid.NewGuid();
+        var issuedAt = clock.Now;
+        cache.Revoke(clientRefId);
+
+        clock.Now = clock.Now + RevocationCache.RetentionPeriod - TimeSpan.FromSeconds(1);
+
+        cache.IsRevoked(clientRefId, issuedAt).Should().BeTrue();
     }
 
     private sealed class SteppedClock(DateTime now) : TimeProvider
