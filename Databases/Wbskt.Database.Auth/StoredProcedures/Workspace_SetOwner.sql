@@ -1,6 +1,7 @@
--- Hands a workspace to another member of its tenant, through dbo.WorkspaceOwner_Grant (membership, the
--- Admin role there, and the ownership event in the outbox). The previous owner stays a member; removing
--- them is a separate, ordinary member removal. Returns the previous owner's reference.
+-- Hands a workspace to another member of its tenant, through dbo.WorkspaceOwner_Grant (membership and
+-- the Admin role there). It queues no event: the host publishes WorkspaceOwnershipTransferredEvent
+-- itself, naming who made the transfer, from the previous owner's reference this returns. The previous
+-- owner stays a member; removing them is a separate, ordinary member removal.
 -- A suspended member cannot act in the tenant, so is refused like someone outside it.
 CREATE PROCEDURE dbo.Workspace_SetOwner
     @WorkspaceId INT,
