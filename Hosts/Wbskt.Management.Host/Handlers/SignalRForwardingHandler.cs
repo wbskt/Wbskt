@@ -59,14 +59,8 @@ public class SignalRForwardingHandler<TEvent> : IConsumer<TEvent>
         }
 
         var watchers = _hubContext.Clients.Group(NotificationHub.ClientGroupName(client.ClientId));
-        var allowed = _throttle.TryAcquire(client.ClientId, out var skipped);
-
-        if (skipped > 0)
-        {
-            await watchers.SendAsync(NotificationHub.ClientFeedSkippedMethod, new ClientFeedSkipped(client.ClientRefId, skipped, DateTime.UtcNow));
-        }
-
-        if (allowed)
+        // What it drops is reported by ClientFeedSkipReporter, whether or not the client sends again.
+        if (_throttle.TryAcquire(client.ClientId, client.ClientRefId))
         {
             await watchers.SendAsync(_metadata.ClientMethod, message);
         }

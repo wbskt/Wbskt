@@ -585,8 +585,9 @@ Per-client traffic is **not** sent to the workspace group: only connections that
 get it, so a tab that isn't on that client's page receives none of it and no backplane publish is
 spent on it. Lifecycle events (connected, disconnected, status, rename, latency) stay workspace-wide
 because lists show them. The client feed is capped at 20 messages per client per second per
-management instance; when messages are dropped, the next second opens with
-`OnClientFeedSkipped { clientRefId, skipped, createdAtUtc }`, and the comms history still has them all.
+management instance; what is dropped is reported within about a second, whether or not the client
+sends again, as `OnClientFeedSkipped { clientRefId, skipped, createdAtUtc }`, and the comms history
+still has them all.
 Like workspace groups, client groups don't survive a reconnect: the console joins again.
 
 Because per-client traffic stays off the workspace group, the workspace group gets a rate instead:
