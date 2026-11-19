@@ -322,6 +322,19 @@ public sealed class MqttGatewayTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task An_mqtt5_client_is_told_the_packet_limit_as_it_connects()
+    {
+        // Libraries that honour Maximum Packet Size (Paho, mosquitto) refuse an oversize publish
+        // themselves; MQTTnet's client does not, so the limit is checked as advertised.
+        var client = new MqttClientFactory().CreateMqttClient();
+        _clients.Add(client);
+
+        var result = await client.ConnectAsync(ClientOptions(null, null, MqttProtocolVersion.V500));
+
+        Assert.Equal((uint)(ClientProtocol.MaxMessageBytes + MqttGatewayOptions.PacketOverheadBytes), result.MaximumPacketSize);
+    }
+
+    [Fact]
     public async Task A_packet_over_the_limit_ends_the_session_as_too_big()
     {
         var client = await ConnectAsync();
