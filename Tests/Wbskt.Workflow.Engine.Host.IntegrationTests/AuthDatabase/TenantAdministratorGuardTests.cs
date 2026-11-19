@@ -6,8 +6,9 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.AuthDatabase;
 
 /// <summary>
 /// The last-administrator guard (THROW 50008), on every procedure that can take tenant-wide
-/// users.manage away from someone. A tenant left with no administrator cannot be repaired through
-/// the API, so each of these is a path to an unrecoverable tenant if the guard is missing.
+/// users.manage or roles.manage away from someone. An administrator holds both (#948). A tenant left
+/// with no administrator cannot be repaired through the API, so each of these is a path to an
+/// unrecoverable tenant if the guard is missing.
 /// </summary>
 [Collection("SqlEdge")]
 public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
@@ -45,8 +46,7 @@ public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
         Skip.IfNot(fixture.IsAvailable, Skipped);
         var (tenantId, ownerId, adminRoleId) = await CreateTenantAsync();
         int second = await AddMemberAsync(tenantId, roleId: null);
-        await ExecAsync("dbo.UserPermission_Grant",
-            ("@UserId", second), ("@PermissionSlug", "users.manage"), ("@IsDeny", false), ("@TenantId", tenantId));
+        await GrantAdministrationDirectlyAsync(tenantId, second);
 
         await AssertBuiltInAsync(() => ExecAsync("dbo.Role_Delete", ("@Id", adminRoleId), ("@TenantId", tenantId)));
         Assert.True(await IsAdministratorAsync(tenantId, ownerId));
@@ -94,14 +94,71 @@ public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
         var (tenantId, ownerId, adminRoleId) = await CreateTenantAsync();
         int second = await AddMemberAsync(tenantId, roleId: null);
 
-        // The second member administers only through a direct grant; the owner then steps down.
-        await ExecAsync("dbo.UserPermission_Grant",
-            ("@UserId", second), ("@PermissionSlug", "users.manage"), ("@IsDeny", false), ("@TenantId", tenantId));
+        // The second member administers only through direct grants; the owner then steps down.
+        await GrantAdministrationDirectlyAsync(tenantId, second);
         await ExecAsync("dbo.UserRole_Remove", ("@UserId", ownerId), ("@RoleId", adminRoleId), ("@TenantId", tenantId));
 
         await AssertRejectedAsync(() => ExecAsync("dbo.UserPermission_Remove",
             ("@UserId", second), ("@PermissionSlug", "users.manage"), ("@TenantId", tenantId)));
+        await AssertRejectedAsync(() => ExecAsync("dbo.UserPermission_Remove",
+            ("@UserId", second), ("@PermissionSlug", "roles.manage"), ("@TenantId", tenantId)));
         Assert.True(await IsAdministratorAsync(tenantId, second));
+    }
+
+    /// <summary>
+    /// A user-level deny beats the Admin role, so the only administrator denying themselves
+    /// roles.manage would leave nobody able to create, assign or change a role, or to lift the deny.
+    /// </summary>
+    [SkippableFact]
+    public async Task The_only_administrator_cannot_be_denied_roles_manage_directly()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var (tenantId, ownerId, _) = await CreateTenantAsync();
+
+        await AssertRejectedAsync(() => ExecAsync("dbo.UserPermission_Grant",
+            ("@UserId", ownerId), ("@PermissionSlug", "roles.manage"), ("@IsDeny", true), ("@TenantId", tenantId)));
+        Assert.True(await IsAdministratorAsync(tenantId, ownerId));
+    }
+
+    [SkippableFact]
+    public async Task Users_manage_without_roles_manage_is_not_an_administrator()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var (tenantId, _, _) = await CreateTenantAsync();
+        int usersOnly = await AddMemberAsync(tenantId, roleId: null);
+        int rolesOnly = await AddMemberAsync(tenantId, roleId: null);
+        int both = await AddMemberAsync(tenantId, roleId: null);
+
+        await GrantDirectlyAsync(tenantId, usersOnly, "users.manage");
+        await GrantDirectlyAsync(tenantId, rolesOnly, "roles.manage");
+        await GrantAdministrationDirectlyAsync(tenantId, both);
+
+        Assert.False(await IsAdministratorAsync(tenantId, usersOnly));
+        Assert.False(await IsAdministratorAsync(tenantId, rolesOnly));
+        Assert.True(await IsAdministratorAsync(tenantId, both));
+    }
+
+    /// <summary>
+    /// A member whose users.manage is not matched by roles.manage may manage people, but removing or
+    /// suspending the only holder of the Admin role would leave nobody able to manage roles.
+    /// </summary>
+    [SkippableFact]
+    public async Task Someone_with_only_users_manage_does_not_count_as_the_administrator_who_remains()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var (tenantId, ownerId, adminRoleId) = await CreateTenantAsync();
+        int usersOnly = await AddMemberAsync(tenantId, roleId: null);
+        await GrantDirectlyAsync(tenantId, usersOnly, "users.manage");
+
+        await AssertRejectedAsync(() => ExecAsync("dbo.TenantMember_Remove",
+            ("@TenantId", tenantId), ("@UserId", ownerId), ("@NewOwnerUserId", usersOnly)));
+        await AssertRejectedAsync(() => ExecAsync("dbo.TenantMember_SetSuspended",
+            ("@TenantId", tenantId), ("@UserId", ownerId), ("@IsSuspended", true)));
+        await AssertRejectedAsync(() => ExecAsync("dbo.UserRole_Remove",
+            ("@UserId", ownerId), ("@RoleId", adminRoleId), ("@TenantId", tenantId)));
+        Assert.Equal(50018, Assert.IsType<SqlException>(
+            await AttemptAsync(() => ExecAsync("dbo.User_Delete", ("@UserId", ownerId), ("@DeletedWorkspaces", "[]")))).Number);
+        Assert.True(await IsAdministratorAsync(tenantId, ownerId));
     }
 
     [SkippableFact]
@@ -344,6 +401,15 @@ public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
         Assert.Equal(50036, Assert.IsType<SqlException>(secondAlone).Number);
         Assert.NotEqual(whileShared, afterUpgrade);
         Assert.True(joiner > 0);
+    }
+
+    private Task GrantDirectlyAsync(int tenantId, int userId, string slug) =>
+        ExecAsync("dbo.UserPermission_Grant", ("@UserId", userId), ("@PermissionSlug", slug), ("@IsDeny", false), ("@TenantId", tenantId));
+
+    private async Task GrantAdministrationDirectlyAsync(int tenantId, int userId)
+    {
+        await GrantDirectlyAsync(tenantId, userId, "users.manage");
+        await GrantDirectlyAsync(tenantId, userId, "roles.manage");
     }
 
     private async Task<bool> IsAdministratorAsync(int tenantId, int userId) =>

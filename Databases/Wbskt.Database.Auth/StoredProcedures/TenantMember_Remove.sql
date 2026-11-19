@@ -36,10 +36,11 @@ BEGIN
     -- dbo.Tenant_Administrators, which also explains the lock. Checked inside the transaction and
     -- under the lock, so two concurrent removals cannot each count the other as the one remaining.
     --
-    -- Along the ordinary path this guard never fires: the caller must hold tenant-wide users.manage
-    -- and cannot target themselves, so a remaining administrator is implied. It exists for the cases
-    -- that do not hold -- an administrator whose users.manage arrives through a group, which the
-    -- function does not count, and any future caller that is not this endpoint.
+    -- The caller holds tenant-wide users.manage and cannot target themselves, but that does not make
+    -- them an administrator: one whose custom role carries users.manage without roles.manage would
+    -- otherwise remove the only holder of the Admin role, and nobody could manage roles again (#948).
+    -- It also covers an administrator whose permissions arrive through a group, which the function
+    -- does not count, and any future caller that is not this endpoint.
     DECLARE @TenantLock INT;
     SELECT @TenantLock = Id FROM dbo.Tenants WITH (UPDLOCK, HOLDLOCK) WHERE Id = @TenantId;
 
