@@ -431,9 +431,6 @@ services:
       replicas: ${GATEWAY_WS_REPLICAS:-1}
     labels:
       - traefik.enable=true
-      # Named for the gateway. During the deploy that renamed it, the old socket containers kept their
-      # own router (socket) on the same rule until deploy.sh stopped them; either could take a new
-      # connection meanwhile, which is safe because every instance can serve every client.
       - traefik.http.routers.gateway-ws.rule=Host(`ws.${DOMAIN}`)
       - traefik.http.routers.gateway-ws.entrypoints=websecure
       - traefik.http.routers.gateway-ws.tls.certresolver=letsencrypt
@@ -495,7 +492,7 @@ services:
       WorkflowEngine__Integrations__Keys__1: ${INTEGRATIONS_KEY_1:-}
     volumes:
       - ../config:/Config:ro
-    # Liveness, not readiness - the exception among the four hosts. A standby engine is a healthy
+    # Liveness, not readiness - the exception among the hosts. A standby engine is a healthy
     # process that is deliberately not ready, so a readiness probe here would mark every standby
     # replica unhealthy and hang deploy.sh's wait_for_health once ENGINE_REPLICAS > 1. Routing to
     # the leader is already handled independently by the Traefik loadbalancer healthcheck below,

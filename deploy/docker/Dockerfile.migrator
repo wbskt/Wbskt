@@ -9,7 +9,7 @@ WORKDIR /src
 COPY Databases/ Databases/
 COPY Directory.Packages.props nuget.config global.json ./
 # sharing=locked: see deploy/docker/Dockerfile - this cache mount can run concurrently with the
-# 4 host image builds (`docker compose build` with no service filter), so it needs the same
+# 5 host image builds (`docker compose build` with no service filter), so it needs the same
 # serialization to avoid corrupting the shared NuGet package cache.
 RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
     dotnet build Databases/Wbskt.Database.Auth/Wbskt.Database.Auth.sqlproj -c Release \

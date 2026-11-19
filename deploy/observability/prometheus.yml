@@ -1,4 +1,4 @@
-# Metrics from the four hosts arrive over OTLP from the collector (--web.enable-otlp-receiver);
+# Metrics from the hosts arrive over OTLP from the collector (--web.enable-otlp-receiver);
 # nothing scrapes a host, so no host exposes a metrics endpoint on a public router. The only scrape
 # targets are infrastructure on the backend network.
 global:

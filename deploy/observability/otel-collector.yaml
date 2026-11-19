@@ -1,6 +1,6 @@
 # One door in for every host's telemetry: traces to Tempo, metrics to Prometheus, logs to Loki.
 # The hosts know only OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317, so swapping a backend
-# (or adding a hosted one alongside) is a change here, not in four services.
+# (or adding a hosted one alongside) is a change here, not in every host.
 receivers:
   otlp:
     protocols:
