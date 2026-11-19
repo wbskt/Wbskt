@@ -101,6 +101,30 @@ public sealed class BranchExecutionPumpTests
         Assert.True(loop.StepTokenCancelledDuringStep);
     }
 
+    [Fact]
+    public async Task Stop_does_not_drain_past_the_lease()
+    {
+        // The process is stopping because it could not renew: the gate has closed, and the next leader
+        // may already be running this step again, so it is cut short at once despite the grace.
+        var dispatcher = new ChannelRunDispatcher();
+        var loop = new SteppingBranchLoop();
+        var services = new ServiceCollection();
+        services.AddScoped<IBranchLoop>(_ => loop);
+        await using var provider = services.BuildServiceProvider();
+        var pump = new BranchExecutionPump(
+            dispatcher, provider.GetRequiredService<IServiceScopeFactory>(), NullLogger<BranchExecutionPump>.Instance,
+            drainGrace: TimeSpan.FromSeconds(30), leaseLeft: () => TimeSpan.FromSeconds(-1));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await pump.StartAsync(cts.Token);
+        await dispatcher.DispatchAsync(new BranchExecutionRequest(42, 1001, BranchExecutionReason.TriggerStarted), cts.Token);
+        await loop.StepStarted.Task.WaitAsync(cts.Token);
+
+        await pump.StopAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5), cts.Token);
+
+        Assert.False(loop.StepCompleted);
+        Assert.True(loop.StepTokenCancelledDuringStep);
+    }
+
     private static ServiceProvider CreateProvider(BranchLoopRecorder recorder, bool shouldThrow)
     {
         var services = new ServiceCollection();
@@ -126,6 +150,32 @@ public sealed class BranchExecutionPumpTests
     }
 
     // One step that waits to be told to finish, watching both tokens as BranchLoop does.
+    [Fact]
+    public async Task Stop_keeps_draining_while_the_lease_is_renewed()
+    {
+        // The lease never has more than a moment left, but it is renewed throughout: read once, it
+        // would have cut the step at once.
+        var dispatcher = new ChannelRunDispatcher();
+        var loop = new SteppingBranchLoop();
+        var services = new ServiceCollection();
+        services.AddScoped<IBranchLoop>(_ => loop);
+        await using var provider = services.BuildServiceProvider();
+        var pump = new BranchExecutionPump(
+            dispatcher, provider.GetRequiredService<IServiceScopeFactory>(), NullLogger<BranchExecutionPump>.Instance,
+            drainGrace: TimeSpan.FromSeconds(30), leaseLeft: () => TimeSpan.FromMilliseconds(400));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await pump.StartAsync(cts.Token);
+        await dispatcher.DispatchAsync(new BranchExecutionRequest(42, 1001, BranchExecutionReason.TriggerStarted), cts.Token);
+        await loop.StepStarted.Task.WaitAsync(cts.Token);
+
+        Task stopping = pump.StopAsync(CancellationToken.None);
+        await Task.Delay(TimeSpan.FromSeconds(1.5), cts.Token);
+        loop.FinishStep.TrySetResult();
+        await stopping.WaitAsync(TimeSpan.FromSeconds(5), cts.Token);
+
+        Assert.True(loop.StepCompleted);
+    }
+
     private sealed class SteppingBranchLoop : IBranchLoop
     {
         public TaskCompletionSource StepStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
