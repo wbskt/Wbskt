@@ -80,7 +80,7 @@ public sealed class LeaderPeriodicWorkerTests
     private sealed class ScopedMarker;
 
     private sealed class CountingWorker(ILeadershipGate leadership, IServiceScopeFactory scopes, bool fail = false)
-        : LeaderPeriodicWorker(leadership, scopes, NullLogger.Instance)
+        : LeaderPeriodicWorker(leadership, scopes, NullLogger.Instance, TimeProvider.System)
     {
         private readonly SemaphoreSlim _ran = new(0);
 

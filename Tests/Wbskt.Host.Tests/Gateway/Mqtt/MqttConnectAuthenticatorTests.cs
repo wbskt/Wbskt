@@ -33,7 +33,7 @@ public sealed class MqttConnectAuthenticatorTests : IDisposable
         var dispatcher = new InboundMessageDispatcher([], new ClientMessageHandler(bus.Object, TimeProvider.System), metrics, NullLogger<InboundMessageDispatcher>.Instance);
         var sessions = new ClientSessions(new ConnectionManager(NullLogger<ConnectionManager>.Instance), _gate.Object, bus.Object, new BusInstanceId("gateway-mqtt"),
             metrics, dispatcher, Options.Create(new MessageBudgetOptions()), Mock.Of<IHostApplicationLifetime>(),
-            NullLogger<ClientSessions>.Instance, NullLogger<ClientInbox>.Instance);
+            NullLogger<ClientSessions>.Instance, NullLogger<ClientInbox>.Instance, TimeProvider.System);
         var trust = JwtTrust.Local(JwtIssuers.Management, JwtAudiences.Socket, _keys.PublishedKeys);
         _authenticator = new MqttConnectAuthenticator(sessions, trust, NullLogger<MqttConnectAuthenticator>.Instance);
     }

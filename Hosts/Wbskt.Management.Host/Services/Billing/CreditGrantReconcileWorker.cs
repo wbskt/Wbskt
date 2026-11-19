@@ -10,8 +10,8 @@ namespace Wbskt.Management.Host.Services.Billing;
 /// soon (<see cref="CreditGrantExpiryWarning"/>). Each management replica runs it; the writes are
 /// idempotent and each warning is claimed once, so two at once only repeat work.
 /// </summary>
-public sealed class CreditGrantReconcileWorker(IServiceScopeFactory scopeFactory, IOptions<BillingOptions> options, ILogger<CreditGrantReconcileWorker> logger)
-    : PeriodicWorker(AlwaysOpenWorkGate.Instance, scopeFactory, logger)
+public sealed class CreditGrantReconcileWorker(IServiceScopeFactory scopeFactory, IOptions<BillingOptions> options, TimeProvider clock, ILogger<CreditGrantReconcileWorker> logger)
+    : PeriodicWorker(AlwaysOpenWorkGate.Instance, scopeFactory, logger, clock)
 {
     protected override string Name => "Credit grant reconcile";
 

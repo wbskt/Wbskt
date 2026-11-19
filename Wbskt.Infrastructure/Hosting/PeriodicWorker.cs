@@ -13,7 +13,7 @@ namespace Wbskt.Infrastructure.Hosting;
 /// </summary>
 /// <param name="gate">Asked before every tick; a closed gate skips the tick (the engine's standby).</param>
 /// <param name="timeProvider">The clock the interval is measured on; the system clock when omitted.</param>
-public abstract class PeriodicWorker(IWorkGate gate, IServiceScopeFactory scopeFactory, ILogger logger, TimeProvider? timeProvider = null) : BackgroundService
+public abstract class PeriodicWorker(IWorkGate gate, IServiceScopeFactory scopeFactory, ILogger logger, TimeProvider timeProvider) : BackgroundService
 {
     protected ILogger Logger { get; } = logger;
 
@@ -76,7 +76,7 @@ public abstract class PeriodicWorker(IWorkGate gate, IServiceScopeFactory scopeF
         }
 
         Logger.LogInformation("{Worker} is starting.", Name);
-        using var timer = new PeriodicTimer(Interval, timeProvider ?? TimeProvider.System);
+        using var timer = new PeriodicTimer(Interval, timeProvider);
         try
         {
             if (RunOnStart || await timer.WaitForNextTickAsync(stoppingToken))

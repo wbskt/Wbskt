@@ -32,7 +32,7 @@ public sealed class ClientSessionTests
     private readonly CancellationTokenSource _stopping = new();
     private readonly ConnectionManager _connections = new(NullLogger<ConnectionManager>.Instance);
 
-    private readonly SupersedeMonitor _supersedes = new();
+    private readonly SupersedeMonitor _supersedes = new(TimeProvider.System);
 
     private ClientSessions Sessions(MessageBudgetOptions? budget = null)
     {
@@ -41,7 +41,7 @@ public sealed class ClientSessionTests
         var lifetime = new Mock<IHostApplicationLifetime>();
         lifetime.SetupGet(x => x.ApplicationStopping).Returns(_stopping.Token);
         return new ClientSessions(_connections, _gate.Object, _bus.Object, new BusInstanceId(ThisHost), metrics, dispatcher,
-            Options.Create(budget ?? new MessageBudgetOptions()), lifetime.Object, NullLogger<ClientSessions>.Instance, NullLogger<ClientInbox>.Instance, _supersedes);
+            Options.Create(budget ?? new MessageBudgetOptions()), lifetime.Object, NullLogger<ClientSessions>.Instance, NullLogger<ClientInbox>.Instance, TimeProvider.System, _supersedes);
     }
 
     private static FakeClientConnection Connection() => new() { ClientId = 42, WorkspaceId = 7, TokenIssuedAtUtc = DateTime.UtcNow };

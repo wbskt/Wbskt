@@ -16,7 +16,7 @@ public sealed class ScheduledFireTicker(
     ILeadershipGate leadership,
     IServiceScopeFactory scopeFactory,
     ILogger<ScheduledFireTicker> logger,
-    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger)
+    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger, clock)
 {
     private readonly int _leaseSeconds = options.Value.LeaseDurationSeconds;
     private readonly int _batchSize = options.Value.ScheduledFireLeaseBatchSize;

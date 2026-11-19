@@ -17,8 +17,9 @@ public sealed class WorkspaceMessageRateBroadcaster : PeriodicWorker
         WorkspaceMessageCounter counter,
         IHubContext<NotificationHub> hub,
         IServiceScopeFactory scopeFactory,
+        TimeProvider clock,
         ILogger<WorkspaceMessageRateBroadcaster> logger)
-        : base(AlwaysOpenWorkGate.Instance, scopeFactory, logger)
+        : base(AlwaysOpenWorkGate.Instance, scopeFactory, logger, clock)
     {
         _counter = counter;
         _hub = hub;

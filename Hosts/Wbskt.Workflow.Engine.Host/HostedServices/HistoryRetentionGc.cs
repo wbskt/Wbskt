@@ -14,7 +14,7 @@ public sealed class HistoryRetentionGc(
     IServiceScopeFactory scopeFactory,
     ILogger<HistoryRetentionGc> logger,
     IOptions<WorkflowEngineOptions> options,
-    PlanCatalog catalog) : LeaderPeriodicWorker(leadership, scopeFactory, logger)
+    PlanCatalog catalog) : LeaderPeriodicWorker(leadership, scopeFactory, logger, clock)
 {
     // Each run takes its branches and history with it, so a batch is a hundred runs.
     internal const int RunBatchSize = 100;

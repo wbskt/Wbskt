@@ -16,7 +16,7 @@ internal sealed class MetricsExporter(
     WorkflowMetrics workflowMetrics,
     ChannelRunDispatcher dispatcher,
     ILogger<MetricsExporter> logger,
-    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger)
+    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger, clock)
 {
     protected override string Name => "Metrics exporter";
 

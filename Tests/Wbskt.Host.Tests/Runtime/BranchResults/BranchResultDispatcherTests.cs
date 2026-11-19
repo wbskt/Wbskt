@@ -65,6 +65,7 @@ public sealed class BranchResultDispatcherTests
         var services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(configuration);
         services.AddLogging();
+        services.AddSingleton(TimeProvider.System);
         services.AddHttpClient();
         services.AddWorkflowProviders();
         services.AddWorkflowRuntime();

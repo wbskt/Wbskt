@@ -9,7 +9,7 @@ public sealed class RunReaper(
     ILeadershipGate leadership,
     IServiceScopeFactory scopeFactory,
     ILogger<RunReaper> logger,
-    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger)
+    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger, clock)
 {
     private const int BatchSize = 100;
     private readonly TimeSpan _stuckThreshold = options.Value.RunStuckThreshold;

@@ -48,13 +48,13 @@ public sealed class ClientSessions
         IHostApplicationLifetime lifetime,
         ILogger<ClientSessions> logger,
         ILogger<ClientInbox> inboxLogger,
+        TimeProvider time,
         SupersedeMonitor? supersedes = null,
-        MessageThrottle? throttle = null,
-        TimeProvider? time = null)
+        MessageThrottle? throttle = null)
     {
-        _time = time ?? TimeProvider.System;
+        _time = time;
         _throttle = throttle ?? new MessageThrottle(_time);
-        _supersedes = supersedes ?? new SupersedeMonitor();
+        _supersedes = supersedes ?? new SupersedeMonitor(_time);
         _connections = connections;
         _accessGate = accessGate;
         _eventBus = eventBus;

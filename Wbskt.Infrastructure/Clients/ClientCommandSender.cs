@@ -196,7 +196,6 @@ public static class ClientCommandServiceCollectionExtensions
         services.AddScoped<ClientCommandQueue>();
         services.AddScoped<IClientCommandSender, ClientCommandSender>();
         services.AddOptions<CommandQueueOptions>().BindConfiguration(CommandQueueOptions.SectionName);
-        services.TryAddSingleton(TimeProvider.System);
         return services;
     }
 }

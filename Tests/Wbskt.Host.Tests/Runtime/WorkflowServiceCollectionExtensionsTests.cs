@@ -31,6 +31,7 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(configuration);
         services.AddLogging();
+        services.AddSingleton(TimeProvider.System);
         services.AddHttpClient();
         services.AddWorkflowEngine(configuration);
 
@@ -54,6 +55,7 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(configuration);
         services.AddLogging();
+        services.AddSingleton(TimeProvider.System);
         services.AddHttpClient();
         services.AddWorkflowProviders();
         services.AddWorkspacePlans(configuration);

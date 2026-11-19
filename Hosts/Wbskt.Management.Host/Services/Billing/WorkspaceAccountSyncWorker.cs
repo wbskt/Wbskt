@@ -11,8 +11,8 @@ namespace Wbskt.Management.Host.Services.Billing;
 /// tenant created before billing, a handler that gave up) is right by the next sync. Each management
 /// replica runs it; the copies are written by revision, so two at once only repeat work.
 /// </summary>
-public sealed class WorkspaceAccountSyncWorker(IServiceScopeFactory scopeFactory, IOptions<BillingOptions> options, ILogger<WorkspaceAccountSyncWorker> logger)
-    : PeriodicWorker(AlwaysOpenWorkGate.Instance, scopeFactory, logger)
+public sealed class WorkspaceAccountSyncWorker(IServiceScopeFactory scopeFactory, IOptions<BillingOptions> options, TimeProvider clock, ILogger<WorkspaceAccountSyncWorker> logger)
+    : PeriodicWorker(AlwaysOpenWorkGate.Instance, scopeFactory, logger, clock)
 {
     protected override string Name => "Workspace account sync";
 

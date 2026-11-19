@@ -9,8 +9,8 @@ namespace Wbskt.Management.Host.Services.Billing;
 /// records the tenants on Business against the month, and closes last month once it is due. Each
 /// management replica runs it; both writes take the month's lock and closing is done once.
 /// </summary>
-public sealed class BusinessUsageWorker(IServiceScopeFactory scopeFactory, IOptions<BillingOptions> options, ILogger<BusinessUsageWorker> logger)
-    : PeriodicWorker(AlwaysOpenWorkGate.Instance, scopeFactory, logger)
+public sealed class BusinessUsageWorker(IServiceScopeFactory scopeFactory, IOptions<BillingOptions> options, TimeProvider clock, ILogger<BusinessUsageWorker> logger)
+    : PeriodicWorker(AlwaysOpenWorkGate.Instance, scopeFactory, logger, clock)
 {
     protected override string Name => "Business usage";
 

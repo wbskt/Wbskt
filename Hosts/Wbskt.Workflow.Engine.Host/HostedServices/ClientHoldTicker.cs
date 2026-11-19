@@ -23,7 +23,7 @@ public sealed class ClientHoldTicker(
     ILeadershipGate leadership,
     IServiceScopeFactory scopeFactory,
     ILogger<ClientHoldTicker> logger,
-    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger)
+    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger, clock)
 {
     internal const int LeaseSeconds = 15;
 

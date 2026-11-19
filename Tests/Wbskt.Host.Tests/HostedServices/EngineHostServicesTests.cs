@@ -21,6 +21,7 @@ public sealed class EngineHostServicesTests
         var services = new ServiceCollection();
         services.AddSingleton(configuration);
         services.AddLogging();
+        services.AddSingleton(TimeProvider.System);
         services.AddHttpClient();
         services.AddSingleton(Mock.Of<IEventBus>());
         services.AddSingleton(Mock.Of<IBusControl>());
