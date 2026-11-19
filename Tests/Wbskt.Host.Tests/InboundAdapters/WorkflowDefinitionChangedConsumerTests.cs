@@ -262,10 +262,10 @@ public sealed class WorkflowDefinitionChangedConsumerTests
             return Task.FromResult(answer);
         }
 
-        public Task RecordAsync(string triggerKey, bool matches, DateTime eventAt, int holdSeconds, string payload, CancellationToken ct)
+        public Task<string?> RecordAsync(string triggerKey, bool matches, DateTime eventAt, int holdSeconds, string? payload, CancellationToken ct)
         {
             Records.Add(triggerKey);
-            return Task.CompletedTask;
+            return Task.FromResult<string?>(matches ? "holding" : "clear");
         }
 
         public Task<IReadOnlyCollection<ClientHoldStateRow>> LeaseDueAsync(int leaseSec, int batch, CancellationToken ct) =>

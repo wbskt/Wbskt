@@ -10,8 +10,12 @@ public interface IClientHoldStateProvider
     /// </summary>
     Task<IReadOnlyCollection<TriggerRegistrationRow>> GetRegistrationsAsync(Guid clientRefId, string messageType, int workspaceId, CancellationToken ct);
 
-    /// <summary>Records one message against one hold trigger; see <c>dbo.ClientHoldState_Record</c>.</summary>
-    Task RecordAsync(string triggerKey, bool matches, DateTime eventAt, int holdSeconds, string payload, CancellationToken ct);
+    /// <summary>
+    /// Records one message against one hold trigger, and returns the trigger's state after it (clear,
+    /// holding or fired); see <c>dbo.ClientHoldState_Record</c>. <paramref name="payload"/> is needed
+    /// only when the message matches.
+    /// </summary>
+    Task<string?> RecordAsync(string triggerKey, bool matches, DateTime eventAt, int holdSeconds, string? payload, CancellationToken ct);
 
     Task<IReadOnlyCollection<ClientHoldStateRow>> LeaseDueAsync(int leaseSec, int batch, CancellationToken ct);
 

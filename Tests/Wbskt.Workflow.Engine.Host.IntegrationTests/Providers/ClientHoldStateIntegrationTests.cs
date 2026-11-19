@@ -60,12 +60,13 @@ public sealed class ClientHoldStateIntegrationTests(SqlEdgeFixture fixture)
         Assert.Equal("fired", await StateAsync(key));
         Assert.DoesNotContain(await provider.LeaseDueAsync(15, 1000, CancellationToken.None), h => h.TriggerKey == key);
 
-        // A non-matching message that arrives late (older than what was seen) changes nothing.
-        await provider.RecordAsync(key, false, t0.AddSeconds(30), 60, "{}", CancellationToken.None);
+        // A non-matching message that arrives late (older than what was seen) changes nothing, and the
+        // write says so: the engine keeps the state it returns.
+        Assert.Equal("fired", await provider.RecordAsync(key, false, t0.AddSeconds(30), 60, null, CancellationToken.None));
         Assert.Equal("fired", await StateAsync(key));
 
         // A newer non-matching message clears it, and the next match starts a fresh hold.
-        await provider.RecordAsync(key, false, t0.AddMinutes(3), 60, "{}", CancellationToken.None);
+        Assert.Equal("clear", await provider.RecordAsync(key, false, t0.AddMinutes(3), 60, null, CancellationToken.None));
         Assert.Equal("clear", await StateAsync(key));
         await provider.RecordAsync(key, true, t0.AddMinutes(4), 60, "{\"n\":5}", CancellationToken.None);
 

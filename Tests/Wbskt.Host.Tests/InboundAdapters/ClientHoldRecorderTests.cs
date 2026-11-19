@@ -33,10 +33,46 @@ public sealed class ClientHoldRecorderTests
         Assert.Equal((typed.TriggerKey, filterPasses, evt.CreatedAtUtc, 600), (provider.Records[0].TriggerKey, provider.Records[0].Matches, provider.Records[0].EventAt, provider.Records[0].HoldSeconds));
         Assert.Equal((anyType.TriggerKey, filterPasses, 30), (provider.Records[1].TriggerKey, provider.Records[1].Matches, provider.Records[1].HoldSeconds));
 
+        if (!filterPasses)
+        {
+            // Only a match starts or refreshes a hold, so only a match serializes the payload.
+            Assert.All(provider.Records, record => Assert.Null(record.Payload));
+            return;
+        }
+
         // The stored payload is the client trigger payload, so the run sees what a plain client trigger would.
-        var stored = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(provider.Records[0].Payload)!;
+        var stored = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(provider.Records[0].Payload!)!;
         Assert.Equal("temperature", stored["messageType"].GetString());
         Assert.Equal(9.5, stored["payload"].GetProperty("celsius").GetDouble());
+    }
+
+    [Fact]
+    public async Task A_message_that_does_not_match_a_hold_known_to_be_clear_is_not_written()
+    {
+        TriggerRegistrationRow hold = Registration(ClientHoldTriggerKey.Build(ClientRef, "temperature", 600, Guid.NewGuid(), Guid.NewGuid()));
+        var provider = new RecordingHoldStateProvider(hold);
+        var states = new ClientHoldStateCache();
+        var filter = new SwitchableFilterEvaluator { Passes = false };
+        var recorder = new ClientHoldRecorder(provider, filter, UncachedTriggerRegistrationCache.Instance, holdStates: states);
+        var message = new InboundEvent("client", [], "evt", new Dictionary<string, JsonElement>(), DateTime.UtcNow);
+
+        // The first is written and learns the trigger is clear; the next is skipped.
+        await recorder.RecordAsync(message, ClientRef, "temperature", 34, DateTime.UtcNow, CancellationToken.None);
+        await recorder.RecordAsync(message, ClientRef, "temperature", 34, DateTime.UtcNow, CancellationToken.None);
+        Assert.Single(provider.Records);
+
+        // A match is always written, and the hold it starts is cleared by the next miss.
+        filter.Passes = true;
+        await recorder.RecordAsync(message, ClientRef, "temperature", 34, DateTime.UtcNow, CancellationToken.None);
+        filter.Passes = false;
+        await recorder.RecordAsync(message, ClientRef, "temperature", 34, DateTime.UtcNow, CancellationToken.None);
+        await recorder.RecordAsync(message, ClientRef, "temperature", 34, DateTime.UtcNow, CancellationToken.None);
+        Assert.Equal([false, true, false], provider.Records.Select(record => record.Matches));
+
+        // A workflow change forgets what was learned.
+        states.Clear();
+        await recorder.RecordAsync(message, ClientRef, "temperature", 34, DateTime.UtcNow, CancellationToken.None);
+        Assert.Equal(4, provider.Records.Count);
     }
 
     [Fact]
@@ -119,4 +155,11 @@ public sealed class ClientHoldRecorderTests
         FilterExpression = "{}",
         CreatedAt = DateTime.UtcNow
     };
+}
+
+internal sealed class SwitchableFilterEvaluator : ITriggerFilterEvaluator
+{
+    public bool Passes { get; set; }
+
+    public Task<bool> PassesAsync(TriggerRegistrationRow registration, InboundEvent evt, CancellationToken ct) => Task.FromResult(Passes);
 }

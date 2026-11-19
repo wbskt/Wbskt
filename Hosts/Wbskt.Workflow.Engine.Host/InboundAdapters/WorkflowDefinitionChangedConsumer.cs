@@ -18,7 +18,8 @@ namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 public sealed class WorkflowDefinitionChangedConsumer(
     IWorkflowDefinitionCache definitionCache,
     ITriggerRegistrationCache registrationCache,
-    ILogger<WorkflowDefinitionChangedConsumer>? logger = null) : IConsumer<WorkflowDefinitionChangedEvent>
+    ILogger<WorkflowDefinitionChangedConsumer>? logger = null,
+    ClientHoldStateCache? holdStates = null) : IConsumer<WorkflowDefinitionChangedEvent>
 {
     public Task Consume(ConsumeContext<WorkflowDefinitionChangedEvent> context)
     {
@@ -26,6 +27,7 @@ public sealed class WorkflowDefinitionChangedConsumer(
 
         // Registrations first: they decide whether a message starts anything at all.
         registrationCache.Clear();
+        holdStates?.Clear();
 
         foreach (int definitionId in changed.DefinitionIds ?? [])
         {
