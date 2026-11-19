@@ -32,7 +32,10 @@ public sealed class RequeueClientCommandConsumer : IConsumer<RequeueClientComman
     {
         var message = context.Message;
 
-        // A revoke that lands after this read drops the queued row through ClientCommandQueueRevocationHandler.
+        // A revoke whose event is handled after the row below is queued drops it through
+        // ClientCommandQueueRevocationHandler. One handled in the moment between this read and the
+        // insert is missed, and the command waits until it expires: approving the client again in
+        // that time would deliver it. Narrow, and no worse than before this check.
         var target = await _targets.FindAsync(message.ClientRefId, context.CancellationToken);
         if (target is { Status: not ClientStatus.Registered })
         {

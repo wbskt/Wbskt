@@ -165,7 +165,8 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
         };
     }
 
-    // RegistrationPolicy_GetBy_Pin leaves the connected count out: the registration path does not read it.
+    // RegistrationPolicy_GetBy_Pin returns 0 for the connected count, and drops the column next release
+    // (#1059): the registration path does not read it.
     private static int ConnectedCountOf(SqlDataReader reader)
     {
         for (int i = 0; i < reader.FieldCount; i++)
