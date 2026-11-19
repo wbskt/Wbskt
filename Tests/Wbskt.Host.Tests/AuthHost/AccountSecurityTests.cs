@@ -232,7 +232,7 @@ public sealed class AccountSecurityTests
     {
         var harness = new Harness();
         harness.Sessions
-            .Setup(p => p.RevokeRefreshTokenAsync("refresh", It.IsAny<string>(), null, It.IsAny<CancellationToken>()))
+            .Setup(p => p.RevokeRefreshTokenAsync("refresh", It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(SessionId);
 
         var result = await harness.SignIn.LogoutAsync("refresh", "10.0.0.1");
@@ -246,7 +246,7 @@ public sealed class AccountSecurityTests
     {
         var harness = new Harness();
         harness.Sessions
-            .Setup(p => p.RevokeRefreshTokenAsync(It.IsAny<string>(), It.IsAny<string>(), null, It.IsAny<CancellationToken>()))
+            .Setup(p => p.RevokeRefreshTokenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid?)null);
 
         var result = await harness.SignIn.LogoutAsync("dead", "10.0.0.1");

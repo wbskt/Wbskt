@@ -309,7 +309,7 @@ internal sealed class SignInService : ISignInService
 
         // Deliberately not reporting whether the token existed: logout is unauthenticated by
         // necessity, and a distinguishable response would turn it into a token oracle.
-        var sessionId = await _sessions.RevokeRefreshTokenAsync(token, ipAddress, null, cancellationToken);
+        var sessionId = await _sessions.RevokeRefreshTokenAsync(token, ipAddress, cancellationToken);
         if (sessionId is not null)
         {
             // The refresh token is gone, so this ends the access token the client still holds.

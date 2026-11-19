@@ -26,7 +26,7 @@ internal sealed class SessionProvider : BaseSqlProvider, ISessionProvider
         token.Id = (int)parameters["@Id"].Value;
     }
 
-    public async Task<Guid?> RevokeRefreshTokenAsync(string token, string ipAddress, string? replacedByToken, CancellationToken cancellationToken = default)
+    public async Task<Guid?> RevokeRefreshTokenAsync(string token, string ipAddress, CancellationToken cancellationToken = default)
     {
         return await ExecuteSingleAsync<Guid?>(
             "dbo.RefreshToken_Revoke",
@@ -34,8 +34,6 @@ internal sealed class SessionProvider : BaseSqlProvider, ISessionProvider
             {
                 p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = SecurityTokens.Hash(token);
                 p.AddWithValue("@RevokedByIp", ipAddress ?? (object)DBNull.Value);
-                p.Add("@ReplacedByTokenHash", SqlDbType.VarBinary, 32).Value =
-                    replacedByToken is null ? DBNull.Value : SecurityTokens.Hash(replacedByToken);
             },
             reader => reader.IsDBNull(reader.GetOrdinal("SessionId")) ? null : reader.GetGuid(reader.GetOrdinal("SessionId")),
             cancellationToken: cancellationToken);
