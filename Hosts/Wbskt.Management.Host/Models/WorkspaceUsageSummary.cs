@@ -1,9 +1,7 @@
 namespace Wbskt.Management.Host.Models;
 
 /// <summary>A row of <c>dbo.WorkspaceUsage_GetSummary</c>: the account's totals and the workspace's share.</summary>
-/// <param name="TenantCreditsPosted">The part of <c>TenantCredits</c> already in the ledger; the rest is runs' unposted credits.</param>
-/// <param name="TenantCreditsDrawn">What the month's posts drew from credit grants because they fell past the allowance.</param>
-/// <param name="TenantCreditsReserved">What the account's runs going hold of their budgets, leased from the allowance.</param>
+/// <param name="RemainingCredits">What new runs may still be given this month, as <c>Run_Start</c> works it out; never below zero.</param>
 public sealed record WorkspaceUsageSummary(
     decimal TenantCredits,
     decimal WorkspaceCredits,
@@ -18,6 +16,4 @@ public sealed record WorkspaceUsageSummary(
     decimal WorkspaceCreditsReserved = 0,
     DateTime? CreditGrantNextExpiresAt = null,
     decimal CreditGrantNextExpiring = 0,
-    decimal TenantCreditsPosted = 0,
-    decimal TenantCreditsDrawn = 0,
-    decimal TenantCreditsReserved = 0);
+    decimal RemainingCredits = 0);

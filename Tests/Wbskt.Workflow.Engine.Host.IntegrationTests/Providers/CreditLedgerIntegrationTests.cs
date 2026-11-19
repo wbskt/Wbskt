@@ -542,11 +542,12 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         var usage = new Wbskt.Management.Host.Providers.WorkspaceUsageProvider(ProviderFactory.BuildConfiguration(fixture.ConnectionString));
         DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-        var summary = await usage.GetSummaryAsync(mine, tenantId, new DateOnly(today.Year, today.Month, 1), CancellationToken.None);
+        var summary = await usage.GetSummaryAsync(mine, tenantId, DateTime.UtcNow, 100m, CancellationToken.None);
         var days = await usage.GetDailyCreditsAsync(mine, today.AddDays(-1), today, CancellationToken.None);
 
         // The workspace's run still going reserves nothing: the cap cut its budget to the 3 it spent.
-        summary.Should().Be(new Wbskt.Management.Host.Models.WorkspaceUsageSummary(7m, 3m, 0, 0, 0, 0, 2, 1, 50m, 0m, 0m, null, 0m, TenantCreditsPosted: 3m, TenantCreditsDrawn: 0m));
+        // Of the 100 the copy has no CreditsPerMonth for, 3 are posted and 4 the sibling's run has not posted.
+        summary.Should().Be(new Wbskt.Management.Host.Models.WorkspaceUsageSummary(7m, 3m, 0, 0, 0, 0, 2, 1, 50m, 0m, 0m, null, 0m, RemainingCredits: 93m));
         days.Should().Equal(new Wbskt.Management.Models.DailyCreditUsage(today, 3m));
     }
 
