@@ -23,7 +23,7 @@ public sealed class ClientCommandPublisher(IClientCommandSender sender, IEventBu
 {
     internal const string UnknownClientReason = "The client does not exist in this workspace.";
     internal const string QueueFullReason = "The client is offline and already has as many commands waiting as it may.";
-    internal const string ExpiryInvalidReason = "The step's ack timeout is longer than a command may wait.";
+    internal const string ExpiryInvalidReason = "The step's ack timeout is not one a command may wait: it must be more than zero and at most 24 hours.";
     internal const string InactiveReason = "The client is offline and not registered, so the command cannot wait for it.";
 
     public async Task<CommandPublishOutcome> PublishCommandAsync(Guid commandId, Guid clientRefId, int workspaceId, string command, string payload, TimeSpan expiresIn, CommandSender? sentBy, CancellationToken ct)

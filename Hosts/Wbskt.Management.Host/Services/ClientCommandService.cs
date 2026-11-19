@@ -78,12 +78,7 @@ public sealed class ClientCommandService : IClientCommandService
 
     private async Task<Result<ClientCommandResponse>> SendCommandAsync(int workspaceId, Guid clientRefId, ClientCommandRequest request, CancellationToken cancellationToken)
     {
-        var invalid = Validate(request);
-        if (invalid is not null)
-        {
-            return Result<ClientCommandResponse>.Failure(invalid);
-        }
-
+        // The sender checks the protocol rules and the expiry, for the console and workflows alike.
         return await DispatchAsync(new ClientCommand(Guid.NewGuid(), clientRefId, workspaceId, request.Type, request.Payload, request.ExpiresAt?.UtcDateTime), request.ExpiresAt, cancellationToken);
     }
 
@@ -102,14 +97,15 @@ public sealed class ClientCommandService : IClientCommandService
             return Result<ClientCommandResponse>.Failure(invalid);
         }
 
-        // What the client last reported decides; one that is offline now is judged by its last connection.
-        var detail = await _clientService.GetDetailAsync(workspaceId, clientRefId, cancellationToken);
-        if (detail.IsFailure)
+        // One read serves the ownership check, the capability check, the send and the clean-up after it.
+        var target = await _sender.FindTargetAsync(clientRefId, workspaceId, cancellationToken);
+        if (target is null)
         {
-            return Result<ClientCommandResponse>.Failure(detail.Error);
+            return Result<ClientCommandResponse>.Failure(WorkspaceOwnership.ClientNotFound);
         }
 
-        if (!detail.Value.System.Contains(SystemCapabilities.Ota, StringComparer.Ordinal))
+        // What the client last reported decides; one that is offline now is judged by its last connection.
+        if (!target.Supports(SystemCapabilities.Ota))
         {
             return Result<ClientCommandResponse>.Failure(OtaNotSupported);
         }
@@ -117,13 +113,11 @@ public sealed class ClientCommandService : IClientCommandService
         // An update that turns up days later is a surprise, so it always expires.
         var expiresAt = request.ExpiresAt ?? _clock.GetUtcNow().Add(_defaultExpiry);
         var payload = JsonSerializer.Serialize(new OtaUpdatePayload(request.Url, request.Sha256.ToLowerInvariant(), NullIfEmpty(request.Version), request.Size));
-        var sent = await DispatchAsync(
-            new ClientCommand(Guid.NewGuid(), clientRefId, workspaceId, MessageTypes.OtaUpdate, payload, expiresAt.UtcDateTime, Platform: true),
-            expiresAt,
-            cancellationToken);
+        var command = new ClientCommand(Guid.NewGuid(), clientRefId, workspaceId, MessageTypes.OtaUpdate, payload, expiresAt.UtcDateTime, Platform: true);
+        var sent = Map(command.CommandId, expiresAt, await _sender.SendAsync(command, target, StampActor, cancellationToken));
         if (sent.IsSuccess)
         {
-            await CancelOlderUpdatesAsync(workspaceId, clientRefId, sent.Value.CommandId, cancellationToken);
+            await CancelOlderUpdatesAsync(workspaceId, clientRefId, target.ClientId, sent.Value.CommandId, cancellationToken);
         }
 
         return sent;
@@ -131,26 +125,22 @@ public sealed class ClientCommandService : IClientCommandService
 
     // Queued updates are delivered oldest first, and a client takes one at a time, so an older one
     // still waiting would install instead of this one and get this one rejected as "already in progress".
-    private async Task CancelOlderUpdatesAsync(int workspaceId, Guid clientRefId, Guid newest, CancellationToken cancellationToken)
+    private async Task CancelOlderUpdatesAsync(int workspaceId, Guid clientRefId, int clientId, Guid newest, CancellationToken cancellationToken)
     {
-        var clientResult = await _clientService.EnsureClientInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
-        if (clientResult.IsFailure)
-        {
-            return;
-        }
-
-        var queued = await _queue.GetAsync(clientResult.Value, cancellationToken);
+        var queued = await _queue.GetAsync(clientId, cancellationToken);
         foreach (var older in queued.Where(c => c.CommandId != newest && MessageTypes.Comparer.Equals(c.Type, MessageTypes.OtaUpdate)))
         {
-            await CancelQueuedAsync(workspaceId, clientRefId, clientResult.Value, older.CommandId, cancellationToken);
+            await CancelQueuedAsync(workspaceId, clientRefId, clientId, older.CommandId, cancellationToken);
         }
     }
 
     private async Task<Result<ClientCommandResponse>> DispatchAsync(ClientCommand command, DateTimeOffset? expiresAt, CancellationToken cancellationToken)
     {
-        var commandId = command.CommandId;
-        var result = await _sender.SendAsync(command, StampActor, cancellationToken);
+        return Map(command.CommandId, expiresAt, await _sender.SendAsync(command, StampActor, cancellationToken));
+    }
 
+    private Result<ClientCommandResponse> Map(Guid commandId, DateTimeOffset? expiresAt, ClientCommandResult result)
+    {
         return result.Outcome switch
         {
             ClientCommandOutcome.Sent => Result<ClientCommandResponse>.Success(new ClientCommandResponse(commandId, ClientCommandStatus.Sent, expiresAt)),
@@ -251,22 +241,8 @@ public sealed class ClientCommandService : IClientCommandService
         return Result.Success();
     }
 
-    private Error? Validate(ClientCommandRequest request)
-    {
-        if (ClientMessageRules.Check(request.Type, request.Payload) is { } violation)
-        {
-            return ToError(violation);
-        }
-
-        if (request.ExpiresAt is { } expiresAt && !CommandLifetime.IsValidExpiry(expiresAt, _clock.GetUtcNow()))
-        {
-            return ExpiryInvalid;
-        }
-
-        return null;
-    }
-
-    private Error? ValidateOta(ClientOtaRequest request)
+    // Only what is particular to an update: the sender checks the expiry as it does for any command.
+    private static Error? ValidateOta(ClientOtaRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Url)
             || request.Url.Length > MaxOtaUrlLength
@@ -290,11 +266,6 @@ public sealed class ClientCommandService : IClientCommandService
         if (request.Size is <= 0 or > uint.MaxValue)
         {
             return Error.Validation("OTA_SIZE_INVALID", "size must be the image's size in bytes, more than 0.");
-        }
-
-        if (request.ExpiresAt is { } expiresAt && !CommandLifetime.IsValidExpiry(expiresAt, _clock.GetUtcNow()))
-        {
-            return ExpiryInvalid;
         }
 
         return null;

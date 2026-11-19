@@ -36,7 +36,7 @@ public enum ClientCommandOutcome
     /// <summary>The broker failed or did not take the command in time; nothing was sent.</summary>
     BrokerUnavailable,
 
-    /// <summary>The expiry is further ahead than <see cref="CommandLifetime.Max"/>.</summary>
+    /// <summary>The expiry has passed, or is further ahead than <see cref="CommandLifetime.Max"/>.</summary>
     ExpiryInvalid
 }
 
@@ -58,6 +58,17 @@ public interface IClientCommandSender
 {
     /// <param name="attribute">Sets who sent the command on its events, when the bus would not know.</param>
     Task<ClientCommandResult> SendAsync(ClientCommand command, Action<ActorEvent>? attribute, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The client as a command sees it, or null when the workspace has no such client (another
+    /// workspace's reads the same). For a caller that must look at the client before it sends, such as
+    /// a firmware update that needs the client to take updates; it passes the target on to
+    /// <see cref="SendAsync(ClientCommand, ClientCommandTarget, Action{ActorEvent}?, CancellationToken)"/>.
+    /// </summary>
+    Task<ClientCommandTarget?> FindTargetAsync(Guid clientRefId, int workspaceId, CancellationToken cancellationToken);
+
+    /// <summary><see cref="SendAsync(ClientCommand, Action{ActorEvent}?, CancellationToken)"/> to a target already found in the command's workspace.</summary>
+    Task<ClientCommandResult> SendAsync(ClientCommand command, ClientCommandTarget target, Action<ActorEvent>? attribute, CancellationToken cancellationToken);
 }
 
 public sealed class ClientCommandSender(
@@ -72,14 +83,29 @@ public sealed class ClientCommandSender(
 
     public async Task<ClientCommandResult> SendAsync(ClientCommand command, Action<ActorEvent>? attribute, CancellationToken cancellationToken)
     {
-        // Ownership has to be settled here: the command goes out over the bus and the socket host
-        // routes it by ClientRefId alone, so nothing downstream would notice a client from another
-        // workspace.
-        var target = await targets.FindAsync(command.ClientRefId, cancellationToken);
-        if (target is null || target.WorkspaceId != command.WorkspaceId)
+        var target = await FindTargetAsync(command.ClientRefId, command.WorkspaceId, cancellationToken);
+        if (target is null)
         {
             logger.LogInformation("No client '{ClientRefId}' in workspace {WorkspaceId}; command '{Type}' not sent.", command.ClientRefId, command.WorkspaceId, command.Type);
             return new ClientCommandResult(ClientCommandOutcome.UnknownClient);
+        }
+
+        return await SendAsync(command, target, attribute, cancellationToken);
+    }
+
+    // Ownership has to be settled here: the command goes out over the bus and the socket host routes it
+    // by ClientRefId alone, so nothing downstream would notice a client from another workspace.
+    public async Task<ClientCommandTarget?> FindTargetAsync(Guid clientRefId, int workspaceId, CancellationToken cancellationToken)
+    {
+        var target = await targets.FindAsync(clientRefId, cancellationToken);
+        return target is not null && target.WorkspaceId == workspaceId ? target : null;
+    }
+
+    public async Task<ClientCommandResult> SendAsync(ClientCommand command, ClientCommandTarget target, Action<ActorEvent>? attribute, CancellationToken cancellationToken)
+    {
+        if (target.WorkspaceId != command.WorkspaceId)
+        {
+            throw new ArgumentException("The target is not in the command's workspace.", nameof(target));
         }
 
         var violation = command.Platform
@@ -91,9 +117,8 @@ public sealed class ClientCommandSender(
             return new ClientCommandResult(ClientCommandOutcome.Invalid, target.ClientId, violation);
         }
 
-        // The lifetime is promised to every sender, so it is held here rather than by each caller. A past
-        // expiry still goes out: the socket host and the SDK refuse it, and the sender hears why.
-        if (command.ExpiresAtUtc is { } expiresAt && expiresAt > clock.GetUtcNow().UtcDateTime + CommandLifetime.Max)
+        // The lifetime is promised to every sender, so it is held here rather than by each caller.
+        if (command.ExpiresAtUtc is { } expiresAt && !CommandLifetime.IsValidExpiry(new DateTimeOffset(DateTime.SpecifyKind(expiresAt, DateTimeKind.Utc)), clock.GetUtcNow()))
         {
             logger.LogInformation("Command '{Type}' to client '{ClientRefId}' refused: it expires at {ExpiresAt:O}.", command.Type, command.ClientRefId, expiresAt);
             return new ClientCommandResult(ClientCommandOutcome.ExpiryInvalid, target.ClientId);

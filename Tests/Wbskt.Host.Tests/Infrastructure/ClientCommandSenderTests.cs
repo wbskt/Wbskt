@@ -36,7 +36,7 @@ public sealed class ClientCommandSenderTests
     public async Task A_connected_client_gets_the_command_addressed_to_its_host_with_the_expiry()
     {
         Target(new ClientCommandTarget(ClientId, WorkspaceId, true, "socket-a"));
-        var expiresAt = new DateTime(2026, 10, 12, 9, 0, 30, DateTimeKind.Utc);
+        var expiresAt = DateTime.UtcNow.AddMinutes(30);
         ClientCommandEvent? sent = null;
         _bus.Setup(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()))
             .Callback<ClientCommandEvent, CancellationToken>((e, _) => sent = e)
@@ -67,13 +67,27 @@ public sealed class ClientCommandSenderTests
     }
 
     [Theory]
+    [InlineData(true, "socket-a")]
+    [InlineData(false, null)]
+    public async Task An_expiry_already_past_is_refused_rather_than_sent_to_be_dropped(bool connected, string? hostId)
+    {
+        Target(new ClientCommandTarget(ClientId, WorkspaceId, connected, hostId));
+
+        var result = await Sender.SendAsync(Command(expiresAtUtc: DateTime.UtcNow - TimeSpan.FromMinutes(1)), null, CancellationToken.None);
+
+        Assert.Equal(ClientCommandOutcome.ExpiryInvalid, result.Outcome);
+        Assert.Empty(_queue.Rows);
+        _bus.Verify(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
     [InlineData(false, null)]
     [InlineData(false, "socket-a")]
     [InlineData(true, null)]
     public async Task A_client_no_host_holds_has_the_command_queued_with_its_sender(bool connected, string? hostId)
     {
         Target(new ClientCommandTarget(ClientId, WorkspaceId, connected, hostId));
-        var expiresAt = new DateTime(2026, 10, 12, 9, 0, 30, DateTimeKind.Utc);
+        var expiresAt = DateTime.UtcNow.AddMinutes(30);
         ClientCommandQueuedEvent? announced = null;
         _bus.Setup(b => b.PublishAsync(It.IsAny<ClientCommandQueuedEvent>(), It.IsAny<CancellationToken>()))
             .Callback<ClientCommandQueuedEvent, CancellationToken>((e, _) => announced = e)
