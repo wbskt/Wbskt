@@ -12,7 +12,7 @@ internal interface ISessionProvider
     Task InsertRefreshTokenAsync(RefreshToken token, string ipAddress, CancellationToken cancellationToken = default);
 
     /// <summary>Revokes one live token. Returns its session, or null when it was unknown or already revoked.</summary>
-    Task<Guid?> RevokeRefreshTokenAsync(string token, string ipAddress, string? replacedByToken, CancellationToken cancellationToken = default);
+    Task<Guid?> RevokeRefreshTokenAsync(string token, string ipAddress, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Retires <paramref name="token"/> and stores <paramref name="replacement"/> in one transaction
