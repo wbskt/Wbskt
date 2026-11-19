@@ -49,8 +49,18 @@ in the console. The answer:
 
 **Store `clientRefId` and `secret` durably** (a file, NVS/EEPROM on a microcontroller) and never
 register again while you have them: each registration is a new client in the console and counts
-against the policy's limit. Discard them only when login answers 401 `CLIENT_UNAUTHORIZED` (the
-client was deleted or its secret rotated), then register again.
+against the policy's limit. Never discard them yourself, not even when login answers 401
+`CLIENT_UNAUTHORIZED`: that means the client was deleted or its secret rotated, and registering again
+would bring a deleted device back as a new client and leave a rotated one offline beside a duplicate.
+Keep the stored credentials, report the refusal (log it and raise it to the app), and stop connecting.
+The user then does one of two things, and the SDK documents both:
+
+- **Secret rotated:** write the new secret, from the console, into the stored credentials beside the
+  same `clientRefId`, and start the client again.
+- **Re-enrol** (a deleted client, or a database that was reset): remove the stored credentials. The
+  next start has none, so it registers with the PIN.
+
+Only a client with no stored credentials registers.
 
 Registration is rate limited per address; a 429 is retried like a failed login (§5).
 
@@ -76,7 +86,7 @@ into a login storm.
 |---|---|
 | 200 | Connect (§3). |
 | 401 `CLIENT_NOT_REGISTERED` | Pending approval, revoked or rejected. Retry on the reconnect schedule. |
-| 401 `CLIENT_UNAUTHORIZED` | Credentials no longer valid. Clear them and register again (§1). |
+| 401 `CLIENT_UNAUTHORIZED` | Deleted, or its secret rotated. Keep the credentials, report it, and stop: don't retry and don't register again (§1). |
 | 429 | Rate limited (300 logins per minute per address by default; clients behind one NAT share it). Wait `Retry-After` if sent, plus jitter (§5). |
 
 Errors are RFC 7807 Problem Details; `code` carries the values above.
@@ -251,7 +261,8 @@ uses close codes, the MQTT binding DISCONNECT reason codes):
 
 An SDK conforms to the message model when it:
 
-- [ ] stores credentials durably and registers only when it has none, or after `CLIENT_UNAUTHORIZED`;
+- [ ] stores credentials durably and registers only when it has none;
+- [ ] on `CLIENT_UNAUTHORIZED` keeps its credentials, reports it, and stops instead of registering again;
 - [ ] reuses the access token until a minute before expiry, and logs in again only then or when the binding refuses it;
 - [ ] sends `capabilities` first on every connection;
 - [ ] answers `sys.ping` with `sys.pong` echoing `id` and the timestamp;

@@ -13,6 +13,7 @@ import pytest
 from conftest import RELAY
 
 RECONNECT = 25.0
+REJECTED_WAIT = 8.0
 
 
 def lower_keys(value):
@@ -62,16 +63,22 @@ async def test_keeps_the_credentials_while_approval_is_pending(api, socket_serve
     assert len(api.logins) == 3
 
 
-async def test_registers_again_once_the_credentials_are_rejected(api, socket_server, client):
+async def test_stops_and_keeps_the_credentials_once_they_are_rejected(api, socket_server, client, tmp_path):
     first = await client()
     await first.expect("connected")
     await first.stop()
     api.forget_all_clients()
 
-    second = await client()
-    await second.expect("connected", timeout=RECONNECT)
+    await client()
+    # Long enough for two retries after a failure (2 s, then 4 s) if the SDK kept trying.
+    await asyncio.sleep(REJECTED_WAIT)
 
-    assert len(api.registrations) == 2
+    # Deleted or rotated: registering again would make a second client (protocol §1).
+    assert len(api.registrations) == 1
+    assert len(api.logins) == 2
+    assert len(socket_server.connections) == 1
+    # Kept, whatever the SDK's storage format: the user installs a rotated secret beside them.
+    assert b"secret-1" in (tmp_path / "credentials.json").read_bytes()
 
 
 # Token
