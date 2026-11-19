@@ -62,6 +62,7 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         services.AddWorkflowRuntime();
         services.AddScoped<IClientCommandPublisher>(_ => Mock.Of<IClientCommandPublisher>());
         services.AddScoped<IToastPublisher>(_ => Mock.Of<IToastPublisher>());
+        services.AddSingleton(Mock.Of<IHostApplicationLifetime>());
         services.AddHostedService<BranchExecutionPump>();
         services.AddHostedService<BookmarkScheduler>();
         services.AddHostedService<ScheduledFireTicker>();

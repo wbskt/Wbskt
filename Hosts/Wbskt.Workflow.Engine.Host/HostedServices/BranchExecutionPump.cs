@@ -10,16 +10,21 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
 /// <summary>
 /// Runs each dispatched branch on a worker, up to <see cref="WorkflowEngineOptions.BranchWorkerLimit"/> at
-/// once. On stop it reads no further request and drains: every worker finishes the step it is in (the
+/// once. Once the host starts stopping (<see cref="IHostApplicationLifetime.ApplicationStopping"/>, before
+/// any hosted service is stopped) it reads no further request and starts no new node. On stop it drains: every worker finishes the step it is in (the
 /// loop starts no new one) for up to <see cref="WorkflowEngineOptions.BranchDrainGrace"/>, and only then is
 /// the step token cancelled. Cutting steps short on the host token made the next leader run each again,
-/// so an email, webhook or client command already sent went twice.
+/// so an email, webhook or client command already sent went twice. The bus must still be up while it
+/// drains, so a step can publish its command or notification: the pump is registered after
+/// <see cref="EngineLeadershipCoordinator"/> and therefore stopped before it.
 /// </summary>
 internal sealed class BranchExecutionPump : BackgroundService
 {
     private readonly ChannelRunDispatcher _dispatcher;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<BranchExecutionPump> _logger;
+    private readonly CancellationToken _hostStopping;
+    private CancellationTokenSource? _draining;
     private readonly TimeSpan _drainGrace;
     private readonly SemaphoreSlim _concurrencyLimiter;
     private readonly CancellationTokenSource _stepCts = new();
@@ -30,8 +35,9 @@ internal sealed class BranchExecutionPump : BackgroundService
         ChannelRunDispatcher dispatcher,
         IServiceScopeFactory scopeFactory,
         ILogger<BranchExecutionPump> logger,
-        IOptions<WorkflowEngineOptions> options)
-        : this(dispatcher, scopeFactory, logger, options.Value.BranchWorkerLimit, options.Value.BranchDrainGrace)
+        IOptions<WorkflowEngineOptions> options,
+        IHostApplicationLifetime lifetime)
+        : this(dispatcher, scopeFactory, logger, options.Value.BranchWorkerLimit, options.Value.BranchDrainGrace, lifetime.ApplicationStopping)
     {
     }
 
@@ -40,9 +46,11 @@ internal sealed class BranchExecutionPump : BackgroundService
         IServiceScopeFactory scopeFactory,
         ILogger<BranchExecutionPump> logger,
         int? branchWorkerLimit = null,
-        TimeSpan? drainGrace = null)
+        TimeSpan? drainGrace = null,
+        CancellationToken hostStopping = default)
     {
         _dispatcher = dispatcher;
+        _hostStopping = hostStopping;
         _scopeFactory = scopeFactory;
         _logger = logger;
         int limit = branchWorkerLimit ?? new WorkflowEngineOptions().BranchWorkerLimit;
@@ -50,7 +58,23 @@ internal sealed class BranchExecutionPump : BackgroundService
         _drainGrace = drainGrace ?? new WorkflowEngineOptions().BranchDrainGrace;
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(CancellationToken executeToken)
+    {
+        // The drain starts when the host starts stopping, not when this service is stopped: the services
+        // stopped before it would otherwise leave it starting new nodes meanwhile.
+        // Disposed with the pump, not here: workers still running hold its token.
+        _draining = CancellationTokenSource.CreateLinkedTokenSource(executeToken, _hostStopping);
+        CancellationToken stoppingToken = _draining.Token;
+        try
+        {
+            await PumpAsync(stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private async Task PumpAsync(CancellationToken stoppingToken)
     {
         while (await _dispatcher.Reader.WaitToReadAsync(stoppingToken))
         {
@@ -67,7 +91,8 @@ internal sealed class BranchExecutionPump : BackgroundService
 
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
-        // Cancels the host token, so the reader stops and each loop starts no further node.
+        // Cancels the host token (already cancelled when the host is stopping), so the reader stops and
+        // each loop starts no further node.
         await base.StopAsync(cancellationToken);
 
         Task drained = Task.WhenAll(_workers.Keys);
@@ -111,6 +136,7 @@ internal sealed class BranchExecutionPump : BackgroundService
         }
 
         _stepCts.Dispose();
+        _draining?.Dispose();
     }
 
     private async Task RunBranchAsync(BranchExecutionRequest request, CancellationToken drainToken)
