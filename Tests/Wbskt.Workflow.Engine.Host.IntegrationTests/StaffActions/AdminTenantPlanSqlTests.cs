@@ -4,6 +4,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services;
 using Wbskt.Auth.Models;
+using Wbskt.EventBus.Abstractions;
+using Wbskt.Infrastructure.Security;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.StaffActions;
 using Wbskt.Models.Admin;
@@ -37,7 +39,9 @@ public sealed class AdminTenantPlanSqlTests(AuthSqlFixture auth)
             new AuditWorkspaces(new WorkspaceProvider(configuration), NullLogger<AuditWorkspaces>.Instance),
             NullLogger<TenantPlanService>.Instance);
         var runner = new StaffActionRunner(new StaffAuditProvider(configuration, "AuthDBConnection"), NullLogger<StaffActionRunner>.Instance);
-        return new AdminTenantService(plans, new UnusedLimits(), runner, TimeProvider.System, tenants, audit, new OutboxWriter(configuration), _review, NullLogger<AdminTenantService>.Instance);
+        return new AdminTenantService(plans, new UnusedLimits(), runner, TimeProvider.System, tenants, audit, new OutboxWriter(configuration), _review,
+            new TenantAnnouncer(new AccountProvider(configuration), new DiscardingBus(), audit, new WorkspaceAccessChanges(null, NullLogger<WorkspaceAccessChanges>.Instance), NullLogger<TenantAnnouncer>.Instance),
+            NullLogger<AdminTenantService>.Instance);
     }
 
     private static StaffChange Staff(Guid key) => new(Guid.NewGuid(), "pika", "Integration test of a staff plan", key);
@@ -168,5 +172,10 @@ public sealed class AdminTenantPlanSqlTests(AuthSqlFixture auth)
             Calls++;
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class DiscardingBus : IEventBus
+    {
+        public Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct = default) where TEvent : IEvent => Task.CompletedTask;
     }
 }

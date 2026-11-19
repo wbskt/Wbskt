@@ -35,6 +35,7 @@ public static class EventLogGroups
         nameof(PasswordChangedEvent),
         nameof(MemberRemovedEvent),
         nameof(MemberSuspendedEvent),
+        nameof(SupportActionTakenEvent),
         nameof(RolePermissionsUpdatedEvent),
         nameof(WorkspaceOwnershipTransferredEvent),
         nameof(WorkspaceDeletedEvent),

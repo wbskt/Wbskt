@@ -1,4 +1,5 @@
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Abstractions;
 
 namespace Wbskt.Management.Host.Services.Admin;
 
@@ -13,6 +14,12 @@ internal sealed class DeferredEventBus : IEventBus
 
     public Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct = default) where TEvent : IEvent
     {
+        // Only staff changes publish through here, so the customer's audit log shows them as Wbskt support's.
+        if (@event is ActorEvent { ActorSource: null } actorEvent)
+        {
+            actorEvent.ActorSource = EventSource.Support;
+        }
+
         // Kept as a typed call: the bus routes on the event's static type.
         _held.Add((bus, token) => bus.PublishAsync(@event, token));
         return Task.CompletedTask;

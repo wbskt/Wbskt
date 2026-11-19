@@ -2,6 +2,7 @@ using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services.Email;
 using Wbskt.Auth.Models;
+using Wbskt.Events.Auth;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Infrastructure.StaffActions;
@@ -14,7 +15,9 @@ namespace Wbskt.Auth.Host.Services;
 /// a mail or the access-token watermark, happens after the runner has committed, and only for a change
 /// made now: a replayed request already sent its mail the first time. The person's own audit events
 /// (<c>PasswordResetRequestedEvent</c>, <c>SessionsRevokedEvent</c>) say the person acted, so a staff
-/// change is recorded in the staff audit instead.
+/// change is recorded in the staff audit instead. The changes that keep the person from working (signing
+/// them out everywhere, turning sign-in off or on) are also told to each workspace they belong to, as a
+/// <see cref="SupportActionTakenEvent"/>, so the tenant's administrators can see Wbskt support did it.
 /// </remarks>
 internal sealed class AdminUserService(
     IAccountProvider accounts,
@@ -23,6 +26,7 @@ internal sealed class AdminUserService(
     IAccessTokenRevocation accessTokens,
     IAuthMailer mailer,
     IStaffActionRunner runner,
+    TenantAnnouncer announcer,
     TimeProvider time,
     ILogger<AdminUserService> logger)
     : IAdminUserService
@@ -131,6 +135,7 @@ internal sealed class AdminUserService(
         }, cancellationToken);
 
         await AfterCommitAsync(result, "access token revocation", user, () => accessTokens.RevokeUserAsync(user.RefId, CancellationToken.None));
+        await AnnounceAsync(result, SignOutEverywhereAction, user);
         return result;
     }
 
@@ -158,8 +163,12 @@ internal sealed class AdminUserService(
             await AfterCommitAsync(result, "access token revocation", user, () => accessTokens.RevokeUserAsync(user.RefId, CancellationToken.None));
         }
 
+        await AnnounceAsync(result, request.Allowed ? AllowSignInAction : BlockSignInAction, user);
         return result;
     }
+
+    private Task AnnounceAsync(Result<StaffActionResponse> result, string action, User user) =>
+        AfterCommitAsync(result, "audit event", user, () => announcer.ToUserAsync(new SupportActionTakenEvent(action, TargetKind, user.RefId), user.Id, CancellationToken.None));
 
     /// <summary>
     /// Checks the person's state inside the runner, after its replay check, so a retry of a change that

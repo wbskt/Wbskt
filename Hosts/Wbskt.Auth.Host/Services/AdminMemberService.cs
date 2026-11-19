@@ -3,6 +3,7 @@ using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Models;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Abstractions;
 using Wbskt.Events.Auth;
 using Wbskt.Infrastructure.StaffActions;
 using Wbskt.Infrastructure;
@@ -16,7 +17,8 @@ namespace Wbskt.Auth.Host.Services;
 /// so their workspaces pass to another administrator of the tenant rather than to a caller, who has none
 /// here. Membership is checked by the procedures, after the runner's idempotency lookup, so a retry of a
 /// change already made replays it. The events go out once the change has committed, and not for a replay.
-/// The audit row is on the account, with the member in its detail.
+/// The audit row is on the account, with the member in its detail. The customer's audit log shows the
+/// member events as from <see cref="EventSource.Support"/>.
 /// </remarks>
 internal sealed class AdminMemberService(
     IStaffUserProvider staff,
@@ -68,7 +70,11 @@ internal sealed class AdminMemberService(
         await AfterCommitAsync(result, async () =>
         {
             _announcer.AccessChanged();
-            await _announcer.ToTenantAsync(request.Suspended ? new MemberSuspendedEvent(userRef) : new MemberUnsuspendedEvent(userRef), tenantId, CancellationToken.None);
+            await _announcer.ToTenantAsync(request.Suspended
+                ? new MemberSuspendedEvent(userRef) { ActorSource = EventSource.Support }
+                : new MemberUnsuspendedEvent(userRef) { ActorSource = EventSource.Support },
+                tenantId,
+                CancellationToken.None);
             if (request.Suspended)
             {
                 await eventBus.PublishAsync(new SecurityAlertEvent(
@@ -106,7 +112,7 @@ internal sealed class AdminMemberService(
         await AfterCommitAsync(result, async () =>
         {
             _announcer.AccessChanged();
-            await _announcer.ToTenantAsync(new MemberRemovedEvent(userRef), tenantId, CancellationToken.None);
+            await _announcer.ToTenantAsync(new MemberRemovedEvent(userRef) { ActorSource = EventSource.Support }, tenantId, CancellationToken.None);
         });
         return result;
     }

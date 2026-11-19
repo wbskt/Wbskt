@@ -81,7 +81,7 @@ public sealed class AdminMemberServiceTests
 
         // The management host's cached access and open live feeds are dropped (#949).
         Assert.Equal(1, _accessChanges.Announced);
-        _bus.Verify(b => b.PublishAsync(It.Is<TenantActorEvent>(e => e is MemberSuspendedEvent && ((MemberSuspendedEvent)e).MemberRefId == _user.RefId && e.WorkspaceIds.SequenceEqual(new[] { 3, 4 })), It.IsAny<CancellationToken>()));
+        _bus.Verify(b => b.PublishAsync(It.Is<TenantActorEvent>(e => e is MemberSuspendedEvent && ((MemberSuspendedEvent)e).MemberRefId == _user.RefId && e.WorkspaceIds.SequenceEqual(new[] { 3, 4 }) && e.ActorSource == EventSource.Support), It.IsAny<CancellationToken>()));
         _bus.Verify(b => b.PublishAsync(It.Is<SecurityAlertEvent>(e => e.AlertType == "MemberSuspended"), It.IsAny<CancellationToken>()));
     }
 
