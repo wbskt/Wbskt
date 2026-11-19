@@ -124,6 +124,15 @@ DROP PROCEDURE IF EXISTS dbo.HistoryEvent_DeleteForRetiredRuns;
 GO
 /*
 --------------------------------------------------------------------------------------
+Pre-Deployment Script: drop IdempotencyKey_GetBy_Key
+--------------------------------------------------------------------------------------
+Only tests read a claim back by its key since #1053, and they read the table directly now (#1080).
+No image calls it, and DropObjectsNotInSource is off, so it is dropped here as Client_Verify is.
+*/
+DROP PROCEDURE IF EXISTS dbo.IdempotencyKey_GetBy_Key;
+GO
+/*
+--------------------------------------------------------------------------------------
 Pre-Deployment Script: one ScheduledFires row per (WorkflowDefinitionId, TriggerNodeId)
 --------------------------------------------------------------------------------------
 The table gains UQ_ScheduledFires_WorkflowDefinitionId_TriggerNodeId. Registering the same version

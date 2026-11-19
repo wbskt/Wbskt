@@ -36,9 +36,6 @@ internal sealed class InMemoryIdempotencyKeyProvider : IIdempotencyKeyProvider
             CompletedAt = null
         }));
 
-    public Task<IdempotencyKeyRow?> FindByKeyAsync(string keyValue, CancellationToken ct) =>
-        Task.FromResult(_rows.TryGetValue(keyValue, out IdempotencyKeyRow? row) ? row : null);
-
     public Task<IdempotencyKeyRow> MarkSucceededAsync(string keyValue, string resultJson, CancellationToken ct) =>
         Task.FromResult(_rows.AddOrUpdate(keyValue, _ => throw new KeyNotFoundException(keyValue), (_, row) => row with { Status = "Succeeded", ResultJson = resultJson, CompletedAt = DateTime.UtcNow }));
 

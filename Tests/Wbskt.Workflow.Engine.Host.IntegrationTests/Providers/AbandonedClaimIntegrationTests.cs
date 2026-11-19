@@ -38,10 +38,10 @@ public sealed class AbandonedClaimIntegrationTests(SqlEdgeFixture fixture)
         int released = await keys.ReleaseAbandonedClaimsAsync(CancellationToken.None);
 
         released.Should().BeGreaterOrEqualTo(2);
-        (await keys.FindByKeyAsync(inbound, CancellationToken.None))!.Status.Should().Be("Failed");
-        (await keys.FindByKeyAsync(triggerStart, CancellationToken.None))!.Status.Should().Be("Failed");
-        (await keys.FindByKeyAsync(action, CancellationToken.None))!.Status.Should().Be("Pending");
-        (await keys.FindByKeyAsync(settled, CancellationToken.None))!.Status.Should().Be("Succeeded");
+        (await ReadKeyAsync(inbound)).Status.Should().Be("Failed");
+        (await ReadKeyAsync(triggerStart)).Status.Should().Be("Failed");
+        (await ReadKeyAsync(action)).Status.Should().Be("Pending");
+        (await ReadKeyAsync(settled)).Status.Should().Be("Succeeded");
 
         // An overlapping old leader still finishing the claim no longer holds it, so its settle misses.
         IdempotencyKeyRow late = await keys.MarkClaimSucceededAsync(inbound, abandonedToken, "{}", CancellationToken.None);
@@ -127,7 +127,7 @@ public sealed class AbandonedClaimIntegrationTests(SqlEdgeFixture fixture)
 
         await keys.ReleaseAbandonedClaimsAsync(CancellationToken.None);
 
-        (await keys.FindByKeyAsync(startKey, CancellationToken.None))!.Status.Should().Be("Succeeded");
+        (await ReadKeyAsync(startKey)).Status.Should().Be("Succeeded");
     }
 
     [SkippableFact]
@@ -147,13 +147,26 @@ public sealed class AbandonedClaimIntegrationTests(SqlEdgeFixture fixture)
         // A late write from the attempt that lost the claim changes nothing.
         await keys.MarkClaimSucceededAsync(key, first, "{}", CancellationToken.None);
         await keys.MarkClaimFailedAsync(key, first, "{}", CancellationToken.None);
-        IdempotencyKeyRow row = (await keys.FindByKeyAsync(key, CancellationToken.None))!;
+        var row = await ReadKeyAsync(key);
         row.Status.Should().Be("Pending");
         row.BranchRefId.Should().Be(redelivery);
         row.ResultJson.Should().Be(IdempotencyClaimResults.Resumed);
 
         await keys.MarkClaimSucceededAsync(key, redelivery, "{}", CancellationToken.None);
-        (await keys.FindByKeyAsync(key, CancellationToken.None))!.Status.Should().Be("Succeeded");
+        (await ReadKeyAsync(key)).Status.Should().Be("Succeeded");
+    }
+
+    private async Task<(string Status, Guid BranchRefId, string? ResultJson)> ReadKeyAsync(string keyValue)
+    {
+        await using var connection = new SqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var select = new SqlCommand(
+            "SELECT Status, BranchRefId, ResultJson FROM dbo.IdempotencyKeys WHERE KeyValue = @KeyValue;",
+            connection);
+        select.Parameters.AddWithValue("@KeyValue", keyValue);
+        await using SqlDataReader reader = await select.ExecuteReaderAsync();
+        (await reader.ReadAsync()).Should().BeTrue($"the key {keyValue} should have a row");
+        return (reader.GetString(0), reader.GetGuid(1), reader.IsDBNull(2) ? null : reader.GetString(2));
     }
 
     private async Task<RunRow> CreateRunAsync()

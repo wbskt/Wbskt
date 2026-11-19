@@ -30,13 +30,6 @@ internal sealed class IdempotencyKeyProvider : BaseSqlProvider, IIdempotencyKeyP
         );
     }
 
-    public Task<IdempotencyKeyRow?> FindByKeyAsync(string keyValue, CancellationToken ct) =>
-        ExecuteFindAsync(
-            "dbo.IdempotencyKey_GetBy_Key",
-            p => p.AddWithValue("@KeyValue", keyValue),
-            Map,
-            ct);
-
     public async Task<IdempotencyKeyRow> MarkSucceededAsync(string keyValue, string resultJson, CancellationToken ct)
     {
         return await ExecuteSingleAsync(

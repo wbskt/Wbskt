@@ -556,7 +556,6 @@ public sealed class BookmarkResumerTests
             return Task.FromResult(_factory(keyValue, runId, branchRefId, nodeId, attempt));
         }
 
-        public Task<IdempotencyKeyRow?> FindByKeyAsync(string keyValue, CancellationToken ct) => throw new NotSupportedException();
         public Task<IdempotencyKeyRow> MarkSucceededAsync(string keyValue, string resultJson, CancellationToken ct) => Task.FromResult<IdempotencyKeyRow>(null!);
         public Task<IdempotencyKeyRow> MarkClaimSucceededAsync(string keyValue, Guid claimToken, string resultJson, CancellationToken ct) => MarkSucceededAsync(keyValue, resultJson, ct);
         public Task<IdempotencyKeyRow> MarkClaimFailedAsync(string keyValue, Guid claimToken, string errorJson, CancellationToken ct) => MarkFailedAsync(keyValue, errorJson, ct);
