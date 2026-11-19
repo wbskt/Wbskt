@@ -60,7 +60,7 @@ public sealed class WorkspaceOwnershipTests
         var provider = new Mock<IRegistrationPolicyProvider>();
         provider.Setup(p => p.FindByRefIdAsync(foreign.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(foreign);
         var bus = new Mock<IEventBus>();
-        var service = new RegistrationPolicyService(provider.Object, Mock.Of<IClientProvider>(), bus.Object, NullLogger<RegistrationPolicyService>.Instance);
+        var service = new RegistrationPolicyService(provider.Object, bus.Object, NullLogger<RegistrationPolicyService>.Instance);
 
         var update = await service.UpdateAsync(WorkspaceId, foreign.RefId, new UpdateRegistrationPolicyRequest("lab", null, false, true));
         var rotate = await service.RotatePinAsync(WorkspaceId, foreign.RefId);

@@ -105,9 +105,9 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
         }
     }
 
-    public async Task UpdateAsync(int workspaceId, int id, UpdateRegistrationPolicyRequest request, CancellationToken cancellationToken = default)
+    public async Task<int?> UpdateAsync(int workspaceId, int id, UpdateRegistrationPolicyRequest request, CancellationToken cancellationToken = default)
     {
-        await ExecuteNonQueryAsync("dbo.RegistrationPolicy_Update", p =>
+        var parameters = await ExecuteNonQueryAsync("dbo.RegistrationPolicy_Update", p =>
         {
             p.AddWithValue("@WorkspaceId", workspaceId);
             p.AddWithValue("@Id", id);
@@ -116,7 +116,10 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
             p.AddWithValue("@RemoveMaxClients", request.RemoveMaxClients);
             p.AddWithValue("@AutoApproval", (object?)request.AutoApproval ?? DBNull.Value);
             p.AddWithValue("@IsEnabled", (object?)request.IsEnabled ?? DBNull.Value);
+            p.Add("@RegisteredOverLimit", SqlDbType.Int).Direction = ParameterDirection.Output;
         }, cancellationToken);
+
+        return parameters["@RegisteredOverLimit"].Value is int registered ? registered : null;
     }
 
     public async Task<RegistrationPolicy> RotatePinAsync(int workspaceId, int id, CancellationToken cancellationToken = default)

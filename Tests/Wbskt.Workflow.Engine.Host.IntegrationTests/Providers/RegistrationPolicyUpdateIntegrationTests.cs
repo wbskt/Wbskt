@@ -41,6 +41,22 @@ public sealed class RegistrationPolicyUpdateIntegrationTests(SqlEdgeFixture fixt
         Assert.Equal(("porch", (int?)null, false, true), await ReadAsync(policyId));
     }
 
+    [SkippableFact]
+    public async Task A_limit_below_the_clients_registered_changes_nothing_and_returns_their_count()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int workspaceId = NewWorkspaceId();
+        int policyId = await CreatePolicyAsync(workspaceId);
+        await RegisterClientsAsync(workspaceId, policyId, 3);
+
+        int? refused = await Provider().UpdateAsync(workspaceId, policyId, new UpdateRegistrationPolicyRequest(Name: "porch", MaxClients: 2));
+        int? accepted = await Provider().UpdateAsync(workspaceId, policyId, new UpdateRegistrationPolicyRequest(MaxClients: 3));
+
+        Assert.Equal(3, refused);
+        Assert.Null(accepted);
+        Assert.Equal(("policy-update-test", 3, false, true), await ReadAsync(policyId));
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private static int NewWorkspaceId() => Random.Shared.Next(1_000_000, int.MaxValue - 1);
@@ -61,6 +77,22 @@ public sealed class RegistrationPolicyUpdateIntegrationTests(SqlEdgeFixture fixt
         cmd.Parameters.AddWithValue("@WorkspaceId", workspaceId);
         cmd.Parameters.AddWithValue("@Pin", Guid.NewGuid().ToString("N")[..20]);
         return (int)(await cmd.ExecuteScalarAsync())!;
+    }
+
+    private async Task RegisterClientsAsync(int workspaceId, int policyId, int count)
+    {
+        await using var conn = new SqlConnection(fixture.ConnectionString);
+        await conn.OpenAsync();
+        for (int i = 0; i < count; i++)
+        {
+            await using var cmd = new SqlCommand("""
+                INSERT INTO dbo.Clients (WorkspaceId, PolicyId, Name, SecretHash, Status)
+                VALUES (@WorkspaceId, @PolicyId, 'policy-update-test', 0x00, 1);
+                """, conn);
+            cmd.Parameters.AddWithValue("@WorkspaceId", workspaceId);
+            cmd.Parameters.AddWithValue("@PolicyId", policyId);
+            await cmd.ExecuteNonQueryAsync();
+        }
     }
 
     private async Task<(string Name, int? MaxClients, bool AutoApproval, bool IsEnabled)> ReadAsync(int policyId)

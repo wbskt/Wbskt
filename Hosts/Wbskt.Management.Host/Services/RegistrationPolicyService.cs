@@ -13,18 +13,15 @@ namespace Wbskt.Management.Host.Services;
 internal sealed class RegistrationPolicyService : IRegistrationPolicyService
 {
     private readonly IRegistrationPolicyProvider _provider;
-    private readonly IClientProvider _clientProvider;
     private readonly IEventBus _eventBus;
     private readonly ILogger<RegistrationPolicyService> _logger;
 
     public RegistrationPolicyService(
-        IRegistrationPolicyProvider provider, 
-        IClientProvider clientProvider,
+        IRegistrationPolicyProvider provider,
         IEventBus eventBus,
         ILogger<RegistrationPolicyService> logger)
     {
         _provider = provider;
-        _clientProvider = clientProvider;
         _eventBus = eventBus;
         _logger = logger;
     }
@@ -110,17 +107,12 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
         var policy = lookup.Value;
         var policyId = policy.Id;
 
-        if (request.MaxClients.HasValue)
+        if (await _provider.UpdateAsync(workspaceId, policyId, request, cancellationToken) is { } registered)
         {
-            var currentCount = policy.RegisteredClientCount;
-            if (currentCount > request.MaxClients.Value)
-            {
-                _logger.LogWarning("Policy update failed: Current registered clients ({Current}) exceeds new limit ({Max}) for Policy ID {PolicyId}", currentCount, request.MaxClients.Value, policyId);
-                return Result.Failure(Error.Validation("POLICY_LIMIT_CONFLICT", $"Cannot set max clients to {request.MaxClients.Value} because {currentCount} clients are already registered under this policy."));
-            }
+            _logger.LogWarning("Policy update failed: {Current} registered clients exceed the new limit ({Max}) for Policy ID {PolicyId}", registered, request.MaxClients, policyId);
+            return Result.Failure(Error.Validation("POLICY_LIMIT_CONFLICT", $"Cannot set max clients to {request.MaxClients} because {registered} clients are already registered under this policy."));
         }
 
-        await _provider.UpdateAsync(workspaceId, policyId, request, cancellationToken);
         _logger.LogInformation("Registration policy ID {PolicyId} updated successfully", policyId);
 
         var updatedPolicy = await _provider.FindByIdAsync(policyId, cancellationToken)

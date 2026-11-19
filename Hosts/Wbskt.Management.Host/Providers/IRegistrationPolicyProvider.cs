@@ -13,7 +13,12 @@ public interface IRegistrationPolicyProvider : IReferenceProvider
     Task<IPagedList<RegistrationPolicy>> GetAllAsync(int workSpaceId, bool? autoApproval, string? name, int skip,
         int take, CancellationToken cancellationToken = default);
     Task<RegistrationPolicy> InsertAsync(int workspaceId, RegistrationPolicyRequest request, CancellationToken cancellationToken = default);
-    Task UpdateAsync(int workspaceId, int id, UpdateRegistrationPolicyRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Applies the edit. Returns null when it went through, or, when <c>maxClients</c> is below the clients
+    /// already registered, that count with nothing changed (checked under the policy's lock).
+    /// </summary>
+    Task<int?> UpdateAsync(int workspaceId, int id, UpdateRegistrationPolicyRequest request, CancellationToken cancellationToken = default);
     /// <summary>Draws a new PIN for the policy, retrying on a clash, and returns the updated policy.</summary>
     Task<RegistrationPolicy> RotatePinAsync(int workspaceId, int id, CancellationToken cancellationToken = default);
 
