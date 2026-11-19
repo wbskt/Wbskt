@@ -83,7 +83,7 @@ internal static class BillingNotices
         string restarted = Date(NextMonth(month));
         string past = plan == PlanCode.Business
             ? $"Credits past it came from your credit packs first, then are invoiced for {name} at {OverageRate()} under your contract."
-            : "Runs past it drew on the credit packs you have bought. Once none were left, new runs were refused and runs going stopped at their next step.";
+            : "Runs past it drew on the credit packs you have bought. Once none were left, new runs were refused and runs already in progress were stopped at their next step.";
         string next = plan == PlanCode.Business
             ? "If you expect to need more every month, reply to resize your contract."
             : "If you often need more, a larger plan includes more credits each month.";
@@ -114,7 +114,7 @@ internal static class BillingNotices
                 $"{workspaceName} reached its credit cap in {name}",
                 [
                     $"The workspace {workspaceName} spent {Number(spent)} workflow credits in {name}, its cap of {Number(cap)}.",
-                    $"Its new runs were refused for the rest of {name}, and have been allowed again since {resets}. If it needs more in a month, raise or remove the cap in the workspace's settings."
+                    $"Its new runs were refused for the rest of {name}, and its runs already in progress were stopped at their next step; runs have been allowed again since {resets}. If it needs more in a month, raise or remove the cap in the workspace's settings."
                 ]);
         }
 

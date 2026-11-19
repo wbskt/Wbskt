@@ -344,6 +344,7 @@ public sealed class BillingNoticeTests
         var cap = _sent.Single(s => s.Period == "2026-10:31");
         Assert.Equal("<Greenhouse> reached its monthly credit cap in October 2026", cap.Mail.Subject);
         Assert.Contains("refused for the rest of October 2026", cap.Mail.HtmlBody);
+        Assert.Contains("its runs already in progress were stopped at their next step", cap.Mail.HtmlBody);
         Assert.DoesNotContain("are refused until", cap.Mail.HtmlBody);
     }
 
