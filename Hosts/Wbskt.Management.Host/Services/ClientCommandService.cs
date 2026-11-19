@@ -23,6 +23,8 @@ public sealed class ClientCommandService : IClientCommandService
 
     private static readonly Error ClientInactive = Error.Conflict("CLIENT_INACTIVE", "The client is offline and not registered, so a command cannot wait for it.");
 
+    private static readonly Error ClientOffline = Error.Conflict("CLIENT_OFFLINE", "The client is not connected, so it cannot answer a ping.");
+
     private static readonly Error OtaNotSupported = Error.Conflict("OTA_NOT_SUPPORTED", "The client does not take firmware updates: its capabilities do not list 'ota'.");
 
     private const int MaxOtaUrlLength = 2048;
@@ -228,13 +230,19 @@ public sealed class ClientCommandService : IClientCommandService
     {
         // Same reasoning as SendAsync: the ping is dispatched by ClientRefId, so the workspace it
         // belongs to is only ever checked here.
-        var clientResult = await _clientService.EnsureClientInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+        var clientResult = await _clientService.LoadInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
         if (clientResult.IsFailure)
         {
             return Result.Failure(clientResult.Error);
         }
 
-        if (!await TryPublishActionAsync(new ClientPingEvent(clientRefId, clientResult.Value, workspaceId, _clock.GetUtcNow().UtcDateTime), cancellationToken))
+        // A ping is not queued: one for a client with no connection would answer nothing.
+        if (!clientResult.Value.IsConnected)
+        {
+            return Result.Failure(ClientOffline);
+        }
+
+        if (!await TryPublishActionAsync(new ClientPingEvent(clientRefId, clientResult.Value.Id, workspaceId, _clock.GetUtcNow().UtcDateTime), cancellationToken))
         {
             return Result.Failure(BrokerUnavailable);
         }

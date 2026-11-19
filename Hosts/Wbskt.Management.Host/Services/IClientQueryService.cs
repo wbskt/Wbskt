@@ -1,3 +1,4 @@
+using Wbskt.Management.Host.Models;
 using Wbskt.Protocol;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Models;
@@ -38,4 +39,10 @@ public interface IClientQueryService
     /// </para>
     /// </summary>
     Task<Result<int>> EnsureClientInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The client named by <paramref name="clientRefId"/> when it belongs to <paramref name="workspaceId"/>,
+    /// with its presence; <c>CLIENT_NOT_FOUND</c> otherwise, as <see cref="EnsureClientInWorkspaceAsync"/>.
+    /// </summary>
+    Task<Result<ClientDetail>> LoadInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default);
 }

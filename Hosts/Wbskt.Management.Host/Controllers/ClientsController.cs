@@ -414,7 +414,8 @@ public class ClientsController : ApiControllerBase
     }
 
     /// <summary>
-    /// Triggers a ping event for a specific client to verify connectivity or wake state.
+    /// Triggers a ping event for a specific client to verify connectivity or wake state. A client
+    /// with no connection answers 409 <c>CLIENT_OFFLINE</c>: a ping is not queued for later.
     /// </summary>
     /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="clientRef">The unique reference ID of the target client.</param>
