@@ -78,9 +78,16 @@ public static class SubscriptionPlan
     }
 
     /// <summary>
-    /// The end of the period a refunded subscription payment made at <paramref name="paidAt"/> paid for,
-    /// with a day's slack for the provider's billing date drifting from the payment's time.
+    /// The end of the period a refunded subscription payment made at <paramref name="paidAt"/> paid for:
+    /// a whole interval from the payment, with a day's slack for the provider's billing date drifting from
+    /// the payment's time, but never past <paramref name="periodEnd"/>, the end of the period in force when
+    /// the refund is read. A period's own charge ends with that period either way. An upgrade's proration
+    /// charge is made mid-period, so a whole interval from it would withhold the plan through most of the
+    /// next period too, which the tenant pays for; capped, the plan comes back at the next renewal.
     /// </summary>
-    public static DateTime RefundedThrough(DateTime paidAt, BillingInterval interval) =>
-        (interval == BillingInterval.Yearly ? paidAt.AddYears(1) : paidAt.AddMonths(1)).AddDays(1);
+    public static DateTime RefundedThrough(DateTime paidAt, BillingInterval interval, DateTime periodEnd)
+    {
+        DateTime intervalEnd = (interval == BillingInterval.Yearly ? paidAt.AddYears(1) : paidAt.AddMonths(1)).AddDays(1);
+        return intervalEnd < periodEnd ? intervalEnd : periodEnd;
+    }
 }
