@@ -35,6 +35,7 @@ internal interface IAuthMailer
     /// </summary>
     ValueTask QueueEmailChangeConflictAsync(string to, string username, CancellationToken ct);
 
+    /// <summary>
     /// Tells the owner their password was <paramref name="how"/> (changed or reset), when and from
     /// where, with the way to reset it if they did not.
     /// </summary>
