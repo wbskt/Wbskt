@@ -318,6 +318,77 @@ public sealed class ClientSessionTests
     }
 
     [Fact]
+    public async Task Acks_and_pongs_the_server_asked_for_do_not_spend_the_budget()
+    {
+        var connection = Connection();
+        var results = new List<DisconnectReason?>();
+        const string ack = """{"type":"sys.ack","payload":{"commandId":"6f9619ff-8b86-d011-b42d-00cf4fc964ff"}}""";
+        const string pong = """{"payload":{"id":"x"},"type":"SYS.PONG"}""";
+
+        await Sessions(new MessageBudgetOptions { PerSecond = 0.001, Burst = 1, CloseAfterDropped = 1 }).RunAsync(Admitted, connection,
+            async inbox =>
+            {
+                results.Add(await inbox.ReceiveAsync(Message, CancellationToken.None));
+                connection.ExpectReply();
+                await connection.SendPingAsync(CancellationToken.None);
+                results.Add(await inbox.ReceiveAsync(ack, CancellationToken.None));
+                results.Add(await inbox.ReceiveAsync(pong, CancellationToken.None));
+
+                // Nothing is owed now, so a third reply spends the (empty) budget.
+                results.Add(await inbox.ReceiveAsync(ack, CancellationToken.None));
+                return DisconnectReason.ClientClosed;
+            });
+
+        Assert.Equal([null, null, null, DisconnectReason.Throttled], results);
+    }
+
+    [Fact]
+    public async Task A_ping_left_unanswered_is_owed_one_pong_not_one_per_ping()
+    {
+        var connection = Connection();
+
+        for (var i = 0; i < 5; i++)
+        {
+            await connection.SendPingAsync(CancellationToken.None);
+        }
+
+        Assert.True(connection.TryTakeReply());
+        Assert.False(connection.TryTakeReply());
+    }
+
+    [Fact]
+    public void The_replies_a_connection_can_be_owed_are_capped()
+    {
+        var connection = Connection();
+
+        for (var i = 0; i < ClientConnectionBase.MaxRepliesOwed + 10; i++)
+        {
+            connection.ExpectReply();
+        }
+
+        var taken = 0;
+        while (connection.TryTakeReply())
+        {
+            taken++;
+        }
+
+        Assert.Equal(ClientConnectionBase.MaxRepliesOwed, taken);
+    }
+
+    [Theory]
+    [InlineData("""{"type":"sys.ack","payload":{}}""", true)]
+    [InlineData("""{"payload":{"type":"t","nested":[1,{"a":2}]},"type":"sys.pong"}""", true)]
+    [InlineData("""{"type":"sys.ping"}""", false)]
+    [InlineData("""{"type":"t","payload":{"type":"sys.ack"}}""", false)]
+    [InlineData("""{"payload":"sys.ack"}""", false)]
+    [InlineData("""["sys.ack"]""", false)]
+    [InlineData("not json sys.ack", false)]
+    public void Only_a_top_level_ack_or_pong_type_reads_as_a_reply(string text, bool expected)
+    {
+        Assert.Equal(expected, ClientInbox.IsReply(text));
+    }
+
+    [Fact]
     public async Task A_message_over_the_size_limit_is_closed_with_1009_whatever_the_transport_let_through()
     {
         var connection = Connection();

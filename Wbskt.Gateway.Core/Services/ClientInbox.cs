@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using Wbskt.Gateway.Core.Infrastructure;
 using Wbskt.Gateway.Core.Services.Inbound;
 using Wbskt.Gateway.Core.Telemetry;
@@ -57,8 +58,11 @@ public sealed class ClientInbox
         }
 
         // Every message becomes broker traffic (event log, live feed, workflow triggers), so a
-        // client over its budget loses the excess, and one that keeps on is disconnected.
-        if (!_budget.TryTake())
+        // client over its budget loses the excess, and one that keeps on is disconnected. A pong or ack
+        // the server asked for is exempt: a reconnect that delivers a queued backlog of commands while
+        // the client flushes its own would otherwise drop the acks.
+        var owedReply = connection.RepliesOwed && IsReply(text) && connection.TryTakeReply();
+        if (!owedReply && !_budget.TryTake())
         {
             _metrics.Dropped("throttled");
             if (_budget.ConsecutiveDropped == 1)
@@ -79,5 +83,42 @@ public sealed class ClientInbox
         _logger.LogDebug("Received from {ClientRefId}: {Message}", clientRefId, text);
         await _dispatcher.DispatchAsync(_context, text, cancellationToken);
         return null;
+    }
+
+    /// <summary>Whether the message's top-level type is <c>sys.ack</c> or <c>sys.pong</c>, read without building the message.</summary>
+    internal static bool IsReply(string text)
+    {
+        var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(text));
+        try
+        {
+            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+            {
+                return false;
+            }
+
+            while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+            {
+                var isType = reader.ValueTextEquals("type");
+                if (!reader.Read())
+                {
+                    return false;
+                }
+
+                if (isType)
+                {
+                    return reader.TokenType == JsonTokenType.String
+                        && reader.GetString() is { } type
+                        && (MessageTypes.Comparer.Equals(type, MessageTypes.Ack) || MessageTypes.Comparer.Equals(type, MessageTypes.Pong));
+                }
+
+                reader.Skip();
+            }
+        }
+        catch (JsonException)
+        {
+            // Not JSON: the dispatcher counts it as invalid once it has spent the budget.
+        }
+
+        return false;
     }
 }

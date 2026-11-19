@@ -53,6 +53,19 @@ public interface IClientConnection
     bool TryCompletePing(string? id, out DateTime sentAt);
 
     /// <summary>
+    /// Notes that the client owes a reply (a <c>sys.ack</c> for a command sent with a commandId). A
+    /// reply the server asked for is let past the client's message budget, since the server, not the
+    /// client, sets how many there are. <see cref="SendPingAsync"/> notes its pong itself.
+    /// </summary>
+    void ExpectReply();
+
+    /// <summary>Whether the client owes a reply, checked before a message is read to see if it is one.</summary>
+    bool RepliesOwed { get; }
+
+    /// <summary>Takes one owed reply; false when none is owed, and the message spends the budget.</summary>
+    bool TryTakeReply();
+
+    /// <summary>
     /// Asks the connection to close for <paramref name="reason"/>, which the transport turns into its
     /// own close (a WebSocket close code, for one). Only the first request counts; returns false for
     /// later ones.

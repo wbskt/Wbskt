@@ -135,6 +135,13 @@ public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
         {
             ExpiresAt = command.ExpiresAtUtc is { } expiresAt ? expiresAt.ToUtcOffset() : null
         };
+
+        // Noted before the send: the ack can arrive before SendAsync returns.
+        if (command.CommandId != null)
+        {
+            connection.ExpectReply();
+        }
+
         await connection.SendAsync(message, ct);
     }
 
