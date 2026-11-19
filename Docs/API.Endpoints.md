@@ -441,9 +441,12 @@ The routes the API style guide replaced were removed before launch (#351): `GET 
 (use `GET ?policyRefId=`), `PATCH {clientRef}/status` and `PATCH {clientRef}/name` (use
 `PATCH {clientRef}`), and `POST {clientRef}/command` (use `/commands`).
 
-Command and ping publish onto the event bus, and the gateway dispatches on `ClientRefId` alone —
-it has no workspace of its own to check against. The controller's ownership check is therefore the
-only one in the path.
+Commands (a console send, an OTA update and a workflow's send-message step alike) go through
+`IClientCommandSender`, which checks the client belongs to the sender's workspace, then puts the command
+on the bus addressed to the socket host holding the client, or in the client's queue when it is offline.
+A ping is published as `ClientPingEvent` after `ClientCommandService` makes the same check, and only to a
+connected client (409 `CLIENT_OFFLINE` otherwise). The gateway dispatches on `ClientRefId` alone and has
+no workspace of its own, so that check in the service is the only one in the path.
 
 ### 2.2 Registration policies — `…/registration-policies`
 
