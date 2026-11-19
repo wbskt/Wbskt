@@ -1111,7 +1111,7 @@ public sealed class TriggerDispatcherTests
             }
         }
 
-        public Task<IdempotencyKeyRow> GetByKeyAsync(string keyValue, CancellationToken ct) => throw new NotImplementedException();
+        public Task<IdempotencyKeyRow?> FindByKeyAsync(string keyValue, CancellationToken ct) => throw new NotImplementedException();
 
         public Task<IdempotencyKeyRow> MarkSucceededAsync(string keyValue, string resultJson, CancellationToken ct)
         {

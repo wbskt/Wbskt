@@ -112,7 +112,6 @@ internal static class RetryExecutor
             // Without it, every lap of a sequential ForEach shares the first lap's key, so laps two
             // onwards return the cached result and their side effect never happens.
             string keyValue = $"action:{context.RunId}:{context.BranchRefId:N}:{node.NodeId:N}:{context.VisitToken}:{attempt}";
-            IdempotencyKeyRow? existingRow = null;
 
             // Recording an attempt's outcome, once. There is no replay-safe path here: a replay-safe
             // node never claims a key, so idempotencyKeyProvider is null for one and this is a no-op.
@@ -135,59 +134,33 @@ internal static class RetryExecutor
                 }
             }
 
-            if (idempotencyKeyProvider != null)
-            {
-                try
-                {
-                    existingRow = await idempotencyKeyProvider.GetByKeyAsync(keyValue, ct);
-                }
-                catch (KeyNotFoundException)
-                {
-                    // Key does not exist yet; normal flow.
-                }
-
-                // A finished earlier attempt is returned as recorded. A Pending one means a prior run
-                // crashed mid-execution, so the node runs again.
-                if (existingRow != null && CachedOutcome(existingRow) is { } cached)
-                {
-                    if (await RetryCachedAsync(cached) is not { } replayed)
-                    {
-                        continue;
-                    }
-
-                    return replayed;
-                }
-            }
-
             // An attempt is paid for before its node runs, so one found already claimed (Pending, by a run
             // that stopped mid-node in a crash or a deploy) was paid for then. A replay-safe node claims
             // no key, so for it the branch's recovery stands in, on the attempt it was recovered at.
-            bool paidBefore = existingRow is not null
-                || (isReplaySafe && isRecoveredVisit && attempt == startAttempt);
+            bool paidBefore = isReplaySafe && isRecoveredVisit && attempt == startAttempt;
 
-            Guid claimToken = Guid.NewGuid();
-            if (!isReplaySafe && idempotencyKeyProvider != null)
+            if (idempotencyKeyProvider != null)
             {
-                if (existingRow == null)
+                // One claim, no read first: the procedure hands back the row that holds the key, ours or
+                // an earlier claimant's. Ours means the attempt is new. An earlier one that finished is
+                // returned as recorded; one still Pending means a prior run crashed mid-node, so the node
+                // runs again, on that claim's payment.
+                Guid claimToken = Guid.NewGuid();
+                IdempotencyKeyRow claim = await idempotencyKeyProvider.UpsertPendingAsync(
+                    keyValue, (int)context.RunId, claimToken, node.NodeId, attempt, ct);
+                if (claim.BranchRefId != claimToken)
                 {
-                    existingRow = await idempotencyKeyProvider.UpsertPendingAsync(
-                        keyValue, (int)context.RunId, claimToken, node.NodeId, attempt, ct);
-
-                    // Another claimant got there first. If it has already finished, its outcome is
-                    // returned; if it was Pending, we continue to run the executor, on its payment.
-                    if (existingRow.BranchRefId != claimToken)
+                    if (CachedOutcome(claim) is { } cached)
                     {
-                        paidBefore = true;
-                        if (CachedOutcome(existingRow) is { } claimed)
+                        if (await RetryCachedAsync(cached) is not { } replayed)
                         {
-                            if (await RetryCachedAsync(claimed) is not { } replayed)
-                            {
-                                continue;
-                            }
-
-                            return replayed;
+                            continue;
                         }
+
+                        return replayed;
                     }
+
+                    paidBefore = true;
                 }
             }
 
