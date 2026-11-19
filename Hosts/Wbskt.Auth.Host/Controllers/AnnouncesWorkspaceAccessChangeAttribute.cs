@@ -14,6 +14,10 @@ namespace Wbskt.Auth.Host.Controllers;
 /// access only costs the management host a few cache misses. Services also announce through
 /// <c>TenantAnnouncer.AccessChanged</c>, which is what covers paths with no marked controller (staff
 /// actions, account deletion); announcing twice is harmless.
+/// <para>
+/// The announcement names the member or workspace in the route (<see cref="ScopeOf"/>), so the
+/// management host re-checks only the live feeds it can reach.
+/// </para>
 /// </remarks>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
 public sealed class AnnouncesWorkspaceAccessChangeAttribute : Attribute, IAsyncResultFilter
@@ -30,7 +34,24 @@ public sealed class AnnouncesWorkspaceAccessChangeAttribute : Attribute, IAsyncR
 
         if (executed.Exception is null && http.Response.StatusCode is >= 200 and < 300)
         {
-            http.RequestServices.GetRequiredService<WorkspaceAccessChanges>().Publish();
+            http.RequestServices.GetRequiredService<WorkspaceAccessChanges>().Publish(ScopeOf(context.RouteData.Values));
         }
+    }
+
+    /// <summary>
+    /// Whom the route names: a member (<c>{userRef}</c>) is the one whose access moved, a workspace
+    /// (<c>{workspaceRef}</c>) reaches its members. A route naming neither, such as a role's
+    /// permissions, may reach anyone in the tenant.
+    /// </summary>
+    internal static AccessChange ScopeOf(RouteValueDictionary route)
+    {
+        if (Guid.TryParse(route["userRef"]?.ToString(), out var userRef))
+        {
+            return AccessChange.ForUsers(userRef);
+        }
+
+        return Guid.TryParse(route["workspaceRef"]?.ToString(), out var workspaceRef)
+            ? AccessChange.ForWorkspaces(workspaceRef)
+            : AccessChange.All;
     }
 }

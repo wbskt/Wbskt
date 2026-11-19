@@ -1,3 +1,4 @@
+using Wbskt.Infrastructure.Security;
 using Wbskt.Auth.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.EventBus.Abstractions;
@@ -163,7 +164,7 @@ internal sealed class AccessControlService : IAccessControlService
         return await GuardAsync("AddUserToGroup", async () =>
         {
             await _accessControl.InsertUserGroupAsync(userId, groupId, tenantId, cancellationToken);
-            _announcer.AccessChanged();
+            _announcer.AccessChanged(AccessChange.ForUsers(userRef));
         });
     }
 
@@ -187,7 +188,7 @@ internal sealed class AccessControlService : IAccessControlService
         return await GuardAsync("RemoveUserFromGroup", async () =>
         {
             await _accessControl.RemoveUserGroupAsync(userId, groupId, tenantId, cancellationToken);
-            _announcer.AccessChanged();
+            _announcer.AccessChanged(AccessChange.ForUsers(userRef));
         });
     }
 
@@ -234,7 +235,7 @@ internal sealed class AccessControlService : IAccessControlService
         return await GuardAsync("GrantUserPermission", async () =>
         {
             await _accessControl.GrantUserPermissionAsync(resolved.Value.EntityId, request.Slug, request.IsDeny, resolved.Value.TenantId, workspace.Value, cancellationToken);
-            _announcer.AccessChanged();
+            _announcer.AccessChanged(AccessChange.ForUsers(userRef));
         });
     }
 
@@ -255,7 +256,7 @@ internal sealed class AccessControlService : IAccessControlService
         return await GuardAsync("RemoveUserPermission", async () =>
         {
             await _accessControl.RemoveUserPermissionAsync(resolved.Value.EntityId, slug, resolved.Value.TenantId, workspace.Value, cancellationToken);
-            _announcer.AccessChanged();
+            _announcer.AccessChanged(AccessChange.ForUsers(userRef));
         });
     }
 
@@ -288,7 +289,7 @@ internal sealed class AccessControlService : IAccessControlService
                 await _accessControl.RemoveUserRoleAsync(userRef, roleRef, tenantId, workspaceRef, cancellationToken);
             }
 
-            _announcer.AccessChanged();
+            _announcer.AccessChanged(AccessChange.ForUsers(userRef));
             await _announcer.ToTenantAsync(
                 assign ? new MemberRoleAssignedEvent(userRef, roleRef, workspaceRef) : new MemberRoleRemovedEvent(userRef, roleRef, workspaceRef),
                 tenantId, cancellationToken);

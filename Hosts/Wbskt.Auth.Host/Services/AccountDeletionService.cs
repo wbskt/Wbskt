@@ -188,7 +188,7 @@ internal sealed class AccountDeletionService : IAccountDeletionService
     {
         try
         {
-            _tenantAnnouncer.AccessChanged();
+            _tenantAnnouncer.AccessChanged(AccessChange.ForUsers(user.RefId));
             foreach (var tenantId in leftTenantIds)
             {
                 await _tenantAnnouncer.ToTenantAsync(new MemberRemovedEvent(user.RefId), tenantId, cancellationToken);

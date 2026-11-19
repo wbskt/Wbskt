@@ -1,3 +1,4 @@
+using Wbskt.Infrastructure.Security;
 using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Models;
@@ -104,7 +105,7 @@ internal sealed class TenantService : ITenantService
         return await GuardAsync("RemoveTenantMember", async () =>
         {
             await _tenants.RemoveTenantMemberAsync(resolved.Value.TenantId, resolved.Value.EntityId, callerId, cancellationToken);
-            _announcer.AccessChanged();
+            _announcer.AccessChanged(AccessChange.ForUsers(userRef));
             await _announcer.ToTenantAsync(new MemberRemovedEvent(userRef), resolved.Value.TenantId, cancellationToken);
         });
     }
@@ -123,7 +124,7 @@ internal sealed class TenantService : ITenantService
         }
 
         _logger.LogInformation("User ID {UserId} left tenant ID {TenantId}", callerId, tenantId);
-        _announcer.AccessChanged();
+        _announcer.AccessChanged(AccessChange.ForUsers(callerRef));
         await _announcer.ToTenantAsync(new MemberLeftEvent(callerRef), tenantId, cancellationToken);
         return Result.Success();
     }
@@ -167,7 +168,7 @@ internal sealed class TenantService : ITenantService
 
             // Access is resolved per request, so the suspension takes effect on the member's next
             // call without touching their tokens - which also still work in their other tenants.
-            _announcer.AccessChanged();
+            _announcer.AccessChanged(AccessChange.ForUsers(userRef));
             await _announcer.ToTenantAsync(isSuspended ? new MemberSuspendedEvent(userRef) : new MemberUnsuspendedEvent(userRef), tenantId, cancellationToken);
 
             if (isSuspended)
@@ -279,7 +280,7 @@ internal sealed class TenantService : ITenantService
             var tenantId = await _tenants.AcceptInvitationAsync(tokenHash, callerId, limits.Members, cancellationToken);
             _logger.LogInformation("User ID {CallerId} joined tenant {TenantRef} by invitation", callerId, invitation.TenantRef);
 
-            _announcer.AccessChanged();
+            _announcer.AccessChanged(AccessChange.ForUsers(callerRef));
             await _announcer.ToTenantAsync(new InvitationAcceptedEvent(invitation.RefId, invitation.Email, callerId, callerRef), tenantId, cancellationToken);
             return new AcceptInvitationResponse(invitation.TenantRef, invitation.TenantName);
         });

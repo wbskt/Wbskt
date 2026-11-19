@@ -24,9 +24,10 @@ internal sealed class TenantAnnouncer(IEventBus eventBus, IAuditWorkspaces audit
 {
     /// <summary>
     /// Announces that someone's access to some workspace may have changed: a role, group, grant,
-    /// membership or suspension. Call it once the change has committed.
+    /// membership or suspension. Call it once the change has committed, naming whose access when the
+    /// change has one subject, so the management host re-checks only their live feeds.
     /// </summary>
-    public void AccessChanged() => accessChanges.Publish();
+    public void AccessChanged(AccessChange? change = null) => accessChanges.Publish(change ?? AccessChange.All);
 
     /// <summary>Publishes an action on the tenant's people, to be logged in each of its workspaces.</summary>
     /// <remarks>

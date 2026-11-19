@@ -111,17 +111,66 @@ public sealed class LiveFeedAccessRecheckTests
         var workspace = Guid.NewGuid();
         Answer(workspace, Result<WorkspaceAccess>.Failure(Error.Unauthorized("TOKEN_REVOKED", "The token was revoked.")));
         await _recheck.StartAsync(CancellationToken.None);
-        var connection = _connections.Open("c1", Token);
+        var user = Guid.NewGuid();
+        var connection = _connections.Open("c1", Token, user);
         connection.Workspaces[workspace] = 5;
         connection.Clients[Guid.NewGuid()] = new WatchedClient(workspace, 50);
 
-        await _revocation.RevokeUserAsync(Guid.NewGuid());
+        await _revocation.RevokeUserAsync(user);
         await _recheck.Pass;
 
         connection.Workspaces.Should().BeEmpty();
         connection.Clients.Should().BeEmpty();
         _groups.Verify(g => g.RemoveFromGroupAsync("c1", NotificationHub.GroupName(5), It.IsAny<CancellationToken>()), Times.Once);
         await _recheck.StopAsync(CancellationToken.None);
+    }
+
+    /// <summary>
+    /// A change to one member re-checks that member's connections and those joined to the workspace it
+    /// names, not every console open on the instance (#1001).
+    /// </summary>
+    [Fact]
+    public async Task A_change_naming_someone_else_passes_a_connection_by()
+    {
+        var member = Guid.NewGuid();
+        var mine = _connections.Open("mine", Token, member);
+        mine.Workspaces[Lost] = 2;
+        var theirs = _connections.Open("theirs", Token, Guid.NewGuid());
+        theirs.Workspaces[Lost] = 2;
+
+        await _recheck.RecheckAsync(AccessChange.ForUsers(member), CancellationToken.None);
+
+        mine.Workspaces.Should().BeEmpty();
+        theirs.Workspaces.Should().ContainKey(Lost);
+    }
+
+    [Fact]
+    public async Task A_change_naming_a_workspace_reaches_a_connection_watching_one_of_its_clients()
+    {
+        var watching = _connections.Open("watching", Token, Guid.NewGuid());
+        watching.Clients[Guid.NewGuid()] = new WatchedClient(Lost, 20);
+        var elsewhere = _connections.Open("elsewhere", Token, Guid.NewGuid());
+        elsewhere.Workspaces[Kept] = 1;
+
+        await _recheck.RecheckAsync(AccessChange.ForWorkspaces(Lost), CancellationToken.None);
+
+        watching.Clients.Should().BeEmpty();
+        _auth.Verify(a => a.ResolveWorkspaceForTokenAsync(Token, Kept, It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Ending_one_session_passes_the_same_user_in_another_by()
+    {
+        var user = Guid.NewGuid();
+        var ended = _connections.Open("ended", Token, user, Guid.NewGuid());
+        ended.Workspaces[Lost] = 2;
+        var other = _connections.Open("other", Token, user, Guid.NewGuid());
+        other.Workspaces[Lost] = 2;
+
+        await _recheck.RecheckAsync(AccessChange.ForSession(ended.SessionId!.Value), CancellationToken.None);
+
+        ended.Workspaces.Should().BeEmpty();
+        other.Workspaces.Should().ContainKey(Lost);
     }
 
     private void Answer(Guid workspaceRef, Result<WorkspaceAccess> answer) =>
