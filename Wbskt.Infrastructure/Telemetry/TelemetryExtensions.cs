@@ -48,7 +48,8 @@ public static class TelemetryExtensions
                 .AddAttributes([new("deployment.environment.name", builder.Environment.EnvironmentName)]))
             .WithTracing(tracing => tracing
                 .AddAspNetCoreInstrumentation(options => options.Filter = context => !IsProbe(context.Request.Path))
-                .AddHttpClientInstrumentation()
+                .AddHttpClientInstrumentation(TraceUrlRedaction.Configure)
+                .AddProcessor(new TraceUrlRedaction.Processor())
                 .AddSource(MassTransitSource))
             .WithMetrics(metrics => metrics
                 .AddAspNetCoreInstrumentation()
