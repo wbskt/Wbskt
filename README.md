@@ -68,6 +68,10 @@ the database script.
    pwsh ./Deploy-Databases.ps1          # add -Fresh to drop and recreate
    ```
 
+   Like the production migrator, an incremental deploy stops on a change that could lose data (a
+   dropped or narrowed column on a table with rows). Read what sqlpackage printed, then rerun with
+   `-AllowDataLoss` if that is what you meant, or with `-Fresh`.
+
 3. Start the hosts as Development, either one by one:
 
    ```bash

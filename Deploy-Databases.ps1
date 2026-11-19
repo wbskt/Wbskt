@@ -1,11 +1,11 @@
 <#PSScriptInfo
-.VERSION 1.2.1
+.VERSION 1.3.0
 .GUID f3a1d2c4-5e9b-4d8a-a6b3-2f8e4d0c9b4c
 .AUTHOR Richard Joy
 .COMPANYNAME WBSKT Inc.
 .COPYRIGHT Copyright (C) WBSKT Inc.
 .TAGS PowerShell, Database, Development, Wbskt
-.DESCRIPTION Deploys WBSKT databases. Only drops-and-recreates when -Fresh is used.
+.DESCRIPTION Deploys WBSKT databases. Only drops-and-recreates when -Fresh is used, and refuses a change that could lose data unless -AllowDataLoss is passed.
 #>
 
 #Requires -Version 7.0
@@ -14,7 +14,19 @@
 param (
     # Pass this to delete and redeploy fresh
     [Parameter(Mandatory = $false)]
-    [switch] $Fresh, 
+    [switch] $Fresh,
+
+    # Apply a change sqlpackage would refuse for possible data loss (a dropped or narrowed column on a
+    # table with rows). Off by default, as in the production migrator: an incremental deploy stops
+    # rather than lose data. -Fresh does not need it, since the databases are recreated empty.
+    [Parameter(Mandatory = $false)]
+    [switch] $AllowDataLoss,
+
+    # Seconds sqlpackage lets one statement run (its own default is 60), as the migrator's
+    # MIGRATE_COMMAND_TIMEOUT. A change that rebuilds a table copies it in one statement. 0 is no limit.
+    [Parameter(Mandatory = $false)]
+    [ValidateRange(0, [int]::MaxValue)]
+    [int] $CommandTimeout = 1800,
 
     [Parameter(Mandatory = $false)]
     [string] $Server = "localhost",
@@ -30,6 +42,11 @@ param (
     # running the hosts locally, or in CI, the way they connect in production.
     [Parameter(Mandatory = $false)]
     [string] $HostLoginPassword = "",
+
+    # Optional: also create the read-only login of the platform admin host (wbskt_admin_reader), which
+    # may read the admin views in both databases, with this password.
+    [Parameter(Mandatory = $false)]
+    [string] $AdminReaderPassword = "",
 
     # The root administrator's password hash, used only when the root account is first created.
     # Defaults to Password123!, the local development and E2E password (Tests/Wbskt.E2E.FeatureTests
@@ -70,30 +87,6 @@ begin {
         return $null
     }
 
-    function Drop-Database {
-        param([string]$DbName, [string]$SqlPackageExecutable)
-
-        Write-Host "Dropping database $DbName (Fresh Start)..." -ForegroundColor Yellow
-        
-        # Cross-platform way: Use SqlPackage to "Script" a drop or use a Script Action
-        # To keep it simple and avoid ADO.NET versioning issues on Linux, we use a simple SQL command via a temporary file
-        $sql = "IF EXISTS (SELECT name FROM sys.databases WHERE name = '$DbName') BEGIN ALTER DATABASE [$DbName] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [$DbName]; END"
-        $tmpFile = [System.IO.Path]::GetTempFileName()
-        $sql | Out-File -FilePath $tmpFile -Encoding utf8
-
-        try {
-            # Attempt to use sqlcmd if available, otherwise this is a gap in non-windows environments
-            if (Get-Command "sqlcmd" -ErrorAction SilentlyContinue) {
-                & sqlcmd -S $Server -U $User -P $Password -Q $sql -b
-            } else {
-                Write-Warning "sqlcmd not found. Skipping Drop step. Please ensure database is clear manually or install sqlcmd."
-            }
-        }
-        finally {
-            if (Test-Path $tmpFile) { Remove-Item $tmpFile }
-        }
-    }
-
     function Get-DacpacPath {
         param([string]$ProjectPath, [string]$DacpacName)
 
@@ -129,8 +122,9 @@ begin {
             "/Action:Publish",
             "/SourceFile:$DacpacPath",
             "/TargetConnectionString:$connString",
-            "/p:BlockOnPossibleDataLoss=False",
-            "/p:CreateNewDatabase=$Recreate"
+            "/p:BlockOnPossibleDataLoss=$(-not ($Recreate -or $AllowDataLoss))",
+            "/p:CreateNewDatabase=$Recreate",
+            "/p:CommandTimeout=$CommandTimeout"
         )
         foreach ($variable in $Variables) {
             $publishArgs += "/v:$variable"
@@ -159,11 +153,7 @@ process {
         if ($LASTEXITCODE -ne 0) { throw "Build failed for: $project" }
     }
 
-    if ($Fresh) {
-        Drop-Database -DbName $authDbName -SqlPackageExecutable $exe
-        Drop-Database -DbName $coreDbName -SqlPackageExecutable $exe
-    }
-
+    # -Fresh needs no separate drop: CreateNewDatabase makes sqlpackage drop and recreate each database.
     # sqlpackage refuses an empty /v: value, so each variable goes only when it has one.
     $authVariables = @()
     $coreVariables = @()
@@ -173,6 +163,10 @@ process {
     if ($HostLoginPassword) {
         $authVariables += "AuthHostPassword=$HostLoginPassword"
         $coreVariables = @("ManagementHostPassword=$HostLoginPassword", "EngineHostPassword=$HostLoginPassword")
+    }
+    if ($AdminReaderPassword) {
+        $authVariables += "AdminReaderPassword=$AdminReaderPassword"
+        $coreVariables += "AdminReaderPassword=$AdminReaderPassword"
     }
 
     $authDacpac = Get-DacpacPath -ProjectPath $authProject -DacpacName "Wbskt.Database.Auth.dacpac"
