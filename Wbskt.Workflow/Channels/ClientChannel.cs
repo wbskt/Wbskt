@@ -30,8 +30,6 @@ public sealed class ClientChannel : TriggerChannel
         {
             ["messageType"] = Json(message.Type),
             ["clientRefId"] = Json(message.ClientRefId),
-            ["clientId"] = Json(message.ClientId),
-            ["workspaceId"] = Json(message.WorkspaceId),
             ["payload"] = message.Payload,
             ["sentAt"] = Json(message.SentAt),
             ["receivedAt"] = Json(message.ReceivedAt),

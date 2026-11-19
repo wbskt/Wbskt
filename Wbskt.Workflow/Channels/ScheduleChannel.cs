@@ -28,7 +28,6 @@ public sealed class ScheduleChannel : TriggerChannel
         OccurrenceEventId(fire),
         new Dictionary<string, JsonElement>
         {
-            ["scheduledFireId"] = Json(fire.Id),
             ["definitionRefId"] = Json(fire.WorkflowRefId),
             ["triggerNodeId"] = Json(fire.TriggerNodeId),
             ["fireAt"] = Json(fire.NextFireAt)

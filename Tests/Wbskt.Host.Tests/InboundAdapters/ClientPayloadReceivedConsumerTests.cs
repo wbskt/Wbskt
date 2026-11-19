@@ -33,8 +33,6 @@ public sealed class ClientPayloadReceivedConsumerTests
                 && e.Payload["clientRefId"].GetString() == evt.ClientRefId.ToString()
                 && e.Payload["messageType"].GetString() == evt.Type
                 && e.Payload["clientRefId"].GetGuid() == evt.ClientRefId
-                && e.Payload["clientId"].GetInt32() == evt.ClientId
-                && e.Payload["workspaceId"].GetInt32() == evt.WorkspaceId
                 && e.Payload["payload"].GetRawText() == evt.Payload),
             CancellationToken.None), Times.Once);
     }
@@ -64,7 +62,7 @@ public sealed class ClientPayloadReceivedConsumerTests
     }
 
     [Fact]
-    public async Task Consume_includes_clientId_and_workspaceId_in_payload()
+    public async Task Consume_keeps_internal_ids_out_of_the_payload()
     {
         // Arrange
         var hub = new Mock<IInboundHub>();
@@ -82,8 +80,8 @@ public sealed class ClientPayloadReceivedConsumerTests
         // Assert
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e =>
-                e.Payload["clientId"].GetInt32() == 99
-                && e.Payload["workspaceId"].GetInt32() == 77),
+                !e.Payload.ContainsKey("clientId")
+                && !e.Payload.ContainsKey("workspaceId")),
             CancellationToken.None), Times.Once);
     }
 
