@@ -26,8 +26,8 @@ public record WorkflowPublishRequest(
 {
     /// <summary>
     /// Deprecated: the earlier body, which nested the steps here beside the id, name and description
-    /// again and fields the server sets. Read only when <c>nodes</c> is left out; dropped in the release
-    /// after (#1059).
+    /// again and fields the server sets. Read only when <c>nodes</c> is left out. Dropped only once the
+    /// console sends the flat body (wbskt/Wbskt.Console#229), not simply in the release after (#1059).
     /// </summary>
     public WorkflowDefinition? Definition { get; init; }
 }
