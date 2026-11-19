@@ -1,5 +1,7 @@
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
+using Wbskt.Models.Billing;
+using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 
@@ -294,7 +296,13 @@ public sealed class WorkspaceRetirementIntegrationTests(SqlEdgeFixture fixture)
         Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Workflows WHERE WorkspaceId = @p0", ws.WorkspaceId));
         Assert.DoesNotContain(ws.WorkspaceId, await Provider().GetPurgeableAsync(batchSize: 100_000));
 
-        await ExecAsync("DELETE FROM dbo.Runs WHERE WorkflowDefinitionId = @p0", ws.DefinitionId);
+        // The run sweep keeps none of a retired workspace's finished runs, whatever its plan keeps.
+        var runs = ProviderFactory.RunRetention(fixture.ConnectionString);
+        RunHistoryRetention[] keepForAges = [new RunHistoryRetention(PlanCode.Free, 36_500)];
+        Assert.Equal(1, await runs.DeleteRetiredRunsAsync(DateTime.UtcNow.AddMinutes(1), keepForAges, new DateTime(2001, 1, 1), 100, CancellationToken.None));
+        await ExecAsync("UPDATE dbo.Runs SET Status = N'Cancelled', CompletedAt = SYSUTCDATETIME() WHERE Id = @p0", ws.RunningRunId);
+        Assert.Equal(1, await runs.DeleteRetiredRunsAsync(DateTime.UtcNow.AddMinutes(1), keepForAges, new DateTime(2001, 1, 1), 100, CancellationToken.None));
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Runs WHERE WorkflowDefinitionId = @p0", ws.DefinitionId));
         Assert.True(await Provider().PurgeAsync(ws.WorkspaceId, batchSize: 2) > 0);
 
         Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Workflows WHERE WorkspaceId = @p0", ws.WorkspaceId));

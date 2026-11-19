@@ -5,7 +5,9 @@
 -- never sooner than a retention still held after a downgrade (RetentionHeldUntil). @Retention and the
 -- JSON override only cover a copy written before RunHistoryDays was kept. A workspace with no copy of
 -- its account yet has no plan cutoff: its plan is not known. A run finished before @CutoffUtc goes whatever the plan
--- says, so no run outlives HistoryRetentionGc's elevated window.
+-- says, so no run outlives HistoryRetentionGc's elevated window. A deleted workspace's copy
+-- (RetiredAt) keeps none: its finished runs go at the next sweep, so dbo.Workspace_Purge can then
+-- remove its workflows, rather than holding them for the rest of the plan's days.
 CREATE PROCEDURE dbo.Run_DeleteRetired
     @NowUtc    DATETIME2(3),
     @Retention dbo.RunHistoryRetentionTableType READONLY,
@@ -24,7 +26,10 @@ BEGIN
     INSERT INTO #Cutoffs (WorkspaceId, CutoffUtc)
     SELECT
         a.WorkspaceId,
-        DATEADD(DAY, -CASE WHEN a.RetentionHeldUntil > @NowUtc AND a.HeldRunHistoryDays > d.Days THEN a.HeldRunHistoryDays ELSE d.Days END, @NowUtc)
+        CASE
+            WHEN a.RetiredAt IS NOT NULL THEN @NowUtc
+            ELSE DATEADD(DAY, -CASE WHEN a.RetentionHeldUntil > @NowUtc AND a.HeldRunHistoryDays > d.Days THEN a.HeldRunHistoryDays ELSE d.Days END, @NowUtc)
+        END
     FROM dbo.WorkspaceAccounts a
     JOIN @Retention p ON p.PlanCode = a.PlanCode
     CROSS APPLY (SELECT COALESCE(a.RunHistoryDays, TRY_CAST(JSON_VALUE(a.LimitOverrides, '$.runHistoryDays') AS INT), p.Days) AS Days) d
