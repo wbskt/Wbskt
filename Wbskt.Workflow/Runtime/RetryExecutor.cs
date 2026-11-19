@@ -47,7 +47,7 @@ internal static class RetryExecutor
     // A charge past a leased budget waits for its tenant's credits lock (and a cap's) and gives up with
     // 50035 when it is held too long; tried again as a run start is (RunStarter.BusyBackoff) before the
     // step fails.
-    private static async Task<CreditCharge?> ChargeAsync(IRunCountersProvider counters, int runId, decimal cost, TimeProvider clock, CancellationToken ct)
+    internal static async Task<CreditCharge?> ChargeAsync(IRunCountersProvider counters, int runId, decimal cost, TimeProvider clock, CancellationToken ct)
     {
         for (int attempt = 0; ; attempt++)
         {
