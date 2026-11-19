@@ -16,8 +16,9 @@ public enum ClientCommandOutcome
     Sent,
 
     /// <summary>
-    /// The client is offline, so the command waits in its queue until it connects or the command
-    /// expires (<see cref="ClientCommandResult.ExpiresAtUtc"/>).
+    /// The client is offline, or the socket host holding it has gone quiet, so the command waits in its
+    /// queue until the client connects again or the command expires
+    /// (<see cref="ClientCommandResult.ExpiresAtUtc"/>).
     /// </summary>
     Queued,
 
