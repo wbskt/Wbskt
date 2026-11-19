@@ -3,33 +3,36 @@ using Wbskt.Auth.Host.Providers;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Abstractions;
 using Wbskt.Events.Auth;
+using Wbskt.Infrastructure.Security;
 
 namespace Wbskt.Auth.Host.Services;
 
 /// <summary>
-/// Publishes what tenant administration changed, once it has committed: that a user's or a role's
-/// permissions changed, and an action on the tenant's people for the audit log of every workspace in
-/// the tenant. It is given the queued bus (<c>AddScopedWithQueuedEvents</c>), so a broker that is down
-/// delays these events instead of failing a request whose change has already happened, which would
-/// also skip the access-change announcement that follows a success.
+/// Publishes what tenant administration changed, once it has committed: that someone's access may have
+/// changed, and an action on the tenant's people for the audit log of every workspace in the tenant. It
+/// is given the queued bus (<c>AddScopedWithQueuedEvents</c>), so a broker that is down delays these
+/// events instead of failing a request whose change has already happened.
 /// </summary>
-internal sealed class TenantAnnouncer(IAccountProvider accounts, IEventBus eventBus, IAuditWorkspaces audit, ILogger<TenantAnnouncer> logger)
+/// <remarks>
+/// An access change is announced on <see cref="WorkspaceAccessChanges"/>, which is what empties the
+/// management host's cached workspace access and rechecks open live feeds. Announcing it here, rather
+/// than only from a filter on the public controllers, covers every path that changes access: staff
+/// suspensions and removals, account deletion, and whatever calls this next (#949).
+/// </remarks>
+internal sealed class TenantAnnouncer(IAccountProvider accounts, IEventBus eventBus, IAuditWorkspaces audit, WorkspaceAccessChanges accessChanges, ILogger<TenantAnnouncer> logger)
 {
-    /// <summary>Records that the user's effective permissions may have changed, and returns the user.</summary>
-    public async Task<User> UserPermissionsChangedAsync(int userId, CancellationToken cancellationToken)
+    /// <summary>
+    /// Announces that someone's access to some workspace may have changed: a role, group, grant,
+    /// membership or suspension. Call it once the change has committed.
+    /// </summary>
+    public void AccessChanged() => accessChanges.Publish();
+
+    /// <summary>Announces an access change of the user's, and returns the user for the audit event that follows.</summary>
+    public async Task<User> AccessChangedAsync(int userId, CancellationToken cancellationToken)
     {
-        var user = await accounts.GetByIdAsync(userId, cancellationToken);
-        await UserPermissionsChangedAsync(user, cancellationToken);
-        return user;
+        AccessChanged();
+        return await accounts.GetByIdAsync(userId, cancellationToken);
     }
-
-    /// <summary>Records that the user's effective permissions may have changed.</summary>
-    public Task UserPermissionsChangedAsync(User user, CancellationToken cancellationToken) =>
-        eventBus.PublishAsync(new UserPermissionsChangedEvent(user.Id, user.RefId), cancellationToken);
-
-    /// <summary>Records that the role's permissions changed, for everyone who holds it.</summary>
-    public Task RolePermissionsChangedAsync(int roleId, CancellationToken cancellationToken) =>
-        eventBus.PublishAsync(new RolePermissionsChangedEvent(roleId), cancellationToken);
 
     /// <summary>Publishes an action on the tenant's people, to be logged in each of its workspaces.</summary>
     /// <remarks>

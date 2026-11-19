@@ -72,7 +72,7 @@ internal sealed class AccessControlService : IAccessControlService
             await _accessControl.DeleteRoleAsync(resolved.Value.EntityId, resolved.Value.TenantId, cancellationToken);
 
             // The role's permissions are gone, so anyone who held it has a different effective set now.
-            await _announcer.RolePermissionsChangedAsync(resolved.Value.EntityId, cancellationToken);
+            _announcer.AccessChanged();
         });
     }
 
@@ -164,7 +164,7 @@ internal sealed class AccessControlService : IAccessControlService
         return await GuardAsync("AddUserToGroup", async () =>
         {
             await _accessControl.InsertUserGroupAsync(userId, groupId, tenantId, cancellationToken);
-            await _announcer.UserPermissionsChangedAsync(userId, cancellationToken);
+            _announcer.AccessChanged();
         });
     }
 
@@ -188,7 +188,7 @@ internal sealed class AccessControlService : IAccessControlService
         return await GuardAsync("RemoveUserFromGroup", async () =>
         {
             await _accessControl.RemoveUserGroupAsync(userId, groupId, tenantId, cancellationToken);
-            await _announcer.UserPermissionsChangedAsync(userId, cancellationToken);
+            _announcer.AccessChanged();
         });
     }
 
@@ -235,7 +235,7 @@ internal sealed class AccessControlService : IAccessControlService
         return await GuardAsync("GrantUserPermission", async () =>
         {
             await _accessControl.GrantUserPermissionAsync(resolved.Value.EntityId, request.Slug, request.IsDeny, resolved.Value.TenantId, workspace.Value, cancellationToken);
-            await _announcer.UserPermissionsChangedAsync(resolved.Value.EntityId, cancellationToken);
+            _announcer.AccessChanged();
         });
     }
 
@@ -256,7 +256,7 @@ internal sealed class AccessControlService : IAccessControlService
         return await GuardAsync("RemoveUserPermission", async () =>
         {
             await _accessControl.RemoveUserPermissionAsync(resolved.Value.EntityId, slug, resolved.Value.TenantId, workspace.Value, cancellationToken);
-            await _announcer.UserPermissionsChangedAsync(resolved.Value.EntityId, cancellationToken);
+            _announcer.AccessChanged();
         });
     }
 
@@ -305,7 +305,7 @@ internal sealed class AccessControlService : IAccessControlService
                 await _accessControl.RemoveUserRoleAsync(userId, roleId, tenantId, workspace.Value, cancellationToken);
             }
 
-            await _announcer.UserPermissionsChangedAsync(userId, cancellationToken);
+            _announcer.AccessChanged();
             await _announcer.ToTenantAsync(
                 assign ? new MemberRoleAssignedEvent(userRef, roleRef, workspaceRef) : new MemberRoleRemovedEvent(userRef, roleRef, workspaceRef),
                 tenantId, cancellationToken);
@@ -343,7 +343,7 @@ internal sealed class AccessControlService : IAccessControlService
                 await _accessControl.RemoveGroupRoleAsync(groupId, roleId, tenantId, workspace.Value, cancellationToken);
             }
 
-            await _announcer.RolePermissionsChangedAsync(roleId, cancellationToken);
+            _announcer.AccessChanged();
         });
     }
 
@@ -484,7 +484,7 @@ internal sealed class AccessControlService : IAccessControlService
         await change();
         var after = await _accessControl.GetRolePermissionsAsync(role.EntityId, cancellationToken);
 
-        await _announcer.RolePermissionsChangedAsync(role.EntityId, cancellationToken);
+        _announcer.AccessChanged();
 
         var (was, now) = (Describe(before), Describe(after));
         if (was != now)

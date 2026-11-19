@@ -67,7 +67,7 @@ internal sealed class AdminMemberService(
 
         await AfterCommitAsync(result, async () =>
         {
-            await _announcer.UserPermissionsChangedAsync(user.Id, CancellationToken.None);
+            _announcer.AccessChanged();
             await _announcer.ToTenantAsync(request.Suspended ? new MemberSuspendedEvent(userRef) : new MemberUnsuspendedEvent(userRef), tenantId, CancellationToken.None);
             if (request.Suspended)
             {
@@ -105,7 +105,7 @@ internal sealed class AdminMemberService(
 
         await AfterCommitAsync(result, async () =>
         {
-            await _announcer.UserPermissionsChangedAsync(user.Id, CancellationToken.None);
+            _announcer.AccessChanged();
             await _announcer.ToTenantAsync(new MemberRemovedEvent(userRef), tenantId, CancellationToken.None);
         });
         return result;

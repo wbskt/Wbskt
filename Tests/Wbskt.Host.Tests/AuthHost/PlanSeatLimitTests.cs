@@ -238,5 +238,5 @@ public sealed class PlanSeatLimitTests
     private TenantService Tenants() => new(
         _tenants.Object, Mock.Of<IAccessControlProvider>(), _workspaces.Object, Mock.Of<IEventBus>(), Mock.Of<IAuthMailer>(),
         NullLogger<TenantService>.Instance, new FixedTenantLimits(Limits),
-        new TenantAnnouncer(Mock.Of<IAccountProvider>(), Mock.Of<IEventBus>(), AuditWorkspaces.None, NullLogger<TenantAnnouncer>.Instance));
+        new TenantAnnouncer(Mock.Of<IAccountProvider>(), Mock.Of<IEventBus>(), AuditWorkspaces.None, new RecordingAccessChanges().Changes, NullLogger<TenantAnnouncer>.Instance));
 }

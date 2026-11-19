@@ -30,6 +30,7 @@ public sealed class TenantServiceTests
     private readonly Mock<IAccountProvider> _accounts = new();
     private readonly Mock<IWorkspaceProvider> _workspaces = new();
     private readonly RecordingBus _bus = new();
+    private readonly RecordingAccessChanges _accessChanges = new();
     private readonly TenantService _service;
 
     public TenantServiceTests()
@@ -40,7 +41,7 @@ public sealed class TenantServiceTests
         _service = new TenantService(
             _tenants.Object, _accessControl.Object, _workspaces.Object, _bus, Mock.Of<IAuthMailer>(),
             NullLogger<TenantService>.Instance, new FixedTenantLimits(),
-            new TenantAnnouncer(_accounts.Object, _bus, AuditWorkspaces.None, NullLogger<TenantAnnouncer>.Instance));
+            new TenantAnnouncer(_accounts.Object, _bus, AuditWorkspaces.None, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance));
     }
 
     [Fact]
@@ -101,9 +102,8 @@ public sealed class TenantServiceTests
 
         Assert.True(result.IsSuccess);
         _tenants.Verify(p => p.RemoveTenantMemberAsync(TenantId, MemberId, CallerId, It.IsAny<CancellationToken>()), Times.Once);
-        Assert.Collection(_bus.Published,
-            e => Assert.Equal(MemberId, Assert.IsType<UserPermissionsChangedEvent>(e).UserId),
-            e => Assert.Equal(MemberRef, Assert.IsType<MemberRemovedEvent>(e).MemberRefId));
+        Assert.Equal(1, _accessChanges.Announced);
+        Assert.Equal(MemberRef, Assert.IsType<MemberRemovedEvent>(Assert.Single(_bus.Published)).MemberRefId);
     }
 
     [Fact]
@@ -115,9 +115,8 @@ public sealed class TenantServiceTests
         var result = await _service.LeaveTenantAsync(MemberId, tenantRef);
 
         Assert.True(result.IsSuccess);
-        Assert.Collection(_bus.Published,
-            e => Assert.Equal(MemberId, Assert.IsType<UserPermissionsChangedEvent>(e).UserId),
-            e => Assert.Equal(MemberRef, Assert.IsType<MemberLeftEvent>(e).MemberRefId));
+        Assert.Equal(1, _accessChanges.Announced);
+        Assert.Equal(MemberRef, Assert.IsType<MemberLeftEvent>(Assert.Single(_bus.Published)).MemberRefId);
     }
 
     [Theory]
@@ -241,7 +240,7 @@ public sealed class TenantServiceTests
         var result = await _service.AcceptInvitationAsync(MemberId, "invitation-token");
 
         Assert.Equal(new AcceptInvitationResponse(acme, "Acme"), result.Value);
-        Assert.Single(_bus.Published.OfType<UserPermissionsChangedEvent>());
+        Assert.Equal(1, _accessChanges.Announced);
         var accepted = Assert.Single(_bus.Published.OfType<InvitationAcceptedEvent>());
         Assert.Equal((invitationRef, MemberId, MemberRef), (accepted.InvitationRefId, accepted.UserId, accepted.UserRefId));
     }

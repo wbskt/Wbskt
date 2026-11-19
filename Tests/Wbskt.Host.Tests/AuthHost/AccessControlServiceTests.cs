@@ -34,6 +34,7 @@ public sealed class AccessControlServiceTests
     private readonly Mock<IAccountProvider> _accounts = new();
     private readonly Mock<IWorkspaceProvider> _workspaces = new();
     private readonly RecordingBus _bus = new();
+    private readonly RecordingAccessChanges _accessChanges = new();
     private readonly AccessControlService _service;
 
     public AccessControlServiceTests()
@@ -47,7 +48,7 @@ public sealed class AccessControlServiceTests
         _service = new AccessControlService(
             _accessControl.Object, _tenants.Object, _workspaces.Object,
             NullLogger<AccessControlService>.Instance,
-            new TenantAnnouncer(_accounts.Object, _bus, AuditWorkspaces.None, NullLogger<TenantAnnouncer>.Instance));
+            new TenantAnnouncer(_accounts.Object, _bus, AuditWorkspaces.None, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance));
     }
 
     // ---------------------------------------------------------------- roles and groups
@@ -161,7 +162,8 @@ public sealed class AccessControlServiceTests
 
         Assert.True(result.IsSuccess);
         _accessControl.Verify(p => p.DeleteRoleAsync(RoleId, TenantId, It.IsAny<CancellationToken>()), Times.Once);
-        Assert.Equal(RoleId, Assert.IsType<RolePermissionsChangedEvent>(Assert.Single(_bus.Published)).RoleId);
+        Assert.Empty(_bus.Published);
+        Assert.Equal(1, _accessChanges.Announced);
     }
 
     [Fact]
@@ -203,13 +205,9 @@ public sealed class AccessControlServiceTests
 
         Assert.True(result.IsSuccess);
         _accessControl.Verify(p => p.AssignUserRoleAsync(MemberId, RoleId, TenantId, WorkspaceId, It.IsAny<CancellationToken>()), Times.Once);
-        Assert.Collection(_bus.Published,
-            e => Assert.Equal(MemberId, Assert.IsType<UserPermissionsChangedEvent>(e).UserId),
-            e =>
-            {
-                var assigned = Assert.IsType<MemberRoleAssignedEvent>(e);
-                Assert.Equal((MemberRef, RoleRef, (Guid?)WorkspaceRef), (assigned.MemberRefId, assigned.RoleRefId, assigned.WorkspaceRefId));
-            });
+        Assert.Equal(1, _accessChanges.Announced);
+        var assigned = Assert.IsType<MemberRoleAssignedEvent>(Assert.Single(_bus.Published));
+        Assert.Equal((MemberRef, RoleRef, (Guid?)WorkspaceRef), (assigned.MemberRefId, assigned.RoleRefId, assigned.WorkspaceRefId));
     }
 
     [Fact]
@@ -235,7 +233,8 @@ public sealed class AccessControlServiceTests
 
         Assert.True(result.IsSuccess);
         _accessControl.Verify(p => p.AssignGroupRoleAsync(GroupId, RoleId, TenantId, null, It.IsAny<CancellationToken>()), Times.Once);
-        Assert.Equal(RoleId, Assert.IsType<RolePermissionsChangedEvent>(Assert.Single(_bus.Published)).RoleId);
+        Assert.Empty(_bus.Published);
+        Assert.Equal(1, _accessChanges.Announced);
     }
 
     // ---------------------------------------------------------------- role permissions
@@ -253,7 +252,7 @@ public sealed class AccessControlServiceTests
 
         Assert.True(result.IsSuccess);
         _accessControl.Verify(p => p.GrantRolePermissionAsync(RoleId, "workspaces.read", false, TenantId, It.IsAny<CancellationToken>()), Times.Once);
-        Assert.Single(_bus.Published.OfType<RolePermissionsChangedEvent>());
+        Assert.Equal(1, _accessChanges.Announced);
         var updated = Assert.Single(_bus.Published.OfType<RolePermissionsUpdatedEvent>());
         Assert.Equal(RoleRef, updated.RoleRefId);
     }
@@ -268,7 +267,7 @@ public sealed class AccessControlServiceTests
 
         Assert.True(result.IsSuccess);
         // The caches are still told: they cannot know the grant was a no-op.
-        Assert.Single(_bus.Published.OfType<RolePermissionsChangedEvent>());
+        Assert.Equal(1, _accessChanges.Announced);
         Assert.Empty(_bus.Published.OfType<RolePermissionsUpdatedEvent>());
     }
 

@@ -23,6 +23,7 @@ public sealed class AdminMemberServiceTests
     private readonly Mock<ITenantProvider> _tenants = new();
     private readonly Mock<IAccountProvider> _accounts = new();
     private readonly Mock<IEventBus> _bus = new();
+    private readonly RecordingAccessChanges _accessChanges = new();
     private readonly Mock<IAuditWorkspaces> _audit = new();
     private readonly RecordingRunner _runner = new();
     private readonly User _user = new() { Id = 42, RefId = Guid.NewGuid(), Username = "bob", Email = "bob@example.test", IsActive = true };
@@ -36,7 +37,7 @@ public sealed class AdminMemberServiceTests
     }
 
     private AdminMemberService Service() => new(_staff.Object, _tenants.Object, _accounts.Object, _bus.Object,
-        new TenantAnnouncer(_accounts.Object, _bus.Object, _audit.Object, NullLogger<TenantAnnouncer>.Instance), _runner,
+        new TenantAnnouncer(_accounts.Object, _bus.Object, _audit.Object, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance), _runner,
         NullLogger<AdminMemberService>.Instance);
 
     [Fact]
@@ -70,11 +71,16 @@ public sealed class AdminMemberServiceTests
     [Fact]
     public async Task A_suspension_is_announced_only_after_it_commits()
     {
-        _runner.Inspect = () => _bus.VerifyNoOtherCalls();
+        _runner.Inspect = () =>
+        {
+            _bus.VerifyNoOtherCalls();
+            Assert.Equal(0, _accessChanges.Announced);
+        };
 
         await Service().SetSuspendedAsync(TenantRef, _user.RefId, new AdminSetMemberSuspendedRequest(Staff, true), CancellationToken.None);
 
-        _bus.Verify(b => b.PublishAsync(It.Is<UserPermissionsChangedEvent>(e => e.UserId == 42), It.IsAny<CancellationToken>()));
+        // The management host's cached access and open live feeds are dropped (#949).
+        Assert.Equal(1, _accessChanges.Announced);
         _bus.Verify(b => b.PublishAsync(It.Is<TenantActorEvent>(e => e is MemberSuspendedEvent && ((MemberSuspendedEvent)e).MemberRefId == _user.RefId && e.WorkspaceIds.SequenceEqual(new[] { 3, 4 })), It.IsAny<CancellationToken>()));
         _bus.Verify(b => b.PublishAsync(It.Is<SecurityAlertEvent>(e => e.AlertType == "MemberSuspended"), It.IsAny<CancellationToken>()));
     }
@@ -112,6 +118,7 @@ public sealed class AdminMemberServiceTests
         Assert.Equal(AdminMemberService.RemoveAction, _runner.Action!.Name);
         _tenants.Verify(t => t.LeaveTenantAsync(TenantRef, 42, It.IsAny<CancellationToken>()));
         _bus.Verify(b => b.PublishAsync(It.Is<TenantActorEvent>(e => e is MemberRemovedEvent && ((MemberRemovedEvent)e).MemberRefId == _user.RefId), It.IsAny<CancellationToken>()));
+        Assert.Equal(1, _accessChanges.Announced);
     }
 
     [Theory]

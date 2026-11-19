@@ -129,8 +129,8 @@ belongs to is this call's purpose, so it cannot also be its precondition.
 
 Redemption marks the invitation accepted, inserts the membership, and — if the invitation named a
 role — grants it **tenant-wide**. That is the tenant's answer to "what can a new member do";
-narrowing it to one workspace is a later, explicit act. A `UserPermissionsChangedEvent` follows, so
-anything caching the user's effective set drops it.
+narrowing it to one workspace is a later, explicit act. The access change is then announced
+(`TenantAnnouncer.AccessChanged`), so anything caching the user's effective set drops it.
 
 **Registering with a token** orders its steps around one failure: an account created for an
 invitation that turns out to be unusable cannot be registered again — the email is taken — and was

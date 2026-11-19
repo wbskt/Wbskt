@@ -102,7 +102,7 @@ internal sealed class TenantService : ITenantService
         return await GuardAsync("RemoveTenantMember", async () =>
         {
             await _tenants.RemoveTenantMemberAsync(resolved.Value.TenantId, resolved.Value.EntityId, callerId, cancellationToken);
-            await _announcer.UserPermissionsChangedAsync(resolved.Value.EntityId, cancellationToken);
+            _announcer.AccessChanged();
             await _announcer.ToTenantAsync(new MemberRemovedEvent(userRef), resolved.Value.TenantId, cancellationToken);
         });
     }
@@ -121,7 +121,7 @@ internal sealed class TenantService : ITenantService
         }
 
         _logger.LogInformation("User ID {UserId} left tenant ID {TenantId}", callerId, tenantId);
-        var user = await _announcer.UserPermissionsChangedAsync(callerId, cancellationToken);
+        var user = await _announcer.AccessChangedAsync(callerId, cancellationToken);
         await _announcer.ToTenantAsync(new MemberLeftEvent(user.RefId), tenantId, cancellationToken);
         return Result.Success();
     }
@@ -165,7 +165,7 @@ internal sealed class TenantService : ITenantService
 
             // Access is resolved per request, so the suspension takes effect on the member's next
             // call without touching their tokens - which also still work in their other tenants.
-            await _announcer.UserPermissionsChangedAsync(userId, cancellationToken);
+            _announcer.AccessChanged();
             await _announcer.ToTenantAsync(isSuspended ? new MemberSuspendedEvent(userRef) : new MemberUnsuspendedEvent(userRef), tenantId, cancellationToken);
 
             if (isSuspended)
@@ -279,7 +279,7 @@ internal sealed class TenantService : ITenantService
             var tenantId = await _tenants.AcceptInvitationAsync(tokenHash, callerId, limits.Members, cancellationToken);
             _logger.LogInformation("User ID {CallerId} joined tenant {TenantRef} by invitation", callerId, invitation.TenantRef);
 
-            var joiner = await _announcer.UserPermissionsChangedAsync(callerId, cancellationToken);
+            var joiner = await _announcer.AccessChangedAsync(callerId, cancellationToken);
             await _announcer.ToTenantAsync(new InvitationAcceptedEvent(invitation.RefId, invitation.Email, callerId, joiner.RefId), tenantId, cancellationToken);
             return new AcceptInvitationResponse(invitation.TenantRef, invitation.TenantName);
         });

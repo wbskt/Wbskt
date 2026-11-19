@@ -29,7 +29,7 @@ public sealed class AuthFaultTests
         _service = new TenantService(
             _tenants.Object, Mock.Of<IAccessControlProvider>(), Mock.Of<IWorkspaceProvider>(), Mock.Of<IEventBus>(), Mock.Of<IAuthMailer>(),
             NullLogger<TenantService>.Instance, new FixedTenantLimits(),
-            new TenantAnnouncer(Mock.Of<IAccountProvider>(), Mock.Of<IEventBus>(), Mock.Of<IAuditWorkspaces>(), NullLogger<TenantAnnouncer>.Instance));
+            new TenantAnnouncer(Mock.Of<IAccountProvider>(), Mock.Of<IEventBus>(), Mock.Of<IAuditWorkspaces>(), new RecordingAccessChanges().Changes, NullLogger<TenantAnnouncer>.Instance));
     }
 
     [Fact]

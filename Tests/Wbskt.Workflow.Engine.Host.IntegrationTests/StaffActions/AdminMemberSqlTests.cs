@@ -1,3 +1,4 @@
+using Wbskt.Infrastructure.Security;
 using System.Data;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
@@ -37,7 +38,7 @@ public sealed class AdminMemberSqlTests(AuthSqlFixture auth)
             new TenantProvider(configuration),
             accounts,
             _bus,
-            new TenantAnnouncer(accounts, _bus, new AuditWorkspaces(new WorkspaceProvider(configuration), NullLogger<AuditWorkspaces>.Instance), NullLogger<TenantAnnouncer>.Instance),
+            new TenantAnnouncer(accounts, _bus, new AuditWorkspaces(new WorkspaceProvider(configuration), NullLogger<AuditWorkspaces>.Instance), new WorkspaceAccessChanges(null, NullLogger<WorkspaceAccessChanges>.Instance), NullLogger<TenantAnnouncer>.Instance),
             runner,
             NullLogger<AdminMemberService>.Instance);
     }
@@ -60,7 +61,9 @@ public sealed class AdminMemberSqlTests(AuthSqlFixture auth)
         Assert.True(retry.Value.Replayed);
         Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.TenantMembers WHERE TenantId = @p0 AND UserId = @p1 AND IsSuspended = 1", tenantId, memberId));
         Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.StaffAudit WHERE IdempotencyKey = @p0 AND Outcome = N'Succeeded' AND Action = N'SuspendMember' AND TargetRefId = @p1 AND Detail LIKE N'Member %'", key, tenantRef));
-        Assert.Equal(3, _bus.Published);
+        // MemberSuspendedEvent and the security alert, once: the replay publishes nothing.
+        // The access change itself goes to WorkspaceAccessChanges, not the bus.
+        Assert.Equal(2, _bus.Published);
     }
 
     [SkippableFact]
