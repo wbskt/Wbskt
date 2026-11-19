@@ -57,14 +57,13 @@ BEGIN
             THROW 50035, 'The workspace is too busy to set its credit cap; try again.', 1;
 
         -- The ceiling first, from the budget before it is cut. The Status IN list is
-        -- IX_Runs_WorkflowDefinitionId_Active's filter word for word.
+        -- IX_Runs_WorkspaceId_Active's filter word for word.
         UPDATE rc
         SET rc.BudgetCeiling = r.CreditBudget,
             rc.UpdatedAt = SYSUTCDATETIME()
         FROM dbo.RunCounters rc
         JOIN dbo.Runs r ON r.Id = rc.RunId
-        JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
-        WHERE d.WorkspaceId = @WorkspaceId
+        WHERE r.WorkspaceId = @WorkspaceId
           AND r.Status IN (N'Running', N'Failing', N'Cancelling')
           AND rc.BudgetRunId IS NULL
           AND rc.BudgetCeiling IS NULL;
@@ -73,8 +72,7 @@ BEGIN
         SET r.CreditBudget = rc.CreditsConsumed + rc.ChildCreditsConsumed
         FROM dbo.Runs r
         JOIN dbo.RunCounters rc ON rc.RunId = r.Id
-        JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
-        WHERE d.WorkspaceId = @WorkspaceId
+        WHERE r.WorkspaceId = @WorkspaceId
           AND r.Status IN (N'Running', N'Failing', N'Cancelling')
           AND rc.BudgetRunId IS NULL
           AND r.CreditBudget > rc.CreditsConsumed + rc.ChildCreditsConsumed;

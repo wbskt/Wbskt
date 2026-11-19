@@ -179,8 +179,8 @@ public sealed class WorkspaceRetirementIntegrationTests(SqlEdgeFixture fixture)
             OUTPUT INSERTED.Id VALUES (NEWID(), 1, @p0, 'prune-test', '{}', 1);
             """, withRun);
         await ExecAsync("""
-            INSERT INTO dbo.Runs (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, Status, StartedAt, CompletedAt, CreditBudget)
-            VALUES (NEWID(), @p0, NEWID(), 1, NEWID(), N'Succeeded', '2026-08-01', '2026-08-01', 0);
+            INSERT INTO dbo.Runs (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, Status, StartedAt, CompletedAt, CreditBudget, WorkspaceId)
+            VALUES (NEWID(), @p0, NEWID(), 1, NEWID(), N'Succeeded', '2026-08-01', '2026-08-01', 0, (SELECT WorkspaceId FROM dbo.WorkflowDefinitions WHERE Id = @p0));
             """, definitionId);
 
         int withReadings = await CreateAccountAsync(longAgo);
@@ -367,13 +367,13 @@ public sealed class WorkspaceRetirementIntegrationTests(SqlEdgeFixture fixture)
             VALUES (@p2, @p0, @p1, '* * * * *', SYSUTCDATETIME());
             INSERT INTO dbo.PendingTriggerEvents (WorkflowRefId, TriggerNodeId, CorrelationKey, InboundEventJson)
             VALUES (@p1, @p2, 'k', '{}');
-            INSERT INTO dbo.Runs (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, Status, StartedAt, CompletedAt, CreditBudget)
-            VALUES (NEWID(), @p0, @p1, 1, @p2, N'Succeeded', SYSUTCDATETIME(), SYSUTCDATETIME(), 0);
+            INSERT INTO dbo.Runs (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, Status, StartedAt, CompletedAt, CreditBudget, WorkspaceId)
+            VALUES (NEWID(), @p0, @p1, 1, @p2, N'Succeeded', SYSUTCDATETIME(), SYSUTCDATETIME(), 0, (SELECT WorkspaceId FROM dbo.WorkflowDefinitions WHERE Id = @p0));
             """, definitionId, workflowRefId, triggerNodeId);
 
         long runningRunId = await InsertAsync<int>("""
-            INSERT INTO dbo.Runs (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, Status, StartedAt, CreditBudget)
-            OUTPUT INSERTED.Id VALUES (NEWID(), @p0, @p1, 1, @p2, N'Running', SYSUTCDATETIME(), 0);
+            INSERT INTO dbo.Runs (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, Status, StartedAt, CreditBudget, WorkspaceId)
+            OUTPUT INSERTED.Id VALUES (NEWID(), @p0, @p1, 1, @p2, N'Running', SYSUTCDATETIME(), 0, (SELECT WorkspaceId FROM dbo.WorkflowDefinitions WHERE Id = @p0));
             """, definitionId, workflowRefId, triggerNodeId);
 
         return new SeededWorkspace(workspaceId, policyId, policyRefId, pending, registered, rejected,

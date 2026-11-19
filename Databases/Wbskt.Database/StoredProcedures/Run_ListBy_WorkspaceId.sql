@@ -31,9 +31,8 @@ BEGIN
             r.Number,
             r.IsTest
         FROM dbo.Runs r
-        INNER JOIN dbo.WorkflowDefinitions w ON w.Id = r.WorkflowDefinitionId
-        WHERE w.WorkspaceId = @WorkspaceId
-          -- The IN list is IX_Runs_WorkflowDefinitionId_Active's filter word for word, so this reads only the
+        WHERE r.WorkspaceId = @WorkspaceId
+          -- The IN list is IX_Runs_WorkspaceId_Active's filter word for word, so this reads only the
           -- runs still going instead of every run the workspace ever made.
           AND r.Status IN (N'Running', N'Failing', N'Cancelling')
           AND r.Status = N'Running'
@@ -44,8 +43,7 @@ BEGIN
         RETURN;
     END
 
-    -- Runs are not workspace-scoped themselves; the workspace lives on the definition, so this joins
-    -- through WorkflowDefinitionId (covered by IX_Runs_WorkflowDefinitionId_Id).
+    -- Covered by IX_Runs_WorkspaceId_Id.
     SELECT TOP (@Top)
         r.Id,
         r.RefId,
@@ -65,8 +63,7 @@ BEGIN
         r.Number,
         r.IsTest
     FROM dbo.Runs r
-    INNER JOIN dbo.WorkflowDefinitions w ON w.Id = r.WorkflowDefinitionId
-    WHERE w.WorkspaceId = @WorkspaceId
+    WHERE r.WorkspaceId = @WorkspaceId
       AND (@StatusFilter IS NULL OR r.Status = @StatusFilter)
       AND (@CursorId IS NULL OR r.Id < @CursorId)
       AND (@IsTest IS NULL OR r.IsTest = @IsTest)

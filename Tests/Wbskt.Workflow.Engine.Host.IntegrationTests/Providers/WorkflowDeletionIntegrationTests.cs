@@ -31,12 +31,12 @@ public sealed class WorkflowDeletionIntegrationTests(SqlEdgeFixture fixture)
             VALUES (@p2, @p0, @p1, '* * * * *', SYSUTCDATETIME());
             INSERT INTO dbo.PendingTriggerEvents (WorkflowRefId, TriggerNodeId, CorrelationKey, InboundEventJson)
             VALUES (@p1, @p2, 'k', '{}');
-            INSERT INTO dbo.Runs (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, Status, StartedAt, CompletedAt, CreditBudget)
-            VALUES (NEWID(), @p3, @p1, 1, @p2, N'Succeeded', SYSUTCDATETIME(), SYSUTCDATETIME(), 0);
+            INSERT INTO dbo.Runs (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, Status, StartedAt, CompletedAt, CreditBudget, WorkspaceId)
+            VALUES (NEWID(), @p3, @p1, 1, @p2, N'Succeeded', SYSUTCDATETIME(), SYSUTCDATETIME(), 0, (SELECT WorkspaceId FROM dbo.WorkflowDefinitions WHERE Id = @p3));
             """, v2.Id, refId, triggerNodeId, v1.Id);
         long runningRunId = Convert.ToInt64(await ScalarAsync("""
-            INSERT INTO dbo.Runs (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, Status, StartedAt, CreditBudget)
-            OUTPUT INSERTED.Id VALUES (NEWID(), @p0, @p1, 2, @p2, N'Running', SYSUTCDATETIME(), 0);
+            INSERT INTO dbo.Runs (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, Status, StartedAt, CreditBudget, WorkspaceId)
+            OUTPUT INSERTED.Id VALUES (NEWID(), @p0, @p1, 2, @p2, N'Running', SYSUTCDATETIME(), 0, (SELECT WorkspaceId FROM dbo.WorkflowDefinitions WHERE Id = @p0));
             """, v2.Id, refId, triggerNodeId));
 
         var versions = await provider.GetVersionsAsync(refId, workspaceId, CancellationToken.None);

@@ -23,8 +23,8 @@ BEGIN
             WHERE WD.WorkspaceId = @WorkspaceId
               AND (   EXISTS (SELECT 1 FROM dbo.TriggerRegistrations TR WHERE TR.WorkflowDefinitionId = WD.Id)
                    OR EXISTS (SELECT 1 FROM dbo.ScheduledFires SF WHERE SF.WorkflowDefinitionId = WD.Id)
-                   OR EXISTS (SELECT 1 FROM dbo.PendingTriggerEvents PTE WHERE PTE.WorkflowRefId = WD.RefId)
-                   OR EXISTS (SELECT 1 FROM dbo.Runs RU WHERE RU.WorkflowDefinitionId = WD.Id AND RU.Status IN (N'Running', N'Failing'))))
+                   OR EXISTS (SELECT 1 FROM dbo.PendingTriggerEvents PTE WHERE PTE.WorkflowRefId = WD.RefId)))
+        OR EXISTS (SELECT 1 FROM dbo.Runs RU WHERE RU.WorkspaceId = @WorkspaceId AND RU.Status IN (N'Running', N'Failing'))
         THEN 1 ELSE 0 END AS BIT) AS HasLiveContent;
 END
 GO

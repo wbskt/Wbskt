@@ -47,6 +47,25 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
+    public async Task A_run_carries_its_definitions_workspace_and_is_listed_and_counted_by_it()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        long runId = await StartAsync(wd, budget: 40m);
+        await ChargeAsync(runId, 15m);
+
+        decimal stored = await ScalarAsync("SELECT CAST(WorkspaceId AS DECIMAL(18, 4)) FROM dbo.Runs WHERE Id = @Id", (int)runId);
+        var listed = await ProviderFactory.Run(fixture.ConnectionString).ListByWorkspaceAsync(workspaceId, null, 50, null, CancellationToken.None);
+        decimal reserved = await ScalarAsync("SELECT Credits FROM dbo.WorkspaceCreditsReserved(@Id)", workspaceId);
+
+        stored.Should().Be(workspaceId);
+        listed.Select(r => r.Id).Should().Equal((int)runId);
+        reserved.Should().Be(25m);
+    }
+
+    [SkippableFact]
     public async Task Deleting_a_retired_run_posts_what_it_had_not_posted_first()
     {
         Skip.IfNot(fixture.IsAvailable, SkipReason);

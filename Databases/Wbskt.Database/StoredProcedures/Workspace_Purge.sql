@@ -59,10 +59,7 @@ BEGIN
         SET @Deleted += @@ROWCOUNT;
     END
 
-    IF NOT EXISTS (SELECT 1
-                   FROM dbo.WorkflowDefinitions D
-                   INNER JOIN dbo.Runs R ON R.WorkflowDefinitionId = D.Id
-                   WHERE D.WorkspaceId = @WorkspaceId)
+    IF NOT EXISTS (SELECT 1 FROM dbo.Runs R WHERE R.WorkspaceId = @WorkspaceId)
     BEGIN
         DECLARE @Workflows TABLE (RefId UNIQUEIDENTIFIER PRIMARY KEY);
         INSERT INTO @Workflows (RefId)

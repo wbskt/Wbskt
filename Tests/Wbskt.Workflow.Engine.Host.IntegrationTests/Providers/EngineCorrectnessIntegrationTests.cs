@@ -82,9 +82,9 @@ public sealed class EngineCorrectnessIntegrationTests(SqlEdgeFixture fixture)
         var workflowRefId = Guid.NewGuid();
         await PublishAsync(workflowRefId, Random.Shared.Next(1_000_000, int.MaxValue));
         int runId = await ScalarAsync<int>("""
-            INSERT INTO dbo.Runs (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, Status, StartedAt, CreditBudget)
+            INSERT INTO dbo.Runs (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, Status, StartedAt, CreditBudget, WorkspaceId)
             OUTPUT INSERTED.Id
-            SELECT NEWID(), Id, RefId, Version, NEWID(), N'Running', SYSUTCDATETIME(), 0
+            SELECT NEWID(), Id, RefId, Version, NEWID(), N'Running', SYSUTCDATETIME(), 0, WorkspaceId
             FROM dbo.WorkflowDefinitions WHERE RefId = @p0;
             """, workflowRefId);
         await ExecAsync("INSERT INTO dbo.RunCounters (RunId, ActiveBranchCount) VALUES (@p0, 1);", runId);
@@ -307,9 +307,9 @@ public sealed class EngineCorrectnessIntegrationTests(SqlEdgeFixture fixture)
 
     private Task<int> InsertRunAsync(Guid workflowRefId, string status, string? completedAt) =>
         ScalarAsync<int>("""
-            INSERT INTO dbo.Runs (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, Status, StartedAt, CompletedAt, CreditBudget)
+            INSERT INTO dbo.Runs (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, Status, StartedAt, CompletedAt, CreditBudget, WorkspaceId)
             OUTPUT INSERTED.Id
-            SELECT NEWID(), Id, RefId, Version, NEWID(), @p1, '2000-01-01', CONVERT(DATETIME2(3), @p2), 0
+            SELECT NEWID(), Id, RefId, Version, NEWID(), @p1, '2000-01-01', CONVERT(DATETIME2(3), @p2), 0, WorkspaceId
             FROM dbo.WorkflowDefinitions WHERE RefId = @p0;
             """, workflowRefId, status, (object?)completedAt ?? DBNull.Value);
 

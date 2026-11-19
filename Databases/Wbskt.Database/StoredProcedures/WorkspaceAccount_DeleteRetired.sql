@@ -48,10 +48,7 @@ BEGIN
                                      WHERE t.MonthStart = DATEFROMPARTS(YEAR(m.Day), MONTH(m.Day), 1)
                                        AND t.TenantId = a.TenantId)
                              OR EXISTS (SELECT 1 FROM dbo.BusinessTenantsNow() n WHERE n.TenantId = a.TenantId)))
-      AND NOT EXISTS (SELECT 1
-                      FROM dbo.WorkflowDefinitions d
-                      JOIN dbo.Runs r ON r.WorkflowDefinitionId = d.Id
-                      WHERE d.WorkspaceId = a.WorkspaceId)
+      AND NOT EXISTS (SELECT 1 FROM dbo.Runs r WHERE r.WorkspaceId = a.WorkspaceId)
       AND NOT EXISTS (SELECT 1 FROM dbo.Clients c WHERE c.WorkspaceId = a.WorkspaceId)
       AND NOT EXISTS (SELECT 1 FROM dbo.RegistrationPolicies p WHERE p.WorkspaceId = a.WorkspaceId)
       AND NOT EXISTS (SELECT 1 FROM dbo.MessageTemplates t WHERE t.WorkspaceId = a.WorkspaceId)
