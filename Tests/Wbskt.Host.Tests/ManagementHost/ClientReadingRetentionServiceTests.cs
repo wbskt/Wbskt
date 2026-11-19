@@ -15,18 +15,18 @@ public sealed class ClientReadingRetentionServiceTests
     private static readonly DateTimeOffset Now = new(2026, 10, 4, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public async Task Sweep_compacts_batches_until_none_comes_back_full()
+    public async Task Sweep_calls_again_while_the_last_batch_came_back_full()
     {
         var provider = new Mock<IClientReadingProvider>();
-        provider.SetupSequence(p => p.CompactAsync(It.IsAny<DateTime>(), It.IsAny<IReadOnlyCollection<ReadingRetention>>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ReadingCompaction(ClientReadingRetentionService.BatchSize, 3, 0))
-            .ReturnsAsync(new ReadingCompaction(10, ClientReadingRetentionService.BatchSize, 0))
+        provider.SetupSequence(p => p.CompactAsync(It.IsAny<DateTime>(), It.IsAny<IReadOnlyCollection<ReadingRetention>>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ReadingCompaction(ClientReadingRetentionService.BatchSize, 3, 0, More: true))
+            .ReturnsAsync(new ReadingCompaction(10, ClientReadingRetentionService.BatchSize, 0, More: true))
             .ReturnsAsync(new ReadingCompaction(2, 1, 4));
 
         var total = await CreateService(provider.Object).SweepAsync(CancellationToken.None);
 
         Assert.Equal(new ReadingCompaction(ClientReadingRetentionService.BatchSize + 12, ClientReadingRetentionService.BatchSize + 4, 4), total);
-        provider.Verify(p => p.CompactAsync(Now.UtcDateTime, It.IsAny<IReadOnlyCollection<ReadingRetention>>(), ClientReadingRetentionService.BatchSize, It.IsAny<CancellationToken>()), Times.Exactly(3));
+        provider.Verify(p => p.CompactAsync(Now.UtcDateTime, It.IsAny<IReadOnlyCollection<ReadingRetention>>(), ClientReadingRetentionService.BatchSize, ClientReadingRetentionService.BatchesPerCall, It.IsAny<CancellationToken>()), Times.Exactly(3));
     }
 
     [Fact]
@@ -34,8 +34,8 @@ public sealed class ClientReadingRetentionServiceTests
     {
         var provider = new Mock<IClientReadingProvider>();
         IReadOnlyCollection<ReadingRetention>? sent = null;
-        provider.Setup(p => p.CompactAsync(It.IsAny<DateTime>(), It.IsAny<IReadOnlyCollection<ReadingRetention>>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .Callback<DateTime, IReadOnlyCollection<ReadingRetention>, int, CancellationToken>((_, r, _, _) => sent = r)
+        provider.Setup(p => p.CompactAsync(It.IsAny<DateTime>(), It.IsAny<IReadOnlyCollection<ReadingRetention>>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Callback<DateTime, IReadOnlyCollection<ReadingRetention>, int, int, CancellationToken>((_, r, _, _, _) => sent = r)
             .ReturnsAsync(new ReadingCompaction(0, 0, 0));
         var catalog = new PlanCatalog(Options.Create(new PlanCatalogOptions
         {

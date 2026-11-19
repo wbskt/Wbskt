@@ -70,7 +70,7 @@ internal sealed class ClientReadingProvider : BaseSqlProvider, IClientReadingPro
             cancellationToken);
     }
 
-    public Task<ReadingCompaction> CompactAsync(DateTime nowUtc, IReadOnlyCollection<ReadingRetention> retention, int batchSize, CancellationToken cancellationToken = default)
+    public Task<ReadingCompaction> CompactAsync(DateTime nowUtc, IReadOnlyCollection<ReadingRetention> retention, int batchSize, int batches, CancellationToken cancellationToken = default)
     {
         var table = new DataTable();
         table.Columns.Add("PlanCode", typeof(string));
@@ -88,10 +88,12 @@ internal sealed class ClientReadingProvider : BaseSqlProvider, IClientReadingPro
             parameter.SqlDbType = SqlDbType.Structured;
             parameter.TypeName = "dbo.ReadingRetentionTableType";
             p.AddWithValue("@BatchSize", batchSize);
+            p.AddWithValue("@Batches", batches);
         }, r => new ReadingCompaction(
             r.GetInt32(r.GetOrdinal("RolledUp")),
             r.GetInt32(r.GetOrdinal("HourlyDeleted")),
-            r.GetInt32(r.GetOrdinal("Cleared"))),
+            r.GetInt32(r.GetOrdinal("Cleared")),
+            r.GetBoolean(r.GetOrdinal("More"))),
             new InvalidOperationException("ClientReadings_Compact did not return a row."),
             cancellationToken);
     }
