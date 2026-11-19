@@ -5,7 +5,8 @@
 -- dbo.OutboxMessages in this transaction, so the management host hears of the workspace (and its plan)
 -- even if the host stops or the broker is down right after the commit. The caller cannot know the new
 -- workspace's id and reference, so they are written into the payload's workspaceId and workspaceRefId
--- here.
+-- here. Both default to NULL (no outbox row) only for the previous host; required in the release after
+-- (#1059).
 CREATE PROCEDURE dbo.Workspace_Create
     @Name NVARCHAR(100),
     @Description NVARCHAR(500),
