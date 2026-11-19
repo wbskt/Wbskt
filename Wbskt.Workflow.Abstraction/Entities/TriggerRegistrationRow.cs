@@ -28,6 +28,13 @@ public record TriggerRegistrationRow
     /// </summary>
     public string? WebhookSecret { get; init; }
 
+    /// <summary>
+    /// <see cref="Runtime.WebhookSecretHash"/> of <see cref="WebhookSecret"/>, written when the version
+    /// was enabled; what a caller's presented hash is compared with. Null on a row the previous image
+    /// wrote, which the dispatcher hashes from <see cref="WebhookSecret"/> instead.
+    /// </summary>
+    public string? WebhookSecretHash { get; init; }
+
     public required DateTime CreatedAt { get; init; }
 
     /// <summary>The stored form of a policy: the enum member's exact name.</summary>

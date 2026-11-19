@@ -483,15 +483,17 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
     /// </summary>
     private static bool SecretMatches(TriggerRegistrationRow registration, InboundEvent evt)
     {
-        if (string.IsNullOrEmpty(registration.WebhookSecret))
+        // The hash is written when the version is enabled; a row the previous image wrote has only the
+        // plaintext, hashed here the way the caller's was.
+        string? expected = registration.WebhookSecretHash ?? WebhookSecretHash.Of(registration.WebhookSecret);
+        if (expected is null)
         {
             return true;
         }
 
-        // The caller's secret arrives hashed, so the configured one is hashed the same way. Fixed-time so
-        // the comparison cannot be used to recover the hash a character at a time.
+        // Fixed-time so the comparison cannot be used to recover the hash a character at a time.
         return CryptographicOperations.FixedTimeEquals(
-            System.Text.Encoding.UTF8.GetBytes(WebhookSecretHash.Of(registration.WebhookSecret)!),
+            System.Text.Encoding.UTF8.GetBytes(expected),
             System.Text.Encoding.UTF8.GetBytes(evt.SecretHash ?? string.Empty));
     }
 

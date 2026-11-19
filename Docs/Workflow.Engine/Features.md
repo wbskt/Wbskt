@@ -143,7 +143,10 @@ When a trigger matches while a run with the same workflow and correlation key is
 
 * A `filter` is an expression over the payload. A filter that errors counts as no match: filters
   fail closed.
-* A webhook `secret` is stored hashed. The caller's `X-Wbskt-Secret` is compared in fixed time.
+* A webhook `secret` is hashed (SHA-256) onto the trigger registration when the version is enabled,
+  and the hash of the caller's `X-Wbskt-Secret` is compared with it in fixed time. The secret itself
+  stays in the workflow definition, where the author set it, and the registration keeps a plaintext
+  copy for one more release so an engine rolled back to the previous image still checks it.
 
 ### 4.4 Delivery guarantees
 

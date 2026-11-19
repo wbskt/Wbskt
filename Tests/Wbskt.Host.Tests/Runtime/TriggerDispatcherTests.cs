@@ -460,6 +460,19 @@ public sealed class TriggerDispatcherTests
     }
 
     [Fact]
+    public async Task Dispatch_compares_the_stored_hash_without_the_plaintext()
+    {
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel) with { WebhookSecretHash = WebhookSecretHash.Of("expected") };
+        TriggerDispatchResult accepted = await CreateDispatcher(triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration))
+            .DispatchAsync(CreateInboundEvent() with { SecretHash = WebhookSecretHash.Of("expected") }, CancellationToken.None);
+        TriggerDispatchResult rejected = await CreateDispatcher(triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration))
+            .DispatchAsync(CreateInboundEvent() with { SecretHash = WebhookSecretHash.Of("wrong") }, CancellationToken.None);
+
+        Assert.Equal(TriggerDispatchOutcome.StartedRun, accepted.Outcome);
+        Assert.Equal(TriggerDispatchOutcome.SecretMismatch, rejected.Outcome);
+    }
+
+    [Fact]
     public async Task Dispatch_leaves_a_registration_without_a_secret_open()
     {
         // Every webhook published before secrets existed has a null one and must keep working.

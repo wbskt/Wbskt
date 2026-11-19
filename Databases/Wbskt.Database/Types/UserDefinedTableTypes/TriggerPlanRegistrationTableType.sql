@@ -8,6 +8,7 @@ CREATE TYPE dbo.TriggerPlanRegistrationTableType AS TABLE
     CorrelationExpression NVARCHAR(1000)   NULL,
     ConcurrencyPolicy     NVARCHAR(32)     NOT NULL,
     FilterExpression      NVARCHAR(2000)   NULL,
-    WebhookSecret         NVARCHAR(200)    NULL
+    WebhookSecret         NVARCHAR(200)    NULL,
+    WebhookSecretHash     VARCHAR(64)      NULL
 );
 GO

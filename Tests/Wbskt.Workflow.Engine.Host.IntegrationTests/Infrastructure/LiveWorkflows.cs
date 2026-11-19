@@ -22,5 +22,5 @@ internal static class LiveWorkflows
 
     /// <summary>A plan of one registration, for a test that matches a single trigger by its key.</summary>
     public static TriggerPlan Registration(Guid triggerNodeId, string triggerKind, string triggerKey, string concurrencyPolicy = "Queue", string? filterExpression = null) =>
-        new([new PlannedTrigger(triggerNodeId, triggerKind, triggerKey, null, concurrencyPolicy, filterExpression, null)], []);
+        new([new PlannedTrigger(triggerNodeId, triggerKind, triggerKey, null, concurrencyPolicy, filterExpression, null, null)], []);
 }
