@@ -4,6 +4,7 @@ using Moq;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events;
 using Wbskt.Events.Abstractions;
+using Wbskt.Events.Billing;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Models;
@@ -64,6 +65,13 @@ public sealed class EventLogQueryTests
             var criticality = events[name].GetCustomAttributes(typeof(EventCriticalityAttribute), false).Cast<EventCriticalityAttribute>().Single().Criticality;
             criticality.Should().BeOneOf([EventCriticality.Warning, EventCriticality.Error], name);
         }
+    }
+
+    [Fact]
+    public void A_join_the_plan_refused_is_listed_with_clients_and_security()
+    {
+        Assert.Contains(nameof(PlanClientLimitReachedEvent), EventLogGroups.All[EventLogGroups.Clients]);
+        Assert.Contains(nameof(PlanClientLimitReachedEvent), EventLogGroups.All[EventLogGroups.Security]);
     }
 
     [Fact]

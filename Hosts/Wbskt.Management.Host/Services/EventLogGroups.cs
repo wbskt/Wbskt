@@ -1,6 +1,7 @@
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events;
 using Wbskt.Events.Auth;
+using Wbskt.Events.Billing;
 using Wbskt.Events.Client;
 using Wbskt.Events.Integrations;
 using Wbskt.Events.Management;
@@ -46,6 +47,7 @@ public static class EventLogGroups
         nameof(PolicyPinRotatedEvent),
         nameof(PolicyRegistrationAttemptedOnDisabledEvent),
         nameof(PolicyRegistrationLimitReachedEvent),
+        nameof(PlanClientLimitReachedEvent),
         nameof(PolicyDeletedEvent),
         nameof(WorkflowDeletedEvent),
         nameof(IntegrationSecretRotatedEvent),
@@ -90,9 +92,11 @@ public static class EventLogGroups
         return new Dictionary<string, IReadOnlySet<string>>(StringComparer.OrdinalIgnoreCase)
         {
             [People] = InNamespace(typeof(UserLoginSuccessEvent)),
-            // Registration events live with the policy ones, but they are about the client joining.
+            // Registration events live with the policy ones, but they are about the client joining, as
+            // the plan's refusal of a join is.
             [Clients] = InNamespace(typeof(ClientRenamedEvent))
                 .Union(InNamespace(typeof(PolicyCreatedEvent), t => t.Name.StartsWith("Client", StringComparison.Ordinal)))
+                .Append(nameof(PlanClientLimitReachedEvent))
                 .ToHashSet(StringComparer.Ordinal),
             [Policies] = InNamespace(typeof(PolicyCreatedEvent), t => t.Name.StartsWith("Policy", StringComparison.Ordinal)),
             [Workflows] = InNamespace(typeof(WorkflowPublishedEvent)),
