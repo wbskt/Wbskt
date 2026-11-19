@@ -11,7 +11,9 @@
 --     Business, or any month not closed while its tenant is on Business now, which is how a month
 --     the tracker never saw is worked out. Other tenants' months are never read for the invoice;
 --   - no run of it is left (dbo.Run_DeleteRetired reads the copy for the plan's days);
---   - none of its clients has readings left (dbo.ClientReadings_Compact clears a retired workspace's).
+--   - none of its clients has readings left (dbo.ClientReadings_Compact clears a retired workspace's);
+--   - dbo.Workspace_Purge has removed its clients, policies, templates, workflows and definitions: it
+--     finds a deleted workspace by this copy, so the copy goes last.
 -- dbo.ClientReadings_InsertBatch no longer needs the copy once it is gone: a deleted workspace's clients
 -- are all revoked or rejected, and it drops their reports by status. Returns how many copies went.
 CREATE PROCEDURE dbo.WorkspaceAccount_DeleteRetired
@@ -50,11 +52,11 @@ BEGIN
                       FROM dbo.WorkflowDefinitions d
                       JOIN dbo.Runs r ON r.WorkflowDefinitionId = d.Id
                       WHERE d.WorkspaceId = a.WorkspaceId)
-      AND NOT EXISTS (SELECT 1
-                      FROM dbo.Clients c
-                      WHERE c.WorkspaceId = a.WorkspaceId
-                        AND (EXISTS (SELECT 1 FROM dbo.ClientReadings cr WHERE cr.ClientId = c.Id)
-                             OR EXISTS (SELECT 1 FROM dbo.ClientReadingsHourly h WHERE h.ClientId = c.Id)));
+      AND NOT EXISTS (SELECT 1 FROM dbo.Clients c WHERE c.WorkspaceId = a.WorkspaceId)
+      AND NOT EXISTS (SELECT 1 FROM dbo.RegistrationPolicies p WHERE p.WorkspaceId = a.WorkspaceId)
+      AND NOT EXISTS (SELECT 1 FROM dbo.MessageTemplates t WHERE t.WorkspaceId = a.WorkspaceId)
+      AND NOT EXISTS (SELECT 1 FROM dbo.Workflows w WHERE w.WorkspaceId = a.WorkspaceId)
+      AND NOT EXISTS (SELECT 1 FROM dbo.WorkflowDefinitions wd WHERE wd.WorkspaceId = a.WorkspaceId);
 
     SELECT @@ROWCOUNT;
 END

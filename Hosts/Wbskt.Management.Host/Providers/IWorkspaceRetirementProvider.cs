@@ -22,4 +22,16 @@ public interface IWorkspaceRetirementProvider
     /// (<c>dbo.WorkspaceAccount_DeleteRetired</c>). Returns how many went.
     /// </summary>
     Task<int> DeleteRetiredAccountsAsync(DateTime nowUtc, int batchSize, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deleted workspaces that still have clients, policies, templates, workflows or definitions here
+    /// (<c>dbo.Workspace_GetPurgeable</c>), at most <paramref name="batchSize"/>.
+    /// </summary>
+    Task<IReadOnlyCollection<int>> GetPurgeableAsync(int batchSize, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes what nothing needs any more of a deleted workspace, up to <paramref name="batchSize"/>
+    /// clients a call (<c>dbo.Workspace_Purge</c>). Returns how many rows went; repeat while above 0.
+    /// </summary>
+    Task<int> PurgeAsync(int workspaceId, int batchSize, CancellationToken cancellationToken = default);
 }
