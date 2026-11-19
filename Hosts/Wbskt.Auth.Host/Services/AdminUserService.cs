@@ -55,7 +55,7 @@ internal sealed class AdminUserService(
             return UserNotFound;
         }
 
-        return await RunAsync(request.Staff, ClearLockoutAction, user, async (now, ct) =>
+        return await RunAsync(request, ClearLockoutAction, user, async (now, ct) =>
         {
             if (now.LockedUntil is not { } until || until <= time.GetUtcNow().UtcDateTime)
             {
@@ -77,7 +77,7 @@ internal sealed class AdminUserService(
 
         var token = SecurityTokens.Generate();
         var expiresAt = time.GetUtcNow().UtcDateTime.Add(RegistrationService.EmailVerificationLifetime);
-        return await RunAsync(request.Staff, ResendVerificationAction, user, async (now, ct) =>
+        return await RunAsync(request, ResendVerificationAction, user, async (now, ct) =>
         {
             if (now.IsEmailVerified)
             {
@@ -104,7 +104,7 @@ internal sealed class AdminUserService(
 
         var token = SecurityTokens.Generate();
         var expiresAt = time.GetUtcNow().UtcDateTime.Add(PasswordService.PasswordResetLifetime);
-        return await RunAsync(request.Staff, SendPasswordResetAction, user, async (now, ct) =>
+        return await RunAsync(request, SendPasswordResetAction, user, async (now, ct) =>
         {
             if (!now.IsActive)
             {
@@ -124,7 +124,7 @@ internal sealed class AdminUserService(
             return UserNotFound;
         }
 
-        return await RunAsync(request.Staff, SignOutEverywhereAction, user, async (now, ct) =>
+        return await RunAsync(request, SignOutEverywhereAction, user, async (now, ct) =>
         {
             await sessions.RevokeAllRefreshTokensForUserAsync(now.Id, StaffAddress, ct);
             return Result.Success();
@@ -143,7 +143,7 @@ internal sealed class AdminUserService(
         IReadOnlyList<AfterCommit> afterCommit = request.Allowed
             ? [Announce(action, user)]
             : [RevokeAccessTokens(user), Announce(action, user)];
-        return await RunAsync(request.Staff, action, user, async (now, ct) =>
+        return await RunAsync(request, action, user, async (now, ct) =>
         {
             if (now.IsActive == request.Allowed)
             {
@@ -167,9 +167,9 @@ internal sealed class AdminUserService(
         var token = SecurityTokens.Generate();
         var expiresAt = time.GetUtcNow().UtcDateTime.Add(RegistrationService.EmailVerificationLifetime);
 
-        // The old address goes in the audit row's detail: it is the only record of where the account pointed.
-        var action = new StaffAction(CorrectEmailAction, TargetKind, user.RefId, $"From {user.Email} to {email}");
-        return await runner.RunAsync(request.Staff, action, async ct =>
+        // The addresses stay out of the audit row, which outlives the account.
+        var action = new StaffAction(CorrectEmailAction, TargetKind, user.RefId);
+        return await runner.RunAsync(request, action, async ct =>
         {
             var now = await accounts.FindByIdAsync(user.Id, ct);
             if (now is null)
@@ -222,11 +222,11 @@ internal sealed class AdminUserService(
     /// already happened gets the first answer rather than "nothing to do". The person is read again in the
     /// change's transaction; a refusal there is audited as Refused.
     /// </summary>
-    private Task<Result<StaffActionResponse>> RunAsync(StaffChange staff, string action, User user, Func<User, CancellationToken, Task<Result>> change, CancellationToken cancellationToken) =>
-        RunAsync(staff, action, user, change, [], cancellationToken);
+    private Task<Result<StaffActionResponse>> RunAsync(IStaffRequest request, string action, User user, Func<User, CancellationToken, Task<Result>> change, CancellationToken cancellationToken) =>
+        RunAsync(request, action, user, change, [], cancellationToken);
 
-    private Task<Result<StaffActionResponse>> RunAsync(StaffChange staff, string action, User user, Func<User, CancellationToken, Task<Result>> change, IReadOnlyList<AfterCommit> afterCommit, CancellationToken cancellationToken) =>
-        runner.RunAsync(staff, new StaffAction(action, TargetKind, user.RefId), async ct =>
+    private Task<Result<StaffActionResponse>> RunAsync(IStaffRequest request, string action, User user, Func<User, CancellationToken, Task<Result>> change, IReadOnlyList<AfterCommit> afterCommit, CancellationToken cancellationToken) =>
+        runner.RunAsync(request, new StaffAction(action, TargetKind, user.RefId), async ct =>
             await accounts.FindByIdAsync(user.Id, ct) is { } now ? await change(now, ct) : Result.Failure(UserNotFound), afterCommit, cancellationToken);
 
     private async Task<User?> FindAsync(Guid userRef, CancellationToken cancellationToken)

@@ -15,8 +15,10 @@ public sealed class StaffAuditProvider(IConfiguration configuration, string conn
                 r.GetInt64(r.GetOrdinal("Id")),
                 r.GetString(r.GetOrdinal("Action")),
                 r.GetNullableGuid("TargetRefId"),
+                r.GetNullableGuid("SubjectRefId"),
                 Enum.Parse<StaffOutcome>(r.GetString(r.GetOrdinal("Outcome"))),
-                r.GetNullableString("Detail")),
+                r.GetNullableString("Detail"),
+                r.IsDBNull(r.GetOrdinal("BodyHash")) ? null : (byte[])r["BodyHash"]),
             cancellationToken);
     }
 
@@ -35,9 +37,25 @@ public sealed class StaffAuditProvider(IConfiguration configuration, string conn
                 p.Add("@Outcome", SqlDbType.NVarChar, 16).Value = entry.Outcome.ToString();
                 p.Add("@Detail", SqlDbType.NVarChar, -1).Value = (object?)entry.Detail ?? DBNull.Value;
                 p.Add("@IdempotencyKey", SqlDbType.UniqueIdentifier).Value = entry.Change.IdempotencyKey;
+                p.Add("@SubjectRefId", SqlDbType.UniqueIdentifier).Value = (object?)entry.Action.SubjectRefId ?? DBNull.Value;
+                p.Add("@BodyHash", SqlDbType.VarBinary, 32).Value = entry.BodyHash;
             },
             r => r.GetInt64(r.GetOrdinal("Id")),
             new InvalidOperationException("StaffAudit_Insert did not return the new row's id."),
+            cancellationToken);
+    }
+
+    public Task<int> DeleteExpiredAsync(DateTime beforeUtc, int take, CancellationToken cancellationToken)
+    {
+        return ExecuteSingleAsync(
+            "dbo.StaffAudit_DeleteExpired",
+            p =>
+            {
+                p.Add("@Before", SqlDbType.DateTime2).Value = beforeUtc;
+                p.Add("@Take", SqlDbType.Int).Value = take;
+            },
+            r => r.GetInt32(r.GetOrdinal("Deleted")),
+            new InvalidOperationException("StaffAudit_DeleteExpired did not return a count."),
             cancellationToken);
     }
 }

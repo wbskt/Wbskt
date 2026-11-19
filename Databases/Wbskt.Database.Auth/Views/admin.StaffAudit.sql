@@ -13,6 +13,7 @@ SELECT
     SA.Outcome,
     SA.Detail,
     SA.IdempotencyKey,
-    SA.CreatedAt
+    SA.CreatedAt,
+    SA.SubjectRefId
 FROM dbo.StaffAudit SA;
 GO

@@ -9,8 +9,10 @@ BEGIN
         Id,
         Action,
         TargetRefId,
+        SubjectRefId,
         Outcome,
-        Detail
+        Detail,
+        BodyHash
     FROM dbo.StaffAudit
     WHERE IdempotencyKey = @IdempotencyKey;
 END

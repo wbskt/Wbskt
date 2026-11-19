@@ -18,7 +18,7 @@ namespace Wbskt.Auth.Host.Services;
 /// so their workspaces pass to another administrator of the tenant rather than to a caller, who has none
 /// here. Membership is checked by the procedures, after the runner's idempotency lookup, so a retry of a
 /// change already made replays it. The events go out once the change has committed, and not for a replay.
-/// The audit row is on the account, with the member in its detail. The customer's audit log shows the
+/// The audit row is on the account, with the member as its subject, so the person's page finds it too. The customer's audit log shows the
 /// member events as from <see cref="EventSource.Support"/>.
 /// </remarks>
 internal sealed class AdminMemberService(
@@ -51,7 +51,7 @@ internal sealed class AdminMemberService(
         }
 
         var (tenantId, user) = target.Value;
-        return await runner.RunAsync(request.Staff, Action(request.Suspended ? SuspendAction : RestoreAction, tenantRef, user), async ct =>
+        return await runner.RunAsync(request, Action(request.Suspended ? SuspendAction : RestoreAction, tenantRef, user), async ct =>
         {
             try
             {
@@ -95,7 +95,7 @@ internal sealed class AdminMemberService(
 
         var (tenantId, user) = target.Value;
         var adminRoleRef = Guid.Empty;
-        return await runner.RunAsync(request.Staff, Action(RepairAdministratorAction, tenantRef, user), async ct =>
+        return await runner.RunAsync(request, Action(RepairAdministratorAction, tenantRef, user), async ct =>
         {
             try
             {
@@ -131,7 +131,7 @@ internal sealed class AdminMemberService(
         }
 
         var (tenantId, user) = target.Value;
-        return await runner.RunAsync(request.Staff, Action(RemoveAction, tenantRef, user), async ct =>
+        return await runner.RunAsync(request, Action(RemoveAction, tenantRef, user), async ct =>
         {
             try
             {
@@ -175,5 +175,5 @@ internal sealed class AdminMemberService(
     }
 
     private static StaffAction Action(string name, Guid tenantRef, User user) =>
-        new(name, TargetKind, tenantRef, $"Member {user.Username} ({user.RefId})");
+        new(name, TargetKind, tenantRef, SubjectRefId: user.RefId);
 }

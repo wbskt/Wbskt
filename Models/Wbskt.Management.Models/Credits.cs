@@ -19,4 +19,4 @@ public sealed record WorkspaceCreditCapResponse(decimal? MonthlyCreditCap, decim
 /// null, through the platform admin (<c>InternalRoutes.AdminWorkspaceCreditCap</c>). The same rules as
 /// <see cref="WorkspaceCreditCapRequest"/>.
 /// </summary>
-public sealed record AdminSetWorkspaceCreditCapRequest(StaffChange Staff, decimal? MonthlyCreditCap);
+public sealed record AdminSetWorkspaceCreditCapRequest(StaffChange Staff, decimal? MonthlyCreditCap) : IStaffRequest;

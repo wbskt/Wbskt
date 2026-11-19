@@ -27,28 +27,30 @@ public sealed class StaffActionRunner(IStaffAuditProvider audit, ILogger<StaffAc
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
 
     public Task<Result<StaffActionResponse>> RunAsync(
-        StaffChange staff,
+        IStaffRequest request,
         StaffAction action,
         Func<CancellationToken, Task<Result>> change,
         CancellationToken cancellationToken) =>
-        RunAsync(staff, action, change, [], cancellationToken);
+        RunAsync(request, action, change, [], cancellationToken);
 
     public async Task<Result<StaffActionResponse>> RunAsync(
-        StaffChange staff,
+        IStaffRequest request,
         StaffAction action,
         Func<CancellationToken, Task<Result>> change,
         IReadOnlyList<AfterCommit> afterCommit,
         CancellationToken cancellationToken)
     {
+        var staff = request.Staff;
         if (Validate(staff) is { } invalid)
         {
             return invalid;
         }
 
+        var bodyHash = StaffRequestHash.Of(request);
         staff = staff with { Reason = staff.Reason.Trim(), StaffName = staff.StaffName.Trim() };
         if (await audit.FindByIdempotencyKeyAsync(staff.IdempotencyKey, cancellationToken) is { } earlier)
         {
-            return Replay(earlier, action);
+            return Replay(earlier, action, bodyHash);
         }
 
         Result outcome;
@@ -61,13 +63,13 @@ public sealed class StaffActionRunner(IStaffAuditProvider audit, ILogger<StaffAc
             long auditId;
             try
             {
-                auditId = await audit.InsertAsync(new StaffAuditEntry(staff, action, StaffOutcome.Succeeded, action.Detail), cancellationToken);
+                auditId = await audit.InsertAsync(new StaffAuditEntry(staff, action, StaffOutcome.Succeeded, action.Detail, bodyHash), cancellationToken);
             }
             catch (SqlException ex) when (ex.Number is 2601 or 2627)
             {
                 // Only the audit row's key is caught here: a unique violation inside the change is the change's own fault.
                 scope.Dispose();
-                return await ReplayAfterRaceAsync(staff, action, cancellationToken);
+                return await ReplayAfterRaceAsync(staff, action, bodyHash, cancellationToken);
             }
 
             outcome = await change(cancellationToken);
@@ -85,10 +87,12 @@ public sealed class StaffActionRunner(IStaffAuditProvider audit, ILogger<StaffAc
             return new StaffActionResponse(id, false);
         }
 
-        // The scope rolled the change and its row back; the refusal gets a row of its own.
+        // The scope rolled the change and its row back; the refusal gets a row of its own, which keeps what
+        // the change was about after the refusal's code.
+        var refused = action.Detail is null ? outcome.Error.Code : $"{outcome.Error.Code}: {action.Detail}";
         try
         {
-            await audit.InsertAsync(new StaffAuditEntry(staff, action, StaffOutcome.Refused, outcome.Error.Code), cancellationToken);
+            await audit.InsertAsync(new StaffAuditEntry(staff, action, StaffOutcome.Refused, refused, bodyHash), cancellationToken);
         }
         catch (SqlException ex) when (ex.Number is 2601 or 2627)
         {
@@ -136,16 +140,20 @@ public sealed class StaffActionRunner(IStaffAuditProvider audit, ILogger<StaffAc
         return null;
     }
 
-    private async Task<Result<StaffActionResponse>> ReplayAfterRaceAsync(StaffChange staff, StaffAction action, CancellationToken cancellationToken)
+    private async Task<Result<StaffActionResponse>> ReplayAfterRaceAsync(StaffChange staff, StaffAction action, byte[] bodyHash, CancellationToken cancellationToken)
     {
         var earlier = await audit.FindByIdempotencyKeyAsync(staff.IdempotencyKey, cancellationToken)
             ?? throw new InvalidOperationException($"Idempotency key {staff.IdempotencyKey} was taken, but no staff audit row holds it.");
-        return Replay(earlier, action);
+        return Replay(earlier, action, bodyHash);
     }
 
-    private static Result<StaffActionResponse> Replay(StaffAuditRow earlier, StaffAction action)
+    private static Result<StaffActionResponse> Replay(StaffAuditRow earlier, StaffAction action, byte[] bodyHash)
     {
-        if (earlier.Action != action.Name || earlier.TargetRefId != action.TargetRefId)
+        // A row written before the body was hashed has none, and is matched on what it does record.
+        if (earlier.Action != action.Name
+            || earlier.TargetRefId != action.TargetRefId
+            || earlier.SubjectRefId != action.SubjectRefId
+            || (earlier.BodyHash is { } earlierHash && !earlierHash.AsSpan().SequenceEqual(bodyHash)))
         {
             return Error.Conflict("IDEMPOTENCY_KEY_REUSED", "That idempotency key was already used for a different change.");
         }

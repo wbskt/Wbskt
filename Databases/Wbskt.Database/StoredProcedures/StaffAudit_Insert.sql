@@ -10,7 +10,11 @@ CREATE PROCEDURE dbo.StaffAudit_Insert
     @Reason         NVARCHAR(500),
     @Outcome        NVARCHAR(16),
     @Detail         NVARCHAR(MAX),
-    @IdempotencyKey UNIQUEIDENTIFIER
+    @IdempotencyKey UNIQUEIDENTIFIER,
+    -- The defaults keep the previous image's call working while the migrator runs ahead of it; both are
+    -- required in the release after (#1059).
+    @SubjectRefId   UNIQUEIDENTIFIER = NULL,
+    @BodyHash       VARBINARY(32) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -25,7 +29,9 @@ BEGIN
         Reason,
         Outcome,
         Detail,
-        IdempotencyKey
+        IdempotencyKey,
+        SubjectRefId,
+        BodyHash
     )
     VALUES
     (
@@ -37,7 +43,9 @@ BEGIN
         @Reason,
         @Outcome,
         @Detail,
-        @IdempotencyKey
+        @IdempotencyKey,
+        @SubjectRefId,
+        @BodyHash
     );
 
     SELECT CAST(SCOPE_IDENTITY() AS BIGINT) AS Id;

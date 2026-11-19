@@ -59,12 +59,12 @@ public sealed class AdminMemberServiceTests
     }
 
     [Fact]
-    public async Task A_suspension_is_audited_on_the_account_and_names_the_member()
+    public async Task A_suspension_is_audited_on_the_account_with_the_member_as_its_subject()
     {
         var result = await Service().SetSuspendedAsync(TenantRef, _user.RefId, new AdminSetMemberSuspendedRequest(Staff, true), CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(new StaffAction(AdminMemberService.SuspendAction, AdminMemberService.TargetKind, TenantRef, $"Member bob ({_user.RefId})"), _runner.Action);
+        Assert.Equal(new StaffAction(AdminMemberService.SuspendAction, AdminMemberService.TargetKind, TenantRef, SubjectRefId: _user.RefId), _runner.Action);
         _tenants.Verify(t => t.SetMemberSuspendedAsync(TenantId, 42, true, It.IsAny<CancellationToken>()));
     }
 
@@ -150,7 +150,7 @@ public sealed class AdminMemberServiceTests
         var result = await Service().RepairAdministratorAsync(TenantRef, _user.RefId, new AdminRepairAdministratorRequest(Staff), CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(new StaffAction(AdminMemberService.RepairAdministratorAction, AdminMemberService.TargetKind, TenantRef, $"Member bob ({_user.RefId})"), _runner.Action);
+        Assert.Equal(new StaffAction(AdminMemberService.RepairAdministratorAction, AdminMemberService.TargetKind, TenantRef, SubjectRefId: _user.RefId), _runner.Action);
         Assert.Equal(1, _accessChanges.Announced);
         _bus.Verify(b => b.PublishAsync(It.Is<TenantActorEvent>(e => e is MemberRoleAssignedEvent
             && ((MemberRoleAssignedEvent)e).MemberRefId == _user.RefId

@@ -42,7 +42,9 @@ public sealed class AdminMemberSqlTests(AuthSqlFixture auth)
             runner);
     }
 
-    private static StaffChange Staff(Guid key) => new(Guid.NewGuid(), "pika", "Integration test of a member change", key);
+    private static readonly Guid StaffRef = Guid.NewGuid();
+
+    private static StaffChange Staff(Guid key) => new(StaffRef, "pika", "Integration test of a member change", key);
 
     [SkippableFact]
     public async Task A_suspension_commits_with_its_audit_row_and_a_retry_replays()
@@ -59,7 +61,7 @@ public sealed class AdminMemberSqlTests(AuthSqlFixture auth)
         Assert.False(first.Value.Replayed);
         Assert.True(retry.Value.Replayed);
         Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.TenantMembers WHERE TenantId = @p0 AND UserId = @p1 AND IsSuspended = 1", tenantId, memberId));
-        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.StaffAudit WHERE IdempotencyKey = @p0 AND Outcome = N'Succeeded' AND Action = N'SuspendMember' AND TargetRefId = @p1 AND Detail LIKE N'Member %'", key, tenantRef));
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.StaffAudit WHERE IdempotencyKey = @p0 AND Outcome = N'Succeeded' AND Action = N'SuspendMember' AND TargetRefId = @p1 AND SubjectRefId = @p2 AND Detail IS NULL", key, tenantRef, memberRef));
         // MemberSuspendedEvent and the security alert, once: the replay publishes nothing.
         // The access change itself goes to WorkspaceAccessChanges, not the bus.
         Assert.Equal(2, _bus.Published);
