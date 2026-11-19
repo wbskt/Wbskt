@@ -47,10 +47,13 @@ applies and the sweeps remove what is older.
 ## Credits over the plan
 
 - **Free, Maker, Pro and Team**: past the month's credits, runs draw on credit packs; with none left,
-  new runs are refused until the 1st. Runs already going finish.
+  new runs are refused until the 1st, and runs already going stop at their next step that would need more
+  (`OutOfCredits`). The allowance is held exactly; it is never exceeded to finish a run. Notices at 80%
+  and 100% say so.
 - **Business**: runs carry on past the contract's credits, to twice them. Credit packs are used first,
-  then the rest is invoiced at $0.50 per 1,000 credits. Notices at 80% and 100% say so, so the invoice is
-  never a surprise.
+  then the rest is invoiced at $0.50 per 1,000 credits. At twice the credits, new runs are refused and
+  runs going stop at their next step, as on the other plans. Notices at 80% and 100% say so, so the
+  invoice is never a surprise.
 
 ## Credit caps
 

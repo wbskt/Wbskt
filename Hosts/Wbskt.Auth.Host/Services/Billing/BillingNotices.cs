@@ -40,7 +40,7 @@ internal static class BillingNotices
                 "This month's workflow credits are used",
                 [
                     $"Your account's workspaces have used {Number(used)} workflow credits this month, all {Number(allowance)} your plan includes.",
-                    $"New runs now draw on the credit packs you have bought. With none left, new runs are refused until {resets}, when the allowance starts again.",
+                    $"New runs now draw on the credit packs you have bought. With none left, new runs are refused until {resets}, when the allowance starts again, and runs already going stop at their next step.",
                     "To keep runs going, buy a credit pack or move to a larger plan."
                 ])
             : new BillingNotice(BillingNoticeKind.CreditAllowance80, key,
@@ -48,7 +48,7 @@ internal static class BillingNotices
                 $"{percent}% of this month's workflow credits are used",
                 [
                     $"Your account's workspaces have used {Number(used)} of the {Number(allowance)} workflow credits your plan includes this month.",
-                    $"Past the allowance, runs draw on the credit packs you have bought; with none left, new runs are refused until {resets}.",
+                    $"Past the allowance, runs draw on the credit packs you have bought; with none left, new runs are refused until {resets} and runs already going stop at their next step.",
                     "If you expect to need more, buy a credit pack or move to a larger plan."
                 ]);
     }
@@ -63,7 +63,7 @@ internal static class BillingNotices
                 "This month's workflow credits are used",
                 [
                     $"Your account's workspaces have used {Number(used)} workflow credits this month, all {Number(allowance)} your contract includes.",
-                    $"Runs carry on. Credits past the allowance come from your credit packs first, then are invoiced at {OverageRate()} under your contract, up to {ceiling} credits in all this month. Past that, new runs are refused until {resets}.",
+                    $"Runs carry on. Credits past the allowance come from your credit packs first, then are invoiced at {OverageRate()} under your contract, up to {ceiling} credits in all this month. Past that, new runs are refused until {resets} and runs already going stop at their next step.",
                     "If you expect to need more every month, reply to resize your contract."
                 ])
             : new BillingNotice(BillingNoticeKind.CreditAllowance80, month,
@@ -71,7 +71,7 @@ internal static class BillingNotices
                 $"{percent}% of this month's workflow credits are used",
                 [
                     $"Your account's workspaces have used {Number(used)} of the {Number(allowance)} workflow credits your contract includes this month.",
-                    $"Past the allowance runs carry on, invoiced at {OverageRate()}, up to {ceiling} credits in all this month; new runs are refused past that until {resets}.",
+                    $"Past the allowance runs carry on, invoiced at {OverageRate()}, up to {ceiling} credits in all this month; past that, new runs are refused until {resets} and runs already going stop at their next step.",
                     "If you expect to need more every month, reply to resize your contract."
                 ]);
     }
@@ -83,7 +83,7 @@ internal static class BillingNotices
         string restarted = Date(NextMonth(month));
         string past = plan == PlanCode.Business
             ? $"Credits past it came from your credit packs first, then are invoiced for {name} at {OverageRate()} under your contract."
-            : "Runs past it drew on the credit packs you have bought, and were refused once none were left.";
+            : "Runs past it drew on the credit packs you have bought. Once none were left, new runs were refused and runs going stopped at their next step.";
         string next = plan == PlanCode.Business
             ? "If you expect to need more every month, reply to resize your contract."
             : "If you often need more, a larger plan includes more credits each month.";
@@ -124,14 +124,14 @@ internal static class BillingNotices
                 $"{workspaceName} reached its credit cap",
                 [
                     $"The workspace {workspaceName} has spent {Number(spent)} workflow credits this month, its cap of {Number(cap)}.",
-                    $"Its new runs are refused until {resets}, or until you raise or remove the cap in the workspace's settings."
+                    $"Its new runs are refused, and its runs already going stop at their next step, until {resets} or until you raise or remove the cap in the workspace's settings."
                 ])
             : new BillingNotice(BillingNoticeKind.CreditCap80, key,
                 $"{workspaceName} has spent {percent}% of its monthly credit cap",
                 $"{workspaceName} is near its credit cap",
                 [
                     $"The workspace {workspaceName} has spent {Number(spent)} of the {Number(cap)} workflow credits its cap allows this month.",
-                    $"At the cap its new runs are refused until {resets}. Raise or remove the cap in the workspace's settings to avoid that."
+                    $"At the cap its new runs are refused until {resets}, and its runs going stop at their next step. Raise or remove the cap in the workspace's settings to avoid that."
                 ]);
     }
 
