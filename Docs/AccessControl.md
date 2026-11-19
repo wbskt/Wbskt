@@ -57,6 +57,7 @@ Consequences worth knowing:
 
 | Concern | Location |
 |---|---|
+| Precedence rule (one place) | `Databases/Wbskt.Database.Auth/Functions/User_EffectivePermissions.sql` |
 | Effective permission set for a workspace | `Databases/Wbskt.Database.Auth/StoredProcedures/Permission_EffectiveSet.sql` |
 | Single-permission check (scoped) | `.../Permission_Verify.sql` (`@WorkspaceId NULL` = tenant-wide only) |
 | Membership gate + set resolution | `Hosts/Wbskt.Auth.Host/Services/WorkspaceService.cs` (`ResolveAccessAsync`) |
