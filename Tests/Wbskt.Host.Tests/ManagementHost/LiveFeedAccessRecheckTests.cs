@@ -125,6 +125,29 @@ public sealed class LiveFeedAccessRecheckTests
         await _recheck.StopAsync(CancellationToken.None);
     }
 
+    [Fact]
+    public async Task A_token_revoked_here_loses_its_feeds_without_asking_the_auth_host()
+    {
+        // #1081: the revocation is already in memory; one call per workspace to hear 401 was waste.
+        var user = Guid.NewGuid();
+        var issued = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var signedOut = _connections.Open("signed-out", Token, user, Guid.NewGuid(), issued);
+        signedOut.Workspaces[Kept] = 1;
+        signedOut.Clients[Guid.NewGuid()] = new WatchedClient(Kept, 10);
+        var sessionEnded = _connections.Open("session-ended", Token, Guid.NewGuid(), Guid.NewGuid(), issued);
+        sessionEnded.Workspaces[Kept] = 1;
+
+        await _revocation.RevokeUserAsync(user);
+        await _revocation.RevokeSessionAsync(sessionEnded.SessionId!.Value);
+        await _recheck.RecheckAllAsync(CancellationToken.None);
+
+        signedOut.Workspaces.Should().BeEmpty();
+        signedOut.Clients.Should().BeEmpty();
+        sessionEnded.Workspaces.Should().BeEmpty();
+        _groups.Verify(g => g.RemoveFromGroupAsync("signed-out", NotificationHub.ClientGroupName(10), It.IsAny<CancellationToken>()), Times.Once);
+        _auth.Verify(a => a.ResolveWorkspaceForTokenAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     /// <summary>
     /// A change to one member re-checks that member's connections and those joined to the workspace it
     /// names, not every console open on the instance (#1001).
