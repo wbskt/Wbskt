@@ -27,8 +27,7 @@ internal sealed class AdminMemberService(
     IAccountProvider accounts,
     IEventBus eventBus,
     TenantAnnouncer announcer,
-    IStaffActionRunner runner,
-    ILogger<AdminMemberService> logger)
+    IStaffActionRunner runner)
     : IAdminMemberService
 {
     public const string SuspendAction = "SuspendMember";
@@ -52,7 +51,7 @@ internal sealed class AdminMemberService(
         }
 
         var (tenantId, user) = target.Value;
-        var result = await runner.RunAsync(request.Staff, Action(request.Suspended ? SuspendAction : RestoreAction, tenantRef, user), async ct =>
+        return await runner.RunAsync(request.Staff, Action(request.Suspended ? SuspendAction : RestoreAction, tenantRef, user), async ct =>
         {
             try
             {
@@ -67,26 +66,23 @@ internal sealed class AdminMemberService(
             {
                 return Result.Failure(LastAdministrator);
             }
-        }, cancellationToken);
-
-        await AfterCommitAsync(result, async () =>
+        }, [new AfterCommit("announcement", async ct =>
         {
             _announcer.AccessChanged(AccessChange.ForUsers(userRef));
             await _announcer.ToTenantAsync(request.Suspended
                 ? new MemberSuspendedEvent(userRef) { ActorSource = EventSource.Support }
                 : new MemberUnsuspendedEvent(userRef) { ActorSource = EventSource.Support },
                 tenantId,
-                CancellationToken.None);
+                ct);
             if (request.Suspended)
             {
                 await eventBus.PublishAsync(new SecurityAlertEvent(
                     "MemberSuspended",
                     $"User ID {user.Id} was suspended in tenant ID {tenantId} by staff member {request.Staff.StaffName.Trim()}.",
                     AdminUserService.StaffAddress,
-                    $"UserId: {user.Id}, TenantId: {tenantId}"), CancellationToken.None);
+                    $"UserId: {user.Id}, TenantId: {tenantId}"), ct);
             }
-        });
-        return result;
+        })], cancellationToken);
     }
 
     public async Task<Result<StaffActionResponse>> RepairAdministratorAsync(Guid tenantRef, Guid userRef, AdminRepairAdministratorRequest request, CancellationToken cancellationToken)
@@ -99,7 +95,7 @@ internal sealed class AdminMemberService(
 
         var (tenantId, user) = target.Value;
         var adminRoleRef = Guid.Empty;
-        var result = await runner.RunAsync(request.Staff, Action(RepairAdministratorAction, tenantRef, user), async ct =>
+        return await runner.RunAsync(request.Staff, Action(RepairAdministratorAction, tenantRef, user), async ct =>
         {
             try
             {
@@ -114,19 +110,16 @@ internal sealed class AdminMemberService(
             {
                 return Result.Failure(Error.Conflict("MEMBER_CANNOT_ACT", "This member is suspended here or their sign-in is off, so they could not act as administrator. Lift that first."));
             }
-        }, cancellationToken);
-
-        await AfterCommitAsync(result, async () =>
+        }, [new AfterCommit("announcement", async ct =>
         {
             _announcer.AccessChanged();
-            await _announcer.ToTenantAsync(new MemberRoleAssignedEvent(userRef, adminRoleRef, null) { ActorSource = EventSource.Support }, tenantId, CancellationToken.None);
+            await _announcer.ToTenantAsync(new MemberRoleAssignedEvent(userRef, adminRoleRef, null) { ActorSource = EventSource.Support }, tenantId, ct);
             await eventBus.PublishAsync(new SecurityAlertEvent(
                 "AdministratorRepaired",
                 $"User ID {user.Id} was made an administrator of tenant ID {tenantId} by staff member {request.Staff.StaffName.Trim()}.",
                 AdminUserService.StaffAddress,
-                $"UserId: {user.Id}, TenantId: {tenantId}"), CancellationToken.None);
-        });
-        return result;
+                $"UserId: {user.Id}, TenantId: {tenantId}"), ct);
+        })], cancellationToken);
     }
 
     public async Task<Result<StaffActionResponse>> RemoveAsync(Guid tenantRef, Guid userRef, AdminRemoveMemberRequest request, CancellationToken cancellationToken)
@@ -138,7 +131,7 @@ internal sealed class AdminMemberService(
         }
 
         var (tenantId, user) = target.Value;
-        var result = await runner.RunAsync(request.Staff, Action(RemoveAction, tenantRef, user), async ct =>
+        return await runner.RunAsync(request.Staff, Action(RemoveAction, tenantRef, user), async ct =>
         {
             try
             {
@@ -149,14 +142,11 @@ internal sealed class AdminMemberService(
             {
                 return Result.Failure(refusal);
             }
-        }, cancellationToken);
-
-        await AfterCommitAsync(result, async () =>
+        }, [new AfterCommit("announcement", async ct =>
         {
             _announcer.AccessChanged(AccessChange.ForUsers(userRef));
-            await _announcer.ToTenantAsync(new MemberRemovedEvent(userRef) { ActorSource = EventSource.Support }, tenantId, CancellationToken.None);
-        });
-        return result;
+            await _announcer.ToTenantAsync(new MemberRemovedEvent(userRef) { ActorSource = EventSource.Support }, tenantId, ct);
+        })], cancellationToken);
     }
 
     private static Error? RemoveRefusal(SqlException ex) => ex.Number switch
@@ -186,25 +176,4 @@ internal sealed class AdminMemberService(
 
     private static StaffAction Action(string name, Guid tenantRef, User user) =>
         new(name, TargetKind, tenantRef, $"Member {user.Username} ({user.RefId})");
-
-    /// <summary>
-    /// Runs <paramref name="effect"/> once the change has committed, and not for a replay. The change is made
-    /// and audited, so a failure here is logged rather than reported as the change failing.
-    /// </summary>
-    private async Task AfterCommitAsync(Result<StaffActionResponse> result, Func<Task> effect)
-    {
-        if (result.IsFailure || result.Value.Replayed)
-        {
-            return;
-        }
-
-        try
-        {
-            await effect();
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogError(ex, "A staff change to a tenant's member committed, but announcing it failed.");
-        }
-    }
 }

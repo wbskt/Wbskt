@@ -40,8 +40,7 @@ public sealed class AdminTenantPlanSqlTests(AuthSqlFixture auth)
             NullLogger<TenantPlanService>.Instance);
         var runner = new StaffActionRunner(new StaffAuditProvider(configuration, "AuthDBConnection"), NullLogger<StaffActionRunner>.Instance);
         return new AdminTenantService(plans, new UnusedLimits(), runner, TimeProvider.System, tenants, audit, new OutboxWriter(configuration), _review,
-            new TenantAnnouncer(new DiscardingBus(), audit, new WorkspaceAccessChanges(null, NullLogger<WorkspaceAccessChanges>.Instance), NullLogger<TenantAnnouncer>.Instance),
-            NullLogger<AdminTenantService>.Instance);
+            new TenantAnnouncer(new DiscardingBus(), audit, new WorkspaceAccessChanges(null, NullLogger<WorkspaceAccessChanges>.Instance), NullLogger<TenantAnnouncer>.Instance));
     }
 
     private static StaffChange Staff(Guid key) => new(Guid.NewGuid(), "pika", "Integration test of a staff plan", key);

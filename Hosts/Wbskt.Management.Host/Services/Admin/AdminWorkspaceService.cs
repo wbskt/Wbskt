@@ -13,7 +13,8 @@ namespace Wbskt.Management.Host.Services.Admin;
 /// <remarks>
 /// The cap goes through <see cref="WorkspaceCreditCapService"/>, the service the console's route uses,
 /// so a staff change takes the same validation, locking and event. Its event is held until the staff
-/// runner has committed, and sent only for a change made now, not for a replay. The main database knows
+/// runner has committed, and sent only for a change made now, not for a replay; a broker that refuses it
+/// then is logged, not answered as a failed change, since the cap is set. The main database knows
 /// a workspace only by its Id, so the RefId is looked up on the auth host first, outside the change.
 /// </remarks>
 internal sealed class AdminWorkspaceService(
@@ -49,7 +50,7 @@ internal sealed class AdminWorkspaceService(
 
         var held = new DeferredEventBus();
         var caps = new WorkspaceCreditCapService(capProvider, held, clock);
-        var result = await runner.RunAsync(
+        return await runner.RunAsync(
             request.Staff,
             new StaffAction(SetCreditCapAction, TargetKind, workspaceRef),
             async ct =>
@@ -57,13 +58,7 @@ internal sealed class AdminWorkspaceService(
                 var set = await caps.SetAsync(workspace.WorkspaceId, new WorkspaceCreditCapRequest(request.MonthlyCreditCap), ct);
                 return set.IsSuccess ? Result.Success() : Result.Failure(set.Error);
             },
+            [new AfterCommit("event", ct => held.ReleaseAsync(eventBus, ct))],
             cancellationToken);
-
-        if (result.IsSuccess && !result.Value.Replayed)
-        {
-            await held.ReleaseAsync(eventBus, cancellationToken);
-        }
-
-        return result;
     }
 }

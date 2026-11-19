@@ -18,8 +18,7 @@ namespace Wbskt.Auth.Host.Services;
 internal sealed class AdminFreezeService(
     IStaffUserProvider staff,
     IStaffActionRunner runner,
-    TenantAnnouncer announcer,
-    ILogger<AdminFreezeService> logger)
+    TenantAnnouncer announcer)
     : IAdminFreezeService
 {
     public const string FreezeAction = "FreezeAccount";
@@ -37,7 +36,7 @@ internal sealed class AdminFreezeService(
         }
 
         var action = new StaffAction(request.Frozen ? FreezeAction : UnfreezeAction, TargetKind, tenantRef);
-        var result = await runner.RunAsync(request.Staff, action, async ct =>
+        return await runner.RunAsync(request.Staff, action, async ct =>
         {
             try
             {
@@ -50,27 +49,13 @@ internal sealed class AdminFreezeService(
                     ? Error.Conflict("ACCOUNT_ALREADY_FROZEN", "This account is already frozen.")
                     : Error.Conflict("ACCOUNT_NOT_FROZEN", "This account is not frozen."));
             }
-        }, cancellationToken);
-
-        if (result.IsFailure || result.Value.Replayed)
-        {
-            return result;
-        }
-
-        // The change has committed, so nothing here may fail the request or take the caller's token.
-        try
+        }, [new AfterCommit("announcement", async ct =>
         {
             announcer.AccessChanged();
             await announcer.ToTenantAsync(
                 request.Frozen ? new TenantFrozenEvent(tenantRef) : new TenantUnfrozenEvent(tenantRef),
                 tenantId,
-                CancellationToken.None);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogError(ex, "Tenant {TenantRef} was {Change}, but announcing it failed.", tenantRef, request.Frozen ? "frozen" : "unfrozen");
-        }
-
-        return result;
+                ct);
+        })], cancellationToken);
     }
 }

@@ -134,6 +134,42 @@ public sealed class StaffActionRunnerTests
         Assert.Equal(0, runs);
     }
 
+    [Fact]
+    public async Task What_follows_a_change_runs_after_its_commit_and_a_failing_step_does_not_fail_it()
+    {
+        var seen = new List<string>();
+        AfterCommit[] afterCommit =
+        [
+            new("revocation", _ => throw new InvalidOperationException("broker down")),
+            new("announcement", _ =>
+            {
+                seen.Add(Transaction.Current is null ? "after commit" : "inside the transaction");
+                return Task.CompletedTask;
+            })
+        ];
+
+        var result = await _runner.RunAsync(Staff(), SetLimits, _ => Task.FromResult(Result.Success()), afterCommit, CancellationToken.None);
+
+        Assert.False(result.Value.Replayed);
+        Assert.Equal(TransactionStatus.Committed, Assert.Single(_audit.Rows).Status);
+        Assert.Equal(["after commit"], seen);
+    }
+
+    [Fact]
+    public async Task Nothing_follows_a_refused_change_or_a_replay()
+    {
+        var staff = Staff();
+        var runs = 0;
+        AfterCommit[] afterCommit = [new("announcement", _ => { runs++; return Task.CompletedTask; })];
+        await _runner.RunAsync(Staff(), SetLimits, _ => Task.FromResult(Result.Failure(Error.Conflict("PLAN_REVISION_STALE", "stale"))), afterCommit, CancellationToken.None);
+        await _runner.RunAsync(staff, SetLimits, _ => Task.FromResult(Result.Success()), CancellationToken.None);
+
+        var retry = await _runner.RunAsync(staff, SetLimits, _ => Task.FromResult(Result.Success()), afterCommit, CancellationToken.None);
+
+        Assert.True(retry.Value.Replayed);
+        Assert.Equal(0, runs);
+    }
+
     private sealed record WrittenRow(long Id, StaffAuditEntry Entry, string? TransactionId)
     {
         public TransactionStatus? Status { get; set; }

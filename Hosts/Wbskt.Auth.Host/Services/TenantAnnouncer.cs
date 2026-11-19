@@ -41,35 +41,6 @@ internal sealed class TenantAnnouncer(IEventBus eventBus, IAuditWorkspaces audit
     public Task ToUserAsync(TenantActorEvent @event, int userId, CancellationToken cancellationToken) =>
         PublishAsync(@event, () => audit.OfUserAsync(userId, cancellationToken), cancellationToken);
 
-    /// <summary>
-    /// Tells the customer's audit log that Wbskt support made a change, once the staff runner has committed
-    /// it, and not for a replay, which was announced the first time (<see cref="SupportActionTakenEvent"/>).
-    /// </summary>
-    public async Task SupportActionAsync(Result<StaffActionResponse> result, SupportActionTakenEvent @event, Func<CancellationToken, Task<int?>> tenantId)
-    {
-        if (result.IsFailure || result.Value.Replayed)
-        {
-            return;
-        }
-
-        // The change has committed, so nothing here may fail the request or take the caller's token.
-        int? id;
-        try
-        {
-            id = await tenantId(CancellationToken.None);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogError(ex, "Could not find the tenant of support action {Action} on {TargetRefId} for the audit log.", @event.Action, @event.TargetRefId);
-            return;
-        }
-
-        if (id is { } found)
-        {
-            await ToTenantAsync(@event, found, CancellationToken.None);
-        }
-    }
-
     private async Task PublishAsync(TenantActorEvent @event, Func<Task<IReadOnlyList<int>>> workspaces, CancellationToken cancellationToken)
     {
         try

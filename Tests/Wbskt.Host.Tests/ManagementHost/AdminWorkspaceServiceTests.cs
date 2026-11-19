@@ -23,7 +23,7 @@ public sealed class AdminWorkspaceServiceTests
     private readonly Mock<IWorkspaceAccountsClient> _workspaces = new();
     private readonly Mock<IWorkspaceCreditCapProvider> _caps = new();
     private readonly RecordingBus _bus = new();
-    private readonly RecordingRunner _runner = new();
+    private readonly RecordingStaffActionRunner _runner = new();
 
     private AdminWorkspaceService Service() =>
         new(_workspaces.Object, _caps.Object, _bus, TimeProvider.System, _runner, NullLogger<AdminWorkspaceService>.Instance);
@@ -46,6 +46,19 @@ public sealed class AdminWorkspaceServiceTests
         Assert.Equal(Staff, _runner.Staff);
         var sent = Assert.IsType<WorkspaceCreditCapSetEvent>(Assert.Single(_bus.Published));
         Assert.Equal((7, (decimal?)500m), (sent.WorkspaceId, sent.MonthlyCreditCap));
+    }
+
+    [Fact]
+    public async Task A_broker_that_refuses_the_event_after_the_cap_is_set_does_not_fail_the_change()
+    {
+        WorkspaceExists(7);
+        _caps.Setup(c => c.SetAsync(7, 500m, It.IsAny<DateOnly>(), It.IsAny<CancellationToken>())).ReturnsAsync(120m);
+        _bus.Fails = true;
+
+        var result = await Service().SetCreditCapAsync(WorkspaceRef, new AdminSetWorkspaceCreditCapRequest(Staff, 500m), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(["event"], _runner.FailedAfterCommit);
     }
 
     [Fact]
@@ -98,39 +111,19 @@ public sealed class AdminWorkspaceServiceTests
         _caps.VerifyNoOtherCalls();
     }
 
-    private sealed class RecordingRunner : IStaffActionRunner
-    {
-        public StaffChange? Staff { get; private set; }
-
-        public StaffAction? Action { get; private set; }
-
-        /// <summary>A replay answers from the first attempt without running the change.</summary>
-        public bool Replay { get; set; }
-
-        /// <summary>Runs after the change, while its transaction would still be open.</summary>
-        public Action? Inspect { get; set; }
-
-        public async Task<Result<StaffActionResponse>> RunAsync(StaffChange staff, StaffAction action, Func<CancellationToken, Task<Result>> change, CancellationToken cancellationToken)
-        {
-            Staff = staff;
-            Action = action;
-            if (Replay)
-            {
-                return new StaffActionResponse(1, true);
-            }
-
-            var outcome = await change(cancellationToken);
-            Inspect?.Invoke();
-            return outcome.IsFailure ? outcome.Error : new StaffActionResponse(1, false);
-        }
-    }
-
     private sealed class RecordingBus : IEventBus
     {
         public List<IEvent> Published { get; } = [];
 
+        public bool Fails { get; set; }
+
         public Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct = default) where TEvent : IEvent
         {
+            if (Fails)
+            {
+                throw new InvalidOperationException("The broker refused the event.");
+            }
+
             Published.Add(@event);
             return Task.CompletedTask;
         }
