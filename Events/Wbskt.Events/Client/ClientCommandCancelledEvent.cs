@@ -6,5 +6,5 @@ namespace Wbskt.Events.Client;
 
 /// <summary>A command waiting for an offline client was cancelled before the client came back.</summary>
 [EventCriticality(EventCriticality.Info)]
-[SignalRNotify("OnClientCommandCancelledEvent")]
+[SignalRNotify("OnClientCommandCancelledEvent", Scope = NotifyScope.Client)]
 public sealed record ClientCommandCancelledEvent(Guid ClientRefId, int ClientId, int WorkspaceId, string Type, Guid CommandId) : ActorEvent, IClientContext;

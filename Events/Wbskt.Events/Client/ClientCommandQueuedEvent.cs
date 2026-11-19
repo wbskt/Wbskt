@@ -8,9 +8,11 @@ namespace Wbskt.Events.Client;
 /// A command was sent to a client that was offline, and waits for it to connect. When it does, the
 /// command goes out as a <see cref="ClientCommandEvent"/> with the same <see cref="CommandId"/>; if
 /// <see cref="ExpiresAtUtc"/> passes first it ends as a <see cref="ClientCommandFailedEvent"/>.
+/// Client-scoped like the client's other commands: the payload is comms history, which needs logs.read
+/// (JoinClient), not just workspace.join.
 /// </summary>
 [EventCriticality(EventCriticality.Info)]
-[SignalRNotify("OnClientCommandQueuedEvent")]
+[SignalRNotify("OnClientCommandQueuedEvent", Scope = NotifyScope.Client)]
 public sealed record ClientCommandQueuedEvent(
     Guid ClientRefId,
     int ClientId,
