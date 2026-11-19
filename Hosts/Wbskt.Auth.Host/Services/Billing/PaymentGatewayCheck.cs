@@ -7,7 +7,7 @@ namespace Wbskt.Auth.Host.Services.Billing;
 /// Once at start, asks the payment provider whether it accepts this deployment's credentials, so a key
 /// for the wrong mode (a live key against the test API) shows up in the logs at deploy rather than at a
 /// customer's first checkout. Then reads every product configured for a plan or a credit pack and checks
-/// it is priced as <see cref="PlanPrices"/> and the pack's <c>PriceUsd</c> say, in USD and for the right
+/// it is priced as <see cref="PlanPrices"/> and <see cref="CreditPackPrices"/> say, in USD and for the right
 /// interval, so a product id set to another plan's product, or a price changed in the dashboard, is caught
 /// before a customer pays one price for another plan's limits. Never stops the host: payments stay as
 /// configured either way.
@@ -84,13 +84,13 @@ public sealed class PaymentGatewayCheck(
             }
 
             string what = $"credit pack {name} ({pack.ProductId})";
-            if (pack.PriceUsd <= 0)
+            if (CreditPackPrices.Find(name) is not { } expected)
             {
-                problems.Add($"{what} has no PriceUsd configured, so it shows as free.");
+                problems.Add($"{what} is configured, but the catalogue has no pack by that name, so it is not offered.");
                 continue;
             }
 
-            problems.AddRange(await CheckProductAsync(gateway, what, pack.ProductId, pack.PriceUsd, interval: null, ct));
+            problems.AddRange(await CheckProductAsync(gateway, what, pack.ProductId, expected.Usd, interval: null, ct));
         }
 
         return problems;

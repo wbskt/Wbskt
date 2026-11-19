@@ -46,7 +46,7 @@ public sealed class BillingPaymentsTests
             [PlanCode.Maker] = new() { [BillingInterval.Monthly] = "prod_maker_m", [BillingInterval.Yearly] = "prod_maker_y" },
             [PlanCode.Pro] = new() { [BillingInterval.Monthly] = "prod_pro_m" }
         },
-        CreditPacks = new() { ["Boost"] = new CreditPackOptions { ProductId = "prod_boost", Credits = 500m, PriceUsd = 5m } }
+        CreditPacks = new() { ["Pack10k"] = new CreditPackOptions { ProductId = "prod_boost" } }
     };
 
     public BillingPaymentsTests()
@@ -434,7 +434,7 @@ public sealed class BillingPaymentsTests
     {
         PaymentSays(new ProviderPayment("pay_1", true, "cus_1", TenantRef, null, [new PaymentLine("prod_boost", 2)], false, Now));
         OutboxMessage? queued = null;
-        _billing.Setup(b => b.RecordCreditPurchaseAsync("dodo", "pay_1", 9, "cus_1", 1_000m, Now.UtcDateTime, Now.UtcDateTime.AddDays(365), It.IsAny<OutboxMessage>(), It.IsAny<CancellationToken>()))
+        _billing.Setup(b => b.RecordCreditPurchaseAsync("dodo", "pay_1", 9, "cus_1", 20_000m, Now.UtcDateTime, Now.UtcDateTime.AddDays(365), It.IsAny<OutboxMessage>(), It.IsAny<CancellationToken>()))
             .Callback<string, string, int, string, decimal, DateTime, DateTime, OutboxMessage, CancellationToken>((_, _, _, _, _, _, _, m, _) => queued = m)
             .ReturnsAsync(true);
 
@@ -444,7 +444,7 @@ public sealed class BillingPaymentsTests
         Assert.NotNull(queued);
         Assert.Equal("Wbskt.Events.Billing.TenantCreditsGrantedEvent", queued.MessageType);
         using JsonDocument payload = JsonDocument.Parse(queued.Payload);
-        Assert.Equal(1_000m, payload.RootElement.GetProperty("credits").GetDecimal());
+        Assert.Equal(20_000m, payload.RootElement.GetProperty("credits").GetDecimal());
         Assert.Equal("dodo", payload.RootElement.GetProperty("source").GetString());
         Assert.Equal("pay_1", payload.RootElement.GetProperty("sourceRef").GetString());
         Assert.Equal([31, 32], payload.RootElement.GetProperty("workspaceIds").EnumerateArray().Select(e => e.GetInt32()));
@@ -454,7 +454,7 @@ public sealed class BillingPaymentsTests
     public async Task A_refunded_credit_pack_is_taken_back()
     {
         PaymentSays(new ProviderPayment("pay_1", true, "cus_1", TenantRef, null, [new PaymentLine("prod_boost", 1)], true, Now));
-        _billing.Setup(b => b.FindCreditPurchaseAsync("dodo", "pay_1", It.IsAny<CancellationToken>())).ReturnsAsync(new TenantCreditPurchase(9, 500m, null));
+        _billing.Setup(b => b.FindCreditPurchaseAsync("dodo", "pay_1", It.IsAny<CancellationToken>())).ReturnsAsync(new TenantCreditPurchase(9, 10_000m, null));
         _billing.Setup(b => b.RefundCreditPurchaseAsync("dodo", "pay_1", It.IsAny<DateTime>(), It.IsAny<OutboxMessage>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
 
         await Sync().SyncPaymentAsync("pay_1", CancellationToken.None);
@@ -470,11 +470,11 @@ public sealed class BillingPaymentsTests
         _billing.Setup(b => b.RecordCreditPurchaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<OutboxMessage>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
         _billing.Setup(b => b.SetCreditPurchaseHoldAsync("dodo", "pay_1", It.IsAny<bool>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<OutboxMessage>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
 
-        _billing.Setup(b => b.FindCreditPurchaseAsync("dodo", "pay_1", It.IsAny<CancellationToken>())).ReturnsAsync(new TenantCreditPurchase(9, 500m, null));
+        _billing.Setup(b => b.FindCreditPurchaseAsync("dodo", "pay_1", It.IsAny<CancellationToken>())).ReturnsAsync(new TenantCreditPurchase(9, 10_000m, null));
         PaymentSays(new ProviderPayment("pay_1", true, "cus_1", TenantRef, null, [new PaymentLine("prod_boost", 1)], false, Now, PaymentDispute.Open));
         await Sync().SyncPaymentAsync("pay_1", CancellationToken.None);
 
-        _billing.Setup(b => b.FindCreditPurchaseAsync("dodo", "pay_1", It.IsAny<CancellationToken>())).ReturnsAsync(new TenantCreditPurchase(9, 500m, null, Now.UtcDateTime, 1));
+        _billing.Setup(b => b.FindCreditPurchaseAsync("dodo", "pay_1", It.IsAny<CancellationToken>())).ReturnsAsync(new TenantCreditPurchase(9, 10_000m, null, Now.UtcDateTime, 1));
         PaymentSays(new ProviderPayment("pay_1", true, "cus_1", TenantRef, null, [new PaymentLine("prod_boost", 1)], false, Now, PaymentDispute.None));
         await Sync().SyncPaymentAsync("pay_1", CancellationToken.None);
 
@@ -488,7 +488,7 @@ public sealed class BillingPaymentsTests
     public async Task A_lost_chargeback_takes_a_pack_back_and_withholds_a_subscriptions_period()
     {
         PaymentSays(new ProviderPayment("pay_1", true, "cus_1", TenantRef, null, [new PaymentLine("prod_boost", 1)], false, Now, PaymentDispute.Lost));
-        _billing.Setup(b => b.FindCreditPurchaseAsync("dodo", "pay_1", It.IsAny<CancellationToken>())).ReturnsAsync(new TenantCreditPurchase(9, 500m, null, Now.UtcDateTime, 1));
+        _billing.Setup(b => b.FindCreditPurchaseAsync("dodo", "pay_1", It.IsAny<CancellationToken>())).ReturnsAsync(new TenantCreditPurchase(9, 10_000m, null, Now.UtcDateTime, 1));
         _billing.Setup(b => b.RefundCreditPurchaseAsync("dodo", "pay_1", It.IsAny<DateTime>(), It.IsAny<OutboxMessage>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
         Tenant = Tenant with { PlanCode = PlanCode.Pro };
         PaymentSays(new ProviderPayment("pay_2", true, "cus_1", TenantRef, "sub_1", [new PaymentLine("prod_pro_m", 1)], false, Now.AddDays(-3), PaymentDispute.Lost));
@@ -739,7 +739,7 @@ public sealed class BillingPaymentsTests
 
     [Theory]
     [InlineData(null, null, null, "BILLING_CHECKOUT_INVALID")]
-    [InlineData(PlanCode.Maker, BillingInterval.Monthly, "Boost", "BILLING_CHECKOUT_INVALID")]
+    [InlineData(PlanCode.Maker, BillingInterval.Monthly, "Pack10k", "BILLING_CHECKOUT_INVALID")]
     [InlineData(PlanCode.Maker, null, null, "BILLING_CHECKOUT_INVALID")]
     [InlineData(PlanCode.Pro, BillingInterval.Yearly, null, "BILLING_OFFER_INVALID")]
     [InlineData(PlanCode.Free, BillingInterval.Monthly, null, "BILLING_OFFER_INVALID")]
@@ -761,7 +761,7 @@ public sealed class BillingPaymentsTests
         _accounts.Setup(a => a.GetByIdAsync(4, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = 4, Email = "a@example.com", Username = "ann" });
         _accounts.Setup(a => a.FindByIdAsync(4, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = 4, Email = "a@example.com", Username = "ann" });
         _gateway.Setup(g => g.CreateCheckoutAsync(It.IsAny<BillingCheckout>(), It.IsAny<CancellationToken>())).ReturnsAsync("https://pay/1");
-        var pack = await Billing().CheckoutAsync(9, 4, new BillingCheckoutRequest(CreditPack: "Boost"), CancellationToken.None);
+        var pack = await Billing().CheckoutAsync(9, 4, new BillingCheckoutRequest(CreditPack: "Pack10k"), CancellationToken.None);
 
         Assert.Equal("BILLING_SUBSCRIPTION_ACTIVE", plan.Error.Code);
         Assert.True(pack.IsSuccess);
@@ -808,7 +808,7 @@ public sealed class BillingPaymentsTests
         _gateway.Setup(g => g.CreateCheckoutAsync(It.IsAny<BillingCheckout>(), It.IsAny<CancellationToken>())).ReturnsAsync("https://pay/1");
         _billing.Setup(b => b.FindCustomerAsync(9, "dodo", It.IsAny<CancellationToken>())).ReturnsAsync(stored is null ? null : new BillingCustomer(stored, shared));
 
-        await Billing().CheckoutAsync(9, 4, new BillingCheckoutRequest(CreditPack: "Boost"), CancellationToken.None);
+        await Billing().CheckoutAsync(9, 4, new BillingCheckoutRequest(CreditPack: "Pack10k"), CancellationToken.None);
 
         _gateway.Verify(g => g.CreateCheckoutAsync(It.Is<BillingCheckout>(c => c.CustomerId == sent), It.IsAny<CancellationToken>()));
     }
@@ -823,7 +823,7 @@ public sealed class BillingPaymentsTests
 
         var reused = await Billing().CheckoutAsync(9, 4, new BillingCheckoutRequest(PlanCode.Pro, BillingInterval.Monthly), CancellationToken.None);
         var fresh = await Billing().CheckoutAsync(9, 4, new BillingCheckoutRequest(PlanCode.Maker, BillingInterval.Monthly), CancellationToken.None);
-        var pack = await Billing().CheckoutAsync(9, 4, new BillingCheckoutRequest(CreditPack: "Boost"), CancellationToken.None);
+        var pack = await Billing().CheckoutAsync(9, 4, new BillingCheckoutRequest(CreditPack: "Pack10k"), CancellationToken.None);
 
         Assert.Equal("https://pay/open", reused.Value.CheckoutUrl);
         Assert.Equal("https://pay/new", fresh.Value.CheckoutUrl);
@@ -847,10 +847,10 @@ public sealed class BillingPaymentsTests
     }
 
     [Fact]
-    public async Task A_plan_without_a_catalogue_price_or_a_pack_without_a_price_is_neither_offered_nor_sold()
+    public async Task A_plan_or_pack_without_a_catalogue_price_is_neither_offered_nor_sold()
     {
         _options.Plans[PlanCode.Business] = new() { [BillingInterval.Yearly] = "prod_business" };
-        _options.CreditPacks["Unpriced"] = new CreditPackOptions { ProductId = "prod_unpriced", Credits = 1_000m };
+        _options.CreditPacks["Unpriced"] = new CreditPackOptions { ProductId = "prod_unpriced" };
 
         var read = await Billing().GetAsync(9, CancellationToken.None);
         var plan = await Billing().CheckoutAsync(9, 4, new BillingCheckoutRequest(PlanCode.Business, BillingInterval.Yearly), CancellationToken.None);
@@ -877,7 +877,7 @@ public sealed class BillingPaymentsTests
             read.Value.Plans);
         Assert.Equal((PlanSource.Default, (DateTimeOffset?)null), (read.Value.Source, read.Value.EndsAt));
         Assert.Equal(40, read.Value.Limits.Clients);
-        Assert.Equal([new CreditPackOffer("Boost", 500m, 5m)], read.Value.CreditPacks);
+        Assert.Equal([new CreditPackOffer("Pack10k", 10_000m, 5m)], read.Value.CreditPacks);
         Assert.Equal(SubscriptionStatus.PastDue, read.Value.Subscription!.Status);
         Assert.Equal(Now, read.Value.Subscription.PastDueSince);
     }
@@ -1571,8 +1571,8 @@ public sealed class BillingPaymentsTests
             },
             CreditPacks = new()
             {
-                ["Pack10k"] = new CreditPackOptions { ProductId = "prod_pack", Credits = 10_000m, PriceUsd = 5m },
-                ["Unpriced"] = new CreditPackOptions { ProductId = "prod_unpriced", Credits = 1m }
+                ["Pack10k"] = new CreditPackOptions { ProductId = "prod_pack" },
+                ["Unpriced"] = new CreditPackOptions { ProductId = "prod_unpriced" }
             }
         };
         _gateway.Setup(g => g.FindProductAsync("prod_ok", It.IsAny<CancellationToken>())).ReturnsAsync(new ProviderProduct(5m, "USD", true, BillingInterval.Monthly));
@@ -1593,7 +1593,7 @@ public sealed class BillingPaymentsTests
                 "Team Yearly (prod_gone) could not be read: Dodo refused to read a product: 422.",
                 "Business Yearly (prod_business) is configured, but the catalogue has no price for it, so it is not offered.",
                 "credit pack Pack10k (prod_pack) lets the buyer choose the amount, so 5 usd is only the least it sells for.",
-                "credit pack Unpriced (prod_unpriced) has no PriceUsd configured, so it shows as free."
+                "credit pack Unpriced (prod_unpriced) is configured, but the catalogue has no pack by that name, so it is not offered."
             ],
             problems);
     }
@@ -1604,7 +1604,7 @@ public sealed class BillingPaymentsTests
         var options = new BillingOptions
         {
             Plans = new() { [PlanCode.Maker] = new() { [BillingInterval.Monthly] = "" } },
-            CreditPacks = new() { ["Pack10k"] = new CreditPackOptions { ProductId = "", Credits = 10_000m } }
+            CreditPacks = new() { ["Pack10k"] = new CreditPackOptions { ProductId = "" } }
         };
 
         Assert.Null(options.FindPlan(""));

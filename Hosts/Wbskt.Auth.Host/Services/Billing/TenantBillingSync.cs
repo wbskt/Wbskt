@@ -66,7 +66,7 @@ internal sealed class TenantBillingSync(
             return result;
         }
 
-        decimal credits = payment.Lines.Sum(l => (options.Value.FindCreditPack(l.ProductId)?.Credits ?? 0m) * l.Quantity);
+        decimal credits = payment.Lines.Sum(l => (options.Value.FindCreditPack(l.ProductId)?.Pack.Credits ?? 0m) * l.Quantity);
         if (credits <= 0m)
         {
             return BillingSyncResult.SetAside($"Payment {paymentId} bought no credit pack offered here.");

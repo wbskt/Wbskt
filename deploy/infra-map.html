@@ -572,7 +572,7 @@ const ENV = [
  ['DODO_PRODUCT_PRO_YEARLY','Payments','plain',false,'',[['auth','Billing__Payments__Plans__Pro__Yearly']],''],
  ['DODO_PRODUCT_TEAM_MONTHLY','Payments','plain',false,'',[['auth','Billing__Payments__Plans__Team__Monthly']],''],
  ['DODO_PRODUCT_TEAM_YEARLY','Payments','plain',false,'',[['auth','Billing__Payments__Plans__Team__Yearly']],''],
- ['DODO_PRODUCT_CREDITS_10K','Payments','plain',false,'',[['auth','Billing__Payments__CreditPacks__Pack10k__ProductId']],'Dodo product for the one credit pack, 10,000 credits for $5 (Credits 10000 and PriceUsd 5 fixed in compose, checked against the product at start); empty is not offered.'],
+ ['DODO_PRODUCT_CREDITS_10K','Payments','plain',false,'',[['auth','Billing__Payments__CreditPacks__Pack10k__ProductId']],'Dodo product for the one credit pack, 10,000 credits for $5 (both fixed in code, CreditPackPrices; the price is checked against the product at start); empty is not offered.'],
  ['CONSOLE_ORIGIN','Browser access','plain',true,'',[['auth, management','Cors__AllowedOrigins__0'],['auth','Auth__Email__ConsoleBaseUrl'],['auth','Billing__Payments__ReturnUrl']],'Public console URL; every mail link and the return from checkout point here.'],
  ['CORS_EXTRA_ORIGINS','Browser access','plain',false,'',[['auth, management','Cors__ExtraOrigins']],'For ng serve against this backend. Clear before public launch.'],
  ['REFRESH_COOKIE_SAMESITE','Browser access','plain',false,'Strict',[['auth','Auth__RefreshCookie__SameSite']],'None only for a cross-site console. Strict before launch.'],
