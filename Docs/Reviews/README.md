@@ -6,7 +6,8 @@ senior developer's code review at once (section 3). This file is the brief the r
 Change the lanes or checks here, not in the scheduled task that starts it.
 
 Reports live beside this file as `YYYY-MM-DD.md`, one per review. The newest report's date is the
-"last review" date. Older reviews, written before this routine, are in the project files
+"last review" date. A re-read of one review's merged fixes is `YYYY-MM-DD-post-merge.md`; it is
+not a full review and does not move that date. Older reviews, written before this routine, are in the project files
 (`full-arch-review/`, `workflow-review/`, `db-review/` and others).
 
 ## 1. Decide whether to run
