@@ -1,6 +1,4 @@
 using Microsoft.Extensions.Logging;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -78,7 +76,7 @@ internal sealed class ForkResultHandler(
         Guid nodeId = context.Node.NodeId;
         bool visitKnown = branchRow.RowVersion.Length > 0;
         Guid cohortId = visitKnown
-            ? DeriveId($"fork-cohort:{branchRow.RefId:N}:{nodeId:N}:{Convert.ToHexString(branchRow.RowVersion)}")
+            ? DerivedRefIds.Of($"fork-cohort:{branchRow.RefId:N}:{nodeId:N}:{Convert.ToHexString(branchRow.RowVersion)}")
             : idGenerator.NewId();
 
         // Counted before any child exists, as always, so a child's own end can never drive the run to
@@ -106,7 +104,7 @@ internal sealed class ForkResultHandler(
             (BranchRow created, bool isNew) = await branchProvider.CreateIfAbsentAsync(new BranchRow
             {
                 Id = 0,
-                RefId = visitKnown ? DeriveId($"fork-child:{cohortId:N}:{index}") : idGenerator.NewId(),
+                RefId = visitKnown ? DerivedRefIds.Of($"fork-child:{cohortId:N}:{index}") : idGenerator.NewId(),
                 RunId = context.Run.Id,
                 ParentBranchId = branchRow.RefId,
                 ForkCohortId = cohortId,
@@ -154,16 +152,5 @@ internal sealed class ForkResultHandler(
         }
 
         return joinState.Count > 0 ? joinState : null;
-    }
-
-    private static Guid DeriveId(string name)
-    {
-        byte[] digest = SHA256.HashData(Encoding.UTF8.GetBytes(name));
-        byte[] bytes = digest[..16];
-
-        // Stamp it as a name-based (version 5 layout, RFC 4122 variant) GUID so it reads as one.
-        bytes[7] = (byte)((bytes[7] & 0x0F) | 0x50);
-        bytes[8] = (byte)((bytes[8] & 0x3F) | 0x80);
-        return new Guid(bytes);
     }
 }

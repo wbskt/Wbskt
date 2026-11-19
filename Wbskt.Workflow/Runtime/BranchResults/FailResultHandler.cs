@@ -21,7 +21,6 @@ internal sealed class FailResultHandler(
     IBranchProvider branchProvider,
     IRunCountersProvider runCountersProvider,
     IRunDispatcher runDispatcher,
-    IIdGenerator idGenerator,
     TimeProvider clock,
     IRunCancellationService runCancellationService,
     IJoinAggregatorProvider joinAggregatorProvider,
@@ -109,7 +108,11 @@ internal sealed class FailResultHandler(
         // This branch is dying, so it will never reach its Join. Contribute on its behalf,
         // otherwise a Mode=All cohort never reaches ExpectedCount and everything after the
         // Join is silently skipped until the reaper eventually cancels the run.
-        await ContributeFailureToJoinAsync(runRow, branchRow, context.Definition, ct);
+        // A failure that stopped the run still votes, so the cohort's counts stay true, but continues
+        // nothing: a continuation would be created and dispatched only to be cancelled at once, and
+        // read as "join continued" in a run that failed.
+        bool stoppedRun = outOfCredits || failsRun || context.Definition.FailFast;
+        await ContributeFailureToJoinAsync(runRow, branchRow, context.Definition, stoppedRun, ct);
 
         await branchTerminator.ReleaseAsync(runRow.Id, 1, ct);
         return BranchResultOutcome.Stopped;
@@ -129,7 +132,7 @@ internal sealed class FailResultHandler(
     /// the work after the Join proceeds. Best-effort — a failure here must not mask the original node
     /// failure that brought us into this path.
     /// </summary>
-    private async Task ContributeFailureToJoinAsync(RunRow runRow, BranchRow branchRow, WorkflowDefinition definition, CancellationToken ct)
+    private async Task ContributeFailureToJoinAsync(RunRow runRow, BranchRow branchRow, WorkflowDefinition definition, bool stoppedRun, CancellationToken ct)
     {
         IReadOnlyDictionary<string, JsonElement> localState = BranchLocalState.Deserialize(branchRow.LocalJson);
         if (!localState.TryGetValue(JoinTokens.TokenKey, out JsonElement tokenElement)
@@ -147,7 +150,7 @@ internal sealed class FailResultHandler(
                 "Branch {BranchId} failed and contributed 'failed' to join {JoinToken} ({Contributed}/{Expected}, {Failed} failed).",
                 branchRow.Id, joinToken, contribution.ContributedCount, contribution.ExpectedCount, contribution.FailedCount);
 
-            if (!contribution.ShouldContinue || contribution.JoinNodeId is not Guid joinNodeId)
+            if (stoppedRun || !contribution.ShouldContinue || contribution.JoinNodeId is not Guid joinNodeId)
             {
                 return;
             }
@@ -175,14 +178,21 @@ internal sealed class FailResultHandler(
             // the run to zero active branches and finalize it out from under the new branch.
             await runCountersProvider.IncrementActiveBranchesAsync(runRow.Id, 1, ct);
 
-            BranchRow continuation = await branchProvider.CreateAsync(BranchRow.New(
-                idGenerator.NewId(),
+            // Named by the join and the branch whose vote completed it, so a replay finds the one the
+            // first attempt made rather than continuing the join twice.
+            (BranchRow continuation, bool created) = await branchProvider.CreateIfAbsentAsync(BranchRow.New(
+                DerivedRefIds.Of($"join-continuation:{joinToken:N}:{branchRow.RefId:N}"),
                 runRow.Id,
                 continuationNodeId.Value,
                 continuationLocalJson,
                 clock.GetUtcNow().UtcDateTime,
                 parentBranchId: branchRow.RefId,
                 forkCohortId: branchRow.ForkCohortId), ct);
+            if (!created)
+            {
+                await runCountersProvider.DecrementActiveBranchesAsync(runRow.Id, 1, ct);
+                return;
+            }
 
             await journal.AppendBranchEventAsync(runRow.Id, continuation.RefId, joinNodeId, HistoryEventKind.JoinContinuationSpawned, ct);
             await runDispatcher.DispatchAsync(new BranchExecutionRequest(runRow.Id, continuation.Id, BranchExecutionReason.ForkChild), ct);

@@ -164,7 +164,7 @@ internal static class TestBranchLoop
             continueHandler,
             new ForkResultHandler(branchProvider, runCountersProvider, runDispatcher, idGenerator, clock, endings),
             new WaitForBookmarkResultHandler(branchProvider, bookmarkProvider, idGenerator, clock, journal),
-            new FailResultHandler(branchProvider, runCountersProvider, runDispatcher, idGenerator, clock, runCancellationService, joinAggregatorProvider, journal, branchTerminator, continueHandler),
+            new FailResultHandler(branchProvider, runCountersProvider, runDispatcher, clock, runCancellationService, joinAggregatorProvider, journal, branchTerminator, continueHandler),
             new TerminalResultHandler(endings, declines)
         ]);
 

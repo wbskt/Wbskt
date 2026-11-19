@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Moq;
+using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
@@ -231,6 +232,61 @@ public sealed class FailResultHandlerTests
         Assert.Contains("cancel-run:OUT_OF_CREDITS", _log);
     }
 
+    [Fact]
+    public async Task A_cohort_failure_that_stops_the_run_votes_but_continues_nothing()
+    {
+        // The continuation would be created, dispatched and cancelled at once, and read as "join
+        // continued" in a run that failed.
+        _joins
+            .Setup(joins => joins.ContributeAsync(JoinToken, BranchId, "failed", It.IsAny<CancellationToken>()))
+            .Callback(() => _log.Add("contribute"))
+            .ReturnsAsync(new JoinContributionResult(true, 3, 2, 1, 3, JoinNodeId: JoinNode));
+        var branches = new RecordingBranchProvider(_log, Branch(FailingNode, $$"""{"{{JoinTokens.TokenKey}}":"{{JoinToken}}"}"""));
+        var definition = Definition(
+            [Node(FailingNode), Node(JoinNode), Node(AfterJoin)],
+            [new Edge((FailingNode, "default"), (JoinNode, "in")), new Edge((JoinNode, "default"), (AfterJoin, "in"))],
+            failFast: true);
+
+        await CreateHandler(branches).HandleAsync(Boom, Context(Node(FailingNode), definition, branches.Current), CancellationToken.None);
+
+        Assert.Equal(
+            new[]
+            {
+                "failed",
+                $"fail-run:Node {FailingNode} failed (BOOM) on a fail-fast workflow",
+                $"journal:{HistoryEventKind.BranchFailed}",
+                "contribute",
+                $"release:{RunId}:1"
+            },
+            _log);
+        Assert.Empty(branches.Created);
+        Assert.Empty(_dispatcher.Requests);
+    }
+
+    [Fact]
+    public async Task A_join_continuation_is_named_by_its_join_and_branch_so_a_replay_finds_it()
+    {
+        _joins
+            .Setup(joins => joins.ContributeAsync(JoinToken, BranchId, "failed", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new JoinContributionResult(true, 3, 2, 1, 3, JoinNodeId: JoinNode));
+        BranchRow failing = Branch(FailingNode, $$"""{"{{JoinTokens.TokenKey}}":"{{JoinToken}}"}""");
+        var branches = new RecordingBranchProvider(_log, failing);
+        var definition = Definition(
+            [Node(FailingNode), Node(JoinNode), Node(AfterJoin)],
+            [new Edge((FailingNode, "default"), (JoinNode, "in")), new Edge((JoinNode, "default"), (AfterJoin, "in"))]);
+        FailResultHandler handler = CreateHandler(branches);
+
+        await handler.HandleAsync(Boom, Context(Node(FailingNode), definition, branches.Current), CancellationToken.None);
+        branches.Current = failing;
+        _log.Clear();
+        await handler.HandleAsync(Boom, Context(Node(FailingNode), definition, branches.Current), CancellationToken.None);
+
+        Assert.Single(branches.Created);
+        Assert.Single(_dispatcher.Requests);
+        Assert.Contains($"increment:{RunId}:1", _log);
+        Assert.Contains($"decrement:{RunId}:1", _log);
+    }
+
     /// <summary>
     /// A failed cohort branch never reaches its Join, so it contributes "failed" itself; when that
     /// arrival meets the quorum, the work after the Join goes on in a fresh, counted branch.
@@ -372,7 +428,6 @@ public sealed class FailResultHandlerTests
             branches,
             new RecordingRunCountersProvider(_log),
             _dispatcher,
-            new SequentialIdGenerator(),
             new FixedClock(),
             _cancellation.Object,
             _joins.Object,
