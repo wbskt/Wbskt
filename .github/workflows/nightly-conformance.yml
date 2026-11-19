@@ -175,10 +175,11 @@ jobs:
 
   # Its own job, so a run that fails before any step of live (a service container that never turns
   # healthy, a runner lost) or runs past its timeout is reported too, and the heavy job needs no
-  # write access. A manual cancel of a scheduled run is reported as well; that is rare.
+  # write access. A manual cancel of a scheduled run is reported as well; that is rare. It runs on
+  # every scheduled night, so a green one closes the issue the red ones kept open.
   report:
     needs: live
-    if: always() && github.event_name == 'schedule' && needs.live.result != 'success'
+    if: always() && github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -186,7 +187,16 @@ jobs:
       issues: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - name: Open or update the issue
+      - name: Open, update or close the issue
         env:
           GH_TOKEN: ${{ github.token }}
-        run: .github/scripts/report-nightly-failure.sh "Nightly conformance" "${{ needs.live.result }}"
+          RESULT: ${{ needs.live.result }}
+        run: |
+          title="Nightly run failing: Nightly conformance"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          message="The Nightly conformance run on $(date -u +%Y-%m-%d) ended in $RESULT at ${GITHUB_SHA::7}: $run_url"
+          if [[ "$RESULT" == success ]]; then
+            .github/scripts/sync-labelled-issue.sh close nightly-conformance "$title" "$message"
+          else
+            COMMENT_IF_OPEN=true .github/scripts/sync-labelled-issue.sh open nightly-conformance "$title" "$message"
+          fi
