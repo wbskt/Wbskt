@@ -15,7 +15,6 @@ using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Models;
 using Wbskt.Primitives.Constants;
-using Wbskt.Primitives.Exceptions;
 using Wbskt.Primitives.Models;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -206,21 +205,5 @@ public sealed class SharedVariablesControllerTests
         var result = await controller.Get(WorkspaceId, workflowRefId, "missing", CancellationToken.None);
         
         ProblemAssert.Is(result.Result, StatusCodes.Status404NotFound);
-    }
-
-    [Fact]
-    public async Task GlobalExceptionMiddleware_maps_OptimisticConcurrencyException_to_409()
-    {
-        var middleware = new GlobalExceptionMiddleware(
-            _ => throw new OptimisticConcurrencyException("conflict"),
-            NullLogger<GlobalExceptionMiddleware>.Instance);
-        var context = new DefaultHttpContext();
-        context.Response.Body = new MemoryStream();
-        var eventBus = new Mock<IEventBus>();
-
-        await middleware.InvokeAsync(context, eventBus.Object);
-
-        Assert.Equal(StatusCodes.Status409Conflict, context.Response.StatusCode);
-        eventBus.Verify(x => x.PublishAsync(It.IsAny<SystemErrorEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

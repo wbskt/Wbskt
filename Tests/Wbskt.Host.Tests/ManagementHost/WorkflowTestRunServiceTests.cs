@@ -197,7 +197,8 @@ public sealed class WorkflowTestRunServiceTests
     private WorkflowTestRunService Service()
     {
         var identity = new Mock<IIdentityService>();
-        identity.Setup(x => x.GetUserIdentity()).Returns(new UserIdentity(9));
+        UserIdentity? signedIn = new UserIdentity(9);
+        identity.Setup(x => x.TryGetUserIdentity(out signedIn)).Returns(true);
         return new WorkflowTestRunService(_definitions.Object, _states.Object, _drafts.Object, _query.Object, _engine.Object, identity.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowTestRunService>>());
     }
 

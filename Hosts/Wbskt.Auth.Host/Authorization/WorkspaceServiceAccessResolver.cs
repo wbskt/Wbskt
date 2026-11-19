@@ -16,7 +16,7 @@ public sealed class WorkspaceServiceAccessResolver(IIdentityService identity, IW
     {
         if (!identity.TryGetUserIdentity(out var caller))
         {
-            return Result<PermissionScope>.Failure(Error.Unauthorized("AUTH_UNAUTHORIZED", "Unauthorized access."));
+            return Result<PermissionScope>.Failure(IdentityService.NoCaller);
         }
 
         var access = await workspaces.ResolveAccessAsync(caller.UserId, workspaceRef, cancellationToken);

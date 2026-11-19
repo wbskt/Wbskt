@@ -186,7 +186,12 @@ internal sealed class AdminUserService(
         var action = new StaffAction(CorrectEmailAction, TargetKind, user.RefId, $"From {user.Email} to {email}");
         var result = await runner.RunAsync(request.Staff, action, async ct =>
         {
-            var now = await accounts.GetByIdAsync(user.Id, ct);
+            var now = await accounts.FindByIdAsync(user.Id, ct);
+            if (now is null)
+            {
+                return Result.Failure(UserNotFound);
+            }
+
             if (now.IsEmailVerified)
             {
                 return Result.Failure(EmailVerified);
@@ -230,12 +235,13 @@ internal sealed class AdminUserService(
     /// change's transaction; a refusal there is audited as Refused.
     /// </summary>
     private Task<Result<StaffActionResponse>> RunAsync(StaffChange staff, string action, User user, Func<User, CancellationToken, Task<Result>> change, CancellationToken cancellationToken) =>
-        runner.RunAsync(staff, new StaffAction(action, TargetKind, user.RefId), async ct => await change(await accounts.GetByIdAsync(user.Id, ct), ct), cancellationToken);
+        runner.RunAsync(staff, new StaffAction(action, TargetKind, user.RefId), async ct =>
+            await accounts.FindByIdAsync(user.Id, ct) is { } now ? await change(now, ct) : Result.Failure(UserNotFound), cancellationToken);
 
     private async Task<User?> FindAsync(Guid userRef, CancellationToken cancellationToken)
     {
         int id = await accounts.FindIdByRefIdAsync(userRef, cancellationToken);
-        return id == 0 ? null : await accounts.GetByIdAsync(id, cancellationToken);
+        return id == 0 ? null : await accounts.FindByIdAsync(id, cancellationToken);
     }
 
     /// <summary>

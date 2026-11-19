@@ -1,7 +1,5 @@
 namespace Wbskt.Infrastructure;
 
-// Appended-to only: Error.Type is serialized as its numeric value in error responses,
-// so reordering these would silently change the wire format for existing clients.
 public enum ErrorType { Failure, Validation, NotFound, Conflict, Unauthorized, Forbidden, Unavailable }
 
 public sealed record Error(string Code, string Message, ErrorType Type)

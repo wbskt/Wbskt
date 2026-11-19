@@ -181,7 +181,7 @@ internal sealed class AdminMemberService(
             return MemberNotFound;
         }
 
-        return (tenantId, await accounts.GetByIdAsync(userId, cancellationToken));
+        return await accounts.FindByIdAsync(userId, cancellationToken) is { } user ? (tenantId, user) : MemberNotFound;
     }
 
     private static StaffAction Action(string name, Guid tenantRef, User user) =>

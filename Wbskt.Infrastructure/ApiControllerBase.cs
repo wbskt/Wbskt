@@ -38,7 +38,7 @@ public abstract class ApiControllerBase : ControllerBase
         var identityService = HttpContext?.RequestServices?.GetService<IIdentityService>();
         if (identityService is null || !identityService.TryGetUserIdentity(out var identity))
         {
-            return Result<int>.Failure(Error.Unauthorized("AUTH_UNAUTHORIZED", "Unauthorized access."));
+            return Result<int>.Failure(IdentityService.NoCaller);
         }
 
         return Result<int>.Success(identity.UserId);
@@ -53,7 +53,7 @@ public abstract class ApiControllerBase : ControllerBase
         var identityService = HttpContext?.RequestServices?.GetService<IIdentityService>();
         if (identityService is null || !identityService.TryGetUserIdentity(out var identity) || identity.UserRefId is not { } userRef)
         {
-            return Result<(int, Guid)>.Failure(Error.Unauthorized("AUTH_UNAUTHORIZED", "Unauthorized access."));
+            return Result<(int, Guid)>.Failure(IdentityService.NoCaller);
         }
 
         return Result<(int, Guid)>.Success((identity.UserId, userRef));

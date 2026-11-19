@@ -81,8 +81,6 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
     // Configuration, not a constant, so it can become a plan tier without a redeploy of the code.
     private int MaxPerWorkspace => _configuration?.GetValue("Workflows:MaxPerWorkspace", DefaultMaxPerWorkspace) ?? DefaultMaxPerWorkspace;
 
-    private int CurrentUserId => _identityService.GetUserIdentity().UserId;
-
     public Task<Result<WorkflowPublishResponse>> PublishAsync(int workspaceId, Guid workspaceRef, WorkflowPublishRequest request, CancellationToken ct)
     {
         return PublishAsync(workspaceId, workspaceRef, request, WorkflowPublishGuards.None, ct);
@@ -91,6 +89,11 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
     public async Task<Result<WorkflowPublishResponse>> PublishAsync(int workspaceId, Guid workspaceRef, WorkflowPublishRequest request, WorkflowPublishGuards guards, CancellationToken ct)
     {
         _logger.LogInformation("Publishing workflow '{WorkflowName}' (RefId: '{RefId}') in WorkspaceId: {WorkspaceId}, enable: {Enable}", request.Name, request.RefId, workspaceId, request.Enable);
+
+        if (!_identityService.TryGetUserIdentity(out UserIdentity? caller))
+        {
+            return IdentityService.NoCaller;
+        }
 
         DateTime now = _clock.GetUtcNow().UtcDateTime;
         WorkflowDefinition? definition = AuthoredDefinitions.From(request, now);
@@ -129,7 +132,7 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
                 Name = request.Name,
                 Description = request.Description,
                 DefinitionJson = JsonSerializer.Serialize(definition with { WorkspaceId = workspaceId }, SerializerOptions),
-                PublishedBy = CurrentUserId,
+                PublishedBy = caller.UserId,
                 CreatedAt = now
             }, check.Value.Refs, MaxPerWorkspace, guards, ct);
         }
@@ -217,12 +220,17 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
 
     private async Task<Result<WorkflowStateResponse>> EnableCoreAsync(int workspaceId, Guid workspaceRef, WorkflowDefinitionRow row, WorkflowDefinition definition, IntegrationReferences integrationRefs, CancellationToken ct)
     {
+        if (!_identityService.TryGetUserIdentity(out UserIdentity? caller))
+        {
+            return IdentityService.NoCaller;
+        }
+
         TriggerPlan plan = _planner.Plan(definition, row.RefId, workspaceRef);
 
         WorkflowEnableResult result;
         try
         {
-            result = await _states.EnableAsync(row.RefId, workspaceId, row.Version, CurrentUserId, plan, integrationRefs.Refs, ct);
+            result = await _states.EnableAsync(row.RefId, workspaceId, row.Version, caller.UserId, plan, integrationRefs.Refs, ct);
         }
         catch (SqlException ex) when (WorkflowLifecycleErrors.TryMap(ex, row.RefId, row.Version, out Error error))
         {
@@ -323,9 +331,14 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
     {
         _logger.LogInformation("Reinstating workflow '{RefId}' in WorkspaceId: {WorkspaceId}", refId, workspaceId);
 
+        if (!_identityService.TryGetUserIdentity(out UserIdentity? caller))
+        {
+            return IdentityService.NoCaller;
+        }
+
         try
         {
-            await _states.ReinstateAsync(refId, workspaceId, CurrentUserId, ct);
+            await _states.ReinstateAsync(refId, workspaceId, caller.UserId, ct);
         }
         catch (SqlException ex) when (WorkflowLifecycleErrors.TryMap(ex, refId, null, out Error error))
         {
@@ -346,7 +359,12 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
     {
         _logger.LogInformation("Deleting workflow '{RefId}' in WorkspaceId: {WorkspaceId}", refId, workspaceId);
 
-        var deletion = await _definitions.DeleteAsync(refId, workspaceId, CurrentUserId, ct);
+        if (!_identityService.TryGetUserIdentity(out UserIdentity? caller))
+        {
+            return Result.Failure(IdentityService.NoCaller);
+        }
+
+        var deletion = await _definitions.DeleteAsync(refId, workspaceId, caller.UserId, ct);
         if (deletion is null)
         {
             // Same answer for unknown, already deleted, and another workspace's workflow.
@@ -370,9 +388,14 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
 
     private async Task<Result<WorkflowDisableResult>> TakeOutOfServiceAsync(int workspaceId, Guid refId, bool deprecate, CancellationToken ct)
     {
+        if (!_identityService.TryGetUserIdentity(out UserIdentity? caller))
+        {
+            return IdentityService.NoCaller;
+        }
+
         try
         {
-            return Result<WorkflowDisableResult>.Success(await _states.DisableAsync(refId, workspaceId, CurrentUserId, deprecate, ct));
+            return Result<WorkflowDisableResult>.Success(await _states.DisableAsync(refId, workspaceId, caller.UserId, deprecate, ct));
         }
         catch (SqlException ex) when (WorkflowLifecycleErrors.TryMap(ex, refId, null, out Error error))
         {

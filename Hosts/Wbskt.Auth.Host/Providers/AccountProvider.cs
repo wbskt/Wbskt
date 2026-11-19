@@ -44,8 +44,7 @@ internal sealed class AccountProvider : BaseSqlProvider, IAccountProvider
             "dbo.User_GetBy_Id",
             p => p.AddWithValue("@Id", id),
             MapUser,
-            new SecurityException($"User with id {id} not found."),
-            cancellationToken
+            cancellationToken: cancellationToken
         );
     }
 

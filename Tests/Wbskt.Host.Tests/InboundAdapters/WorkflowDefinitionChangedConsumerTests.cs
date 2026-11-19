@@ -214,7 +214,8 @@ public sealed class WorkflowDefinitionChangedConsumerTests
                 .ReturnsAsync(new WorkflowDisableResult(true, DefinitionId, 0, []));
 
             var identity = new Mock<IIdentityService>();
-            identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
+            UserIdentity? signedIn = new UserIdentity(7);
+            identity.Setup(i => i.TryGetUserIdentity(out signedIn)).Returns(true);
 
             Service = new WorkflowLifecycleService(
                 definitions.Object,

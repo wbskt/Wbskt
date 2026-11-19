@@ -478,7 +478,8 @@ public sealed class WorkflowLifecycleServiceTests
         public Harness(IConfiguration? configuration = null, TimeProvider? clock = null)
         {
             var identity = new Mock<IIdentityService>();
-            identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(UserId));
+            UserIdentity? signedIn = new UserIdentity(UserId);
+            identity.Setup(i => i.TryGetUserIdentity(out signedIn)).Returns(true);
             Service = new WorkflowLifecycleService(
                 Definitions.Object,
                 States.Object,

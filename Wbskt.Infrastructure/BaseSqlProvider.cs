@@ -12,7 +12,7 @@ public abstract class BaseSqlProvider
     protected BaseSqlProvider(IConfiguration configuration, string connectionStringName = "DefaultConnection")
     {
         _connectionString = configuration.GetConnectionString(connectionStringName) 
-                            ?? throw new ArgumentNullException(nameof(configuration));
+                            ?? throw new InvalidOperationException($"The connection string '{connectionStringName}' is not configured.");
     }
 
     protected async Task<T> ExecuteSingleAsync<T>(

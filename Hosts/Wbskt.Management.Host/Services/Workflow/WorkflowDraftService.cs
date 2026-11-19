@@ -88,7 +88,11 @@ public sealed class WorkflowDraftService : IWorkflowDraftService
             return Result<WorkflowDraftDto>.Failure(Error.Validation("WORKFLOW_DRAFT_INVALID", $"A description can be at most {MaxDescriptionLength} characters."));
         }
 
-        UserIdentity user = _identityService.GetUserIdentity();
+        if (!_identityService.TryGetUserIdentity(out UserIdentity? user))
+        {
+            return IdentityService.NoCaller;
+        }
+
         var save = new WorkflowDraftSave(
             refId,
             workspaceId,

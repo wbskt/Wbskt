@@ -103,7 +103,11 @@ internal sealed class IntegrationService(
         }
 
         var sealedIntegration = sealedResult.Value;
-        var identity = identityService.GetUserIdentity();
+        if (!identityService.TryGetUserIdentity(out UserIdentity? identity))
+        {
+            return IdentityService.NoCaller;
+        }
+
         try
         {
             await provider.InsertAsync(new Integration
