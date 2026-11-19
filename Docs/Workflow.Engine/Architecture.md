@@ -14,7 +14,6 @@ see [Features.md](Features.md); for the patterns behind the code, see
 | `Hosts/Wbskt.Workflow.Engine.Host` | The engine process: inbound adapters (bus consumers), controllers, hosted services, leadership, middleware. |
 | `Models/Wbskt.Workflow.Engine.Contracts` | The HTTP contracts of the engine's inbound API, shared with the management host. |
 | `Hosts/Wbskt.Management.Host/Services/Workflow` | Publishing, versioning, enabling and disabling (`WorkflowLifecycleService`); trigger plans come from `ITriggerPlanner` in `Wbskt.Workflow`. |
-| `Tools/Wbskt.Workflow.Exporter` | Writes the example workflows to JSON with the builder. |
 
 ## 2. Where the engine sits
 
