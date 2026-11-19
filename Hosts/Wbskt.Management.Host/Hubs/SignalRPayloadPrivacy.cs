@@ -9,8 +9,9 @@ namespace Wbskt.Management.Host.Hubs;
 
 /// <summary>
 /// The JSON the hub sends events with: the shared settings, minus every property marked
-/// <see cref="SignalRPrivateAttribute"/> on the event or on an interface it implements. The internal ids
-/// and the actor's address stay on the bus; a browser only ever sees the references.
+/// <see cref="SignalRPrivateAttribute"/> on the event or on an interface it implements, and every one
+/// marked <see cref="SignalRWithheldAttribute"/> on the event. The internal ids and the actor's address
+/// stay on the bus; a browser only ever sees the references.
 /// </summary>
 internal static class SignalRPayloadPrivacy
 {
@@ -42,7 +43,8 @@ internal static class SignalRPayloadPrivacy
 
     private static bool IsPrivate(JsonPropertyInfo property, Type[] interfaces)
     {
-        if (property.AttributeProvider?.IsDefined(typeof(SignalRPrivateAttribute), false) == true)
+        if (property.AttributeProvider?.IsDefined(typeof(SignalRPrivateAttribute), false) == true
+            || property.AttributeProvider?.IsDefined(typeof(SignalRWithheldAttribute), false) == true)
         {
             return true;
         }
