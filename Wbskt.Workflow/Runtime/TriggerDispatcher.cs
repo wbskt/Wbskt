@@ -273,15 +273,15 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             return Task.FromResult(NoRegistrations);
         }
 
-        if (!string.Equals(evt.ChannelKind, ClientChannel.Name, StringComparison.Ordinal) || evt.MatchKeys.Count == 0)
+        if (!string.Equals(evt.ChannelKind, ClientChannel.Name, StringComparison.Ordinal) || evt.MatchKeys.Count == 0 || evt.WorkspaceId is not null)
         {
-            return _triggerRegistrationProvider.GetActiveByChannelKeysAsync(evt.ChannelKind, evt.MatchKeys, ct);
+            return _triggerRegistrationProvider.GetActiveByChannelKeysAsync(evt.ChannelKind, evt.MatchKeys, evt.WorkspaceId, ct);
         }
 
         return _triggerRegistrationCache.LoadUnlessKnownEmptyAsync(
             evt.ChannelKind,
             string.Join('\n', evt.MatchKeys),
-            token => _triggerRegistrationProvider.GetActiveByChannelKeysAsync(evt.ChannelKind, evt.MatchKeys, token),
+            token => _triggerRegistrationProvider.GetActiveByChannelKeysAsync(evt.ChannelKind, evt.MatchKeys, null, token),
             ct);
     }
 

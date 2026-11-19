@@ -98,6 +98,23 @@ public sealed class SubWorkflowNodeExecutorTests
     }
 
     [Fact]
+    public async Task First_visit_starts_only_a_child_of_the_parents_own_workspace()
+    {
+        // #940: the manual trigger's key is the ref alone, so the event carries the workspace that may match.
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 99, null, "ok"));
+        var runProvider = new Mock<IRunProvider>();
+        runProvider.Setup(r => r.GetByIdAsync(99, It.IsAny<CancellationToken>())).ReturnsAsync(RunRow(ChildRunRefId));
+        var executor = new SubWorkflowNodeExecutor(hub.Object, runProvider.Object, new FixedClock());
+        NodeContext ctx = Context(new Dictionary<string, JsonElement>());
+
+        await executor.ExecuteAsync(ctx, CancellationToken.None);
+
+        hub.Verify(h => h.HandleAsync(It.Is<InboundEvent>(e => e.WorkspaceId == ctx.Branch.WorkspaceId), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task First_visit_fails_non_retryably_when_the_workspace_is_at_its_run_ceiling()
     {
         // The safety net: a child is exempt from the ceiling, so this should not happen.

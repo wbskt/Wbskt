@@ -13,7 +13,7 @@ internal sealed class TriggerRegistrationProvider : BaseSqlProvider, ITriggerReg
 {
     public TriggerRegistrationProvider(IConfiguration configuration) : base(configuration) { }
 
-    public async Task<IReadOnlyCollection<TriggerRegistrationRow>> GetActiveByChannelKeysAsync(string channelKind, IReadOnlyCollection<string> channelKeys, CancellationToken ct)
+    public async Task<IReadOnlyCollection<TriggerRegistrationRow>> GetActiveByChannelKeysAsync(string channelKind, IReadOnlyCollection<string> channelKeys, int? workspaceId, CancellationToken ct)
     {
         if (channelKeys == null || channelKeys.Count == 0)
         {
@@ -28,6 +28,7 @@ internal sealed class TriggerRegistrationProvider : BaseSqlProvider, ITriggerReg
             {
                 p.AddWithValue("@TriggerKind", channelKind);
                 p.AddWithValue("@KeysJson", jsonKeys);
+                p.AddWithValue("@WorkspaceId", (object?)workspaceId ?? DBNull.Value);
             },
             Map,
             ct

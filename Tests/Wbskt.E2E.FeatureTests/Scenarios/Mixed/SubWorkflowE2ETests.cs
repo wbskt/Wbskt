@@ -1,7 +1,9 @@
+using System.Net;
 using System.Text.Json;
 using FluentAssertions;
 using Wbskt;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Management.Models.Workflow;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Mixed;
 
@@ -100,5 +102,35 @@ public sealed class SubWorkflowE2ETests(ServicesFixture fixture)
         
         summary.Should().NotBeNull($"Parent run failed or did not finish: {branches}");
         summary!.Status.Should().Be("Succeeded", $"Parent run failed: {branches}");
+    }
+
+    [SkippableFact]
+    public async Task SubWorkflow_NamingAnotherTenantsWorkflow_IsRefusedAtPublish()
+    {
+        // #940: a manual trigger's key is the workflow ref alone, so a step naming another tenant's
+        // workflow once started a run there. Publish refuses the ref, reading it as missing.
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (otherToken, otherWorkspace) = await fixture.CreateIsolatedWorkspaceAsync();
+        var foreignRef = Guid.NewGuid();
+        var foreign = new WorkflowBuilder($"E2E-Foreign-{foreignRef:N}", foreignRef)
+            .AddManualTrigger(out _)
+            .AddDelay(TimeSpan.FromMilliseconds(10))
+            .BuildAndValidate();
+        await fixture.PublishWorkflowAsync(otherToken, otherWorkspace, foreignRef, $"E2E-Foreign-{foreignRef:N}", JsonSerializer.SerializeToElement(foreign, JsonOpts));
+
+        var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
+        var parentRef = Guid.NewGuid();
+        var parent = new WorkflowBuilder($"E2E-Parent-{parentRef:N}", parentRef)
+            .AddManualTrigger(out _)
+            .AddSubWorkflow(foreignRef)
+            .BuildAndValidate();
+
+        using var response = await fixture.Management.As(token).PublishWorkflowRawAsync(
+            workspaceRef, new WorkflowPublishRequest(parentRef, $"E2E-Parent-{parentRef:N}", null, parent, Enable: true));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("WORKFLOW_VALIDATION_FAILED");
+        (await response.Content.ReadAsStringAsync()).Should().Contain("SUBWORKFLOW_TARGET_NOT_FOUND");
     }
 }

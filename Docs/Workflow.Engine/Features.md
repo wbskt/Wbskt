@@ -245,6 +245,11 @@ was failed → `Failed`; cancelled → `Cancelled`.
   `parentRunRefId`, `correlationKey` and `depth` are reserved (`SUBWORKFLOW_INPUT_KEY_RESERVED`).
 * A workflow cannot call itself (`SUBWORKFLOW_SELF_REFERENCE`); nesting is limited to 8 levels
   (`SUBWORKFLOW_DEPTH_EXCEEDED`).
+* The child must be one of the workspace's own workflows. Publish, enable and draft validation refuse
+  a `workflowRefId` the workspace does not have, another workspace's included
+  (`SUBWORKFLOW_TARGET_NOT_FOUND`), and warn when the child has no manual trigger
+  (`SUBWORKFLOW_TARGET_NOT_MANUAL`). At run time the step's start event carries the parent's
+  workspace, so only that workspace's manual triggers can match it.
 * The child is started through its manual trigger. Its `control:end` `output` (allowed only in
   workflows with a manual trigger, `END_OUTPUT_WITHOUT_MANUAL_TRIGGER`) comes back to the parent as
   `childResult` = `{ childRunRefId, status, output }`.
@@ -309,6 +314,7 @@ publish. An expression error fails the node with `EXPRESSION_EVALUATION_ERROR`.
 | Other steps | `INTEGRATION_REF_MISSING`, `TELEGRAM_CHAT_MISSING`, `TELEGRAM_MESSAGE_INVALID`, `TELEGRAM_PARSE_MODE_INVALID`, `TELEGRAM_THREAD_INVALID`, `DISCORD_MESSAGE_INVALID`, `DISCORD_EMBED_INVALID`, `DISCORD_THREAD_INVALID`, `DISCORD_AVATAR_URL_INVALID`, `NTFY_MESSAGE_MISSING`, `NTFY_PRIORITY_INVALID`, `CLIENT_MESSAGE_INVALID`, `CLIENT_MESSAGE_ACK_TIMEOUT` |
 | Triggers | `TRIGGER_CLIENT_REQUIRED`, `TRIGGER_MESSAGE_TYPE_REQUIRED`, `WEBHOOK_PATH_MISSING`, `INVALID_CLIENT_REF`, `INVALID_CRON`, `INVALID_PRESENCE_DURATION`, `INVALID_HOLD_DURATION`, `HOLD_REQUIRES_FILTER` |
 | Warnings | `NO_TRIGGERS`, `ORPHAN_NODE`, `SUSPICIOUS_CORRELATION_KEY` |
+| Workspace references (management host, after the validator) | `CLIENT_NOT_FOUND`, `CLIENT_NOT_REGISTERED` (warning), `SUBWORKFLOW_TARGET_NOT_FOUND`, `SUBWORKFLOW_TARGET_NOT_MANUAL` (warning) |
 
 The management host also refuses a publish that references an integration the workspace does not
 have.

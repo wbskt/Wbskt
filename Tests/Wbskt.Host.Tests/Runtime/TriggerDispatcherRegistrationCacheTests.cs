@@ -154,7 +154,7 @@ public sealed class TriggerDispatcherRegistrationCacheTests
 
         public int Reads { get; private set; }
 
-        public Task<IReadOnlyCollection<TriggerRegistrationRow>> GetActiveByChannelKeysAsync(string channelKind, IReadOnlyCollection<string> channelKeys, CancellationToken ct)
+        public Task<IReadOnlyCollection<TriggerRegistrationRow>> GetActiveByChannelKeysAsync(string channelKind, IReadOnlyCollection<string> channelKeys, int? workspaceId, CancellationToken ct)
         {
             Reads++;
             IReadOnlyCollection<TriggerRegistrationRow> matches = Rows.Where(r => r.TriggerKind == channelKind && channelKeys.Contains(r.TriggerKey)).ToArray();

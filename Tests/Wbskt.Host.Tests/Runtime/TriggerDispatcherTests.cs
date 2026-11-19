@@ -670,6 +670,20 @@ public sealed class TriggerDispatcherTests
         Assert.Equal(6L, Assert.Single(result.Registrations).RegistrationId);
     }
 
+    [Theory]
+    [InlineData(7)]
+    [InlineData(null)]
+    public async Task Registrations_are_read_for_the_events_workspace_when_it_names_one(int? workspaceId)
+    {
+        // #940: a sub-workflow step names its own workspace, so a ref from another one matches nothing.
+        var registrations = new RecordingTriggerRegistrationProvider(CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel));
+        var dispatcher = CreateDispatcher(triggerRegistrationProvider: registrations, runStarter: new RecordingRunStarter([]));
+
+        await dispatcher.DispatchAsync(CreateInboundEvent() with { WorkspaceId = workspaceId }, CancellationToken.None);
+
+        Assert.Equal(workspaceId, Assert.Single(registrations.WorkspaceIds));
+    }
+
     [Fact]
     public async Task A_refusal_at_the_ceiling_is_reported_so_the_user_hears_of_it()
     {
@@ -1268,8 +1282,11 @@ public sealed class TriggerDispatcherTests
         public Task<TriggerRegistrationRow> InsertAsync(TriggerRegistrationRow row, CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteAllByWorkflowDefinitionIdAsync(int workflowDefinitionId, CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<IReadOnlyCollection<TriggerRegistrationRow>> GetActiveByChannelKeysAsync(string channelKind, IReadOnlyCollection<string> channelKeys, CancellationToken ct)
+        public List<int?> WorkspaceIds { get; } = [];
+
+        public Task<IReadOnlyCollection<TriggerRegistrationRow>> GetActiveByChannelKeysAsync(string channelKind, IReadOnlyCollection<string> channelKeys, int? workspaceId, CancellationToken ct)
         {
+            WorkspaceIds.Add(workspaceId);
             IReadOnlyCollection<TriggerRegistrationRow> matches = rows.Where(row => row.TriggerKind == channelKind && channelKeys.Contains(row.TriggerKey)).ToArray();
             return Task.FromResult(matches);
         }

@@ -24,6 +24,7 @@ public sealed class WorkflowQueryService : IWorkflowQueryService
     private readonly WorkflowValidator _validator;
     private readonly IntegrationReferenceCheck _integrationCheck;
     private readonly ClientReferenceCheck? _clientCheck;
+    private readonly SubWorkflowReferenceCheck? _subWorkflowCheck;
     private readonly ILogger<WorkflowQueryService> _logger;
 
     public WorkflowQueryService(
@@ -32,10 +33,12 @@ public sealed class WorkflowQueryService : IWorkflowQueryService
         WorkflowValidator validator,
         IntegrationReferenceCheck integrationCheck,
         ILogger<WorkflowQueryService> logger,
-        ClientReferenceCheck? clientCheck = null)
+        ClientReferenceCheck? clientCheck = null,
+        SubWorkflowReferenceCheck? subWorkflowCheck = null)
     {
         _integrationCheck = integrationCheck;
         _clientCheck = clientCheck;
+        _subWorkflowCheck = subWorkflowCheck;
         _workflowDefinitionProvider = workflowDefinitionProvider;
         _states = states;
         _validator = validator;
@@ -46,11 +49,12 @@ public sealed class WorkflowQueryService : IWorkflowQueryService
     {
         ValidationResult validation = _validator.Validate(definition);
 
-        // The workspace's half - do the integrations and clients the steps name exist here - so a draft
-        // hears what publishing it would.
+        // The workspace's half - do the integrations, clients and child workflows the steps name exist
+        // here - so a draft hears what publishing it would.
         IntegrationReferences integrations = await _integrationCheck.CheckAsync(workspaceId, definition, ct);
         IReadOnlyList<ValidationIssue> clients = _clientCheck is null ? [] : await _clientCheck.CheckAsync(workspaceId, definition, ct);
-        var issues = validation.Issues.Concat(integrations.Issues).Concat(clients).ToList();
+        IReadOnlyList<ValidationIssue> children = _subWorkflowCheck is null ? [] : await _subWorkflowCheck.CheckAsync(workspaceId, definition, ct);
+        var issues = validation.Issues.Concat(integrations.Issues).Concat(clients).Concat(children).ToList();
 
         return new WorkflowValidationResponse(
             issues.All(issue => issue.Severity != ValidationSeverity.Error),
