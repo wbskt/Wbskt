@@ -357,3 +357,13 @@ those are queued and it goes with its step (#1000).
 */
 DROP PROCEDURE IF EXISTS dbo.DeletedClientReadings_InsertRetired;
 GO
+/*
+CK_Clients_Status (#995 item 114) admits only the four ClientStatus values. The API used to store any
+number it was sent, and a client with another value is locked out already (only Registered connects),
+so one found here is moved to Revoked: still locked out, but now shown as revoked and restorable.
+*/
+IF COL_LENGTH('dbo.Clients', 'Status') IS NOT NULL
+BEGIN
+    EXEC sp_executesql N'UPDATE dbo.Clients SET Status = 2 WHERE Status NOT IN (0, 1, 2, 3);';
+END
+GO

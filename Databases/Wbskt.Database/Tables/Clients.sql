@@ -5,7 +5,7 @@ CREATE TABLE dbo.Clients (
     PolicyId       INT              NOT NULL,
     Name           NVARCHAR(100)    NOT NULL,
     SecretHash     VARBINARY(32)    NOT NULL, -- SHA-256 of the secret; the plaintext is shown once, at registration, and never stored
-    Status         TINYINT          NOT NULL           DEFAULT 0, -- 0: Pending, 1: Registered, 2: Revoked
+    Status         TINYINT          NOT NULL           DEFAULT 0, -- 0: Pending, 1: Registered, 2: Revoked, 3: Rejected (ClientStatus)
     IsConnected    BIT              NOT NULL           DEFAULT 0,
     ConnectedAt    DATETIME2(3)     NULL, -- set on connect, cleared on disconnect; uptime = now - ConnectedAt
     LastActivityAt DATETIME2(3)     NULL,
@@ -19,7 +19,8 @@ CREATE TABLE dbo.Clients (
     CONSTRAINT PK_Clients                     PRIMARY KEY (Id),
     CONSTRAINT UQ_Clients_RefId               UNIQUE (RefId),
     CONSTRAINT FK_Clients_RegistrationPolicies FOREIGN KEY (PolicyId)
-        REFERENCES dbo.RegistrationPolicies (Id)
+        REFERENCES dbo.RegistrationPolicies (Id),
+    CONSTRAINT CK_Clients_Status CHECK (Status IN (0, 1, 2, 3))
 );
 GO
 

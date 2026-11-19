@@ -43,6 +43,10 @@ internal sealed class ClientLifecycleService : IClientLifecycleService
     public async Task<Result> UpdateStatusAsync(int workspaceId, Guid clientRefId, ClientStatus status, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Updating client RefId {ClientRefId} status to '{ClientStatus}' in WorkspaceId: {WorkspaceId}", clientRefId, status, workspaceId);
+        if (!Enum.IsDefined(status))
+        {
+            return Result.Failure(StatusInvalid);
+        }
 
         // The same limit registration enforces: approving a pending or revoked client makes it count.
         WorkspacePlan plan = await _plans.GetAsync(workspaceId, cancellationToken);
@@ -73,6 +77,10 @@ internal sealed class ClientLifecycleService : IClientLifecycleService
         ClientStatus status, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Updating {Count} clients to status '{ClientStatus}' in WorkspaceId: {WorkspaceId}", clientRefIds.Count, status, workspaceId);
+        if (!Enum.IsDefined(status))
+        {
+            return Result<BulkClientStatusResponse>.Failure(StatusInvalid);
+        }
 
         // One database call for the whole list, in the order given: approvals compete for the
         // policy's and the workspace's remaining places, and a predictable order decides which ones get them.
@@ -262,6 +270,9 @@ internal sealed class ClientLifecycleService : IClientLifecycleService
         _logger.LogInformation("Set {Count} tags on client ID {ClientId}", normalized.Count, client.Id);
         return Result<ClientTagsResponse>.Success(new ClientTagsResponse(client.RefId, normalized.ToList()));
     }
+
+    // A status the protocol does not define would lock the client out and show it as offline.
+    private static readonly Error StatusInvalid = Error.Validation("CLIENT_STATUS_INVALID", "Status must be Pending, Registered, Revoked or Rejected.");
 
     private static readonly Error PolicyFull = Error.Validation("POLICY_LIMIT_REACHED", "Policy registration limit reached. Cannot approve more clients.");
 }
