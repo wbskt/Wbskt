@@ -27,6 +27,14 @@ internal sealed class TriggerConcurrencyEnforcer : ITriggerConcurrencyEnforcer
             return new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Proceed, TriggerConcurrencyDecision.NoRuns);
         }
 
+        // The queue is asked whether anything is ahead of a new event even when no run is active, so it
+        // does not start ahead of events still waiting on the key. A replay is the queue's head, whose
+        // row stays until it is handed over, so it waits only for an active run.
+        if (policy == WorkflowConcurrencyPolicy.Queue && evt.ReplayFor is null)
+        {
+            return await QueueAsync(registration, evt, ct);
+        }
+
         IReadOnlyCollection<Abstraction.Entities.RunRow> activeRuns = await _runProvider.GetActiveByCorrelationAsync(registration.WorkflowRefId, registration.TriggerNodeId, evt.CorrelationKey, ct);
         if (activeRuns.Count == 0)
         {
@@ -48,9 +56,11 @@ internal sealed class TriggerConcurrencyEnforcer : ITriggerConcurrencyEnforcer
     private async Task<TriggerConcurrencyDecision> QueueAsync(Abstraction.Entities.TriggerRegistrationRow registration, InboundEvent evt, CancellationToken ct)
     {
         string inboundEventJson = JsonSerializer.Serialize(evt, EngineJson.Options);
-        Abstraction.Entities.PendingTriggerEventRow? queued = await _pendingTriggerEventProvider.EnqueueBehindActiveRunAsync(registration.WorkflowRefId, registration.TriggerNodeId, evt.CorrelationKey ?? string.Empty, inboundEventJson, ct);
+        // A replay's own row is still queued until it is handed over, so it is not something to wait behind.
+        Abstraction.Entities.PendingTriggerEventRow? queued = await _pendingTriggerEventProvider.EnqueueBehindAsync(
+            registration.WorkflowRefId, registration.TriggerNodeId, evt.CorrelationKey ?? string.Empty, inboundEventJson, evt.ReplayFor?.PendingEventId, ct);
 
-        // The run it would have waited for finished in the meantime, and nothing else holds the key.
+        // No run is going on the key and nothing is queued on it.
         return queued is null
             ? new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Proceed, TriggerConcurrencyDecision.NoRuns)
             : new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Queued, TriggerConcurrencyDecision.NoRuns);

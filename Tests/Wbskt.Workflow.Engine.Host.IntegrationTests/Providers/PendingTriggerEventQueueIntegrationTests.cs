@@ -53,18 +53,18 @@ public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixt
         await ActiveRunSeeder.StartAsync(fixture.ConnectionString, workflowDefinitionId, workflowRefId, triggerNodeId, correlationKey);
 
         // Enqueue three events with deliberate timing gaps
-        PendingTriggerEventRow first = (await provider.EnqueueBehindActiveRunAsync(
-            workflowRefId, triggerNodeId, correlationKey, """{"n":1}""", CancellationToken.None))!;
+        PendingTriggerEventRow first = (await provider.EnqueueBehindAsync(
+            workflowRefId, triggerNodeId, correlationKey, """{"n":1}""", null, CancellationToken.None))!;
 
         await Task.Delay(50); // ensure distinct EnqueuedAt timestamps
 
-        PendingTriggerEventRow second = (await provider.EnqueueBehindActiveRunAsync(
-            workflowRefId, triggerNodeId, correlationKey, """{"n":2}""", CancellationToken.None))!;
+        PendingTriggerEventRow second = (await provider.EnqueueBehindAsync(
+            workflowRefId, triggerNodeId, correlationKey, """{"n":2}""", null, CancellationToken.None))!;
 
         await Task.Delay(50);
 
-        PendingTriggerEventRow third = (await provider.EnqueueBehindActiveRunAsync(
-            workflowRefId, triggerNodeId, correlationKey, """{"n":3}""", CancellationToken.None))!;
+        PendingTriggerEventRow third = (await provider.EnqueueBehindAsync(
+            workflowRefId, triggerNodeId, correlationKey, """{"n":3}""", null, CancellationToken.None))!;
 
         // Lease and delete three times; they come out in enqueue order.
         var d1 = await provider.LeaseNextAsync(workflowRefId, triggerNodeId, correlationKey, 60, CancellationToken.None);
@@ -89,9 +89,9 @@ public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixt
         string correlationKey = $"lease-test-{Guid.NewGuid():N}";
         Guid triggerNodeId = Guid.NewGuid();
         await ActiveRunSeeder.StartAsync(fixture.ConnectionString, workflowDefinitionId, workflowRefId, triggerNodeId, correlationKey);
-        PendingTriggerEventRow first = (await provider.EnqueueBehindActiveRunAsync(workflowRefId, triggerNodeId, correlationKey, """{"n":1}""", CancellationToken.None))!;
+        PendingTriggerEventRow first = (await provider.EnqueueBehindAsync(workflowRefId, triggerNodeId, correlationKey, """{"n":1}""", null, CancellationToken.None))!;
         await Task.Delay(50);
-        await provider.EnqueueBehindActiveRunAsync(workflowRefId, triggerNodeId, correlationKey, """{"n":2}""", CancellationToken.None);
+        await provider.EnqueueBehindAsync(workflowRefId, triggerNodeId, correlationKey, """{"n":2}""", null, CancellationToken.None);
 
         // A replay whose start failed leaves its row leased: the event behind it must not jump ahead.
         (await provider.LeaseNextAsync(workflowRefId, triggerNodeId, correlationKey, 1, CancellationToken.None))!.Id.Should().Be(first.Id);
@@ -113,9 +113,9 @@ public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixt
         string busyKey = $"busy-{Guid.NewGuid():N}";
         string idleKey = $"idle-{Guid.NewGuid():N}";
         await ActiveRunSeeder.StartAsync(fixture.ConnectionString, workflowDefinitionId, workflowRefId, triggerNodeId, busyKey);
-        await provider.EnqueueBehindActiveRunAsync(workflowRefId, triggerNodeId, busyKey, "{}", CancellationToken.None);
+        await provider.EnqueueBehindAsync(workflowRefId, triggerNodeId, busyKey, "{}", null, CancellationToken.None);
 
-        // A queue whose run ended before its drain: inserted directly, as Enqueue only queues behind a run.
+        // A queue whose run ended before its drain: inserted directly, as Enqueue needs a run or a queue to wait behind.
         await using (var connection = new SqlConnection(fixture.ConnectionString))
         {
             await connection.OpenAsync();
@@ -151,8 +151,8 @@ public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixt
         await ActiveRunSeeder.StartAsync(fixture.ConnectionString, workflowDefinitionId, workflowRefId, triggerA, correlationKey);
         await ActiveRunSeeder.StartAsync(fixture.ConnectionString, workflowDefinitionId, workflowRefId, triggerB, correlationKey);
 
-        await provider.EnqueueBehindActiveRunAsync(workflowRefId, triggerA, correlationKey, """{"trigger":"A"}""", CancellationToken.None);
-        await provider.EnqueueBehindActiveRunAsync(workflowRefId, triggerB, correlationKey, """{"trigger":"B"}""", CancellationToken.None);
+        await provider.EnqueueBehindAsync(workflowRefId, triggerA, correlationKey, """{"trigger":"A"}""", null, CancellationToken.None);
+        await provider.EnqueueBehindAsync(workflowRefId, triggerB, correlationKey, """{"trigger":"B"}""", null, CancellationToken.None);
 
         var fromA = await provider.LeaseNextAsync(workflowRefId, triggerA, correlationKey, 60, CancellationToken.None);
         fromA.Should().NotBeNull();
@@ -186,8 +186,8 @@ public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixt
 
         for (int i = 0; i < rowCount; i++)
         {
-            await provider.EnqueueBehindActiveRunAsync(
-                workflowRefId, triggerNodeId, correlationKey, $"{{\"seq\":{i}}}", CancellationToken.None);
+            await provider.EnqueueBehindAsync(
+                workflowRefId, triggerNodeId, correlationKey, $"{{\"seq\":{i}}}", null, CancellationToken.None);
         }
 
         var dequeued = new System.Collections.Concurrent.ConcurrentBag<long>();
