@@ -26,6 +26,14 @@ BEGIN
 
     BEGIN TRANSACTION;
 
+    -- A frozen account enrols nothing (dbo.WorkspaceAccounts.FrozenAt); the caller checks its own copy
+    -- first, and this is the check that holds when a freeze lands after it.
+    IF EXISTS (SELECT 1 FROM dbo.WorkspaceAccounts WHERE WorkspaceId = @WorkspaceId AND FrozenAt IS NOT NULL)
+    BEGIN
+        ROLLBACK TRANSACTION;
+        THROW 50044, 'The account is frozen.', 1;
+    END
+
     DECLARE @MaxClients INT;
 
     SELECT @MaxClients = MaxClients

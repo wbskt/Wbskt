@@ -21,7 +21,7 @@ internal sealed class WorkspacePlans(IWorkspaceAccountProvider accounts, PlanCat
         WorkspaceAccount? account = await accounts.FindAsync(workspaceId, ct);
         WorkspacePlan plan = account is null
             ? new WorkspacePlan(workspaceId, null, PlanCode.Free, catalog.LimitsFor(PlanCode.Free))
-            : new WorkspacePlan(workspaceId, account.TenantId, account.PlanCode, catalog.LimitsFor(account.PlanCode, account.LimitOverrides));
+            : new WorkspacePlan(workspaceId, account.TenantId, account.PlanCode, catalog.LimitsFor(account.PlanCode, account.LimitOverrides), account.FrozenAt is not null);
 
         cache.Set(Key(workspaceId), plan, CacheDuration);
         return plan;

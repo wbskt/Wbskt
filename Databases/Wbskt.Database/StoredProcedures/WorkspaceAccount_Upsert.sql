@@ -1,6 +1,6 @@
 -- Writes copies of workspace accounts from the auth host, a page at a time: @Accounts is a JSON array
 -- of { workspaceId, tenantId, tenantRefId, planCode, limitOverrides, planRevision, creditsPerMonth,
--- rawReadingsDays, hourlyReadingsDays, runHistoryDays }.
+-- rawReadingsDays, hourlyReadingsDays, runHistoryDays, frozenAt }.
 --
 -- A held copy is replaced only by one at the same or a later PlanRevision, so an event handled after
 -- a newer sync, or a sync page read before a plan change and written after it, cannot put an older
@@ -33,10 +33,11 @@ BEGIN
         CreditsPerMonth DECIMAL(18,4)   NULL,
         RawReadingsDays    INT          NULL,
         HourlyReadingsDays INT          NULL,
-        RunHistoryDays     INT          NULL
+        RunHistoryDays     INT          NULL,
+        FrozenAt       DATETIME2(3)     NULL
     );
 
-    INSERT INTO @Incoming (WorkspaceId, TenantId, TenantRefId, PlanCode, LimitOverrides, PlanRevision, CreditsPerMonth, RawReadingsDays, HourlyReadingsDays, RunHistoryDays)
+    INSERT INTO @Incoming (WorkspaceId, TenantId, TenantRefId, PlanCode, LimitOverrides, PlanRevision, CreditsPerMonth, RawReadingsDays, HourlyReadingsDays, RunHistoryDays, FrozenAt)
     SELECT
         WorkspaceId,
         TenantId,
@@ -47,7 +48,8 @@ BEGIN
         CreditsPerMonth,
         RawReadingsDays,
         HourlyReadingsDays,
-        RunHistoryDays
+        RunHistoryDays,
+        FrozenAt
     FROM OPENJSON(@Accounts)
     WITH
     (
@@ -60,7 +62,8 @@ BEGIN
         CreditsPerMonth DECIMAL(18,4)   '$.CreditsPerMonth',
         RawReadingsDays    INT          '$.RawReadingsDays',
         HourlyReadingsDays INT          '$.HourlyReadingsDays',
-        RunHistoryDays     INT          '$.RunHistoryDays'
+        RunHistoryDays     INT          '$.RunHistoryDays',
+        FrozenAt       DATETIME2(3)     '$.FrozenAt'
     );
 
     DECLARE @Changed INT;
@@ -78,6 +81,7 @@ BEGIN
         wa.RawReadingsDays = i.RawReadingsDays,
         wa.HourlyReadingsDays = i.HourlyReadingsDays,
         wa.RunHistoryDays = i.RunHistoryDays,
+        wa.FrozenAt = i.FrozenAt,
         wa.HeldRawReadingsDays = CASE WHEN s.Shrinks = 1 THEN CASE WHEN wa.RetentionHeldUntil > @Now AND wa.HeldRawReadingsDays > wa.RawReadingsDays THEN wa.HeldRawReadingsDays ELSE wa.RawReadingsDays END ELSE wa.HeldRawReadingsDays END,
         wa.HeldHourlyReadingsDays = CASE WHEN s.Shrinks = 1 THEN CASE WHEN wa.RetentionHeldUntil > @Now AND wa.HeldHourlyReadingsDays > wa.HourlyReadingsDays THEN wa.HeldHourlyReadingsDays ELSE wa.HourlyReadingsDays END ELSE wa.HeldHourlyReadingsDays END,
         wa.HeldRunHistoryDays = CASE WHEN s.Shrinks = 1 THEN CASE WHEN wa.RetentionHeldUntil > @Now AND wa.HeldRunHistoryDays > wa.RunHistoryDays THEN wa.HeldRunHistoryDays ELSE wa.RunHistoryDays END ELSE wa.HeldRunHistoryDays END,
@@ -97,11 +101,12 @@ BEGIN
            OR ISNULL(wa.CreditsPerMonth, -1) <> ISNULL(i.CreditsPerMonth, -1)
            OR ISNULL(wa.RawReadingsDays, -1) <> ISNULL(i.RawReadingsDays, -1)
            OR ISNULL(wa.HourlyReadingsDays, -1) <> ISNULL(i.HourlyReadingsDays, -1)
-           OR ISNULL(wa.RunHistoryDays, -1) <> ISNULL(i.RunHistoryDays, -1));
+           OR ISNULL(wa.RunHistoryDays, -1) <> ISNULL(i.RunHistoryDays, -1)
+           OR ISNULL(wa.FrozenAt, '00010101') <> ISNULL(i.FrozenAt, '00010101'));
 
     SET @Changed = @@ROWCOUNT;
 
-    INSERT INTO dbo.WorkspaceAccounts (WorkspaceId, TenantId, TenantRefId, PlanCode, LimitOverrides, PlanRevision, CreditsPerMonth, RawReadingsDays, HourlyReadingsDays, RunHistoryDays)
+    INSERT INTO dbo.WorkspaceAccounts (WorkspaceId, TenantId, TenantRefId, PlanCode, LimitOverrides, PlanRevision, CreditsPerMonth, RawReadingsDays, HourlyReadingsDays, RunHistoryDays, FrozenAt)
     SELECT
         i.WorkspaceId,
         i.TenantId,
@@ -112,7 +117,8 @@ BEGIN
         i.CreditsPerMonth,
         i.RawReadingsDays,
         i.HourlyReadingsDays,
-        i.RunHistoryDays
+        i.RunHistoryDays,
+        i.FrozenAt
     FROM @Incoming i
     WHERE NOT EXISTS (SELECT 1 FROM dbo.WorkspaceAccounts wa WITH (UPDLOCK, HOLDLOCK) WHERE wa.WorkspaceId = i.WorkspaceId);
 

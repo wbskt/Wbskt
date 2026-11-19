@@ -43,8 +43,11 @@ public record TenantPlanResponse(
     PlanSource Source = PlanSource.Default,
     DateTimeOffset? EndsAt = null);
 
-/// <summary>A workspace and its tenant's plan, for the main database's copy (<c>InternalRoutes.WorkspaceAccounts</c>).</summary>
-public record WorkspaceAccountResponse(int WorkspaceId, int TenantId, Guid TenantRefId, PlanCode PlanCode, PlanLimitOverrides? LimitOverrides, int PlanRevision);
+/// <summary>
+/// A workspace and its tenant's plan, for the main database's copy (<c>InternalRoutes.WorkspaceAccounts</c>).
+/// <see cref="FrozenAt"/> is when Wbskt support froze the tenant, or null.
+/// </summary>
+public record WorkspaceAccountResponse(int WorkspaceId, int TenantId, Guid TenantRefId, PlanCode PlanCode, PlanLimitOverrides? LimitOverrides, int PlanRevision, DateTimeOffset? FrozenAt = null);
 
 /// <summary>
 /// A credit pack bought, as the auth database holds it (<c>InternalRoutes.CreditPurchases</c>): what the

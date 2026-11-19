@@ -24,6 +24,7 @@ internal sealed class RunStarter : IRunStarter
     private const int WorkspaceCreditCapError = 50034; // THROW in dbo.Run_Start
     private const int StartBusyError = 50035; // THROW in dbo.Run_Start
     private const int NotLiveError = 50036; // THROW in dbo.Run_Start
+    private const int AccountFrozenError = 50044; // THROW in dbo.Run_Start
 
     // Tries of a start that times out waiting for its tenant's or workspace's lock, and the pause after
     // each but the last: contention clears in well under a second unless a burst keeps it held.
@@ -179,6 +180,13 @@ internal sealed class RunStarter : IRunStarter
                     definition.WorkspaceId, credits!.RunsRefusedAt, definition.RefId, triggerEvent.ChannelKind);
                 throw new PlanCreditLimitException(definition.WorkspaceId, credits.RunsRefusedAt);
             }
+            catch (SqlException ex) when (ex.Number == AccountFrozenError)
+            {
+                _workflowMetrics?.RecordRunRefused(definition.RefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId);
+                _logger?.LogInformation("Workspace {WorkspaceId}'s account is frozen; workflow {WorkflowRefId} was not started for {Channel}",
+                    definition.WorkspaceId, definition.RefId, triggerEvent.ChannelKind);
+                throw new AccountFrozenException(definition.WorkspaceId);
+            }
             catch (SqlException ex) when (ex.Number == WorkspaceCreditCapError)
             {
                 _workflowMetrics?.RecordRunRefused(definition.RefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId);
@@ -237,7 +245,7 @@ internal sealed class RunStarter : IRunStarter
 
             return new RunStartResult(createdRun.Id, createdRun.RefId, started.RootBranchId, true);
         }
-        catch (Exception ex) when (ex is not PlanRunLimitException and not PlanCreditLimitException and not WorkspaceCreditCapException and not ActiveRunConflictException and not TestRunActiveException and not RunStartBusyException and not WorkflowNotLiveException)
+        catch (Exception ex) when (ex is not PlanRunLimitException and not PlanCreditLimitException and not WorkspaceCreditCapException and not AccountFrozenException and not ActiveRunConflictException and not TestRunActiveException and not RunStartBusyException and not WorkflowNotLiveException)
         {
             _logger?.LogError(ex, "Failed to start run for workflow definition {WorkflowDefinitionId} and trigger {TriggerNodeId}", workflowDefinitionId, triggerNodeId);
             throw;

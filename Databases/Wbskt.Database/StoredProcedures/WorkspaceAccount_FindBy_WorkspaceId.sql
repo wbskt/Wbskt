@@ -12,7 +12,8 @@ BEGIN
         TenantRefId,
         PlanCode,
         LimitOverrides,
-        PlanRevision
+        PlanRevision,
+        FrozenAt
     FROM dbo.WorkspaceAccounts
     WHERE WorkspaceId = @WorkspaceId
       AND RetiredAt IS NULL;

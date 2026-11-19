@@ -11,8 +11,9 @@ CREATE TABLE dbo.Tenants (
     PlanCode NVARCHAR(20) NOT NULL CONSTRAINT DF_Tenants_PlanCode DEFAULT N'Free',
     -- A negotiated contract's limits as JSON (PlanLimitOverrides), over the plan's own; usually NULL.
     PlanLimitOverrides NVARCHAR(MAX) NULL,
-    -- Raised by every plan change (dbo.TenantPlan_Set). The main database's copies carry it, so an
-    -- older copy never replaces a newer one, and a change made from a stale read is refused.
+    -- Raised by every plan change (dbo.TenantPlan_Set), and by a freeze or its end
+    -- (dbo.Tenant_StaffSetFrozen). The main database's copies carry it, so an older copy never replaces
+    -- a newer one, and a change made from a stale read is refused.
     PlanRevision INT NOT NULL CONSTRAINT DF_Tenants_PlanRevision DEFAULT 0,
     PlanChangedAt DATETIME2(3) NULL,
     -- Who set the plan (Wbskt.Models.Billing.PlanSource): Default (never changed), Subscription (the

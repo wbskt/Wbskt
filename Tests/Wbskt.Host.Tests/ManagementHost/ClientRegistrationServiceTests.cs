@@ -55,4 +55,29 @@ public sealed class ClientRegistrationServiceTests
         problem.Extensions["current"].Should().Be(140L);
         bus.Verify(b => b.PublishAsync(It.IsAny<ClientRegistrationInitiatedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_frozen_account_enrols_nothing(bool seenFirst)
+    {
+        var clients = new Mock<IClientProvider>();
+        var policies = new Mock<IRegistrationPolicyProvider>();
+        var bus = new Mock<IEventBus>();
+        var policy = new RegistrationPolicy { Id = 5, RefId = Guid.NewGuid(), WorkspaceId = WorkspaceId, Name = "lab", IsEnabled = true, AutoApproval = true };
+        policies.Setup(p => p.FindByPinAsync("PIN", It.IsAny<CancellationToken>())).ReturnsAsync(policy);
+
+        // Either this host's copy already says so, or the freeze lands after it was read and Client_Create refuses.
+        clients
+            .Setup(p => p.InsertClientAsync(WorkspaceId, policy.Id, "sensor", It.IsAny<byte[]>(), ClientStatus.Registered, It.IsAny<PlanCeiling>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(SqlExceptions.WithNumber(50044, "The account is frozen."));
+        using var metrics = new ManagementMetrics();
+        var service = new ClientRegistrationService(clients.Object, policies.Object, bus.Object, NullLogger<ClientRegistrationService>.Instance, metrics, new FixedWorkspacePlans(PlanCode.Pro, tenantId: 3, frozen: seenFirst));
+
+        var result = await service.InitiateRegistrationAsync(new ClientRegistrationRequest("PIN", "sensor"), CancellationToken.None);
+
+        result.Error.Code.Should().Be("ACCOUNT_FROZEN");
+        clients.Verify(p => p.InsertClientAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<ClientStatus>(), It.IsAny<PlanCeiling>(), It.IsAny<CancellationToken>()), seenFirst ? Times.Never() : Times.Once());
+        bus.Verify(b => b.PublishAsync(It.IsAny<ClientRegistrationInitiatedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 }

@@ -16,7 +16,8 @@ BEGIN
         t.RefId AS TenantRefId,
         t.PlanCode,
         t.PlanLimitOverrides,
-        t.PlanRevision
+        t.PlanRevision,
+        t.FrozenAt
     FROM dbo.Workspaces w
     JOIN dbo.Tenants t ON t.Id = w.TenantId
     WHERE (@AfterWorkspaceId IS NULL OR w.Id > @AfterWorkspaceId)

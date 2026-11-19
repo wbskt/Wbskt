@@ -56,5 +56,5 @@ public sealed class WorkspaceAccountSync(
     }
 
     private static WorkspaceAccount ToAccount(WorkspaceAccountResponse response) =>
-        new(response.WorkspaceId, response.TenantId, response.TenantRefId, response.PlanCode, response.LimitOverrides, response.PlanRevision);
+        new(response.WorkspaceId, response.TenantId, response.TenantRefId, response.PlanCode, response.LimitOverrides, response.PlanRevision, response.FrozenAt);
 }
