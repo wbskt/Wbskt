@@ -157,6 +157,38 @@ public sealed class OutboundMailPipelineTests
         Assert.Equal([MailOutcome.Dropped, MailOutcome.Retried, MailOutcome.Retried, MailOutcome.Sent], outcomes.Seen.Order());
     }
 
+    /// <summary>
+    /// A password reset is good for an hour; arriving hours later it only fails. A failed message whose
+    /// link would expire before its next attempt is dropped, counted as expired, and not tried again.
+    /// </summary>
+    [Fact]
+    public async Task A_message_whose_link_expires_before_the_next_attempt_is_dropped_as_expired()
+    {
+        var sender = new ScriptedSender(failures: int.MaxValue, () => new IOException("relay is down"));
+        await using var harness = new DispatcherHarness(sender, retryDelays: [TimeSpan.FromHours(2)]);
+        using var outcomes = new MailOutcomes(harness.Metrics);
+
+        await harness.StartAsync();
+        harness.Queue.TryWrite(Message() with { ExpiresAtUtc = DateTimeOffset.UtcNow.AddHours(1) });
+        await outcomes.WaitForAsync(1);
+
+        Assert.Equal([MailOutcome.Expired], outcomes.Seen);
+        Assert.Equal(1, sender.Attempts);
+    }
+
+    [Fact]
+    public async Task A_message_whose_link_outlives_the_next_attempt_is_tried_again()
+    {
+        var sender = new ScriptedSender(failures: 1, () => new IOException("relay closed the connection"));
+        await using var harness = new DispatcherHarness(sender);
+
+        await harness.StartAsync();
+        harness.Queue.TryWrite(Message() with { ExpiresAtUtc = DateTimeOffset.UtcNow.AddHours(1) });
+        await sender.WaitForNextAsync();
+
+        Assert.Equal(2, sender.Attempts);
+    }
+
     [Fact]
     public async Task A_full_queue_counts_the_refused_message_as_queue_full()
     {

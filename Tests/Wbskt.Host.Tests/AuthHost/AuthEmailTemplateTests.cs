@@ -144,4 +144,18 @@ public sealed class AuthEmailTemplateTests
         Assert.Contains("href=\"https://site.example.test/privacy\"", mail.HtmlBody);
         Assert.Contains("https://site.example.test/terms", mail.TextBody);
     }
+
+    [Fact]
+    public void A_message_with_a_link_that_expires_carries_its_expiry_and_the_change_notice_does_not()
+    {
+        DateTimeOffset expiry = new(Expiry, TimeSpan.Zero);
+
+        Assert.Equal(expiry, AuthEmailTemplates.PasswordReset(Options, "a@example.test", "a", "t", Expiry).ExpiresAtUtc);
+        Assert.Equal(expiry, AuthEmailTemplates.Invitation(Options, "a@example.test", "Acme", "t", Expiry).ExpiresAtUtc);
+        Assert.Equal(expiry, AuthEmailTemplates.EmailVerification(Options, "a@example.test", "a", "t", Expiry).ExpiresAtUtc);
+        Assert.Equal(expiry, AuthEmailTemplates.EmailChange(Options, "a@example.test", "a", "t", Expiry).ExpiresAtUtc);
+
+        // The one notice with no way to ask for it again keeps the whole retry ladder.
+        Assert.Null(AuthEmailTemplates.EmailChanged(Options, "a@example.test", "a", "b@example.test", "t", Expiry).ExpiresAtUtc);
+    }
 }

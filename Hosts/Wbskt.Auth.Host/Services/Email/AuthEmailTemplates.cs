@@ -1,5 +1,6 @@
 using System.Globalization;
 using Wbskt.Auth.Host.Models;
+using Wbskt.Models;
 
 namespace Wbskt.Auth.Host.Services.Email;
 
@@ -26,7 +27,7 @@ internal static class AuthEmailTemplates
                 new EmailAction(Link(options, "accept-invitation", token), "Accept the invitation"),
                 Expiry(expiresAtUtc),
                 new EmailNote("If you were not expecting this, you can ignore this message. Nothing happens until you accept.")
-            ]));
+            ])) with { ExpiresAtUtc = expiresAtUtc.ToUtcOffset() };
     }
 
     public static OutboundMail EmailVerification(AuthEmailOptions options, string to, string username, string token, DateTime expiresAtUtc)
@@ -40,7 +41,7 @@ internal static class AuthEmailTemplates
                 new EmailAction(Link(options, "verify-email", token), "Confirm this address"),
                 Expiry(expiresAtUtc),
                 new EmailNote("If you did not create this account, someone entered your address by mistake. Ignoring this message leaves the account unusable.")
-            ]));
+            ])) with { ExpiresAtUtc = expiresAtUtc.ToUtcOffset() };
     }
 
     public static OutboundMail PasswordReset(AuthEmailOptions options, string to, string username, string token, DateTime expiresAtUtc)
@@ -54,7 +55,7 @@ internal static class AuthEmailTemplates
                 new EmailAction(Link(options, "reset-password", token), "Choose a new password"),
                 Expiry(expiresAtUtc),
                 new EmailNote("If that was not you, no action is needed and your password has not changed. Signing in everywhere else stays as it was until this link is used.")
-            ]));
+            ])) with { ExpiresAtUtc = expiresAtUtc.ToUtcOffset() };
     }
 
     /// <summary>
@@ -88,7 +89,7 @@ internal static class AuthEmailTemplates
                 new EmailAction(Link(options, "confirm-email-change", token), "Use this address"),
                 Expiry(expiresAtUtc),
                 new EmailNote("Confirming signs you out everywhere; sign in again with this address. If you did not ask for this, ignore this message and nothing changes.")
-            ]));
+            ])) with { ExpiresAtUtc = expiresAtUtc.ToUtcOffset() };
     }
 
     /// <summary>

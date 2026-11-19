@@ -9,4 +9,9 @@ namespace Wbskt.Auth.Host.Services.Email;
 /// and nothing logs a body.
 /// </remarks>
 /// <param name="Kind">Which message this is, for log lines: the subject can carry a tenant's name.</param>
-internal sealed record OutboundMail(string To, string Subject, string TextBody, string HtmlBody, string Kind = "mail");
+/// <param name="ExpiresAtUtc">
+/// When the link in it stops working, for a message that is no use after that: a retry that would
+/// fall past it drops the message instead. Null for one worth delivering late, such as the notice
+/// that an address was changed, which cannot be asked for again.
+/// </param>
+internal sealed record OutboundMail(string To, string Subject, string TextBody, string HtmlBody, string Kind = "mail", DateTimeOffset? ExpiresAtUtc = null);

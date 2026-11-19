@@ -13,8 +13,9 @@ internal sealed class OutboundMailDispatcher : BackgroundService
     /// <summary>
     /// Relays fail transiently (greylisting, a connection reset, a restart, an outage of an hour) far
     /// more often than permanently, and some mail, such as the notice that an address was changed, has
-    /// no way to be asked for again. So a failed message is tried again for about eight hours. A link in
-    /// it that has expired by then fails on its own, as an old link does.
+    /// no way to be asked for again. So a failed message is tried again for about eight hours, unless
+    /// the link in it expires first (<see cref="OutboundMail.ExpiresAtUtc"/>): a password reset is good
+    /// for an hour, and one that arrives later only fails.
     /// </summary>
     private static readonly TimeSpan[] DefaultRetryDelays =
     [
@@ -150,7 +151,17 @@ internal sealed class OutboundMailDispatcher : BackgroundService
         }
 
         var delay = _retryDelays[attempts - 1];
-        if (!_retries.TryAdd(pending with { Attempts = attempts }, _time.GetUtcNow() + delay))
+        var dueAt = _time.GetUtcNow() + delay;
+        if (mail.ExpiresAtUtc is { } expiresAt && dueAt >= expiresAt)
+        {
+            // A reset or invitation link arriving after it stopped working only confuses; the person
+            // asks for a new one, which is what they would have to do with this one anyway.
+            _metrics.RecordMail(MailOutcome.Expired);
+            _logger.LogWarning("Mail {MailKind} to {RecipientFingerprint} was not sent: its link expires before attempt {Attempt} is due. {Failure}.", mail.Kind, recipient, attempts + 1, MailFailure.Describe(failure));
+            return;
+        }
+
+        if (!_retries.TryAdd(pending with { Attempts = attempts }, dueAt))
         {
             _metrics.RecordMail(MailOutcome.Dropped);
             _logger.LogError("Mail {MailKind} to {RecipientFingerprint} was not sent: {Waiting} messages already wait to be tried again. {Failure}.", mail.Kind, recipient, MailRetryList.Capacity, MailFailure.Describe(failure));

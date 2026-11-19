@@ -12,6 +12,9 @@ public static class MailOutcome
     /// <summary>Given up on after the retries: the relay is refusing or not answering.</summary>
     public const string Dropped = "dropped";
 
+    /// <summary>Given up on because the link in it would have expired before the next attempt.</summary>
+    public const string Expired = "expired";
+
     /// <summary>Refused before it was queued because the queue was full: the relay is not keeping up.</summary>
     public const string QueueFull = "queue_full";
 
