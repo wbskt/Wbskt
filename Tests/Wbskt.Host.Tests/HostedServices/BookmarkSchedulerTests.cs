@@ -31,6 +31,20 @@ public sealed class BookmarkSchedulerTests
     }
 
     [Fact]
+    public async Task Tick_dispatches_by_the_branch_id_the_claim_returned_without_reading_the_branch()
+    {
+        var bookmark = CreateBookmark(11, 101, Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3"), Guid.Parse("11111111-1111-1111-1111-111111111113")) with { BranchId = 555 };
+        var provider = new RecordingBookmarkProvider([bookmark]);
+        var branchProvider = new RecordingBranchProvider();
+        var dispatcher = new RecordingRunDispatcher();
+        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(branchProvider, provider), dispatcher, NullLogger<BookmarkScheduler>.Instance, WorkerTestServices.Options());
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.Equal((11L, 555L, BranchExecutionReason.BookmarkResumed), Assert.Single(dispatcher.Requests));
+    }
+
+    [Fact]
     public async Task Tick_leaves_a_ttl_exit_to_the_claim_and_only_dispatches()
     {
         // Arrange: a signal/http wait that timed out via its TTL. Bookmark_ClaimDue sets its timeout edge

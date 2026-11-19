@@ -207,6 +207,7 @@ internal sealed class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
             RefId = reader.GetGuid(reader.GetOrdinal("RefId")),
             RunId = reader.GetInt32(reader.GetOrdinal("RunId")),
             BranchRefId = reader.GetGuid(reader.GetOrdinal("BranchRefId")),
+            BranchId = BranchIdOf(reader),
             NodeId = reader.GetGuid(reader.GetOrdinal("NodeId")),
             WakeConditionKind = reader.GetString(reader.GetOrdinal("WakeConditionKind")),
             MatchKey = reader.GetString(reader.GetOrdinal("MatchKey")),
@@ -215,5 +216,19 @@ internal sealed class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
             TtlPort = reader.IsDBNull(reader.GetOrdinal("TtlPort")) ? null : reader.GetString(reader.GetOrdinal("TtlPort")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
         };
+    }
+
+    // Only the claim and the match return the branch's id; null as well when the branch is gone.
+    private static long? BranchIdOf(DbDataReader reader)
+    {
+        for (int i = 0; i < reader.FieldCount; i++)
+        {
+            if (string.Equals(reader.GetName(i), "BranchId", StringComparison.OrdinalIgnoreCase))
+            {
+                return reader.IsDBNull(i) ? null : Convert.ToInt64(reader.GetValue(i));
+            }
+        }
+
+        return null;
     }
 }

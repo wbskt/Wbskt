@@ -113,8 +113,12 @@ internal sealed class BookmarkResumer : IBookmarkResumer
             foreach (var bookmark in bookmarks)
             {
                 // Read before the claim: while its bookmark exists the branch is parked and nothing else
-                // writes its local state, so the state read here is the one the claim replaces.
-                var branch = await _branchProvider.GetByRefIdAsync(bookmark.BranchRefId, ct);
+                // writes its local state, so the state read here is the one the claim replaces. A wake
+                // with no payload needs only the branch's id, which the match already returned.
+                BranchRow? branch = evt.Payload.Count > 0 || bookmark.BranchId is null
+                    ? await _branchProvider.GetByRefIdAsync(bookmark.BranchRefId, ct)
+                    : null;
+                long branchId = branch?.Id ?? bookmark.BranchId!.Value;
 
                 // Single-row model: claiming (deleting) the bookmark decides the race with a concurrent
                 // TTL expiry or another matcher; a loser must not resume the branch. The winner's wake is
@@ -123,7 +127,7 @@ internal sealed class BookmarkResumer : IBookmarkResumer
                 // branch the next leader resumes with its payload (RunRecoveryService). The branch keeps
                 // its pointer and Waiting status; the re-executed node flips it to Active.
                 bool claimed = evt.Payload.Count > 0
-                    ? await _bookmarkProvider.TryClaimWithWakeAsync(bookmark.RefId, MergeWakePayload(branch.LocalJson, evt.Payload, bookmark.NodeId), ct)
+                    ? await _bookmarkProvider.TryClaimWithWakeAsync(bookmark.RefId, MergeWakePayload(branch!.LocalJson, evt.Payload, bookmark.NodeId), ct)
                     : await _bookmarkProvider.TryClaimAsync(bookmark.RefId, ct);
                 if (!claimed)
                 {
@@ -135,7 +139,7 @@ internal sealed class BookmarkResumer : IBookmarkResumer
 
                 // Dispatch is the last step - the branch is only resumed once the bookmark is
                 // irrevocably claimed and any wake payload is durably merged.
-                await _runDispatcher.DispatchAsync(new BranchExecutionRequest(bookmark.RunId, branch.Id, BranchExecutionReason.BookmarkResumed), ct);
+                await _runDispatcher.DispatchAsync(new BranchExecutionRequest(bookmark.RunId, branchId, BranchExecutionReason.BookmarkResumed), ct);
             }
 
             // We mark the idempotency key as succeeded now that all resumes have been dispatched
