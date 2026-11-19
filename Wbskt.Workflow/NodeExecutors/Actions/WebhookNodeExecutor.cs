@@ -82,7 +82,12 @@ internal sealed class WebhookNodeExecutor(IHttpClientFactory httpClientFactory, 
         try
         {
             HttpContent? content = null;
-            if (config.Body.HasValue)
+            if (config.Body is { ValueKind: JsonValueKind.String } text)
+            {
+                // A body typed as text goes as that text, as the designer says; a Content-Type header overrides it.
+                content = new StringContent(text.GetString()!, Encoding.UTF8, "text/plain");
+            }
+            else if (config.Body.HasValue)
             {
                 content = new StringContent(config.Body.Value.GetRawText(), Encoding.UTF8, "application/json");
             }
