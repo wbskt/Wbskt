@@ -4,6 +4,10 @@ namespace Wbskt.Auth.Host.Services;
 /// Per-account lockout: every wrong password counts, wherever it is typed - signing in, or confirming
 /// the current password before changing it. <see cref="AccountCredentials"/> applies it.
 /// </summary>
+/// <remarks>
+/// wbskt/Wbskt.Admin keeps a copy of <see cref="MaxFailedLogins"/> and <see cref="LoginLockout"/>
+/// (<c>SignInLockout</c>), from which its people pages work out when a lock began. Change both together.
+/// </remarks>
 internal static class AccountLockout
 {
     /// <summary>
