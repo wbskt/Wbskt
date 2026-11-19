@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Routing;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Wbskt.EventBus.Abstractions;
@@ -35,7 +36,7 @@ public sealed class WorkflowRunsControllerTests
         var workflowRefId = Guid.NewGuid();
         var expected = new RunListResponse { Items = [] };
         service.Setup(x => x.ListByWorkflowAsync(WorkspaceId, workflowRefId, "Running", null, 25, 12, It.IsAny<CancellationToken>())).ReturnsAsync(Result<RunListResponse>.Success(expected));
-        var controller = new WorkflowRunsController(service.Object, new WorkflowRunService(Mock.Of<IWorkflowQueryService>(), service.Object, engineClient.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunService>>()));
+        var controller = new WorkflowRunsController(service.Object, new WorkflowRunService(Mock.Of<IWorkflowStateProvider>(), service.Object, engineClient.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunService>>()));
 
         var actual = await controller.List(WorkspaceId, workflowRefId, "Running", new PageRequest { Cursor = "12", Limit = 25 }, ct: CancellationToken.None);
 
@@ -52,7 +53,7 @@ public sealed class WorkflowRunsControllerTests
         var runRefId = Guid.NewGuid();
         var detail = new RunDetailDto(new RunSummaryDto(runRefId, Guid.NewGuid(), 3, "Running", "corr", DateTime.UtcNow, null), []);
         service.Setup(x => x.GetDetailAsync(WorkspaceId, runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(Result<RunDetailDto>.Success(detail));
-        var controller = new WorkflowRunsController(service.Object, new WorkflowRunService(Mock.Of<IWorkflowQueryService>(), service.Object, engineClient.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunService>>()));
+        var controller = new WorkflowRunsController(service.Object, new WorkflowRunService(Mock.Of<IWorkflowStateProvider>(), service.Object, engineClient.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunService>>()));
 
         var actual = await controller.Get(WorkspaceId, runRefId, CancellationToken.None);
 
@@ -159,7 +160,7 @@ public sealed class WorkflowRunsControllerTests
         engineClient.Setup(x => x.SignalAsync(runRefId, "wake", It.IsAny<SignalRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expected);
         var bus = new Mock<IEventBus>();
-        var controller = new WorkflowRunsController(service.Object, new WorkflowRunService(Mock.Of<IWorkflowQueryService>(), service.Object, engineClient.Object, bus.Object, Mock.Of<ILogger<WorkflowRunService>>()));
+        var controller = new WorkflowRunsController(service.Object, new WorkflowRunService(Mock.Of<IWorkflowStateProvider>(), service.Object, engineClient.Object, bus.Object, Mock.Of<ILogger<WorkflowRunService>>()));
 
         var response = await controller.Signal(WorkspaceId, runRefId, "wake", new SignalRequest("wake", JsonSerializer.SerializeToElement(new { ready = true })), CancellationToken.None);
 
@@ -181,7 +182,7 @@ public sealed class WorkflowRunsControllerTests
     {
         var runProvider = new Mock<IRunProvider>();
         var branchProvider = new Mock<IBranchProvider>();
-        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider> { CallBase = true };
         var workflowRefId = Guid.NewGuid();
         definitionProvider.Setup(x => x.FindCurrentByRefIdAsync(workflowRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId));
@@ -207,7 +208,7 @@ public sealed class WorkflowRunsControllerTests
     {
         var workflowRefId = Guid.NewGuid();
         var runProvider = new Mock<IRunProvider>();
-        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider> { CallBase = true };
         var definition = ValidWorkflowBuilder.Build();
         definitionProvider.Setup(x => x.GetByIdAsync(9, It.IsAny<CancellationToken>())).ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId) with
         {
@@ -239,12 +240,53 @@ public sealed class WorkflowRunsControllerTests
     }
 
     [Fact]
+    public async Task A_run_list_reads_the_versions_on_a_page_in_one_call_and_once_per_process()
+    {
+        var workflowRefId = Guid.NewGuid();
+        var runProvider = new Mock<IRunProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        definitionProvider.Setup(x => x.GetByIdsAsync(It.Is<IReadOnlyCollection<int>>(ids => ids.SequenceEqual(new[] { 9 })), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([CreateDefinitionRow(workflowRefId, WorkspaceId) with { Name = "Greenhouse" }]);
+        runProvider.Setup(x => x.ListByWorkspaceAsync(WorkspaceId, null, null, 3, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([CreateRunRow(1, Guid.NewGuid(), workflowRefId, 1, "Running"), CreateRunRow(2, Guid.NewGuid(), workflowRefId, 1, "Running")]);
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        WorkflowRunQueryService Service() => new(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>(), cache: cache);
+
+        var first = await Service().ListByWorkspaceAsync(WorkspaceId, null, null, 2, null, CancellationToken.None);
+        var second = await Service().ListByWorkspaceAsync(WorkspaceId, null, null, 2, null, CancellationToken.None);
+
+        Assert.All(first.Value.Items.Concat(second.Value.Items), r => Assert.Equal("Greenhouse", r.WorkflowName));
+        definitionProvider.Verify(x => x.GetByIdsAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()), Times.Once);
+        definitionProvider.Verify(x => x.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Opening_a_run_checks_its_workspace_without_reading_the_definition()
+    {
+        var runRefId = Guid.NewGuid();
+        var runProvider = new Mock<IRunProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        runProvider.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(5, runRefId, Guid.NewGuid(), 1, "Succeeded"));
+        definitionProvider.Setup(x => x.FindWorkspaceIdAsync(9, It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceId);
+        var branchProvider = new Mock<IBranchProvider>();
+        branchProvider.Setup(x => x.GetAllByRunIdAsync(5, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        var service = new WorkflowRunQueryService(runProvider.Object, branchProvider.Object, definitionProvider.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
+
+        var mine = await service.GetDetailAsync(WorkspaceId, runRefId, CancellationToken.None);
+        var foreign = await service.GetDetailAsync(WorkspaceId + 1, runRefId, CancellationToken.None);
+
+        Assert.True(mine.IsSuccess);
+        Assert.Equal("RUN_NOT_FOUND", foreign.Error.Code);
+        definitionProvider.Verify(x => x.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task ListByWorkflowAsync_returns_no_cursor_when_the_page_lands_exactly_on_the_end()
     {
         // Regression: "a full page means there is more" handed back a cursor even when the results
         // ended exactly on the page boundary, so clients always fetched one empty page.
         var runProvider = new Mock<IRunProvider>();
-        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider> { CallBase = true };
         var workflowRefId = Guid.NewGuid();
         definitionProvider.Setup(x => x.FindCurrentByRefIdAsync(workflowRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId));
@@ -267,7 +309,7 @@ public sealed class WorkflowRunsControllerTests
         // In-flight runs must not count as failures - an active workflow would look broken.
         var workflowRefId = Guid.NewGuid();
         var runProvider = new Mock<IRunProvider>();
-        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider> { CallBase = true };
         definitionProvider.Setup(x => x.FindCurrentByRefIdAsync(workflowRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId));
         runProvider.Setup(x => x.GetStatsAsync(workflowRefId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
@@ -391,7 +433,7 @@ public sealed class WorkflowRunsControllerTests
             });
         runProvider.Setup(x => x.GetListDetailsAsync(It.Is<IReadOnlyCollection<int>>(ids => ids.Single() == 7), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new RunListDetailRow { RunId = 7, IsWaiting = true, WaitingKind = "signal", WaitingNodeId = nodeId, WaitingSignalName = "approve" }]);
-        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider> { CallBase = true };
         definitionProvider.Setup(x => x.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId));
         var branchProvider = new Mock<IBranchProvider>();
@@ -437,7 +479,7 @@ public sealed class WorkflowRunsControllerTests
         // A rate of 0 would read as "everything failed" rather than "nothing to report".
         var workflowRefId = Guid.NewGuid();
         var runProvider = new Mock<IRunProvider>();
-        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider> { CallBase = true };
         definitionProvider.Setup(x => x.FindCurrentByRefIdAsync(workflowRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId));
         runProvider.Setup(x => x.GetStatsAsync(workflowRefId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
@@ -469,7 +511,7 @@ public sealed class WorkflowRunsControllerTests
     public async Task GetStatsAsync_refuses_a_workflow_in_another_workspace()
     {
         var workflowRefId = Guid.NewGuid();
-        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider> { CallBase = true };
         definitionProvider.Setup(x => x.FindCurrentByRefIdAsync(workflowRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId + 1));
         var service = new WorkflowRunQueryService(Mock.Of<IRunProvider>(), Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
@@ -504,7 +546,7 @@ public sealed class WorkflowRunsControllerTests
         // The procedure scopes by workspace itself, so no per-workflow ownership check is needed -
         // and none should be attempted.
         var runProvider = new Mock<IRunProvider>();
-        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider> { CallBase = true };
         var workflowA = Guid.NewGuid();
         var workflowB = Guid.NewGuid();
         runProvider.Setup(x => x.ListByWorkspaceAsync(WorkspaceId, null, null, 11, null, It.IsAny<CancellationToken>())).ReturnsAsync([
@@ -528,7 +570,7 @@ public sealed class WorkflowRunsControllerTests
     {
         var runProvider = new Mock<IRunProvider>();
         var branchProvider = new Mock<IBranchProvider>();
-        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider> { CallBase = true };
         var workflowRefId = Guid.NewGuid();
         definitionProvider.Setup(x => x.FindCurrentByRefIdAsync(workflowRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId + 1));
@@ -545,7 +587,7 @@ public sealed class WorkflowRunsControllerTests
     {
         var runProvider = new Mock<IRunProvider>();
         var branchProvider = new Mock<IBranchProvider>();
-        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider> { CallBase = true };
         var runRefId = Guid.NewGuid();
         var workflowRefId = Guid.NewGuid();
         var run = CreateRunRow(51, runRefId, workflowRefId, 6, "Running");
@@ -568,7 +610,7 @@ public sealed class WorkflowRunsControllerTests
     public async Task GetDefinitionAsync_returns_the_test_copy_a_test_run_ran()
     {
         var runProvider = new Mock<IRunProvider>();
-        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider> { CallBase = true };
         var runRefId = Guid.NewGuid();
         var workflowRefId = Guid.NewGuid();
         runProvider.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(52, runRefId, workflowRefId, 0, "Running") with { IsTest = true });
@@ -587,7 +629,7 @@ public sealed class WorkflowRunsControllerTests
     public async Task GetDefinitionAsync_of_another_workspaces_run_is_not_found()
     {
         var runProvider = new Mock<IRunProvider>();
-        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider> { CallBase = true };
         var runRefId = Guid.NewGuid();
         var workflowRefId = Guid.NewGuid();
         runProvider.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(53, runRefId, workflowRefId, 1, "Running"));
@@ -603,7 +645,7 @@ public sealed class WorkflowRunsControllerTests
     public async Task ResolveCancellableRunAsync_returns_the_run_id_and_changes_nothing()
     {
         var runProvider = new Mock<IRunProvider>();
-        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider> { CallBase = true };
         var runRefId = Guid.NewGuid();
         var workflowRefId = Guid.NewGuid();
         runProvider.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(63, runRefId, workflowRefId, 2, "Running"));
@@ -624,7 +666,7 @@ public sealed class WorkflowRunsControllerTests
     {
         // Cancelling a finished run used to report success while doing nothing at all.
         var runProvider = new Mock<IRunProvider>();
-        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider> { CallBase = true };
         var runRefId = Guid.NewGuid();
         var workflowRefId = Guid.NewGuid();
         runProvider.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(64, runRefId, workflowRefId, 2, "Succeeded"));
@@ -644,7 +686,7 @@ public sealed class WorkflowRunsControllerTests
     {
         var runProvider = new Mock<IRunProvider>();
         var branchProvider = new Mock<IBranchProvider>();
-        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider> { CallBase = true };
         var runRefId = Guid.NewGuid();
         var workflowRefId = Guid.NewGuid();
         runProvider.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(70, runRefId, workflowRefId, 1, "Running"));
@@ -670,7 +712,7 @@ public sealed class WorkflowRunsControllerTests
                 .ReturnsAsync((RunRow?)null);
             var gateway = new WorkflowEngineGateway(Mock.Of<IWorkflowEngineClient>(), Commands.Object, Mock.Of<ICommandSender>());
             var queryService = new WorkflowRunQueryService(Runs.Object, Mock.Of<IBranchProvider>(), Definitions.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
-            Controller = new WorkflowRunsController(queryService, new WorkflowRunService(Mock.Of<IWorkflowQueryService>(), queryService, gateway, QueuedBus.Object, Mock.Of<ILogger<WorkflowRunService>>()))
+            Controller = new WorkflowRunsController(queryService, new WorkflowRunService(Mock.Of<IWorkflowStateProvider>(), queryService, gateway, QueuedBus.Object, Mock.Of<ILogger<WorkflowRunService>>()))
             {
                 ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
             };
@@ -678,7 +720,7 @@ public sealed class WorkflowRunsControllerTests
 
         public Mock<IRunProvider> Runs { get; } = new();
 
-        public Mock<IWorkflowDefinitionProvider> Definitions { get; } = new();
+        public Mock<IWorkflowDefinitionProvider> Definitions { get; } = new() { CallBase = true };
 
         /// <summary>The real bus: what the engine consumes from.</summary>
         public Mock<ICommandSender> Commands { get; } = new();

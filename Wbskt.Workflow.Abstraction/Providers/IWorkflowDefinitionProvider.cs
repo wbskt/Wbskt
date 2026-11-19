@@ -8,6 +8,25 @@ public interface IWorkflowDefinitionProvider
 {
     Task<int?> FindByRefIdVersionAsync(Guid refId, int version, CancellationToken ct);
     Task<WorkflowDefinitionRow> GetByIdAsync(int id, CancellationToken ct);
+
+    /// <summary>The workspace of definition <paramref name="id"/>, without reading its JSON. Null when there is no such row.</summary>
+    async Task<int?> FindWorkspaceIdAsync(int id, CancellationToken ct) => (await GetByIdAsync(id, ct)).WorkspaceId;
+
+    /// <summary>The definitions with these ids, in one read. Ids with no row are left out.</summary>
+    async Task<IReadOnlyCollection<WorkflowDefinitionRow>> GetByIdsAsync(IReadOnlyCollection<int> ids, CancellationToken ct)
+    {
+        List<WorkflowDefinitionRow> rows = [];
+        foreach (int id in ids)
+        {
+            if (await GetByIdAsync(id, ct) is { } row)
+            {
+                rows.Add(row);
+            }
+        }
+
+        return rows;
+    }
+
     Task<WorkflowDefinitionRow?> FindRowByRefIdVersionAsync(Guid refId, int version, CancellationToken ct);
     Task<WorkflowDefinitionRow?> FindCurrentByRefIdAsync(Guid refId, CancellationToken ct);
     Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, CancellationToken ct) => InsertAsync(row, [], ct);

@@ -4,10 +4,13 @@ using Moq;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Workflow;
 using Wbskt.Infrastructure;
+using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Management.Models.Workflow;
+using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
+using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Host.Tests.ManagementHost;
 
@@ -20,17 +23,17 @@ public sealed class WorkflowRunServiceTests
     private const int WorkspaceId = 7;
     private static readonly Guid WorkflowRef = Guid.NewGuid();
 
-    private readonly Mock<IWorkflowQueryService> _definitions = new();
+    private readonly Mock<IWorkflowStateProvider> _states = new();
     private readonly Mock<IWorkflowRunQueryService> _runs = new();
     private readonly Mock<IWorkflowEngineGateway> _engine = new();
     private readonly Mock<IEventBus> _bus = new();
 
-    private WorkflowRunService Service => new(_definitions.Object, _runs.Object, _engine.Object, _bus.Object, NullLogger<WorkflowRunService>.Instance);
+    private WorkflowRunService Service => new(_states.Object, _runs.Object, _engine.Object, _bus.Object, NullLogger<WorkflowRunService>.Instance);
 
     private void WorkflowIs(WorkflowState state)
     {
-        _definitions.Setup(d => d.GetCurrentAsync(WorkspaceId, WorkflowRef, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<WorkflowDefinitionDto>.Success(new WorkflowDefinitionDto(WorkflowRef, 1, state, state == WorkflowState.Enabled ? 1 : null, "wf", null, null!, DateTime.UtcNow)));
+        _states.Setup(s => s.FindAsync(WorkflowRef, WorkspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowStateRow(WorkflowRef, WorkspaceId, state, state == WorkflowState.Enabled ? 1 : null, state == WorkflowState.Enabled ? 1 : null, 1));
     }
 
     private void EngineAnswers(StartRunOutcome outcome)
@@ -108,6 +111,15 @@ public sealed class WorkflowRunServiceTests
         var result = await Service.StartManualAsync(WorkspaceId, WorkflowRef, new StartRunRequest(Guid.NewGuid(), null), CancellationToken.None);
 
         result.Error.Code.Should().Be("WORKFLOW_DEPRECATED");
+        _engine.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task A_workflow_unknown_here_is_a_404_and_the_engine_is_not_asked()
+    {
+        var result = await Service.StartManualAsync(WorkspaceId, WorkflowRef, new StartRunRequest(Guid.NewGuid(), null), CancellationToken.None);
+
+        result.Error.Should().Be(WorkspaceOwnership.WorkflowNotFound);
         _engine.VerifyNoOtherCalls();
     }
 
