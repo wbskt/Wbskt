@@ -2,16 +2,16 @@
 -- but deletes little, because runs and readings were still to go; this removes what is left once they
 -- have: its clients and what they reported about themselves, its policies and message templates, then
 -- its workflows and their definitions. Nobody can read them any more (the workspace is gone from the
--- auth database), and the privacy page promises that deleting removes everything. The event log keeps
--- only RefIds, on its own rows.
+-- auth database), and the privacy page promises that deleting removes everything. The event log is not
+-- touched here: its rows, payloads included, go at the audit retention (dbo.EventLogs_DeleteBefore).
 --
 -- Acts only on a workspace whose account copy says it was retired, and in stages, each only once
 -- nothing still needs the rows:
 --   - a client once its readings are cleared (dbo.ClientReadings_Compact), up to @BatchSize a call,
 --     its children in dbo.Client_Delete's order;
 --   - the policies and templates once no client is left;
---   - the workflows and definitions once no run of them is left (dbo.Run_DeleteRetired, by the plan's
---     days), with their shared variables, run numbers and the workspace's credit cap.
+--   - the workflows and definitions once no run of them is left (dbo.Run_DeleteRetired, at its next sweep
+--     once the workspace is retired), with their shared variables, run numbers and the workspace's credit cap.
 -- The caller repeats it while it returns more than 0. Returns how many rows it deleted.
 CREATE PROCEDURE dbo.Workspace_Purge
     @WorkspaceId INT,

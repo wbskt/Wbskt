@@ -77,7 +77,7 @@ dbo.Tenants.PlanCode ──(copy)──────────►  dbo.Workspac
 - Retiring a deleted workspace (`dbo.Workspace_Retire`) keeps its copy and marks it (`RetiredAt`). The
   month it was part of still counts what it spent: the tenant's credits and messages are summed through
   the copies, so removing it handed the month's usage back, and deleting a workspace and making another
-  reset both meters. The retention sweeps also go on reaching its readings and runs. It adds nothing to
+  reset both meters. The retention sweeps also go on reaching its readings and runs; the run sweep deletes its finished runs at once. It adds nothing to
   the counts of clients and runs going, as it has none left, and it is not read for the tenant's plan
   or listed for message warnings. A sync that updates the copy leaves the mark alone; one that arrives
   after a retire that found no copy inserts an unmarked row, which is harmless, since the workspace
@@ -306,7 +306,9 @@ The engine's `HistoryRetentionGc` (hourly, leader only) hands every plan's days 
 `dbo.Run_DeleteRetired`, which works out each workspace's cutoff and deletes the runs past it, posting
 any credits they had not posted yet first. A run older than `HistoryRetentionWindowElevated` (365 days)
 goes whatever the plan says. Run stats over a range longer than the plan keeps count only the runs
-still kept; credit usage is read from the ledger, so it is not affected.
+still kept; credit usage is read from the ledger, so it is not affected. A deleted workspace's copy
+(`RetiredAt`) keeps no runs: its finished runs go at the next sweep, and `dbo.Workspace_Purge` then
+removes its workflows.
 
 ## Messages
 
@@ -340,7 +342,9 @@ included.
   estimate from the schema, not yet measured on a staging copy). A Team account at its 1.5x throttle
   whose clients send one number per message is about 115 msg/s: 2 days of traffic rows (about 3.8 GB)
   plus 7 days of raw readings (about 70 M, 3.2 GB) is about 7 GB, near the 8 GB
-  `DatabaseNearExpressLimit` alert. A Pro account at 2x keeps about 23 M raw readings (1 GB), a Maker one
+  `DatabaseNearExpressLimit` alert. The readings scale with how many numbers each message carries, which no
+  limit caps: the same account reporting five numbers a message would keep about 16 GB of readings alone.
+  A Pro account at 2x keeps about 23 M raw readings (1 GB), a Maker one
   about 5 M (0.2 GB). That is why raw readings are kept 7 days on every paid self-serve plan, where Pro
   and Team once kept 30 (about 13 GB of readings for one Team account, #952); the hourly roll-up keeps
   charts exact for a year or two. With one Team account able to come near the limit alone, a second Pro
