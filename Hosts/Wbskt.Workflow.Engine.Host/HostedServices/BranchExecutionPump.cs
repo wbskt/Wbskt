@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Options;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Entities;
@@ -7,12 +8,22 @@ using Wbskt.Workflow.Runtime;
 
 namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
+/// <summary>
+/// Runs each dispatched branch on a worker, up to <see cref="WorkflowEngineOptions.BranchWorkerLimit"/> at
+/// once. On stop it reads no further request and drains: every worker finishes the step it is in (the
+/// loop starts no new one) for up to <see cref="WorkflowEngineOptions.BranchDrainGrace"/>, and only then is
+/// the step token cancelled. Cutting steps short on the host token made the next leader run each again,
+/// so an email, webhook or client command already sent went twice.
+/// </summary>
 internal sealed class BranchExecutionPump : BackgroundService
 {
     private readonly ChannelRunDispatcher _dispatcher;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<BranchExecutionPump> _logger;
-    private readonly int _branchWorkerLimit;
+    private readonly TimeSpan _drainGrace;
+    private readonly SemaphoreSlim _concurrencyLimiter;
+    private readonly CancellationTokenSource _stepCts = new();
+    private readonly ConcurrentDictionary<Task, byte> _workers = new();
 
     [ActivatorUtilitiesConstructor]
     public BranchExecutionPump(
@@ -20,7 +31,7 @@ internal sealed class BranchExecutionPump : BackgroundService
         IServiceScopeFactory scopeFactory,
         ILogger<BranchExecutionPump> logger,
         IOptions<WorkflowEngineOptions> options)
-        : this(dispatcher, scopeFactory, logger, options.Value.BranchWorkerLimit)
+        : this(dispatcher, scopeFactory, logger, options.Value.BranchWorkerLimit, options.Value.BranchDrainGrace)
     {
     }
 
@@ -28,46 +39,100 @@ internal sealed class BranchExecutionPump : BackgroundService
         ChannelRunDispatcher dispatcher,
         IServiceScopeFactory scopeFactory,
         ILogger<BranchExecutionPump> logger,
-        int? branchWorkerLimit = null)
+        int? branchWorkerLimit = null,
+        TimeSpan? drainGrace = null)
     {
         _dispatcher = dispatcher;
         _scopeFactory = scopeFactory;
         _logger = logger;
-        _branchWorkerLimit = branchWorkerLimit ?? new WorkflowEngineOptions().BranchWorkerLimit;
+        int limit = branchWorkerLimit ?? new WorkflowEngineOptions().BranchWorkerLimit;
+        _concurrencyLimiter = new SemaphoreSlim(limit, limit);
+        _drainGrace = drainGrace ?? new WorkflowEngineOptions().BranchDrainGrace;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using SemaphoreSlim concurrencyLimiter = new(_branchWorkerLimit, _branchWorkerLimit);
-
         while (await _dispatcher.Reader.WaitToReadAsync(stoppingToken))
         {
-            while (_dispatcher.Reader.TryRead(out BranchExecutionRequest? request))
+            while (!stoppingToken.IsCancellationRequested && _dispatcher.Reader.TryRead(out BranchExecutionRequest? request))
             {
-                await concurrencyLimiter.WaitAsync(stoppingToken);
+                await _concurrencyLimiter.WaitAsync(stoppingToken);
 
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
-                        IBranchLoop loop = scope.ServiceProvider.GetRequiredService<IBranchLoop>();
-                        await loop.RunAsync(request.RunId, request.BranchId, request.Reason, stoppingToken);
-                    }
-                    catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-                    {
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Branch execution failed for RunId {RunId} BranchId {BranchId}.", request.RunId, request.BranchId);
-                        await ContainLeakedBranchAsync(request, stoppingToken);
-                    }
-                    finally
-                    {
-                        concurrencyLimiter.Release();
-                    }
-                }, stoppingToken);
+                Task worker = Task.Run(() => RunBranchAsync(request, stoppingToken), CancellationToken.None);
+                _workers.TryAdd(worker, 0);
+                _ = worker.ContinueWith(finished => _workers.TryRemove(finished, out _), CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
             }
+        }
+    }
+
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        // Cancels the host token, so the reader stops and each loop starts no further node.
+        await base.StopAsync(cancellationToken);
+
+        Task drained = Task.WhenAll(_workers.Keys);
+        if (!drained.IsCompleted)
+        {
+            _logger.LogInformation("Waiting up to {Grace} for {Count} running branch(es) to finish their step.", _drainGrace, _workers.Count);
+            try
+            {
+                await drained.WaitAsync(_drainGrace, cancellationToken);
+            }
+            catch (TimeoutException)
+            {
+                _logger.LogWarning("{Count} branch(es) still running after {Grace}; cutting their step short. The next leader runs it again.", _workers.Count, _drainGrace);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogWarning("Host shutdown timeout reached while draining {Count} branch(es); cutting their step short.", _workers.Count);
+            }
+        }
+
+        await _stepCts.CancelAsync();
+        try
+        {
+            await Task.WhenAll(_workers.Keys).WaitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("{Count} branch(es) did not unwind before the host shutdown timeout.", _workers.Count);
+        }
+    }
+
+    public override void Dispose()
+    {
+        base.Dispose();
+
+        // Only once nothing can release it any more; a worker still unwinding past the shutdown
+        // timeout is abandoned with the process.
+        if (_workers.IsEmpty)
+        {
+            _concurrencyLimiter.Dispose();
+        }
+
+        _stepCts.Dispose();
+    }
+
+    private async Task RunBranchAsync(BranchExecutionRequest request, CancellationToken drainToken)
+    {
+        CancellationToken stepToken = _stepCts.Token;
+        try
+        {
+            await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
+            IBranchLoop loop = scope.ServiceProvider.GetRequiredService<IBranchLoop>();
+            await loop.RunAsync(request.RunId, request.BranchId, request.Reason, drainToken, stepToken);
+        }
+        catch (OperationCanceledException) when (stepToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Branch execution failed for RunId {RunId} BranchId {BranchId}.", request.RunId, request.BranchId);
+            await ContainLeakedBranchAsync(request, stepToken);
+        }
+        finally
+        {
+            _concurrencyLimiter.Release();
         }
     }
 

@@ -19,6 +19,41 @@ public sealed class BranchLoopEndToEndTests
     public async Task RunAsync_manual_trigger_logic_happy_path_completes_branch_and_finalizes_run()
     {
         // Arrange
+        BranchLoop loop = CreateTwoNodeLoop(out InMemoryProviders providers, out RecordingRunFinalizer finalizer);
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(
+            ["BranchStarted", "NodeStarted", "NodeCompleted", "NodeStarted", "NodeCompleted", "BranchCompleted"],
+            providers.HistoryEvents.Select(evt => evt.EventKind));
+        Assert.Equal("Completed", providers.Branches[1001].Status);
+        Assert.Equal([42L], finalizer.RunIds);
+    }
+
+    [Fact]
+    public async Task RunAsync_stops_between_nodes_once_the_engine_is_draining()
+    {
+        // Arrange
+        BranchLoop loop = CreateTwoNodeLoop(out InMemoryProviders providers, out RecordingRunFinalizer finalizer);
+        using var draining = new CancellationTokenSource();
+        await draining.CancelAsync();
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, draining.Token, CancellationToken.None);
+
+        // Assert: the node in hand finished and its outcome was written; the next one is left for recovery.
+        Assert.Equal(
+            ["BranchStarted", "NodeStarted", "NodeCompleted"],
+            providers.HistoryEvents.Select(evt => evt.EventKind));
+        Assert.Equal("Active", providers.Branches[1001].Status);
+        Assert.Equal(Guid.Parse("22222222-2222-2222-2222-222222222222"), providers.Branches[1001].NodeId);
+        Assert.Empty(finalizer.RunIds);
+    }
+
+    private static BranchLoop CreateTwoNodeLoop(out InMemoryProviders providers, out RecordingRunFinalizer finalizer)
+    {
         var triggerNodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var logicNodeId = Guid.Parse("22222222-2222-2222-2222-222222222222");
         WorkflowDefinition definition = new(
@@ -35,9 +70,10 @@ public sealed class BranchLoopEndToEndTests
             [],
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
             7);
-        var providers = new InMemoryProviders(definition, triggerNodeId);
-        var finalizer = new RecordingRunFinalizer();
-        var loop = TestBranchLoop.Create(
+        providers = new InMemoryProviders(definition, triggerNodeId);
+        var recordingFinalizer = new RecordingRunFinalizer();
+        finalizer = recordingFinalizer;
+        return TestBranchLoop.Create(
             providers,
             providers,
             providers,
@@ -52,20 +88,10 @@ public sealed class BranchLoopEndToEndTests
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new BranchTerminator(providers, new Lazy<IRunFinalizer>(() => finalizer)),
+            new BranchTerminator(providers, new Lazy<IRunFinalizer>(() => recordingFinalizer)),
             new NoOpRunCancellationService(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
-
-        // Act
-        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
-
-        // Assert
-        Assert.Equal(
-            ["BranchStarted", "NodeStarted", "NodeCompleted", "NodeStarted", "NodeCompleted", "BranchCompleted"],
-            providers.HistoryEvents.Select(evt => evt.EventKind));
-        Assert.Equal("Completed", providers.Branches[1001].Status);
-        Assert.Equal([42L], finalizer.RunIds);
     }
 
     private sealed class ManualTriggerExecutor : INodeExecutor

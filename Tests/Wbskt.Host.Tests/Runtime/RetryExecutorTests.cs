@@ -640,6 +640,49 @@ public sealed class RetryExecutorTests
     }
 
     [Fact]
+    public async Task RunWithRetryAsync_records_a_finished_side_effect_even_when_the_step_token_is_cancelled_after_it()
+    {
+        // The email has gone when the engine begins to stop. Written on the step's token the key would
+        // stay Pending, and the next leader would read that as "crashed mid-node" and send it again.
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] });
+        using var cts = new CancellationTokenSource();
+        var executor = new ThrowingExecutor(() =>
+        {
+            cts.Cancel();
+            return new NodeExecutionResult.Terminal(BranchTerminalReason.Completed);
+        });
+
+        var idempotencyMock = new Mock<IIdempotencyKeyProvider>();
+        idempotencyMock.Setup(p => p.GetByKeyAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new KeyNotFoundException());
+        idempotencyMock.Setup(p => p.UpsertPendingAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string key, int runId, Guid claimToken, Guid nodeId, int attempt, CancellationToken _) => new IdempotencyKeyRow
+            {
+                Id = 1, KeyValue = key, RunId = runId, BranchRefId = claimToken, NodeId = nodeId, Attempt = attempt, Status = "Pending", CreatedAt = DateTime.UtcNow, ResultJson = null, ErrorJson = null, CompletedAt = null
+            });
+        CancellationToken recordedWith = cts.Token;
+        idempotencyMock.Setup(p => p.MarkSucceededAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Callback((string _, string _, CancellationToken ct) => recordedWith = ct)
+            .ReturnsAsync((string key, string res, CancellationToken _) => new IdempotencyKeyRow
+            {
+                Id = 1, KeyValue = key, RunId = 42, BranchRefId = Guid.NewGuid(), NodeId = Guid.Empty, Attempt = 1, Status = "Succeeded", ResultJson = res, CreatedAt = DateTime.UtcNow, ErrorJson = null, CompletedAt = null
+            });
+
+        NodeExecutionResult result = await RetryExecutor.RunWithRetryAsync(
+            node,
+            CreateContext(),
+            executor,
+            new TestNodeExecutionServices(idempotencyMock.Object),
+            new FixedClock(),
+            cts.Token,
+            new UnlimitedRunCountersProvider(),
+            new DefaultCreditCostCalculator());
+
+        Assert.IsType<NodeExecutionResult.Terminal>(result);
+        Assert.False(recordedWith.CanBeCanceled);
+    }
+
+    [Fact]
     public async Task RunWithRetryAsync_keys_each_visit_to_a_node_separately()
     {
         // A sequential ForEach brings the branch back to the same node on every lap. Each lap is a

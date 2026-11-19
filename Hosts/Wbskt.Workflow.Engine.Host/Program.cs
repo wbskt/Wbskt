@@ -39,6 +39,10 @@ public static class Program
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
         builder.Services.AddEngineHostServices(builder.Configuration);
+
+        // Room for the pump's drain (WorkflowEngineOptions.BranchDrainGrace) and the lease release after
+        // it, inside compose's stop_grace_period of 30 s for this service.
+        builder.Services.Configure<HostOptions>(options => options.ShutdownTimeout = TimeSpan.FromSeconds(25));
         builder.Services.AddSingleton<IWorkerTickMetrics>(sp => sp.GetRequiredService<WorkflowMetrics>());
         builder.Services.AddRabbitMqEventBus(builder.Configuration, consumerAssemblies: [typeof(Program).Assembly]);
         // The bus is started manually by EngineLeadershipCoordinator once this instance is leader,
@@ -100,9 +104,12 @@ public static class Program
         // other hosted service starts checking ILeadershipGate.IsActive. RunRecoveryService is
         // deliberately NOT a hosted service here - EngineLeadershipCoordinator calls its
         // RecoverAsync directly, only once this instance becomes leader.
+        // Hosted services stop in reverse order, so the coordinator stops the bus (no new work arrives),
+        // then the pump drains the branches it is running, and only then is the lease released, so the
+        // standby cannot recover a branch this process is still finishing.
         services.AddHostedService<LeaderElectionService>();
-        services.AddHostedService<EngineLeadershipCoordinator>();
         services.AddHostedService<BranchExecutionPump>();
+        services.AddHostedService<EngineLeadershipCoordinator>();
         services.AddHostedService<BookmarkScheduler>();
         services.AddHostedService<BookmarkOrphanGc>();
         services.AddHostedService<ScheduledFireTicker>();
