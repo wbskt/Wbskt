@@ -172,6 +172,14 @@ administrator cannot disable the account itself, which only staff can, from the 
 It refuses self-suspension (`AUTH_CANNOT_SUSPEND_SELF`) and suspending the last administrator
 (`THROW 50008`); a suspended administrator does not count toward the guard.
 
+> An **administrator**, for the last-administrator guard (`dbo.Tenant_Administrators`), is an active,
+> unsuspended member who effectively holds **both** `users.manage` and `roles.manage` tenant-wide, which
+> in practice means the `Admin` role with no user-level deny on either. Counting `users.manage` alone let
+> the only `Admin` deny themselves `roles.manage`, or be removed or suspended by someone whose custom
+> role carries `users.manage`, after which nobody could create, assign or change a role again (#948).
+> Every guarded change (role and permission grants and removals, removing, suspending and leaving,
+> deleting an account) refuses to leave a tenant that had such an administrator with none.
+>
 > The last-administrator guard counts direct `UserRoles` and `UserPermissions` only; an
 > administrator reached through a group is not counted. That undercounts, so the guard occasionally
 > refuses a removal it could safely allow — the deliberate direction to be wrong in, since the
