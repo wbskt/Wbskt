@@ -118,6 +118,9 @@ services:
       dockerfile: deploy/docker/Dockerfile.migrator
     environment:
       <<: *sql-logins
+      # Production sets it, so the post-deployment branch that creates wbskt_admin_reader and grants it
+      # the [admin] views runs here too, on every pull request, rather than first on prod.
+      SQL_ADMIN_READER_PASSWORD: Wb1-e2e-Host-Login
       AUTH_DB_CONNECTION_STRING: Server=sql;Database=Wbskt.Database.Auth;User Id=sa;Password=Welcome1234;TrustServerCertificate=True;Encrypt=True;
       DEFAULT_DB_CONNECTION_STRING: Server=sql;Database=Wbskt.Database;User Id=sa;Password=Welcome1234;TrustServerCertificate=True;Encrypt=True;
       # Password123!, the development and E2E root password (the same default as Deploy-Databases.ps1).

@@ -32,6 +32,7 @@ migrate() {
     -e SQL_AUTH_PASSWORD="$host_password" \
     -e SQL_MANAGEMENT_PASSWORD="$host_password" \
     -e SQL_ENGINE_PASSWORD="$host_password" \
+    -e SQL_ADMIN_READER_PASSWORD="$host_password" \
     -e MIGRATE_FRESH="$fresh" \
     "$image"
 }
@@ -109,8 +110,8 @@ operations() {
 
 check_converged() {
   local pass=$1
-  report "$auth_db" Wbskt.Database.Auth.dacpac "deploy-report-$pass" /v:AuthHostPassword="$host_password"
-  report "$core_db" Wbskt.Database.dacpac "deploy-report-$pass" /v:ManagementHostPassword="$host_password" /v:EngineHostPassword="$host_password"
+  report "$auth_db" Wbskt.Database.Auth.dacpac "deploy-report-$pass" /v:AuthHostPassword="$host_password" /v:AdminReaderPassword="$host_password"
+  report "$core_db" Wbskt.Database.dacpac "deploy-report-$pass" /v:ManagementHostPassword="$host_password" /v:EngineHostPassword="$host_password" /v:AdminReaderPassword="$host_password"
   for db in "$auth_db" "$core_db"; do
     if grep -q '<Operation ' "$out/deploy-report-$pass-$db.xml"; then
       echo "::error::$db still differs from this commit's DACPAC after the $pass upgrade:"
@@ -149,8 +150,8 @@ left_behind() {
   fi
 }
 
-left_behind "$auth_db" Wbskt.Database.Auth.dacpac /v:AuthHostPassword="$host_password"
-left_behind "$core_db" Wbskt.Database.dacpac /v:ManagementHostPassword="$host_password" /v:EngineHostPassword="$host_password"
+left_behind "$auth_db" Wbskt.Database.Auth.dacpac /v:AuthHostPassword="$host_password" /v:AdminReaderPassword="$host_password"
+left_behind "$core_db" Wbskt.Database.dacpac /v:ManagementHostPassword="$host_password" /v:EngineHostPassword="$host_password" /v:AdminReaderPassword="$host_password"
 
 if [[ $status -eq 0 ]]; then
   echo "Upgrade from $PREVIOUS_IMAGE rehearsed: no data lost, schema matches this commit, reruns cleanly, nothing left behind."
