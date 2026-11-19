@@ -46,7 +46,7 @@ dbo.Tenants.PlanCode ──(copy)──────────►  dbo.Workspac
 ```
 
 - **The auth host owns the plan** (`dbo.Tenants`). `PUT /api/internal/tenants/{tenantRef}/plan` changes
-  it through `TenantPlanService`, which the payment webhook will call too. A change raises
+  it through `TenantPlanService`, which the payment webhook's sync (`TenantBillingSync`) calls too. A change raises
   `PlanRevision` and writes `TenantPlanChangedEvent` to the outbox in the same transaction
   (`dbo.TenantPlan_Set`). A change worked out from a stale read is refused, and asking for the plan
   already held is a no-op, so a webhook delivered twice is harmless.
@@ -94,7 +94,7 @@ dbo.Tenants.PlanCode ──(copy)──────────►  dbo.Workspac
 |---|---|---|
 | Clients | `dbo.Client_Create` (registration) and `dbo.Client_UpdateStatuses` (approval) | 50025, **409** `PLAN_CLIENT_LIMIT_REACHED` |
 | Runs going at once | `dbo.Run_Start` | 50026; a trigger's dispatch reads `Refused`, a test run or a manual run is **409** `PLAN_RUN_LIMIT_REACHED` |
-| Messages a month | `MessageAllowanceMonitor`, then each socket host | Free at 1×, Maker, Pro and Team at 2×, Business never: each client held to one message a minute until the 1st (see Messages) |
+| Messages a month | `MessageAllowanceMonitor`, then each socket host | Free at 1×, Maker and Pro at 2×, Team at 1.5×, Business never: each client held to one message a minute until the 1st (see Messages) |
 | Workflow credits a month | `dbo.Run_Start` | 50033; a trigger's dispatch reads `Refused`, a test run or a manual run is **409** `PLAN_CREDIT_LIMIT_REACHED` |
 | A workspace's credit cap | `dbo.Run_Start` | 50034; a trigger's dispatch reads `Refused`, a test run or a manual run is **409** `WORKSPACE_CREDIT_CAP_REACHED` |
 | (a start that waits too long for a lock) | `dbo.Run_Start` | 50035; retried, then a trigger's event is redelivered and a test run or a manual run is **503** `WORKSPACE_BUSY` |
