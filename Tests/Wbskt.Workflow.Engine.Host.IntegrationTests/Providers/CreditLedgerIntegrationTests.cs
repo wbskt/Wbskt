@@ -269,10 +269,27 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         var counters = ProviderFactory.RunCounters(fixture.ConnectionString);
         (await runs.GetByIdAsync(capped, CancellationToken.None)).CreditBudget.Should().Be(0.2m, "a capped run leases a twentieth of the cap at a time");
         (await counters.TryChargeAsync((int)capped, 3m, CancellationToken.None)).Should().Be(new CreditCharge(3m, 3m), "the lease grows up to what the cap left");
-        (await counters.TryChargeAsync((int)capped, 0.01m, CancellationToken.None))!.Refusal.Should().Be(CreditRefusal.WorkspaceCap);
+        (await counters.TryChargeAsync((int)capped, 0.01m, CancellationToken.None))!.Refusal.Should().Be(CreditRefusal.RunBudget, "the cap is gone by now, so what holds the run is the ceiling its start was cut to");
         (await runs.GetByIdAsync(uncapped, CancellationToken.None)).CreditBudget.Should().Be(49.94m, "without the cap it leases a twentieth of the 998.8 the plan has left: less the first run's start and the capped run's 0.2 lease");
         (await counters.TryChargeAsync((int)uncapped, 0m, CancellationToken.None)).Should().Be(new CreditCharge(0m, 100m), "and may grow to its whole budget");
         first.Should().BePositive();
+    }
+
+    /// <summary>#954: a run whose start the cap cut, refused at that ceiling, names the cap rather than its own budget.</summary>
+    [SkippableFact]
+    public async Task A_run_cut_to_what_the_cap_left_is_refused_for_the_cap()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        await StartAsync(wd, startCost: 1m, budget: 1m);
+        await SetCapAsync(workspaceId, 4m);
+        long capped = await StartAsync(wd, credits: new PlanCredits(1000m, null));
+
+        var counters = ProviderFactory.RunCounters(fixture.ConnectionString);
+        (await counters.TryChargeAsync((int)capped, 3m, CancellationToken.None))!.Refusal.Should().BeNull();
+        (await counters.TryChargeAsync((int)capped, 0.01m, CancellationToken.None))!.Refusal.Should().Be(CreditRefusal.WorkspaceCap);
     }
 
     /// <summary>#954: a run stopped by its own budget says so, rather than the account's month or a cap.</summary>
