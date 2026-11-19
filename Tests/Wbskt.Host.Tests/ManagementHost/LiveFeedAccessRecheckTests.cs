@@ -3,8 +3,10 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moq;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Hubs;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Primitives.Constants;
@@ -25,6 +27,7 @@ public sealed class LiveFeedAccessRecheckTests
     private readonly Mock<IGroupManager> _groups = new();
     private readonly LiveFeedConnections _connections = new();
     private readonly WorkspaceAccessCache _cache = new(new ConfigurationBuilder().Build());
+    private readonly AccessTokenRevocation _revocation = new(null, Options.Create(new AccessTokenOptions()), TimeProvider.System, NullLogger<AccessTokenRevocation>.Instance);
     private readonly LiveFeedAccessRecheck _recheck;
 
     public LiveFeedAccessRecheckTests()
@@ -32,7 +35,7 @@ public sealed class LiveFeedAccessRecheckTests
         var hub = new Mock<IHubContext<NotificationHub>>();
         hub.Setup(h => h.Groups).Returns(_groups.Object);
         var services = new ServiceCollection().AddSingleton(_auth.Object).BuildServiceProvider();
-        _recheck = new LiveFeedAccessRecheck(_cache, _connections, hub.Object, services.GetRequiredService<IServiceScopeFactory>(), NullLogger<LiveFeedAccessRecheck>.Instance);
+        _recheck = new LiveFeedAccessRecheck(_cache, _revocation, _connections, hub.Object, services.GetRequiredService<IServiceScopeFactory>(), NullLogger<LiveFeedAccessRecheck>.Instance);
 
         Answer(Kept, Result<WorkspaceAccess>.Success(Access(1, PermissionNames.WorkspaceJoin, PermissionNames.LogsRead)));
         Answer(Lost, Result<WorkspaceAccess>.Failure(Error.Forbidden("WORKSPACE_FORBIDDEN", "Access denied to workspace.")));
@@ -95,6 +98,29 @@ public sealed class LiveFeedAccessRecheckTests
         await _recheck.Pass;
 
         connection.Workspaces.Should().BeEmpty();
+        await _recheck.StopAsync(CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Signing out everywhere or changing the password revokes the token a connection opened with, and
+    /// the auth host then answers 401 for it; the revocation alone starts a pass (#959).
+    /// </summary>
+    [Fact]
+    public async Task A_revoked_token_loses_its_feeds_without_any_access_change()
+    {
+        var workspace = Guid.NewGuid();
+        Answer(workspace, Result<WorkspaceAccess>.Failure(Error.Unauthorized("TOKEN_REVOKED", "The token was revoked.")));
+        await _recheck.StartAsync(CancellationToken.None);
+        var connection = _connections.Open("c1", Token);
+        connection.Workspaces[workspace] = 5;
+        connection.Clients[Guid.NewGuid()] = new WatchedClient(workspace, 50);
+
+        await _revocation.RevokeUserAsync(Guid.NewGuid());
+        await _recheck.Pass;
+
+        connection.Workspaces.Should().BeEmpty();
+        connection.Clients.Should().BeEmpty();
+        _groups.Verify(g => g.RemoveFromGroupAsync("c1", NotificationHub.GroupName(5), It.IsAny<CancellationToken>()), Times.Once);
         await _recheck.StopAsync(CancellationToken.None);
     }
 

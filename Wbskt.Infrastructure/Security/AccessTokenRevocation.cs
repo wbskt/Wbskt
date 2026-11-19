@@ -152,6 +152,14 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
 
     public bool IsSessionRevoked(Guid sessionId) => _sessions.ContainsKey(sessionId);
 
+    /// <summary>
+    /// Raised when this host learns of a revocation it did not hold yet: a user's watermark moved on, or
+    /// a session ended, here or announced by another host. Something holding a token past its check (a
+    /// live connection that validated only when it opened) listens to drop what that token reaches.
+    /// Raised on the thread that applied it, so a handler only schedules its work.
+    /// </summary>
+    public event Action? Revoked;
+
     public bool IsRevoked(Guid userRef, DateTimeOffset issuedAt)
     {
         if (!_watermarks.TryGetValue(userRef, out Watermark? watermark))
@@ -299,13 +307,52 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
             && long.TryParse(text[(separator + 1)..], out revokedAt);
     }
 
-    private void Apply(Guid userRef, Watermark watermark) =>
-        _watermarks.AddOrUpdate(userRef, watermark, (_, existing) => new Watermark(
-            Math.Max(existing.RevokedAt, watermark.RevokedAt),
-            Math.Max(existing.ExpiresAt, watermark.ExpiresAt)));
+    private void Apply(Guid userRef, Watermark watermark)
+    {
+        // The resync applies every stored entry again each time; only one that moves the watermark is news.
+        bool moved = false;
+        _watermarks.AddOrUpdate(
+            userRef,
+            _ =>
+            {
+                moved = true;
+                return watermark;
+            },
+            (_, existing) =>
+            {
+                moved = watermark.RevokedAt > existing.RevokedAt;
+                return new Watermark(Math.Max(existing.RevokedAt, watermark.RevokedAt), Math.Max(existing.ExpiresAt, watermark.ExpiresAt));
+            });
 
-    private void ApplySession(Guid sessionId, long expiresAt) =>
+        if (moved)
+        {
+            RaiseRevoked();
+        }
+    }
+
+    private void ApplySession(Guid sessionId, long expiresAt)
+    {
+        if (_sessions.TryAdd(sessionId, expiresAt))
+        {
+            RaiseRevoked();
+            return;
+        }
+
         _sessions.AddOrUpdate(sessionId, expiresAt, (_, existing) => Math.Max(existing, expiresAt));
+    }
+
+    private void RaiseRevoked()
+    {
+        try
+        {
+            Revoked?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            // A listener's failure must not stop the revocation itself, which has already applied.
+            _logger.LogError(ex, "A listener for access-token revocations failed");
+        }
+    }
 
     /// <summary>Tokens issued before <see cref="RevokedAt"/> are refused until <see cref="ExpiresAt"/>, both unix seconds.</summary>
     private sealed record Watermark(long RevokedAt, long ExpiresAt);
