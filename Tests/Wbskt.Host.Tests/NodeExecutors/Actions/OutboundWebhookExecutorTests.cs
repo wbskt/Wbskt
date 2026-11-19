@@ -322,8 +322,20 @@ public sealed class OutboundWebhookExecutorTests
         var failure = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(BuildContext("https://example.test/webhook", "GET"), CancellationToken.None));
 
         Assert.Equal("WEBHOOK_HTTP_ERROR", failure.ErrorCode);
-        Assert.True(failure.Message.Length < WebhookNotificationConfig.MaxResponseBytes + 16);
-        Assert.EndsWith("…", failure.Message);
+        Assert.Equal($"502: {new string('e', WebhookNotificationConfig.MaxErrorDetailChars)}…", failure.Message);
+    }
+
+    [Fact]
+    public async Task An_error_reply_is_not_cut_inside_a_surrogate_pair()
+    {
+        // 1023 plain characters, then an emoji whose two halves straddle the limit.
+        string body = new string('e', WebhookNotificationConfig.MaxErrorDetailChars - 1) + "😀" + "tail";
+        var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = new StringContent(body) });
+        var executor = CreateExecutor(handler);
+
+        var failure = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(BuildContext("https://example.test/webhook", "GET"), CancellationToken.None));
+
+        Assert.Equal($"400: {new string('e', WebhookNotificationConfig.MaxErrorDetailChars - 1)}…", failure.Message);
     }
 
     [Fact]
