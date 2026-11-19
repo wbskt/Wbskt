@@ -12,4 +12,11 @@ public enum NotifyScope
     /// implement <c>IClientContext</c>.
     /// </summary>
     Client,
+
+    /// <summary>
+    /// Every console connection joined to any of the tenant's workspaces still in use. For news about the
+    /// account as a whole, such as its pooled credits, which each workspace's console has to show. The
+    /// event must implement <c>ITenantContext</c>.
+    /// </summary>
+    Tenant,
 }

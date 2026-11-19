@@ -656,6 +656,13 @@ once per threshold. `monthStart` (`yyyy-MM-dd`) is the month it was reached in: 
 `createdAtUtc`'s when a 100% crossing at a month's end is announced in the first days of the next. A run refused for the cap is **409** `WORKSPACE_CREDIT_CAP_REACHED` on a test run,
 and `Refused` (reported with `reason: WorkspaceCreditCap`) for a trigger.
 
+An account whose workspaces together spend 80% and then 100% of the credits its plan includes raises
+`TenantCreditAllowanceReachedEvent` once per threshold and month (Warning,
+`OnTenantCreditAllowanceReachedEvent { percent, creditsPerMonth, creditsSpent, monthStart, createdAtUtc }`).
+It is pushed to every workspace of the account still in use, since the credits are pooled. Past 100% new
+runs draw on credit packs, and are refused once there is nothing left to draw on (Business carries on and
+is invoiced).
+
 An account found over its monthly messages raises `WorkspaceMessageLimitReachedEvent` once per workspace
 and month (Warning, `OnWorkspaceMessageLimitReachedEvent { messagesPerMonth, messagesUsed, throttled, createdAtUtc }`),
 within about a minute of the crossing. `throttled` is true on Free; on a paid plan nothing is slowed.
