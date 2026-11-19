@@ -1,0 +1,5 @@
+root = false
+
+[*.cs]
+# A log message whose holes do not match its arguments is dropped at run time; refuse it at build.
+dotnet_diagnostic.CA2017.severity = error
