@@ -783,6 +783,9 @@
           "interval": {
             "$ref": "#/components/schemas/BillingInterval"
           },
+          "limits": {
+            "$ref": "#/components/schemas/PlanLimits"
+          },
           "plan": {
             "$ref": "#/components/schemas/PlanCode"
           }
@@ -790,9 +793,17 @@
         "required": [
           "plan",
           "interval",
-          "amountUsd"
+          "amountUsd",
+          "limits"
         ],
         "type": "object"
+      },
+      "PlanSource": {
+        "enum": [
+          "Default",
+          "Subscription",
+          "Operator"
+        ]
       },
       "RefreshTokenRequest": {
         "properties": {
@@ -1012,6 +1023,12 @@
             },
             "type": "array"
           },
+          "endsAt": {
+            "format": "date-time"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/PlanLimits"
+          },
           "plan": {
             "$ref": "#/components/schemas/PlanCode"
           },
@@ -1020,6 +1037,9 @@
               "$ref": "#/components/schemas/PlanOffer"
             },
             "type": "array"
+          },
+          "source": {
+            "$ref": "#/components/schemas/PlanSource"
           },
           "subscription": {
             "oneOf": [
@@ -1036,7 +1056,10 @@
           "plan",
           "subscription",
           "plans",
-          "creditPacks"
+          "creditPacks",
+          "source",
+          "endsAt",
+          "limits"
         ],
         "type": "object"
       },

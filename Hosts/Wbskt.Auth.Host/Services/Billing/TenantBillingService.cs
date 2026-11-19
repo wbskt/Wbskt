@@ -3,6 +3,7 @@ using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Models;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Billing;
 using Wbskt.Models;
 using Wbskt.Models.Billing;
 
@@ -16,9 +17,13 @@ internal sealed class TenantBillingService(
     IOptions<BillingOptions> options,
     TimeProvider clock,
     TenantBillingSync sync,
+    PlanCatalog catalog,
     ILogger<TenantBillingService> logger) : ITenantBillingService
 {
     private static readonly Error TenantNotFound = Error.Forbidden("TENANT_NOT_FOUND", "Tenant not found.");
+    private static readonly Error PlanSetByOperator = Error.Conflict(
+        "BILLING_PLAN_SET_BY_OPERATOR",
+        "Wbskt has set this tenant's plan, so a subscription would charge beside it and change nothing. Contact us to change the plan; credit packs can still be bought.");
     private static readonly Error NotConfigured = Error.Unavailable("BILLING_UNAVAILABLE", "Payments are not set up on this deployment.");
 
     public async Task<Result<Page<CreditPurchaseResponse>>> GetCreditPurchasesAsync(PageRequest page, DateTimeOffset? expiresAfter, CancellationToken ct)
@@ -52,6 +57,7 @@ internal sealed class TenantBillingService(
 
         TenantSubscription? subscription = SubscriptionPlan.Deciding(await billing.GetSubscriptionsAsync(tenantId, ct));
         BillingOptions offers = options.Value;
+        bool operatorPlan = tenant.IsOperatorPlanAt(clock.GetUtcNow().UtcDateTime);
         return new TenantBillingResponse(
             tenant.PlanCode,
             subscription is null ? null : new TenantSubscriptionResponse(
@@ -64,16 +70,19 @@ internal sealed class TenantBillingService(
                 subscription.ScheduledPlan,
                 subscription.ScheduledInterval,
                 subscription.ScheduledAt?.ToUtcOffset()),
-            gateway.IsConfigured
+            gateway.IsConfigured && !operatorPlan
                 ? offers.Plans
                     .SelectMany(p => p.Value.Keys
                         .Where(interval => offers.FindOfferedPlanProduct(p.Key, interval) is not null)
-                        .Select(interval => new PlanOffer(p.Key, interval, PlanPrices.UsdFor(p.Key, interval) ?? 0m)))
+                        .Select(interval => new PlanOffer(p.Key, interval, PlanPrices.UsdFor(p.Key, interval) ?? 0m, catalog.LimitsFor(p.Key))))
                     .OrderBy(o => o.Plan).ThenBy(o => o.Interval).ToList()
                 : [],
             gateway.IsConfigured
                 ? offers.CreditPacks.Where(p => p.Value.IsOffered).Select(p => new CreditPackOffer(p.Key, p.Value.Credits, p.Value.PriceUsd)).OrderBy(o => o.Credits).ToList()
-                : []);
+                : [],
+            tenant.Source,
+            tenant.Source == PlanSource.Operator ? tenant.EndsAt?.ToUtcOffset() : null,
+            catalog.LimitsFor(tenant.PlanCode, tenant.LimitOverrides));
     }
 
     public async Task<Result<BillingCheckoutResponse>> CheckoutAsync(int tenantId, int userId, BillingCheckoutRequest request, CancellationToken ct)
@@ -97,6 +106,13 @@ internal sealed class TenantBillingService(
         // A plan checkout still open is handed out again, so two tabs or two admins pay for one subscription.
         DateTime now = clock.GetUtcNow().UtcDateTime;
         bool plan = request.Plan is not null;
+
+        // The sync never moves a plan an operator set (TenantBillingSync.ApplyAsync), so a subscription
+        // would be paid for and change nothing until that plan ends. Credit packs are still sold.
+        if (plan && tenant.IsOperatorPlanAt(now))
+        {
+            return PlanSetByOperator;
+        }
         if (plan && await billing.FindOpenCheckoutAsync(tenantId, gateway.Name, product.Value, now, ct) is { } open)
         {
             return new BillingCheckoutResponse(open);

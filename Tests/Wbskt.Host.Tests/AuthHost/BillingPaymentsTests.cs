@@ -12,6 +12,7 @@ using Wbskt.Auth.Host.Services.Billing;
 using Wbskt.Auth.Host.Telemetry;
 using Wbskt.Auth.Models;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Billing;
 using Wbskt.Infrastructure.Events.Outbox;
 using Wbskt.Models.Billing;
 
@@ -868,11 +869,41 @@ public sealed class BillingPaymentsTests
         var read = await Billing().GetAsync(9, CancellationToken.None);
 
         Assert.Equal(
-            [new PlanOffer(PlanCode.Maker, BillingInterval.Monthly, 5m), new PlanOffer(PlanCode.Maker, BillingInterval.Yearly, 50m), new PlanOffer(PlanCode.Pro, BillingInterval.Monthly, 24m)],
+            [
+                new PlanOffer(PlanCode.Maker, BillingInterval.Monthly, 5m, PlanCatalog.BuiltIn[PlanCode.Maker]),
+                new PlanOffer(PlanCode.Maker, BillingInterval.Yearly, 50m, PlanCatalog.BuiltIn[PlanCode.Maker]),
+                new PlanOffer(PlanCode.Pro, BillingInterval.Monthly, 24m, PlanCatalog.BuiltIn[PlanCode.Pro])
+            ],
             read.Value.Plans);
+        Assert.Equal((PlanSource.Default, (DateTimeOffset?)null), (read.Value.Source, read.Value.EndsAt));
+        Assert.Equal(40, read.Value.Limits.Clients);
         Assert.Equal([new CreditPackOffer("Boost", 500m, 5m)], read.Value.CreditPacks);
         Assert.Equal(SubscriptionStatus.PastDue, read.Value.Subscription!.Status);
         Assert.Equal(Now, read.Value.Subscription.PastDueSince);
+    }
+
+    /// <summary>
+    /// While Wbskt has set the plan, the sync leaves it alone, so a subscription would be charged and
+    /// change nothing: no plan is offered or sold, and the read says who set it and until when. Credit
+    /// packs are still sold. Once that plan has ended, plans are on sale again.
+    /// </summary>
+    [Fact]
+    public async Task A_plan_wbskt_set_is_shown_with_its_end_and_no_plan_is_sold_beside_it()
+    {
+        Tenant = Tenant with { PlanCode = PlanCode.Business, Source = PlanSource.Operator, EndsAt = Now.UtcDateTime.AddDays(30) };
+
+        var read = await Billing().GetAsync(9, CancellationToken.None);
+        var plan = await Billing().CheckoutAsync(9, 4, new BillingCheckoutRequest(PlanCode.Pro, BillingInterval.Monthly), CancellationToken.None);
+
+        Assert.Empty(read.Value.Plans);
+        Assert.NotEmpty(read.Value.CreditPacks);
+        Assert.Equal((PlanSource.Operator, (DateTimeOffset?)Now.AddDays(30)), (read.Value.Source, read.Value.EndsAt));
+        Assert.Equal("BILLING_PLAN_SET_BY_OPERATOR", plan.Error.Code);
+        Assert.Equal(ErrorType.Conflict, plan.Error.Type);
+        _gateway.Verify(g => g.CreateCheckoutAsync(It.IsAny<BillingCheckout>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        Tenant = Tenant with { EndsAt = Now.UtcDateTime.AddDays(-1) };
+        Assert.NotEmpty((await Billing().GetAsync(9, CancellationToken.None)).Value.Plans);
     }
 
     // ----- Changing plan -----------------------------------------------------------------------------
@@ -1589,7 +1620,8 @@ public sealed class BillingPaymentsTests
     private BillingWebhookService Webhooks() => new(_gateway.Object, _billing.Object, Sync(), new AuthMetrics(), NullLogger<BillingWebhookService>.Instance);
 
     private TenantBillingService Billing() => new(
-        _gateway.Object, _billing.Object, _plans.Object, _accounts.Object, Options.Create(_options), new FixedClock(Now), Sync(), NullLogger<TenantBillingService>.Instance);
+        _gateway.Object, _billing.Object, _plans.Object, _accounts.Object, Options.Create(_options), new FixedClock(Now), Sync(),
+        new PlanCatalog(Options.Create(new PlanCatalogOptions())), NullLogger<TenantBillingService>.Instance);
 
     private static DodoPaymentGateway Dodo(StubHandler handler)
     {
