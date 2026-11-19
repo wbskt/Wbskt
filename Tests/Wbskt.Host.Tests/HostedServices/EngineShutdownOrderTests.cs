@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Engine;
 using Wbskt.Workflow.Engine.Host;
 using Wbskt.Workflow.Engine.Host.HostedServices;
 using Wbskt.Workflow.Runtime;
@@ -43,6 +44,8 @@ public sealed class EngineShutdownOrderTests
                 services.AddLogging();
                 services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new WorkflowEngineOptions { BranchDrainGrace = TimeSpan.FromSeconds(5) }));
                 services.AddSingleton<ChannelRunDispatcher>();
+                services.AddSingleton<LeadershipState>();
+                services.AddSingleton(TimeProvider.System);
                 services.AddScoped<IBranchLoop>(_ => loop);
 
                 // The order the engine host registers them in: the bus's owner, then the pump, then the

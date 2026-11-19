@@ -4,6 +4,7 @@ using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Engine;
 using Wbskt.Workflow.Runtime;
 
 namespace Wbskt.Workflow.Engine.Host.HostedServices;
@@ -16,7 +17,9 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 /// the step token cancelled. Cutting steps short on the host token made the next leader run each again,
 /// so an email, webhook or client command already sent went twice. The bus must still be up while it
 /// drains, so a step can publish its command or notification: the pump is registered after
-/// <see cref="EngineLeadershipCoordinator"/> and therefore stopped before it.
+/// <see cref="EngineLeadershipCoordinator"/> and therefore stopped before it. The drain never runs past
+/// the moment the lease's gate closes (<see cref="LeadershipState.WorkStopsAtUtc"/>): a process stopping
+/// because it could not renew must not finish a step the next leader is already running again.
 /// </summary>
 internal sealed class BranchExecutionPump : BackgroundService
 {
@@ -24,8 +27,11 @@ internal sealed class BranchExecutionPump : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<BranchExecutionPump> _logger;
     private readonly CancellationToken _hostStopping;
+    private readonly Func<TimeSpan?> _leaseLeft;
+    private readonly TimeProvider _clock;
     private CancellationTokenSource? _draining;
     private readonly TimeSpan _drainGrace;
+    private readonly TimeSpan _leaseRecheck = TimeSpan.FromSeconds(1);
     private readonly SemaphoreSlim _concurrencyLimiter;
     private readonly CancellationTokenSource _stepCts = new();
     private readonly ConcurrentDictionary<Task, byte> _workers = new();
@@ -36,8 +42,18 @@ internal sealed class BranchExecutionPump : BackgroundService
         IServiceScopeFactory scopeFactory,
         ILogger<BranchExecutionPump> logger,
         IOptions<WorkflowEngineOptions> options,
-        IHostApplicationLifetime lifetime)
-        : this(dispatcher, scopeFactory, logger, options.Value.BranchWorkerLimit, options.Value.BranchDrainGrace, lifetime.ApplicationStopping)
+        IHostApplicationLifetime lifetime,
+        LeadershipState leadership,
+        TimeProvider clock)
+        : this(
+            dispatcher,
+            scopeFactory,
+            logger,
+            options.Value.BranchWorkerLimit,
+            options.Value.BranchDrainGrace,
+            lifetime.ApplicationStopping,
+            () => leadership.IsLeader ? leadership.WorkStopsAtUtc - clock.GetUtcNow().UtcDateTime : null,
+            clock)
     {
     }
 
@@ -47,10 +63,14 @@ internal sealed class BranchExecutionPump : BackgroundService
         ILogger<BranchExecutionPump> logger,
         int? branchWorkerLimit = null,
         TimeSpan? drainGrace = null,
-        CancellationToken hostStopping = default)
+        CancellationToken hostStopping = default,
+        Func<TimeSpan?>? leaseLeft = null,
+        TimeProvider? clock = null)
     {
         _dispatcher = dispatcher;
+        _clock = clock ?? TimeProvider.System;
         _hostStopping = hostStopping;
+        _leaseLeft = leaseLeft ?? (() => null);
         _scopeFactory = scopeFactory;
         _logger = logger;
         int limit = branchWorkerLimit ?? new WorkflowEngineOptions().BranchWorkerLimit;
@@ -101,11 +121,10 @@ internal sealed class BranchExecutionPump : BackgroundService
             _logger.LogInformation("Waiting up to {Grace} for {Count} running branch(es) to finish their step.", _drainGrace, _workers.Count);
             try
             {
-                await drained.WaitAsync(_drainGrace, cancellationToken);
-            }
-            catch (TimeoutException)
-            {
-                _logger.LogWarning("{Count} branch(es) still running after {Grace}; cutting their step short. The next leader runs it again.", _workers.Count, _drainGrace);
+                if (!await DrainAsync(drained, cancellationToken))
+                {
+                    _logger.LogWarning("{Count} branch(es) still running after the drain grace or the lease ran out; cutting their step short. The next leader runs it again.", _workers.Count);
+                }
             }
             catch (OperationCanceledException)
             {
@@ -122,6 +141,41 @@ internal sealed class BranchExecutionPump : BackgroundService
         {
             _logger.LogWarning("{Count} branch(es) did not unwind before the host shutdown timeout.", _workers.Count);
         }
+    }
+
+    /// <summary>
+    /// Waits for the running steps up to the configured grace, but never past the moment the lease's gate
+    /// closes. The lease is read again every slice, because it is renewed while the pump drains: read once
+    /// at the start, a renewal running a little late would cut a normal deploy's drain short. False when
+    /// the steps were still running at the end.
+    /// </summary>
+    private async Task<bool> DrainAsync(Task drained, CancellationToken cancellationToken)
+    {
+        long started = _clock.GetTimestamp();
+        while (!drained.IsCompleted)
+        {
+            TimeSpan slice = _drainGrace - _clock.GetElapsedTime(started);
+            if (_leaseLeft() is { } left && left < slice)
+            {
+                slice = left;
+            }
+
+            if (slice <= TimeSpan.Zero)
+            {
+                return false;
+            }
+
+            try
+            {
+                await drained.WaitAsync(slice < _leaseRecheck ? slice : _leaseRecheck, _clock, cancellationToken);
+            }
+            catch (TimeoutException)
+            {
+                // The next slice reads the lease again.
+            }
+        }
+
+        return true;
     }
 
     public override void Dispose()
