@@ -83,10 +83,6 @@ internal sealed class BranchLoop : IBranchLoop
 
     public async Task RunAsync(long runId, long branchId, BranchExecutionReason reason, CancellationToken drainToken, CancellationToken ct)
     {
-        CancellationToken runToken = _runCancellationService.GetToken(runId);
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, runToken);
-        CancellationToken linkedToken = linkedCts.Token;
-
         BranchRow branchRow = await _branchProvider.GetByIdAsync(branchId, ct);
         if (BranchStatus.IsEnded(branchRow.Status))
         {
@@ -97,6 +93,12 @@ internal sealed class BranchLoop : IBranchLoop
             _logger?.LogInformation("Branch {BranchId} of run {RunId} has already ended ({Status}); not running it for {Reason}", branchId, runId, branchRow.Status, reason);
             return;
         }
+
+        // Only for a branch that will run: asked for before the check above, a late wake of a finished
+        // run left a registry entry that nothing removes.
+        CancellationToken runToken = _runCancellationService.GetToken(runId);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, runToken);
+        CancellationToken linkedToken = linkedCts.Token;
 
         RunRow runRow = await _runProvider.GetByIdAsync(runId, ct);
         WorkflowDefinition definition = await _workflowDefinitionCache.GetAsync(runRow.WorkflowDefinitionId, ct);

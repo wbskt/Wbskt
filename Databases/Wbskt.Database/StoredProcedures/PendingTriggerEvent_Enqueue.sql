@@ -14,7 +14,7 @@ BEGIN
 
     -- The Queue policy saw an active run and queues behind it, but the run may have finished since,
     -- and its finalizer may already have drained the queue and found it empty (#470). The run is
-    -- looked for again under the key's lock, which DequeueNext takes as well: either the drain comes
+    -- looked for again under the key's lock, which LeaseNext takes as well: either the drain comes
     -- after this insert and finds it, or the finalizer's terminal write came first and this returns
     -- no row, telling the caller to start a run instead.
     DECLARE @Resource NVARCHAR(255) = dbo.TriggerStartLockResource(@WorkflowRefId, @TriggerNodeId, @CorrelationKey);

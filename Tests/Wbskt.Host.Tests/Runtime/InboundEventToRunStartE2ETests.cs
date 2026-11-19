@@ -437,7 +437,8 @@ public sealed class InboundEventToRunStartE2ETests
             });
 
         public Task<PendingTriggerEventRow?> EnqueueBehindActiveRunAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, CancellationToken ct) => throw new NotSupportedException();
-        public Task<PendingTriggerEventRow?> DequeueNextAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct) => Task.FromResult<PendingTriggerEventRow?>(null);
+        public Task<PendingTriggerEventRow?> LeaseNextAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, int leaseSeconds, CancellationToken ct) => Task.FromResult<PendingTriggerEventRow?>(null);
+        public Task<IReadOnlyCollection<PendingTriggerEventKey>> GetIdleKeysAsync(int batchSize, CancellationToken ct) => throw new NotSupportedException();
         public Task<long> CountAllAsync(CancellationToken ct) => Task.FromResult((long)PendingEvents.Count);
         public Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
 

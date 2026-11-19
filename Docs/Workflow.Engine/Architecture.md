@@ -110,8 +110,13 @@ For each inbound event:
 
    `Queue` enqueues through `PendingTriggerEvent_Enqueue @RequireActiveRun = 1`, which looks for the
    active run again under the same lock and queues nothing if it has finished; the event then starts a
-   run instead. `PendingTriggerEvent_DequeueNext` takes the lock too, so a finalizer's drain never runs
+   run instead. `PendingTriggerEvent_LeaseNext` takes the lock too, so a finalizer's drain never runs
    between an enqueue's check and its insert. All three name the lock with `dbo.TriggerStartLockResource`.
+   A drain leases the queue's head rather than deleting it, and deletes it once the replay has been
+   handed to the inbound hub, so a replay whose start fails is tried again when the lease runs out. A
+   finalizer drains last, after its publish and cleanup, and a failed drain never stops them. The
+   backlog reaper drains any queue whose key has no run going (`PendingTriggerEvent_GetIdleKeys`): one
+   left when the engine stopped between a run's end and its drain, or whose replay failed.
 5. **Outcome** per registration: `StartedRun`, `Queued`, `Dropped`, `Refused`, `Filtered`,
    `SecretMismatch`, `NoRegistration`, `Idempotent` or `ResumedBookmark`.
 6. **Record.** `TriggerOutcomeLog` writes each registration's outcome to

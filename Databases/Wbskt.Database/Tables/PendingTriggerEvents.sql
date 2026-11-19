@@ -6,6 +6,8 @@ CREATE TABLE dbo.PendingTriggerEvents
     CorrelationKey   NVARCHAR(400)    NOT NULL,
     InboundEventJson NVARCHAR(MAX)    NOT NULL,
     EnqueuedAt       DATETIME2(3)     NOT NULL DEFAULT SYSUTCDATETIME(),
+    -- Set while a drain hands the event to the inbound hub; the row is deleted once that succeeds.
+    LeasedUntil      DATETIME2(3)     NULL,
     -- Unused: a duplicate of EnqueuedAt that nothing reads or writes any more. It stays because
     -- sqlpackage refuses to drop a column from a table with rows while BlockOnPossibleDataLoss is
     -- on, and deploy.sh always runs it that way. Drop it in a deploy that allows data loss.

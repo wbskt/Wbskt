@@ -28,27 +28,42 @@ internal sealed class PendingTriggerEventProvider : BaseSqlProvider, IPendingTri
         );
     }
 
-    public async Task<PendingTriggerEventRow?> DequeueNextAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct)
+    public async Task<PendingTriggerEventRow?> LeaseNextAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, int leaseSeconds, CancellationToken ct)
     {
-        try
-        {
-            return await ExecuteSingleAsync(
-                "dbo.PendingTriggerEvent_DequeueNext",
-                p =>
-                {
-                    p.AddWithValue("@WorkflowRefId", workflowRefId);
-                    p.AddWithValue("@TriggerNodeId", triggerNodeId);
-                    p.AddWithValue("@CorrelationKey", correlationKey);
-                },
-                Map,
-                null,
-                ct
-            );
-        }
-        catch (KeyNotFoundException)
-        {
-            return null;
-        }
+        return await ExecuteFindAsync(
+            "dbo.PendingTriggerEvent_LeaseNext",
+            p =>
+            {
+                p.AddWithValue("@WorkflowRefId", workflowRefId);
+                p.AddWithValue("@TriggerNodeId", triggerNodeId);
+                p.AddWithValue("@CorrelationKey", correlationKey);
+                p.AddWithValue("@LeaseSec", leaseSeconds);
+            },
+            Map,
+            ct
+        );
+    }
+
+    public async Task DeleteByIdAsync(long id, CancellationToken ct)
+    {
+        await ExecuteNonQueryAsync(
+            "dbo.PendingTriggerEvent_DeleteById",
+            p => p.AddWithValue("@Id", id),
+            ct
+        );
+    }
+
+    public async Task<IReadOnlyCollection<PendingTriggerEventKey>> GetIdleKeysAsync(int batchSize, CancellationToken ct)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.PendingTriggerEvent_GetIdleKeys",
+            p => p.AddWithValue("@BatchSize", batchSize),
+            reader => new PendingTriggerEventKey(
+                reader.GetGuid(reader.GetOrdinal("WorkflowRefId")),
+                reader.GetGuid(reader.GetOrdinal("TriggerNodeId")),
+                reader.GetString(reader.GetOrdinal("CorrelationKey"))),
+            ct
+        );
     }
 
     public async Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)

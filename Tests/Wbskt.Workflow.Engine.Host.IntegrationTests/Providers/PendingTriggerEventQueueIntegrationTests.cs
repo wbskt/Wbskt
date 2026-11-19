@@ -1,11 +1,12 @@
+using Microsoft.Data.SqlClient;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 
 namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 
 /// <summary>
-/// Task 13.7 — PendingTriggerEvent: verifies FIFO dequeue order and that concurrent
-/// dequeues via DELETE OUTPUT return distinct rows (no double-dequeue).
+/// PendingTriggerEvent: the queue's head is leased in FIFO order, a leased head holds its place until it
+/// is deleted or its lease runs out, and concurrent drains never lease the same row twice.
 /// </summary>
 [Collection("SqlEdge")]
 public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixture)
@@ -33,8 +34,8 @@ public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixt
         var (workflowRefId, _) = await CreateWorkflowAsync();
         var provider = ProviderFactory.PendingTriggerEvent(fixture.ConnectionString);
 
-        var dequeued = await provider.DequeueNextAsync(
-            workflowRefId, Guid.NewGuid(), "empty-correlation", CancellationToken.None);
+        var dequeued = await provider.LeaseNextAsync(
+            workflowRefId, Guid.NewGuid(), "empty-correlation", 60, CancellationToken.None);
 
         dequeued.Should().BeNull();
     }
@@ -65,19 +66,72 @@ public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixt
         PendingTriggerEventRow third = (await provider.EnqueueBehindActiveRunAsync(
             workflowRefId, triggerNodeId, correlationKey, """{"n":3}""", CancellationToken.None))!;
 
-        // Dequeue three times; should come out in enqueue order
-        var d1 = await provider.DequeueNextAsync(workflowRefId, triggerNodeId, correlationKey, CancellationToken.None);
-        var d2 = await provider.DequeueNextAsync(workflowRefId, triggerNodeId, correlationKey, CancellationToken.None);
-        var d3 = await provider.DequeueNextAsync(workflowRefId, triggerNodeId, correlationKey, CancellationToken.None);
-        var d4 = await provider.DequeueNextAsync(workflowRefId, triggerNodeId, correlationKey, CancellationToken.None);
+        // Lease and delete three times; they come out in enqueue order.
+        var d1 = await provider.LeaseNextAsync(workflowRefId, triggerNodeId, correlationKey, 60, CancellationToken.None);
+        await provider.DeleteByIdAsync(d1!.Id, CancellationToken.None);
+        var d2 = await provider.LeaseNextAsync(workflowRefId, triggerNodeId, correlationKey, 60, CancellationToken.None);
+        await provider.DeleteByIdAsync(d2!.Id, CancellationToken.None);
+        var d3 = await provider.LeaseNextAsync(workflowRefId, triggerNodeId, correlationKey, 60, CancellationToken.None);
+        await provider.DeleteByIdAsync(d3!.Id, CancellationToken.None);
+        var d4 = await provider.LeaseNextAsync(workflowRefId, triggerNodeId, correlationKey, 60, CancellationToken.None);
 
-        d1.Should().NotBeNull();
-        d2.Should().NotBeNull();
-        d3.Should().NotBeNull();
-        d4.Should().BeNull("queue should be empty after three dequeues");
+        d4.Should().BeNull("queue should be empty after three deletes");
+        new[] { d1.Id, d2.Id, d3.Id }.Should().Equal(first.Id, second.Id, third.Id);
+    }
 
-        d1!.EnqueuedAt.Should().BeBefore(d2!.EnqueuedAt);
-        d2.EnqueuedAt.Should().BeBefore(d3!.EnqueuedAt);
+    [SkippableFact]
+    public async Task A_leased_head_holds_its_place_until_its_lease_runs_out()
+    {
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
+
+        var (workflowRefId, workflowDefinitionId) = await CreateWorkflowAsync();
+        var provider = ProviderFactory.PendingTriggerEvent(fixture.ConnectionString);
+        string correlationKey = $"lease-test-{Guid.NewGuid():N}";
+        Guid triggerNodeId = Guid.NewGuid();
+        await ActiveRunSeeder.StartAsync(fixture.ConnectionString, workflowDefinitionId, workflowRefId, triggerNodeId, correlationKey);
+        PendingTriggerEventRow first = (await provider.EnqueueBehindActiveRunAsync(workflowRefId, triggerNodeId, correlationKey, """{"n":1}""", CancellationToken.None))!;
+        await Task.Delay(50);
+        await provider.EnqueueBehindActiveRunAsync(workflowRefId, triggerNodeId, correlationKey, """{"n":2}""", CancellationToken.None);
+
+        // A replay whose start failed leaves its row leased: the event behind it must not jump ahead.
+        (await provider.LeaseNextAsync(workflowRefId, triggerNodeId, correlationKey, 1, CancellationToken.None))!.Id.Should().Be(first.Id);
+        (await provider.LeaseNextAsync(workflowRefId, triggerNodeId, correlationKey, 60, CancellationToken.None)).Should().BeNull();
+
+        // Once the lease runs out the same event is handed out again rather than lost.
+        await Task.Delay(TimeSpan.FromSeconds(1.5));
+        (await provider.LeaseNextAsync(workflowRefId, triggerNodeId, correlationKey, 60, CancellationToken.None))!.Id.Should().Be(first.Id);
+    }
+
+    [SkippableFact]
+    public async Task Idle_keys_are_the_queues_with_no_run_going()
+    {
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
+
+        var (workflowRefId, workflowDefinitionId) = await CreateWorkflowAsync();
+        var provider = ProviderFactory.PendingTriggerEvent(fixture.ConnectionString);
+        Guid triggerNodeId = Guid.NewGuid();
+        string busyKey = $"busy-{Guid.NewGuid():N}";
+        string idleKey = $"idle-{Guid.NewGuid():N}";
+        await ActiveRunSeeder.StartAsync(fixture.ConnectionString, workflowDefinitionId, workflowRefId, triggerNodeId, busyKey);
+        await provider.EnqueueBehindActiveRunAsync(workflowRefId, triggerNodeId, busyKey, "{}", CancellationToken.None);
+
+        // A queue whose run ended before its drain: inserted directly, as Enqueue only queues behind a run.
+        await using (var connection = new SqlConnection(fixture.ConnectionString))
+        {
+            await connection.OpenAsync();
+            await using var insert = new SqlCommand(
+                "INSERT INTO dbo.PendingTriggerEvents (WorkflowRefId, TriggerNodeId, CorrelationKey, InboundEventJson) VALUES (@WorkflowRefId, @TriggerNodeId, @CorrelationKey, N'{}');",
+                connection);
+            insert.Parameters.AddWithValue("@WorkflowRefId", workflowRefId);
+            insert.Parameters.AddWithValue("@TriggerNodeId", triggerNodeId);
+            insert.Parameters.AddWithValue("@CorrelationKey", idleKey);
+            await insert.ExecuteNonQueryAsync();
+        }
+
+        IReadOnlyCollection<PendingTriggerEventKey> idle = await provider.GetIdleKeysAsync(1000, CancellationToken.None);
+
+        idle.Should().Contain(new PendingTriggerEventKey(workflowRefId, triggerNodeId, idleKey));
+        idle.Should().NotContain(key => key.CorrelationKey == busyKey);
     }
 
     [SkippableFact]
@@ -100,23 +154,24 @@ public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixt
         await provider.EnqueueBehindActiveRunAsync(workflowRefId, triggerA, correlationKey, """{"trigger":"A"}""", CancellationToken.None);
         await provider.EnqueueBehindActiveRunAsync(workflowRefId, triggerB, correlationKey, """{"trigger":"B"}""", CancellationToken.None);
 
-        var fromA = await provider.DequeueNextAsync(workflowRefId, triggerA, correlationKey, CancellationToken.None);
+        var fromA = await provider.LeaseNextAsync(workflowRefId, triggerA, correlationKey, 60, CancellationToken.None);
         fromA.Should().NotBeNull();
         fromA!.TriggerNodeId.Should().Be(triggerA);
         fromA.InboundEventJson.Should().Contain("A");
+        await provider.DeleteByIdAsync(fromA.Id, CancellationToken.None);
 
         // A's queue is now empty; B's event must still be there, untouched.
-        var aAgain = await provider.DequeueNextAsync(workflowRefId, triggerA, correlationKey, CancellationToken.None);
+        var aAgain = await provider.LeaseNextAsync(workflowRefId, triggerA, correlationKey, 60, CancellationToken.None);
         aAgain.Should().BeNull("draining trigger A must not reach across to trigger B's event");
 
-        var fromB = await provider.DequeueNextAsync(workflowRefId, triggerB, correlationKey, CancellationToken.None);
+        var fromB = await provider.LeaseNextAsync(workflowRefId, triggerB, correlationKey, 60, CancellationToken.None);
         fromB.Should().NotBeNull();
         fromB!.TriggerNodeId.Should().Be(triggerB);
         fromB.InboundEventJson.Should().Contain("B");
     }
 
     [SkippableFact]
-    public async Task Concurrent_dequeues_return_distinct_rows()
+    public async Task Concurrent_drains_lease_the_head_once()
     {
         Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
@@ -143,15 +198,14 @@ public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixt
             async (_, ct) =>
             {
                 var p = ProviderFactory.PendingTriggerEvent(fixture.ConnectionString);
-                var row = await p.DequeueNextAsync(workflowRefId, triggerNodeId, correlationKey, ct);
+                var row = await p.LeaseNextAsync(workflowRefId, triggerNodeId, correlationKey, 60, ct);
                 if (row is not null)
                 {
                     dequeued.Add(row.Id);
                 }
             });
 
-        // All dequeued Ids must be distinct — no double-dequeue
-        dequeued.Should().OnlyHaveUniqueItems("DELETE OUTPUT should be atomic — no row dequeued twice");
-        dequeued.Count.Should().BeLessOrEqualTo(rowCount);
+        // Only the head is ever handed out, and only to one caller while its lease holds.
+        dequeued.Should().ContainSingle("the head is leased by one drain and the rest wait behind it");
     }
 }

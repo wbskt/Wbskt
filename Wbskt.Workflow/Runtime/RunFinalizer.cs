@@ -98,11 +98,7 @@ internal sealed class RunFinalizer : IRunFinalizer
                 Severity = RunStatus.IsFailure(terminalStatus) ? HistoryEventKind.SeverityWarn : HistoryEventKind.SeverityInfo
             },
             ct);
-        
-        // The run just freed its correlation slot, so release exactly one event that a Queue
-        // concurrency policy parked behind it. One, not all: draining more would re-enter the
-        // concurrency enforcer while the newly started run is active and simply re-queue them.
-        await _pendingTriggerEventDrainer.DrainAsync(updatedRun.WorkflowRefId, updatedRun.TriggerNodeId, updatedRun.CorrelationKey ?? string.Empty, ct);
+
 
         // Published through an abstraction rather than IEventBus directly so Wbskt.Workflow carries no
         // event-bus dependency; the engine host supplies the implementation.
@@ -117,6 +113,21 @@ internal sealed class RunFinalizer : IRunFinalizer
         // that branches on childResult.status decides for itself whether to trust it.
         await _completionHook.OnRunCompletedAsync(updatedRun.RefId, terminalStatus, updatedRun.OutputJson, ct);
         _tokenRegistry.Remove(updatedRun.Id);
+
+        // The run just freed its correlation slot, so release exactly one event that a Queue
+        // concurrency policy parked behind it. One, not all: draining more would re-enter the
+        // concurrency enforcer while the newly started run is active and simply re-queue them.
+        // Last, and never allowed to fail the finalize: it starts another run, and a start that
+        // throws used to skip this run's completion event, cleanup and parent wake. The event stays
+        // queued and the backlog reaper replays it.
+        try
+        {
+            await _pendingTriggerEventDrainer.DrainAsync(updatedRun.WorkflowRefId, updatedRun.TriggerNodeId, updatedRun.CorrelationKey ?? string.Empty, ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            _logger?.LogError(ex, "Could not start the event queued behind run {RunId}; the backlog reaper retries it.", updatedRun.Id);
+        }
     }
 
     private static string DetermineTerminalStatus(RunRow run, IReadOnlyCollection<BranchRow> branches)

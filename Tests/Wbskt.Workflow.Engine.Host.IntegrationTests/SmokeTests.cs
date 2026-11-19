@@ -74,7 +74,9 @@ public sealed class SmokeTests(SqlEdgeFixture fixture)
             "SharedVariable_Initialize",
             "SharedVariable_CompareAndSet",
             "PendingTriggerEvent_Enqueue",
-            "PendingTriggerEvent_DequeueNext"
+            "PendingTriggerEvent_LeaseNext",
+            "PendingTriggerEvent_DeleteById",
+            "PendingTriggerEvent_GetIdleKeys"
         };
 
         await using var conn = new SqlConnection(fixture.ConnectionString);

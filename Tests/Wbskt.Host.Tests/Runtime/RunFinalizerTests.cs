@@ -113,6 +113,22 @@ public sealed class RunFinalizerTests
     }
 
     [Fact]
+    public async Task FinalizeAsync_drains_last_and_a_failed_drain_does_not_skip_the_rest()
+    {
+        // A queued event's start that throws used to leave FinalizeAsync before the completion event,
+        // the bookmark and join cleanup and the parent wake (#962).
+        var harness = new RunFinalizerHarness("Running", [CreateBranch("Completed")]);
+        harness.Drainer.Throws = true;
+        harness.Drainer.PublishedCount = () => harness.Publisher.RunIds.Count;
+
+        await harness.Finalizer.FinalizeAsync(42, CancellationToken.None);
+
+        Assert.Equal(1, harness.Drainer.PublishedBeforeDrain);
+        Assert.Equal([42L], harness.Publisher.RunIds);
+        Assert.Equal([42], harness.BookmarkProvider.DeletedRunIds);
+    }
+
+    [Fact]
     public async Task FinalizeAsync_deletes_remaining_bookmarks()
     {
         var harness = new RunFinalizerHarness("Running", [CreateBranch("Completed")]);
@@ -277,11 +293,15 @@ public sealed class RunFinalizerTests
     private sealed class RecordingPendingTriggerEventDrainer : IPendingTriggerEventDrainer
     {
         public List<(Guid WorkflowRefId, Guid TriggerNodeId, string CorrelationKey)> Requests { get; } = [];
+        public bool Throws { get; set; }
+        public int PublishedBeforeDrain { get; private set; } = -1;
+        public Func<int>? PublishedCount { get; set; }
 
         public Task DrainAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct)
         {
             Requests.Add((workflowRefId, triggerNodeId, correlationKey));
-            return Task.CompletedTask;
+            PublishedBeforeDrain = PublishedCount?.Invoke() ?? -1;
+            return Throws ? throw new InvalidOperationException("start failed") : Task.CompletedTask;
         }
     }
 
