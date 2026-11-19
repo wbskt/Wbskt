@@ -137,7 +137,7 @@ When a trigger matches while a run with the same workflow and correlation key is
 | `AllowParallel` | Start another run. |
 | `DropIfRunning` | Drop the event. |
 | `Queue` (default) | Store the event; when a run finishes, the oldest queued event starts the next run. Queued events expire after 24 h. |
-| `CancelExisting` | Cancel every matching run, then start a new one. |
+| `CancelExisting` | Start a new run and cancel every matching one in the same step. If the new run is refused (out of credits, at the cap, not live), the old ones keep running. |
 
 ### 4.3 Filters and secrets
 

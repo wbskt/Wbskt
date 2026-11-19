@@ -71,13 +71,13 @@ internal sealed class RunStarter : IRunStarter
         _logger = logger;
     }
 
-    public Task<RunStartResult> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, CancellationToken ct, bool exemptFromCeiling = false, ActiveRunGuard activeRunGuard = ActiveRunGuard.None) =>
-        StartCoreAsync(workflowDefinitionId, triggerNodeId, triggerEvent, triggerStartKey, exemptFromCeiling, activeRunGuard, isTest: false, ct);
+    public Task<RunStartResult> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, CancellationToken ct, bool exemptFromCeiling = false, ActiveRunGuard activeRunGuard = ActiveRunGuard.None, IReadOnlyCollection<long>? replacing = null) =>
+        StartCoreAsync(workflowDefinitionId, triggerNodeId, triggerEvent, triggerStartKey, exemptFromCeiling, activeRunGuard, replacing ?? [], isTest: false, ct);
 
     public Task<RunStartResult> StartTestAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, CancellationToken ct) =>
-        StartCoreAsync(workflowDefinitionId, triggerNodeId, triggerEvent, triggerStartKey: null, exemptFromCeiling: false, ActiveRunGuard.None, isTest: true, ct);
+        StartCoreAsync(workflowDefinitionId, triggerNodeId, triggerEvent, triggerStartKey: null, exemptFromCeiling: false, ActiveRunGuard.None, [], isTest: true, ct);
 
-    private async Task<RunStartResult> StartCoreAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, bool exemptFromCeiling, ActiveRunGuard activeRunGuard, bool isTest, CancellationToken ct)
+    private async Task<RunStartResult> StartCoreAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, bool exemptFromCeiling, ActiveRunGuard activeRunGuard, IReadOnlyCollection<long> replacing, bool isTest, CancellationToken ct)
     {
         try
         {
@@ -146,6 +146,7 @@ internal sealed class RunStarter : IRunStarter
                     ceiling,
                     activeRunGuard,
                     credits,
+                    replacing,
                     ct), ct);
             }
             catch (SqlException ex) when (ex.Number == NotLiveError)

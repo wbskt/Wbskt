@@ -17,9 +17,11 @@ public interface IRunStarter
     /// <paramref name="activeRunGuard"/>, a run still active for the same trigger and correlation key
     /// refuses the start with <see cref="ActiveRunConflictException"/>. A start that cannot get its
     /// tenant's or workspace's lock is tried again a few times, then throws
-    /// <see cref="RunStartBusyException"/>.
+    /// <see cref="RunStartBusyException"/>. The runs in <paramref name="replacing"/> (a CancelExisting
+    /// trigger's) are moved to Cancelling only when the start goes through, in the same write; the caller
+    /// stops their work after it.
     /// </summary>
-    Task<RunStartResult> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, CancellationToken ct, bool exemptFromCeiling = false, ActiveRunGuard activeRunGuard = ActiveRunGuard.None);
+    Task<RunStartResult> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, CancellationToken ct, bool exemptFromCeiling = false, ActiveRunGuard activeRunGuard = ActiveRunGuard.None, IReadOnlyCollection<long>? replacing = null);
 
     /// <summary>
     /// Starts a test run: a run like any other, marked as a test, from a test copy of the definition.

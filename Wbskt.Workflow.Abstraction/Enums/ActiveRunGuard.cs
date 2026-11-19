@@ -13,6 +13,6 @@ public enum ActiveRunGuard
     /// <summary>Refused while any run is Running, Failing or Cancelling: DropIfRunning and Queue.</summary>
     AnyActive = 1,
 
-    /// <summary>Refused while a run is Running or Failing. CancelExisting has just moved the runs it found to Cancelling.</summary>
+    /// <summary>Refused while a run is Running or Failing, other than the ones the start replaces (CancelExisting), which it moves to Cancelling itself.</summary>
     NotCancelling = 2
 }

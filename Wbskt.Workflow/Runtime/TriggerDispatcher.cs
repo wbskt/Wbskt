@@ -17,6 +17,9 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
     // key is being hammered; the claim fails and the bus redelivers the event.
     private const int MaxStartAttempts = 3;
 
+    // What Run_Start writes as the reason on the runs a CancelExisting start replaces.
+    private const string ReplacedRunReason = "Trigger-cancel-policy";
+
     private readonly ICorrelationKeyResolver _correlationKeyResolver;
     private readonly IBookmarkResumer _bookmarkResumer;
     private readonly ITriggerRegistrationProvider _triggerRegistrationProvider;
@@ -325,12 +328,15 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
                     return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Queued, null, correlationValue), null);
 
                 case TriggerConcurrencyOutcome.ProceedAfterCancellingActive:
-                    foreach (long runIdToCancel in concurrencyDecision.RunIdsToCancel)
-                    {
-                        await _runCancellationService.RequestCancellationAsync(runIdToCancel, "Trigger-cancel-policy", ct);
-                    }
+                    // Not cancelled here: the start moves them to Cancelling in its own write, once it has
+                    // passed the month's credits, the cap and the live-version check, so a refused start
+                    // leaves them running rather than leaving nothing running at all.
                     break;
             }
+
+            IReadOnlyCollection<long> replacing = concurrencyDecision.Outcome == TriggerConcurrencyOutcome.ProceedAfterCancellingActive
+                ? concurrencyDecision.RunIdsToCancel
+                : [];
 
             // Some starts take a place under the plan's active-run ceiling that is already held, so
             // refusing them would lose work rather than shed it: a sub-workflow child (its parent is running),
@@ -345,7 +351,21 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
 
             try
             {
-                started = await _runStarter.StartAsync(registration.WorkflowDefinitionId, registration.TriggerNodeId.ToString(), normalizedEvent, startKey, ct, exemptFromCeiling, activeRunGuard);
+                started = await _runStarter.StartAsync(registration.WorkflowDefinitionId, registration.TriggerNodeId.ToString(), normalizedEvent, startKey, ct, exemptFromCeiling, activeRunGuard, replacing);
+                foreach (long replaced in replacing)
+                {
+                    try
+                    {
+                        await _runCancellationService.StopReplacedRunAsync(replaced, ReplacedRunReason, ct);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        // The run is already Cancelling, so its branches stop at their next check and
+                        // recovery re-applies the cleanup; the start that replaced it stands.
+                        _logger?.LogWarning(ex, "Could not stop run {RunId}, replaced by a CancelExisting start for registration {RegistrationId}", replaced, registration.Id);
+                    }
+                }
+
                 break;
             }
             catch (WorkflowNotLiveException)

@@ -15,6 +15,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
 {
     private const int PlanRunLimitError = 50026;
+    private const int PlanCreditLimitError = 50033;
     private const int StartBusyError = 50035;
     private const int ActiveRunConflictError = 50028;
     private const string SkipReason = "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.";
@@ -404,6 +405,44 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
 
         replaced.Created.Should().BeTrue();
         (await dropAct.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(ActiveRunConflictError);
+    }
+
+    [SkippableFact]
+    public async Task A_start_that_replaces_runs_moves_them_to_Cancelling_in_its_own_write()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync();
+        var runProvider = ProviderFactory.Run(fixture.ConnectionString);
+        (RunRow first, BranchRow firstBranch) = NewRun(wd);
+        RunStartRow firstStarted = await runProvider.StartAsync(first, firstBranch, null, 0, null, ActiveRunGuard.None, CancellationToken.None);
+
+        (RunRow replace, BranchRow replaceBranch) = SameTrigger(first, wd, first.CorrelationKey!);
+        RunStartRow replaced = await runProvider.StartAsync(replace, replaceBranch, null, 0, null, ActiveRunGuard.NotCancelling, null, [firstStarted.Run.Id], CancellationToken.None);
+
+        replaced.Created.Should().BeTrue();
+        RunRow old = await runProvider.GetByIdAsync(firstStarted.Run.Id, CancellationToken.None);
+        old.Status.Should().Be(RunStatus.Cancelling);
+        old.CancellationReason.Should().Be("Trigger-cancel-policy");
+    }
+
+    [SkippableFact]
+    public async Task A_start_that_would_replace_runs_but_is_refused_leaves_them_running()
+    {
+        // #1006 item 175: the old run was cancelled before the start was checked against the month's
+        // credits, so a refused start left nothing running.
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(NewWorkspaceId());
+        var runProvider = ProviderFactory.Run(fixture.ConnectionString);
+        (RunRow first, BranchRow firstBranch) = NewRun(wd);
+        RunStartRow firstStarted = await runProvider.StartAsync(first with { StartCost = 1m }, firstBranch, null, wd.WorkspaceId, null, ActiveRunGuard.None, new PlanCredits(1m, null), CancellationToken.None);
+
+        (RunRow replace, BranchRow replaceBranch) = SameTrigger(first, wd, first.CorrelationKey!);
+        Func<Task> act = () => runProvider.StartAsync(replace with { StartCost = 1m }, replaceBranch, null, wd.WorkspaceId, null, ActiveRunGuard.NotCancelling, new PlanCredits(1m, null), [firstStarted.Run.Id], CancellationToken.None);
+
+        (await act.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(PlanCreditLimitError);
+        (await runProvider.GetByIdAsync(firstStarted.Run.Id, CancellationToken.None)).Status.Should().Be(RunStatus.Running);
     }
 
     [SkippableFact]

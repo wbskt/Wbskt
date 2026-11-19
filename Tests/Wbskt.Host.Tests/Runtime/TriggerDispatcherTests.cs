@@ -180,6 +180,47 @@ public sealed class TriggerDispatcherTests
     }
 
     [Fact]
+    public async Task A_CancelExisting_start_hands_the_runs_it_replaces_to_the_start_and_stops_them_after_it()
+    {
+        // Arrange
+        var operations = new List<string>();
+        var runStarter = new RecordingRunStarter(operations);
+        var cancellationService = new RecordingRunCancellationService();
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration(WorkflowConcurrencyPolicy.CancelExisting)),
+            concurrencyEnforcer: new RecordingTriggerConcurrencyEnforcer(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.ProceedAfterCancellingActive, [55L, 56L])),
+            runCancellationService: cancellationService,
+            runStarter: runStarter);
+
+        // Act
+        await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        // Assert: the start moves them to Cancelling itself; their work is stopped only once it has.
+        Assert.Equal([55L, 56L], runStarter.Replacing.Single());
+        Assert.Equal([55L, 56L], cancellationService.Replaced);
+    }
+
+    [Fact]
+    public async Task A_CancelExisting_start_that_is_refused_stops_nothing()
+    {
+        // Arrange: #1006 item 175. The old run used to be cancelled before the start was refused (out of
+        // credits, at the cap, not live), leaving nothing running.
+        var cancellationService = new RecordingRunCancellationService();
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration(WorkflowConcurrencyPolicy.CancelExisting)),
+            concurrencyEnforcer: new RecordingTriggerConcurrencyEnforcer(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.ProceedAfterCancellingActive, [55L])),
+            runCancellationService: cancellationService,
+            runStarter: new RecordingRunStarter([]) { NotLive = true });
+
+        // Act
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        // Assert
+        Assert.Equal(TriggerDispatchOutcome.NoRegistration, result.Outcome);
+        Assert.Empty(cancellationService.Requests);
+    }
+
+    [Fact]
     public async Task Dispatch_with_StartedRun_outcome_invokes_RunStarter_and_RunDispatcher()
     {
         // Arrange
@@ -1317,6 +1358,15 @@ public sealed class TriggerDispatcherTests
             return Task.FromResult(true);
         }
 
+        public List<long> Replaced { get; } = [];
+
+        public Task<bool> StopReplacedRunAsync(long runId, string reason, CancellationToken ct)
+        {
+            Replaced.Add(runId);
+            Requests.Add((runId, reason));
+            return Task.FromResult(true);
+        }
+
         public Task<bool> FailRunAsync(long runId, string reason, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<bool> IsCancellationRequestedAsync(long runId, CancellationToken ct)
@@ -1366,11 +1416,15 @@ public sealed class TriggerDispatcherTests
         /// <summary>Refuses every guarded start, as for a key that never stops losing the race.</summary>
         public bool AlwaysConflict { get; init; }
 
-        public async Task<RunStartResult> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, CancellationToken ct, bool exemptFromCeiling = false, ActiveRunGuard activeRunGuard = ActiveRunGuard.None)
+        /// <summary>The runs each start was told it replaces, in order.</summary>
+        public List<IReadOnlyCollection<long>> Replacing { get; } = [];
+
+        public async Task<RunStartResult> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, CancellationToken ct, bool exemptFromCeiling = false, ActiveRunGuard activeRunGuard = ActiveRunGuard.None, IReadOnlyCollection<long>? replacing = null)
         {
             lock (_gate)
             {
                 operations.Add("start");
+                Replacing.Add(replacing ?? []);
                 ExemptFromCeiling.Add(exemptFromCeiling);
                 Guards.Add(activeRunGuard);
                 if ((AtCeiling || RefuseFirst) && !exemptFromCeiling)

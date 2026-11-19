@@ -39,6 +39,14 @@ public interface IRunProvider
     Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, PlanCeiling? ceiling, ActiveRunGuard activeRunGuard, PlanCredits? creditAllowance, CancellationToken ct)
         => StartAsync(run, rootBranch, triggerStartKey, workspaceId, ceiling, activeRunGuard, ct);
 
+    /// <summary>
+    /// As above, and once every check has let the start through, moves <paramref name="replaceRunIds"/>
+    /// (those still Running or Failing) to Cancelling in the same transaction, so a refused start
+    /// cancels nothing. The guard does not count them. The caller stops their work afterwards.
+    /// </summary>
+    Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, PlanCeiling? ceiling, ActiveRunGuard activeRunGuard, PlanCredits? creditAllowance, IReadOnlyCollection<long> replaceRunIds, CancellationToken ct)
+        => StartAsync(run, rootBranch, triggerStartKey, workspaceId, ceiling, activeRunGuard, creditAllowance, ct);
+
     /// <summary>The run <see cref="StartAsync"/> created under this key, if there is one.</summary>
     Task<RunStartRow?> FindByTriggerStartKeyAsync(string triggerStartKey, CancellationToken ct)
         => Task.FromResult<RunStartRow?>(null);
