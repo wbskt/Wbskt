@@ -306,9 +306,10 @@ Two structural notes on scoping, since neither is enforced by the resolve call:
   to it. Every service that acts on a nested resource loads it through `WorkspaceOwnership.LoadAsync`
   (or `Check` for one already in hand), which answers the resource's `<RESOURCE>_NOT_FOUND` 404 both
   for a reference that names nothing and for another workspace's, so the endpoint cannot be used to
-  confirm that a guessed reference is real. This matters most where the endpoint publishes to the
-  bus: the socket host dispatches `ClientCommandEvent`/`ClientPingEvent` on `ClientRefId` alone and
-  has no workspace to check against, so the service's check is the only one there is.
+  confirm that a guessed reference is real. This matters most where the endpoint reaches a device:
+  the socket host delivers a command from `IClientCommandSender` or a `ClientPingEvent` on
+  `ClientRefId` alone and has no workspace to check against, so the check in the sender or service
+  is the only one there is.
 - **The realtime feed is per workspace, not per permission.** `workspace.join` puts a connection in
   `ws:{workspaceId}`, which carries every `[SignalRNotify]` event for that workspace. A member who
   holds only `workflows.read` still receives client command payloads over the hub. Narrowing that
