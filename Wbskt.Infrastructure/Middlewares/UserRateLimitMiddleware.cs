@@ -70,7 +70,7 @@ public sealed class UserRateLimitMiddleware(RequestDelegate next, UserRateLimite
 {
     public async Task InvokeAsync(HttpContext context)
     {
-        if (!WbsktClaims.TryReadUser(context.User, out Guid userRef, out _))
+        if (!WbsktClaims.TryReadUser(context.User, out Guid userRef))
         {
             await next(context);
             return;

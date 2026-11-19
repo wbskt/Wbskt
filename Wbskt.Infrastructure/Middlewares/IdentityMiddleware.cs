@@ -8,7 +8,7 @@ namespace Wbskt.Infrastructure.Middlewares;
 /// <summary>
 /// Makes the signed-in user this request's <see cref="UserIdentity"/>. A token names the user by
 /// RefId (<see cref="WbsktClaims"/>); the internal id this host's records use comes from
-/// <see cref="IUserIdLookup"/>, or straight from a token issued before #306.
+/// <see cref="IUserIdLookup"/>.
 /// </summary>
 public class IdentityMiddleware
 {
@@ -23,13 +23,8 @@ public class IdentityMiddleware
 
     public async Task InvokeAsync(HttpContext context, IIdentityService identityService)
     {
-        if (!WbsktClaims.TryReadUser(context.User, out Guid userRef, out int? userId))
-        {
-            await _next(context);
-            return;
-        }
-
-        if (userId is null && context.RequestServices.GetService<IUserIdLookup>() is { } lookup)
+        int? userId = null;
+        if (WbsktClaims.TryReadUser(context.User, out Guid userRef) && context.RequestServices.GetService<IUserIdLookup>() is { } lookup)
         {
             try
             {

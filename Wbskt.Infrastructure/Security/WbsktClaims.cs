@@ -18,11 +18,6 @@ namespace Wbskt.Infrastructure.Security;
 /// claim mapping is on.
 /// </para>
 /// <para>
-/// Tokens issued before this contract (user: <c>sub</c> the internal id, <c>uref</c> the RefId,
-/// <c>type</c>; client: <c>type</c>) are still read for one token lifetime. The legacy readers go in
-/// the release after.
-/// </para>
-/// <para>
 /// A client token still carries the client's internal id and workspace id (<c>id</c>,
 /// <c>workspace_id</c>): the socket host has no data source of its own to resolve them from, and it
 /// stamps them on every event it publishes. The token is held by the client it names, so it reveals
@@ -39,12 +34,6 @@ public static class WbsktClaims
 
     public const string UserType = "user";
     public const string ClientType = "client";
-
-    /// <summary>Before #306: the principal type.</summary>
-    internal const string LegacyType = "type";
-
-    /// <summary>Before #306: a user token's RefId, when <c>sub</c> was the internal id.</summary>
-    internal const string LegacyUserRef = "uref";
 
     /// <summary>The claims of a user's access token.</summary>
     public static Claim[] ForUser(Guid userRef, string username, string email, Guid sessionId) =>
@@ -72,39 +61,17 @@ public static class WbsktClaims
     }
 
     /// <summary>What the token is for: <see cref="UserType"/>, <see cref="ClientType"/>, or null.</summary>
-    public static string? TypeOf(ClaimsPrincipal principal) =>
-        principal.FindFirst(Type)?.Value ?? principal.FindFirst(LegacyType)?.Value;
+    public static string? TypeOf(ClaimsPrincipal principal) => principal.FindFirst(Type)?.Value;
 
     /// <summary>The session a user token belongs to.</summary>
     public static Guid? SessionOf(ClaimsPrincipal principal) =>
         Guid.TryParse(Find(principal, Session), out var sessionId) ? sessionId : null;
 
-    /// <summary>
-    /// Reads a user token: the user's RefId, and for a token issued before #306 the internal id it
-    /// still carries (null for a current one, whose host resolves it).
-    /// </summary>
-    public static bool TryReadUser(ClaimsPrincipal principal, out Guid userRef, out int? legacyUserId)
+    /// <summary>Reads a user token: the user's RefId, which the host resolves to its internal id.</summary>
+    public static bool TryReadUser(ClaimsPrincipal principal, out Guid userRef)
     {
-        legacyUserId = null;
         userRef = Guid.Empty;
-        if (TypeOf(principal) != UserType)
-        {
-            return false;
-        }
-
-        string? subject = Find(principal, Subject);
-        if (Guid.TryParse(subject, out userRef))
-        {
-            return true;
-        }
-
-        if (int.TryParse(subject, out int userId) && Guid.TryParse(principal.FindFirst(LegacyUserRef)?.Value, out userRef))
-        {
-            legacyUserId = userId;
-            return true;
-        }
-
-        return false;
+        return TypeOf(principal) == UserType && Guid.TryParse(Find(principal, Subject), out userRef);
     }
 }
 
