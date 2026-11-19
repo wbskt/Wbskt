@@ -148,11 +148,6 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
         return UpdateBranchAsync(branchId, null, BranchStatus.Completed, null, null, ct);
     }
 
-    public Task<BranchRow> SetFailedAsync(long branchId, string? lastOutputJson, CancellationToken ct)
-    {
-        return UpdateBranchAsync(branchId, null, BranchStatus.Failed, null, lastOutputJson, ct);
-    }
-
     public async Task<bool> EndIfLiveAsync(long branchId, string toStatus, string? lastOutputJson, CancellationToken ct)
     {
         var result = await ExecuteScalarAsync<object>(

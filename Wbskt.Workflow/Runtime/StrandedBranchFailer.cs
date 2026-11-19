@@ -90,7 +90,12 @@ internal sealed class StrandedBranchFailer(
             // No node to read an onFailure from (the branch loop completes a branch in this state);
             // end the branch Failed and let the finalizer decide the run's outcome.
             string errorJson = JsonSerializer.Serialize(new { fail.ErrorCode, fail.Message }, EngineJson.Options);
-            await branchProvider.SetFailedAsync(current.Id, errorJson, ct);
+            if (!await branchProvider.EndIfLiveAsync(current.Id, BranchStatus.Failed, errorJson, ct))
+            {
+                // Woken or ended by another loop since it was read; that loop owns its end.
+                return false;
+            }
+
             await journal.AppendBranchEventAsync(run.Id, current.RefId, current.NodeId, HistoryEventKind.BranchFailed, new { fail.ErrorCode, fail.Message }, ct);
             await branchTerminator.ReleaseAsync(run.Id, 1, ct);
             return true;

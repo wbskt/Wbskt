@@ -52,7 +52,6 @@ public interface IBranchProvider
 
     Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct);
     Task<BranchRow> SetCompletedAsync(long branchId, CancellationToken ct);
-    Task<BranchRow> SetFailedAsync(long branchId, string? lastOutputJson, CancellationToken ct);
     Task<int> CancelWaitingBranchesAsync(int runId, CancellationToken ct) => Task.FromResult(0);
 
     /// <summary>

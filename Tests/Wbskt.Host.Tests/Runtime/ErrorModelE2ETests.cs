@@ -228,13 +228,6 @@ public sealed class ErrorModelE2ETests
             state.Branches[branchId] = updated;
             return Task.FromResult(updated);
         }
-
-        public Task<BranchRow> SetFailedAsync(long branchId, string? lastOutputJson, CancellationToken ct)
-        {
-            BranchRow updated = state.Branches[branchId] with { Status = "Failed", LastOutputJson = lastOutputJson, UpdatedAt = state.Clock.UtcNow };
-            state.Branches[branchId] = updated;
-            return Task.FromResult(updated);
-        }
     }
 
     private sealed class InMemoryRunProvider(InMemoryState state) : IRunProvider

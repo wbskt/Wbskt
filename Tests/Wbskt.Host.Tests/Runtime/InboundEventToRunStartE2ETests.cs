@@ -285,7 +285,6 @@ public sealed class InboundEventToRunStartE2ETests
             return Task.FromResult(updated);
         }
 
-        public Task<BranchRow> SetFailedAsync(long branchId, string? lastOutputJson, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct)
         {
