@@ -51,6 +51,15 @@ public sealed class InboundMessageDispatcherTests
     }
 
     [Fact]
+    public async Task A_client_message_keeps_its_own_text_without_new_escapes()
+    {
+        await Dispatch("""{"type":"note","payload":{"text":"Grüße 温度 <a> & 'b' +1"}}""");
+
+        _bus.Published.OfType<ClientMessageReceivedEvent>().Single().Payload
+            .Should().Be("""{"text":"Grüße 温度 <a> & 'b' +1"}""");
+    }
+
+    [Fact]
     public async Task Only_a_client_message_handed_on_counts_as_received()
     {
         var counted = new List<(long Value, string? Transport)>();

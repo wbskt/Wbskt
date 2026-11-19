@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Wbskt.Protocol;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
@@ -23,7 +22,9 @@ public sealed class ClientMessageHandler
     public Task HandleAsync(InboundContext context, ProtocolMessage message, CancellationToken cancellationToken)
     {
         var connection = context.Connection;
-        var payload = JsonSerializer.Serialize(message.Payload);
+        // Re-serialising with the default encoder turned every non-ASCII character and < > & ' + into a
+        // six-byte \uXXXX escape; the client's own text is already valid JSON.
+        var payload = ProtocolJson.SerializePayload(message.Payload);
         return _eventBus.PublishAsync(new ClientMessageReceivedEvent(context.ClientRefId, connection.ClientId, connection.WorkspaceId, message.Type, payload)
         {
             SentAtUtc = PlausibleSentAt(message.SentAt, _time.GetUtcNow().UtcDateTime)
