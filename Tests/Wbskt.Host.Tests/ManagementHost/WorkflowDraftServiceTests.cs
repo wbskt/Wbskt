@@ -116,7 +116,7 @@ public sealed class WorkflowDraftServiceTests
     [Fact]
     public async Task A_draft_without_a_name_is_not_saved()
     {
-        var result = await Service().SaveAsync(WorkspaceId, RefId, new WorkflowDraftSaveRequest(" ", null, null!), CancellationToken.None);
+        var result = await Service().SaveAsync(WorkspaceId, RefId, new WorkflowDraftSaveRequest(" ", null, null!, null!), CancellationToken.None);
 
         Assert.Equal("WORKFLOW_DRAFT_INVALID", result.Error.Code);
         _drafts.VerifyNoOtherCalls();

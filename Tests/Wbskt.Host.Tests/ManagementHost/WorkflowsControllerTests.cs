@@ -28,7 +28,7 @@ public sealed class WorkflowsControllerTests
     {
         var service = new Mock<IWorkflowLifecycleService>();
         var engineClient = new Mock<IWorkflowEngineGateway>();
-        var request = new WorkflowPublishRequest(Guid.NewGuid(), "Greenhouse", "desc", null!, Enable: true);
+        var request = new WorkflowPublishRequest(Guid.NewGuid(), "Greenhouse", "desc", [], [], Enable: true);
         var expected = new WorkflowPublishResponse(request.RefId, 1, WorkflowState.Enabled, 1);
         service.Setup(x => x.PublishAsync(WorkspaceId, WorkspaceRef, request, It.IsAny<CancellationToken>())).ReturnsAsync(Result<WorkflowPublishResponse>.Success(expected));
         var controller = new WorkflowsController(Mock.Of<IWorkflowQueryService>(), service.Object, new WorkflowRunService(Mock.Of<IWorkflowStateProvider>(), Mock.Of<IWorkflowRunQueryService>(), engineClient.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunService>>()));

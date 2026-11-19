@@ -3407,14 +3407,33 @@
       },
       "WorkflowDraftSaveRequest": {
         "properties": {
+          "creditBudget": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ]
+          },
           "definition": {
-            "$ref": "#/components/schemas/WorkflowDefinition"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkflowDefinition"
+              }
+            ]
           },
           "description": {
             "type": [
               "null",
               "string"
             ]
+          },
+          "edges": {
+            "type": "array"
           },
           "expectedRevision": {
             "format": "int32",
@@ -3425,14 +3444,31 @@
               "string"
             ]
           },
+          "failFast": {
+            "default": false,
+            "type": "boolean"
+          },
           "name": {
             "type": "string"
+          },
+          "nodes": {
+            "type": "array"
+          },
+          "sharedVariableSchema": {
+            "items": {
+              "$ref": "#/components/schemas/SharedVariableDeclaration"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
           }
         },
         "required": [
           "name",
           "description",
-          "definition"
+          "nodes",
+          "edges"
         ],
         "type": "object"
       },
@@ -3522,8 +3558,24 @@
       },
       "WorkflowPublishRequest": {
         "properties": {
+          "creditBudget": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ]
+          },
           "definition": {
-            "$ref": "#/components/schemas/WorkflowDefinition"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkflowDefinition"
+              }
+            ]
           },
           "description": {
             "type": [
@@ -3531,22 +3583,42 @@
               "string"
             ]
           },
+          "edges": {
+            "type": "array"
+          },
           "enable": {
+            "type": "boolean"
+          },
+          "failFast": {
+            "default": false,
             "type": "boolean"
           },
           "name": {
             "type": "string"
           },
+          "nodes": {
+            "type": "array"
+          },
           "refId": {
             "format": "uuid",
             "type": "string"
+          },
+          "sharedVariableSchema": {
+            "items": {
+              "$ref": "#/components/schemas/SharedVariableDeclaration"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
           }
         },
         "required": [
           "refId",
           "name",
           "description",
-          "definition",
+          "nodes",
+          "edges",
           "enable"
         ],
         "type": "object"
@@ -3895,12 +3967,66 @@
       },
       "WorkflowValidationRequest": {
         "properties": {
+          "creditBudget": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ]
+          },
           "definition": {
-            "$ref": "#/components/schemas/WorkflowDefinition"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkflowDefinition"
+              }
+            ]
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "edges": {
+            "type": "array"
+          },
+          "failFast": {
+            "default": false,
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nodes": {
+            "type": "array"
+          },
+          "refId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sharedVariableSchema": {
+            "items": {
+              "$ref": "#/components/schemas/SharedVariableDeclaration"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
           }
         },
         "required": [
-          "definition"
+          "name",
+          "description",
+          "nodes",
+          "edges"
         ],
         "type": "object"
       },

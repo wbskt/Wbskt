@@ -127,7 +127,7 @@ public sealed class SubWorkflowE2ETests(ServicesFixture fixture)
             .BuildAndValidate();
 
         using var response = await fixture.Management.As(token).PublishWorkflowRawAsync(
-            workspaceRef, new WorkflowPublishRequest(parentRef, $"E2E-Parent-{parentRef:N}", null, parent, Enable: true));
+            workspaceRef, WorkflowRequests.Publish(parentRef, $"E2E-Parent-{parentRef:N}", parent));
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("WORKFLOW_VALIDATION_FAILED");

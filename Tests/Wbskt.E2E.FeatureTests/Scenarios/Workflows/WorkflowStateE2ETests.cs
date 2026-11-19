@@ -352,7 +352,7 @@ public sealed class WorkflowStateE2ETests(ServicesFixture fixture)
     private async Task PublishAsync(string token, Guid workspace, Guid workflowRef, WorkflowDefinition definition, bool enable)
     {
         using var response = await fixture.Management.As(token).PublishWorkflowRawAsync(
-            workspace, new WorkflowPublishRequest(workflowRef, $"E2E-State-{workflowRef:N}", null, definition, Enable: enable));
+            workspace, WorkflowRequests.Publish(workflowRef, $"E2E-State-{workflowRef:N}", definition, enable));
         await WbsktApiClient.EnsureSuccessAsync(response);
     }
 }

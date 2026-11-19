@@ -658,7 +658,7 @@ public sealed class ServicesFixture : IDisposable
 
         var published = await Management.As(token).PublishWorkflowAsync(
             workspaceRef,
-            new WorkflowPublishRequest(workflowRefId, name, null, definition, Enable: true));
+            WorkflowRequests.Publish(workflowRefId, name, definition));
 
         return published.RefId;
     }

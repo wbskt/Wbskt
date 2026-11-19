@@ -45,9 +45,20 @@ public sealed class WorkflowQueryService : IWorkflowQueryService
         _logger = logger;
     }
 
-    public async Task<WorkflowValidationResponse> ValidateAsync(int workspaceId, WorkflowDefinition? definition, CancellationToken ct)
+    public Task<WorkflowValidationResponse> ValidateAsync(int workspaceId, WorkflowDefinition? definition, CancellationToken ct)
     {
-        ValidationResult validation = _validator.Validate(definition);
+        return ValidateAsync(workspaceId, definition, refId: null, ct);
+    }
+
+    public Task<WorkflowValidationResponse> ValidateAsync(int workspaceId, WorkflowValidationRequest request, CancellationToken ct)
+    {
+        // Nothing is stored, so the definition's time is never read.
+        return ValidateAsync(workspaceId, AuthoredDefinitions.From(request, now: default), request.RefId, ct);
+    }
+
+    private async Task<WorkflowValidationResponse> ValidateAsync(int workspaceId, WorkflowDefinition? definition, Guid? refId, CancellationToken ct)
+    {
+        ValidationResult validation = _validator.Validate(definition, refId);
 
         // The workspace's half - do the integrations, clients and child workflows the steps name exist
         // here - so a draft hears what publishing it would.

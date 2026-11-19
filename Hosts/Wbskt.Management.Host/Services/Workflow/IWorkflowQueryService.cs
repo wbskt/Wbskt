@@ -12,6 +12,8 @@ public interface IWorkflowQueryService
     /// builder can surface them while editing rather than discovering them by creating a version.
     /// </summary>
     Task<WorkflowValidationResponse> ValidateAsync(int workspaceId, WorkflowDefinition? definition, CancellationToken ct);
+    /// <summary><see cref="ValidateAsync(int, WorkflowDefinition?, CancellationToken)"/> for the body a designer sends.</summary>
+    Task<WorkflowValidationResponse> ValidateAsync(int workspaceId, WorkflowValidationRequest request, CancellationToken ct);
 
     Task<Result<WorkflowDefinitionDto>> GetCurrentAsync(int workspaceId, Guid refId, CancellationToken ct);
 
