@@ -66,6 +66,29 @@ public sealed class AccountServiceTests
         Assert.Equal((invitationRef, 42, UserRef), (accepted.InvitationRefId, accepted.UserId, accepted.UserRefId));
     }
 
+    /// <summary>
+    /// The invitation was revoked or redeemed between the check and the redemption. The account exists
+    /// by then, and cannot sign in without confirming its address, so the link must already be out.
+    /// </summary>
+    [Fact]
+    public async Task An_invitation_lost_after_the_account_is_made_still_leaves_a_confirmation_link()
+    {
+        var harness = new Harness();
+        harness.Tenants.Setup(p => p.GetInvitationByTokenHashAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new InvitationLookup(Guid.NewGuid(), Guid.NewGuid(), "Acme", Email, DateTime.UtcNow.AddDays(1), IsLive: true));
+        harness.Accounts.Setup(p => p.InsertUserAsync(It.IsAny<User>(), It.IsAny<CancellationToken>())).ReturnsAsync(42);
+        harness.Accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
+        harness.Tenants.Setup(p => p.AcceptInvitationAsync(It.IsAny<byte[]>(), 42, It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(SqlExceptions.WithNumber(50011, "The invitation is no longer valid."));
+
+        var result = await harness.Registration.RegisterUserAsync("someone", Email, Password, "invitation-token");
+
+        Assert.Equal("INVITATION_INVALID", result.Error.Code);
+        Assert.Contains("account was created", result.Error.Message);
+        harness.Accounts.Verify(p => p.CreateEmailVerificationTokenAsync(42, It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.IsType<UserRegisteredEvent>(Assert.Single(harness.Bus.Published));
+    }
+
     [Fact]
     public async Task An_invitation_sent_to_another_address_creates_no_account()
     {

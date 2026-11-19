@@ -23,6 +23,16 @@ internal sealed class RegistrationService : IRegistrationService
     /// </summary>
     private static readonly Error InvalidInvitation = SqlGuardErrors.InvalidInvitation;
 
+    private static readonly Error InvitationLostAfterSignUp = SqlGuardErrors.InvalidInvitation with
+    {
+        Message = "Your account was created and a confirmation link was sent to your address, but the invitation can no longer be used. Confirm your address, sign in, and ask for a new invitation."
+    };
+
+    private static readonly Error NoSeatAfterSignUp = SqlGuardErrors.PlanMemberLimitReached with
+    {
+        Message = "Your account was created and a confirmation link was sent to your address, but the team that invited you has no room for another member. Confirm your address and sign in; they can invite you again once they make room."
+    };
+
     private static readonly Error UsernameConflict = Error.Conflict("AUTH_USERNAME_CONFLICT", "That username is already taken.");
 
     private static readonly Error InvalidVerificationToken =
@@ -126,19 +136,6 @@ internal sealed class RegistrationService : IRegistrationService
             var tenantRefId = await _tenants.CreateTenantAsync($"{username}'s Tenant", null, userId, DefaultWorkspaceName, cancellationToken);
             _logger.LogInformation("Created tenant {TenantRefId} for new user ID {UserId}", tenantRefId, userId);
 
-            int? joinedTenantId = null;
-            if (invitationToken is not null && invitation is not null)
-            {
-                // Re-validated authoritatively inside the procedure. Between the check above and here
-                // the invitation could have been revoked or redeemed, in which case this throws and
-                // registration fails — the account and its own tenant survive, so the user can log in
-                // and ask for a fresh invitation rather than being stranded.
-                var limits = await _limits.ForTenantAsync(invitation.TenantRef, cancellationToken);
-                var tenantId = await _tenants.AcceptInvitationAsync(SecurityTokens.Hash(invitationToken), userId, limits.Members, cancellationToken);
-                _logger.LogInformation("New user ID {UserId} joined tenant ID {TenantId} by invitation", userId, tenantId);
-                joinedTenantId = tenantId;
-            }
-
             user = await _accounts.GetByIdAsync(userId, cancellationToken);
 
             // The account exists and is unusable until this link is followed. Issued as its own step
@@ -153,8 +150,18 @@ internal sealed class RegistrationService : IRegistrationService
             await IssueEmailVerificationAsync(user, cancellationToken);
 
             await _eventBus.PublishAsync(new UserRegisteredEvent(userId, user.RefId, username, email), cancellationToken);
-            if (joinedTenantId is { } joined && invitation is not null)
+
+            // After the confirmation link, not before: the invitation can fail here, and an account
+            // whose link was never sent could not sign in, ask for a new invitation, or register again.
+            if (invitationToken is not null && invitation is not null)
             {
+                // Re-validated authoritatively inside the procedure. Between the check above and here
+                // the invitation could have been revoked or redeemed, or the tenant filled up, in which
+                // case this throws and registration answers with the reason. The account, its own
+                // tenant and its confirmation link survive, so the user can sign in and be invited again.
+                var limits = await _limits.ForTenantAsync(invitation.TenantRef, cancellationToken);
+                var joined = await _tenants.AcceptInvitationAsync(SecurityTokens.Hash(invitationToken), userId, limits.Members, cancellationToken);
+                _logger.LogInformation("New user ID {UserId} joined tenant ID {TenantId} by invitation", userId, joined);
                 await _eventBus.PublishAsync(
                     new InvitationAcceptedEvent(invitation.RefId, invitation.Email, userId, user.RefId) { WorkspaceIds = await _audit.OfTenantAsync(joined, cancellationToken) },
                     cancellationToken);
@@ -167,24 +174,25 @@ internal sealed class RegistrationService : IRegistrationService
         catch (Exception ex)
         {
             // The invitation was revoked or redeemed between the pre-check and the redemption. The
-            // account and its own tenant exist and are usable, so this is the caller's problem to
-            // retry with a fresh invitation, not a server fault — 400, matching the pre-check.
+            // account, its own tenant and its confirmation link exist, so this is the caller's problem
+            // to retry with a fresh invitation, not a server fault — 400, matching the pre-check, with
+            // a message that says the account was made.
             if (ex is SqlException { Number: 50011 })
             {
                 _logger.LogWarning("Registration for {Username} completed but the invitation was no longer redeemable", username);
                 _metrics.RecordRegistration("invalid_invitation");
-                return Result.Failure(InvalidInvitation);
+                return Result.Failure(InvitationLostAfterSignUp);
             }
 
-            // The inviting tenant's plan has no room for another member. As above, the account and its
-            // own tenant survive; the inviter has to make room and invite again.
+            // The inviting tenant's plan has no room for another member. As above, the account survives
+            // with its confirmation link; the inviter has to make room and invite again.
             if (ex is SqlException { Number: 50031 })
             {
                 _logger.LogWarning("Registration for {Username} completed but the inviting tenant is at its plan's member limit", username);
                 _metrics.RecordRegistration("member_limit");
                 return Result.Failure(invitation is null
-                    ? SqlGuardErrors.PlanMemberLimitReached
-                    : await _limits.WithSeatsAsync(SqlGuardErrors.PlanMemberLimitReached, invitation.TenantRef, cancellationToken));
+                    ? NoSeatAfterSignUp
+                    : await _limits.WithSeatsAsync(NoSeatAfterSignUp, invitation.TenantRef, cancellationToken));
             }
 
             if (ex is SqlException { Number: 50027 })
