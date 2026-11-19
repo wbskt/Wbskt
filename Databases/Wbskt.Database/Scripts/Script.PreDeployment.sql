@@ -319,3 +319,9 @@ DROP PROCEDURE IF EXISTS dbo.TriggerDispatchOutcome_Record;
 GO
 DROP PROCEDURE IF EXISTS dbo.WorkflowDefinition_FindBy_RefId;
 GO
+/*
+dbo.ViewEvents (in Views/EventLogs.sql) had no reader: the console's activity reads go through
+EventLog_GetBy_* procedures. DropObjectsNotInSource is off, so it is dropped here.
+*/
+DROP VIEW IF EXISTS dbo.ViewEvents;
+GO
