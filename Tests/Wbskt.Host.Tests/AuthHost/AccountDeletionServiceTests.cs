@@ -50,7 +50,7 @@ public sealed class AccountDeletionServiceTests
         _accounts.Setup(p => p.GetSoleTenantWorkspaceIdsAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(new List<int> { 7 });
         var order = new List<string>();
         _gateway.Setup(g => g.CancelSubscriptionAsync("sub_1", It.IsAny<CancellationToken>())).Callback(() => order.Add("cancel")).Returns(Task.CompletedTask);
-        _accounts.Setup(p => p.DeleteUserAsync(42, It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), It.IsAny<CancellationToken>()))
+        _accounts.Setup(p => p.DeleteUserAsync(42, It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), null, It.IsAny<CancellationToken>()))
             .Callback(() => order.Add("delete"))
             .ReturnsAsync(new List<int>());
 
@@ -76,7 +76,7 @@ public sealed class AccountDeletionServiceTests
         Assert.Equal(Wbskt.Infrastructure.ErrorType.Conflict, result.Error.Type);
         Assert.Contains("Acme, Globex", result.Error.Message);
         _gateway.Verify(g => g.CancelSubscriptionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-        _accounts.Verify(p => p.DeleteUserAsync(It.IsAny<int>(), It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), It.IsAny<CancellationToken>()), Times.Never);
+        _accounts.Verify(p => p.DeleteUserAsync(It.IsAny<int>(), It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public sealed class AccountDeletionServiceTests
         Assert.Equal(Wbskt.Infrastructure.ErrorType.Unavailable, down.Error.Type);
         Assert.Equal("BILLING_SUBSCRIPTION_NOT_CANCELLED", timedOut.Error.Code);
         Assert.Equal("BILLING_SUBSCRIPTION_NOT_CANCELLED", unconfigured.Error.Code);
-        _accounts.Verify(p => p.DeleteUserAsync(It.IsAny<int>(), It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), It.IsAny<CancellationToken>()), Times.Never);
+        _accounts.Verify(p => p.DeleteUserAsync(It.IsAny<int>(), It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
         _accessTokens.Verify(a => a.RevokeUserAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -104,8 +104,8 @@ public sealed class AccountDeletionServiceTests
     {
         _accounts.Setup(p => p.GetSoleTenantWorkspaceIdsAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(new List<int> { 7, 9 });
         IReadOnlyDictionary<int, OutboxMessage>? planned = null;
-        _accounts.Setup(p => p.DeleteUserAsync(42, It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), It.IsAny<CancellationToken>()))
-            .Callback<int, IReadOnlyDictionary<int, OutboxMessage>, CancellationToken>((_, w, _) => planned = w)
+        _accounts.Setup(p => p.DeleteUserAsync(42, It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), null, It.IsAny<CancellationToken>()))
+            .Callback<int, IReadOnlyDictionary<int, OutboxMessage>, DateTime?, CancellationToken>((_, w, _, _) => planned = w)
             .ReturnsAsync(new List<int> { 3 });
 
         var result = await Service().DeleteAccountAsync(42, Password, Ip);
@@ -132,7 +132,7 @@ public sealed class AccountDeletionServiceTests
 
         Assert.Equal("AUTH_USER_NOT_FOUND", result.Error.Code);
         _accounts.Verify(p => p.EndPasswordCheckAsync(It.IsAny<int>(), false, It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Never);
-        _accounts.Verify(p => p.DeleteUserAsync(It.IsAny<int>(), It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), It.IsAny<CancellationToken>()), Times.Never);
+        _accounts.Verify(p => p.DeleteUserAsync(It.IsAny<int>(), It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -142,7 +142,7 @@ public sealed class AccountDeletionServiceTests
 
         Assert.Equal("AUTH_CURRENT_PASSWORD_INVALID", result.Error.Code);
         _accounts.Verify(p => p.EndPasswordCheckAsync(42, false, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, It.IsAny<CancellationToken>()), Times.Once);
-        _accounts.Verify(p => p.DeleteUserAsync(It.IsAny<int>(), It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), It.IsAny<CancellationToken>()), Times.Never);
+        _accounts.Verify(p => p.DeleteUserAsync(It.IsAny<int>(), It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
         _accessTokens.Verify(a => a.RevokeUserAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -156,14 +156,14 @@ public sealed class AccountDeletionServiceTests
         var result = await Service().DeleteAccountAsync(42, Password, Ip);
 
         Assert.Equal("AUTH_ACCOUNT_LOCKED", result.Error.Code);
-        _accounts.Verify(p => p.DeleteUserAsync(It.IsAny<int>(), It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), It.IsAny<CancellationToken>()), Times.Never);
+        _accounts.Verify(p => p.DeleteUserAsync(It.IsAny<int>(), It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task Leaving_a_shared_tenant_nobody_else_administers_is_refused_and_keeps_their_tokens()
     {
         _accounts.Setup(p => p.GetSoleTenantWorkspaceIdsAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(Array.Empty<int>());
-        _accounts.Setup(p => p.DeleteUserAsync(42, It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), It.IsAny<CancellationToken>()))
+        _accounts.Setup(p => p.DeleteUserAsync(42, It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), null, It.IsAny<CancellationToken>()))
             .ThrowsAsync(SqlExceptions.WithNumber(50018, "Nobody else administers Acme."));
 
         var result = await Service().DeleteAccountAsync(42, Password, Ip);
@@ -171,6 +171,38 @@ public sealed class AccountDeletionServiceTests
         Assert.Equal("ACCOUNT_SOLE_ADMINISTRATOR", result.Error.Code);
         Assert.Contains("Acme", result.Error.Message);
         _accessTokens.Verify(a => a.RevokeUserAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task An_unconfirmed_account_is_deleted_with_its_workspaces_without_asking_the_payment_provider()
+    {
+        var createdBefore = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        _accounts.Setup(p => p.GetSoleTenantWorkspaceIdsAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(new List<int> { 7 });
+        IReadOnlyDictionary<int, OutboxMessage>? planned = null;
+        _accounts.Setup(p => p.DeleteUserAsync(42, It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), createdBefore, It.IsAny<CancellationToken>()))
+            .Callback<int, IReadOnlyDictionary<int, OutboxMessage>, DateTime?, CancellationToken>((_, w, _, _) => planned = w)
+            .ReturnsAsync(new List<int>());
+
+        var deleted = await Service().DeleteUnconfirmedAsync(42, createdBefore);
+
+        Assert.True(deleted);
+        Assert.Equal([7], planned!.Keys);
+        _billing.Verify(b => b.GetLiveSubscriptionsOfSoleTenantsAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        _bus.Verify(b => b.PublishAsync(It.Is<AccountDeletedEvent>(e => e.UserRefId == UserRef && e.ClientAddress == null), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task An_account_confirmed_while_the_sweep_deletes_it_is_kept()
+    {
+        var createdBefore = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        _accounts.Setup(p => p.GetSoleTenantWorkspaceIdsAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(Array.Empty<int>());
+        _accounts.Setup(p => p.DeleteUserAsync(42, It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), createdBefore, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(SqlExceptions.WithNumber(50029, "The account was confirmed or used while it was being deleted as unconfirmed."));
+
+        var deleted = await Service().DeleteUnconfirmedAsync(42, createdBefore);
+
+        Assert.False(deleted);
+        _bus.Verify(b => b.PublishAsync(It.IsAny<AccountDeletedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private AccountDeletionService Service() =>

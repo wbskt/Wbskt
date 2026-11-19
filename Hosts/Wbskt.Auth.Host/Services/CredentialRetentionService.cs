@@ -9,7 +9,8 @@ namespace Wbskt.Auth.Host.Services;
 /// Hourly sweep of spent credentials: refresh, reset and verification tokens and unaccepted
 /// invitations, deleted <see cref="Grace"/> after they expired. Nothing deleted them before, so the
 /// tables grew with every sign-in for the life of the deployment. Each sweep first logs the invitations
-/// that ran out unused since the last one, in the tenant's workspaces' audit logs.
+/// that ran out unused since the last one, in the tenant's workspaces' audit logs, and then deletes the
+/// accounts whose email was never confirmed <see cref="UnconfirmedAccountLifetime"/> after they registered.
 /// </summary>
 public sealed class CredentialRetentionService : PeriodicWorker
 {
@@ -20,6 +21,15 @@ public sealed class CredentialRetentionService : PeriodicWorker
     /// recognised as rotated-away or revoked is evidence of theft, which an unknown one is not.
     /// </summary>
     internal static readonly TimeSpan Grace = TimeSpan.FromDays(30);
+
+    /// <summary>
+    /// How long an account may wait for its owner to confirm the address. Until then it holds the
+    /// username and the address, so someone who mistyped theirs, or registered someone else's, keeps
+    /// the real owner out of both.
+    /// </summary>
+    internal static readonly TimeSpan UnconfirmedAccountLifetime = TimeSpan.FromDays(30);
+
+    internal const int UnconfirmedBatchSize = 100;
 
     private readonly TimeProvider _timeProvider;
 
@@ -71,7 +81,44 @@ public sealed class CredentialRetentionService : PeriodicWorker
             Logger.LogInformation("Credential retention deleted {Count} rows that expired before {CutoffUtc:o}.", total, cutoffUtc);
         }
 
+        await DeleteUnconfirmedAccountsAsync(services, provider, nowUtc, cancellationToken);
+
         return total;
+    }
+
+    /// <summary>
+    /// Deletes, one at a time, every account never confirmed within <see cref="UnconfirmedAccountLifetime"/>.
+    /// One that was confirmed or used meanwhile is skipped. Returns how many were deleted.
+    /// </summary>
+    private async Task<int> DeleteUnconfirmedAccountsAsync(IServiceProvider services, ICredentialRetentionProvider provider, DateTime nowUtc, CancellationToken cancellationToken)
+    {
+        var deletion = services.GetRequiredService<IAccountDeletionService>();
+        var createdBeforeUtc = nowUtc - UnconfirmedAccountLifetime;
+        var afterId = 0;
+        var deleted = 0;
+
+        IReadOnlyCollection<int> batch;
+        do
+        {
+            batch = await provider.GetUnconfirmedAccountsAsync(createdBeforeUtc, nowUtc, afterId, UnconfirmedBatchSize, cancellationToken);
+            foreach (var userId in batch)
+            {
+                if (await deletion.DeleteUnconfirmedAsync(userId, createdBeforeUtc, cancellationToken))
+                {
+                    deleted++;
+                }
+
+                afterId = Math.Max(afterId, userId);
+            }
+        }
+        while (batch.Count == UnconfirmedBatchSize);
+
+        if (deleted > 0)
+        {
+            Logger.LogInformation("Credential retention deleted {Count} accounts never confirmed since before {CreatedBeforeUtc:o}.", deleted, createdBeforeUtc);
+        }
+
+        return deleted;
     }
 
     private static async Task AnnounceExpiredInvitationsAsync(IServiceProvider services, ICredentialRetentionProvider provider, DateTime nowUtc, CancellationToken cancellationToken)

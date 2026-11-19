@@ -108,7 +108,8 @@ internal interface IAccountProvider : IReferenceProvider
     /// transaction; its membership of every other tenant; its sessions and tokens. The user row is
     /// anonymised rather than removed. Returns the shared tenants the user left. Throws SQL guard 50018
     /// while nobody else administers a tenant others belong to, and 50019 when the workspaces no longer
-    /// match.
+    /// match. With <paramref name="unconfirmedBefore"/>, deletes only an account still unconfirmed,
+    /// never signed in, created before it and alone in its tenants, and throws 50029 otherwise.
     /// </summary>
-    Task<IReadOnlyCollection<int>> DeleteUserAsync(int userId, IReadOnlyDictionary<int, OutboxMessage> deletedWorkspaces, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<int>> DeleteUserAsync(int userId, IReadOnlyDictionary<int, OutboxMessage> deletedWorkspaces, DateTime? unconfirmedBefore, CancellationToken cancellationToken = default);
 }
