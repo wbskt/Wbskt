@@ -135,13 +135,16 @@ public sealed class AccessControlServiceTests
 
     /// <summary>
     /// The workspace is looked up within the tenant, so another tenant's reads exactly like one that
-    /// does not exist, and nothing reaches the procedure.
+    /// does not exist, and nothing reaches the procedure. A role assignment leaves the lookup to its
+    /// procedure, whose refusal (50017) reads back the same.
     /// </summary>
     [Fact]
     public async Task An_assignment_to_another_tenants_workspace_reads_as_not_found()
     {
         var elsewhere = Guid.NewGuid();
         _workspaces.Setup(p => p.FindIdByRefIdAsync(elsewhere, It.IsAny<CancellationToken>())).ReturnsAsync(99);
+        _accessControl.Setup(p => p.AssignUserRoleAsync(MemberRef, RoleRef, TenantId, elsewhere, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(SqlExceptions.WithNumber(50017, "Workspace not found in this tenant."));
 
         var assigned = await _service.AssignUserRoleAsync(TenantId, MemberRef, RoleRef, elsewhere);
         var granted = await _service.GrantUserPermissionAsync(TenantId, MemberRef, new GrantPermissionRequest(PermissionNames.ClientsRead, false, elsewhere));
@@ -152,8 +155,8 @@ public sealed class AccessControlServiceTests
             Assert.Equal(ErrorType.NotFound, result.Error.Type);
         }
 
-        _accessControl.Verify(p => p.AssignUserRoleAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
         Assert.Empty(_bus.Published);
+        Assert.Equal(0, _accessChanges.Announced);
     }
 
     [Fact]
@@ -189,14 +192,33 @@ public sealed class AccessControlServiceTests
 
     // ---------------------------------------------------------------- assignments
 
-    [Fact]
-    public async Task A_role_is_not_assigned_to_someone_outside_the_tenant()
+    /// <summary>
+    /// The procedure resolves the references within the tenant; each miss reads back as that
+    /// reference's own 404, and nothing is announced.
+    /// </summary>
+    [Theory]
+    [InlineData(50037, "USER_NOT_FOUND")]
+    [InlineData(50038, "ROLE_NOT_FOUND")]
+    [InlineData(50017, "WORKSPACE_NOT_FOUND")]
+    public async Task A_reference_the_assignment_cannot_resolve_reads_as_not_found(int number, string code)
     {
-        var result = await _service.AssignUserRoleAsync(TenantId, Guid.NewGuid(), RoleRef, null);
+        var stranger = Guid.NewGuid();
+        _accessControl.Setup(p => p.AssignUserRoleAsync(stranger, RoleRef, TenantId, null, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(SqlExceptions.WithNumber(number, "Not found in this tenant."));
+        _accessControl.Setup(p => p.RemoveUserRoleAsync(stranger, RoleRef, TenantId, null, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(SqlExceptions.WithNumber(number, "Not found in this tenant."));
 
-        Assert.Equal("USER_NOT_FOUND", result.Error.Code);
-        _accessControl.Verify(p => p.AssignUserRoleAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
+        var assigned = await _service.AssignUserRoleAsync(TenantId, stranger, RoleRef, null);
+        var removed = await _service.RemoveUserRoleAsync(TenantId, stranger, RoleRef, null);
+
+        foreach (var result in new[] { assigned, removed })
+        {
+            Assert.Equal(code, result.Error.Code);
+            Assert.Equal(ErrorType.NotFound, result.Error.Type);
+        }
+
         Assert.Empty(_bus.Published);
+        Assert.Equal(0, _accessChanges.Announced);
     }
 
     [Fact]
@@ -205,7 +227,7 @@ public sealed class AccessControlServiceTests
         var result = await _service.AssignUserRoleAsync(TenantId, MemberRef, RoleRef, WorkspaceRef);
 
         Assert.True(result.IsSuccess);
-        _accessControl.Verify(p => p.AssignUserRoleAsync(MemberId, RoleId, TenantId, WorkspaceId, It.IsAny<CancellationToken>()), Times.Once);
+        _accessControl.Verify(p => p.AssignUserRoleAsync(MemberRef, RoleRef, TenantId, WorkspaceRef, It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(1, _accessChanges.Announced);
         var assigned = Assert.IsType<MemberRoleAssignedEvent>(Assert.Single(_bus.Published));
         Assert.Equal((MemberRef, RoleRef, (Guid?)WorkspaceRef), (assigned.MemberRefId, assigned.RoleRefId, assigned.WorkspaceRefId));

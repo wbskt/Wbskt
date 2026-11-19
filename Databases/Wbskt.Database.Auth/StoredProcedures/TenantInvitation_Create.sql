@@ -17,7 +17,11 @@ CREATE PROCEDURE dbo.TenantInvitation_Create
     @WorkspaceIds NVARCHAR(MAX) = NULL,
     -- The tenant's plan's limit on members (NULL is none). An invitation to a tenant already at it is
     -- refused (50031), since it could never be accepted; TenantInvitation_Accept holds the limit.
-    @MemberLimit INT = NULL
+    @MemberLimit INT = NULL,
+    -- The workspaces' public references as a JSON array of strings, resolved here within @TenantId in
+    -- place of @WorkspaceIds, so the caller needs no lookup per workspace. One that names nothing in
+    -- the tenant is refused (50017). @WorkspaceIds stays for the host still running during a rollout.
+    @WorkspaceRefIds NVARCHAR(MAX) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -48,6 +52,26 @@ BEGIN
     SELECT DISTINCT CAST(value AS INT)
     FROM STRING_SPLIT(ISNULL(@WorkspaceIds, N''), N',')
     WHERE LTRIM(RTRIM(value)) <> N'';
+
+    DECLARE @WorkspaceRefs TABLE (RefId UNIQUEIDENTIFIER NOT NULL PRIMARY KEY);
+    INSERT INTO @WorkspaceRefs (RefId)
+    SELECT DISTINCT CONVERT(UNIQUEIDENTIFIER, value)
+    FROM OPENJSON(ISNULL(@WorkspaceRefIds, N'[]'));
+
+    IF EXISTS (
+        SELECT 1
+        FROM @WorkspaceRefs R
+        LEFT JOIN dbo.Workspaces W ON W.RefId = R.RefId AND W.TenantId = @TenantId
+        WHERE W.Id IS NULL)
+    BEGIN
+        THROW 50017, 'Workspace does not belong to the specified tenant.', 1;
+    END
+
+    INSERT INTO @Workspaces (WorkspaceId)
+    SELECT W.Id
+    FROM @WorkspaceRefs R
+    INNER JOIN dbo.Workspaces W ON W.RefId = R.RefId AND W.TenantId = @TenantId
+    WHERE NOT EXISTS (SELECT 1 FROM @Workspaces WS WHERE WS.WorkspaceId = W.Id);
 
     IF EXISTS (
         SELECT 1

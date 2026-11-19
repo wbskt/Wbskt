@@ -1,4 +1,5 @@
 using System.Data;
+using System.Text.Json;
 using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Models;
@@ -123,7 +124,7 @@ internal sealed class TenantProvider : BaseSqlProvider, ITenantProvider
         }, cancellationToken);
     }
 
-    public async Task<CreatedInvitation> CreateInvitationAsync(int tenantId, string email, int? roleId, byte[] tokenHash, DateTime expiresAt, int invitedByUserId, IReadOnlyCollection<int> workspaceIds, int? memberLimit, CancellationToken cancellationToken = default)
+    public async Task<CreatedInvitation> CreateInvitationAsync(int tenantId, string email, int? roleId, byte[] tokenHash, DateTime expiresAt, int invitedByUserId, IReadOnlyCollection<Guid> workspaceRefs, int? memberLimit, CancellationToken cancellationToken = default)
     {
         var parameters = await ExecuteNonQueryAsync("dbo.TenantInvitation_Create", p =>
         {
@@ -135,7 +136,7 @@ internal sealed class TenantProvider : BaseSqlProvider, ITenantProvider
             p.AddWithValue("@InvitedByUserId", invitedByUserId);
             p.Add("@RefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
             p.Add("@TenantName", SqlDbType.NVarChar, 100).Direction = ParameterDirection.Output;
-            p.AddWithValue("@WorkspaceIds", workspaceIds.Count == 0 ? DBNull.Value : string.Join(',', workspaceIds));
+            p.AddWithValue("@WorkspaceRefIds", workspaceRefs.Count == 0 ? DBNull.Value : JsonSerializer.Serialize(workspaceRefs));
             p.AddWithValue("@MemberLimit", (object?)memberLimit ?? DBNull.Value);
         }, cancellationToken);
 

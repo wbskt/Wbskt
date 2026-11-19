@@ -42,7 +42,7 @@ public sealed class PeopleAuditEventTests
 
         var announcer = new TenantAnnouncer(bus.Object, _audit.Object, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance);
         _tenantService = new TenantService(
-            _tenants.Object, _accessControl.Object, Mock.Of<IWorkspaceProvider>(), bus.Object, Mock.Of<IAuthMailer>(),
+            _tenants.Object, _accessControl.Object, bus.Object, Mock.Of<IAuthMailer>(),
             NullLogger<TenantService>.Instance, new FixedTenantLimits(), announcer, TimeProvider.System, WorkspaceFakes.Created());
         _accessControlService = new AccessControlService(
             _accessControl.Object, _tenants.Object, Mock.Of<IWorkspaceProvider>(),
@@ -53,7 +53,7 @@ public sealed class PeopleAuditEventTests
     public async Task An_invitation_is_logged_in_every_workspace_of_the_tenant()
     {
         var invitationRef = Guid.NewGuid();
-        _tenants.Setup(p => p.CreateInvitationAsync(TenantId, "amal@example.test", null, It.IsAny<byte[]>(), It.IsAny<DateTime>(), CallerId, It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+        _tenants.Setup(p => p.CreateInvitationAsync(TenantId, "amal@example.test", null, It.IsAny<byte[]>(), It.IsAny<DateTime>(), CallerId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CreatedInvitation(invitationRef, "Acme"));
 
         await _tenantService.CreateInvitationAsync(CallerId, TenantId, new CreateInvitationRequest("amal@example.test", null), CancellationToken.None);

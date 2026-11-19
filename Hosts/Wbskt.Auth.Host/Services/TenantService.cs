@@ -26,7 +26,6 @@ internal sealed class TenantService : ITenantService
     private readonly WorkspaceCreatedOutbox _workspaceCreated;
     private readonly ITenantProvider _tenants;
     private readonly IAccessControlProvider _accessControl;
-    private readonly IWorkspaceProvider _workspaceProvider;
     private readonly IEventBus _eventBus;
     private readonly IAuthMailer _mailer;
     private readonly ILogger<TenantService> _logger;
@@ -37,7 +36,6 @@ internal sealed class TenantService : ITenantService
     public TenantService(
         ITenantProvider tenants,
         IAccessControlProvider accessControl,
-        IWorkspaceProvider workspaceProvider,
         IEventBus eventBus,
         IAuthMailer mailer,
         ILogger<TenantService> logger,
@@ -51,7 +49,6 @@ internal sealed class TenantService : ITenantService
         _workspaceCreated = workspaceCreated;
         _tenants = tenants;
         _accessControl = accessControl;
-        _workspaceProvider = workspaceProvider;
         _eventBus = eventBus;
         _mailer = mailer;
         _logger = logger;
@@ -219,17 +216,8 @@ internal sealed class TenantService : ITenantService
             roleId = named.Value;
         }
 
-        var workspaceIds = new List<int>();
-        foreach (var workspaceRef in (request.WorkspaceRefs ?? []).Distinct())
-        {
-            var workspace = await TenantReferences.ResolveWorkspaceAsync(_workspaceProvider, tenantId, workspaceRef, cancellationToken);
-            if (workspace.IsFailure)
-            {
-                return Result<CreatedInvitationResponse>.Failure(workspace.Error);
-            }
-
-            workspaceIds.Add(workspace.Value);
-        }
+        // Resolved by the procedure within the tenant; one that names nothing there is WORKSPACE_NOT_FOUND.
+        var workspaceRefs = (request.WorkspaceRefs ?? []).Distinct().ToList();
 
         var token = SecurityTokens.Generate();
         var expiresAt = _time.GetUtcNow().UtcDateTime.Add(InvitationLifetime);
@@ -237,7 +225,7 @@ internal sealed class TenantService : ITenantService
 
         Result<CreatedInvitationResponse> result = await GuardAsync("CreateInvitation", async () =>
         {
-            var created = await _tenants.CreateInvitationAsync(tenantId, request.Email, roleId, SecurityTokens.Hash(token), expiresAt, callerId, workspaceIds, limits.Members, cancellationToken);
+            var created = await _tenants.CreateInvitationAsync(tenantId, request.Email, roleId, SecurityTokens.Hash(token), expiresAt, callerId, workspaceRefs, limits.Members, cancellationToken);
             _logger.LogInformation("Invitation {RefId} issued for tenant {TenantId} by user ID {CallerId}", created.RefId, tenantId, callerId);
 
             // Queued, not awaited: an unreachable relay must not fail an invitation that has already

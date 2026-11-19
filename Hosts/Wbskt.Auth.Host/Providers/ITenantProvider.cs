@@ -47,10 +47,10 @@ internal interface ITenantProvider
     // Invitations. The token is never stored or accepted in raw form here — the service hashes it,
     // so a provider that logged its parameters could not leak a usable one.
     /// <summary>
-    /// Throws 50017 when one of <paramref name="workspaceIds"/> is not in the tenant, and 50031 when the
+    /// Throws 50017 when one of <paramref name="workspaceRefs"/> is not in the tenant, and 50031 when the
     /// tenant already has <paramref name="memberLimit"/> members (null is no limit).
     /// </summary>
-    Task<CreatedInvitation> CreateInvitationAsync(int tenantId, string email, int? roleId, byte[] tokenHash, DateTime expiresAt, int invitedByUserId, IReadOnlyCollection<int> workspaceIds, int? memberLimit, CancellationToken cancellationToken = default);
+    Task<CreatedInvitation> CreateInvitationAsync(int tenantId, string email, int? roleId, byte[] tokenHash, DateTime expiresAt, int invitedByUserId, IReadOnlyCollection<Guid> workspaceRefs, int? memberLimit, CancellationToken cancellationToken = default);
     /// <summary>The invitation carrying that hash, or null when none does.</summary>
     Task<InvitationLookup?> FindInvitationByTokenHashAsync(byte[] tokenHash, CancellationToken cancellationToken = default);
     /// <summary>
