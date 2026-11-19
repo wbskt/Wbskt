@@ -120,7 +120,9 @@ Every message, both ways, is a JSON object:
 **Limits.** A message is at most 64 KB (`ClientProtocol.MaxMessageBytes`); a bigger one ends the
 connection (too big, §5). The gateway lets a client send 10 messages a second sustained with a
 burst of 100; past that the excess is dropped, and after 500 drops in a row the connection is ended
-(throttled, §5).
+(throttled, §5). Every message counts, `sys.*` included, except a `sys.pong` answering a ping and a
+`sys.ack` answering a command sent with a `commandId`: the server set how many of those there are, so
+they never spend the budget. An SDK need not pace them.
 
 **Monthly allowance.** An account past its plan's monthly messages is slowed, not cut off: the gateway
 passes on one of each client's own messages a minute, `state.report` included, and drops the rest

@@ -12,8 +12,15 @@ public abstract class ClientConnectionBase : IClientConnection
     private readonly object _gate = new();
     private readonly TimeProvider _time;
 
+    /// <summary>The most replies a connection can be owed; past it, a reply spends the budget again.</summary>
+    public const int MaxRepliesOwed = 256;
+
     // The sys.ping waiting for its pong; only the latest one counts.
     private (string Id, DateTime SentAt)? _pendingPing;
+
+    // Pongs and acks the client owes for what was sent to it. Written by the sending side, read by the
+    // receive loop, so it changes only through Interlocked.
+    private int _repliesOwed;
 
     public required int ClientId { get; init; }
     public required int WorkspaceId { get; init; }
@@ -37,6 +44,12 @@ public abstract class ClientConnectionBase : IClientConnection
         var sentAt = _time.GetUtcNow().UtcDateTime;
         lock (_gate)
         {
+            // A ping still unanswered is replaced, and the pong owed for it carries over to this one.
+            if (_pendingPing is null)
+            {
+                ExpectReply();
+            }
+
             _pendingPing = (id, sentAt);
         }
 
@@ -57,6 +70,38 @@ public abstract class ClientConnectionBase : IClientConnection
             sentAt = pending.SentAt;
             return true;
         }
+    }
+
+    public void ExpectReply()
+    {
+        int owed;
+        do
+        {
+            owed = Volatile.Read(ref _repliesOwed);
+            if (owed >= MaxRepliesOwed)
+            {
+                return;
+            }
+        }
+        while (Interlocked.CompareExchange(ref _repliesOwed, owed + 1, owed) != owed);
+    }
+
+    public bool RepliesOwed => Volatile.Read(ref _repliesOwed) > 0;
+
+    public bool TryTakeReply()
+    {
+        int owed;
+        do
+        {
+            owed = Volatile.Read(ref _repliesOwed);
+            if (owed <= 0)
+            {
+                return false;
+            }
+        }
+        while (Interlocked.CompareExchange(ref _repliesOwed, owed - 1, owed) != owed);
+
+        return true;
     }
 
     public Task SendAsync(ProtocolMessage message, CancellationToken cancellationToken)
