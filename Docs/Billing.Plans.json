@@ -85,6 +85,13 @@
       "pricesUsd": {}
     }
   ],
+  "creditPacks": [
+    {
+      "name": "Pack10k",
+      "credits": 10000,
+      "usd": 5
+    }
+  ],
   "business": {
     "minimumClients": 2000,
     "usdPerMillionExtraMessages": 1,
