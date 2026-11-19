@@ -259,7 +259,7 @@ public sealed class StrandedBranchSweepTests
             var resultDispatcher = new BranchResultDispatcher(
             [
                 continueHandler,
-                new FailResultHandler(branchProvider, counters, runDispatcher, idGenerator, state.Clock, runCancellationService, new NoOpJoinAggregatorProvider(), journal, terminator, continueHandler)
+                new FailResultHandler(branchProvider, counters, runDispatcher, state.Clock, runCancellationService, new NoOpJoinAggregatorProvider(), journal, terminator, continueHandler)
             ]);
             Failer = new StrandedBranchFailer(branchProvider, bookmarkProvider, runProvider, cache, resultDispatcher, runCancellationService, runDispatcher, journal, terminator);
 
