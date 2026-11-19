@@ -42,7 +42,7 @@ public sealed class ClientsControllerScopingTests
         var bus = new Mock<IEventBus>();
         var eventLogService = new Mock<IEventLogService>();
 
-        var controller = new ClientsController(clientService.Object, Mock.Of<IClientLifecycleService>(), new ClientCommandService(clientService.Object, TestClientCommands.Sender(_targets.Object, bus.Object, _queue), _queue, bus.Object, Microsoft.Extensions.Options.Options.Create(new CommandQueueOptions()), NullLogger<ClientCommandService>.Instance, new Wbskt.Management.Host.Telemetry.ManagementMetrics(), TimeProvider.System), Mock.Of<IRegistrationPolicyService>(), eventLogService.Object);
+        var controller = new ClientsController(clientService.Object, Mock.Of<IClientLifecycleService>(), new ClientCommandService(clientService.Object, TestClientCommands.Sender(_targets.Object, bus.Object, _queue), _queue, bus.Object, Microsoft.Extensions.Options.Options.Create(new CommandQueueOptions()), NullLogger<ClientCommandService>.Instance, new Wbskt.Management.Host.Telemetry.ManagementMetrics(), TimeProvider.System), eventLogService.Object);
 
         controller.ControllerContext = new ControllerContext
         {
@@ -164,18 +164,5 @@ public sealed class ClientsControllerScopingTests
         bus.Verify(x => x.PublishAsync(
             It.Is<ClientPingEvent>(e => e.ClientRefId == ClientRefId && e.ClientId == ClientId && e.WorkspaceId == WorkspaceId),
             It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task GetComms_reports_a_client_in_another_workspace_as_not_found_rather_than_empty()
-    {
-        var (controller, clientService, _, eventLogService) = CreateController();
-        SetupOwnership(clientService, Result<int>.Failure(Foreign));
-
-        var result = await controller.GetComms(WorkspaceId, ClientRefId, direction: null, new PageRequest(), cancellationToken: CancellationToken.None);
-
-        ProblemAssert.Is(result.Result, StatusCodes.Status404NotFound);
-        eventLogService.Verify(x => x.GetClientCommsAsync(
-            It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

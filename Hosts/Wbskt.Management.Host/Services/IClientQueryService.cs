@@ -10,15 +10,18 @@ namespace Wbskt.Management.Host.Services;
 public interface IClientQueryService
 {
     /// <summary>
-    /// <paramref name="statuses"/>, when not empty, lists only clients in one of them. <paramref name="tag"/>,
-    /// when given, lists only clients carrying it; an invalid one is <c>CLIENT_TAG_INVALID</c>.
+    /// <paramref name="policyRefId"/>, when given, lists only clients registered under that policy; one
+    /// this workspace does not own is <c>POLICY_NOT_FOUND</c>. <paramref name="statuses"/>, when not
+    /// empty, lists only clients in one of them. <paramref name="tag"/>, when given, lists only clients
+    /// carrying it; an invalid one is <c>CLIENT_TAG_INVALID</c>.
     /// </summary>
-    Task<Result<IPagedList<ClientResponse>>> GetAllAsync(int workspaceId, IReadOnlyCollection<ClientStatus>? statuses, string? name, string? tag, int skip,
+    Task<Result<IPagedList<ClientResponse>>> GetAllAsync(int workspaceId, Guid? policyRefId, IReadOnlyCollection<ClientStatus>? statuses, string? name, string? tag, int skip,
         int take, CancellationToken cancellationToken = default);
-    Task<Result<IPagedList<ClientResponse>>> GetByPolicyIdAsync(int workspaceId, int policyId, IReadOnlyCollection<ClientStatus>? statuses,
-        string? name, string? tag, int skip, int take, CancellationToken cancellationToken = default);
-    /// <summary>How many clients the workspace, or one of its policies when <paramref name="policyId"/> is given, has in each status.</summary>
-    Task<Result<ClientCountsResponse>> GetCountsAsync(int workspaceId, int? policyId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// How many clients the workspace, or one of its policies when <paramref name="policyRefId"/> is
+    /// given, has in each status. A policy this workspace does not own is <c>POLICY_NOT_FOUND</c>.
+    /// </summary>
+    Task<Result<ClientCountsResponse>> GetCountsAsync(int workspaceId, Guid? policyRefId, CancellationToken cancellationToken = default);
     Task<Result<ClientDetailResponse>> GetDetailAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default);
     /// <summary>Every tag in use in the workspace, with how many clients carry it.</summary>
     Task<Result<IReadOnlyList<ClientTagCountResponse>>> GetTagsAsync(int workspaceId, CancellationToken cancellationToken = default);

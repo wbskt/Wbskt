@@ -117,10 +117,26 @@ internal sealed class EventLogService : IEventLogService
         return Result<EventLogSummaryResponse>.Success(Summarize(counts, range.Value, traffic));
     }
 
-    public async Task<Result<Page<EventLogResponse>>> GetClientCommsAsync(int workspaceId, int clientId, string? direction, long? cursor, int take,
+    public async Task<Result<Page<EventLogResponse>>> GetClientCommsAsync(int workspaceId, Guid clientRef, string? direction, long? cursor, int take,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug("Querying comms log for client ID {ClientId} in WorkspaceId: {WorkspaceId}", clientId, workspaceId);
+        _logger.LogDebug("Querying comms log for client {ClientRef} in WorkspaceId: {WorkspaceId}", clientRef, workspaceId);
+
+        if (direction is not (null or "in" or "out"))
+        {
+            return Result<Page<EventLogResponse>>.Failure(Error.Validation("DIRECTION_INVALID", "Direction must be 'in', 'out', or omitted."));
+        }
+
+        // The query is workspace-filtered in SQL, so a foreign client would come back as an empty
+        // page. Resolving it first reports it as CLIENT_NOT_FOUND, as the sibling endpoints do,
+        // rather than as a client that exists but has never said anything.
+        var client = await _clientService.EnsureClientInWorkspaceAsync(workspaceId, clientRef, cancellationToken);
+        if (client.IsFailure)
+        {
+            return Result<Page<EventLogResponse>>.Failure(client.Error);
+        }
+
+        var clientId = client.Value;
 
         take = Paging.Take(take);
         var rows = await _eventProvider.GetClientCommsAsync(workspaceId, clientId, direction, cursor, take + 1, cancellationToken);

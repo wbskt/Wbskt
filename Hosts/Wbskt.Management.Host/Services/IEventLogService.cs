@@ -39,10 +39,13 @@ public interface IEventLogService
         EventLogTraffic traffic,
         CancellationToken cancellationToken = default);
 
-    /// <summary>A page of one client's comms entries, paged as <see cref="GetLogsAsync"/>.</summary>
+    /// <summary>
+    /// A page of one client's comms entries, paged as <see cref="GetLogsAsync"/>. <paramref name="direction"/>
+    /// is "in", "out" or null; a client this workspace does not own is <c>CLIENT_NOT_FOUND</c>.
+    /// </summary>
     Task<Result<Page<EventLogResponse>>> GetClientCommsAsync(
         int workspaceId,
-        int clientId,
+        Guid clientRef,
         string? direction,
         long? cursor,
         int take,

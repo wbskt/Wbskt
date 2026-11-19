@@ -15,6 +15,12 @@ public interface IClientLifecycleService
     Task<Result> DeleteAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default);
     /// <summary>Replaces a client's secret, returns the new one once, and disconnects it.</summary>
     Task<Result<ClientSecretResponse>> RotateSecretAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Applies a PATCH: the status first, then the name. A blank or over-long name is refused before
+    /// anything changes.
+    /// </summary>
+    Task<Result> UpdateAsync(int workspaceId, Guid clientRefId, UpdateClientRequest request, CancellationToken cancellationToken = default);
+    /// <summary>Renames a client. The name is trimmed and must be 1-100 characters.</summary>
     Task<Result> RenameAsync(int workspaceId, Guid clientRefId, string name, CancellationToken cancellationToken = default);
     /// <summary>
     /// Replaces a client's tags. Each is normalised (trimmed, lower-cased) and duplicates collapse;

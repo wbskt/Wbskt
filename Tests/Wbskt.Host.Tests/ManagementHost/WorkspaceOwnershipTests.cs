@@ -123,6 +123,39 @@ public sealed class WorkspaceOwnershipTests
         provider.VerifyNoOtherCalls();
     }
 
+    [Fact]
+    public async Task Comms_of_another_workspaces_client_are_not_found_rather_than_an_empty_page()
+    {
+        var clientRef = Guid.NewGuid();
+        var clients = new Mock<IClientQueryService>();
+        clients.Setup(s => s.EnsureClientInWorkspaceAsync(WorkspaceId, clientRef, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<int>.Failure(WorkspaceOwnership.ClientNotFound));
+        var provider = new Mock<IEventProvider>();
+        var service = new EventLogService(provider.Object, Mock.Of<IRegistrationPolicyService>(), clients.Object, NullLogger<EventLogService>.Instance);
+
+        var result = await service.GetClientCommsAsync(WorkspaceId, clientRef, null, null, 50);
+
+        result.Error.Should().Be(WorkspaceOwnership.ClientNotFound);
+        provider.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task Clients_listed_or_counted_by_another_workspaces_policy_are_not_found()
+    {
+        var policyRef = Guid.NewGuid();
+        var policies = new Mock<IRegistrationPolicyProvider>();
+        policies.Setup(p => p.FindByRefIdAsync(policyRef, It.IsAny<CancellationToken>())).ReturnsAsync(Policy(WorkspaceId + 1));
+        var clients = new Mock<IClientProvider>();
+        var service = new ClientQueryService(clients.Object, Mock.Of<IClientMessageTypeProvider>(), policies.Object, NullLogger<ClientQueryService>.Instance);
+
+        var list = await service.GetAllAsync(WorkspaceId, policyRef, null, null, null, 0, 50);
+        var counts = await service.GetCountsAsync(WorkspaceId, policyRef);
+
+        list.Error.Should().Be(WorkspaceOwnership.PolicyNotFound);
+        counts.Error.Should().Be(WorkspaceOwnership.PolicyNotFound);
+        clients.VerifyNoOtherCalls();
+    }
+
     private static RegistrationPolicy Policy(int workspaceId)
     {
         return new RegistrationPolicy { Id = 5, RefId = Guid.NewGuid(), WorkspaceId = workspaceId, Name = "lab", IsEnabled = true };
