@@ -29,6 +29,26 @@ public sealed class ClientFeedScopeTests
         scoped.Should().AllSatisfy(t => typeof(IClientContext).IsAssignableFrom(t).Should().BeTrue(t.Name));
     }
 
+    /// <summary>
+    /// A client's commands and messages are comms history, which JoinClient guards with logs.read. A
+    /// workspace-scoped event reaches anyone with workspace.join, so one about a client that carries a
+    /// command type, a payload or a value has to be client-scoped (#958).
+    /// </summary>
+    [Fact]
+    public void A_client_event_carrying_a_command_or_payload_is_client_scoped()
+    {
+        string[] content = ["Type", "Payload", "Value", "Data", "Message"];
+
+        var workspaceWide = ForwardedEvents()
+            .Where(t => typeof(IClientContext).IsAssignableFrom(t) && Notify(t).Scope != NotifyScope.Client)
+            .Where(t => t.GetProperties().Any(p => content.Contains(p.Name)))
+            .Select(t => t.Name);
+
+        workspaceWide.Should().BeEmpty();
+        Notify(typeof(ClientCommandQueuedEvent)).Scope.Should().Be(NotifyScope.Client);
+        Notify(typeof(ClientCommandCancelledEvent)).Scope.Should().Be(NotifyScope.Client);
+    }
+
     // Lists and the explorer show these, so every tab in the workspace still needs them.
     [Theory]
     [InlineData(typeof(ClientConnectedEvent))]
