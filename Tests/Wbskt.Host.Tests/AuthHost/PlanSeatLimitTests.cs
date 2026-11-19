@@ -222,13 +222,19 @@ public sealed class PlanSeatLimitTests
         harness.Tenants.Setup(p => p.GetInvitationByTokenHashAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new InvitationLookup(Guid.NewGuid(), TenantRef, "Acme", "someone@example.test", DateTime.UtcNow.AddDays(1), IsLive: true));
         harness.Accounts.Setup(p => p.InsertUserAsync(It.IsAny<User>(), It.IsAny<CancellationToken>())).ReturnsAsync(42);
+        harness.Accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new User { Id = 42, RefId = Guid.NewGuid(), Username = "someone", Email = "someone@example.test" });
         harness.Tenants.Setup(p => p.AcceptInvitationAsync(It.IsAny<byte[]>(), 42, 4, It.IsAny<CancellationToken>()))
             .ThrowsAsync(SqlExceptions.WithNumber(50031, "The plan has reached its member limit."));
 
         var result = await harness.Registration.RegisterUserAsync("someone", "someone@example.test", "a-long-enough-Passw0rd!", "invitation-token");
 
         Assert.Equal("PLAN_MEMBER_LIMIT_REACHED", result.Error.Code);
+        Assert.Contains("account was created", result.Error.Message);
         harness.Tenants.Verify(p => p.CreateTenantAsync("someone's Tenant", null, 42, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+
+        // The account cannot sign in without confirming its address, so the link goes out regardless.
+        harness.Accounts.Verify(p => p.CreateEmailVerificationTokenAsync(42, It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     private WorkspaceService Workspaces(IEventBus? bus = null) => new(
