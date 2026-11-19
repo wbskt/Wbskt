@@ -131,6 +131,8 @@ public class WorkspacesController : ApiControllerBase
     /// <summary>
     /// Makes another member of the workspace's tenant its owner, adding them to the workspace if they
     /// are not in it. The previous owner stays a member and can then be removed like anyone else.
+    /// The new owner gets Admin there, so the service also needs the caller to be the owner or to hold
+    /// roles.manage tenant-wide.
     /// </summary>
     [HttpPut("{workspaceRef:guid}/owner")]
     [RequiresPermission(PermissionNames.UsersManage)]
@@ -143,7 +145,8 @@ public class WorkspacesController : ApiControllerBase
 
     /// <summary>
     /// Deletes a workspace and every assignment scoped to it. What the management host holds for it
-    /// is retired by the event the delete queues (see <c>WorkspaceDeletedEvent</c>).
+    /// is retired by the event the delete queues (see <c>WorkspaceDeletedEvent</c>). The service also
+    /// needs the caller to be the owner or to hold workspaces.delete tenant-wide.
     /// </summary>
     [HttpDelete("{workspaceRef:guid}")]
     [RequiresPermission(PermissionNames.UsersManage)]

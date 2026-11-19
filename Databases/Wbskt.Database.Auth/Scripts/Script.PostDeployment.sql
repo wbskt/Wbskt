@@ -268,6 +268,14 @@ BEGIN
 END
 GO
 
+-- workspaces.delete is tenant-wide and not a default User grant: deleting a workspace retires everything
+-- in it. A workspace's owner may delete it without this. Admin roles get it below.
+IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'workspaces.delete')
+BEGIN
+    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('workspaces.delete', 'Delete any workspace in the tenant');
+END
+GO
+
 -- RolePermissions (every tenant's Admin gets ALL).
 --
 -- Set-based across all Admin roles on purpose. Roles are tenant-scoped, so once a second tenant

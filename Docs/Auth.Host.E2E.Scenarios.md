@@ -419,6 +419,7 @@ The cross-service contract. Every workspace-scoped management-host request passe
 | `WS_OWN_01` | + | Transfer to a tenant member outside the workspace | **204**; they can resolve it; removing them is now refused and removing the previous owner succeeds |
 | `WS_OWN_02` | − | Transfer to someone outside the tenant | **404** `USER_NOT_FOUND`; they gain nothing |
 | `WS_OWN_03` | − | Transfer by a member without `users.manage` | **403** |
+| `WS_OWN_04` | − | A member holding `users.manage` scoped to the workspace transfers it to themselves, then deletes it | **403** both times; they gain no `Admin` permissions there |
 
 ---
 
