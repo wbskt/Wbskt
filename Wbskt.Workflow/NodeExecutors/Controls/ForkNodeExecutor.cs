@@ -5,6 +5,7 @@ using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Runtime;
 
 namespace Wbskt.Workflow.NodeExecutors.Controls;
 
@@ -40,7 +41,7 @@ internal sealed class ForkNodeExecutor(IJoinAggregatorProvider aggregators) : IN
             (int)ctx.Branch.RunId,
             node.Config.Branches.Count,
             (joinNode?.Config?.Mode ?? JoinMode.All).ToString(),
-            joinNode?.Config?.QuorumCount ?? 0,
+            JoinQuorum.For(joinNode?.Config, node.Config.Branches.Count),
             joinNode?.NodeId,
             ct);
         JsonElement joinTokenElement = JsonSerializer.SerializeToElement(joinToken.ToString());

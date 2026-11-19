@@ -839,6 +839,45 @@ public sealed class WorkflowValidatorRuleTests
         Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "FORK_BRANCH_WITHOUT_JOIN" && i.NodeId == forkId);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0)]
+    public void Validate_rejects_a_Quorum_Join_without_a_count_of_at_least_one(int? quorum)
+    {
+        // A quorum of 0 met at once, so the join behaved like Any.
+        Guid forkId = Guid.NewGuid(), joinId = Guid.NewGuid();
+
+        var result = ValidateGraph(
+            [Fork(forkId, "a", "b"), Join(joinId, JoinMode.Quorum, quorum)],
+            [new Edge((forkId, "a"), (joinId, "in")), new Edge((forkId, "b"), (joinId, "in"))]);
+
+        Assert.Contains(result.Issues, i => i.Code == "QUORUM_COUNT_INVALID" && i.NodeId == joinId && i.Field == "config.quorumCount");
+    }
+
+    [Fact]
+    public void Validate_rejects_a_Quorum_above_the_Forks_branch_count()
+    {
+        Guid forkId = Guid.NewGuid(), joinId = Guid.NewGuid();
+
+        var result = ValidateGraph(
+            [Fork(forkId, "a", "b"), Join(joinId, JoinMode.Quorum, 3)],
+            [new Edge((forkId, "a"), (joinId, "in")), new Edge((forkId, "b"), (joinId, "in"))]);
+
+        Assert.Contains(result.Issues, i => i.Code == "QUORUM_COUNT_INVALID" && i.NodeId == joinId);
+    }
+
+    [Fact]
+    public void Validate_accepts_a_Quorum_equal_to_the_Forks_branch_count()
+    {
+        Guid forkId = Guid.NewGuid(), joinId = Guid.NewGuid();
+
+        var result = ValidateGraph(
+            [Fork(forkId, "a", "b"), Join(joinId, JoinMode.Quorum, 2)],
+            [new Edge((forkId, "a"), (joinId, "in")), new Edge((forkId, "b"), (joinId, "in"))]);
+
+        Assert.DoesNotContain(result.Issues, i => i.Code == "QUORUM_COUNT_INVALID");
+    }
+
     [Fact]
     public void Validate_accepts_a_Fork_without_a_Join_as_a_fire_and_forget_fan_out()
     {
@@ -1014,7 +1053,7 @@ public sealed class WorkflowValidatorRuleTests
         Config = new LogicGateConfig { Condition = LogicConditionJsonConverter.FromLegacyString("$trigger.temperature > 35") }
     };
 
-    private static JoinNode Join(Guid nodeId, JoinMode mode = JoinMode.All) => new()
+    private static JoinNode Join(Guid nodeId, JoinMode mode = JoinMode.All, int? quorumCount = null) => new()
     {
         NodeId = nodeId,
         Name = "join",
@@ -1022,7 +1061,7 @@ public sealed class WorkflowValidatorRuleTests
             new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" },
             new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Out" }
         ],
-        Config = new JoinConfig { Mode = mode }
+        Config = new JoinConfig { Mode = mode, QuorumCount = quorumCount }
     };
 
     private static EndNode End(Guid nodeId) => new()

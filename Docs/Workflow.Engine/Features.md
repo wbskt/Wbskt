@@ -225,7 +225,9 @@ was failed → `Failed`; cancelled → `Cancelled`.
 * A **join** downstream at the same nesting level collects the cohort. Its `mode`:
   * `All`: continue once every branch has arrived.
   * `Any`: continue on the first branch to arrive.
-  * `Quorum`: continue once `quorumCount` branches have arrived.
+  * `Quorum`: continue once `quorumCount` branches have arrived. `quorumCount` must be at least 1,
+    and for a fork no more than its branch count (`QUORUM_COUNT_INVALID`). A parallel for-each over
+    fewer items than `quorumCount` waits for all of them.
 * A branch that **fails** still counts as arriving, as a failure: the join can converge, and
   `joinFailed` tells the next node how many failed. When the deciding arrival is a failure, a fresh
   continuation branch carries on past the join.

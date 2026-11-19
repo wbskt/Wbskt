@@ -418,6 +418,20 @@ public sealed partial class WorkflowValidator
                     fork.NodeId));
             }
 
+            // A Fork's cohort size is fixed, so a quorum above it is a mistake the designer can show.
+            // A ParallelForEach's depends on the collection, and the engine waits for all of it then.
+            if (walk.Joins.Count == 1
+                && walk.Joins[0] is { Config: { Mode: JoinMode.Quorum, QuorumCount: { } quorum } } quorumJoin
+                && quorum > fork.Config.Branches.Count)
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "QUORUM_COUNT_INVALID",
+                    $"Step '{quorumJoin.Name}': it waits for {quorum} paths, but Fork '{fork.Name}' starts only {fork.Config.Branches.Count}.",
+                    quorumJoin.NodeId,
+                    "config.quorumCount"));
+            }
+
             if (walk.Joins.Count > 1)
             {
                 issues.Add(new ValidationIssue(

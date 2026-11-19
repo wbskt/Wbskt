@@ -144,6 +144,10 @@ public sealed partial class WorkflowValidator
 
                     break;
 
+                case JoinNode { Config: { Mode: JoinMode.Quorum } config } when config.QuorumCount is not >= 1:
+                    Error("QUORUM_COUNT_INVALID", "set how many paths to wait for (at least 1).", "config.quorumCount");
+                    break;
+
                 case WaitForHttpNode { Config: { } config } when config.Ttl <= TimeSpan.Zero:
                     Error("WAITFORHTTP_TTL_INVALID", "the time to wait for the call must be more than zero.", "config.ttl");
                     break;

@@ -121,6 +121,31 @@ public sealed class ParallelForEachNodeExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_waits_for_every_item_when_the_quorum_is_above_the_collection()
+    {
+        // A collection shorter than the quorum used to release on the first arrival.
+        var aggregatorMock = CreateAggregatorMock();
+        var executor = new ParallelForEachNodeExecutor(Evaluator, aggregatorMock.Object);
+        var node = CreateNode();
+        Guid joinNodeId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
+        NodeContext ctx = CreateContext(
+            node,
+            new Dictionary<string, JsonElement>
+            {
+                ["items"] = JsonSerializer.SerializeToElement(new[] { "a", "b" })
+            },
+            joinNodeId: joinNodeId,
+            joinMode: JoinMode.Quorum,
+            quorumCount: 5);
+
+        await executor.ExecuteAsync(ctx, CancellationToken.None);
+
+        aggregatorMock.Verify(
+            a => a.InitializeAsync(It.IsAny<Guid>(), 42, 2, "Quorum", 2, joinNodeId, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_returns_fail_when_no_Join_is_downstream_of_body()
     {
         // Without a Join the cohort could never converge, so fail loudly rather than fan out into a

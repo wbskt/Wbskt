@@ -245,7 +245,7 @@ public sealed class WorkflowBuilder
         return this;
     }
 
-    public WorkflowBuilder AddJoin(JoinMode mode, out Guid nodeId, string? name = null)
+    public WorkflowBuilder AddJoin(JoinMode mode, out Guid nodeId, string? name = null, int? quorumCount = null)
     {
         var id = Guid.NewGuid();
         nodeId = id;
@@ -253,7 +253,7 @@ public sealed class WorkflowBuilder
             NodeId = id,
             Name = name ?? "Join",
             Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
-            Config = new JoinConfig { Mode = mode } });
+            Config = new JoinConfig { Mode = mode, QuorumCount = quorumCount } });
 
         ConnectToHead(id, PortNames.In);
         _head = (id, PortNames.Default);
@@ -581,7 +581,10 @@ public sealed class WorkflowBuilder
         return this;
     }
 
-    public WorkflowBuilder AddJoin(JoinMode mode, params (Guid NodeId, string PortId)[] branchEnds)
+    public WorkflowBuilder AddJoin(JoinMode mode, params (Guid NodeId, string PortId)[] branchEnds) =>
+        AddJoin(mode, null, branchEnds);
+
+    public WorkflowBuilder AddJoin(JoinMode mode, int? quorumCount, params (Guid NodeId, string PortId)[] branchEnds)
     {
         var id = Guid.NewGuid();
         _nodes.Add(new JoinNode
@@ -589,7 +592,7 @@ public sealed class WorkflowBuilder
             NodeId = id,
             Name = "Join",
             Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
-            Config = new JoinConfig { Mode = mode }
+            Config = new JoinConfig { Mode = mode, QuorumCount = quorumCount }
         });
 
         // Wire each branch tail to join.In — do NOT call ConnectToHead here to avoid
