@@ -197,7 +197,7 @@ When a node fails (after its retries), its `onFailure` decides what happens:
 | `FailRun` | The whole run fails: every branch is stopped and child runs are cancelled. |
 | `ContinueOnError` | Leave by the node's `error` port (the node must have one, `CONTINUE_ON_ERROR_WITHOUT_ERROR_PORT`). |
 | `ContinueAsSucceeded` | Leave by `default` as if it had succeeded. |
-| `JumpToNode` | Continue at `targetNodeId` (must exist, `ONFAILURE_TARGET_NOT_FOUND`). |
+| `JumpToNode` | Continue at `targetNodeId`: required (`ONFAILURE_TARGET_MISSING`), must exist (`ONFAILURE_TARGET_NOT_FOUND`), and may be neither the step itself nor a trigger (`ONFAILURE_TARGET_INVALID`). |
 | `Compensate` | **Not supported**; rejected at publish (`COMPENSATION_NOT_SUPPORTED`). Tracked in #377. |
 
 The continuing outcomes write `lastError` (`errorCode`, `message`) into the branch.
@@ -307,7 +307,7 @@ publish. An expression error fails the node with `EXPRESSION_EVALUATION_ERROR`.
 | Area | Codes |
 |---|---|
 | Structure | `NULL_DEFINITION`, `INVALID_WORKFLOW_REF_ID`, `INVALID_VERSION`, `DUPLICATE_NODE_ID`, `UNKNOWN_NODE_KIND`, `EDGE_UNKNOWN_NODE`, `EDGE_UNKNOWN_PORT`, `DUPLICATE_PORT_EDGE`, `MISSING_PORT`, `EXTRA_PORT` |
-| Failure handling | `COMPENSATION_NOT_SUPPORTED`, `ONFAILURE_TARGET_NOT_FOUND`, `CONTINUE_ON_ERROR_WITHOUT_ERROR_PORT`, `RETRY_FACTOR_INVALID`, `RETRY_MAX_DELAY_BELOW_INITIAL` |
+| Failure handling | `COMPENSATION_NOT_SUPPORTED`, `ONFAILURE_TARGET_MISSING`, `ONFAILURE_TARGET_NOT_FOUND`, `ONFAILURE_TARGET_INVALID`, `CONTINUE_ON_ERROR_WITHOUT_ERROR_PORT`, `RETRY_FACTOR_INVALID`, `RETRY_MAX_DELAY_BELOW_INITIAL` |
 | Fan-out and joins | `PARALLEL_FOREACH_WITHOUT_JOIN`, `FORK_BRANCH_WITHOUT_JOIN`, `FORK_BRANCHES_JOIN_MISMATCH`, `JOIN_WITHOUT_COHORT` |
 | Sub-workflows and end | `SUBWORKFLOW_INPUT_KEY_RESERVED`, `SUBWORKFLOW_SELF_REFERENCE`, `END_OUTPUT_WITHOUT_MANUAL_TRIGGER` |
 | Variables and waits | `VARIABLE_NAME_RESERVED`, `WAITFORHTTP_WEAK_TOKEN` |

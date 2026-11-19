@@ -20,6 +20,7 @@ public sealed partial class WorkflowValidator
     // form or a base64 nonce).
     private const int MinWakeTokenLength = 24;
     private const string ErrorPortId = "error";
+    private const string OnFailureTargetField = "onFailure.targetNodeId";
     private const string BodyPortId = "body";
 
     /// <param name="definition">The definition to check.</param>
@@ -105,6 +106,11 @@ public sealed partial class WorkflowValidator
         }
     }
 
+    private static bool IsTrigger(WorkflowDefinition def, Guid nodeId) =>
+        def.Nodes.FirstOrDefault(candidate => candidate.NodeId == nodeId) is { } target
+        && NodeKinds.TryGet(target.Kind, out NodeKindDescriptor? descriptor)
+        && descriptor.Category == NodeCategory.Trigger;
+
     private static void ValidateOnFailure(WorkflowDefinition def, List<ValidationIssue> issues)
     {
         var nodeIds = def.Nodes.Select(node => node.NodeId).ToHashSet();
@@ -148,13 +154,38 @@ public sealed partial class WorkflowValidator
                     node.NodeId));
             }
 
+            // Without a step to jump to, the runtime fails the branch instead, which is not what the
+            // step's settings say will happen.
+            if (onFailure.Outcome == ErrorOutcome.JumpToNode && onFailure.TargetNodeId is null)
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "ONFAILURE_TARGET_MISSING",
+                    $"Node '{node.NodeId}' declares onFailure 'JumpToNode' but names no step to jump to.",
+                    node.NodeId,
+                    OnFailureTargetField));
+            }
+
             if (onFailure.TargetNodeId is Guid target && !nodeIds.Contains(target))
             {
                 issues.Add(new ValidationIssue(
                     ValidationSeverity.Error,
                     "ONFAILURE_TARGET_NOT_FOUND",
                     $"Node '{node.NodeId}' has onFailure targetNodeId '{target}', which is not a node in this workflow.",
-                    node.NodeId));
+                    node.NodeId,
+                    OnFailureTargetField));
+            }
+            else if (onFailure.Outcome == ErrorOutcome.JumpToNode && onFailure.TargetNodeId is Guid jumpTarget
+                && (jumpTarget == node.NodeId || IsTrigger(def, jumpTarget)))
+            {
+                // Jumping to itself retries forever without a retry policy's limit, and a trigger only
+                // starts runs: running one mid-run hands the step's error on as if it were a new event.
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "ONFAILURE_TARGET_INVALID",
+                    $"Node '{node.NodeId}' has onFailure targetNodeId '{jumpTarget}', which is {(jumpTarget == node.NodeId ? "the step itself" : "a trigger")}. Jump to another step.",
+                    node.NodeId,
+                    OnFailureTargetField));
             }
         }
     }
