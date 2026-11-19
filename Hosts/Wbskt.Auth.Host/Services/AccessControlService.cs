@@ -88,8 +88,7 @@ internal sealed class AccessControlService : IAccessControlService
         int? parentGroupId = null;
         if (request.ParentGroupRef.HasValue)
         {
-            var parentId = await _accessControl.FindGroupIdByRefIdAsync(request.ParentGroupRef.Value, tenantId, cancellationToken);
-            if (parentId <= 0)
+            if (await _accessControl.FindGroupIdByRefIdAsync(request.ParentGroupRef.Value, tenantId, cancellationToken) is not { } parentId)
             {
                 return Result<GroupResponse>.Failure(TenantReferences.GroupNotFound);
             }
@@ -276,14 +275,12 @@ internal sealed class AccessControlService : IAccessControlService
 
     private async Task<Result> ChangeUserRoleAsync(int tenantId, Guid userRef, Guid roleRef, Guid? workspaceRef, bool assign, CancellationToken cancellationToken)
     {
-        var userId = await _tenants.FindUserIdByRefIdInTenantAsync(userRef, tenantId, cancellationToken);
-        if (userId <= 0)
+        if (await _tenants.FindUserIdByRefIdInTenantAsync(userRef, tenantId, cancellationToken) is not { } userId)
         {
             return Result.Failure(TenantReferences.UserNotFound);
         }
 
-        var roleId = await _accessControl.FindRoleIdByRefIdAsync(roleRef, tenantId, cancellationToken);
-        if (roleId <= 0)
+        if (await _accessControl.FindRoleIdByRefIdAsync(roleRef, tenantId, cancellationToken) is not { } roleId)
         {
             return Result.Failure(TenantReferences.RoleNotFound);
         }
@@ -314,14 +311,12 @@ internal sealed class AccessControlService : IAccessControlService
 
     private async Task<Result> ChangeGroupRoleAsync(int tenantId, Guid groupRef, Guid roleRef, Guid? workspaceRef, bool assign, CancellationToken cancellationToken)
     {
-        var groupId = await _accessControl.FindGroupIdByRefIdAsync(groupRef, tenantId, cancellationToken);
-        if (groupId <= 0)
+        if (await _accessControl.FindGroupIdByRefIdAsync(groupRef, tenantId, cancellationToken) is not { } groupId)
         {
             return Result.Failure(TenantReferences.GroupNotFound);
         }
 
-        var roleId = await _accessControl.FindRoleIdByRefIdAsync(roleRef, tenantId, cancellationToken);
-        if (roleId <= 0)
+        if (await _accessControl.FindRoleIdByRefIdAsync(roleRef, tenantId, cancellationToken) is not { } roleId)
         {
             return Result.Failure(TenantReferences.RoleNotFound);
         }
@@ -422,8 +417,7 @@ internal sealed class AccessControlService : IAccessControlService
 
     private async Task<Result<ResolvedEntity>> ResolveRoleAsync(int tenantId, Guid roleRef, CancellationToken cancellationToken)
     {
-        var roleId = await _accessControl.FindRoleIdByRefIdAsync(roleRef, tenantId, cancellationToken);
-        if (roleId <= 0)
+        if (await _accessControl.FindRoleIdByRefIdAsync(roleRef, tenantId, cancellationToken) is not { } roleId)
         {
             return Result<ResolvedEntity>.Failure(TenantReferences.RoleNotFound);
         }
@@ -433,8 +427,7 @@ internal sealed class AccessControlService : IAccessControlService
 
     private async Task<Result<ResolvedEntity>> ResolveGroupAsync(int tenantId, Guid groupRef, CancellationToken cancellationToken)
     {
-        var groupId = await _accessControl.FindGroupIdByRefIdAsync(groupRef, tenantId, cancellationToken);
-        if (groupId <= 0)
+        if (await _accessControl.FindGroupIdByRefIdAsync(groupRef, tenantId, cancellationToken) is not { } groupId)
         {
             return Result<ResolvedEntity>.Failure(TenantReferences.GroupNotFound);
         }
@@ -453,8 +446,7 @@ internal sealed class AccessControlService : IAccessControlService
             return Result<(int, int, int)>.Failure(user.Error);
         }
 
-        var groupId = await _accessControl.FindGroupIdByRefIdAsync(groupRef, tenantId, cancellationToken);
-        if (groupId <= 0)
+        if (await _accessControl.FindGroupIdByRefIdAsync(groupRef, tenantId, cancellationToken) is not { } groupId)
         {
             return Result<(int, int, int)>.Failure(TenantReferences.GroupNotFound);
         }

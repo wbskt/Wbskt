@@ -7,7 +7,6 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Auth;
 using Wbskt.Infrastructure;
 using Wbskt.Models;
-using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Auth.Host.Services;
 
@@ -198,12 +197,12 @@ internal sealed class TenantService : ITenantService
     {
         var mayGrant = await RoleGrantGuard.MayGrantRolesAsync(_accessControl, callerId, tenantId, cancellationToken);
         var roleId = await _accessControl.FindRoleIdByRefIdAsync(roleRef, tenantId, cancellationToken);
-        if (!mayGrant && (roleId <= 0 || roleId != await _accessControl.FindUserRoleIdAsync(tenantId, cancellationToken)))
+        if (!mayGrant && (roleId is null || roleId != await _accessControl.FindUserRoleIdAsync(tenantId, cancellationToken)))
         {
             return Result<int>.Failure(RoleGrantGuard.RolesManageRequired);
         }
 
-        return roleId <= 0 ? Result<int>.Failure(TenantReferences.RoleNotFound) : Result<int>.Success(roleId);
+        return roleId is { } id ? Result<int>.Success(id) : Result<int>.Failure(TenantReferences.RoleNotFound);
     }
 
     public async Task<Result<CreatedInvitationResponse>> CreateInvitationAsync(int callerId, int tenantId, CreateInvitationRequest request, CancellationToken cancellationToken = default)
@@ -277,12 +276,8 @@ internal sealed class TenantService : ITenantService
     {
         var tokenHash = SecurityTokens.Hash(token);
 
-        InvitationLookup invitation;
-        try
-        {
-            invitation = await _tenants.GetInvitationByTokenHashAsync(tokenHash, cancellationToken);
-        }
-        catch (SecurityException)
+        var invitation = await _tenants.FindInvitationByTokenHashAsync(tokenHash, cancellationToken);
+        if (invitation is null)
         {
             _logger.LogWarning("Invitation acceptance failed for user ID {CallerId}: no invitation matches the presented token", callerId);
             return Result<AcceptInvitationResponse>.Failure(InvalidInvitation);

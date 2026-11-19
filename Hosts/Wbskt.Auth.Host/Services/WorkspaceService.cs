@@ -11,7 +11,6 @@ using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Events.Outbox;
 using Wbskt.Models;
 using Wbskt.Primitives.Constants;
-using Wbskt.Primitives.Exceptions;
 using Wbskt.Primitives.Models;
 
 namespace Wbskt.Auth.Host.Services;
@@ -103,12 +102,8 @@ internal sealed class WorkspaceService : IWorkspaceService
 
         try
         {
-            User user;
-            try
-            {
-                user = await _accounts.GetByEmailAsync(request.Email, cancellationToken);
-            }
-            catch (SecurityException)
+            var user = await _accounts.FindByEmailAsync(request.Email, cancellationToken);
+            if (user is null)
             {
                 _logger.LogWarning("Failed to add member to workspace ID {WorkspaceId}: no user with email {EmailHash}", workspaceId, EmailFingerprint.Of(request.Email));
                 return Result.Failure(Error.NotFound("USER_NOT_FOUND", "No user with that email address."));

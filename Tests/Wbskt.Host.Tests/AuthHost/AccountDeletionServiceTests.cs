@@ -37,6 +37,7 @@ public sealed class AccountDeletionServiceTests
     public AccountDeletionServiceTests()
     {
         _accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
+        _accounts.Setup(p => p.FindByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
         _billing.Setup(b => b.GetLiveSubscriptionsOfSoleTenantsAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync([]);
         _accounts.Setup(p => p.GetDeletionBlockersAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync([]);
         _gateway.SetupGet(g => g.Name).Returns("dodo");
@@ -127,6 +128,7 @@ public sealed class AccountDeletionServiceTests
         var inactive = AUser();
         inactive.IsActive = false;
         _accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(inactive);
+        _accounts.Setup(p => p.FindByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(inactive);
 
         var result = await Service().DeleteAccountAsync(42, Password, Ip);
 
@@ -152,6 +154,7 @@ public sealed class AccountDeletionServiceTests
         var locked = AUser();
         locked.LockedUntil = DateTime.UtcNow.AddMinutes(5);
         _accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(locked);
+        _accounts.Setup(p => p.FindByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(locked);
 
         var result = await Service().DeleteAccountAsync(42, Password, Ip);
 

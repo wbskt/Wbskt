@@ -20,9 +20,9 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
         }, cancellationToken);
     }
 
-    public async Task<int> FindIdByRefIdInTenantAsync(Guid workspaceRef, int tenantId, CancellationToken cancellationToken = default)
+    public async Task<int?> FindIdByRefIdInTenantAsync(Guid workspaceRef, int tenantId, CancellationToken cancellationToken = default)
     {
-        return await ExecuteScalarAsync<int>("dbo.Workspace_FindBy_RefIdInTenant", p =>
+        return await ExecuteScalarAsync<int?>("dbo.Workspace_FindBy_RefIdInTenant", p =>
         {
             p.AddWithValue("@RefId", workspaceRef);
             p.AddWithValue("@TenantId", tenantId);

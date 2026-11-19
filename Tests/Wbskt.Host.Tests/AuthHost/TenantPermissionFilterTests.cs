@@ -70,7 +70,7 @@ public sealed class TenantPermissionFilterTests
     [Fact]
     public async Task A_tenant_the_caller_does_not_belong_to_reads_as_not_found()
     {
-        _tenants.Setup(p => p.FindTenantIdByRefIdForUserAsync(TenantRef, CallerId, It.IsAny<CancellationToken>())).ReturnsAsync(0);
+        _tenants.Setup(p => p.FindTenantIdByRefIdForUserAsync(TenantRef, CallerId, It.IsAny<CancellationToken>())).ReturnsAsync((int?)null);
         var (context, _) = Context(nameof(ManagementController.GetMembers));
 
         await new TenantPermissionFilter().OnAuthorizationAsync(context);

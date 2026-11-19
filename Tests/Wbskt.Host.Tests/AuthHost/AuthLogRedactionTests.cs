@@ -36,8 +36,8 @@ public sealed class AuthLogRedactionTests
     public async Task An_unknown_address_is_logged_as_a_fingerprint()
     {
         var harness = new Harness();
-        harness.Accounts.Setup(p => p.GetByEmailAsync(Email, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new SecurityException($"No user with email {Email}."));
+        harness.Accounts.Setup(p => p.FindByEmailAsync(Email, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((User?)null);
 
         await harness.SignIn.LoginAsync(Email, Password, "10.0.0.1");
 
@@ -123,14 +123,14 @@ public sealed class AuthLogRedactionTests
         var workspaces = new Mock<IWorkspaceProvider>();
         if (inAnotherTenant)
         {
-            auth.Setup(p => p.GetByEmailAsync(Email, It.IsAny<CancellationToken>())).ReturnsAsync(AUser(verified: true));
+            auth.Setup(p => p.FindByEmailAsync(Email, It.IsAny<CancellationToken>())).ReturnsAsync(AUser(verified: true));
             workspaces.Setup(p => p.AddUserToWorkspaceAsync(7, 42, It.IsAny<CancellationToken>()))
                 .ThrowsAsync(SqlExceptions.WithNumber(50009, $"User {Email} is not a member of the tenant."));
         }
         else
         {
-            auth.Setup(p => p.GetByEmailAsync(Email, It.IsAny<CancellationToken>()))
-                .ThrowsAsync(new SecurityException($"User with email {Email} not found."));
+            auth.Setup(p => p.FindByEmailAsync(Email, It.IsAny<CancellationToken>()))
+                .ReturnsAsync((User?)null);
         }
 
         var serviceLogger = new RecordingLogger<WorkspaceService>();
@@ -217,8 +217,9 @@ public sealed class AuthLogRedactionTests
 
         public void WithUser(User user)
         {
-            Accounts.Setup(p => p.GetByEmailAsync(user.Email, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+            Accounts.Setup(p => p.FindByEmailAsync(user.Email, It.IsAny<CancellationToken>())).ReturnsAsync(user);
             Accounts.Setup(p => p.GetByIdAsync(user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+            Accounts.Setup(p => p.FindByIdAsync(user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(user);
         }
 
         public void AssertNoAddressLogged()

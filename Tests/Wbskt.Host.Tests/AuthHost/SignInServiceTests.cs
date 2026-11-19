@@ -7,7 +7,6 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Auth;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
-using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Host.Tests.AuthHost;
 
@@ -48,7 +47,7 @@ public sealed class SignInServiceTests
     public async Task An_unknown_address_gets_the_wrong_password_answer()
     {
         var harness = new Harness();
-        harness.Accounts.Setup(p => p.GetByEmailAsync(Email, It.IsAny<CancellationToken>())).ThrowsAsync(new SecurityException("No user with that email address."));
+        harness.Accounts.Setup(p => p.FindByEmailAsync(Email, It.IsAny<CancellationToken>())).ReturnsAsync((User?)null);
 
         var result = await harness.SignIn.LoginAsync(Email, Password, Ip);
 
@@ -240,8 +239,9 @@ public sealed class SignInServiceTests
 
         public void WithUser(User user)
         {
-            Accounts.Setup(p => p.GetByEmailAsync(user.Email, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+            Accounts.Setup(p => p.FindByEmailAsync(user.Email, It.IsAny<CancellationToken>())).ReturnsAsync(user);
             Accounts.Setup(p => p.GetByIdAsync(user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+            Accounts.Setup(p => p.FindByIdAsync(user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(user);
         }
     }
 

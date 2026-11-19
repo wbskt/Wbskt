@@ -244,17 +244,8 @@ internal sealed class RegistrationService : IRegistrationService
         //
         // Anonymous specifically because sign-in requires a verified address: an account that needs
         // this endpoint is by definition one that cannot obtain a token to call an authenticated one.
-        User user;
-        try
-        {
-            user = await _accounts.GetByEmailAsync(email, cancellationToken);
-        }
-        catch (SecurityException)
-        {
-            return Result.Success();
-        }
-
-        if (user.IsEmailVerified || !user.IsActive)
+        var user = await _accounts.FindByEmailAsync(email, cancellationToken);
+        if (user is null || user.IsEmailVerified || !user.IsActive)
         {
             return Result.Success();
         }
@@ -348,11 +339,7 @@ internal sealed class RegistrationService : IRegistrationService
                 return Result.Failure(UsernameConflict);
             }
 
-            existing = await _accounts.GetByEmailAsync(email, cancellationToken);
-        }
-        catch (SecurityException)
-        {
-            existing = null;
+            existing = await _accounts.FindByEmailAsync(email, cancellationToken);
         }
         catch (Exception lookupEx) when (lookupEx is not OperationCanceledException)
         {
@@ -402,12 +389,8 @@ internal sealed class RegistrationService : IRegistrationService
     /// </summary>
     private async Task<Result<InvitationLookup>> ValidateInvitationAsync(string invitationToken, string email, CancellationToken cancellationToken)
     {
-        InvitationLookup invitation;
-        try
-        {
-            invitation = await _tenants.GetInvitationByTokenHashAsync(SecurityTokens.Hash(invitationToken), cancellationToken);
-        }
-        catch (SecurityException)
+        var invitation = await _tenants.FindInvitationByTokenHashAsync(SecurityTokens.Hash(invitationToken), cancellationToken);
+        if (invitation is null)
         {
             _logger.LogWarning("Registration rejected: no invitation matches the presented token");
             return Result<InvitationLookup>.Failure(InvalidInvitation);

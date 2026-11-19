@@ -45,8 +45,7 @@ public sealed class TenantPermissionFilter : ScopedPermissionFilter<RequiresTena
         }
 
         var tenants = httpContext.RequestServices.GetRequiredService<ITenantProvider>();
-        int tenantId = await tenants.FindTenantIdByRefIdForUserAsync(scopeRef, caller.UserId, cancellationToken);
-        if (tenantId <= 0)
+        if (await tenants.FindTenantIdByRefIdForUserAsync(scopeRef, caller.UserId, cancellationToken) is not { } tenantId)
         {
             return Result<PermissionScope>.Failure(Error.Forbidden("TENANT_NOT_FOUND", "Tenant not found."));
         }

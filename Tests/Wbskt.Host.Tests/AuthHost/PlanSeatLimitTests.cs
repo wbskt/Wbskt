@@ -207,7 +207,7 @@ public sealed class PlanSeatLimitTests
     [Fact]
     public async Task Accepting_is_held_to_the_inviting_tenants_member_limit()
     {
-        _tenants.Setup(p => p.GetInvitationByTokenHashAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+        _tenants.Setup(p => p.FindInvitationByTokenHashAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new InvitationLookup(Guid.NewGuid(), TenantRef, "Acme", "amal@example.test", DateTime.UtcNow.AddDays(1), IsLive: true));
         _tenants.Setup(p => p.AcceptInvitationAsync(It.IsAny<byte[]>(), CallerId, 4, It.IsAny<CancellationToken>()))
             .ThrowsAsync(SqlExceptions.WithNumber(50031, "The plan has reached its member limit."));
@@ -221,10 +221,12 @@ public sealed class PlanSeatLimitTests
     public async Task Signing_up_into_a_full_tenant_keeps_the_account_and_says_why()
     {
         var harness = new AccountServices(limits: new FixedTenantLimits(Limits));
-        harness.Tenants.Setup(p => p.GetInvitationByTokenHashAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+        harness.Tenants.Setup(p => p.FindInvitationByTokenHashAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new InvitationLookup(Guid.NewGuid(), TenantRef, "Acme", "someone@example.test", DateTime.UtcNow.AddDays(1), IsLive: true));
         harness.Accounts.Setup(p => p.InsertUserAsync(It.IsAny<User>(), It.IsAny<CancellationToken>())).Callback<User, CancellationToken>((u, _) => u.Id = 42).ReturnsAsync(42);
         harness.Accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new User { Id = 42, RefId = Guid.NewGuid(), Username = "someone", Email = "someone@example.test" });
+        harness.Accounts.Setup(p => p.FindByIdAsync(42, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new User { Id = 42, RefId = Guid.NewGuid(), Username = "someone", Email = "someone@example.test" });
         harness.Tenants.Setup(p => p.AcceptInvitationAsync(It.IsAny<byte[]>(), 42, 4, It.IsAny<CancellationToken>()))
             .ThrowsAsync(SqlExceptions.WithNumber(50031, "The plan has reached its member limit."));

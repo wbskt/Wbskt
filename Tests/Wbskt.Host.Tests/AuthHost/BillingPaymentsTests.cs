@@ -707,6 +707,7 @@ public sealed class BillingPaymentsTests
 
         var plan = await Billing().CheckoutAsync(9, 4, new BillingCheckoutRequest(PlanCode.Pro, BillingInterval.Monthly), CancellationToken.None);
         _accounts.Setup(a => a.GetByIdAsync(4, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = 4, Email = "a@example.com", Username = "ann" });
+        _accounts.Setup(a => a.FindByIdAsync(4, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = 4, Email = "a@example.com", Username = "ann" });
         _gateway.Setup(g => g.CreateCheckoutAsync(It.IsAny<BillingCheckout>(), It.IsAny<CancellationToken>())).ReturnsAsync("https://pay/1");
         var pack = await Billing().CheckoutAsync(9, 4, new BillingCheckoutRequest(CreditPack: "Boost"), CancellationToken.None);
 
@@ -730,6 +731,7 @@ public sealed class BillingPaymentsTests
     public async Task A_checkout_is_paid_by_the_caller_for_the_tenant_and_a_provider_outage_is_a_503()
     {
         _accounts.Setup(a => a.GetByIdAsync(4, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = 4, Email = "a@example.com", Username = "ann" });
+        _accounts.Setup(a => a.FindByIdAsync(4, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = 4, Email = "a@example.com", Username = "ann" });
         _gateway.SetupSequence(g => g.CreateCheckoutAsync(It.IsAny<BillingCheckout>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("https://checkout.example/session")
             .ThrowsAsync(new HttpRequestException("down"));
@@ -750,6 +752,7 @@ public sealed class BillingPaymentsTests
     public async Task A_checkout_pays_as_the_tenants_own_customer_and_never_as_one_another_tenant_shares(string? stored, bool shared, string? sent)
     {
         _accounts.Setup(a => a.GetByIdAsync(4, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = 4, Email = "a@example.com", Username = "ann" });
+        _accounts.Setup(a => a.FindByIdAsync(4, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = 4, Email = "a@example.com", Username = "ann" });
         _gateway.Setup(g => g.CreateCheckoutAsync(It.IsAny<BillingCheckout>(), It.IsAny<CancellationToken>())).ReturnsAsync("https://pay/1");
         _billing.Setup(b => b.FindCustomerAsync(9, "dodo", It.IsAny<CancellationToken>())).ReturnsAsync(stored is null ? null : new BillingCustomer(stored, shared));
 
@@ -762,6 +765,7 @@ public sealed class BillingPaymentsTests
     public async Task A_plan_checkout_still_open_is_handed_out_again_and_a_new_one_is_kept_for_reuse()
     {
         _accounts.Setup(a => a.GetByIdAsync(4, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = 4, Email = "a@example.com", Username = "ann" });
+        _accounts.Setup(a => a.FindByIdAsync(4, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = 4, Email = "a@example.com", Username = "ann" });
         _gateway.Setup(g => g.CreateCheckoutAsync(It.IsAny<BillingCheckout>(), It.IsAny<CancellationToken>())).ReturnsAsync("https://pay/new");
         _billing.Setup(b => b.FindOpenCheckoutAsync(9, "dodo", "prod_pro_m", Now.UtcDateTime, It.IsAny<CancellationToken>())).ReturnsAsync("https://pay/open");
 
@@ -922,6 +926,7 @@ public sealed class BillingPaymentsTests
     public async Task A_provider_refusal_is_a_conflict_and_anything_else_a_503(HttpStatusCode status, string code)
     {
         _accounts.Setup(a => a.GetByIdAsync(4, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = 4, Email = "a@example.com", Username = "ann" });
+        _accounts.Setup(a => a.FindByIdAsync(4, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = 4, Email = "a@example.com", Username = "ann" });
         _gateway.Setup(g => g.CreateCheckoutAsync(It.IsAny<BillingCheckout>(), It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("no", null, status));
 
         var result = await Billing().CheckoutAsync(9, 4, new BillingCheckoutRequest(PlanCode.Maker, BillingInterval.Monthly), CancellationToken.None);

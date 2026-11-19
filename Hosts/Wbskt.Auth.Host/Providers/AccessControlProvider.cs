@@ -10,9 +10,9 @@ internal sealed class AccessControlProvider : BaseSqlProvider, IAccessControlPro
 {
     public AccessControlProvider(IConfiguration configuration) : base(configuration, "AuthDBConnection") { }
 
-    public async Task<int> FindRoleIdByRefIdAsync(Guid roleRef, int tenantId, CancellationToken cancellationToken = default)
+    public async Task<int?> FindRoleIdByRefIdAsync(Guid roleRef, int tenantId, CancellationToken cancellationToken = default)
     {
-        return await ExecuteScalarAsync<int>("dbo.Role_FindBy_RefId", p =>
+        return await ExecuteScalarAsync<int?>("dbo.Role_FindBy_RefId", p =>
         {
             p.AddWithValue("@RefId", roleRef);
             p.AddWithValue("@TenantId", tenantId);
@@ -24,9 +24,9 @@ internal sealed class AccessControlProvider : BaseSqlProvider, IAccessControlPro
         return await ExecuteScalarAsync<int?>("dbo.Role_FindBy_UserKind", p => p.AddWithValue("@TenantId", tenantId), cancellationToken);
     }
 
-    public async Task<int> FindGroupIdByRefIdAsync(Guid groupRef, int tenantId, CancellationToken cancellationToken = default)
+    public async Task<int?> FindGroupIdByRefIdAsync(Guid groupRef, int tenantId, CancellationToken cancellationToken = default)
     {
-        return await ExecuteScalarAsync<int>("dbo.Group_FindBy_RefId", p =>
+        return await ExecuteScalarAsync<int?>("dbo.Group_FindBy_RefId", p =>
         {
             p.AddWithValue("@RefId", groupRef);
             p.AddWithValue("@TenantId", tenantId);

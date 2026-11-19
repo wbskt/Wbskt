@@ -115,12 +115,8 @@ internal sealed class PasswordService : IPasswordService
         // for the audit log, a few milliseconds against a lookup that both paths pay - a signal, but a
         // far smaller one than a different response, and closing it properly means doing fake work
         // rather than less. Recorded rather than fixed.
-        User user;
-        try
-        {
-            user = await _accounts.GetByEmailAsync(email, cancellationToken);
-        }
-        catch (SecurityException)
+        var user = await _accounts.FindByEmailAsync(email, cancellationToken);
+        if (user is null)
         {
             _logger.LogInformation("Password reset requested for an address with no account. IP: {IpAddress}", ipAddress);
             return Result.Success();

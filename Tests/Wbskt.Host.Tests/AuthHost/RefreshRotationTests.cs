@@ -136,6 +136,7 @@ public sealed class RefreshRotationTests
                 .Returns("access-token");
 
             Accounts.Setup(p => p.GetByIdAsync(TheUser.Id, It.IsAny<CancellationToken>())).ReturnsAsync(TheUser);
+            Accounts.Setup(p => p.FindByIdAsync(TheUser.Id, It.IsAny<CancellationToken>())).ReturnsAsync(TheUser);
             SignIn = Create(jwt.Object, Bus.Object);
             QueuedService = Create(jwt.Object, new Wbskt.Infrastructure.Events.QueuedEventBus(NullLogger<Wbskt.Infrastructure.Events.QueuedEventBus>.Instance));
         }

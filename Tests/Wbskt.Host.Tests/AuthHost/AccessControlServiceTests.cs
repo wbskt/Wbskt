@@ -44,6 +44,7 @@ public sealed class AccessControlServiceTests
         _accessControl.Setup(p => p.FindGroupIdByRefIdAsync(GroupRef, TenantId, It.IsAny<CancellationToken>())).ReturnsAsync(GroupId);
         _workspaces.Setup(p => p.FindIdByRefIdInTenantAsync(WorkspaceRef, TenantId, It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceId);
         _accounts.Setup(p => p.GetByIdAsync(MemberId, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = MemberId, RefId = MemberRef });
+        _accounts.Setup(p => p.FindByIdAsync(MemberId, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = MemberId, RefId = MemberRef });
 
         _service = new AccessControlService(
             _accessControl.Object, _tenants.Object, _workspaces.Object,

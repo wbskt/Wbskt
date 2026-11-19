@@ -36,6 +36,7 @@ public sealed class WorkspaceOwnerActionsTests
             .ReturnsAsync(new Workspace { Id = WorkspaceId, OwnerUserId = OwnerId, TenantId = TenantId, Name = "W" });
         _accounts.Setup(p => p.FindIdByRefIdAsync(ManagerRef, It.IsAny<CancellationToken>())).ReturnsAsync(ManagerId);
         _accounts.Setup(p => p.GetByIdAsync(OwnerId, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = OwnerId, RefId = OwnerRef });
+        _accounts.Setup(p => p.FindByIdAsync(OwnerId, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = OwnerId, RefId = OwnerRef });
     }
 
     [Fact]

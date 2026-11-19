@@ -84,16 +84,16 @@ internal sealed class AccountProfileService : IAccountProfileService
             return Result<LoginResponse>.Failure(UsernameReserved);
         }
 
-        User user;
+        var user = await _accounts.FindByIdAsync(userId, cancellationToken);
+        if (user is null)
+        {
+            return Result<LoginResponse>.Failure(AccountCredentials.UserNotFound);
+        }
+
         UsernameChange change;
         try
         {
-            user = await _accounts.GetByIdAsync(userId, cancellationToken);
             change = await _accounts.ChangeUsernameAsync(userId, username, UsernameChangeInterval, cancellationToken);
-        }
-        catch (SecurityException)
-        {
-            return Result<LoginResponse>.Failure(AccountCredentials.UserNotFound);
         }
         catch (SqlException ex) when (ex.Number is 2601 or 2627)
         {
@@ -146,7 +146,7 @@ internal sealed class AccountProfileService : IAccountProfileService
         // A taken address answers 204 like a free one, as registration does, or this would tell any
         // signed-in caller which addresses have accounts. Its owner is told instead, and confirming
         // (which needs that mailbox) is still refused with EMAIL_CHANGE_CONFLICT.
-        if (await FindOwnerAsync(newEmail, cancellationToken) is { } owner)
+        if (await _accounts.FindByEmailAsync(newEmail, cancellationToken) is { } owner)
         {
             _logger.LogInformation("Email change for user {UserId} not started: the new address is in use; its owner was told. IP: {IpAddress}", userId, ipAddress);
             await _mailer.QueueEmailChangeConflictAsync(newEmail, owner.Username, cancellationToken);
@@ -221,17 +221,5 @@ internal sealed class AccountProfileService : IAccountProfileService
         _logger.LogWarning("Email change reverted for user {UserId}; all sessions revoked. IP: {IpAddress}", change.UserId, ipAddress);
         await _announcer.AnnounceAsync(new UserProfileChangedEvent(change.UserId, change.UserRefId, "email", change.From, change.To, "reverted"), ipAddress, cancellationToken);
         return Result.Success();
-    }
-
-    private async Task<User?> FindOwnerAsync(string email, CancellationToken cancellationToken)
-    {
-        try
-        {
-            return await _accounts.GetByEmailAsync(email, cancellationToken);
-        }
-        catch (SecurityException)
-        {
-            return null;
-        }
     }
 }

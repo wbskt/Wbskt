@@ -27,8 +27,7 @@ internal static class TenantReferences
     /// </summary>
     public static async Task<Result<ResolvedEntity>> ResolveMemberAsync(ITenantProvider tenants, int tenantId, Guid userRef, CancellationToken cancellationToken)
     {
-        var userId = await tenants.FindUserIdByRefIdInTenantAsync(userRef, tenantId, cancellationToken);
-        if (userId <= 0)
+        if (await tenants.FindUserIdByRefIdInTenantAsync(userRef, tenantId, cancellationToken) is not { } userId)
         {
             return Result<ResolvedEntity>.Failure(UserNotFound);
         }
@@ -40,6 +39,6 @@ internal static class TenantReferences
     public static async Task<Result<int>> ResolveWorkspaceAsync(IWorkspaceProvider workspaces, int tenantId, Guid workspaceRef, CancellationToken cancellationToken)
     {
         var workspaceId = await workspaces.FindIdByRefIdInTenantAsync(workspaceRef, tenantId, cancellationToken);
-        return workspaceId > 0 ? Result<int>.Success(workspaceId) : Result<int>.Failure(WorkspaceNotFound);
+        return workspaceId is { } id ? Result<int>.Success(id) : Result<int>.Failure(WorkspaceNotFound);
     }
 }

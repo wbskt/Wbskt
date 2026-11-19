@@ -8,8 +8,8 @@ namespace Wbskt.Auth.Host.Providers;
 
 internal interface IWorkspaceProvider : IReferenceProvider
 {
-    /// <summary>The workspace's id when it is in the tenant, 0 when it is not or does not exist.</summary>
-    Task<int> FindIdByRefIdInTenantAsync(Guid workspaceRef, int tenantId, CancellationToken cancellationToken = default);
+    /// <summary>The workspace's id when it is in the tenant, null when it is not or does not exist.</summary>
+    Task<int?> FindIdByRefIdInTenantAsync(Guid workspaceRef, int tenantId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Creates the workspace and writes <paramref name="created"/> to the outbox in the same transaction,

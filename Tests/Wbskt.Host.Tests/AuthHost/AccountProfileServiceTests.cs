@@ -158,7 +158,7 @@ public sealed class AccountProfileServiceTests
     {
         var harness = new Harness();
         harness.WithUser();
-        harness.Accounts.Setup(p => p.GetByEmailAsync(NewEmail, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = 7, Username = "owner", Email = NewEmail });
+        harness.Accounts.Setup(p => p.FindByEmailAsync(NewEmail, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = 7, Username = "owner", Email = NewEmail });
 
         var result = await harness.Profile.RequestEmailChangeAsync(42, Password, NewEmail, "10.0.0.1");
 
@@ -282,8 +282,8 @@ public sealed class AccountProfileServiceTests
             bus.Setup(b => b.PublishAsync(It.IsAny<AccountEvent>(), It.IsAny<CancellationToken>()))
                 .Callback<AccountEvent, CancellationToken>((e, _) => Published.Add(e))
                 .Returns(Task.CompletedTask);
-            Accounts.Setup(p => p.GetByEmailAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .ThrowsAsync(new SecurityException("No user with that email address."));
+            Accounts.Setup(p => p.FindByEmailAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((User?)null);
         }
 
         public RecordingMailer Mailer { get; }
@@ -304,6 +304,7 @@ public sealed class AccountProfileServiceTests
                 LockedUntil = lockedUntil
             };
             Accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+            Accounts.Setup(p => p.FindByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(user);
             return user;
         }
     }
