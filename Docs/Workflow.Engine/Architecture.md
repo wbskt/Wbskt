@@ -367,8 +367,12 @@ providers in `Wbskt.Workflow/Providers`.
 
 ## 10. History
 
-`HistoryEvents` is the run journal, written in batches. Severity is Warn for failures, retries,
-cancellations and abandoned joins.
+`HistoryEvents` is the run journal, written as things happen and ordered by `HistoryEventId`. Most
+entries are one insert each. The branch loop groups what it can without delaying anything the
+console shows: a dispatch's `BranchStarted`/`BranchResumed`/`BranchRecovered` goes in with its first
+`NodeStarted`, and a node's warnings go in with its `NodeCompleted` or `NodeFailed`. `NodeStarted` is
+still written before the node runs, so a long node shows as running. Severity is Warn for failures,
+retries, cancellations and abandoned joins.
 
 | Scope | Events |
 |---|---|

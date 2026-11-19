@@ -1314,6 +1314,24 @@ public sealed class BranchLoopTests
     }
 
     [Fact]
+    public async Task A_dispatch_journals_its_start_with_the_first_node_and_each_outcome_in_one_write()
+    {
+        // Arrange
+        var history = new RecordingHistoryEventProvider();
+        var branchProvider = new RecordingBranchProvider(ChainNodeId(0));
+        BranchLoop loop = CreateChainLoop(branchProvider, new CountingContinueExecutor(), new RowAndTokenRunCancellationService(), checkInterval: 10, nodeCount: 2, history: history);
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert: BranchStarted rides with the first NodeStarted rather than costing a write of its own.
+        Assert.Equal([HistoryEventKind.BranchStarted, HistoryEventKind.NodeStarted], history.Batches[0]);
+        Assert.Equal([HistoryEventKind.NodeCompleted], history.Batches[1]);
+        Assert.Equal([HistoryEventKind.NodeStarted], history.Batches[2]);
+        Assert.Equal([HistoryEventKind.NodeCompleted], history.Batches[3]);
+    }
+
+    [Fact]
     public async Task The_run_row_is_read_once_every_interval_after_the_first_step()
     {
         // Arrange
@@ -1422,7 +1440,8 @@ public sealed class BranchLoopTests
         IRunCancellationService cancellation,
         int checkInterval,
         int nodeCount = 1,
-        string runStatus = "Running")
+        string runStatus = "Running",
+        RecordingHistoryEventProvider? history = null)
     {
         TestNode[] nodes = Enumerable.Range(0, nodeCount)
             .Select(index => new TestNode { NodeId = ChainNodeId(index), Name = $"n{index}", Ports = Array.Empty<PortDefinition>(), KindValue = "test" })
@@ -1447,7 +1466,7 @@ public sealed class BranchLoopTests
             new StubRunProvider(runStatus),
             runCounters,
             new RecordingBookmarkProvider(),
-            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
+            new RunJournal(history ?? new RecordingHistoryEventProvider(), new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(executor),
             new RecordingRunDispatcher(),
@@ -2301,9 +2320,12 @@ public sealed class BranchLoopTests
     {
         public List<HistoryEventRow> Events { get; } = [];
 
+        public List<string[]> Batches { get; } = [];
+
         public Task InsertBatchAsync(IReadOnlyCollection<HistoryEventRow> events, CancellationToken ct)
         {
             Events.AddRange(events);
+            Batches.Add(events.Select(e => e.EventKind).ToArray());
             return Task.CompletedTask;
         }
         public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct) => throw new NotSupportedException();
