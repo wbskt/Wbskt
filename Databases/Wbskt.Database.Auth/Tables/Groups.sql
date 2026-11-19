@@ -13,3 +13,9 @@ CREATE TABLE dbo.Groups (
     CONSTRAINT FK_Groups_Parent  FOREIGN KEY (ParentGroupId) REFERENCES dbo.Groups (Id)
 );
 GO
+
+-- A group's children: Group_Delete refuses a group that has any, and walks of the ancestry join on it.
+CREATE NONCLUSTERED INDEX IX_Groups_ParentGroupId
+    ON dbo.Groups (ParentGroupId)
+    WHERE ParentGroupId IS NOT NULL;
+GO

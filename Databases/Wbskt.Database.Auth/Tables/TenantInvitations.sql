@@ -46,3 +46,10 @@ CREATE INDEX IX_TenantInvitations_RoleId ON dbo.TenantInvitations (RoleId);
 GO
 CREATE INDEX IX_TenantInvitations_Email ON dbo.TenantInvitations (Email);
 GO
+
+-- The hourly sweeps read unaccepted invitations by when they expire: TenantInvitation_AnnounceExpired
+-- for the ones that just did, Credential_DeleteExpired for the ones long past it.
+CREATE NONCLUSTERED INDEX IX_TenantInvitations_Expiring
+    ON dbo.TenantInvitations (ExpiresAt)
+    WHERE AcceptedAt IS NULL;
+GO
