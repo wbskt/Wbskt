@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using Microsoft.Extensions.Options;
 using MQTTnet;
+using MQTTnet.Packets;
 using MQTTnet.Protocol;
 using MQTTnet.Server;
 using Wbskt.Gateway.Core.Services;
@@ -69,6 +70,7 @@ public sealed class MqttGateway : IHostedService
         _server.InterceptingPublishAsync += ReceivePublishAsync;
         _server.InterceptingSubscriptionAsync += CheckSubscriptionAsync;
         _server.InterceptingUnsubscriptionAsync += KeepDownTopicAsync;
+        _server.InterceptingOutboundPacketAsync += AdvertiseLimitsAsync;
     }
 
     internal GuardedTcpServerAdapter Listener { get; }
@@ -97,6 +99,20 @@ public sealed class MqttGateway : IHostedService
         {
             DefaultClientDisconnectOptions = new MqttServerClientDisconnectOptions { ReasonCode = MqttDisconnectReasonCode.ServerShuttingDown }
         });
+    }
+
+    // The packet limit goes in the MQTT 5 CONNACK as Maximum Packet Size. A compliant library checks it
+    // before sending, so a client about to send too much learns why locally instead of losing its
+    // connection without a reason code: the size guard cuts a packet over the limit before it is read.
+    // MQTT 3.1.1 has no such property and the encoder leaves it out.
+    private Task AdvertiseLimitsAsync(InterceptingPacketEventArgs args)
+    {
+        if (args.Packet is MqttConnAckPacket connAck)
+        {
+            connAck.MaximumPacketSize = (uint)_options.MaxPacketBytes;
+        }
+
+        return Task.CompletedTask;
     }
 
     private async Task ValidateConnectionAsync(ValidatingConnectionEventArgs args)

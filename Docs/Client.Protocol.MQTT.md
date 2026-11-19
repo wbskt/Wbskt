@@ -52,8 +52,11 @@ On MQTT 3.1.1 the same refusals arrive as the 3.1.1 return codes (4 for 0x86, 5 
 
 Topics are case-sensitive and use the same lower-case `clientRefId`; a PUBLISH to any other
 spelling is dropped. `MqttBinding` in `Wbskt.Protocol` builds both. Each PUBLISH carries one message: one JSON object in
-UTF-8, at most 64 KB. A packet over 64 KB plus 1 KB of MQTT framing ends the connection at once,
-before the gateway reads it.
+UTF-8, at most 64 KB. An MQTT 5 CONNACK states the limit as Maximum Packet Size (64 KB plus 1 KB of
+MQTT framing), and a library that honours it refuses a bigger publish before sending. A packet over
+that limit ends the connection at once, before the gateway reads it and without a DISCONNECT or reason
+code: the client sees the connection drop. A message over 64 KB in a packet that fits gets DISCONNECT
+0x95.
 
 Messages are delivered at most once (QoS 0) towards the client. A client may publish at QoS 0 or 1;
 QoS 1 gets a PUBACK, but delivery is still confirmed by the model's own `sys.ack` for commands, not by
@@ -77,7 +80,7 @@ DISCONNECT:
 |---|---|---|
 | 0x00 Normal disconnection | Normal | Reconnect on the schedule. |
 | 0x8B Server shutting down | Restarting | Reconnect, 0–30 s spread. |
-| 0x95 Packet too large | Too big | Fix the sender; reconnect on the schedule. |
+| 0x95 Packet too large | Too big: a message over 64 KB in a packet within the limit. A packet over the limit gets no DISCONNECT (§2). | Fix the sender; reconnect on the schedule. |
 | 0x83 Implementation specific error | Server error | Reconnect on the schedule. |
 | 0x8E Session taken over | Superseded | Reconnect on the schedule. Log it: repeated, it means another client uses these credentials. |
 | 0x87 Not authorized | Revoked | Drop the access token, then reconnect on the schedule; the login decides what happens next. |
