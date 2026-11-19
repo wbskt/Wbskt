@@ -32,11 +32,15 @@ public static class Program
         // Outbound WebhookNotification client: don't follow redirects, so a 3xx to an internal
         // address can't sidestep the OutboundAddressGuard SSRF check on the original target.
         builder.Services.AddHttpClient("workflow-webhook")
-            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false })
+            .RedactUrlInTraces();
         // Every call an integration makes (Telegram, Discord, ntfy, an HTTP auth test): no redirects,
         // so a 3xx cannot carry a credential, or the request, past the checks on where it may go.
+        // Both clients keep the path out of traces: a Telegram URL carries the bot token, a Discord
+        // webhook's path is the secret, and a Call URL step's address is whatever its author typed.
         builder.Services.AddHttpClient(HttpChannelSupport.ClientName, client => client.Timeout = TimeSpan.FromSeconds(30))
-            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false })
+            .RedactUrlInTraces();
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
         builder.Services.AddEngineHostServices(builder.Configuration);
 
