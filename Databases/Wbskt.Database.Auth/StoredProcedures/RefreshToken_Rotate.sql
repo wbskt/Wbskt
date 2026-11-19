@@ -73,11 +73,7 @@ BEGIN
     END
     ELSE IF @Revoked IS NOT NULL
     BEGIN
-        UPDATE dbo.RefreshTokens
-        SET Revoked = @Now,
-            RevokedByIp = @Ip
-        WHERE UserId = @UserId
-          AND Revoked IS NULL;
+        EXEC dbo.RefreshTokens_EndAllForUser @UserId = @UserId, @Now = @Now, @RevokedByIp = @Ip;
 
         SET @Outcome = 'Replayed';
     END

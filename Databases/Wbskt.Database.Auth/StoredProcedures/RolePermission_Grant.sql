@@ -33,9 +33,8 @@ BEGIN
     BEGIN TRANSACTION;
 
     -- Last-administrator guard; see dbo.Tenant_Administrators for the rule and the lock.
-    DECLARE @TenantLock INT;
-    SELECT @TenantLock = Id FROM dbo.Tenants WITH (UPDLOCK, HOLDLOCK) WHERE Id = @TenantId;
-    DECLARE @HadAdministrator BIT = IIF(EXISTS (SELECT 1 FROM dbo.Tenant_Administrators(@TenantId)), 1, 0);
+    DECLARE @HadAdministrator BIT;
+    EXEC dbo.Tenant_LockAdministered @TenantId = @TenantId, @HadAdministrator = @HadAdministrator OUTPUT;
 
     MERGE dbo.RolePermissions AS target
     USING (SELECT @RoleId AS RoleId, @PermissionId AS PermissionId) AS source
@@ -54,10 +53,7 @@ BEGIN
             @IsDeny
         );
 
-    IF @HadAdministrator = 1 AND NOT EXISTS (SELECT 1 FROM dbo.Tenant_Administrators(@TenantId))
-    BEGIN
-        THROW 50008, 'This change would leave the tenant without an administrator.', 1;
-    END
+    EXEC dbo.Tenant_AssertAdministered @TenantId = @TenantId, @HadAdministrator = @HadAdministrator;
 
     COMMIT TRANSACTION;
 END

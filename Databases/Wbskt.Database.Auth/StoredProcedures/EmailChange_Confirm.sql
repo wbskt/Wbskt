@@ -75,11 +75,7 @@ BEGIN
         @Username = Username
     WHERE Id = @UserId;
 
-    UPDATE dbo.RefreshTokens
-    SET Revoked = SYSUTCDATETIME(),
-        RevokedByIp = @RevokedByIp
-    WHERE UserId = @UserId
-      AND Revoked IS NULL;
+    EXEC dbo.RefreshTokens_EndAllForUser @UserId = @UserId, @RevokedByIp = @RevokedByIp;
 
     INSERT INTO dbo.EmailChangeTokens (UserId, Kind, TokenHash, OldEmail, NewEmail, ExpiresAt, RequestedByIp)
     VALUES (@UserId, 2, @RevertTokenHash, @OldEmail, @NewEmail, @RevertExpiresAt, @RevokedByIp);

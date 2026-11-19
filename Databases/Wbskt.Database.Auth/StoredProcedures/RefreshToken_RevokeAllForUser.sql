@@ -7,12 +7,9 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    UPDATE dbo.RefreshTokens
-    SET Revoked = SYSUTCDATETIME(),
-        RevokedByIp = @RevokedByIp
-    WHERE UserId = @UserId
-      AND Revoked IS NULL;
+    DECLARE @RevokedCount INT;
+    EXEC dbo.RefreshTokens_EndAllForUser @UserId = @UserId, @RevokedByIp = @RevokedByIp, @RevokedCount = @RevokedCount OUTPUT;
 
-    SELECT @@ROWCOUNT AS RevokedCount;
+    SELECT @RevokedCount AS RevokedCount;
 END
 GO

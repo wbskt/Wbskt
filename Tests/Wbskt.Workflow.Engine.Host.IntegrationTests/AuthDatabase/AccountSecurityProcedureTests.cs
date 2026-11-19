@@ -109,6 +109,25 @@ public sealed class AccountSecurityProcedureTests(AuthSqlFixture fixture)
     }
 
     [SkippableFact]
+    public async Task Signing_out_everywhere_revokes_only_live_sessions_and_counts_them()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int userId = await CreateUserAsync();
+        int otherUserId = await CreateUserAsync();
+        await AddSessionAsync(userId);
+        await AddSessionAsync(userId);
+        Guid revoked = await AddSessionAsync(userId);
+        await ExecAsync("UPDATE dbo.RefreshTokens SET Revoked = SYSUTCDATETIME() WHERE SessionId = @p0", revoked);
+        await AddSessionAsync(otherUserId);
+
+        Assert.Equal(2, await ScalarAsync<int>("EXEC dbo.RefreshToken_RevokeAllForUser @UserId = @p0", userId));
+
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.RefreshTokens WHERE UserId = @p0 AND Revoked IS NULL", userId));
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.RefreshTokens WHERE UserId = @p0 AND Revoked IS NULL", otherUserId));
+        Assert.Equal(0, await ScalarAsync<int>("EXEC dbo.RefreshToken_RevokeAllForUser @UserId = @p0", userId));
+    }
+
+    [SkippableFact]
     public async Task Sessions_list_only_live_ones_and_revoke_only_the_owners()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
