@@ -7,6 +7,7 @@
 #   deploy/scripts/deploy.sh --tag sha-abc1234 --services auth,management --skip-migrations
 #   deploy/scripts/deploy.sh --console-tag sha-def5678                     # console only
 #   deploy/scripts/deploy.sh --admin-tag sha-0123abc                       # platform admin only
+#   deploy/scripts/deploy.sh --monitoring --tag sha-abc1234                # the monitoring VM
 #
 # Nothing is built here - images come from CI via GHCR (.github/workflows/build-images.yml here,
 # .github/workflows/build-and-deploy.yml in the Dashboard repo).
@@ -51,12 +52,14 @@ ADMIN_TAG=""
 REF=""
 SERVICES=()
 SKIP_MIGRATIONS=false
+MONITORING=false
 
 usage() {
     cat <<'EOF'
 usage: deploy.sh --tag <image-tag> [--services <a,b,c>] [--ref <git-ref>] [--skip-migrations]
        deploy.sh --console-tag <image-tag>
        deploy.sh --admin-tag <image-tag>
+       deploy.sh --monitoring --tag <image-tag> | --ref <git-ref>
 
   --tag              Backend image tag, e.g. sha-abc1234. Also selects the commit this
                      checkout is reset to.
@@ -76,6 +79,12 @@ usage: deploy.sh --tag <image-tag> [--services <a,b,c>] [--ref <git-ref>] [--ski
   --admin-tag        Platform admin image tag from the Wbskt.Admin repo. Migrates the admin
                      database, then deploys only the admin host, loopback only. Leaves this
                      checkout alone. Not combinable with any other option.
+
+  --monitoring       On a VM that runs only the monitoring stack (COMPOSE_FILE=monitoring.yml in
+                     its .env): resets this checkout to the commit --tag names (or --ref), then
+                     recreates whichever monitoring service's definition or config file changed.
+                     Pulls no host image. Not combinable with --services, --skip-migrations,
+                     --console-tag or --admin-tag.
 EOF
 }
 
@@ -96,6 +105,7 @@ parse_args() {
             --services)    [[ -n "${2:-}" ]] || die "--services needs a value"
                            read -r -a SERVICES <<< "${2//,/ }"; shift 2 ;;
             --skip-migrations) SKIP_MIGRATIONS=true; shift ;;
+            --monitoring)  MONITORING=true; shift ;;
             -h|--help)     usage; exit 0 ;;
             *)             usage >&2; die "unknown argument: $1" ;;
         esac
@@ -154,7 +164,7 @@ validate_backend() {
 }
 
 validate_console() {
-    if [[ -n "$ADMIN_TAG" || -n "$TAG" || -n "$REF" || ${#SERVICES[@]} -gt 0 || "$SKIP_MIGRATIONS" == true ]]; then
+    if [[ "$MONITORING" == true || -n "$ADMIN_TAG" || -n "$TAG" || -n "$REF" || ${#SERVICES[@]} -gt 0 || "$SKIP_MIGRATIONS" == true ]]; then
         die "--console-tag is its own mode; it cannot be combined with --tag/--ref/--services/--skip-migrations"
     fi
     validate_tag "$CONSOLE_TAG"
@@ -163,12 +173,50 @@ validate_console() {
 }
 
 validate_admin() {
-    if [[ -n "$TAG" || -n "$CONSOLE_TAG" || -n "$REF" || ${#SERVICES[@]} -gt 0 || "$SKIP_MIGRATIONS" == true ]]; then
+    if [[ "$MONITORING" == true || -n "$TAG" || -n "$CONSOLE_TAG" || -n "$REF" || ${#SERVICES[@]} -gt 0 || "$SKIP_MIGRATIONS" == true ]]; then
         die "--admin-tag is its own mode; it cannot be combined with any other option"
     fi
     validate_tag "$ADMIN_TAG"
     require_env_file
     SERVICES=(admin)
+}
+
+validate_monitoring() {
+    if [[ -n "$CONSOLE_TAG" || -n "$ADMIN_TAG" || ${#SERVICES[@]} -gt 0 || "$SKIP_MIGRATIONS" == true ]]; then
+        die "--monitoring is its own mode; it takes only --tag or --ref"
+    fi
+    if [[ -n "$TAG" ]]; then
+        validate_tag "$TAG"
+        if [[ -z "$REF" && "$TAG" =~ ^sha-([0-9a-f]{7,40})$ ]]; then
+            REF="${BASH_REMATCH[1]}"
+        fi
+    fi
+    [[ -n "$REF" ]] || die "--monitoring needs --ref, or a sha-<commit> --tag"
+    require_env_file
+    is_monitoring_vm || die "--monitoring is for a VM whose .env sets COMPOSE_FILE=monitoring.yml; this one runs production"
+}
+
+# The monitoring VM names monitoring.yml as its compose file, in .env or the shell.
+is_monitoring_vm() {
+    [[ "${COMPOSE_FILE:-$(sed -n 's/^COMPOSE_FILE=//p' "$ENV_FILE" | tail -1)}" == monitoring.yml ]]
+}
+
+# Monitoring runs beside production unless .env says where it runs: a production VM whose monitoring
+# lives elsewhere sets COMPOSE_PROFILES= (empty). Compose reads the setting from .env itself; this only
+# supplies the default, so a .env written before the profile existed keeps its monitoring running.
+default_compose_profiles() {
+    if ! grep -q '^COMPOSE_PROFILES=' "$ENV_FILE"; then
+        export COMPOSE_PROFILES=monitoring
+    fi
+}
+
+# What COMPOSE_PROFILES comes to, from the shell or else from .env.
+effective_compose_profiles() {
+    if [[ -n "${COMPOSE_PROFILES+set}" ]]; then
+        printf '%s' "$COMPOSE_PROFILES"
+    else
+        sed -n 's/^COMPOSE_PROFILES=//p' "$ENV_FILE" | tail -1
+    fi
 }
 
 # Resets the checkout to the deployed commit, then hands off to the version of this script that
@@ -348,7 +396,11 @@ require_admin_env() {
 # databases' [admin] views and its reader login come from this repo's migrator on backend deploys.
 deploy_admin() {
     cd "$COMPOSE_DIR"
-    export COMPOSE_PROFILES=admin
+    # Added to the profiles already on rather than replacing them: a bare COMPOSE_PROFILES=admin
+    # would hide the monitoring services from this run.
+    local profiles
+    profiles="$(effective_compose_profiles)"
+    export COMPOSE_PROFILES="${profiles:+$profiles,}admin"
     require_complete_env
     require_admin_env
     set_env_var ADMIN_IMAGE_TAG "$ADMIN_TAG"
@@ -366,6 +418,17 @@ deploy_admin() {
 
     wait_for_health admin
     echo "==> deployed admin $ADMIN_TAG on 127.0.0.1:8090"
+}
+
+# The monitoring VM runs only monitoring.yml, so there is no host to pull or migration to run: the
+# checkout is already at the deployed commit, and reconcile_services recreates whatever changed.
+deploy_monitoring() {
+    cd "$COMPOSE_DIR"
+    export COMPOSE_FILE=monitoring.yml
+    require_complete_env
+
+    reconcile_services
+    echo "==> monitoring at $(git -C "$REPO_ROOT" rev-parse --short HEAD)"
 }
 
 deploy_backend() {
@@ -524,6 +587,23 @@ start_services() {
 
 main() {
     parse_args "$@"
+
+    if [[ "$MONITORING" == true ]]; then
+        validate_monitoring
+        if [[ "${WBSKT_DEPLOY_SYNCED:-}" != "1" ]]; then
+            sync_and_reexec "$@"
+        fi
+        deploy_monitoring
+        return
+    fi
+
+    require_env_file
+    # A monitoring VM's compose file has no hosts: a backend, console or admin deploy there would
+    # prune its images and then fail to pull.
+    if is_monitoring_vm; then
+        die "this VM runs only the monitoring stack (COMPOSE_FILE=monitoring.yml); deploy it with --monitoring"
+    fi
+    default_compose_profiles
 
     if [[ -n "$CONSOLE_TAG" ]]; then
         validate_console

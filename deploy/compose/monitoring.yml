@@ -1,0 +1,260 @@
+# The monitoring stack: what collects, stores and alerts on the hosts' traces, metrics and logs.
+#
+# Two ways it runs (see "Monitoring on its own VM" in deploy/README.md):
+#   - Beside production on one VM: docker-compose.yml extends every service here, and runs those
+#     outside node-exporter and cAdvisor only while the `monitoring` profile is on (deploy.sh's default).
+#   - On a VM of its own: this file alone (COMPOSE_FILE=monitoring.yml in that VM's .env), with
+#     PROD_HOST_ADDRESS naming the production VM's private address for Prometheus to scrape, and
+#     MONITORING_BIND_ADDRESS this VM's private address for the hosts, backup.sh and alert.sh to reach.
+#
+# Nothing here is on the edge network or behind Traefik. Grafana stays on the VM's loopback; reach it with
+#   ssh -L 3000:127.0.0.1:3000 <vm>   and open http://localhost:3000
+name: wbskt
+
+networks:
+  backend:
+    ipam:
+      config:
+        - subnet: 172.28.1.0/24
+          ip_range: 172.28.1.128/25
+
+volumes:
+  prometheus-data:
+  alertmanager-data:
+  loki-data:
+  tempo-data:
+  grafana-data:
+  pushgateway-data:
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.130.0
+    container_name: wbskt-otel-collector
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ../observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    depends_on: [prometheus, loki, tempo]
+    # The hosts' OTLP endpoint. Loopback unless MONITORING_BIND_ADDRESS names this VM's private address,
+    # as it must when production runs on another VM; on one VM the hosts use otel-collector:4317.
+    ports:
+      - "${MONITORING_BIND_ADDRESS:-127.0.0.1}:4317:4317"
+    # No healthcheck: the image has no shell and no HTTP client to run one with. Prometheus scrapes
+    # its own metrics on :8888 instead, and OtelCollectorDown fires when that stops answering.
+    networks: [backend]
+    restart: unless-stopped
+    environment:
+      # The Go runtime does not read the cgroup limit; without this its heap overshoots mem_limit.
+      GOMEMLIMIT: 217MiB
+    mem_limit: 256m
+    memswap_limit: 256m
+    logging: *default-logging
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: wbskt-prometheus
+    # Points the production scrape targets at PROD_HOST_ADDRESS when production runs on another VM.
+    entrypoint: ["/bin/sh", "/etc/prometheus/entrypoint.sh"]
+    environment:
+      PROD_HOST_ADDRESS: ${PROD_HOST_ADDRESS:-}
+    command:
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${METRICS_RETENTION:-15d}
+      - --web.enable-otlp-receiver
+    volumes:
+      - ../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../observability/prometheus-entrypoint.sh:/etc/prometheus/entrypoint.sh:ro
+      - ../observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9090/-/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks: [backend]
+    restart: unless-stopped
+    mem_limit: ${PROMETHEUS_MEM_LIMIT:-512m}
+    memswap_limit: ${PROMETHEUS_MEM_LIMIT:-512m}
+    logging: *default-logging
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    container_name: wbskt-alertmanager
+    entrypoint: ["/bin/sh", "/etc/alertmanager/entrypoint.sh"]
+    environment:
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      ALERT_DEADMANS_URL: ${ALERT_DEADMANS_URL:-}
+      ALERT_TIMEZONE: ${ALERT_TIMEZONE:-UTC}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USE_STARTTLS: ${SMTP_USE_STARTTLS:-true}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_ADDRESS: ${SMTP_FROM_ADDRESS:-}
+    volumes:
+      - ../observability/alertmanager-entrypoint.sh:/etc/alertmanager/entrypoint.sh:ro
+      - ../observability/alert-email.tmpl:/etc/alertmanager/alert-email.tmpl:ro
+      # The image has no zone database; the email template reads ALERT_TIMEZONE from the VM's.
+      - /usr/share/zoneinfo:/usr/share/zoneinfo:ro
+      - alertmanager-data:/alertmanager
+    # deploy/scripts/alert.sh posts backup failures here from the production VM (ALERTMANAGER_URL).
+    # Loopback unless MONITORING_BIND_ADDRESS is set.
+    ports:
+      - "${MONITORING_BIND_ADDRESS:-127.0.0.1}:9093:9093"
+    networks: [backend]
+    restart: unless-stopped
+    mem_limit: 64m
+    memswap_limit: 64m
+    logging: *default-logging
+
+  pushgateway:
+    image: prom/pushgateway:v1.11.1
+    container_name: wbskt-pushgateway
+    # Persisted, or a restart forgets the backup success timestamp and BackupMissing goes blind
+    # until the next nightly run. /pushgateway is the image's own directory, owned by its nobody
+    # user, so a fresh named volume mounted there takes that owner and is writable.
+    command:
+      - --persistence.file=/pushgateway/metrics
+      - --persistence.interval=1m
+    volumes:
+      - pushgateway-data:/pushgateway
+    # backup.sh runs from cron on the production VM and pushes its success timestamp here
+    # (BACKUP_METRICS_URL). Loopback unless MONITORING_BIND_ADDRESS is set.
+    ports:
+      - "${MONITORING_BIND_ADDRESS:-127.0.0.1}:9091:9091"
+    networks: [backend]
+    restart: unless-stopped
+    mem_limit: 64m
+    memswap_limit: 64m
+    logging: *default-logging
+
+  # Host metrics: free space on every real filesystem (/, the image store, the SQL volume) for
+  # DiskAlmostFull and DiskFillingFast. It reads the host's root through /host and its /proc via
+  # pid: host; it listens on the backend network only and Prometheus scrapes it there.
+  node-exporter:
+    image: prom/node-exporter:v1.12.1
+    container_name: wbskt-node-exporter
+    command:
+      - --path.rootfs=/host
+      # Docker's own mounts would report every container's overlay as a filesystem of its own.
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|run|sys|var/lib/docker/.+|var/lib/containerd/.+)($$|/)
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    networks: [backend]
+    restart: unless-stopped
+    mem_limit: 64m
+    memswap_limit: 64m
+    logging: *default-logging
+
+  # Per-container metrics, for ContainerRestarting: a host that crashes and is restarted by
+  # restart: unless-stopped keeps its container, so cAdvisor sees the same series start again.
+  # Trimmed to CPU, memory (start times always come with them) and OOM kills, for ContainerOutOfMemoryKilled:
+  # the full set is thousands of series per container.
+  cadvisor:
+    image: ghcr.io/google/cadvisor:v0.60.6
+    container_name: wbskt-cadvisor
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=30s
+      - --store_container_labels=false
+      - --whitelisted_container_labels=com.docker.compose.service
+      - --enable_metrics=cpu,memory,oom_event
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks: [backend]
+    restart: unless-stopped
+    environment:
+      # The Go runtime does not read the cgroup limit; without this its heap overshoots mem_limit.
+      GOMEMLIMIT: 163MiB
+    mem_limit: 192m
+    memswap_limit: 192m
+    logging: *default-logging
+
+  loki:
+    image: grafana/loki:3.5.3
+    container_name: wbskt-loki
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ../observability/loki.yaml:/etc/loki/config.yaml:ro
+      - loki-data:/loki
+    # /ready answers 503 for about 15 s after start while the ingester settles, hence start_period.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3100/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    networks: [backend]
+    restart: unless-stopped
+    environment:
+      # The Go runtime does not read the cgroup limit; without this its heap overshoots mem_limit.
+      GOMEMLIMIT: 435MiB
+    mem_limit: 512m
+    memswap_limit: 512m
+    logging: *default-logging
+
+  tempo:
+    image: grafana/tempo:2.8.2
+    container_name: wbskt-tempo
+    command: ["-config.file=/etc/tempo/config.yaml"]
+    volumes:
+      - ../observability/tempo.yaml:/etc/tempo/config.yaml:ro
+      - tempo-data:/var/tempo
+    # Like Loki, /ready waits for the ingester ring after start.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3200/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    networks: [backend]
+    restart: unless-stopped
+    environment:
+      # The Go runtime does not read the cgroup limit; without this its heap overshoots mem_limit.
+      GOMEMLIMIT: 544MiB
+    mem_limit: 640m
+    memswap_limit: 640m
+    logging: *default-logging
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    container_name: wbskt-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required - see .env.example}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      # The Go runtime does not read the cgroup limit; without this its heap overshoots mem_limit.
+      # Kept well under the cap: the rest holds its binary and plugin pages, which count toward it (#891).
+      GOMEMLIMIT: 217MiB
+    volumes:
+      - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on: [prometheus, loki, tempo]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    networks: [backend]
+    restart: unless-stopped
+    mem_limit: 512m
+    memswap_limit: 512m
+    logging: *default-logging

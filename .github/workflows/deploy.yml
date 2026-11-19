@@ -169,6 +169,29 @@ jobs:
             fi
           done
 
+      # The monitoring stack, when it runs on a VM of its own (MONITORING_HOST set): its config lives in
+      # this repo too, so the same commit is applied there. Same key, user and path as the production VM;
+      # DEPLOY_KNOWN_HOSTS must list both. After the production deploy, so a failure here (reported by
+      # the last step) never holds production back.
+      - name: Deploy monitoring
+        if: success()
+        shell: bash
+        env:
+          TAG: ${{ inputs.tag }}
+          MONITORING_HOST: ${{ secrets.MONITORING_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          if [[ -z "$MONITORING_HOST" ]]; then
+            echo "no MONITORING_HOST: monitoring runs beside production and was reconciled by its deploy"
+            exit 0
+          fi
+          ssh -i "$RUNNER_TEMP/id_deploy" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 \
+            -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+            -o UserKnownHostsFile="$RUNNER_TEMP/known_hosts" \
+            "$DEPLOY_USER@$MONITORING_HOST" \
+            "$DEPLOY_PATH/deploy/scripts/deploy.sh" --monitoring --tag "$TAG"
+
       # deploy.sh brings the supporting services in line itself, but recreating sql, rabbitmq, redis
       # or traefik drops connections, so it only names them. Keep an issue open while any is behind.
       - name: Report services left behind the compose file
