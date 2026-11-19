@@ -66,9 +66,9 @@ public static class ClientMessageRules
             return new ClientMessageViolation(ClientMessageRule.PayloadSize, $"Message payload is limited to {MaxPayloadChars} characters.");
         }
 
-        // A payload goes out as a JSON string, so every quote, backslash and control character in it is
-        // escaped, and 32,768 quotes are 64 KB before the envelope. Measured as sent; a platform
-        // command's object payload is never longer than its text escaped as a string.
+        // Measured as the payload escaped into a JSON string, the longest it can go out: every quote,
+        // backslash and control character in it is escaped, and 32,768 quotes are 64 KB before the
+        // envelope. A payload that is JSON goes out as that value, which is never longer.
         if (payload is not null && WireBytes(messageType, payload) > ClientProtocol.MaxMessageBytes)
         {
             return new ClientMessageViolation(ClientMessageRule.PayloadSize, $"Message payload is too large: escaped as it is sent, the message would be over {ClientProtocol.MaxMessageBytes} bytes.");
