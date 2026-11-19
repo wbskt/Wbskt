@@ -79,9 +79,11 @@ public sealed class IntegrationDeletionIntegrationTests(SqlEdgeFixture fixture)
     }
 
     private Task<object?> AddRunAsync(int definitionId, Guid workflowRef, string status) => ScalarAsync("""
-        INSERT INTO dbo.Runs (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, Status, StartedAt, CompletedAt, CreditBudget)
-        VALUES (NEWID(), @p0, @p1, 1, NEWID(), @p2, SYSUTCDATETIME(),
-                CASE WHEN @p2 IN (N'Running', N'Failing', N'Cancelling') THEN NULL ELSE SYSUTCDATETIME() END, 0);
+        INSERT INTO dbo.Runs (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, Status, StartedAt, CompletedAt, CreditBudget, WorkspaceId)
+        SELECT NEWID(), d.Id, @p1, 1, NEWID(), @p2, SYSUTCDATETIME(),
+               CASE WHEN @p2 IN (N'Running', N'Failing', N'Cancelling') THEN NULL ELSE SYSUTCDATETIME() END, 0, d.WorkspaceId
+        FROM dbo.WorkflowDefinitions d
+        WHERE d.Id = @p0;
         """, definitionId, workflowRef, status);
 
     private IIntegrationProvider Provider() =>
