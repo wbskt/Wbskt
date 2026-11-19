@@ -44,11 +44,11 @@ public sealed class WorkspaceRetirementIntegrationTests(SqlEdgeFixture fixture)
     }
 
     /// <summary>
-    /// The event behind this can be delivered twice. The second run must not report the clients
-    /// again, or every socket host is told to drop them twice and the event log shows two revocations.
+    /// A retry after announcing the revoked clients failed part-way must reach the ones after the
+    /// failure, so a second run reports every revoked client again, and still only revoked ones.
     /// </summary>
     [SkippableFact]
-    public async Task Retiring_twice_reports_each_client_once()
+    public async Task Retiring_again_reports_the_revoked_clients_again()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
         var ws = await SeedWorkspaceAsync();
@@ -56,7 +56,7 @@ public sealed class WorkspaceRetirementIntegrationTests(SqlEdgeFixture fixture)
         await Provider().RetireAsync(ws.WorkspaceId);
         var second = await Provider().RetireAsync(ws.WorkspaceId);
 
-        Assert.Empty(second.RevokedClients);
+        Assert.Equal([ws.PendingClientId, ws.RegisteredClientId], second.RevokedClients.Select(c => c.ClientId).Order());
     }
 
     /// <summary>

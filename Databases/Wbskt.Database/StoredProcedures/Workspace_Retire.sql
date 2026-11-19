@@ -9,11 +9,13 @@
 -- their credentials. The clients' readings are queued for clearing, and dbo.Workspace_Purge removes the
 -- clients, policies, templates, workflows and definitions once nothing needs them.
 --
--- Idempotent: the event that drives it can be delivered more than once. A client already revoked is
--- not reported again, so the caller does not re-announce it.
+-- Idempotent: the event that drives it can be delivered more than once. Every revoked client of the
+-- workspace is reported on every call, not only those this call revoked: announcing one is idempotent,
+-- and a retry after an announcement failed part-way must reach the clients after it, or their open
+-- connections stay up. The duplicate revocations land in the log of a workspace nobody can open.
 --
 -- Returns one row per thing the caller must still act on outside the database:
---   Kind 'client'     - a client revoked by this call; announce it so socket hosts drop the connection.
+--   Kind 'client'     - a revoked client; announce it so socket hosts drop the connection.
 --   Kind 'run'        - a run still in progress; request its cancellation.
 --   Kind 'definition' - a definition disabled here; evict it from definition caches.
 CREATE PROCEDURE dbo.Workspace_Retire
@@ -23,7 +25,6 @@ BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
 
-    DECLARE @Revoked TABLE (ClientId INT, ClientRefId UNIQUEIDENTIFIER, PolicyId INT);
     DECLARE @Definitions TABLE (Id INT PRIMARY KEY);
 
     BEGIN TRANSACTION;
@@ -50,7 +51,6 @@ BEGIN
 
     UPDATE dbo.Clients
     SET Status = 2 -- Revoked
-    OUTPUT INSERTED.Id, INSERTED.RefId, INSERTED.PolicyId INTO @Revoked
     WHERE WorkspaceId = @WorkspaceId
       AND Status IN (0, 1); -- Pending, Registered; Revoked and Rejected already cannot connect
 
@@ -120,9 +120,11 @@ BEGIN
 
     COMMIT TRANSACTION;
 
-    SELECT N'client' AS Kind, CAST(R.ClientId AS BIGINT) AS Id, R.ClientRefId AS RefId, R.PolicyId, P.RefId AS PolicyRefId
-    FROM @Revoked R
-    INNER JOIN dbo.RegistrationPolicies P ON P.Id = R.PolicyId
+    SELECT N'client' AS Kind, CAST(C.Id AS BIGINT) AS Id, C.RefId, C.PolicyId, P.RefId AS PolicyRefId
+    FROM dbo.Clients C
+    INNER JOIN dbo.RegistrationPolicies P ON P.Id = C.PolicyId
+    WHERE C.WorkspaceId = @WorkspaceId
+      AND C.Status = 2
 
     UNION ALL
 
