@@ -110,6 +110,10 @@ internal sealed class AdminMemberService(
             {
                 return Result.Failure(Error.Conflict("MEMBER_CANNOT_ACT", "This member is suspended here or their sign-in is off, so they could not act as administrator. Lift that first."));
             }
+            catch (SqlException ex) when (ex.Number is 50050)
+            {
+                return Result.Failure(Error.Conflict("TENANT_HAS_ADMINISTRATOR", "This account still has an active administrator. Ask them to make the change, or suspend them first if they cannot be reached."));
+            }
         }, [new AfterCommit("announcement", async ct =>
         {
             _announcer.AccessChanged();

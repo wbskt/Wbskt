@@ -1,10 +1,12 @@
 -- Makes a member an administrator of the tenant for staff, when nobody left in it can: assigns the
 -- tenant's Admin role tenant-wide and removes the member's own tenant-wide denies of users.manage and
 -- roles.manage, which would otherwise beat the role (see dbo.Tenant_Administrators). Returns the Admin
--- role's RefId. Running it again changes nothing.
+-- role's RefId. Only for a tenant nobody can administer any more.
 --
 -- 50016: the person is not a member of this tenant.
 -- 50048: the member is suspended here or their sign-in is off, so they could not act as administrator.
+-- 50050: the tenant still has a working administrator (dbo.Tenant_Administrators), so it needs no repair;
+--        staff must not hand a customer's administration to someone its own administrators did not pick.
 CREATE PROCEDURE dbo.TenantMember_StaffRepairAdministrator
     @TenantId INT,
     @UserId INT
@@ -37,6 +39,11 @@ BEGIN
     IF @IsSuspended = 1 OR @IsActive = 0
     BEGIN
         THROW 50048, 'The member is suspended or cannot sign in.', 1;
+    END
+
+    IF EXISTS (SELECT 1 FROM dbo.Tenant_Administrators(@TenantId))
+    BEGIN
+        THROW 50050, 'The tenant still has an administrator.', 1;
     END
 
     DECLARE @AdminRoleId INT;

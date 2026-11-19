@@ -340,6 +340,28 @@ public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
     }
 
     /// <summary>
+    /// Staff may hand a tenant's administration to a member only when nobody can administer it any
+    /// more; while its own administrator can, the repair is refused and nothing changes.
+    /// </summary>
+    [SkippableFact]
+    public async Task Staff_repair_is_refused_while_the_tenant_has_an_administrator()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var (tenantId, ownerId, adminRoleId) = await CreateTenantAsync();
+        int member = await AddMemberAsync(tenantId, null);
+
+        Exception? refused = await AttemptAsync(() => ExecAsync("dbo.TenantMember_StaffRepairAdministrator", ("@TenantId", tenantId), ("@UserId", member)));
+
+        Assert.Equal(50050, Assert.IsType<SqlException>(refused).Number);
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.UserRoles WHERE UserId = @p0 AND RoleId = @p1", member, adminRoleId));
+
+        // The owner's sign-in is turned off: nobody is left, so the repair goes through.
+        await ExecSqlAsync("UPDATE dbo.Users SET IsActive = 0 WHERE Id = @p0;", ownerId);
+        await ExecAsync("dbo.TenantMember_StaffRepairAdministrator", ("@TenantId", tenantId), ("@UserId", member));
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.UserRoles WHERE UserId = @p0 AND RoleId = @p1 AND WorkspaceId IS NULL", member, adminRoleId));
+    }
+
+    /// <summary>
     /// A tenant with nothing to keep (never paid, its plan never set, never frozen), such as an abandoned
     /// sign-up's, is deleted with the account rather than left as a tombstone for good.
     /// </summary>
