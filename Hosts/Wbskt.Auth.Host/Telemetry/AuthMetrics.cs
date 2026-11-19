@@ -38,6 +38,7 @@ public sealed class AuthMetrics : IWorkerTickMetrics, IDisposable
         // first appears at 1 has no earlier sample, and increase() would miss it.
         RecordBillingRefund("unconfirmed", 0);
         Mail.Add(0, new KeyValuePair<string, object?>("outcome", MailOutcome.Dropped));
+        Mail.Add(0, new KeyValuePair<string, object?>("outcome", MailOutcome.Expired));
         Mail.Add(0, new KeyValuePair<string, object?>("outcome", MailOutcome.QueueFull));
         Mail.Add(0, new KeyValuePair<string, object?>("outcome", MailOutcome.Rejected));
         Mail.Add(0, new KeyValuePair<string, object?>("outcome", MailOutcome.Sent));
