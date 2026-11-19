@@ -50,6 +50,26 @@ public sealed class ForkNodeExecutorTests
         aggregators.VerifyNoOtherCalls();
     }
 
+    /// <summary>
+    /// A quorum above the cohort's size used to read as out of reach at the first arrival, which
+    /// released it; one with no count met at once. Both are stamped as a reachable quorum.
+    /// </summary>
+    [Theory]
+    [InlineData(5, 2)]
+    [InlineData(null, 1)]
+    [InlineData(0, 1)]
+    public async Task A_Quorum_out_of_range_is_stamped_within_the_cohort(int? configured, int stamped)
+    {
+        var definition = Definition(
+            [Fork(OuterFork, "a", "b"), Join(OuterJoin, JoinMode.Quorum, configured)],
+            [new Edge((OuterFork, "a"), (OuterJoin, "in")), new Edge((OuterFork, "b"), (OuterJoin, "in"))]);
+        var aggregators = new Mock<IJoinAggregatorProvider>();
+
+        await new ForkNodeExecutor(aggregators.Object).ExecuteAsync(Context(definition, OuterFork), CancellationToken.None);
+
+        aggregators.Verify(a => a.InitializeAsync(It.IsAny<Guid>(), 42, 2, "Quorum", stamped, OuterJoin, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     [Fact]
     public async Task A_Fork_with_no_Join_at_its_level_stamps_no_Join()
     {

@@ -89,7 +89,7 @@ internal sealed class ParallelForEachNodeExecutor : INodeExecutor
             (int)ctx.Branch.RunId,
             items.Count,
             (joinNode.Config?.Mode ?? JoinMode.All).ToString(),
-            joinNode.Config?.QuorumCount ?? 0,
+            JoinQuorum.For(joinNode.Config, items.Count),
             joinNode.NodeId,
             ct);
 
