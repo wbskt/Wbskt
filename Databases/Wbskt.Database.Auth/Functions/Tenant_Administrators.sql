@@ -10,13 +10,13 @@
 -- transaction. Without it two concurrent removals would each read (under READ_COMMITTED_SNAPSHOT,
 -- without blocking) the other administrator as still present, and both commit.
 --
--- Precedence follows Docs/AccessControl.md, for each of the two permissions: a user-level DENY beats
--- everything, then a user-level ALLOW, then a role that allows it provided no held role denies it.
+-- Whether a member holds each of the two is dbo.User_EffectivePermissions, the same precedence every
+-- permission check uses, over tenant-wide assignments only.
 --
--- Scope: direct assignments only (UserRoles and UserPermissions). Administrators reached through a
--- group are not counted, so a tenant administered solely through group membership is treated as
--- having none. That is the deliberate direction to be wrong in -- walking the group ancestry here
--- and getting it subtly wrong would let a change orphan the tenant.
+-- Scope: direct assignments only (UserRoles and UserPermissions, @ThroughGroups = 0). Administrators
+-- reached through a group are not counted, so a tenant administered solely through group membership is
+-- treated as having none. That is the deliberate direction to be wrong in: a change to a group or its
+-- ancestry would otherwise need the same guard, and missing one would let it orphan the tenant.
 --
 -- Deactivated accounts and suspended members are not administrators: neither can act in the tenant,
 -- so counting them would let the last active administrator remove themselves while one "remained".
@@ -30,49 +30,7 @@ RETURN
     WHERE TM.TenantId = @TenantId
       AND U.IsActive = 1
       AND TM.IsSuspended = 0
-
-      -- No permission administration needs that this member does not effectively hold.
-      AND NOT EXISTS (
-          SELECT 1
-          FROM dbo.Permissions Needed
-          WHERE Needed.Slug IN (N'users.manage', N'roles.manage')
-            AND NOT (
-                NOT EXISTS (
-                    SELECT 1
-                    FROM dbo.UserPermissions UP
-                    WHERE UP.UserId = TM.UserId
-                      AND UP.TenantId = @TenantId
-                      AND UP.WorkspaceId IS NULL
-                      AND UP.PermissionId = Needed.Id
-                      AND UP.IsDeny = 1)
-
-                AND (
-                    EXISTS (
-                        SELECT 1
-                        FROM dbo.UserPermissions UP
-                        WHERE UP.UserId = TM.UserId
-                          AND UP.TenantId = @TenantId
-                          AND UP.WorkspaceId IS NULL
-                          AND UP.PermissionId = Needed.Id
-                          AND UP.IsDeny = 0)
-
-                    OR (
-                        EXISTS (
-                            SELECT 1
-                            FROM dbo.UserRoles UR
-                            INNER JOIN dbo.RolePermissions RP ON RP.RoleId = UR.RoleId
-                            WHERE UR.UserId = TM.UserId
-                              AND UR.TenantId = @TenantId
-                              AND UR.WorkspaceId IS NULL
-                              AND RP.PermissionId = Needed.Id
-                              AND RP.IsDeny = 0)
-                        AND NOT EXISTS (
-                            SELECT 1
-                            FROM dbo.UserRoles UR
-                            INNER JOIN dbo.RolePermissions RP ON RP.RoleId = UR.RoleId
-                            WHERE UR.UserId = TM.UserId
-                              AND UR.TenantId = @TenantId
-                              AND UR.WorkspaceId IS NULL
-                              AND RP.PermissionId = Needed.Id
-                              AND RP.IsDeny = 1)))));
+      AND (SELECT COUNT(*)
+           FROM dbo.User_EffectivePermissions(TM.UserId, @TenantId, NULL, 0) E
+           WHERE E.Slug IN (N'users.manage', N'roles.manage')) = 2;
 GO
