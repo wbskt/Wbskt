@@ -172,8 +172,8 @@ internal sealed class SignInService : ISignInService
                 ipAddress,
                 $"EmailHash: {emailHash}"), cancellationToken);
 
-            // Not a bare rethrow: GlobalExceptionMiddleware logs the message and publishes it in a
-            // SystemErrorEvent, so the fault goes on as its type name and stack frames only.
+            // Not a bare rethrow: GlobalExceptionMiddleware logs the message, which can quote the
+            // address, so the fault goes on as its type name and stack frames only.
             throw SignInFaultException.From(ex);
         }
     }

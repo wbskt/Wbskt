@@ -25,14 +25,33 @@ public partial class GlobalExceptionMiddleware
         {
             await _next(context);
         }
+        catch (Exception ex) when (context.RequestAborted.IsCancellationRequested && (ex is OperationCanceledException || ex is Microsoft.Data.SqlClient.SqlException))
+        {
+            // The caller went away (a browser tab closed, a fetch aborted): nothing failed on our side,
+            // so it is not logged as a fault or announced. 499 is what proxies record for it.
+            LogTheCallerCancelled(context.Request.Path);
+            if (!context.Response.HasStarted)
+            {
+                context.Response.StatusCode = StatusCodeClientClosedRequest;
+            }
+        }
         catch (Exception ex)
         {
             // Faults are logged here, once, with the stack; services let them propagate rather than
             // logging them again and turning them into a Result.
             LogAnUnhandledExceptionOccurredMessage(LogLevel.Error, ex.Message, ex);
+            if (context.Response.HasStarted)
+            {
+                // Too late for a status or a body: the caller has part of a response already.
+                _logger.LogWarning("The response had started, so the fault above could not be answered with an error.");
+                return;
+            }
+
             await HandleExceptionAsync(context, ex, eventBus, _logger);
         }
     }
+
+    private const int StatusCodeClientClosedRequest = 499;
 
     // Safety net only. Expected failures travel as Result/Error and are given their status code by
     // ApiControllerBase; anything reaching here is either a deliberate throw from a non-controller
@@ -45,7 +64,9 @@ public partial class GlobalExceptionMiddleware
             // that a bad reference cannot be told apart from an inaccessible one. 403 rather than 401:
             // the caller is authenticated, they just cannot have this.
             SecurityException => (StatusCodes.Status403Forbidden, "AUTH_FORBIDDEN"),
-            ValidationException or ArgumentException => (StatusCodes.Status400BadRequest, Problems.ValidationFailed),
+            // Not ArgumentException: one that escapes is a bug, a 500 like any other, and bad input
+            // already travels as Error.Validation.
+            ValidationException => (StatusCodes.Status400BadRequest, Problems.ValidationFailed),
             NotFoundException => (StatusCodes.Status404NotFound, "NOT_FOUND"),
             OptimisticConcurrencyException => (StatusCodes.Status409Conflict, "CONFLICT"),
             UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, "AUTH_UNAUTHORIZED"),
@@ -58,10 +79,11 @@ public partial class GlobalExceptionMiddleware
         {
             try
             {
+                // The type, the path and the trace id only: the event log is readable by tenant admins,
+                // and an exception's message and stack can quote SQL, addresses or file paths. The log
+                // line above holds them, found by the trace id.
                 await eventBus.PublishAsync(new SystemErrorEvent(
                     exception.GetType().Name,
-                    exception.Message,
-                    exception.StackTrace,
                     context.Request.Path,
                     context.TraceIdentifier
                 ));
@@ -83,6 +105,9 @@ public partial class GlobalExceptionMiddleware
 
         await Problems.WriteAsync(context, statusCode, code, message);
     }
+
+    [LoggerMessage(LogLevel.Debug, "The caller cancelled the request to {Path}.")]
+    partial void LogTheCallerCancelled(string path);
 
     [LoggerMessage("An unhandled exception occurred: {Message}")]
     partial void LogAnUnhandledExceptionOccurredMessage(LogLevel logLevel, string message, Exception exception);

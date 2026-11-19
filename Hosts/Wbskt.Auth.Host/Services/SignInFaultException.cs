@@ -3,10 +3,10 @@ using System.Runtime.ExceptionServices;
 namespace Wbskt.Auth.Host.Services;
 
 /// <summary>
-/// What a sign-in fault propagates as. GlobalExceptionMiddleware logs a fault's message and puts it
-/// in the <c>SystemErrorEvent</c> tenant admins can read, and a fault here can quote the address
-/// being signed in or SQL detail. This carries only the original's type name and its stack frames,
-/// and no inner exception, so neither the log line nor the event can repeat the original's text.
+/// What a sign-in fault propagates as. GlobalExceptionMiddleware logs a fault's message, and a fault
+/// here can quote the address being signed in or SQL detail. This carries only the original's type
+/// name and its stack frames, and no inner exception, so the log line cannot repeat the original's
+/// text.
 /// It is unmapped, so the caller gets the same generic 500 the original would have produced.
 /// </summary>
 internal sealed class SignInFaultException : Exception
