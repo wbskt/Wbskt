@@ -286,7 +286,7 @@ public sealed class InboundEventToRunStartE2ETests
         }
 
         public Task<long> SumActiveBranchesAsync(CancellationToken ct) => Task.FromResult(_activeBranches.Values.Sum(value => (long)value));
-        public Task<CreditCharge?> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult<CreditCharge?>(new CreditCharge(0m, decimal.MaxValue));
+        public Task<CreditCharge> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult(new CreditCharge(0m, decimal.MaxValue));
 
         public Task<BookmarkRow> CreateAsync(BookmarkRow row, CancellationToken ct)
         {

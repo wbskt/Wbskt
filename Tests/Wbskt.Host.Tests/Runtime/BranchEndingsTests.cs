@@ -115,7 +115,7 @@ public sealed class BranchEndingsTests
 
         public Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<CreditCharge?> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => throw new NotSupportedException();
+        public Task<CreditCharge> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<long> SumActiveBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
     }

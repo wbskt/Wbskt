@@ -48,7 +48,7 @@ internal sealed class RunCountersProvider : BaseSqlProvider, IRunCountersProvide
         );
     }
 
-    public async Task<CreditCharge?> TryChargeAsync(int runId, decimal cost, CancellationToken ct)
+    public async Task<CreditCharge> TryChargeAsync(int runId, decimal cost, CancellationToken ct)
     {
         SqlParameter? refusal = null;
         CreditCharge? charge = await ExecuteFindAsync(

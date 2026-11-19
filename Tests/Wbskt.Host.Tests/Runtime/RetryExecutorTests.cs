@@ -437,7 +437,7 @@ public sealed class RetryExecutorTests
 
         public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => Task.FromResult(0);
 
-        public Task<CreditCharge?> TryChargeAsync(int runId, decimal cost, CancellationToken ct)
+        public Task<CreditCharge> TryChargeAsync(int runId, decimal cost, CancellationToken ct)
         {
             Calls++;
             if (Calls <= busyTimes)
@@ -445,7 +445,7 @@ public sealed class RetryExecutorTests
                 throw SqlExceptions.WithNumber(50035, "busy");
             }
 
-            return Task.FromResult<CreditCharge?>(new CreditCharge(cost, 100m));
+            return Task.FromResult(new CreditCharge(cost, 100m));
         }
 
         public Task<long> SumActiveBranchesAsync(CancellationToken ct) => Task.FromResult(0L);
@@ -850,7 +850,7 @@ public sealed class RetryExecutorTests
         var executor = new RecordingExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
 
         var countersMock = new Mock<IRunCountersProvider>();
-        countersMock.Setup(p => p.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>())).ReturnsAsync((CreditCharge?)null);
+        countersMock.Setup(p => p.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>())).ReturnsAsync(CreditCharge.Refused(CreditRefusal.RunBudget));
 
         NodeExecutionResult result = await RetryExecutor.RunWithRetryAsync(
             node,
@@ -957,7 +957,7 @@ public sealed class RetryExecutorTests
         var free = new Mock<ICreditCostCalculator>();
         free.Setup(c => c.Calculate(It.IsAny<BaseNode>())).Returns(0m);
         var counters = new Mock<IRunCountersProvider>();
-        counters.Setup(p => p.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>())).ReturnsAsync((CreditCharge?)null);
+        counters.Setup(p => p.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>())).ReturnsAsync(CreditCharge.Refused(CreditRefusal.RunBudget));
 
         NodeExecutionResult result = await RetryExecutor.RunWithRetryAsync(
             node, CreateContext(), executor, new TestNodeExecutionServices(), new FixedClock(), CancellationToken.None,

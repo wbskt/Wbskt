@@ -643,7 +643,7 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
 
     private async Task ChargeAsync(long runId, decimal cost)
     {
-        CreditCharge? charge = await ProviderFactory.RunCounters(fixture.ConnectionString).TryChargeAsync((int)runId, cost, CancellationToken.None);
+        CreditCharge charge = await ProviderFactory.RunCounters(fixture.ConnectionString).TryChargeAsync((int)runId, cost, CancellationToken.None);
         charge.Should().NotBeNull();
         charge!.Refusal.Should().BeNull();
     }
