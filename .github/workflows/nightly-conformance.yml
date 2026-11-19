@@ -2,7 +2,7 @@ name: Nightly conformance
 
 # Runs Tests/Conformance/test_live.py with each SDK's harness (wbskt/Wbskt.DotNet and wbskt/Wbskt.Python master)
 # against the real hosts, one job per SDK, started from
-# source as in nightly-stress.yml (the setup is copied from there; keep them in step). The pull-request
+# source by the shared .github/actions/e2e-stack, as nightly-stress.yml and the E2E job are. The pull-request
 # suite (sdk-conformance.yml) checks the SDKs against fake_wbskt.py; this checks that what the fake does
 # is still what the gateway does. Nothing here gates a merge or an image.
 
@@ -69,29 +69,8 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
-        with:
-          global-json-file: global.json
-          cache: true
-          cache-dependency-path: Directory.Packages.props
-
-      - name: Install sqlpackage
-        run: |
-          dotnet tool list -g | grep -qi '^microsoft\.sqlpackage ' || dotnet tool install -g microsoft.sqlpackage
-          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
-
-      - name: Deploy databases
-        run: pwsh ./Deploy-Databases.ps1 -HostLoginPassword "$HOST_SQL_PASSWORD"
-
-      - name: Trust the development certificate
-        run: |
-          dotnet dev-certs https
-          dotnet dev-certs https --export-path "$RUNNER_TEMP/aspnet-dev.crt" --format PEM
-          sudo cp "$RUNNER_TEMP/aspnet-dev.crt" /usr/local/share/ca-certificates/aspnet-dev.crt
-          sudo update-ca-certificates
-
-      - name: Start hosts
-        run: Tests/Wbskt.E2E.FeatureTests/start-hosts.sh
+      - name: Start the stack
+        uses: ./.github/actions/e2e-stack
 
       - name: Workspace and policy
         run: |
