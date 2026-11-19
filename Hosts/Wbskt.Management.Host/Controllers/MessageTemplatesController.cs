@@ -72,10 +72,10 @@ public sealed class MessageTemplatesController : ApiControllerBase
     /// <param name="templateRef">The unique reference ID of the template.</param>
     /// <param name="request">The new template details.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
+    /// <returns>The template as saved; 409 <c>TEMPLATE_NAME_TAKEN</c> for a name another template has.</returns>
     [HttpPut("{templateRef:guid}")]
     [RequiresPermission(PermissionNames.TemplatesManage)]
-    public async Task<IActionResult> Update([FromWorkspace] int workspaceId, Guid templateRef, MessageTemplateRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<MessageTemplateResponse>> Update([FromWorkspace] int workspaceId, Guid templateRef, MessageTemplateRequest request, CancellationToken cancellationToken)
     {
         var result = await _templateService.UpdateAsync(workspaceId, templateRef, request, cancellationToken);
         return MapResult(result);

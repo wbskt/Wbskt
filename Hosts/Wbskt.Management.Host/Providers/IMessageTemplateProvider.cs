@@ -8,8 +8,9 @@ public interface IMessageTemplateProvider
     Task<IPagedList<MessageTemplate>> GetAllAsync(int workspaceId, int? policyId, int skip, int take,
         CancellationToken cancellationToken = default);
     Task<MessageTemplate?> FindByRefIdAsync(Guid refId, CancellationToken cancellationToken = default);
+    /// <summary>Saves a template; throws 50045 at <paramref name="maxPerWorkspace"/> and 2627 on a name the workspace already uses.</summary>
     Task<MessageTemplate> InsertAsync(int workspaceId, int? policyId, string name, string messageType,
-        string payloadJson, CancellationToken cancellationToken = default);
+        string payloadJson, int maxPerWorkspace, CancellationToken cancellationToken = default);
     Task UpdateAsync(int workspaceId, int id, int? policyId, string name, string messageType, string payloadJson,
         CancellationToken cancellationToken = default);
     Task DeleteAsync(int workspaceId, int id, CancellationToken cancellationToken = default);
