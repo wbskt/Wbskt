@@ -93,8 +93,19 @@ public class AuthController : ApiControllerBase
     [HttpPost("login")]
     public async Task<ActionResult<LoginResponse>> Login(LoginRequest request, CancellationToken cancellationToken)
     {
-        var result = await _signIn.LoginAsync(request.Email, request.Password, CallerIpAddress(), cancellationToken);
-        return MapSession(result);
+        if (!RefreshTokenCookie.IsRequested(Request))
+        {
+            return MapSession(await _signIn.LoginAsync(request.Email, request.Password, CallerIpAddress(), cancellationToken));
+        }
+
+        var browser = await _signIn.LoginFromBrowserAsync(request.Email, request.Password, CallerIpAddress(), _refreshCookie.ReadDevice(Request), cancellationToken);
+        if (!browser.IsSuccess)
+        {
+            return MapError(browser.Error);
+        }
+
+        _refreshCookie.WriteDevice(Response, browser.Value.DeviceToken, browser.Value.DeviceExpiresAt);
+        return MapSession(Result<LoginResponse>.Success(browser.Value.Session));
     }
 
     /// <summary>

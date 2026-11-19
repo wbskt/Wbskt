@@ -28,4 +28,13 @@ internal interface ISessionProvider
 
     /// <summary>Revokes one of the user's own live sessions. Returns 0 when there is no such live session of theirs.</summary>
     Task<int> RevokeSessionAsync(Guid sessionId, int userId, string? revokedByIp, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Records a browser that signed in with the password (<c>dbo.UserDevice_Create</c>), keeping only
+    /// the account's newest <paramref name="maxPerUser"/>.
+    /// </summary>
+    Task InsertDeviceAsync(int userId, string deviceToken, DateTime expiresAt, int maxPerUser, CancellationToken cancellationToken = default);
+
+    /// <summary>Whether <paramref name="deviceToken"/> is a live sign-in device of the account's.</summary>
+    Task<bool> IsKnownDeviceAsync(int userId, string deviceToken, CancellationToken cancellationToken = default);
 }

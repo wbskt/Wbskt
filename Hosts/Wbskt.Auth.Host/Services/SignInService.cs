@@ -11,6 +11,7 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Auth;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
+using Wbskt.Models;
 using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Auth.Host.Services;
@@ -64,6 +65,15 @@ internal sealed class SignInService : ISignInService
 
     public async Task<Result<LoginResponse>> LoginAsync(string email, string password, string ipAddress, CancellationToken cancellationToken = default)
     {
+        var result = await SignInAsync(email, password, ipAddress, null, issueDevice: false, cancellationToken);
+        return result.IsSuccess ? Result<LoginResponse>.Success(result.Value.Session) : Result<LoginResponse>.Failure(result.Error);
+    }
+
+    public async Task<Result<BrowserSignIn>> LoginFromBrowserAsync(string email, string password, string ipAddress, string? deviceToken, CancellationToken cancellationToken = default) =>
+        await SignInAsync(email, password, ipAddress, deviceToken, issueDevice: true, cancellationToken);
+
+    private async Task<Result<BrowserSignIn>> SignInAsync(string email, string password, string ipAddress, string? deviceToken, bool issueDevice, CancellationToken cancellationToken)
+    {
         _logger.LogDebug("Attempting login from IP: {IpAddress}", ipAddress);
 
         try 
@@ -83,20 +93,22 @@ internal sealed class SignInService : ISignInService
                 // address is not told apart by answering sooner. No account, so no workspace.
                 await _audit.OfUserAsync(0, cancellationToken);
                 await _eventBus.PublishAsync(new UserLoginFailedEvent(-1, Guid.Empty, ipAddress, "Invalid credentials"), cancellationToken);
-                return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_INVALID_CREDENTIALS", "Invalid credentials."));
+                return Result<BrowserSignIn>.Failure(Error.Unauthorized("AUTH_INVALID_CREDENTIALS", "Invalid credentials."));
             }
 
             // Before the password check, so a locked account cannot be used to test passwords. The
             // answer is the ordinary one: a distinct "locked" reply would confirm that the address has
-            // an account to anyone willing to make ten bad guesses. The owner gets in by resetting.
-            if (user.LockedUntil > DateTime.UtcNow)
+            // an account to anyone willing to make ten bad guesses. A browser this account signed in
+            // from before still gets its password tried, so a stranger's guesses cannot keep the owner
+            // out; anyone else gets in by resetting.
+            if (user.LockedUntil > DateTime.UtcNow && !await IsKnownDeviceAsync(user.Id, deviceToken, cancellationToken))
             {
                 // Against the dummy hash, not the account's: the work is spent, the password is not tested.
                 SpendPasswordCheck(password);
                 _logger.LogWarning("Login refused: account {UserId} is locked until {LockedUntil}. IP: {IpAddress}", user.Id, user.LockedUntil, ipAddress);
                 _metrics.RecordLogin("locked_out");
                 await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "Account locked") { WorkspaceIds = await _audit.OfUserAsync(user.Id, cancellationToken) }, cancellationToken);
-                return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_INVALID_CREDENTIALS", "Invalid credentials."));
+                return Result<BrowserSignIn>.Failure(Error.Unauthorized("AUTH_INVALID_CREDENTIALS", "Invalid credentials."));
             }
 
             var stopwatch = Stopwatch.StartNew();
@@ -110,7 +122,7 @@ internal sealed class SignInService : ISignInService
                 _metrics.RecordLogin("invalid_credentials");
                 await AccountLockout.RecordFailedPasswordAsync(_accounts, _eventBus, _logger, user, ipAddress, cancellationToken);
                 await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "Invalid password") { WorkspaceIds = await _audit.OfUserAsync(user.Id, cancellationToken) }, cancellationToken);
-                return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_INVALID_CREDENTIALS", "Invalid credentials."));
+                return Result<BrowserSignIn>.Failure(Error.Unauthorized("AUTH_INVALID_CREDENTIALS", "Invalid credentials."));
             }
 
             if (!user.IsActive)
@@ -118,7 +130,7 @@ internal sealed class SignInService : ISignInService
                 _logger.LogWarning("Login failed: Account is inactive for user {UserId}. IP: {IpAddress}", user.Id, ipAddress);
                 _metrics.RecordLogin("user_inactive");
                 await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "User inactive") { WorkspaceIds = await _audit.OfUserAsync(user.Id, cancellationToken) }, cancellationToken);
-                return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_USER_INACTIVE", "User is inactive."));
+                return Result<BrowserSignIn>.Failure(Error.Unauthorized("AUTH_USER_INACTIVE", "User is inactive."));
             }
 
             // After the password check, not before: answering "verify your address" to someone who did
@@ -134,7 +146,7 @@ internal sealed class SignInService : ISignInService
                 _logger.LogWarning("Login refused: address not yet verified for user {UserId}. IP: {IpAddress}", user.Id, ipAddress);
                 _metrics.RecordLogin("email_unverified");
                 await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "Email not verified") { WorkspaceIds = await _audit.OfUserAsync(user.Id, cancellationToken) }, cancellationToken);
-                return Result<LoginResponse>.Failure(Error.Unauthorized(
+                return Result<BrowserSignIn>.Failure(Error.Unauthorized(
                     "AUTH_EMAIL_UNVERIFIED",
                     "Confirm your email address before signing in. Check your inbox, or ask for a new confirmation link."));
             }
@@ -156,8 +168,11 @@ internal sealed class SignInService : ISignInService
             await _eventBus.PublishAsync(new UserLoginSuccessEvent(user.Id, user.RefId, ipAddress) { WorkspaceIds = await _audit.OfUserAsync(user.Id, cancellationToken) }, cancellationToken);
             _logger.LogInformation("User {Username} logged in successfully. IP: {IpAddress}", user.Username, ipAddress);
 
+            var session = new LoginResponse(accessToken, refreshToken.Token);
+            var signIn = issueDevice ? await IssueDeviceAsync(user.Id, session, cancellationToken) : new BrowserSignIn(session, string.Empty, default);
+
             _metrics.RecordLogin("success");
-            return Result<LoginResponse>.Success(new LoginResponse(accessToken, refreshToken.Token));
+            return Result<BrowserSignIn>.Success(signIn);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -325,6 +340,18 @@ internal sealed class SignInService : ISignInService
         _logger.LogInformation("User {UserId} ended session {SessionId}. IP: {IpAddress}", userId, sessionId, ipAddress);
         await _announcer.AnnounceAsync(new SessionsRevokedEvent(userId, await _announcer.RefOfAsync(userId, cancellationToken), "one"), ipAddress, cancellationToken);
         return Result.Success();
+    }
+
+    private async Task<bool> IsKnownDeviceAsync(int userId, string? deviceToken, CancellationToken cancellationToken) =>
+        !string.IsNullOrEmpty(deviceToken) && await _sessions.IsKnownDeviceAsync(userId, deviceToken, cancellationToken);
+
+    /// <summary>Records a new sign-in device for the account, whose token goes in the browser's cookie.</summary>
+    private async Task<BrowserSignIn> IssueDeviceAsync(int userId, LoginResponse session, CancellationToken cancellationToken)
+    {
+        var token = SecurityTokens.Generate();
+        var expiresAt = DateTime.UtcNow.Add(AccountLockout.DeviceLifetime);
+        await _sessions.InsertDeviceAsync(userId, token, expiresAt, AccountLockout.MaxDevicesPerUser, cancellationToken);
+        return new BrowserSignIn(session, token, expiresAt.ToUtcOffset());
     }
 
     /// <summary>

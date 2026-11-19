@@ -9,6 +9,9 @@ public sealed class RefreshCookieOptions
 {
     public string Name { get; set; } = "wbskt_refresh";
 
+    /// <summary>The sign-in device cookie, which lets this browser's password through an account lock.</summary>
+    public string DeviceName { get; set; } = "wbskt_device";
+
     /// <summary>
     /// Strict suits a console on a sibling subdomain of the auth host (same site). A console served
     /// from another site, such as <c>ng serve</c> on localhost against a deployed backend, needs None,
@@ -66,6 +69,19 @@ public sealed class RefreshTokenCookie
 
     public void Clear(HttpResponse response) =>
         response.Cookies.Delete(_options.Name, CookieOptions(expires: null));
+
+    /// <summary>
+    /// The sign-in device token from its cookie, under the same rules as the refresh token. It is not
+    /// cleared on sign-out: it only proves this browser signed in to the account before, and is no use
+    /// without the password.
+    /// </summary>
+    public string? ReadDevice(HttpRequest request) =>
+        IsRequested(request) && IsOriginAllowed(request) && request.Cookies.TryGetValue(_options.DeviceName, out var token) && !string.IsNullOrEmpty(token)
+            ? token
+            : null;
+
+    public void WriteDevice(HttpResponse response, string token, DateTimeOffset expiresAt) =>
+        response.Cookies.Append(_options.DeviceName, token, CookieOptions(expiresAt));
 
     private bool IsOriginAllowed(HttpRequest request)
     {

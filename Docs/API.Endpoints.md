@@ -214,6 +214,15 @@ many addresses. While locked, sign-in answers exactly as for a wrong password, s
 confirm the address has an account. A successful sign-in resets the count; a password reset or
 change lifts a lock. Sessions issued before the lock keep working.
 
+A lock does not keep out a browser the account signed in from before, so a stranger who knows the
+address cannot lock the owner out by guessing. A sign-in in the cookie transport also sets
+`wbskt_device` (`HttpOnly; Secure`, `Path=/api/auth`, the refresh cookie's `SameSite`, 90 days),
+whose token is stored only as a hash, ten per account at most. While the account is locked, a
+sign-in that presents a live one still has its password checked; a wrong one counts as usual. It
+is read under the refresh cookie's rules (header and allowed origin) and is not cleared on
+sign-out, since it is no use without the password. Clients outside a browser have no such cookie,
+and the staff "clear lockout" action remains the fallback.
+
 Reset and confirmation tokens are stored only as a SHA-256 hash, are single-use, and supersede any
 predecessor for the same account. A reset link lasts 1 hour; a confirmation link lasts 24 hours —
 longer because it is not a credential for an existing account, and sign-up commonly happens shortly

@@ -128,6 +128,7 @@ BEGIN
     DELETE FROM dbo.UserGroups WHERE UserId = @UserId;
     DELETE FROM dbo.WorkspaceMembers WHERE UserId = @UserId;
     DELETE FROM dbo.RefreshTokens WHERE UserId = @UserId;
+    DELETE FROM dbo.UserDevices WHERE UserId = @UserId;
     DELETE FROM dbo.PasswordResetTokens WHERE UserId = @UserId;
     DELETE FROM dbo.EmailVerificationTokens WHERE UserId = @UserId;
     DELETE FROM dbo.EmailChangeTokens WHERE UserId = @UserId;
