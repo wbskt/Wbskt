@@ -23,8 +23,8 @@ public interface IWorkspaceService
 
     /// <summary>
     /// Membership gate plus effective permission set for <paramref name="userId"/> in the workspace, from
-    /// its public reference, in a single database call. Fails Forbidden with <c>WORKSPACE_NOT_FOUND</c> when the reference matches no
-    /// workspace and <c>WORKSPACE_UNAUTHORIZED</c> when the user is not a member.
+    /// its public reference, in a single database call. Fails Forbidden with <c>WORKSPACE_NOT_FOUND</c> both when the reference matches no
+    /// workspace and when the user is not a member, so the two cannot be told apart.
     /// </summary>
     Task<Result<WorkspaceAccessResolution>> ResolveAccessAsync(int userId, Guid workspaceRef, CancellationToken cancellationToken = default);
 

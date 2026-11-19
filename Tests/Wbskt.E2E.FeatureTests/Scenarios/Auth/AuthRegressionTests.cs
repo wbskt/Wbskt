@@ -38,6 +38,23 @@ public sealed class AuthRegressionTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
+    public async Task REG_16_Resolve_AnotherTenantsWorkspace_AnswersAsIfUnknown()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var owner = await fixture.CreateUserAsync();
+        var outsider = await fixture.CreateUserAsync();
+        var workspace = await fixture.CreateWorkspaceAsync(owner.Token);
+
+        var foreign = await fixture.Auth.As(outsider.Token).ResolveWorkspaceRawAsync(new ResolveWorkspaceRequest(workspace));
+        var unknown = await fixture.Auth.As(outsider.Token).ResolveWorkspaceRawAsync(new ResolveWorkspaceRequest(Guid.NewGuid()));
+
+        foreign.StatusCode.Should().Be(unknown.StatusCode);
+        (await ServicesFixture.ReadErrorCodeAsync(foreign)).Should().Be(await ServicesFixture.ReadErrorCodeAsync(unknown),
+            "a different code would confirm that the reference names someone else's workspace");
+    }
+
+    [SkippableFact]
     public async Task REG_02_Resolve_DeletedWorkspace_Returns403()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");

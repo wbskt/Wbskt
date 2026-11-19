@@ -23,8 +23,9 @@ internal sealed class WorkspaceService : IWorkspaceService
     private static readonly Error MayNotDeleteWorkspace =
         Error.Forbidden("PERMISSION_UNAUTHORIZED", $"user does not have permission(s) {PermissionNames.WorkspacesDelete}");
 
-    private static readonly Error WorkspaceGone =
-        Error.Forbidden("WORKSPACE_UNAUTHORIZED", "user does not have permission to this workspace");
+    // Forbidden, not NotFound: "no such workspace" must read like "not yours", and the management host
+    // treats anything but 401 and 403 from the resolve call as a fault.
+    private static readonly Error WorkspaceNotFound = Error.Forbidden("WORKSPACE_NOT_FOUND", "Workspace not found.");
 
     private readonly WorkspaceCreatedOutbox _workspaceCreated;
     private readonly IWorkspaceProvider _workspaceProvider;
@@ -188,7 +189,7 @@ internal sealed class WorkspaceService : IWorkspaceService
         var before = await _workspaceProvider.FindByIdAsync(workspaceId, cancellationToken);
         if (before is null)
         {
-            return Result.Failure(WorkspaceGone);
+            return Result.Failure(WorkspaceNotFound);
         }
 
         // The new owner is given the tenant's Admin role in the workspace (Workspace_SetOwner), which
@@ -237,7 +238,7 @@ internal sealed class WorkspaceService : IWorkspaceService
         var workspace = await _workspaceProvider.FindByIdAsync(workspaceId, cancellationToken);
         if (workspace is null)
         {
-            return Result.Failure(WorkspaceGone);
+            return Result.Failure(WorkspaceNotFound);
         }
 
         // Deleting retires everything in the workspace, so users.manage there is not enough: only its
@@ -278,17 +279,17 @@ internal sealed class WorkspaceService : IWorkspaceService
             var resolution = await _workspaceProvider.ResolveAccessAsync(userId, workspaceRef, cancellationToken);
             if (resolution is null)
             {
-                // Forbidden, not NotFound: "no such workspace" must read like "not yours", and the
-                // management host treats anything but 401 and 403 from the resolve call as a fault. A
-                // stale reference (normal after a workspace is deleted) is a permission answer, not a 500.
-                return Result<WorkspaceAccessResolution>.Failure(Error.Forbidden("WORKSPACE_NOT_FOUND", "Workspace not found."));
+                // A stale reference (normal after a workspace is deleted) is a permission answer, not a 500.
+                return Result<WorkspaceAccessResolution>.Failure(WorkspaceNotFound);
             }
 
+            // The same answer as for no such workspace, so a reference cannot be probed for whether it
+            // names a workspace in someone else's tenant.
             if (!resolution.IsMember)
             {
                 _logger.LogWarning("Workspace access resolution failed: User ID {UserId} is not a member of workspace ID: {WorkspaceId}", userId, resolution.WorkspaceId);
                 _metrics.RecordPermissionCheck("effective-set", "unauthorized");
-                return Result<WorkspaceAccessResolution>.Failure(Error.Forbidden("WORKSPACE_UNAUTHORIZED", "user does not have permission to this workspace"));
+                return Result<WorkspaceAccessResolution>.Failure(WorkspaceNotFound);
             }
 
             _logger.LogDebug("User ID {UserId} resolved {Count} effective permissions in workspace ID: {WorkspaceId}", userId, resolution.Permissions.Count, resolution.WorkspaceId);
