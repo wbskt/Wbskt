@@ -48,13 +48,7 @@ public sealed class ClientOtaTests
     private void Client(bool connected, params string[] system)
     {
         _targets.Setup(x => x.FindAsync(ClientRefId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ClientCommandTarget(ClientId, WorkspaceId, connected, connected ? HostId : null));
-        _clients.Setup(x => x.GetDetailAsync(WorkspaceId, ClientRefId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<ClientDetailResponse>.Success(new ClientDetailResponse(
-                ClientRefId, Guid.NewGuid(), "p", "board", ClientStatus.Registered, connected, null, null, null, null,
-                "wbskt-esp32", "0.3.0", "esp32", [], DateTime.UtcNow, [], system)));
-        _clients.Setup(x => x.EnsureClientInWorkspaceAsync(WorkspaceId, ClientRefId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<int>.Success(ClientId));
+            .ReturnsAsync(new ClientCommandTarget(ClientId, WorkspaceId, connected, connected ? HostId : null, System: system));
     }
 
     private Task<IActionResult?> Send(ClientOtaRequest request) =>
@@ -110,6 +104,40 @@ public sealed class ClientOtaTests
         var newer = Assert.IsType<ClientCommandResponse>(Assert.IsType<AcceptedResult>(result).Value).CommandId;
         _queue.Rows.Select(r => r.CommandId).Should().BeEquivalentTo([reboot, newer]);
         _bus.Verify(x => x.PublishAsync(It.Is<ClientCommandCancelledEvent>(e => e.CommandId == older && e.Type == MessageTypes.OtaUpdate), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task An_update_reads_the_client_once_and_not_its_detail_page()
+    {
+        Client(connected: true, SystemCapabilities.Ota);
+
+        await Send(new ClientOtaRequest("https://firmware.example/a.bin", Digest));
+
+        _targets.Verify(x => x.FindAsync(ClientRefId, It.IsAny<CancellationToken>()), Times.Once);
+        _clients.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task A_client_of_another_workspace_is_not_found()
+    {
+        _targets.Setup(x => x.FindAsync(ClientRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ClientCommandTarget(ClientId, WorkspaceId + 1, true, HostId, System: [SystemCapabilities.Ota]));
+
+        var result = await Send(new ClientOtaRequest("https://firmware.example/a.bin", Digest));
+
+        ProblemAssert.Is(result, StatusCodes.Status404NotFound).Should().Be("CLIENT_NOT_FOUND");
+        _bus.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task An_expiry_already_past_is_a_400()
+    {
+        Client(connected: true, SystemCapabilities.Ota);
+
+        var result = await Send(new ClientOtaRequest("https://firmware.example/a.bin", Digest, ExpiresAt: DateTimeOffset.UtcNow.AddMinutes(-1)));
+
+        ProblemAssert.Is(result, StatusCodes.Status400BadRequest).Should().Be("COMMAND_EXPIRY_INVALID");
+        _bus.VerifyNoOtherCalls();
     }
 
     [Fact]

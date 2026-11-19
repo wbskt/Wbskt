@@ -191,12 +191,14 @@ public sealed class ClientCommandServiceTests
     }
 
     [Fact]
-    public async Task A_reserved_command_type_is_refused_before_the_client_is_looked_up()
+    public async Task A_reserved_command_type_is_refused_by_the_sender_with_its_own_code()
     {
+        _targets.Setup(t => t.FindAsync(ClientRef, It.IsAny<CancellationToken>())).ReturnsAsync(new ClientCommandTarget(42, WorkspaceId, true, "socket-a"));
+
         var result = await Service.SendAsync(WorkspaceId, ClientRef, new ClientCommandRequest(MessageTypes.StateReport, "{}"));
 
         result.Error.Code.Should().Be("COMMAND_TYPE_RESERVED");
-        _targets.VerifyNoOtherCalls();
+        _bus.VerifyNoOtherCalls();
     }
 
     [Fact]

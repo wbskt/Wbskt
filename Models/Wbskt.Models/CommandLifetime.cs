@@ -2,7 +2,8 @@ namespace Wbskt.Models;
 
 /// <summary>
 /// How long a command to a client may live, whoever sends it: the console, the API or a workflow
-/// step. The client command sender refuses an expiry past it, so no caller can act later than this.
+/// step. The client command sender is the one place it is held: it refuses an expiry that has already
+/// passed, which nothing would ever deliver, and one further ahead than <see cref="Max"/>.
 /// </summary>
 public static class CommandLifetime
 {
