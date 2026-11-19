@@ -91,6 +91,11 @@ public sealed class AuthEmailTemplateTests
         var exists = AuthEmailTemplates.AccountAlreadyExists(Options, "a@example.test", "a");
         Assert.Contains("forgot-password", exists.HtmlBody);
         Assert.DoesNotContain("token=", exists.HtmlBody);
+
+        // Nor the notice that someone tried to move another account to this address.
+        var conflict = AuthEmailTemplates.EmailChangeConflict(Options, "a@example.test", "a");
+        Assert.DoesNotContain("token=", conflict.HtmlBody);
+        Assert.DoesNotContain("token=", conflict.TextBody);
     }
     /// <summary>
     /// The plain-text body is what text-only clients and anyone blocking HTML read, so it carries the

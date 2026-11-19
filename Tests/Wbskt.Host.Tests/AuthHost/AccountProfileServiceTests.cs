@@ -155,17 +155,17 @@ public sealed class AccountProfileServiceTests
     }
 
     [Fact]
-    public async Task An_address_another_account_uses_gets_the_generic_conflict_and_no_mail()
+    public async Task An_address_another_account_uses_answers_like_a_free_one_and_tells_its_owner()
     {
         var harness = new Harness();
         harness.WithUser();
-        harness.Accounts.Setup(p => p.GetByEmailAsync(NewEmail, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = 7, Email = NewEmail });
+        harness.Accounts.Setup(p => p.GetByEmailAsync(NewEmail, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = 7, Username = "owner", Email = NewEmail });
 
         var result = await harness.Profile.RequestEmailChangeAsync(42, Password, NewEmail, "10.0.0.1");
 
-        Assert.Equal("EMAIL_CHANGE_CONFLICT", result.Error.Code);
-        Assert.Equal(ErrorType.Conflict, result.Error.Type);
-        Assert.Empty(harness.Mailer.Sent);
+        Assert.True(result.IsSuccess);
+        Assert.Equal($"conflict:{NewEmail}:owner", Assert.Single(harness.Mailer.Sent));
+        harness.Accounts.Verify(p => p.CreateEmailChangeTokenAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -327,6 +327,12 @@ public sealed class AccountProfileServiceTests
         public ValueTask QueueEmailChangeAsync(string to, string username, string token, DateTime expiresAtUtc, CancellationToken ct)
         {
             Sent.Add($"change:{to}");
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask QueueEmailChangeConflictAsync(string to, string username, CancellationToken ct)
+        {
+            Sent.Add($"conflict:{to}:{username}");
             return ValueTask.CompletedTask;
         }
 

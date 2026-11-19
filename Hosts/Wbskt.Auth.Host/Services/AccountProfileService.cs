@@ -149,18 +149,23 @@ internal sealed class AccountProfileService : IAccountProfileService
             return Result.Failure(EmailUnchanged);
         }
 
-        if (await IsTakenAsync(newEmail, cancellationToken))
-        {
-            _logger.LogInformation("Email change for user {UserId} refused: the new address is in use. IP: {IpAddress}", userId, ipAddress);
-            return Result.Failure(EmailUnavailable);
-        }
-
         // Before the token, as for a reset: a new token replaces the pending one, and replacing it
-        // without a mail would leave the person holding a dead link.
+        // without a mail would leave the person holding a dead link. Before the lookup too, and the
+        // same kind either way, so the cooldown answers alike for a taken address and a free one.
         if (!await _mailCooldown.TryAcquireAsync(newEmail, MailKind.EmailChange))
         {
             _logger.LogInformation("Email change for user {UserId} suppressed by the mail cooldown. IP: {IpAddress}", userId, ipAddress);
             _metrics.RecordMailSuppressed(nameof(MailKind.EmailChange));
+            return Result.Success();
+        }
+
+        // A taken address answers 204 like a free one, as registration does, or this would tell any
+        // signed-in caller which addresses have accounts. Its owner is told instead, and confirming
+        // (which needs that mailbox) is still refused with EMAIL_CHANGE_CONFLICT.
+        if (await FindOwnerAsync(newEmail, cancellationToken) is { } owner)
+        {
+            _logger.LogInformation("Email change for user {UserId} not started: the new address is in use; its owner was told. IP: {IpAddress}", userId, ipAddress);
+            await _mailer.QueueEmailChangeConflictAsync(newEmail, owner.Username, cancellationToken);
             return Result.Success();
         }
 
@@ -236,16 +241,15 @@ internal sealed class AccountProfileService : IAccountProfileService
         return Result.Success();
     }
 
-    private async Task<bool> IsTakenAsync(string email, CancellationToken cancellationToken)
+    private async Task<User?> FindOwnerAsync(string email, CancellationToken cancellationToken)
     {
         try
         {
-            await _accounts.GetByEmailAsync(email, cancellationToken);
-            return true;
+            return await _accounts.GetByEmailAsync(email, cancellationToken);
         }
         catch (SecurityException)
         {
-            return false;
+            return null;
         }
     }
 }

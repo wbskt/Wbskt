@@ -83,7 +83,7 @@ public sealed class AccountProfileTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task AUTH_PROF_04_ChangeEmail_ToAnAddressInUse_IsAGenericConflict()
+    public async Task AUTH_PROF_04_ChangeEmail_ToAnAddressInUse_AnswersLikeAFreeOne()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -92,8 +92,10 @@ public sealed class AccountProfileTests(ServicesFixture fixture)
 
         var response = await fixture.SendAsync(HttpMethod.Post, $"{AccountUrl}/change-email", user.Token, new ChangeEmailRequest(other.Email, user.Password));
 
-        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
-        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("EMAIL_CHANGE_CONFLICT");
+        // The same answer a free address gets, or any signed-in caller could test who is registered.
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await fixture.LoginRawAsync(user.Email, user.Password)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await fixture.LoginRawAsync(other.Email, other.Password)).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [SkippableFact]

@@ -268,7 +268,7 @@ The suite has no inbox, so the links themselves are covered by the unit tests.
 | `AUTH_PROF_01` | + | Rename, then rename again | **200** with an access token whose `name` is the new one and no refresh token; the second is **400** `USERNAME_CHANGED_RECENTLY`; sign-in still works |
 | `AUTH_PROF_02` | − | Rename to `Adm1n`, to another user's name, or with no field | **400** `USERNAME_RESERVED`, **409** `USERNAME_TAKEN`, **400** |
 | `AUTH_PROF_03` | ± | Change email with a wrong password, then the right one | **400** `AUTH_CURRENT_PASSWORD_INVALID`, then **204**; the old address still signs in and the new one does not |
-| `AUTH_PROF_04` | − | Change email to an address another account uses | **409** `EMAIL_CHANGE_CONFLICT` |
+| `AUTH_PROF_04` | − | Change email to an address another account uses | **204**, the same answer as a free address; both accounts still sign in with their own addresses |
 | `AUTH_PROF_05` | − | Confirm or revert with a token that was never issued | **400** `EMAIL_CHANGE_TOKEN_INVALID` |
 | `AUTH_PROF_06` | − | Sign up as `Support` | **400** `USERNAME_RESERVED` |
 | `AUTH_PROF_07` | − | Sign up as, or rename to, `admin` with a Cyrillic first letter | **400** `VALIDATION_FAILED`: a username is letters of one alphabet, ASCII digits, and single `.`, `_`, `-` or spaces between them |
