@@ -12,10 +12,6 @@ CREATE TABLE dbo.HistoryEvents
 );
 GO
 
-CREATE INDEX IX_HistoryEvents_HistoryEventId
-    ON dbo.HistoryEvents (HistoryEventId);
-GO
-
-CREATE INDEX IX_HistoryEvents_Timestamp_Severity
-    ON dbo.HistoryEvents (Timestamp, Severity);
-GO
+-- Every read is by RunId (the history of one run, a page of runs' last steps), which the clustered key
+-- serves, and retention deletes by run. An index on HistoryEventId alone or on Timestamp had no reader
+-- and cost a write on every step of every run.
