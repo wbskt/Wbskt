@@ -120,9 +120,9 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
         (await DrawnAsync(later)).Should().Be(5m);
         (await MonthAsync(tenantId)).Should().Be((25m, 15m), "a second post with nothing new draws nothing");
         var summary = await new Wbskt.Management.Host.Providers.WorkspaceUsageProvider(ProviderFactory.BuildConfiguration(fixture.ConnectionString))
-            .GetSummaryAsync(workspaceId, tenantId, new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1), CancellationToken.None);
-        (summary.TenantCredits, summary.TenantCreditsPosted, summary.TenantCreditsDrawn, summary.CreditGrantBalance)
-            .Should().Be((25m, 25m, 15m, 15m), "the usage response works out the same 15 left from these");
+            .GetSummaryAsync(workspaceId, tenantId, DateTime.UtcNow, 10m, CancellationToken.None);
+        (summary.TenantCredits, summary.CreditGrantBalance, summary.RemainingCredits)
+            .Should().Be((25m, 15m, 15m), "the usage response finds the same 15 left as a run start");
         long next = await StartAsync(wd, credits: new PlanCredits(10m, tenantId));
         (await new ChargeCounter(ProviderFactory.RunCounters(fixture.ConnectionString)).TryAsync(next, 0m))
             .Should().Be((0m, 15m), "the plan's 10 are covered and what the grants still hold is left");
@@ -260,8 +260,8 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
         (await runs.GetByIdAsync(second, CancellationToken.None)).CreditBudget.Should().Be(4.75m, "or a twentieth of the 95 left, if less");
         (await counters.TryAsync(second, 0m)).Should().Be((0m, 95m), "the first run's lease is held from what the second may reach");
         var summary = await new Wbskt.Management.Host.Providers.WorkspaceUsageProvider(ProviderFactory.BuildConfiguration(fixture.ConnectionString))
-            .GetSummaryAsync(workspaceId, tenantId, new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1), CancellationToken.None);
-        summary.TenantCreditsReserved.Should().Be(9.75m, "both leases are held across the tenant's workspaces");
+            .GetSummaryAsync(workspaceId, tenantId, DateTime.UtcNow, 100m, CancellationToken.None);
+        summary.RemainingCredits.Should().Be(90.25m, "both leases are held from what is left, across the tenant's workspaces");
 
         (await counters.TryAsync(first, 60m)).Should().Be((60m, 100m), "the lease grows by what the charge needs");
         (await counters.TryAsync(second, 40m)).Should().Be((40m, 95m), "the second run takes the 40 the first left");
@@ -412,8 +412,8 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
         var runs = ProviderFactory.Run(fixture.ConnectionString);
         (await runs.GetByIdAsync(started[^1], CancellationToken.None)).CreditBudget.Should().Be(10m, "the allowance shared among the 200 runs the plan lets go at once");
         var summary = await new Wbskt.Management.Host.Providers.WorkspaceUsageProvider(ProviderFactory.BuildConfiguration(fixture.ConnectionString))
-            .GetSummaryAsync(workspaceId, tenantId, new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1), CancellationToken.None);
-        summary.TenantCreditsReserved.Should().Be(300m, "thirty runs parked with nothing spent hold a little each, not the whole month");
+            .GetSummaryAsync(workspaceId, tenantId, DateTime.UtcNow, 2_000m, CancellationToken.None);
+        summary.RemainingCredits.Should().Be(1_700m, "thirty runs parked with nothing spent hold a little each, not the whole month");
     }
 
     [SkippableFact]

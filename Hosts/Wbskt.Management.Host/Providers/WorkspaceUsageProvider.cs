@@ -11,15 +11,20 @@ internal sealed class WorkspaceUsageProvider : BaseSqlProvider, IWorkspaceUsageP
 {
     public WorkspaceUsageProvider(IConfiguration configuration) : base(configuration) { }
 
-    public async Task<WorkspaceUsageSummary> GetSummaryAsync(int workspaceId, int? tenantId, DateOnly monthStart, CancellationToken ct)
+    public async Task<WorkspaceUsageSummary> GetSummaryAsync(int workspaceId, int? tenantId, DateTime now, decimal creditAllowance, CancellationToken ct)
     {
+        var monthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         return await ExecuteSingleAsync(
             "dbo.WorkspaceUsage_GetSummary",
             p =>
             {
                 p.AddWithValue("@WorkspaceId", workspaceId);
                 p.AddWithValue("@TenantId", (object?)tenantId ?? DBNull.Value);
-                p.Add("@MonthStart", SqlDbType.Date).Value = monthStart.ToDateTime(TimeOnly.MinValue);
+                p.Add("@MonthStart", SqlDbType.Date).Value = monthStart;
+                p.Add("@Allowance", SqlDbType.Decimal).Value = creditAllowance;
+                p["@Allowance"].Precision = 18;
+                p["@Allowance"].Scale = 4;
+                p.Add("@Now", SqlDbType.DateTime2).Value = now;
             },
             r => new WorkspaceUsageSummary(
                 r.GetDecimal(r.GetOrdinal("TenantCredits")),
@@ -35,9 +40,7 @@ internal sealed class WorkspaceUsageProvider : BaseSqlProvider, IWorkspaceUsageP
                 r.GetDecimal(r.GetOrdinal("WorkspaceCreditsReserved")),
                 r.IsDBNull(r.GetOrdinal("CreditGrantNextExpiresAt")) ? null : DateTime.SpecifyKind(r.GetDateTime(r.GetOrdinal("CreditGrantNextExpiresAt")), DateTimeKind.Utc),
                 r.GetDecimal(r.GetOrdinal("CreditGrantNextExpiring")),
-                r.GetDecimal(r.GetOrdinal("TenantCreditsPosted")),
-                r.GetDecimal(r.GetOrdinal("TenantCreditsDrawn")),
-                r.GetDecimal(r.GetOrdinal("TenantCreditsReserved"))),
+                r.GetDecimal(r.GetOrdinal("RemainingCredits"))),
             new InvalidOperationException("WorkspaceUsage_GetSummary did not return a row."),
             ct);
     }

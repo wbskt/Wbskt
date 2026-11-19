@@ -26,7 +26,7 @@ internal sealed class WorkspaceUsageService(IWorkspaceUsageProvider usage, IWork
 
         var monthStart = new DateOnly(now.UtcDateTime.Year, now.UtcDateTime.Month, 1);
         WorkspacePlan plan = await plans.GetAsync(workspaceId, ct);
-        WorkspaceUsageSummary summary = await usage.GetSummaryAsync(workspaceId, plan.TenantId, monthStart, ct);
+        WorkspaceUsageSummary summary = await usage.GetSummaryAsync(workspaceId, plan.TenantId, now.UtcDateTime, plan.Credits.RunsRefusedAt, ct);
 
         // The range is half-open, so a `to` at midnight does not take in the day it starts.
         IReadOnlyCollection<DailyCreditUsage> days = await usage.GetDailyCreditsAsync(
@@ -47,21 +47,11 @@ internal sealed class WorkspaceUsageService(IWorkspaceUsageProvider usage, IWork
                     summary.CreditGrantBalance,
                     summary.CreditGrantNextExpiresAt?.ToUtcOffset(),
                     summary.CreditGrantNextExpiring,
-                    RemainingCredits(summary, plan.Credits.RunsRefusedAt)),
+                    summary.RemainingCredits),
                 new MessageUsageAmount(summary.TenantMessages, plan.Limits.MessagesPerMonth, MessageAllowance.IsThrottled(plan.PlanCode, summary.TenantMessages, plan.Limits.MessagesPerMonth, _billing.PaidMessageThrottleMultipleFor(plan.PlanCode))),
                 new UsageCount(summary.TenantClients, plan.Limits.Clients),
                 new UsageCount(summary.TenantActiveRuns, plan.Limits.ActiveRuns)),
             new WorkspaceUsageShare(summary.WorkspaceCredits, summary.MonthlyCreditCap, summary.WorkspaceMessages, summary.WorkspaceClients, summary.WorkspaceActiveRuns, summary.WorkspaceCreditsReserved),
             days));
-    }
-
-    // Run_Start's sum (dbo.TenantCreditsLeft): the plan's remainder (posted less what grants covered, never
-    // below zero) plus what the grants still hold, less what runs have not posted yet and what the runs
-    // going hold of their budgets.
-    private static decimal RemainingCredits(WorkspaceUsageSummary summary, decimal runsRefusedAt)
-    {
-        decimal planLeft = Math.Max(0m, runsRefusedAt - (summary.TenantCreditsPosted - summary.TenantCreditsDrawn));
-        decimal unposted = summary.TenantCredits - summary.TenantCreditsPosted;
-        return Math.Max(0m, planLeft + summary.CreditGrantBalance - unposted - summary.TenantCreditsReserved);
     }
 }

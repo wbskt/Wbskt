@@ -2,14 +2,18 @@
 -- the plan: workflow credits since @MonthStart (the ledger plus runs' unposted credits, ended or not, as
 -- Run_Start counts them), client messages since @MonthStart (dbo.WorkspaceMessageUsage), registered
 -- clients and runs going, the workspace's own credit cap and what its runs going hold of it, the credits
--- the tenant's grants still hold, and which of those expire first: when, and how many. Also the part of
--- the month's credits already posted and what was drawn from grants as it was posted
--- (dbo.TenantCreditMonths) and what the tenant's runs going hold of their budgets
--- (dbo.TenantCreditsReserved), so the caller can work out what is left as Run_Start does.
+-- the tenant's grants still hold, and which of those expire first: when, and how many. RemainingCredits
+-- is what new runs may still be given, worked out by dbo.TenantCreditsLeft as Run_Start works it out, with
+-- the allowance read from the plan copy as RunCounters_TryCharge reads it (@Allowance, the caller's,
+-- stands in for a workspace with no copy yet), never below zero.
 CREATE PROCEDURE dbo.WorkspaceUsage_GetSummary
     @WorkspaceId INT,
     @TenantId    INT,
-    @MonthStart  DATE
+    @MonthStart  DATE,
+    -- Optional, so a host before RemainingCredits calls it as before: where new runs are refused for the
+    -- month's credits on the caller's plan, and the caller's clock (the SQL clock without it).
+    @Allowance   DECIMAL(18,4) = NULL,
+    @Now         DATETIME2(3) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -52,7 +56,7 @@ BEGIN
 
     -- The live grant that expires first, as dbo.TenantCreditGrantBalance counts live; a grant drawn to
     -- nothing is left out, since nothing of it can expire.
-    DECLARE @Now DATETIME2(3) = SYSUTCDATETIME();
+    SET @Now = COALESCE(@Now, SYSUTCDATETIME());
     DECLARE @NextExpiresAt DATETIME2(3) = (
         SELECT MIN(g.ExpiresAt)
         FROM dbo.TenantCreditGrants g
@@ -61,6 +65,12 @@ BEGIN
           AND g.HeldAt IS NULL
           AND g.ExpiresAt > @Now
           AND g.Credits > g.Drawn);
+
+    DECLARE @RefusedAt DECIMAL(18,4) = COALESCE(
+        (SELECT dbo.PlanCreditsRefusedAt(wa.PlanCode, wa.CreditsPerMonth)
+         FROM dbo.WorkspaceAccounts wa
+         WHERE wa.WorkspaceId = @WorkspaceId),
+        @Allowance);
 
     SELECT
         (SELECT ISNULL(SUM(Credits), 0) FROM @Credits) AS TenantCredits,
@@ -85,10 +95,15 @@ BEGIN
          FROM dbo.WorkspaceCreditUsage u
          JOIN @Workspaces w ON w.WorkspaceId = u.WorkspaceId
          WHERE u.Day >= @MonthStart) AS TenantCreditsPosted,
+        -- TenantCreditsPosted, TenantCreditsDrawn and TenantCreditsReserved fed a copy of this sum in
+        -- the host before RemainingCredits; kept so that host still reads its row, and dropped in the
+        -- release after (#1059).
         ISNULL((SELECT Drawn
                 FROM dbo.TenantCreditMonths
                 WHERE TenantId = @TenantId
                   AND MonthStart = @MonthStart), 0) AS TenantCreditsDrawn,
-        (SELECT Credits FROM dbo.TenantCreditsReserved(@WorkspaceId, @TenantId)) AS TenantCreditsReserved;
+        (SELECT Credits FROM dbo.TenantCreditsReserved(@WorkspaceId, @TenantId)) AS TenantCreditsReserved,
+        (SELECT CASE WHEN l.Credits > 0 THEN l.Credits ELSE 0 END
+         FROM dbo.TenantCreditsLeft(@WorkspaceId, @TenantId, @RefusedAt, @Now) l) AS RemainingCredits;
 END;
 GO
