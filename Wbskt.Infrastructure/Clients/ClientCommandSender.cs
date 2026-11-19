@@ -104,6 +104,15 @@ public sealed class ClientCommandSender(
             return await QueueAsync(command, target, attribute, cancellationToken);
         }
 
+        // Until commands go to the owning host's own queue (#278), a command for a host that crashed is
+        // skipped by every live host and lost. A host that has gone quiet is treated as gone: the client
+        // takes the command when it reconnects.
+        if (queue.HostIsSilent(target))
+        {
+            logger.LogInformation("Client '{ClientRefId}' is held by socket host '{HostId}', silent for {Silent} s; queueing command '{CommandId}'.", command.ClientRefId, target.HostId, target.HostSilentSeconds?.ToString() ?? "unknown", command.CommandId);
+            return await QueueAsync(command, target, attribute, cancellationToken);
+        }
+
         var @event = new ClientCommandEvent(command.ClientRefId, target.ClientId, command.WorkspaceId, command.Type, command.Payload, command.CommandId,
             TargetHostId: target.HostId, ExpiresAtUtc: command.ExpiresAtUtc);
         attribute?.Invoke(@event);

@@ -1,21 +1,24 @@
 using MassTransit;
 using Wbskt.Events.Hosting;
-using Wbskt.Management.Host.Providers;
+using Wbskt.Management.Host.Services;
 
 namespace Wbskt.Management.Host.Handlers;
 
-/// <summary>Records each socket host's heartbeat; <see cref="Services.StalePresenceSweeper"/> reads it.</summary>
+/// <summary>
+/// Records each socket host's heartbeat; <see cref="StalePresenceSweeper"/> reads it. A beat ending a
+/// silence also sends the commands that queued for the host's clients meanwhile (<see cref="SocketHostBeat"/>).
+/// </summary>
 public sealed class SocketHostHeartbeatHandler : IConsumer<SocketHostHeartbeat>
 {
-    private readonly ISocketHostProvider _socketHostProvider;
+    private readonly SocketHostBeat _beat;
 
-    public SocketHostHeartbeatHandler(ISocketHostProvider socketHostProvider)
+    public SocketHostHeartbeatHandler(SocketHostBeat beat)
     {
-        _socketHostProvider = socketHostProvider;
+        _beat = beat;
     }
 
     public Task Consume(ConsumeContext<SocketHostHeartbeat> context)
     {
-        return _socketHostProvider.RecordHeartbeatAsync(context.Message.HostId, context.CancellationToken);
+        return _beat.RecordAsync(context.Message.HostId, context.CancellationToken);
     }
 }

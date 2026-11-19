@@ -71,6 +71,7 @@ public static class Program
         builder.Services.AddScopedWithQueuedEvents<IRegistrationPolicyService, RegistrationPolicyService>();
         builder.Services.AddScoped<IClientProvider, ClientProvider>();
         builder.Services.AddScoped<ISocketHostProvider, SocketHostProvider>();
+        builder.Services.AddScoped<SocketHostBeat>();
         builder.Services.AddScoped<IWorkspaceRetirementProvider, WorkspaceRetirementProvider>();
         // The one way a deleted workspace is retired: WorkspaceDeletedHandler and DeletedWorkspaceSweeper share it.
         builder.Services.AddScoped<WorkspaceRetirer>();

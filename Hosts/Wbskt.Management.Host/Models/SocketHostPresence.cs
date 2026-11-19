@@ -27,3 +27,9 @@ public sealed class PresenceOptions
     /// <summary>How often the management host looks for presence held by a silent host.</summary>
     public int SweepIntervalSeconds { get; set; } = 60;
 }
+
+/// <summary>
+/// A client still connected to a socket host that had gone silent and has beaten again, with commands
+/// that queued for it meanwhile (see <c>SocketHostBeat</c>).
+/// </summary>
+public sealed record SilentHostClient(int ClientId, Guid ClientRefId, int WorkspaceId);

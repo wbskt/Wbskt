@@ -8,7 +8,8 @@ namespace Wbskt.Infrastructure.Clients;
 /// is registered (only a registered client can have a command wait for it).
 /// </summary>
 /// <param name="ConnectedAtUtc">When the socket host holding it saw it connect, on that host's clock.</param>
-public sealed record ClientCommandTarget(int ClientId, int WorkspaceId, bool IsConnected, string? HostId, ClientStatus Status = ClientStatus.Registered, DateTime? ConnectedAtUtc = null);
+/// <param name="HostSilentSeconds">How long since that host's last heartbeat, by the database's clock; null when it has none on record.</param>
+public sealed record ClientCommandTarget(int ClientId, int WorkspaceId, bool IsConnected, string? HostId, ClientStatus Status = ClientStatus.Registered, DateTime? ConnectedAtUtc = null, int? HostSilentSeconds = 0);
 
 public interface IClientCommandTargetProvider
 {
@@ -29,13 +30,15 @@ internal sealed class ClientCommandTargetProvider : BaseSqlProvider, IClientComm
             {
                 var hostOrdinal = reader.GetOrdinal("ConnectedHostId");
                 var connectedAtOrdinal = reader.GetOrdinal("ConnectedAt");
+                var silentOrdinal = reader.GetOrdinal("HostSilentSeconds");
                 return new ClientCommandTarget(
                     reader.GetInt32(reader.GetOrdinal("Id")),
                     reader.GetInt32(reader.GetOrdinal("WorkspaceId")),
                     reader.GetBoolean(reader.GetOrdinal("IsConnected")),
                     reader.IsDBNull(hostOrdinal) ? null : reader.GetString(hostOrdinal),
                     (ClientStatus)reader.GetByte(reader.GetOrdinal("Status")),
-                    reader.IsDBNull(connectedAtOrdinal) ? null : DateTime.SpecifyKind(reader.GetDateTime(connectedAtOrdinal), DateTimeKind.Utc));
+                    reader.IsDBNull(connectedAtOrdinal) ? null : DateTime.SpecifyKind(reader.GetDateTime(connectedAtOrdinal), DateTimeKind.Utc),
+                    reader.IsDBNull(silentOrdinal) ? null : reader.GetInt32(silentOrdinal));
             },
             ct);
     }
