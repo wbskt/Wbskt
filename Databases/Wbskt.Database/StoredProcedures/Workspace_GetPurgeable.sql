@@ -24,10 +24,7 @@ BEGIN
                 AND (EXISTS (SELECT 1 FROM dbo.RegistrationPolicies P WHERE P.WorkspaceId = A.WorkspaceId)
                      OR EXISTS (SELECT 1 FROM dbo.MessageTemplates T WHERE T.WorkspaceId = A.WorkspaceId)))
             -- Workflows or definitions, once no run of them is left.
-            OR (NOT EXISTS (SELECT 1
-                            FROM dbo.WorkflowDefinitions D
-                            INNER JOIN dbo.Runs R ON R.WorkflowDefinitionId = D.Id
-                            WHERE D.WorkspaceId = A.WorkspaceId)
+            OR (NOT EXISTS (SELECT 1 FROM dbo.Runs R WHERE R.WorkspaceId = A.WorkspaceId)
                 AND (EXISTS (SELECT 1 FROM dbo.Workflows W WHERE W.WorkspaceId = A.WorkspaceId)
                      OR EXISTS (SELECT 1 FROM dbo.WorkflowDefinitions D WHERE D.WorkspaceId = A.WorkspaceId)))
           )

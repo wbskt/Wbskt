@@ -31,6 +31,11 @@ CREATE TABLE dbo.Runs
     -- Started by hand from the workflow page's Test run, against a test copy of a draft or the live
     -- version. Shares the workflow's numbering; left out of stats.
     IsTest                   BIT              NOT NULL CONSTRAINT DF_Runs_IsTest DEFAULT 0,
+    -- The workspace the run's definition belongs to, copied by Run_Start and never changed, so a
+    -- workspace's runs are read without going through dbo.WorkflowDefinitions. Null only for a run
+    -- started before the column existed, which the post-deployment script fills in, until it is made
+    -- NOT NULL in the release after (#1059).
+    WorkspaceId              INT              NULL,
     CONSTRAINT UQ_Runs_RefId UNIQUE (RefId),
     -- The words RunStatus (Wbskt.Workflow.Abstraction) defines; a change there is a change here.
     -- Written out with OR, not IN: SQL Server stores IN expanded, and the DACPAC would never match it.
@@ -71,21 +76,26 @@ CREATE UNIQUE INDEX UX_Runs_WorkflowRefId_Number
     WHERE Number > 0;
 GO
 
--- Workspace-wide run listing joins Runs to WorkflowDefinitions on this column. SQL Server does not
--- index foreign keys automatically, so without this the join scans.
-CREATE INDEX IX_Runs_WorkflowDefinitionId_Id
-    ON dbo.Runs (WorkflowDefinitionId, Id DESC)
+-- The workspace's run list (Run_ListBy_WorkspaceId) pages backwards by Id, optionally by status, and
+-- the workspace-wide existence checks (purge, retire) seek its first row.
+CREATE INDEX IX_Runs_WorkspaceId_Id
+    ON dbo.Runs (WorkspaceId, Id DESC)
     INCLUDE (Status, IsTest);
 GO
 
 -- Run_Start's per-workspace ceiling counts the active runs while it holds the workspace's applock;
 -- filtered like IX_Runs_WorkflowRefId_CorrelationKey_Active so the count never reads retained runs.
--- CreditBudget is included for the budgets the runs going hold (dbo.TenantCreditsReserved,
--- dbo.WorkspaceCreditsReserved), summed on every start and lease extension.
-CREATE INDEX IX_Runs_WorkflowDefinitionId_Active
-    ON dbo.Runs (WorkflowDefinitionId)
+-- CreditBudget is included for the budgets the runs going hold (dbo.RunCreditsHeld), summed on every
+-- start and lease extension.
+CREATE INDEX IX_Runs_WorkspaceId_Active
+    ON dbo.Runs (WorkspaceId)
     INCLUDE (CreditBudget)
     WHERE Status IN (N'Running', N'Failing', N'Cancelling');
+GO
+
+-- A workflow version's runs, for the checks that a definition is still referenced before it is deleted.
+CREATE INDEX IX_Runs_WorkflowDefinitionId
+    ON dbo.Runs (WorkflowDefinitionId);
 GO
 
 -- Run_DeleteRetired seeks each workflow's finished runs up to its workspace's own cutoff, so the runs a
@@ -110,8 +120,8 @@ CREATE INDEX IX_Runs_WorkflowRefId_CreatedAt
     INCLUDE (Status, StartedAt, CompletedAt, IsTest);
 GO
 
-CREATE INDEX IX_Runs_WorkflowDefinitionId_CreatedAt
-    ON dbo.Runs (WorkflowDefinitionId, CreatedAt)
+CREATE INDEX IX_Runs_WorkspaceId_CreatedAt
+    ON dbo.Runs (WorkspaceId, CreatedAt)
     INCLUDE (Status, StartedAt, CompletedAt, IsTest);
 GO
 

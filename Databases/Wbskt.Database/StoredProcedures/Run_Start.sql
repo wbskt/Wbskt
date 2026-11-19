@@ -154,11 +154,10 @@ BEGIN
                 IF @LockResult < 0
                     THROW 50035, 'The account is too busy to start another run; try again.', 1;
 
-                -- IX_Runs_WorkflowDefinitionId_Active keeps this to the runs still going.
+                -- IX_Runs_WorkspaceId_Active keeps this to the runs still going.
                 IF (SELECT COUNT(*)
-                    FROM dbo.Runs r
-                    JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
-                    JOIN dbo.TenantWorkspaces(@WorkspaceId, @TenantId) w ON w.WorkspaceId = d.WorkspaceId
+                    FROM dbo.TenantWorkspaces(@WorkspaceId, @TenantId) w
+                    JOIN dbo.Runs r ON r.WorkspaceId = w.WorkspaceId
                     WHERE r.Status IN (N'Running', N'Failing', N'Cancelling')) >= @MaxActiveRuns
                     THROW 50026, 'The plan has reached its limit of active runs.', 1;
             END
@@ -291,10 +290,13 @@ BEGIN
             DECLARE @Number INT;
             EXEC dbo.WorkflowRunSequence_Next @WorkflowRefId = @WorkflowRefId, @Number = @Number OUTPUT;
 
+            -- From the definition, not @WorkspaceId, which a caller may leave out.
+            DECLARE @RunWorkspaceId INT = (SELECT WorkspaceId FROM dbo.WorkflowDefinitions WHERE Id = @WorkflowDefinitionId);
+
             INSERT INTO dbo.Runs
-                (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, CorrelationKey, Status, StartedAt, CreditBudget, TriggerStartKey, ParentRunRefId, Number, IsTest)
+                (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, CorrelationKey, Status, StartedAt, CreditBudget, TriggerStartKey, ParentRunRefId, Number, IsTest, WorkspaceId)
             VALUES
-                (@RefId, @WorkflowDefinitionId, @WorkflowRefId, @WorkflowVersion, @TriggerNodeId, @CorrelationKey, N'Running', @StartedAt, @CreditBudget, @TriggerStartKey, @ParentRunRefId, @Number, @RunIsTest);
+                (@RefId, @WorkflowDefinitionId, @WorkflowRefId, @WorkflowVersion, @TriggerNodeId, @CorrelationKey, N'Running', @StartedAt, @CreditBudget, @TriggerStartKey, @ParentRunRefId, @Number, @RunIsTest, @RunWorkspaceId);
 
             SET @RunId = SCOPE_IDENTITY();
 

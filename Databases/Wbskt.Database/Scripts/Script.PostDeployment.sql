@@ -179,3 +179,15 @@ GO
 -- missing one itself, so this only stops it doing so per event. A no-op once every row has one.
 EXEC dbo.TriggerRegistration_BackfillWebhookSecretHash;
 GO
+
+-- 6. Fill Runs.WorkspaceId (#1000 item 197) on the runs started before the column existed. Here, not in
+-- the pre-deployment script: sqlpackage plans the ALTER TABLE before that script runs, so a column added
+-- there is added twice. Until this runs, the swapped procedures do not see those runs for the few
+-- seconds between, and it also catches a run the previous image starts in that time. A no-op after the
+-- first deploy; goes with the column's NULL in the release after (#1059).
+UPDATE r
+SET r.WorkspaceId = d.WorkspaceId
+FROM dbo.Runs r
+JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
+WHERE r.WorkspaceId IS NULL;
+GO

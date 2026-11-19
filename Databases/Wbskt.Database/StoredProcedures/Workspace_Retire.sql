@@ -130,8 +130,8 @@ BEGIN
 
     SELECT N'run', CAST(RU.Id AS BIGINT), RU.RefId, NULL, NULL
     FROM dbo.Runs RU
-    INNER JOIN @Definitions D ON D.Id = RU.WorkflowDefinitionId
-    WHERE RU.Status IN (N'Running', N'Failing')
+    WHERE RU.WorkspaceId = @WorkspaceId
+      AND RU.Status IN (N'Running', N'Failing')
 
     UNION ALL
 

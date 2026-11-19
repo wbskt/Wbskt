@@ -2,8 +2,7 @@
 -- workspace (@WorkspaceId) or one workflow (@WorkflowRefId); pass the other NULL. Windowed on CreatedAt,
 -- so "runs started in this period", not "runs that finished in it": a long run started before the
 -- window would otherwise appear or vanish depending on when it happened to complete.
---   WorkflowRefId  the workflow (from the definition on the workspace path, so the read stays on
---                  IX_Runs_WorkflowDefinitionId_CreatedAt, which does not include the run's own copy)
+--   WorkflowRefId  the workflow
 --   Day            the UTC day the run started
 --   IsWaiting      still Running, with every live branch waiting on a delay, signal or call
 --                  (dbo.RunParked); probed only by a caller that reads it
@@ -22,15 +21,14 @@ AS
 RETURN
 (
     SELECT
-        d.RefId AS WorkflowRefId,
+        r.WorkflowRefId,
         CAST(r.CreatedAt AS DATE) AS Day,
         r.Status,
         CASE WHEN r.Status = N'Running' AND EXISTS (SELECT 1 FROM dbo.RunParked(r.Id)) THEN 1 ELSE 0 END AS IsWaiting,
         CASE WHEN r.CompletedAt IS NULL THEN NULL ELSE DATEDIFF_BIG(MILLISECOND, r.StartedAt, r.CompletedAt) END AS DurationMs
     FROM dbo.Runs r
-    INNER JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
     WHERE @WorkspaceId IS NOT NULL
-      AND d.WorkspaceId = @WorkspaceId
+      AND r.WorkspaceId = @WorkspaceId
       AND r.CreatedAt >= @FromUtc
       AND r.CreatedAt < @ToUtc
       AND r.IsTest = 0

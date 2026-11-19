@@ -44,15 +44,14 @@ BEGIN
     WHERE c.Status = 1
     GROUP BY c.WorkspaceId;
 
-    -- The Status IN list is IX_Runs_WorkflowDefinitionId_Active's filter word for word.
+    -- The Status IN list is IX_Runs_WorkspaceId_Active's filter word for word.
     DECLARE @Runs TABLE (WorkspaceId INT NOT NULL PRIMARY KEY, Runs INT NOT NULL);
     INSERT INTO @Runs (WorkspaceId, Runs)
-    SELECT d.WorkspaceId, COUNT(*)
-    FROM dbo.Runs r
-    JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
-    JOIN @Workspaces w ON w.WorkspaceId = d.WorkspaceId
+    SELECT w.WorkspaceId, COUNT(*)
+    FROM @Workspaces w
+    JOIN dbo.Runs r ON r.WorkspaceId = w.WorkspaceId
     WHERE r.Status IN (N'Running', N'Failing', N'Cancelling')
-    GROUP BY d.WorkspaceId;
+    GROUP BY w.WorkspaceId;
 
     -- The live grant that expires first, as dbo.TenantCreditGrantBalance counts live; a grant drawn to
     -- nothing is left out, since nothing of it can expire.
