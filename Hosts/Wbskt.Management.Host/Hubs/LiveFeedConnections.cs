@@ -7,8 +7,8 @@ public sealed class LiveFeedConnections
 {
     private readonly ConcurrentDictionary<string, LiveFeedConnection> _open = new();
 
-    public LiveFeedConnection Open(string connectionId, string? accessToken, Guid? userRef = null, Guid? sessionId = null) =>
-        _open.GetOrAdd(connectionId, id => new LiveFeedConnection(id, accessToken, userRef, sessionId));
+    public LiveFeedConnection Open(string connectionId, string? accessToken, Guid? userRef = null, Guid? sessionId = null, DateTimeOffset? issuedAt = null) =>
+        _open.GetOrAdd(connectionId, id => new LiveFeedConnection(id, accessToken, userRef, sessionId, issuedAt));
 
     public LiveFeedConnection? Find(string connectionId) => _open.GetValueOrDefault(connectionId);
 

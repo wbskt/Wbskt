@@ -39,7 +39,8 @@ public class NotificationHub : Hub
             Context.ConnectionId,
             httpContext is null ? null : AuthenticationForwardingHandler.TokenOf(httpContext),
             userRef,
-            Context.User is null ? null : WbsktClaims.SessionOf(Context.User));
+            Context.User is null ? null : WbsktClaims.SessionOf(Context.User),
+            Context.User is null ? null : WbsktClaims.IssuedAtOf(Context.User));
         return base.OnConnectedAsync();
     }
 

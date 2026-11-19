@@ -9,12 +9,13 @@ namespace Wbskt.Management.Host.Hubs;
 /// </summary>
 public sealed class LiveFeedConnection
 {
-    public LiveFeedConnection(string connectionId, string? accessToken, Guid? userRef = null, Guid? sessionId = null)
+    public LiveFeedConnection(string connectionId, string? accessToken, Guid? userRef = null, Guid? sessionId = null, DateTimeOffset? issuedAt = null)
     {
         ConnectionId = connectionId;
         AccessToken = accessToken;
         UserRef = userRef;
         SessionId = sessionId;
+        IssuedAt = issuedAt;
     }
 
     public string ConnectionId { get; }
@@ -27,6 +28,9 @@ public sealed class LiveFeedConnection
 
     /// <summary>The sign-in session the token belongs to, so ending another session passes it by; null when unknown.</summary>
     public Guid? SessionId { get; }
+
+    /// <summary>When the token was issued, so a revocation of its user can be judged here; null when unknown.</summary>
+    public DateTimeOffset? IssuedAt { get; }
 
     /// <summary>Joined workspaces, by reference, with the internal id their group is named after.</summary>
     public ConcurrentDictionary<Guid, int> Workspaces { get; } = new();

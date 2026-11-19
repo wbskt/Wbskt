@@ -67,6 +67,12 @@ public static class WbsktClaims
     public static Guid? SessionOf(ClaimsPrincipal principal) =>
         Guid.TryParse(Find(principal, Session), out var sessionId) ? sessionId : null;
 
+    /// <summary>When the token was issued (<c>iat</c>), which a user's revocation is compared with.</summary>
+    public static DateTimeOffset? IssuedAtOf(ClaimsPrincipal principal) =>
+        long.TryParse(principal.FindFirst(JwtRegisteredClaimNames.Iat)?.Value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var seconds)
+            ? DateTimeOffset.FromUnixTimeSeconds(seconds)
+            : null;
+
     /// <summary>Reads a user token: the user's RefId, which the host resolves to its internal id.</summary>
     public static bool TryReadUser(ClaimsPrincipal principal, out Guid userRef)
     {

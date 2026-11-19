@@ -15,8 +15,8 @@ namespace Wbskt.Management.Host.Hubs;
 /// also empties <see cref="WorkspaceAccessCache"/>), each joined feed the change can reach is resolved
 /// again with the token its connection opened with, and a feed the connection is now refused is left
 /// for it. A revoked token (sign out everywhere, a password change or reset, a deleted account) counts
-/// too: the auth host answers 401 for it, so a console left open on a lost laptop stops receiving the
-/// feed (#959).
+/// too, and is judged from the revocations this host holds without asking the auth host, so a console
+/// left open on a lost laptop stops receiving the feed (#959).
 /// </summary>
 /// <remarks>
 /// An announcement names the users or workspaces it touches (<see cref="AccessChange"/>), a revocation
@@ -156,6 +156,14 @@ internal sealed class LiveFeedAccessRecheck : IHostedService
             return;
         }
 
+        // A revoked token is judged here, from the revocations this host already holds: asking the auth
+        // host about each joined workspace would only hear 401 for each, later, or not at all if it is slow.
+        if (IsRevokedHere(connection))
+        {
+            await LeaveAllAsync(connection, cancellationToken);
+            return;
+        }
+
         var answers = new Dictionary<Guid, Result<WorkspaceAccess>>();
         async Task<Result<WorkspaceAccess>> AccessAsync(Guid workspaceRef)
         {
@@ -184,6 +192,30 @@ internal sealed class LiveFeedAccessRecheck : IHostedService
                 && connection.Clients.TryRemove(clientRef, out _))
             {
                 _logger.LogInformation("Connection {ConnectionId} may no longer read client {ClientId}; removed from its feed.", connection.ConnectionId, watched.ClientId);
+                await _hub.Groups.RemoveFromGroupAsync(connection.ConnectionId, NotificationHub.ClientGroupName(watched.ClientId), cancellationToken);
+            }
+        }
+    }
+
+    private bool IsRevokedHere(LiveFeedConnection connection) =>
+        (connection.SessionId is { } session && _revocation.IsSessionRevoked(session))
+        || (connection.UserRef is { } user && connection.IssuedAt is { } issuedAt && _revocation.IsRevoked(user, issuedAt));
+
+    private async Task LeaveAllAsync(LiveFeedConnection connection, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Connection {ConnectionId}'s token was revoked; removed from all its feeds.", connection.ConnectionId);
+        foreach (var workspaceRef in connection.Workspaces.Keys)
+        {
+            if (connection.Workspaces.TryRemove(workspaceRef, out int workspaceId))
+            {
+                await _hub.Groups.RemoveFromGroupAsync(connection.ConnectionId, NotificationHub.GroupName(workspaceId), cancellationToken);
+            }
+        }
+
+        foreach (var clientRef in connection.Clients.Keys)
+        {
+            if (connection.Clients.TryRemove(clientRef, out var watched))
+            {
                 await _hub.Groups.RemoveFromGroupAsync(connection.ConnectionId, NotificationHub.ClientGroupName(watched.ClientId), cancellationToken);
             }
         }
