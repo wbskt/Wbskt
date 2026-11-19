@@ -6,6 +6,9 @@ public record BookmarkRow
     public required Guid RefId { get; init; }
     public required int RunId { get; init; }
     public required Guid BranchRefId { get; init; }
+
+    /// <summary>The waiting branch's id, where the read returns it (a claim, a match); null otherwise.</summary>
+    public long? BranchId { get; init; }
     public required Guid NodeId { get; init; }
     public required string WakeConditionKind { get; init; }
     public required string MatchKey { get; init; }

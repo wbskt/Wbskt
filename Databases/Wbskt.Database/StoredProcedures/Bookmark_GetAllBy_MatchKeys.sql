@@ -4,20 +4,23 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    -- The branch's id too, so a wake with no payload dispatches without reading the branch.
     SELECT
-        Id,
-        RefId,
-        RunId,
-        BranchRefId,
-        NodeId,
-        WakeConditionKind,
-        MatchKey,
-        WakeConditionJson,
-        ExpiresAt,
-        TtlPort,
-        CreatedAt
-    FROM dbo.Bookmarks
-    WHERE MatchKey IN (
+        b.Id,
+        b.RefId,
+        b.RunId,
+        b.BranchRefId,
+        br.Id AS BranchId,
+        b.NodeId,
+        b.WakeConditionKind,
+        b.MatchKey,
+        b.WakeConditionJson,
+        b.ExpiresAt,
+        b.TtlPort,
+        b.CreatedAt
+    FROM dbo.Bookmarks b
+    LEFT JOIN dbo.Branches br ON br.RefId = b.BranchRefId
+    WHERE b.MatchKey IN (
         SELECT [value]
         FROM OPENJSON(@MatchKeysJson)
     );

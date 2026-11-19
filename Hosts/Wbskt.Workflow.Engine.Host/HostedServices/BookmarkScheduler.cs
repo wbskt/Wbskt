@@ -42,10 +42,11 @@ public sealed class BookmarkScheduler(
         {
             try
             {
-                var branch = await branchProvider.GetByRefIdAsync(bookmark.BranchRefId, ct);
+                // The claim returns the branch's id; reading the branch is only the fallback for a row without it.
+                long branchId = bookmark.BranchId ?? (await branchProvider.GetByRefIdAsync(bookmark.BranchRefId, ct)).Id;
 
-                Logger.LogInformation("Resuming bookmark {BookmarkId} (Timer Due) for run {RunId} on branch {BranchId}", bookmark.Id, bookmark.RunId, branch.Id);
-                await runDispatcher.DispatchAsync(new BranchExecutionRequest(bookmark.RunId, branch.Id, BranchExecutionReason.BookmarkResumed), ct);
+                Logger.LogInformation("Resuming bookmark {BookmarkId} (Timer Due) for run {RunId} on branch {BranchId}", bookmark.Id, bookmark.RunId, branchId);
+                await runDispatcher.DispatchAsync(new BranchExecutionRequest(bookmark.RunId, branchId, BranchExecutionReason.BookmarkResumed), ct);
             }
             catch (Exception ex)
             {

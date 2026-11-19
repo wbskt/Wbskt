@@ -64,6 +64,9 @@ public sealed class BookmarkClaimIntegrationTests(SqlEdgeFixture fixture)
 
         due.Should().HaveCountGreaterOrEqualTo(5);
 
+        // These bookmarks name no branch row, so the claim's BranchId comes back empty rather than failing.
+        due.Where(b => b.RunId == runId).Should().OnlyContain(b => b.BranchId == null);
+
         // Claim-by-delete: a second claim attempt must not see the same rows again.
         var second = await bookmarkProvider.ClaimDueAsync(DateTime.UtcNow, 10, CancellationToken.None);
         second.Select(b => b.RefId).Should().NotIntersectWith(due.Select(b => b.RefId));

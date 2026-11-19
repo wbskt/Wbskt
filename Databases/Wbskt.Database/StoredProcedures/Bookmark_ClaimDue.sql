@@ -50,18 +50,21 @@ BEGIN
 
     COMMIT TRANSACTION;
 
+    -- The branch's id too, so the scheduler dispatches without a second read per bookmark.
     SELECT
-        Id,
-        RefId,
-        RunId,
-        BranchRefId,
-        NodeId,
-        WakeConditionKind,
-        MatchKey,
-        WakeConditionJson,
-        ExpiresAt,
-        TtlPort,
-        CreatedAt
-    FROM @Claimed;
+        c.Id,
+        c.RefId,
+        c.RunId,
+        c.BranchRefId,
+        br.Id AS BranchId,
+        c.NodeId,
+        c.WakeConditionKind,
+        c.MatchKey,
+        c.WakeConditionJson,
+        c.ExpiresAt,
+        c.TtlPort,
+        c.CreatedAt
+    FROM @Claimed c
+    LEFT JOIN dbo.Branches br ON br.RefId = c.BranchRefId;
 END;
 GO

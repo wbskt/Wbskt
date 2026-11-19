@@ -119,6 +119,20 @@ public sealed class BookmarkResumerTests
     }
 
     [Fact]
+    public async Task MatchInbound_with_no_payload_dispatches_by_the_matched_branch_id_without_reading_the_branch()
+    {
+        // The branch is read only for its local state, which a wake with no payload does not touch.
+        var bookmark = CreateBookmark(77, 42, Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaab"), Guid.Parse("11111111-1111-1111-1111-11111111111b")) with { BranchId = 555 };
+        var bookmarkProvider = new RecordingBookmarkProvider(bookmark);
+        var dispatcher = new RecordingRunDispatcher();
+        var resumer = new BookmarkResumer(bookmarkProvider, RecordingIdempotencyKeyProvider.NewClaim(), new RecordingBranchProvider(), dispatcher);
+
+        await resumer.MatchInboundAsync(CreateInboundEvent(), hasRegistrations: true, CancellationToken.None);
+
+        Assert.Equal([(42L, 555L, BranchExecutionReason.BookmarkResumed)], dispatcher.Requests);
+    }
+
+    [Fact]
     public async Task MatchInbound_dispatches_branch_for_matching_bookmark()
     {
         // Arrange
