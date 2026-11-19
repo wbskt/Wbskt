@@ -43,13 +43,38 @@ public sealed class RequeueClientCommandConsumerTests
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    private static async Task<(InMemoryQueuedCommandStore Store, Mock<IEventBus> Bus)> ConsumeAsync(ClientStatus status)
+    [Fact]
+    public async Task A_command_for_a_client_deleted_meanwhile_ends_as_failed()
+    {
+        var (store, bus) = await ConsumeAsync(status: null);
+
+        Assert.Empty(store.Rows);
+        bus.Verify(b => b.PublishAsync(
+            It.Is<ClientCommandFailedEvent>(e => e.ClientRefId == ClientRefId && e.Reason == ClientCommandFailedEvent.DeletedWhileQueuedReason),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_command_whose_client_goes_before_it_is_queued_again_ends_as_failed()
     {
         var store = new InMemoryQueuedCommandStore();
+        store.MissingClients.Add(ClientId);
+
+        var (_, bus) = await ConsumeAsync(ClientStatus.Registered, store);
+
+        Assert.Empty(store.Rows);
+        bus.Verify(b => b.PublishAsync(
+            It.Is<ClientCommandFailedEvent>(e => e.Reason == ClientCommandFailedEvent.DeletedWhileQueuedReason),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    private static async Task<(InMemoryQueuedCommandStore Store, Mock<IEventBus> Bus)> ConsumeAsync(ClientStatus? status, InMemoryQueuedCommandStore? store = null)
+    {
+        store ??= new InMemoryQueuedCommandStore();
         var bus = new Mock<IEventBus>();
         var targets = new Mock<IClientCommandTargetProvider>();
         targets.Setup(t => t.FindAsync(ClientRefId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ClientCommandTarget(ClientId, WorkspaceId, IsConnected: false, HostId: null, Status: status));
+            .ReturnsAsync(status is { } known ? new ClientCommandTarget(ClientId, WorkspaceId, IsConnected: false, HostId: null, Status: known) : null);
         var consumer = new RequeueClientCommandConsumer(
             TestClientCommands.Queue(store, targets.Object, bus.Object), targets.Object, bus.Object, NullLogger<RequeueClientCommandConsumer>.Instance);
 
