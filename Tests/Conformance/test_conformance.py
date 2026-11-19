@@ -83,6 +83,28 @@ async def test_stops_and_keeps_the_credentials_once_they_are_rejected(api, socke
     assert b"secret-1" in (tmp_path / "credentials.json").read_bytes()
 
 
+async def test_stops_on_a_registration_no_retry_can_fix(api, socket_server, client):
+    api.register_answers = [(404, {"code": "POLICY_NOT_FOUND", "detail": "Invalid registration PIN."}, {})] * 5
+
+    await client()
+    # Long enough for two retries after a failure (2 s, then 4 s) if the SDK kept trying.
+    await asyncio.sleep(REJECTED_WAIT)
+
+    # A wrong PIN never starts working, and retrying spends the per-address limit (protocol §1).
+    assert len(api.registrations) == 1
+    assert not api.logins
+
+
+async def test_retries_a_registration_refused_for_a_disabled_policy(api, socket_server, client):
+    api.register_answers = [(403, {"code": "POLICY_DISABLED", "detail": "This registration policy is currently disabled."}, {})]
+    harness = await client()
+
+    # Someone may turn the policy on while the client waits (protocol §1).
+    await harness.expect("connected", timeout=RECONNECT)
+
+    assert len(api.registrations) == 2
+
+
 # Token
 
 
@@ -393,6 +415,33 @@ async def test_paces_a_large_offline_backlog_under_the_gateway_budget(api, socke
     assert socket_server.dropped == 0
     assert not socket_server.close_codes
     await harness.expect("connected", timeout=10.0)
+
+
+async def test_acks_a_queued_command_backlog_on_top_of_its_own_backlog(api, socket_server, client):
+    # On reconnect the server delivers the commands queued while the client was offline, while the
+    # client flushes its own backlog. The acks are owed, so they don't spend the budget (protocol §4).
+    count, commands = 150, 100
+    socket_server.queued_commands = [
+        {"type": "relay.set", "payload": {"n": n}, "commandId": f"q{n}"} for n in range(commands)
+    ]
+    socket_server.down = True
+    harness = await client()
+    await harness.command("send-many", type="reading", count=count)
+    await harness.expect("sent", type="reading", count=count)
+    socket_server.down = False
+
+    readings, acks = [], set()
+    while len(readings) < count or len(acks) < commands:
+        _, frame, _ = await socket_server.next_frame(30.0)
+        if frame["type"] == "reading":
+            readings.append(frame["payload"])
+        elif frame["type"] == "sys.ack":
+            acks.add(frame["payload"]["commandId"])
+
+    assert readings == list(range(count))
+    assert acks == {f"q{n}" for n in range(commands)}
+    assert socket_server.dropped == 0
+    assert not socket_server.close_codes
 
 
 async def test_refuses_to_send_a_message_over_64_kb(api, socket_server, client):

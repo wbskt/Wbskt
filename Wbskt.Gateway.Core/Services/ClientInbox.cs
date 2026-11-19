@@ -85,9 +85,19 @@ public sealed class ClientInbox
         return null;
     }
 
+    /// <summary>Longer than any ack or pong an SDK sends (a refused ack with a 100-character type is under 300).</summary>
+    internal const int MaxReplyLength = 1024;
+
     /// <summary>Whether the message's top-level type is <c>sys.ack</c> or <c>sys.pong</c>, read without building the message.</summary>
     internal static bool IsReply(string text)
     {
+        // Checked first, so a backlog of 64 KB readings arriving while commands are owed acks isn't encoded
+        // a second time just to read its type; a reply that long is charged to the budget like any message.
+        if (text.Length > MaxReplyLength)
+        {
+            return false;
+        }
+
         var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(text));
         try
         {
