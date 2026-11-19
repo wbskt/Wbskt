@@ -45,6 +45,14 @@ public sealed class ClientCommandHandlerTests
         return ctx.Object;
     }
 
+    private static ConsumeContext<ClientCommandEvent> Command(string type, string payload)
+    {
+        var ctx = new Mock<ConsumeContext<ClientCommandEvent>>();
+        ctx.SetupGet(x => x.Message).Returns(new ClientCommandEvent(ClientRefId, 42, 7, type, payload, CommandId, ThisHost));
+        ctx.SetupGet(x => x.CancellationToken).Returns(CancellationToken.None);
+        return ctx.Object;
+    }
+
     [Fact]
     public async Task The_target_host_hands_a_command_whose_connection_has_gone_back_to_the_queue()
     {
@@ -140,21 +148,54 @@ public sealed class ClientCommandHandlerTests
     }
 
     [Fact]
-    public async Task A_platform_command_goes_out_with_its_payload_as_an_object_and_a_client_command_as_sent()
+    public async Task A_platform_command_goes_out_with_its_payload_as_an_object()
     {
         Connected();
-        var ota = new Mock<ConsumeContext<ClientCommandEvent>>();
-        ota.SetupGet(x => x.Message).Returns(new ClientCommandEvent(ClientRefId, 42, 7, "sys.ota.update", """{"url":"https://f.example/a.bin"}""", CommandId, ThisHost));
-        ota.SetupGet(x => x.CancellationToken).Returns(CancellationToken.None);
 
-        await CreateHandler().Consume(ota.Object);
-        await CreateHandler().Consume(Context());
+        await CreateHandler().Consume(Command("sys.ota.update", """{"url":"https://f.example/a.bin"}"""));
 
-        _sentFrames.Should().HaveCount(2);
-        var update = JsonDocument.Parse(_sentFrames[0]).RootElement.GetProperty("payload");
+        var update = JsonDocument.Parse(_sentFrames.Should().ContainSingle().Subject).RootElement.GetProperty("payload");
         update.ValueKind.Should().Be(JsonValueKind.Object);
         update.GetProperty("url").GetString().Should().Be("https://f.example/a.bin");
-        JsonDocument.Parse(_sentFrames[1]).RootElement.GetProperty("payload").ValueKind.Should().Be(JsonValueKind.String);
+    }
+
+    [Fact]
+    public async Task A_client_command_whose_payload_is_json_goes_out_as_that_json_value()
+    {
+        Connected();
+
+        await CreateHandler().Consume(Command("relay.set", "{\"on\":true}"));
+
+        var payload = JsonDocument.Parse(_sentFrames.Should().ContainSingle().Subject).RootElement.GetProperty("payload");
+        payload.ValueKind.Should().Be(JsonValueKind.Object);
+        payload.GetProperty("on").GetBoolean().Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("42", JsonValueKind.Number)]
+    [InlineData("[1,2]", JsonValueKind.Array)]
+    [InlineData("\"on\"", JsonValueKind.String)]
+    public async Task A_client_command_whose_payload_is_any_json_value_goes_out_as_that_value(string payload, JsonValueKind kind)
+    {
+        Connected();
+
+        await CreateHandler().Consume(Command("relay.set", payload));
+
+        var sent = JsonDocument.Parse(_sentFrames.Should().ContainSingle().Subject).RootElement.GetProperty("payload");
+        sent.ValueKind.Should().Be(kind);
+        sent.GetRawText().Should().Be(payload);
+    }
+
+    [Fact]
+    public async Task A_client_command_whose_payload_is_not_json_goes_out_as_a_string()
+    {
+        Connected();
+
+        await CreateHandler().Consume(Command("say", "lights on"));
+
+        var sent = JsonDocument.Parse(_sentFrames.Should().ContainSingle().Subject).RootElement.GetProperty("payload");
+        sent.ValueKind.Should().Be(JsonValueKind.String);
+        sent.GetString().Should().Be("lights on");
     }
 
     [Fact]
