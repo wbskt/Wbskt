@@ -13,4 +13,11 @@ namespace Wbskt.Events.Billing;
 /// <param name="MessagesUsed">What the account had carried this month when it was found past 80%.</param>
 [EventCriticality(EventCriticality.Warning)]
 [SignalRNotify("OnWorkspaceMessageLimitApproachingEvent")]
-public sealed record WorkspaceMessageLimitApproachingEvent(int WorkspaceId, long MessagesPerMonth, long MessagesUsed) : BaseEvent, IWorkspaceContext;
+public sealed record WorkspaceMessageLimitApproachingEvent(int WorkspaceId, long MessagesPerMonth, long MessagesUsed) : BaseEvent, IWorkspaceContext
+{
+    /// <summary>
+    /// The messages a month at which the account's clients are held to one a minute each; null for a
+    /// plan that is never slowed (Business), or from a sender before this was carried.
+    /// </summary>
+    public long? ThrottleAt { get; init; }
+}

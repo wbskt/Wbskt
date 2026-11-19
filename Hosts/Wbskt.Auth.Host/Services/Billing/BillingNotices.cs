@@ -135,7 +135,7 @@ internal static class BillingNotices
                 ]);
     }
 
-    public static BillingNotice MessagesApproaching(PlanCode plan, long allowance, long used, DateTime at) =>
+    public static BillingNotice MessagesApproaching(PlanCode plan, long allowance, long used, long? throttleAt, DateTime at) =>
         new(BillingNoticeKind.Messages80, MessagesKey(at, allowance),
             "Your account has carried 80% of this month's messages",
             "80% of this month's messages are used",
@@ -144,12 +144,12 @@ internal static class BillingNotices
                 plan switch
                 {
                     PlanCode.Free => $"At the allowance each client is held to one message a minute until {Date(NextMonth(at))}. Move to a paid plan to avoid that.",
-                    PlanCode.Business => "Past the allowance your clients carry on; your contract covers what is carried beyond it.",
-                    _ => "Past the allowance nothing more is charged and your clients carry on. Far past it they are slowed, so if traffic keeps growing, consider a larger plan."
+                    PlanCode.Business => $"Past the allowance your clients carry on, and what they carry beyond it is invoiced at {MessageOverageRate()} under your contract.",
+                    _ => $"Past the allowance nothing more is charged and your clients carry on. {SlowedAt(throttleAt)} If traffic keeps growing, consider a larger plan."
                 }
             ]);
 
-    public static BillingNotice MessagesReached(PlanCode plan, long allowance, long used, bool throttled, DateTime at) =>
+    public static BillingNotice MessagesReached(PlanCode plan, long allowance, long used, bool throttled, long? throttleAt, DateTime at) =>
         new(BillingNoticeKind.Messages100, MessagesKey(at, allowance),
             "Your account has carried this month's messages",
             "This month's messages are used",
@@ -158,8 +158,8 @@ internal static class BillingNotices
                 (throttled, plan) switch
                 {
                     (true, _) => $"Each client is now held to one message a minute until {Date(NextMonth(at))}. Move to a larger plan to lift that now.",
-                    (false, PlanCode.Business) => "Your clients carry on; your contract covers what is carried beyond the allowance.",
-                    _ => "Nothing more is charged and your clients carry on. Far past the allowance they are slowed, so if traffic keeps growing, consider a larger plan."
+                    (false, PlanCode.Business) => $"Your clients carry on, and what they carry beyond the allowance is invoiced at {MessageOverageRate()} under your contract.",
+                    _ => $"Nothing more is charged and your clients carry on. {SlowedAt(throttleAt)} If traffic keeps growing, consider a larger plan."
                 }
             ]);
 
@@ -265,6 +265,15 @@ internal static class BillingNotices
 
     private static string OverageRate() =>
         $"${BusinessContract.UsdPerThousandExtraCredits.ToString("0.00", Invariant)} per 1,000 credits";
+
+    private static string MessageOverageRate() =>
+        $"${BusinessContract.UsdPerMillionExtraMessages.ToString("0.00", Invariant)} per million messages";
+
+    // Where a paid plan slows its clients: the monitor sends the count, an older one sends none.
+    private static string SlowedAt(long? throttleAt) =>
+        throttleAt is { } count
+            ? $"Past {Number(count)} messages this month each client is held to one message a minute."
+            : "Far past the allowance clients are slowed.";
 
     private static DateTime NextMonth(DateTime at) => StartOfMonth(at).AddMonths(1);
 

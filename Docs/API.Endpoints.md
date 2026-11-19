@@ -688,8 +688,11 @@ board registering through an auto-approve policy, or someone approving a client)
 with, and null for an approval. A bulk approval announces it once, for the first client refused.
 
 An account found over its monthly messages raises `WorkspaceMessageLimitReachedEvent` once per workspace
-and month (Warning, `OnWorkspaceMessageLimitReachedEvent { messagesPerMonth, messagesUsed, throttled, createdAtUtc }`),
-within about a minute of the crossing. `throttled` is true on Free; on a paid plan nothing is slowed.
+and month (Warning, `OnWorkspaceMessageLimitReachedEvent { messagesPerMonth, messagesUsed, throttled, throttleAt, createdAtUtc }`),
+within about a minute of the crossing. `throttled` is true on Free, and on a paid plan already past its throttle.
+`throttleAt` is the month's count at which its clients are held to one message a minute (the allowance on Free,
+twice it on Maker and Pro, one and a half times it on Team), null on Business, which is never slowed. The 80%
+notice, `OnWorkspaceMessageLimitApproachingEvent`, carries the same `throttleAt`.
 
 For operators, the Business overage behind the invoice:
 

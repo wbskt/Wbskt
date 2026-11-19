@@ -15,4 +15,11 @@ namespace Wbskt.Events.Billing;
 /// <param name="Throttled">Whether the account's clients are now throttled (Free, or a paid plan already past its throttle).</param>
 [EventCriticality(EventCriticality.Warning)]
 [SignalRNotify("OnWorkspaceMessageLimitReachedEvent")]
-public sealed record WorkspaceMessageLimitReachedEvent(int WorkspaceId, long MessagesPerMonth, long MessagesUsed, bool Throttled) : BaseEvent, IWorkspaceContext;
+public sealed record WorkspaceMessageLimitReachedEvent(int WorkspaceId, long MessagesPerMonth, long MessagesUsed, bool Throttled) : BaseEvent, IWorkspaceContext
+{
+    /// <summary>
+    /// The messages a month at which the account's clients are held to one a minute each; null for a
+    /// plan that is never slowed (Business), or from a sender before this was carried.
+    /// </summary>
+    public long? ThrottleAt { get; init; }
+}

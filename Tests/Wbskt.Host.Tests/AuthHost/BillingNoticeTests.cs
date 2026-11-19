@@ -179,13 +179,21 @@ public sealed class BillingNoticeTests
     }
 
     [Theory]
-    [InlineData(PlanCode.Free, "one message a minute")]
-    [InlineData(PlanCode.Pro, "Far past it they are slowed")]
-    [InlineData(PlanCode.Business, "your contract covers")]
-    public void The_message_warning_says_what_the_plan_does_past_its_allowance(PlanCode plan, string expected)
+    [InlineData(PlanCode.Free, null, "one message a minute")]
+    [InlineData(PlanCode.Pro, 300L, "Past 300 messages this month each client is held to one message a minute")]
+    [InlineData(PlanCode.Pro, null, "Far past the allowance clients are slowed")]
+    [InlineData(PlanCode.Business, null, "invoiced at $1.00 per million messages")]
+    public void The_message_warning_says_what_the_plan_does_past_its_allowance(PlanCode plan, long? throttleAt, string expected)
     {
-        Assert.Contains(BillingNotices.MessagesApproaching(plan, 100, 80, Now).Paragraphs, p => p.Contains(expected));
-        Assert.DoesNotContain(BillingNotices.MessagesReached(PlanCode.Business, 100, 100, throttled: false, Now).Paragraphs, p => p.Contains("slowed"));
+        Assert.Contains(BillingNotices.MessagesApproaching(plan, 100, 80, throttleAt, Now).Paragraphs, p => p.Contains(expected));
+        Assert.DoesNotContain(BillingNotices.MessagesReached(PlanCode.Business, 100, 100, throttled: false, throttleAt: null, Now).Paragraphs, p => p.Contains("slowed"));
+    }
+
+    [Fact]
+    public void A_reached_message_notice_names_where_a_paid_plan_slows_its_clients()
+    {
+        Assert.Contains(BillingNotices.MessagesReached(PlanCode.Maker, 100, 100, throttled: false, throttleAt: 300, Now).Paragraphs, p => p.Contains("Past 300 messages this month"));
+        Assert.Contains(BillingNotices.MessagesReached(PlanCode.Business, 100, 120, throttled: false, throttleAt: null, Now).Paragraphs, p => p.Contains("$1.00 per million messages"));
     }
 
     [Fact]
