@@ -7,6 +7,7 @@ using Wbskt.Events.Client;
 using Wbskt.Events.Hosting;
 using Wbskt.Management.Host.Handlers;
 using Wbskt.Management.Host.Models;
+using Wbskt.Infrastructure.Clients;
 using Wbskt.Management.Host.Providers;
 
 namespace Wbskt.Host.Tests.ManagementHost;
@@ -64,7 +65,7 @@ public sealed class SocketHostPresenceSnapshotHandlerTests
         var takenAt = new DateTime(2026, 11, 2, 12, 0, 0, DateTimeKind.Utc);
         var order = new List<string>();
         var hosts = new Mock<ISocketHostProvider>();
-        hosts.Setup(h => h.RecordHeartbeatAsync("socket-a", It.IsAny<CancellationToken>())).Callback(() => order.Add("beat")).Returns(Task.CompletedTask);
+        hosts.Setup(h => h.RecordHeartbeatAsync("socket-a", It.IsAny<int?>(), It.IsAny<CancellationToken>())).Callback(() => order.Add("beat")).ReturnsAsync([]);
         var provider = new Mock<IClientProvider>();
         provider.Setup(p => p.ReconcilePresenceByHostAsync("socket-a", It.IsAny<IReadOnlyCollection<Guid>>(), takenAt, It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
             .Callback(() => order.Add("reconcile")).ReturnsAsync([]);
@@ -86,7 +87,7 @@ public sealed class SocketHostPresenceSnapshotHandlerTests
     }
 
     private static SocketHostPresenceSnapshotHandler Handler(IClientProvider clients, IEventBus bus, DateTime now, ISocketHostProvider? hosts = null) =>
-        new(clients, hosts ?? Mock.Of<ISocketHostProvider>(), bus, new FixedClock(now), Options.Create(new PresenceOptions()),
+        new(clients, SocketHostBeatTests.Beat(hosts ?? SocketHostBeatTests.QuietHosts(), Mock.Of<IQueuedCommandStore>()), bus, new FixedClock(now), Options.Create(new PresenceOptions()),
             NullLogger<SocketHostPresenceSnapshotHandler>.Instance);
 
     private static ConsumeContext<SocketHostPresenceSnapshot> Context(SocketHostPresenceSnapshot snapshot)

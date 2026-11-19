@@ -24,6 +24,15 @@ public sealed class CommandQueueOptions
     public int DefaultExpiryMinutes { get; set; } = (int)MaxLifetime.TotalMinutes;
 
     public TimeSpan DefaultExpiry => TimeSpan.FromMinutes(Math.Clamp(DefaultExpiryMinutes, 1, (int)MaxLifetime.TotalMinutes));
+
+    /// <summary>
+    /// A client's socket host not heard from for this long is taken to have gone, and a command for the
+    /// client is queued rather than addressed to it: a crashed host keeps its clients' presence until
+    /// the management host's sweep (Presence:HostStaleAfterSeconds, 120 s), and nobody would deliver or
+    /// hand back a command published to it. Two and a half heartbeat intervals (30 s), so one late beat
+    /// does not queue commands for a live host.
+    /// </summary>
+    public int HostSilentAfterSeconds { get; set; } = 75;
 }
 
 /// <summary>
@@ -79,6 +88,13 @@ public sealed class ClientCommandQueue(
         var target = await targets.FindAsync(command.ClientRefId, ct);
         if (target is { IsConnected: true, HostId: { Length: > 0 } hostId })
         {
+            if (HostIsSilent(target))
+            {
+                // Presence names a host that has gone quiet, likely crashed: what is published to it is
+                // lost. The client takes the command when it connects again.
+                return true;
+            }
+
             if (handBack is not null && string.Equals(hostId, handBack.HostId, StringComparison.Ordinal) && !ConnectedSince(target, handBack))
             {
                 // Presence is stale: the disconnect hasn't landed, or was lost (the host's presence
@@ -93,6 +109,13 @@ public sealed class ClientCommandQueue(
 
         return true;
     }
+
+    /// <summary>
+    /// Whether the socket host presence names for the client has gone quiet for longer than
+    /// <see cref="CommandQueueOptions.HostSilentAfterSeconds"/>, or has no heartbeat on record.
+    /// </summary>
+    public bool HostIsSilent(ClientCommandTarget target) =>
+        target.HostSilentSeconds is not { } silent || silent > Options.HostSilentAfterSeconds;
 
     // Both times are the returning host's own, so they compare without clock skew. A hand-back from
     // before the time was carried, or a connect whose time is unknown, is taken as the lost connection.

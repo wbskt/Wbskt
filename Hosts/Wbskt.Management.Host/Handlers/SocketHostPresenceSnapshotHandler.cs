@@ -5,6 +5,7 @@ using Wbskt.Events.Client;
 using Wbskt.Events.Hosting;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
+using Wbskt.Management.Host.Services;
 
 namespace Wbskt.Management.Host.Handlers;
 
@@ -25,17 +26,17 @@ public sealed class SocketHostPresenceSnapshotHandler : IConsumer<SocketHostPres
     internal static readonly TimeSpan Margin = TimeSpan.FromMinutes(1);
 
     private readonly IClientProvider _clients;
-    private readonly ISocketHostProvider _hosts;
+    private readonly SocketHostBeat _beat;
     private readonly IEventBus _eventBus;
     private readonly TimeProvider _clock;
     private readonly TimeSpan _staleAfter;
     private readonly ILogger<SocketHostPresenceSnapshotHandler> _logger;
 
-    public SocketHostPresenceSnapshotHandler(IClientProvider clients, ISocketHostProvider hosts, IEventBus eventBus, TimeProvider clock,
+    public SocketHostPresenceSnapshotHandler(IClientProvider clients, SocketHostBeat beat, IEventBus eventBus, TimeProvider clock,
         IOptions<PresenceOptions> presence, ILogger<SocketHostPresenceSnapshotHandler> logger)
     {
         _clients = clients;
-        _hosts = hosts;
+        _beat = beat;
         _eventBus = eventBus;
         _clock = clock;
         _staleAfter = TimeSpan.FromSeconds(presence.Value.HostStaleAfterSeconds);
@@ -54,8 +55,9 @@ public sealed class SocketHostPresenceSnapshotHandler : IConsumer<SocketHostPres
         }
 
         // A snapshot is proof of life: without the beat recorded first, the sweep could expire a client
-        // this sets back online before the host's heartbeat, a separate message, is handled.
-        await _hosts.RecordHeartbeatAsync(snapshot.HostId, context.CancellationToken);
+        // this sets back online before the host's heartbeat, a separate message, is handled. A beat that ends
+        // a silence also sends what queued for the host's clients meanwhile.
+        await _beat.RecordAsync(snapshot.HostId, context.CancellationToken);
         var repaired = await _clients.ReconcilePresenceByHostAsync(snapshot.HostId, snapshot.ClientRefIds, snapshot.TakenAtUtc, Margin, context.CancellationToken);
         foreach (var client in repaired)
         {

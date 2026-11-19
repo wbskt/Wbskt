@@ -92,6 +92,33 @@ public sealed class ClientCommandSenderTests
         _bus.Verify(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Theory]
+    [InlineData(76)]
+    [InlineData(null)]
+    public async Task A_client_held_by_a_silent_host_has_the_command_queued(int? hostSilentSeconds)
+    {
+        // The host crashed: presence still names it, but nobody would deliver or hand back a command
+        // published to it (#960).
+        Target(new ClientCommandTarget(ClientId, WorkspaceId, true, "socket-a", HostSilentSeconds: hostSilentSeconds));
+
+        var result = await Sender.SendAsync(Command(), null, CancellationToken.None);
+
+        Assert.Equal(ClientCommandOutcome.Queued, result.Outcome);
+        Assert.Single(_queue.Rows);
+        _bus.Verify(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_client_held_by_a_host_one_beat_late_still_gets_the_command_sent()
+    {
+        Target(new ClientCommandTarget(ClientId, WorkspaceId, true, "socket-a", HostSilentSeconds: 75));
+
+        var result = await Sender.SendAsync(Command(), null, CancellationToken.None);
+
+        Assert.Equal(ClientCommandOutcome.Sent, result.Outcome);
+        Assert.Empty(_queue.Rows);
+    }
+
     [Fact]
     public async Task A_command_sent_without_an_expiry_waits_the_default()
     {

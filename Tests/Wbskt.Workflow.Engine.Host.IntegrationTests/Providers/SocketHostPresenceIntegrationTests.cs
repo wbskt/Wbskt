@@ -216,6 +216,54 @@ public sealed class SocketHostPresenceIntegrationTests(SqlEdgeFixture fixture)
         Assert.Null((await clients.FindDetailByRefIdAsync(clientRef))!.UpdatingUntil);
     }
 
+    /// <summary>
+    /// #960: while a host is silent, commands for its clients queue. The beat that ends the silence names
+    /// its connected clients with commands waiting, and an ordinary beat names none.
+    /// </summary>
+    [SkippableFact]
+    public async Task A_beat_after_a_silence_names_the_hosts_clients_with_commands_waiting()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var hosts = new SocketHostProvider(ProviderFactory.BuildConfiguration(fixture.ConnectionString));
+        int workspaceId = Random.Shared.Next(1_000_000, int.MaxValue);
+        string host = $"quiet-{Guid.NewGuid():N}";
+        (int waiting, Guid waitingRef) = await CreateClientAsync(workspaceId);
+        (int idle, _) = await CreateClientAsync(workspaceId);
+        await PresenceAsync(waiting, DateTime.UtcNow.AddMinutes(-10), host);
+        await PresenceAsync(idle, DateTime.UtcNow.AddMinutes(-10), host);
+        await QueueCommandAsync(waiting, waitingRef, workspaceId);
+
+        // No beat on record counts as silent.
+        var first = await hosts.RecordHeartbeatAsync(host, silentAfterSeconds: 75);
+        var only = Assert.Single(first);
+        Assert.Equal((waiting, waitingRef, workspaceId), (only.ClientId, only.ClientRefId, only.WorkspaceId));
+
+        Assert.Empty(await hosts.RecordHeartbeatAsync(host, silentAfterSeconds: 75));
+
+        await using (var conn = await OpenAsync())
+        {
+            await using var cmd = new SqlCommand("UPDATE dbo.SocketHosts SET LastSeenAt = DATEADD(SECOND, -76, SYSUTCDATETIME()) WHERE HostId = @HostId", conn);
+            cmd.Parameters.AddWithValue("@HostId", host);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        Assert.Single(await hosts.RecordHeartbeatAsync(host, silentAfterSeconds: 75));
+        Assert.Empty(await hosts.RecordHeartbeatAsync(host));
+    }
+
+    private async Task QueueCommandAsync(int clientId, Guid clientRef, int workspaceId)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = new SqlCommand("""
+            INSERT INTO dbo.QueuedCommands (CommandId, ClientId, ClientRefId, WorkspaceId, Type, Payload, ExpiresAt)
+            VALUES (NEWID(), @ClientId, @ClientRefId, @WorkspaceId, N'cmd', N'{}', DATEADD(HOUR, 1, SYSUTCDATETIME()));
+            """, conn);
+        cmd.Parameters.AddWithValue("@ClientId", clientId);
+        cmd.Parameters.AddWithValue("@ClientRefId", clientRef);
+        cmd.Parameters.AddWithValue("@WorkspaceId", workspaceId);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
     private async Task<(int ClientId, Guid ClientRef)> CreateClientAsync(int workspaceId)
     {
         await using var conn = await OpenAsync();
