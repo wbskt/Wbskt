@@ -27,7 +27,7 @@ public sealed class PendingTriggerEventGuardIntegrationTests(SqlEdgeFixture fixt
         PendingTriggerEventRow? queued = await provider.EnqueueBehindActiveRunAsync(run.WorkflowRefId, run.TriggerNodeId, run.CorrelationKey!, "{}", CancellationToken.None);
 
         queued.Should().BeNull();
-        (await provider.DequeueNextAsync(run.WorkflowRefId, run.TriggerNodeId, run.CorrelationKey!, CancellationToken.None)).Should().BeNull();
+        (await provider.LeaseNextAsync(run.WorkflowRefId, run.TriggerNodeId, run.CorrelationKey!, 60, CancellationToken.None)).Should().BeNull();
     }
 
     [SkippableFact]
@@ -41,7 +41,7 @@ public sealed class PendingTriggerEventGuardIntegrationTests(SqlEdgeFixture fixt
         PendingTriggerEventRow? queued = await provider.EnqueueBehindActiveRunAsync(run.WorkflowRefId, run.TriggerNodeId, run.CorrelationKey!, """{"n":1}""", CancellationToken.None);
 
         queued.Should().NotBeNull();
-        (await provider.DequeueNextAsync(run.WorkflowRefId, run.TriggerNodeId, run.CorrelationKey!, CancellationToken.None))!.Id.Should().Be(queued!.Id);
+        (await provider.LeaseNextAsync(run.WorkflowRefId, run.TriggerNodeId, run.CorrelationKey!, 60, CancellationToken.None))!.Id.Should().Be(queued!.Id);
     }
 
     [SkippableFact]
@@ -73,7 +73,7 @@ public sealed class PendingTriggerEventGuardIntegrationTests(SqlEdgeFixture fixt
         }
 
         await FinishAsync(run);
-        Task<PendingTriggerEventRow?> drain = provider.DequeueNextAsync(run.WorkflowRefId, run.TriggerNodeId, run.CorrelationKey!, CancellationToken.None);
+        Task<PendingTriggerEventRow?> drain = provider.LeaseNextAsync(run.WorkflowRefId, run.TriggerNodeId, run.CorrelationKey!, 60, CancellationToken.None);
         (await Task.WhenAny(drain, Task.Delay(TimeSpan.FromSeconds(1)))).Should().NotBeSameAs(drain);
 
         await tx.CommitAsync();

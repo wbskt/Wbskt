@@ -26,7 +26,8 @@ public sealed class WorkflowEngineOptions
     /// workspace with no copy of its account has no plan cutoff, and this still bounds it.
     /// </summary>
     public TimeSpan HistoryRetentionWindowElevated { get; init; } = TimeSpan.FromDays(365);
-    public TimeSpan PendingTriggerEventBacklogInterval { get; init; } = TimeSpan.FromMinutes(10);
+    // Also how soon a queue left with no run going (an engine stopped before its drain) is drained.
+    public TimeSpan PendingTriggerEventBacklogInterval { get; init; } = TimeSpan.FromMinutes(1);
     public TimeSpan PendingTriggerEventTtl { get; init; } = TimeSpan.FromHours(24);
     public TimeSpan MetricsExportInterval { get; init; } = TimeSpan.FromSeconds(15);
     // How often runs' credits move to the ledger the monthly allowance is counted against (CreditUsagePoster).

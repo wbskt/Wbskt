@@ -13,7 +13,12 @@ public interface IPendingTriggerEventProvider
     // Dequeue is always scoped by trigger node as well as workflow + correlation key: two triggers in
     // one workflow can share a correlation key, and draining across them would start a run from the
     // wrong trigger with the wrong payload.
-    Task<PendingTriggerEventRow?> DequeueNextAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct);
+    // Leases the queue's head, or returns null when the queue is empty or its head is still leased. The
+    // row stays until DeleteByIdAsync, so a replay that fails is leased again once the lease runs out.
+    Task<PendingTriggerEventRow?> LeaseNextAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, int leaseSeconds, CancellationToken ct);
+    Task DeleteByIdAsync(long id, CancellationToken ct);
+    // Keys with a queued, unleased event and no run going, so no finalizer will drain them.
+    Task<IReadOnlyCollection<PendingTriggerEventKey>> GetIdleKeysAsync(int batchSize, CancellationToken ct);
     Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct);
     Task<long> CountAllAsync(CancellationToken ct);
 }

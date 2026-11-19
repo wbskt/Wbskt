@@ -1,7 +1,8 @@
-CREATE PROCEDURE dbo.PendingTriggerEvent_DequeueNext
+CREATE PROCEDURE dbo.PendingTriggerEvent_LeaseNext
     @WorkflowRefId  UNIQUEIDENTIFIER,
     @TriggerNodeId  UNIQUEIDENTIFIER,
-    @CorrelationKey NVARCHAR(400)
+    @CorrelationKey NVARCHAR(400),
+    @LeaseSec       INT
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -17,28 +18,38 @@ BEGIN
     IF @LockResult < 0
         THROW 50029, 'Timed out waiting for the trigger start lock.', 1;
 
-    WITH Dequeue AS (
+    DECLARE @Now DATETIME2(3) = SYSUTCDATETIME();
+
+    -- Leased, not deleted: the row goes only once its replay has been handed over
+    -- (PendingTriggerEvent_DeleteById), so a replay whose start fails is tried again once the lease
+    -- runs out (#962). Only the head is looked at: one still leased holds its place, and the events
+    -- behind it are not started out of order.
+    WITH Head AS (
         SELECT TOP (1)
             Id,
             WorkflowRefId,
             TriggerNodeId,
             CorrelationKey,
             InboundEventJson,
-            EnqueuedAt
-        FROM dbo.PendingTriggerEvents WITH (ROWLOCK, UPDLOCK, READPAST)
+            EnqueuedAt,
+            LeasedUntil
+        FROM dbo.PendingTriggerEvents WITH (ROWLOCK, UPDLOCK)
         WHERE WorkflowRefId = @WorkflowRefId
           AND TriggerNodeId = @TriggerNodeId
           AND CorrelationKey = @CorrelationKey
-        ORDER BY EnqueuedAt ASC
+        ORDER BY EnqueuedAt ASC, Id ASC
     )
-    DELETE FROM Dequeue
+    UPDATE Head
+    SET LeasedUntil = DATEADD(SECOND, @LeaseSec, @Now)
     OUTPUT
-        deleted.Id,
-        deleted.WorkflowRefId,
-        deleted.TriggerNodeId,
-        deleted.CorrelationKey,
-        deleted.InboundEventJson,
-        deleted.EnqueuedAt;
+        inserted.Id,
+        inserted.WorkflowRefId,
+        inserted.TriggerNodeId,
+        inserted.CorrelationKey,
+        inserted.InboundEventJson,
+        inserted.EnqueuedAt
+    WHERE LeasedUntil IS NULL
+       OR LeasedUntil < @Now;
 
     COMMIT TRANSACTION;
 END;

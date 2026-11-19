@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Wbskt.Workflow.Abstraction.Engine;
+using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.HostedServices;
@@ -14,7 +15,8 @@ public sealed class PendingTriggerEventBacklogReaperTests
         // Arrange
         var leadership = new FixedLeadershipGate(true);
         var provider = new RecordingPendingTriggerEventProvider();
-        var reaper = new PendingTriggerEventBacklogReaper(new FixedClock(), leadership, WorkerTestServices.Scopes(provider), NullLogger<PendingTriggerEventBacklogReaper>.Instance, WorkerTestServices.Options());
+        var drainer = new RecordingDrainer();
+        var reaper = new PendingTriggerEventBacklogReaper(new FixedClock(), leadership, WorkerTestServices.Scopes(provider, drainer), NullLogger<PendingTriggerEventBacklogReaper>.Instance, WorkerTestServices.Options());
 
         // Act
         await reaper.TickAsync(CancellationToken.None);
@@ -29,7 +31,8 @@ public sealed class PendingTriggerEventBacklogReaperTests
         // Arrange
         var leadership = new FixedLeadershipGate(false);
         var provider = new RecordingPendingTriggerEventProvider();
-        var reaper = new PendingTriggerEventBacklogReaper(new FixedClock(), leadership, WorkerTestServices.Scopes(provider), NullLogger<PendingTriggerEventBacklogReaper>.Instance, WorkerTestServices.Options());
+        var drainer = new RecordingDrainer();
+        var reaper = new PendingTriggerEventBacklogReaper(new FixedClock(), leadership, WorkerTestServices.Scopes(provider, drainer), NullLogger<PendingTriggerEventBacklogReaper>.Instance, WorkerTestServices.Options());
 
         // Act
         await reaper.TickAsync(CancellationToken.None);
@@ -37,6 +40,37 @@ public sealed class PendingTriggerEventBacklogReaperTests
         // Assert
         Assert.Equal(1, leadership.Checks);
         Assert.Null(provider.LastDeleteRequest);
+    }
+
+    [Fact]
+    public async Task Tick_drains_each_queue_with_no_run_going_and_carries_on_past_a_failure()
+    {
+        // Arrange
+        var provider = new RecordingPendingTriggerEventProvider();
+        var first = new PendingTriggerEventKey(Guid.NewGuid(), Guid.NewGuid(), "corr-1");
+        var second = new PendingTriggerEventKey(Guid.NewGuid(), Guid.NewGuid(), "corr-2");
+        provider.IdleKeys.AddRange([first, second]);
+        var drainer = new RecordingDrainer { FailFor = first };
+        var reaper = new PendingTriggerEventBacklogReaper(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(provider, drainer), NullLogger<PendingTriggerEventBacklogReaper>.Instance, WorkerTestServices.Options());
+
+        // Act
+        await reaper.TickAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal([first, second], drainer.Drained);
+    }
+
+    private sealed class RecordingDrainer : IPendingTriggerEventDrainer
+    {
+        public PendingTriggerEventKey? FailFor { get; init; }
+        public List<PendingTriggerEventKey> Drained { get; } = [];
+
+        public Task DrainAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct)
+        {
+            var key = new PendingTriggerEventKey(workflowRefId, triggerNodeId, correlationKey);
+            Drained.Add(key);
+            return key == FailFor ? throw new InvalidOperationException("start failed") : Task.CompletedTask;
+        }
     }
 
     private sealed class FixedClock : TimeProvider
@@ -64,8 +98,11 @@ public sealed class PendingTriggerEventBacklogReaperTests
     {
         public (DateTime CutoffUtc, int BatchSize)? LastDeleteRequest { get; private set; }
 
-        public Task<Wbskt.Workflow.Abstraction.Entities.PendingTriggerEventRow?> EnqueueBehindActiveRunAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, CancellationToken ct) => throw new NotSupportedException();
-        public Task<Wbskt.Workflow.Abstraction.Entities.PendingTriggerEventRow?> DequeueNextAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
+        public Task<PendingTriggerEventRow?> EnqueueBehindActiveRunAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, CancellationToken ct) => throw new NotSupportedException();
+        public Task<PendingTriggerEventRow?> LeaseNextAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, int leaseSeconds, CancellationToken ct) => throw new NotSupportedException();
+        public Task DeleteByIdAsync(long id, CancellationToken ct) => throw new NotSupportedException();
+        public List<PendingTriggerEventKey> IdleKeys { get; } = [];
+        public Task<IReadOnlyCollection<PendingTriggerEventKey>> GetIdleKeysAsync(int batchSize, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<PendingTriggerEventKey>>(IdleKeys);
 
         public Task<long> CountAllAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
