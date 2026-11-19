@@ -1127,7 +1127,7 @@ public sealed class RetryExecutorTests
         await RunAsync(node, context, executor, keys);
 
         Assert.Empty(keys.Rows);
-        shared.Verify(p => p.SetAsync(It.IsAny<Guid>(), "hits", "\"on\"", It.IsAny<CancellationToken>()), Times.Exactly(2));
+        shared.Verify(p => p.UpsertAsync(It.IsAny<Guid>(), "hits", "Json", "\"on\"", It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
     [Theory]
