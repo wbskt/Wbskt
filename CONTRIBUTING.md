@@ -47,7 +47,7 @@ commits, not only the PR title, follow the format.
 ```bash
 dotnet build Wbskt.slnx
 dotnet test Tests/Wbskt.Host.Tests                              # unit tests, no infrastructure
-dotnet test Tests/Wbskt.Workflow.Engine.Host.IntegrationTests   # when the engine or its SQL changes
+dotnet test Tests/Wbskt.Workflow.Engine.Host.IntegrationTests   # when the engine or any SQL changes (it also holds the auth database and admin view tests)
 ```
 
 - A change to a public contract also refreshes the OpenAPI snapshots

@@ -1,5 +1,5 @@
 -- The tenant's workspaces and members, counted as Workspace_Create and TenantInvitation_Accept count
--- them against the plan.
+-- them against the plan. A suspended member counts: they keep their seat until removed.
 CREATE PROCEDURE dbo.TenantSeats_GetBy_TenantId
     @TenantId INT
 AS
