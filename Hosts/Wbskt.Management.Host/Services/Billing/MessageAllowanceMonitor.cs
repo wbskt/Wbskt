@@ -13,8 +13,8 @@ namespace Wbskt.Management.Host.Services.Billing;
 /// <summary>
 /// Compares each account's client messages this month (the meter <c>dbo.ClientTraffic_InsertBatch</c>
 /// keeps) with its plan's allowance. It tells every socket host which workspaces to throttle
-/// (<see cref="MessageThrottleSnapshot"/>, the whole list every time), and announces each workspace once a
-/// month and allowance as it passes 80% (<see cref="WorkspaceMessageLimitApproachingEvent"/>), 100%
+/// (<see cref="MessageThrottleSnapshot"/>, the whole list every time), and announces each account once a
+/// month and allowance, on the workspace that carried the most, as it passes 80% (<see cref="WorkspaceMessageLimitApproachingEvent"/>), 100%
 /// (<see cref="WorkspaceMessageLimitReachedEvent"/>) and, on Maker, Pro and Team, the throttle at
 /// its plan's <see cref="BillingOptions.PaidMessageThrottleMultiples"/> times it (<see cref="WorkspaceMessagesThrottledEvent"/>).
 /// </summary>
@@ -58,40 +58,63 @@ public sealed class MessageAllowanceMonitor(
 
         List<MessageAllowanceUsage> reached = usages.Where(u => u.Used >= u.Allowance).ToList();
 
-        // Every account past 80% is recorded, so one found past 100% first is never warned later; only those
-        // still short of 100% are told, since the next notice says more.
-        IReadOnlyCollection<int> newlyWarned = await RecordAsync(usages, monthStart, WarningPercent, ct);
-        foreach (MessageAllowanceUsage usage in usages.Where(u => newlyWarned.Contains(u.Account.WorkspaceId) && u.Used < u.Allowance))
+        // The allowance is the account's, so each crossing is announced once per account, naming the
+        // workspace that carried the most. Every workspace of it is recorded, so one listed later in the
+        // month (a new workspace) does not raise the notice again. Every account past 80% is recorded, so
+        // one found past 100% first is never warned later; only those still short of 100% are told, since
+        // the next notice says more.
+        foreach (MessageAllowanceUsage usage in await NewlyCrossedAsync(usages, monthStart, WarningPercent, ct))
         {
-            logger.LogInformation("Workspace {WorkspaceId} has carried {Used} of its plan's {Limit} messages this month.",
+            if (usage.Used >= usage.Allowance)
+            {
+                continue;
+            }
+
+            logger.LogInformation("The account of workspace {WorkspaceId} has carried {Used} of its plan's {Limit} messages this month.",
                 usage.Account.WorkspaceId, usage.Used, usage.Allowance);
-            await AnnounceAsync(new WorkspaceMessageLimitApproachingEvent(usage.Account.WorkspaceId, usage.Allowance, usage.Used) { ThrottleAt = (long?)usage.ThrottleAt }, usage.Allowance, monthStart, WarningPercent, ct);
+            await AnnounceAsync(new WorkspaceMessageLimitApproachingEvent(usage.Account.WorkspaceId, usage.Allowance, usage.Used) { ThrottleAt = (long?)usage.ThrottleAt }, usages, usage, monthStart, WarningPercent, ct);
         }
 
-        IReadOnlyCollection<int> newlyReached = await RecordAsync(reached, monthStart, ReachedPercent, ct);
-        foreach (MessageAllowanceUsage usage in reached.Where(u => newlyReached.Contains(u.Account.WorkspaceId)))
+        foreach (MessageAllowanceUsage usage in await NewlyCrossedAsync(reached, monthStart, ReachedPercent, ct))
         {
-            logger.LogInformation("Workspace {WorkspaceId} reached its plan's {Limit} messages this month ({Used}); throttled: {Throttled}.",
+            logger.LogInformation("The account of workspace {WorkspaceId} reached its plan's {Limit} messages this month ({Used}); throttled: {Throttled}.",
                 usage.Account.WorkspaceId, usage.Allowance, usage.Used, usage.IsThrottled);
-            await AnnounceAsync(new WorkspaceMessageLimitReachedEvent(usage.Account.WorkspaceId, usage.Allowance, usage.Used, usage.IsThrottled) { ThrottleAt = (long?)usage.ThrottleAt }, usage.Allowance, monthStart, ReachedPercent, ct);
+            await AnnounceAsync(new WorkspaceMessageLimitReachedEvent(usage.Account.WorkspaceId, usage.Allowance, usage.Used, usage.IsThrottled) { ThrottleAt = (long?)usage.ThrottleAt }, reached, usage, monthStart, ReachedPercent, ct);
         }
 
         // A Free account's throttle starts at its allowance and is announced with it above.
         List<MessageAllowanceUsage> paidThrottled = throttled.Where(u => u.Account.PlanCode != PlanCode.Free).ToList();
-        IReadOnlyCollection<int> newlyThrottled = await RecordAsync(paidThrottled, monthStart, ThrottledNotice, ct);
-        foreach (MessageAllowanceUsage usage in paidThrottled.Where(u => newlyThrottled.Contains(u.Account.WorkspaceId)))
+        foreach (MessageAllowanceUsage usage in await NewlyCrossedAsync(paidThrottled, monthStart, ThrottledNotice, ct))
         {
-            logger.LogWarning("Workspace {WorkspaceId} carried {Used} messages this month, {Multiple} times its plan's {Limit}; its clients are throttled until the 1st.",
+            logger.LogWarning("The account of workspace {WorkspaceId} carried {Used} messages this month, {Multiple} times its plan's {Limit}; its clients are throttled until the 1st.",
                 usage.Account.WorkspaceId, usage.Used, _billing.PaidMessageThrottleMultipleFor(usage.Account.PlanCode), usage.Allowance);
-            await AnnounceAsync(new WorkspaceMessagesThrottledEvent(usage.Account.WorkspaceId, usage.Allowance, (long)usage.ThrottleAt!.Value, usage.Used), usage.Allowance, monthStart, ThrottledNotice, ct);
+            await AnnounceAsync(new WorkspaceMessagesThrottledEvent(usage.Account.WorkspaceId, usage.Allowance, (long)usage.ThrottleAt!.Value, usage.Used), paidThrottled, usage, monthStart, ThrottledNotice, ct);
         }
     }
 
+    // A workspace whose copy has not arrived is an account of its own.
+    private static int AccountKey(MessageAllowanceUsage usage) => usage.Account.TenantId ?? -usage.Account.WorkspaceId;
+
     /// <summary>
-    /// Publishes a notice already recorded. One that cannot be published is given back, so the next check
-    /// raises it again rather than the account never hearing of it; the auth host sends each once.
+    /// Records the notice for every workspace in <paramref name="usages"/> and returns one usage per account
+    /// none of whose workspaces had it recorded before: the workspace that carried the most.
     /// </summary>
-    private async Task AnnounceAsync<TEvent>(TEvent notice, long allowanceOf, DateOnly monthStart, int percent, CancellationToken ct)
+    private async Task<IReadOnlyCollection<MessageAllowanceUsage>> NewlyCrossedAsync(List<MessageAllowanceUsage> usages, DateOnly monthStart, int percent, CancellationToken ct)
+    {
+        IReadOnlyCollection<int> newly = await allowance.RecordNoticeAsync(usages.Select(u => new MessageLimitNotice(u.Account.WorkspaceId, u.Allowance)).ToList(), monthStart, percent, ct);
+        return usages
+            .GroupBy(AccountKey)
+            .Where(account => account.All(u => newly.Contains(u.Account.WorkspaceId)))
+            .Select(account => account.OrderByDescending(u => u.Account.WorkspaceMessages).ThenBy(u => u.Account.WorkspaceId).First())
+            .ToList();
+    }
+
+    /// <summary>
+    /// Publishes a notice already recorded. One that cannot be published is given back for every workspace
+    /// of the account, so the next check raises it again rather than the account never hearing of it; the
+    /// auth host sends each once.
+    /// </summary>
+    private async Task AnnounceAsync<TEvent>(TEvent notice, List<MessageAllowanceUsage> recorded, MessageAllowanceUsage named, DateOnly monthStart, int percent, CancellationToken ct)
         where TEvent : IWorkspaceContext
     {
         try
@@ -101,10 +124,10 @@ public sealed class MessageAllowanceMonitor(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Could not announce {Notice} for workspace {WorkspaceId}; it is raised again on the next check.", typeof(TEvent).Name, notice.WorkspaceId);
-            await allowance.ReleaseNoticeAsync(new MessageLimitNotice(notice.WorkspaceId, allowanceOf), monthStart, percent, CancellationToken.None);
+            foreach (MessageAllowanceUsage usage in recorded.Where(u => AccountKey(u) == AccountKey(named)))
+            {
+                await allowance.ReleaseNoticeAsync(new MessageLimitNotice(usage.Account.WorkspaceId, usage.Allowance), monthStart, percent, CancellationToken.None);
+            }
         }
     }
-
-    private Task<IReadOnlyCollection<int>> RecordAsync(List<MessageAllowanceUsage> usages, DateOnly monthStart, int percent, CancellationToken ct) =>
-        allowance.RecordNoticeAsync(usages.Select(u => new MessageLimitNotice(u.Account.WorkspaceId, u.Allowance)).ToList(), monthStart, percent, ct);
 }

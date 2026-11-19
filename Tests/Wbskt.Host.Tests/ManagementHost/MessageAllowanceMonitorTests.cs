@@ -140,6 +140,50 @@ public sealed class MessageAllowanceMonitorTests
     }
 
     [Fact]
+    public async Task An_accounts_crossing_is_announced_once_naming_the_workspace_that_carried_the_most()
+    {
+        Accounts(
+            new WorkspaceMessageAccount(1, PlanCode.Free, null, Free, TenantId: 9, WorkspaceMessages: Free / 4),
+            new WorkspaceMessageAccount(2, PlanCode.Free, null, Free, TenantId: 9, WorkspaceMessages: Free * 3 / 4),
+            new WorkspaceMessageAccount(3, PlanCode.Free, null, Free, TenantId: 9, WorkspaceMessages: 0));
+
+        await Monitor().CheckAsync(CancellationToken.None);
+
+        Assert.Equal([1, 2, 3], _snapshot!.WorkspaceIds);
+        Assert.Equal([2], _events.OfType<WorkspaceMessageLimitReachedEvent>().Select(e => e.WorkspaceId));
+        _allowance.Verify(x => x.RecordNoticeAsync(It.Is<IReadOnlyCollection<MessageLimitNotice>>(n => n.Select(x => x.WorkspaceId).SequenceEqual(new[] { 1, 2, 3 })), November, 100, It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task A_workspace_added_to_an_account_already_told_does_not_tell_it_again()
+    {
+        Accounts(
+            new WorkspaceMessageAccount(1, PlanCode.Free, null, Free, TenantId: 9, WorkspaceMessages: Free),
+            new WorkspaceMessageAccount(4, PlanCode.Free, null, Free, TenantId: 9, WorkspaceMessages: 0));
+        _allowance.Setup(x => x.RecordNoticeAsync(It.IsAny<IReadOnlyCollection<MessageLimitNotice>>(), November, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([4]);
+
+        await Monitor().CheckAsync(CancellationToken.None);
+
+        Assert.Empty(_events);
+    }
+
+    [Fact]
+    public async Task An_accounts_notice_the_broker_refuses_is_given_back_for_each_of_its_workspaces()
+    {
+        Accounts(
+            new WorkspaceMessageAccount(1, PlanCode.Free, null, Free, TenantId: 9, WorkspaceMessages: Free),
+            new WorkspaceMessageAccount(2, PlanCode.Free, null, Free, TenantId: 9, WorkspaceMessages: 0));
+        _bus.Setup(x => x.PublishAsync(It.IsAny<WorkspaceMessageLimitReachedEvent>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("The broker is down."));
+
+        await Monitor().CheckAsync(CancellationToken.None);
+
+        _allowance.Verify(x => x.ReleaseNoticeAsync(new MessageLimitNotice(1, Free), November, 100, It.IsAny<CancellationToken>()), Times.Once);
+        _allowance.Verify(x => x.ReleaseNoticeAsync(new MessageLimitNotice(2, Free), November, 100, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task With_nobody_over_the_empty_list_is_still_sent_so_the_socket_hosts_let_go()
     {
         Accounts();

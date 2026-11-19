@@ -2,6 +2,8 @@
 -- carried client messages since @MonthStart, with its plan copy and the account's pooled total: what the
 -- management host compares with each plan's message allowance (MessageAllowanceMonitor). A workspace of
 -- such a tenant is listed even if it carried none itself, since the allowance is the tenant's.
+-- WorkspaceMessages is what the workspace carried itself, so a notice for the tenant can name the
+-- workspace that carried the most.
 CREATE PROCEDURE dbo.WorkspaceMessageUsage_GetAccounts
     @MonthStart DATE
 AS
@@ -32,7 +34,8 @@ BEGIN
             CASE
                 WHEN w.TenantId IS NULL THEN ISNULL(u.Messages, 0)
                 ELSE SUM(ISNULL(u.Messages, 0)) OVER (PARTITION BY w.TenantId)
-            END AS AccountMessages
+            END AS AccountMessages,
+            ISNULL(u.Messages, 0) AS WorkspaceMessages
         FROM Workspaces w
         LEFT JOIN Used u ON u.WorkspaceId = w.WorkspaceId
     )
@@ -41,7 +44,8 @@ BEGIN
         TenantId,
         PlanCode,
         LimitOverrides,
-        AccountMessages
+        AccountMessages,
+        WorkspaceMessages
     FROM Pooled
     WHERE AccountMessages > 0
       -- A deleted workspace's messages still count in its tenant's pool, but it is not listed: nothing
