@@ -7,7 +7,8 @@ name: Build images
 # or pushed until the tests, the scan, E2E and the upgrade rehearsal have passed; once every image has
 # succeeded, the deploy job hands that run's sha-<short> tag to deploy.yml. Images are pushed only by
 # their sha tag: :latest means what production runs, and only deploy.yml moves it, after a deploy from
-# master succeeds. A pull request that changes only docs skips every job after `changes`.
+# master succeeds. A pull request or push that changes only docs skips every job after `changes`, so
+# a docs-only merge publishes and deploys nothing.
 #
 # Every job stays on GitHub-hosted runners. The repository is public, and a self-hosted runner would
 # run code from any fork's pull request on the machine that hosts it.
@@ -25,10 +26,12 @@ permissions:
   contents: read
 
 jobs:
-  # Whether this change can affect what the jobs below test. A pull request that touches only the
-  # docs or Markdown skips them. A skipped job counts as passed for a required check, where a
-  # workflow left out by `on: paths-ignore` would never report at all. Pushes and manual runs always run everything, so nothing is published from
-  # a partial check.
+  # Whether this change can affect what the jobs below test. A pull request or a master push that
+  # touches only the docs, Markdown or the infra map skips them, and a push like that publishes and
+  # deploys nothing: production already runs the code it describes. A skipped job counts as passed for
+  # a required check, where a workflow left out by `on: paths-ignore` would never report at all. A
+  # manual run always runs everything, and so does a push whose diff cannot be read (a new branch, a
+  # force-push, or more files than the API lists), so nothing is published from a partial check.
   changes:
     runs-on: ubuntu-latest
     permissions:
@@ -43,19 +46,36 @@ jobs:
           EVENT: ${{ github.event_name }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
         run: |
-          if [[ "$EVENT" != "pull_request" ]]; then
+          everything() {
             echo "hosts=true" >> "$GITHUB_OUTPUT"
             exit 0
-          fi
-          gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename' > files.txt
+          }
+          case "$EVENT" in
+            pull_request)
+              # The API lists at most 3000 files.
+              limit=3000
+              gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename' > files.txt || everything
+              ;;
+            push)
+              # The compare API lists at most 300 files.
+              limit=300
+              if [[ -z "$BEFORE" || "$BEFORE" =~ ^0+$ ]]; then
+                everything
+              fi
+              gh api "repos/$REPO/compare/$BEFORE...$AFTER" --jq '.files[].filename' > files.txt || everything
+              ;;
+            *)
+              everything
+              ;;
+          esac
           count=$(grep -c . files.txt || true)
-          # The API lists at most 3000 files; past that, assume anything changed.
-          if [[ "$count" -eq 0 || "$count" -ge 3000 ]]; then
-            echo "hosts=true" >> "$GITHUB_OUTPUT"
-            exit 0
+          if [[ "$count" -eq 0 || "$count" -ge "$limit" ]]; then
+            everything
           fi
-          relevant=$(awk '!/^Docs\// && !/\.md$/' files.txt)
+          relevant=$(awk '!/^Docs\// && !/\.md$/ && $0 != "deploy/infra-map.html"' files.txt)
           echo "changed: $count file(s); affecting the hosts:"
           echo "${relevant:-  none}"
           if [[ -n "$relevant" ]]; then
