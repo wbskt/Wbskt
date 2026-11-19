@@ -15,5 +15,12 @@ public static class ProtocolJson
 
     public static string Serialize(ProtocolMessage message) => JsonSerializer.Serialize(message, Options);
 
+    /// <summary>
+    /// A payload as JSON text. One read from a client is passed through as the client wrote it; anything
+    /// else is written with the same relaxed escaping as a message.
+    /// </summary>
+    public static string SerializePayload(object? payload) =>
+        payload is JsonElement element ? element.GetRawText() : JsonSerializer.Serialize(payload, Options);
+
     public static int ByteCount(ProtocolMessage message) => JsonSerializer.SerializeToUtf8Bytes(message, Options).Length;
 }
