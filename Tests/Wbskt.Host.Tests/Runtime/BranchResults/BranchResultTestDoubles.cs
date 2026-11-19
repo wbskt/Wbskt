@@ -257,7 +257,7 @@ internal sealed class RecordingRunCountersProvider(List<string> log) : IRunCount
         return Task.FromResult(0);
     }
 
-    public Task<CreditCharge?> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => throw new NotSupportedException();
+    public Task<CreditCharge> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => throw new NotSupportedException();
 
     public Task<long> SumActiveBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
 }

@@ -47,7 +47,7 @@ internal static class RetryExecutor
     // A charge past a leased budget waits for its tenant's credits lock (and a cap's) and gives up with
     // 50035 when it is held too long; tried again as a run start is (RunStarter.BusyBackoff) before the
     // step fails.
-    internal static async Task<CreditCharge?> ChargeAsync(IRunCountersProvider counters, int runId, decimal cost, TimeProvider clock, CancellationToken ct)
+    internal static async Task<CreditCharge> ChargeAsync(IRunCountersProvider counters, int runId, decimal cost, TimeProvider clock, CancellationToken ct)
     {
         for (int attempt = 0; ; attempt++)
         {
@@ -175,10 +175,10 @@ internal static class RetryExecutor
                 // Atomic budget-checked charge (2.2): the SP re-validates the budget under the
                 // same row lock as the increment, so this is a single round-trip with no
                 // check-then-act race between concurrent branches on the same run.
-                CreditCharge? charge = await ChargeAsync(runCountersProvider, (int)context.RunId, cost, clock, ct);
-                if (charge is null || charge.Refusal is not null)
+                CreditCharge charge = await ChargeAsync(runCountersProvider, (int)context.RunId, cost, clock, ct);
+                if (charge.Refusal is { } refusal)
                 {
-                    var outOfCreditsResult = OutOfCredits.Fail(charge?.Refusal ?? CreditRefusal.RunBudget) with { Warnings = chargeWarnings.ToArray() };
+                    var outOfCreditsResult = OutOfCredits.Fail(refusal) with { Warnings = chargeWarnings.ToArray() };
                     string errorJson = JsonSerializer.Serialize(outOfCreditsResult, EngineJson.Options);
 
                     await RecordOutcomeAsync(false, errorJson);

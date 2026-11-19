@@ -131,10 +131,10 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
         bool startCharged = false;
         if (counters is not null && _runStartCost > 0m)
         {
-            CreditCharge? charge = await RetryExecutor.ChargeAsync(counters, (int)ctx.Branch.RunId, _runStartCost, Clock, ct);
-            if (charge is null || charge.Refusal is not null)
+            CreditCharge charge = await RetryExecutor.ChargeAsync(counters, (int)ctx.Branch.RunId, _runStartCost, Clock, ct);
+            if (charge.Refusal is { } refusal)
             {
-                return OutOfCredits.Fail(charge?.Refusal ?? CreditRefusal.RunBudget);
+                return OutOfCredits.Fail(refusal);
             }
 
             startCharged = true;

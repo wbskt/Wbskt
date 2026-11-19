@@ -102,7 +102,7 @@ internal sealed class UnlimitedRunCountersProvider : IRunCountersProvider
 
     public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => Task.FromResult(0);
 
-    public Task<CreditCharge?> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult<CreditCharge?>(new CreditCharge(0m, decimal.MaxValue));
+    public Task<CreditCharge> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult(new CreditCharge(0m, decimal.MaxValue));
 
     public Task<long> SumActiveBranchesAsync(CancellationToken ct) => Task.FromResult(0L);
 }

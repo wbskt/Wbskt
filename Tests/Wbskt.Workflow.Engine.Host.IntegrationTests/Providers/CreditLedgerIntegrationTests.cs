@@ -321,7 +321,7 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         long run = await StartAsync(wd, budget: 2m);
         await ChargeAsync(run, 2m);
 
-        CreditCharge? refused = await ProviderFactory.RunCounters(fixture.ConnectionString).TryChargeAsync((int)run, 1m, CancellationToken.None);
+        CreditCharge refused = await ProviderFactory.RunCounters(fixture.ConnectionString).TryChargeAsync((int)run, 1m, CancellationToken.None);
 
         refused!.Refusal.Should().Be(CreditRefusal.RunBudget);
     }
@@ -616,7 +616,7 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
 
     private async Task ChargeAsync(long runId, decimal cost)
     {
-        CreditCharge? charge = await ProviderFactory.RunCounters(fixture.ConnectionString).TryChargeAsync((int)runId, cost, CancellationToken.None);
+        CreditCharge charge = await ProviderFactory.RunCounters(fixture.ConnectionString).TryChargeAsync((int)runId, cost, CancellationToken.None);
         charge.Should().NotBeNull();
         charge!.Refusal.Should().BeNull();
     }
