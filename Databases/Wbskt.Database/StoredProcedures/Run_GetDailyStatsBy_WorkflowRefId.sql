@@ -13,18 +13,8 @@ BEGIN
 
     WITH Windowed AS
     (
-        SELECT
-            CAST(CreatedAt AS DATE) AS Day,
-            Status,
-            CASE
-                WHEN CompletedAt IS NULL THEN NULL
-                ELSE DATEDIFF_BIG(MILLISECOND, StartedAt, CompletedAt)
-            END AS DurationMs
-        FROM dbo.Runs
-        WHERE WorkflowRefId = @WorkflowRefId
-          AND CreatedAt >= @FromUtc
-          AND CreatedAt < @ToUtc
-          AND IsTest = 0
+        SELECT w.Day, w.Status, w.DurationMs
+        FROM dbo.RunsInWindow(NULL, @WorkflowRefId, @FromUtc, @ToUtc) w
     ),
     Medians AS
     (

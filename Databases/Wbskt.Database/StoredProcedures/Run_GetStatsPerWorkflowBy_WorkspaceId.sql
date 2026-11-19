@@ -15,25 +15,8 @@ BEGIN
     -- runs, both failed, sorts last here by design; its 0% shows up in the row, not in the ordering.
     WITH Windowed AS
     (
-        SELECT
-            r.WorkflowRefId,
-            r.Status,
-            -- Parked: still Running, with every live branch waiting on a delay, signal or call.
-            CASE
-                WHEN r.Status = N'Running'
-                 AND EXISTS (SELECT 1 FROM dbo.RunParked(r.Id))
-                THEN 1 ELSE 0
-            END AS IsWaiting,
-            CASE
-                WHEN r.CompletedAt IS NULL THEN NULL
-                ELSE DATEDIFF_BIG(MILLISECOND, r.StartedAt, r.CompletedAt)
-            END AS DurationMs
-        FROM dbo.Runs r
-        INNER JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
-        WHERE d.WorkspaceId = @WorkspaceId
-          AND r.CreatedAt >= @FromUtc
-          AND r.CreatedAt < @ToUtc
-          AND r.IsTest = 0
+        SELECT w.WorkflowRefId, w.Status, w.IsWaiting, w.DurationMs
+        FROM dbo.RunsInWindow(@WorkspaceId, NULL, @FromUtc, @ToUtc) w
     )
     SELECT TOP (@Top)
         w.WorkflowRefId,
