@@ -65,13 +65,14 @@ internal sealed class AccountProvider : BaseSqlProvider, IAccountProvider
         return user.Id;
     }
 
-    public async Task<bool> BeginPasswordCheckAsync(int userId, int maxFailures, bool throughLock, CancellationToken cancellationToken = default)
+    public async Task<bool> BeginPasswordCheckAsync(int userId, int maxFailures, bool throughLock, TimeSpan lockout, CancellationToken cancellationToken = default)
     {
         return await ExecuteScalarAsync<bool>("dbo.User_BeginPasswordCheck", p =>
         {
             p.AddWithValue("@UserId", userId);
             p.AddWithValue("@MaxFailures", maxFailures);
             p.AddWithValue("@ThroughLock", throughLock);
+            p.AddWithValue("@LockoutSeconds", (int)lockout.TotalSeconds);
         }, cancellationToken);
     }
 

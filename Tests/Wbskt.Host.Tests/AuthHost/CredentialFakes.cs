@@ -26,8 +26,8 @@ internal static class CredentialFakes
     public static void ReadLockFromUser(Mock<IAccountProvider> accounts)
     {
         accounts
-            .Setup(p => p.BeginPasswordCheckAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .Returns<int, int, bool, CancellationToken>(async (userId, _, throughLock, ct) =>
+            .Setup(p => p.BeginPasswordCheckAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Returns<int, int, bool, TimeSpan, CancellationToken>(async (userId, _, throughLock, _, ct) =>
                 throughLock || !((await accounts.Object.GetByIdAsync(userId, ct))?.LockedUntil > DateTime.UtcNow));
     }
 

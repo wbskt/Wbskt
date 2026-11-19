@@ -74,7 +74,7 @@ public sealed class AccountSecurityTests
         // slot, so a burst cannot get more tries than the lock allows by racing the count.
         var harness = new Harness();
         harness.WithUser(AUser());
-        harness.Accounts.Setup(p => p.BeginPasswordCheckAsync(42, AccountLockout.MaxFailedLogins, false, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        harness.Accounts.Setup(p => p.BeginPasswordCheckAsync(42, AccountLockout.MaxFailedLogins, false, AccountLockout.LoginLockout, It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
         var result = await harness.SignIn.LoginAsync(Email, Password, "10.0.0.1");
 
@@ -92,8 +92,43 @@ public sealed class AccountSecurityTests
         var result = await harness.Passwords.ChangePasswordAsync(42, Password, "a brand new passphrase", "10.0.0.1");
 
         Assert.True(result.IsSuccess);
-        harness.Accounts.Verify(p => p.BeginPasswordCheckAsync(42, AccountLockout.MaxFailedLogins, false, It.IsAny<CancellationToken>()), Times.Once);
+        harness.Accounts.Verify(p => p.BeginPasswordCheckAsync(42, AccountLockout.MaxFailedLogins, false, AccountLockout.LoginLockout, It.IsAny<CancellationToken>()), Times.Once);
         harness.Accounts.Verify(p => p.EndPasswordCheckAsync(42, true, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task An_attempt_the_caller_abandons_is_given_back()
+    {
+        // A guesser who drops each request while it waits for a hashing slot learns nothing, and must
+        // not leave the attempt counted: ten of them would refuse the owner with no lock to lapse.
+        var harness = new Harness();
+        harness.WithUser(AUser());
+        using var abandoned = new CancellationTokenSource();
+        await abandoned.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            harness.Passwords.ChangePasswordAsync(42, "not the password", "a brand new passphrase", "10.0.0.1", abandoned.Token));
+
+        harness.Accounts.Verify(p => p.EndPasswordCheckAsync(42, true, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, CancellationToken.None), Times.Once);
+        harness.Accounts.Verify(p => p.EndPasswordCheckAsync(It.IsAny<int>(), false, It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_tested_password_is_settled_even_when_the_caller_has_gone()
+    {
+        var harness = new Harness();
+        harness.WithUser(AUser());
+        using var leaving = new CancellationTokenSource();
+        harness.Accounts
+            .Setup(p => p.EndPasswordCheckAsync(42, false, It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Callback(leaving.Cancel)
+            .ReturnsAsync((DateTime?)null);
+
+        await harness.Passwords.ChangePasswordAsync(42, "not the password", "a brand new passphrase", "10.0.0.1", leaving.Token);
+
+        // Settled once, as a failure, and with a token the caller cannot cancel.
+        harness.Accounts.Verify(p => p.EndPasswordCheckAsync(42, false, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, CancellationToken.None), Times.Once);
+        harness.Accounts.Verify(p => p.EndPasswordCheckAsync(It.IsAny<int>(), true, It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]

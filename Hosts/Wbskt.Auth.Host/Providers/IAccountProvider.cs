@@ -28,8 +28,10 @@ internal interface IAccountProvider : IReferenceProvider
     /// Reserves a password attempt before the password is checked (<c>User_BeginPasswordCheck</c>).
     /// False when the account is locked (unless <paramref name="throughLock"/>) or already has
     /// <paramref name="maxFailures"/> attempts counted or in flight; the password must not be checked then.
+    /// A refusal that finds the count at the limit with no lock in force locks the account for
+    /// <paramref name="lockout"/>, so attempts that were never settled cannot refuse it for good.
     /// </summary>
-    Task<bool> BeginPasswordCheckAsync(int userId, int maxFailures, bool throughLock, CancellationToken cancellationToken = default);
+    Task<bool> BeginPasswordCheckAsync(int userId, int maxFailures, bool throughLock, TimeSpan lockout, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Settles a reserved attempt (<c>User_EndPasswordCheck</c>): a right password gives it back, a
