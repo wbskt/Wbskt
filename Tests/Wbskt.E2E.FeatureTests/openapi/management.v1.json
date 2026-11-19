@@ -1392,6 +1392,15 @@
       },
       "IntegrationUsedBy": {
         "properties": {
+          "activeRuns": {
+            "default": 0,
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
           "isLive": {
             "type": "boolean"
           },
@@ -6185,6 +6194,14 @@
             "schema": {
               "format": "uuid",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "confirm",
+            "schema": {
+              "default": false,
+              "type": "boolean"
             }
           },
           {

@@ -21,8 +21,12 @@ public interface IIntegrationService
     /// <summary>Renames it, replaces its settings, or patches its secret; <c>INTEGRATION_TYPE_IMMUTABLE</c> for a type change.</summary>
     Task<Result<IntegrationResponse>> UpdateAsync(int workspaceId, Guid refId, IntegrationUpdateRequest request, CancellationToken ct);
 
-    /// <summary>Deletes it, or refuses with <c>INTEGRATION_IN_USE</c> and the published steps that use it.</summary>
-    Task<IntegrationDeleteResult> DeleteAsync(int workspaceId, Guid refId, CancellationToken ct);
+    /// <summary>
+    /// Deletes it, or refuses with <c>INTEGRATION_IN_USE</c> and the published steps that use it, or,
+    /// unless <paramref name="confirmActiveRuns"/>, with <c>INTEGRATION_RUNS_IN_FLIGHT</c> and the steps
+    /// runs still in flight would fail at.
+    /// </summary>
+    Task<IntegrationDeleteResult> DeleteAsync(int workspaceId, Guid refId, bool confirmActiveRuns, CancellationToken ct);
 
     Task<Result<IntegrationUsageResponse>> GetUsageAsync(int workspaceId, Guid refId, CancellationToken ct);
 

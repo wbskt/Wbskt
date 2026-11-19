@@ -254,7 +254,7 @@ internal sealed class IntegrationService(
         return await GetAsync(workspaceId, refId, ct);
     }
 
-    public async Task<IntegrationDeleteResult> DeleteAsync(int workspaceId, Guid refId, CancellationToken ct)
+    public async Task<IntegrationDeleteResult> DeleteAsync(int workspaceId, Guid refId, bool confirmActiveRuns, CancellationToken ct)
     {
         var owned = await FindOwnedAsync(workspaceId, refId, ct);
         if (owned.IsFailure)
@@ -263,7 +263,17 @@ internal sealed class IntegrationService(
         }
 
         var integration = owned.Value;
-        var blocking = await provider.DeleteAsync(workspaceId, integration.Id, ct);
+        var blocking = await provider.DeleteAsync(workspaceId, integration.Id, confirmActiveRuns, ct);
+        if (blocking.Count > 0 && blocking.All(u => u.ActiveRuns > 0))
+        {
+            int runs = blocking.Sum(u => u.ActiveRuns);
+            return new IntegrationDeleteResult(
+                Result.Failure(Error.Conflict(
+                    "INTEGRATION_RUNS_IN_FLIGHT",
+                    $"'{integration.Name}' is used by {runs} run{(runs == 1 ? string.Empty : "s")} still in flight, which will fail at that step once it is gone. Wait for them to finish, or delete it with confirm=true.")),
+                blocking.Select(MapUse).ToList());
+        }
+
         if (blocking.Count > 0)
         {
             int workflows = blocking.Select(u => u.WorkflowRefId).Distinct().Count();
@@ -439,7 +449,7 @@ internal sealed class IntegrationService(
     }
 
     private static IntegrationUsedBy MapUse(IntegrationUse use) =>
-        new(use.WorkflowRefId, use.WorkflowName, use.NodeId, use.NodeName, use.IsLive);
+        new(use.WorkflowRefId, use.WorkflowName, use.NodeId, use.NodeName, use.IsLive, use.ActiveRuns);
 
     private static IntegrationResponse Map(Integration i) => new(
         i.RefId,

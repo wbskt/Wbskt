@@ -93,7 +93,8 @@ public sealed record IntegrationResponse(
 /// <summary>
 /// One step that sends through an integration: in an enabled workflow's live version, or in the newest
 /// version of a disabled or deprecated one. Only a live use (<c>IsLive</c>) blocks deleting the integration.
+/// On a delete refused for runs in flight, <c>ActiveRuns</c> is how many runs are on that step's version.
 /// </summary>
-public sealed record IntegrationUsedBy(Guid WorkflowRefId, string WorkflowName, Guid StepId, string StepName, bool IsLive);
+public sealed record IntegrationUsedBy(Guid WorkflowRefId, string WorkflowName, Guid StepId, string StepName, bool IsLive, int ActiveRuns = 0);
 
 public sealed record IntegrationUsageResponse(IReadOnlyList<IntegrationUsedBy> UsedBy);
