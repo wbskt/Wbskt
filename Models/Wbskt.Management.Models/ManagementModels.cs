@@ -52,6 +52,8 @@ public record BulkClientStatusResponse(IReadOnlyList<Guid> Updated, IReadOnlyLis
 public record BulkClientStatusFailure(Guid ClientRefId, string Code, string Message);
 
 /// <param name="UpdatingUntil">Set when the client's last disconnect was to install a firmware update: while it is later than now the client counts as updating, not offline. Cleared on its next connect.</param>
+/// <param name="LastActivityAt">When the last presence change a host reported happened. Kept for older consoles; show <paramref name="LastSeenAt"/> instead.</param>
+/// <param name="LastSeenAt">When the client was last known present: its last connect or disconnect, or the moment its gateway was found gone. What "last seen" shows.</param>
 public record ClientResponse(
     Guid ClientRefId,
     Guid PolicyRefId,
@@ -63,11 +65,13 @@ public record ClientResponse(
     int? LastRttMs,
     DateTimeOffset CreatedAt,
     IReadOnlyList<string> Tags,
-    DateTimeOffset? UpdatingUntil = null
+    DateTimeOffset? UpdatingUntil = null,
+    DateTimeOffset? LastSeenAt = null
 );
 
 /// <param name="System">The platform features the client last said it takes, such as <c>ota</c>; empty when none.</param>
 /// <param name="UpdatingUntil">As on <see cref="ClientResponse"/>.</param>
+/// <param name="LastSeenAt">As on <see cref="ClientResponse"/>.</param>
 /// <param name="FirmwareVersion">The version of the code the client runs, from its capabilities report; null when it never said.</param>
 public record ClientDetailResponse(
     Guid ClientRefId,
@@ -88,7 +92,8 @@ public record ClientDetailResponse(
     IReadOnlyList<string> Tags,
     IReadOnlyList<string> System,
     string? FirmwareVersion = null,
-    DateTimeOffset? UpdatingUntil = null
+    DateTimeOffset? UpdatingUntil = null,
+    DateTimeOffset? LastSeenAt = null
 );
 
 public record ClientTagsResponse(Guid ClientRefId, IReadOnlyList<string> Tags);

@@ -197,7 +197,8 @@ internal sealed class ClientQueryService : IClientQueryService
             c.LastRttMs,
             c.CreatedAt.ToUtcOffset(),
             c.Tags,
-            c.UpdatingUntil.ToUtcOffset()
+            c.UpdatingUntil.ToUtcOffset(),
+            c.LastSeenAt.ToUtcOffset()
         );
     }
 
@@ -238,7 +239,8 @@ internal sealed class ClientQueryService : IClientQueryService
             d.Tags,
             ReadSystem(d.SystemJson),
             d.FirmwareVersion,
-            d.UpdatingUntil.ToUtcOffset()
+            d.UpdatingUntil.ToUtcOffset(),
+            d.LastSeenAt.ToUtcOffset()
         );
     }
 

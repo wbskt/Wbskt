@@ -39,7 +39,8 @@ BEGIN
     SET
         IsConnected = 0,
         ConnectedAt = NULL,
-        ConnectedHostId = NULL
+        ConnectedHostId = NULL,
+        LastSeenAt = @TakenAt
     OUTPUT deleted.Id, deleted.RefId, deleted.WorkspaceId, 0, @TakenAt INTO @Repaired (Id, RefId, WorkspaceId, Connected, ChangedAt)
     FROM dbo.Clients c
     WHERE c.IsConnected = 1
@@ -56,6 +57,7 @@ BEGIN
         ConnectedAt = DATEADD(MILLISECOND, 1, ISNULL(c.LastActivityAt, @ChangedBefore)),
         ConnectedHostId = @HostId,
         LastActivityAt = DATEADD(MILLISECOND, 1, ISNULL(c.LastActivityAt, @ChangedBefore)),
+        LastSeenAt = @TakenAt,
         UpdatingUntil = NULL
     OUTPUT inserted.Id, inserted.RefId, inserted.WorkspaceId, 1, inserted.LastActivityAt INTO @Repaired (Id, RefId, WorkspaceId, Connected, ChangedAt)
     FROM dbo.Clients c

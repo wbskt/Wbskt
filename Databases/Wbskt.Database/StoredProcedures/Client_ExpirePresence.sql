@@ -3,7 +3,8 @@
 -- id, or was scaled away, so the disconnects it owed will never arrive. Returns the cleared clients
 -- so the caller can announce each as disconnected, dated by this sweep. LastActivityAt is left alone:
 -- it holds the last change a host saw, and an inferred expiry must not outrank a real connect or
--- disconnect from the outage whose event is still on its way.
+-- disconnect from the outage whose event is still on its way. LastSeenAt, which is only shown, takes
+-- the sweep's time, so a device whose gateway died is not shown as last seen when it connected.
 --
 -- A connection younger than the window is left alone, so a host whose first heartbeat has not been
 -- recorded yet is not mistaken for a dead one. The UPDATE claims each row once, so two management
@@ -21,7 +22,8 @@ BEGIN
     SET
         IsConnected = 0,
         ConnectedAt = NULL,
-        ConnectedHostId = NULL
+        ConnectedHostId = NULL,
+        LastSeenAt = @Now
     OUTPUT deleted.Id, deleted.RefId, deleted.WorkspaceId, deleted.ConnectedHostId, @Now AS ChangedAt
     FROM dbo.Clients c
     WHERE c.IsConnected = 1
