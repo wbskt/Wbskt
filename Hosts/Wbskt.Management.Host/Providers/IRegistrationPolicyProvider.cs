@@ -24,6 +24,13 @@ public interface IRegistrationPolicyProvider
 
     /// <summary>Deletes a policy with no clients, unpinning its templates; see <c>dbo.RegistrationPolicy_Delete</c>.</summary>
     Task<PolicyDeleteOutcome> DeleteAsync(int workspaceId, int id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Whether a registration refused at <paramref name="kind"/>'s limit through the policy is to be
+    /// announced: true, and recorded, when none was within <paramref name="interval"/> before
+    /// <paramref name="nowUtc"/>; see <c>dbo.RegistrationLimitNotice_Claim</c>.
+    /// </summary>
+    Task<bool> TryClaimLimitNoticeAsync(int policyId, RegistrationLimitKind kind, DateTime nowUtc, TimeSpan interval, CancellationToken cancellationToken = default);
 }
 
 /// <param name="ClientCount">The clients still enrolled through the policy, which kept it from being deleted.</param>

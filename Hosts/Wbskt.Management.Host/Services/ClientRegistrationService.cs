@@ -31,6 +31,8 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
     private readonly ILogger<ClientRegistrationService> _logger;
     private readonly ManagementMetrics _metrics;
     private readonly IWorkspacePlans _plans;
+    private readonly TimeProvider _clock;
+    private readonly TimeSpan _limitNoticeInterval = TimeSpan.FromHours(1);
 
     public ClientRegistrationService(
         IClientProvider clientProvider,
@@ -38,9 +40,11 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
         IEventBus eventBus,
         ILogger<ClientRegistrationService> logger,
         ManagementMetrics metrics,
-        IWorkspacePlans plans)
+        IWorkspacePlans plans,
+        TimeProvider clock)
     {
         _plans = plans;
+        _clock = clock;
         _clientProvider = clientProvider;
         _policyProvider = policyProvider;
         _eventBus = eventBus;
@@ -104,7 +108,7 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
             if (currentCount >= policy.MaxClients.Value)
             {
                 _logger.LogWarning("Client registration failed: Limit reached for policy '{PolicyName}' ({Current}/{Max})", policy.Name, currentCount, policy.MaxClients.Value);
-                await _eventBus.PublishAsync(new PolicyRegistrationLimitReachedEvent(policy.RefId, policy.Id, policy.WorkspaceId, policy.MaxClients.Value), cancellationToken);
+                await AnnounceLimitAsync(policy, RegistrationLimitKind.Policy, new PolicyRegistrationLimitReachedEvent(policy.RefId, policy.Id, policy.WorkspaceId, policy.MaxClients.Value), cancellationToken);
                 return Result<ClientRegistrationResponse>.Failure(Error.Validation("POLICY_LIMIT_REACHED", "Policy registration limit reached."));
             }
         }
@@ -134,7 +138,7 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
         {
             _logger.LogWarning("Client registration failed: WorkspaceId {WorkspaceId} is at its plan's limit of {MaxClients} clients", policy.WorkspaceId, ceiling.Limit);
             int current = await _clientProvider.GetRegisteredCountByAccountAsync(policy.WorkspaceId, plan.TenantId, cancellationToken);
-            await _eventBus.PublishAsync(new PlanClientLimitReachedEvent(policy.RefId, policy.Id, policy.WorkspaceId, plan.PlanCode.ToString(), plan.Limits.Clients, current, Guid.Empty, name), cancellationToken);
+            await AnnounceLimitAsync(policy, RegistrationLimitKind.Plan, new PlanClientLimitReachedEvent(policy.RefId, policy.Id, policy.WorkspaceId, plan.PlanCode.ToString(), plan.Limits.Clients, current, Guid.Empty, name), cancellationToken);
             return Result<ClientRegistrationResponse>.Failure(PlanLimitReached(plan, current));
         }
         catch (SqlException ex) when (ex.Number == PolicyLimitReachedError && policy.MaxClients.HasValue)
@@ -142,7 +146,7 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
             // A concurrent registration took the last slot after the count above. Client_Create
             // re-checks under a lock on the policy row; this is that check refusing.
             _logger.LogWarning("Client registration failed: Limit reached for policy '{PolicyName}' (concurrent registration)", policy.Name);
-            await _eventBus.PublishAsync(new PolicyRegistrationLimitReachedEvent(policy.RefId, policy.Id, policy.WorkspaceId, policy.MaxClients.Value), cancellationToken);
+            await AnnounceLimitAsync(policy, RegistrationLimitKind.Policy, new PolicyRegistrationLimitReachedEvent(policy.RefId, policy.Id, policy.WorkspaceId, policy.MaxClients.Value), cancellationToken);
             return Result<ClientRegistrationResponse>.Failure(Error.Validation("POLICY_LIMIT_REACHED", "Policy registration limit reached."));
         }
 
@@ -162,4 +166,19 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
         return Result<ClientRegistrationResponse>.Success(new ClientRegistrationResponse(client.RefId, secret, client.Status));
     }
 
+    /// <summary>
+    /// Raises a limit's refusal at most once an hour per policy and limit, whichever board was refused:
+    /// a refused board retries every half minute, and each retry used to write a Warning to the audit
+    /// log and push a banner to the console. The event names the first board refused in the hour.
+    /// Published whatever the request's token does once the hour is claimed, so a board that hangs up
+    /// does not leave the hour claimed with nothing announced.
+    /// </summary>
+    private async Task AnnounceLimitAsync<TEvent>(RegistrationPolicy policy, RegistrationLimitKind kind, TEvent announcement, CancellationToken cancellationToken)
+        where TEvent : class, IEvent
+    {
+        if (await _policyProvider.TryClaimLimitNoticeAsync(policy.Id, kind, _clock.GetUtcNow().UtcDateTime, _limitNoticeInterval, cancellationToken))
+        {
+            await _eventBus.PublishAsync(announcement, CancellationToken.None);
+        }
+    }
 }

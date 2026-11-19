@@ -421,7 +421,8 @@ A client refused for the plan's limit also raises `PlanClientLimitReachedEvent` 
 activity, and `OnPlanClientLimitReachedEvent { policyRefId, planCode, limit, current, clientRefId,
 clientName, createdAtUtc }` on the workspace's console), so a board that registers and is refused leaves a
 trace beyond its own log. A registration names the board (`clientName`, with an empty `clientRefId`); an
-approval names the client, and a bulk approval raises it once for the first client it refused.
+approval names the client, and a bulk approval raises it once for the first client it refused. A
+registration raises it at most once an hour per policy, since a refused board keeps retrying.
 
 The split follows where the data lives: seats are counted in the auth database, everything else in the
 main one, and neither host calls the other to answer. Messages are on the management read, from the

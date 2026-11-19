@@ -695,7 +695,9 @@ board registering through an auto-approve policy, or someone approving a client)
 `PLAN_CLIENT_LIMIT_REACHED` and raises `PlanClientLimitReachedEvent` (Warning, in the policy's activity,
 `OnPlanClientLimitReachedEvent { policyRefId, planCode, limit, current, clientRefId, clientName, createdAtUtc }`).
 `clientRefId` is empty for a registration, which creates no client; `clientName` is the name it registered
-with, and null for an approval. A bulk approval announces it once, for the first client refused.
+with, and null for an approval. A bulk approval announces it once, for the first client refused. A board
+refused on registration retries, so a registration announces it at most once an hour per policy (as it does
+`PolicyRegistrationLimitReachedEvent` for the policy's own limit); every retry is still refused. The hour is per policy and limit, not per board: the event names the first board refused in it, and other boards refused through the same policy that hour leave no entry of their own.
 
 An account found over its monthly messages raises `WorkspaceMessageLimitReachedEvent` once per account
 and month, in the workspace that carried the most of them (Warning, `OnWorkspaceMessageLimitReachedEvent { messagesPerMonth, messagesUsed, throttled, throttleAt, createdAtUtc }`),
