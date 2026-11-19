@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.Json;
 using Microsoft.Extensions.Hosting;
 using Serilog;
 using Serilog.Core;
@@ -9,6 +10,11 @@ namespace Wbskt.Infrastructure.Configuration;
 
 public static class SharedConfigurationExtension
 {
+    /// <summary>
+    /// Adds the shared configuration files (from the repo's <c>Config</c> folder, then the host's own
+    /// copy) beneath the builder's own sources: appsettings, user secrets, environment variables and the
+    /// command line all still win over them, in that order.
+    /// </summary>
     public static IHostApplicationBuilder AddSharedConfiguration(
         this IHostApplicationBuilder builder,
         params string[] fileNames)
@@ -16,29 +22,34 @@ public static class SharedConfigurationExtension
         var sharedConfigPath = Path.Combine(
             builder.Environment.ContentRootPath, "..", "..", "Config");
 
+        var shared = new List<IConfigurationSource>();
         foreach (var fileName in fileNames)
         {
-            builder.Configuration.AddJsonFile(
-                Path.Combine(sharedConfigPath, fileName),
-                optional: true,
-                reloadOnChange: true);
-
-            builder.Configuration.AddJsonFile(
-                Path.Combine(builder.Environment.ContentRootPath, fileName),
-                optional: true,
-                reloadOnChange: true);
+            shared.Add(JsonFile(Path.Combine(sharedConfigPath, fileName)));
+            shared.Add(JsonFile(Path.Combine(builder.Environment.ContentRootPath, fileName)));
         }
 
-        builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
-        builder.Configuration.AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true);
-
-        // CreateBuilder already adds env vars, but at lower precedence than the JSON providers
-        // above. Re-append so container env vars (secrets, per-instance overrides) win.
-        builder.Configuration.AddEnvironmentVariables();
+        // Before appsettings.json, so everything the builder added after it keeps its precedence.
+        // Appending them, as this once did, put them above the command line.
+        var sources = builder.Configuration.Sources;
+        int at = sources.Select((source, index) => (source, index))
+            .FirstOrDefault(s => s.source is JsonConfigurationSource { Path: "appsettings.json" }, (null!, 0)).index;
+        for (int i = 0; i < shared.Count; i++)
+        {
+            sources.Insert(at + i, shared[i]);
+        }
 
         return builder;
     }
-    
+
+    // Read once at start: a file edited under a running host should not change it half-way.
+    private static JsonConfigurationSource JsonFile(string path)
+    {
+        var source = new JsonConfigurationSource { Path = Path.GetFullPath(path), Optional = true, ReloadOnChange = false };
+        source.ResolveFileProvider();
+        return source;
+    }
+
     public static Logger CreateSerilog(this IHostApplicationBuilder builder)
     {
         var configuration = new LoggerConfiguration().ReadFrom.Configuration(builder.Configuration);
