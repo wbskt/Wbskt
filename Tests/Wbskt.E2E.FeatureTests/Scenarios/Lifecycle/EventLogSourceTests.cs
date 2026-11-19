@@ -54,5 +54,40 @@ public sealed class EventLogSourceTests(ServicesFixture fixture)
         change.GetProperty("after").GetString().Should().Be("source-after");
     }
 
+    [SkippableFact]
+    public async Task EVL_SOURCE_02_NoLoggedEvent_CarriesAnInternalId()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (token, workspace) = await fixture.RegisterAndLoginUserAsync();
+        var (_, pin) = await fixture.CreatePolicyAsync(token, workspace);
+        var (clientRef, _) = await fixture.RegisterClientAsync(pin, "ids-before");
+        (await fixture.SendAsync(HttpMethod.Patch, Url(workspace, $"clients/{clientRef}"), token, new { Name = "ids-after" }))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var bodies = new List<string>();
+        var logged = await ServicesFixture.PollAsync(async () =>
+        {
+            var response = await fixture.SendAsync(HttpMethod.Get, Url(workspace, "event-logs"), token);
+            using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            bodies = body.RootElement.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("eventData").GetString()!).ToList();
+            return bodies.Any(b => b.Contains("ids-after"));
+        }, TimeSpan.FromSeconds(30), TimeSpan.FromMilliseconds(500));
+        logged.Should().BeTrue("the rename reaches the log");
+
+        // An internal id is an integer named ...Id (or a list of them, ...Ids); references are GUIDs.
+        foreach (var eventData in bodies)
+        {
+            using var data = JsonDocument.Parse(eventData);
+            foreach (var property in data.RootElement.EnumerateObject())
+            {
+                var isId = property.Name.EndsWith("Id", StringComparison.OrdinalIgnoreCase) && property.Value.ValueKind == JsonValueKind.Number;
+                var isIds = property.Name.EndsWith("Ids", StringComparison.OrdinalIgnoreCase) && property.Value.ValueKind == JsonValueKind.Array
+                    && property.Value.EnumerateArray().Any(e => e.ValueKind == JsonValueKind.Number);
+                (isId || isIds).Should().BeFalse($"{property.Name} is an internal id in {eventData}");
+            }
+        }
+    }
+
     private static string Url(Guid workspace, string path) => ServicesFixture.ManagementUrl($"/api/workspaces/{workspace}/{path}");
 }

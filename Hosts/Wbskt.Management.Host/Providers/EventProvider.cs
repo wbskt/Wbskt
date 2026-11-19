@@ -4,6 +4,7 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Abstractions;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
+using Wbskt.Management.Host.Services;
 using Wbskt.Management.Models;
 using Wbskt.Models;
 
@@ -153,7 +154,8 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
     {
         return new EventLogResponse(
             reader.GetString(reader.GetOrdinal("EventName")),
-            reader.GetString(reader.GetOrdinal("EventData")),
+            // Rows logged before the body was stripped still hold internal ids until they age out (90 days).
+            EventDataPrivacy.Strip(reader.GetString(reader.GetOrdinal("EventData"))),
             (EventCriticality)reader.GetByte(reader.GetOrdinal("EventCriticality")),
             reader.GetNullableGuid("PolicyRefId"),
             reader.GetNullableGuid("ClientRefId"),

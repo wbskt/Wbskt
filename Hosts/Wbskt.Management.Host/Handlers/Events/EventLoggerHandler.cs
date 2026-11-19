@@ -1,7 +1,6 @@
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using MassTransit;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events;
@@ -130,11 +129,10 @@ public sealed class EventLoggerHandler : IConsumer<Batch<IEvent>>
             var clientAddress = GetStringProperty(targetNode, "clientAddress") ?? GetStringProperty(targetNode, "ipAddress");
             var userAgent = GetStringProperty(targetNode, "userAgent");
             var workspaceIds = workspaceId is null ? GetIntArrayProperty(targetNode, "workspaceIds") : [];
-            var moved = new[] { "clientAddress", "ipAddress", "userAgent", "workspaceIds" }.Where(n => TryGetProperty(targetNode, n, out _)).ToArray();
-            if (moved.Length > 0)
-            {
-                eventData = Without(eventData, moved);
-            }
+
+            // Everything read into a column above leaves the stored body, internal ids included, so the
+            // API and the CSV return what the hub sends: references only.
+            eventData = EventDataPrivacy.Strip(eventData);
 
             EventLogEntry Entry(int? workspace) => new(
                 eventId, 
@@ -237,22 +235,6 @@ public sealed class EventLoggerHandler : IConsumer<Batch<IEvent>>
         prop = default;
         return element.ValueKind == JsonValueKind.Object
             && (element.TryGetProperty(name, out prop) || element.TryGetProperty(char.ToUpperInvariant(name[0]) + name[1..], out prop));
-    }
-
-    /// <summary>The event's JSON without the named properties, matched in either casing.</summary>
-    internal static string Without(string json, params string[] names)
-    {
-        if (JsonNode.Parse(json) is not JsonObject body)
-        {
-            return json;
-        }
-
-        foreach (var key in body.Select(p => p.Key).Where(k => names.Contains(k, StringComparer.OrdinalIgnoreCase)).ToList())
-        {
-            body.Remove(key);
-        }
-
-        return body.ToJsonString();
     }
 
     private static string? Truncate(string? value, int length) => value is { Length: var n } && n > length ? value[..length] : value;

@@ -13,4 +13,4 @@ namespace Wbskt.Events.Auth;
 /// host's record of deletes and retires it the same way.
 /// </summary>
 [EventCriticality(EventCriticality.Warning)]
-public sealed record WorkspaceDeletedEvent(int WorkspaceId, int DeletedByUserId) : BaseEvent, IWorkspaceContext;
+public sealed record WorkspaceDeletedEvent(int WorkspaceId, [property: SignalRPrivate] int DeletedByUserId) : BaseEvent, IWorkspaceContext;
