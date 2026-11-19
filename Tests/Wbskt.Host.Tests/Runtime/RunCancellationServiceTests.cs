@@ -589,7 +589,6 @@ public sealed class RunCancellationServiceTests
         }
 
         public Task<BranchRow> SetCompletedAsync(long branchId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<BranchRow> SetFailedAsync(long branchId, string? lastOutputJson, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class StubRunCountersProvider : IRunCountersProvider
@@ -683,7 +682,6 @@ public sealed class RunCancellationServiceTests
         public Task<IReadOnlyCollection<BranchRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotImplementedException();
         public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct) => throw new NotImplementedException();
         public Task<BranchRow> SetCompletedAsync(long branchId, CancellationToken ct) => throw new NotImplementedException();
-        public Task<BranchRow> SetFailedAsync(long branchId, string? lastOutputJson, CancellationToken ct) => throw new NotImplementedException();
     }
 
     private sealed class CancellationTestBookmarkProvider : IBookmarkProvider

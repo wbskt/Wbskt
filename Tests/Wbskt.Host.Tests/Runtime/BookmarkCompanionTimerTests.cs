@@ -211,7 +211,6 @@ public sealed class BookmarkCompanionTimerTests
         }
 
         public Task<BranchRow> SetCompletedAsync(long branchId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<BranchRow> SetFailedAsync(long branchId, string? lastOutputJson, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class StubRunProvider : IRunProvider

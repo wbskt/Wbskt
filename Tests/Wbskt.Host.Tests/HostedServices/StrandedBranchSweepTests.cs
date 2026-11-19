@@ -441,7 +441,6 @@ public sealed class StrandedBranchSweepTests
 
         public Task<BranchRow> SetCompletedAsync(long branchId, CancellationToken ct) => Write(branchId, branch => branch with { Status = BranchStatus.Completed });
 
-        public Task<BranchRow> SetFailedAsync(long branchId, string? lastOutputJson, CancellationToken ct) => Write(branchId, branch => branch with { Status = BranchStatus.Failed, LastOutputJson = lastOutputJson });
 
         private Task<BranchRow> Write(long branchId, Func<BranchRow, BranchRow> change)
         {
