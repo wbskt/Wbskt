@@ -392,6 +392,26 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
+    public async Task A_run_is_held_to_the_plan_copys_allowance_from_its_start_whatever_the_engine_was_told()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int tenantId = NewId();
+        int workspaceId = NewId();
+        await AddAccountAsync(workspaceId, tenantId, creditsPerMonth: 10m);
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        ChargeCounter counters = new(ProviderFactory.RunCounters(fixture.ConnectionString));
+
+        // The engine's catalogue says 1,000 (a host configured apart from the one writing the copy); the
+        // copy says 10. Held to the engine's figure at start, the run's lease would let it spend 11 before
+        // the copy's 10 were ever read.
+        long run = await StartAsync(wd, credits: new PlanCredits(1_000m, tenantId), budget: 1_000m);
+
+        (await counters.TryAsync(run, 11m)).Should().BeNull("the copy's 10 are the month's allowance from the run's start");
+        (await counters.TryAsync(run, 10m)).Should().Be((10m, 10m), "all of the copy's 10 can be spent");
+    }
+
+    [SkippableFact]
     public async Task Runs_parked_on_their_leases_leave_the_allowance_to_the_runs_the_plan_lets_start()
     {
         Skip.IfNot(fixture.IsAvailable, SkipReason);

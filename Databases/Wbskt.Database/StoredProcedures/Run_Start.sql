@@ -126,6 +126,15 @@ BEGIN
             IF @WorkspaceId IS NOT NULL
                 SET @TenantId = COALESCE((SELECT TenantId FROM dbo.WorkspaceAccounts WHERE WorkspaceId = @WorkspaceId), @TenantId);
 
+            -- The month's credits come from the same copy, as RunCounters_TryCharge reads them when it
+            -- extends a lease, so a run is held to one allowance from its start to its end. The caller's
+            -- (the engine's catalogue) stands in for a copy that has not arrived or carries none; a caller
+            -- that holds the run to no allowance (NULL) is not given one.
+            IF @CreditAllowance IS NOT NULL AND @WorkspaceId IS NOT NULL
+                SET @CreditAllowance = COALESCE(
+                    (SELECT dbo.PlanCreditsRefusedAt(PlanCode, CreditsPerMonth) FROM dbo.WorkspaceAccounts WHERE WorkspaceId = @WorkspaceId),
+                    @CreditAllowance);
+
             -- Nothing runs in an account Wbskt support has frozen (dbo.WorkspaceAccounts.FrozenAt).
             IF @WorkspaceId IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.WorkspaceAccounts WHERE WorkspaceId = @WorkspaceId AND FrozenAt IS NOT NULL)
                 THROW 50044, 'The account is frozen.', 1;
