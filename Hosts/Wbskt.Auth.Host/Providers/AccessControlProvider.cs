@@ -47,20 +47,6 @@ internal sealed class AccessControlProvider : BaseSqlProvider, IAccessControlPro
         };
     }
 
-    public async Task<IReadOnlyCollection<string>> GetEffectivePermissionsAsync(int userId, int workspaceId, CancellationToken cancellationToken = default)
-    {
-        return await ExecuteCollectionAsync(
-            "dbo.Permission_EffectiveSet",
-            p =>
-            {
-                p.AddWithValue("@UserId", userId);
-                p.AddWithValue("@WorkspaceId", workspaceId);
-            },
-            r => r.GetString(r.GetOrdinal("Slug")),
-            cancellationToken
-        );
-    }
-
     public async Task<IPagedList<PermissionResponse>> GetPermissionsAsync(int skip, int take, CancellationToken cancellationToken = default)
     {
         return await ExecutePagedCollectionAsync(

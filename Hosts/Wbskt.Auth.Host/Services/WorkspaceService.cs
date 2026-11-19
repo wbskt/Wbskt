@@ -278,35 +278,6 @@ internal sealed class WorkspaceService : IWorkspaceService
         return userId;
     }
 
-    public async Task<Result<IReadOnlyCollection<string>>> ResolveAccessAsync(int userId, int workspaceId, CancellationToken cancellationToken = default)
-    {
-        _logger.LogDebug("Resolving access for workspace ID: {WorkspaceId}", workspaceId);
-
-        try
-        {
-            // 1. Verify Membership (hard gate before any permission evaluation)
-            var isMember = await _workspaceProvider.VerifyWorkspaceMembershipAsync(userId, workspaceId, cancellationToken);
-            if (!isMember)
-            {
-                _logger.LogWarning("Workspace access resolution failed: User ID {UserId} is not a member of workspace ID: {WorkspaceId}", userId, workspaceId);
-                _metrics.RecordPermissionCheck("effective-set", "unauthorized");
-                return Result<IReadOnlyCollection<string>>.Failure(Error.Forbidden("WORKSPACE_UNAUTHORIZED", "user does not have permission to this workspace"));
-            }
-
-            // 2. Compute the effective permission set (an empty set is still a successful resolution)
-            var permissions = await _accessControl.GetEffectivePermissionsAsync(userId, workspaceId, cancellationToken);
-
-            _logger.LogDebug("User ID {UserId} resolved {Count} effective permissions in workspace ID: {WorkspaceId}", userId, permissions.Count, workspaceId);
-            _metrics.RecordPermissionCheck("effective-set", "resolved");
-            return Result<IReadOnlyCollection<string>>.Success(permissions);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _metrics.RecordPermissionCheck("effective-set", "error");
-            throw;
-        }
-    }
-
     public async Task<Result<WorkspaceAccessResolution>> ResolveAccessAsync(int userId, Guid workspaceRef, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Resolving access for workspace reference: {WorkspaceRef}", workspaceRef);
@@ -316,6 +287,9 @@ internal sealed class WorkspaceService : IWorkspaceService
             var resolution = await _workspaceProvider.ResolveAccessAsync(userId, workspaceRef, cancellationToken);
             if (resolution is null)
             {
+                // Forbidden, not NotFound: "no such workspace" must read like "not yours", and the
+                // management host treats anything but 401 and 403 from the resolve call as a fault. A
+                // stale reference (normal after a workspace is deleted) is a permission answer, not a 500.
                 return Result<WorkspaceAccessResolution>.Failure(Error.Forbidden("WORKSPACE_NOT_FOUND", "Workspace not found."));
             }
 
@@ -337,10 +311,6 @@ internal sealed class WorkspaceService : IWorkspaceService
         }
     }
 
-    /// <summary>
-    /// Publishes an audit event for a change that has already been made. A failure is logged, not
-    /// returned: reporting the change as failed would only invite a retry of something that happened.
-    /// </summary>
     /// <summary>
     /// The tenant a new workspace goes in. A named tenant must be one the caller belongs to (403
     /// TENANT_NOT_FOUND otherwise, as on every tenant route) and grant them workspaces.create tenant-wide.
