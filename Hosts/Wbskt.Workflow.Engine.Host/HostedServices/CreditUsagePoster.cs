@@ -65,7 +65,7 @@ public sealed class CreditUsagePoster(
         bool posted = false;
         for (int batch = 0; batch < MaxBatchesPerTick; batch++)
         {
-            IReadOnlyCollection<WorkspaceCreditPost> moved = await credits.PostAsync(DateOnly.FromDateTime(nowUtc), BatchSize, ct);
+            IReadOnlyCollection<WorkspaceCreditPost> moved = await credits.PostAsync(nowUtc, BatchSize, ct);
             posted |= moved.Any(post => post.Credits > 0);
 
             if (moved.Sum(post => post.Runs) < BatchSize)

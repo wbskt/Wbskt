@@ -603,7 +603,7 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
     }
 
     private Task<IReadOnlyCollection<WorkspaceCreditPost>> PostAsync() =>
-        ProviderFactory.CreditUsage(fixture.ConnectionString).PostAsync(DateOnly.FromDateTime(DateTime.UtcNow), 500, CancellationToken.None);
+        ProviderFactory.CreditUsage(fixture.ConnectionString).PostAsync(DateTime.UtcNow, 500, CancellationToken.None);
 
     private Task<decimal> LedgerAsync(int workspaceId) =>
         ScalarAsync("SELECT ISNULL(SUM(Credits), 0) FROM dbo.WorkspaceCreditUsage WHERE WorkspaceId = @Id", workspaceId);

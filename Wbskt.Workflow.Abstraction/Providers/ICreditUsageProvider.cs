@@ -7,9 +7,10 @@ public interface ICreditUsageProvider
 {
     /// <summary>
     /// Moves what up to <paramref name="batchSize"/> runs consumed since they last posted into the ledger
-    /// on <paramref name="day"/>, whether the runs are still going or ended. Returns what each workspace posted.
+    /// on the UTC day of <paramref name="nowUtc"/>, whether the runs are still going or ended, and draws
+    /// what is past the allowance from the credit grants live then. Returns what each workspace posted.
     /// </summary>
-    Task<IReadOnlyCollection<WorkspaceCreditPost>> PostAsync(DateOnly day, int batchSize, CancellationToken ct);
+    Task<IReadOnlyCollection<WorkspaceCreditPost>> PostAsync(DateTime nowUtc, int batchSize, CancellationToken ct);
 
     /// <summary>
     /// The caps and plan allowances whose spend in the month starting <paramref name="monthStart"/> has
