@@ -41,7 +41,7 @@ Wbskt.Infrastructure, Wbskt.Primitives, Models, Events
                 shared code: data access, messaging, contracts
 Config/         shared host configuration
 Tests/          unit, integration, end-to-end and load tests
-Tools/          Wbskt.Workflow.Exporter
+Tools/          Wbskt.Dashboard.html
 deploy/         Docker images, compose stack, VM scripts and observability config
 Docs/           design notes, plans and references
 ```

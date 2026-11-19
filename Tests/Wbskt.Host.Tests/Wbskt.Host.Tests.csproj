@@ -35,8 +35,7 @@
     <ProjectReference Include="..\..\Events\Wbskt.EventBus\Wbskt.EventBus.csproj" />
     <ProjectReference Include="..\..\Events\Wbskt.Events\Wbskt.Events.csproj" />
     <ProjectReference Include="..\..\Wbskt.Workflow.Abstraction\Wbskt.Workflow.Abstraction.csproj" />
-    <!-- So the shipped examples are smoke-tested as exported, not as a copy that cannot drift with them. -->
-    <ProjectReference Include="..\..\Tools\Wbskt.Workflow.Exporter\Wbskt.Workflow.Exporter.csproj" />
+    <ProjectReference Include="..\..\Wbskt.Workflow.Builder\Wbskt.Workflow.Builder.csproj" />
   </ItemGroup>
 
   <ItemGroup>
