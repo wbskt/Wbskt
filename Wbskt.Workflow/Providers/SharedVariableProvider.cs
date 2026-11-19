@@ -94,6 +94,23 @@ internal sealed class SharedVariableProvider : BaseSqlProvider, ISharedVariableP
         );
     }
 
+    public async Task<SharedVariableRow> UpsertAsync(Guid workflowRefId, string varName, string varType, string valueJson, CancellationToken ct)
+    {
+        return await ExecuteSingleAsync(
+            "dbo.SharedVariable_Upsert",
+            p =>
+            {
+                p.AddWithValue("@WorkflowRefId", workflowRefId);
+                p.AddWithValue("@VarName", varName);
+                p.AddWithValue("@VarType", varType);
+                p.AddWithValue("@ValueJson", valueJson);
+            },
+            Map,
+            new InvalidOperationException("SharedVariable_Upsert did not return a row."),
+            ct
+        );
+    }
+
     public async Task<string> IncrementAsync(Guid workflowRefId, string varName, long delta, CancellationToken ct)
     {
         try

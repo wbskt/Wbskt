@@ -72,6 +72,7 @@ public sealed class SmokeTests(SqlEdgeFixture fixture)
             "Bookmark_ClaimByRefId",
             "HistoryEvent_InsertBatch",
             "SharedVariable_Initialize",
+            "SharedVariable_Upsert",
             "SharedVariable_CompareAndSet",
             "PendingTriggerEvent_Enqueue",
             "PendingTriggerEvent_LeaseNext",

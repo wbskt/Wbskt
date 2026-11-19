@@ -34,6 +34,25 @@ public sealed class SharedVariableCasIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
+    public async Task Upsert_creates_a_missing_variable_and_concurrent_creates_all_succeed()
+    {
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
+
+        var provider = ProviderFactory.SharedVariable(fixture.ConnectionString);
+        Guid workflowRefId = Guid.NewGuid();
+
+        // Many writers find the variable missing at once; the ones that lose the insert update instead.
+        string[] values = Enumerable.Range(0, 8).Select(i => $"\"w{i}\"").ToArray();
+        await Task.WhenAll(values.Select(value => provider.UpsertAsync(workflowRefId, "mode", "Json", value, CancellationToken.None)));
+
+        SharedVariableRow stored = await provider.GetByWorkflowRefIdNameAsync(workflowRefId, "mode", CancellationToken.None);
+        Assert.Contains(stored.ValueJson, values);
+
+        SharedVariableRow updated = await provider.UpsertAsync(workflowRefId, "mode", "Json", "\"last\"", CancellationToken.None);
+        updated.ValueJson.Should().Be("\"last\"");
+    }
+
+    [SkippableFact]
     public async Task SetAsync_overwrites_value()
     {
         Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");

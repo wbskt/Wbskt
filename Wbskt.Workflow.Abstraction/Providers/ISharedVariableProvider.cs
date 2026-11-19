@@ -17,6 +17,24 @@ public interface ISharedVariableProvider
 
     Task<SharedVariableRow> InitializeAsync(Guid workflowRefId, string varName, string varType, string valueJson, CancellationToken ct);
     Task<SharedVariableRow> SetAsync(Guid workflowRefId, string varName, string valueJson, CancellationToken ct);
+
+    /// <summary>
+    /// Sets the variable, creating it with <paramref name="varType"/> when it does not exist: last writer
+    /// wins, even when two writers create it at once. The default sets and creates on a miss, which is
+    /// enough for a single-threaded fake; the SQL provider does it in one procedure.
+    /// </summary>
+    async Task<SharedVariableRow> UpsertAsync(Guid workflowRefId, string varName, string varType, string valueJson, CancellationToken ct)
+    {
+        try
+        {
+            return await SetAsync(workflowRefId, varName, valueJson, ct);
+        }
+        catch (KeyNotFoundException)
+        {
+            return await InitializeAsync(workflowRefId, varName, varType, valueJson, ct);
+        }
+    }
+
     Task<string> IncrementAsync(Guid workflowRefId, string varName, long delta, CancellationToken ct);
     Task<string> DecrementAsync(Guid workflowRefId, string varName, long delta, CancellationToken ct);
     Task<int> CompareAndSetAsync(Guid workflowRefId, string varName, string expected, string newValue, CancellationToken ct);

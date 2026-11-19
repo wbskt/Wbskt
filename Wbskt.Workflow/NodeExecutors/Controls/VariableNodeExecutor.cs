@@ -92,16 +92,10 @@ internal sealed class VariableNodeExecutor : INodeExecutor
             return Continue(new Dictionary<string, JsonElement> { [config.Var] = value });
         }
 
+        // One upsert: a set followed by a create-if-missing lost the later of two writes that both
+        // found the variable missing, because the second create kept the first one's value.
         string valueJson = CanonicalJson.Serialize(value);
-        try
-        {
-            await _sharedVariableProvider.SetAsync(ctx.Branch.WorkflowDefinitionRefId, config.Var, valueJson, ct);
-        }
-        catch (KeyNotFoundException)
-        {
-            // SharedVariable_Set only UPDATEs, so a variable that was never written needs creating.
-            await _sharedVariableProvider.InitializeAsync(ctx.Branch.WorkflowDefinitionRefId, config.Var, JsonVarType, valueJson, ct);
-        }
+        await _sharedVariableProvider.UpsertAsync(ctx.Branch.WorkflowDefinitionRefId, config.Var, JsonVarType, valueJson, ct);
 
         await AnnounceAsync(ctx, config, valueJson, ct);
         return Continue();
