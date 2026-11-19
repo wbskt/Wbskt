@@ -1,6 +1,4 @@
 using Wbskt.Auth.Host.Providers;
-using Wbskt.EventBus.Abstractions;
-using Wbskt.Events.Auth;
 using Wbskt.Infrastructure.Hosting;
 
 namespace Wbskt.Auth.Host.Services;
@@ -65,7 +63,7 @@ public sealed class CredentialRetentionService : PeriodicWorker
 
         // Before the deletes, so an invitation that expired longer ago than the grace period (one from
         // before this sweep logged expiries) is logged before it is gone.
-        await AnnounceExpiredInvitationsAsync(services, provider, nowUtc, cancellationToken);
+        await AnnounceExpiredInvitationsAsync(provider, nowUtc, cancellationToken);
 
         long total = 0;
         int deleted;
@@ -128,29 +126,22 @@ public sealed class CredentialRetentionService : PeriodicWorker
         return deleted;
     }
 
-    private static async Task AnnounceExpiredInvitationsAsync(IServiceProvider services, ICredentialRetentionProvider provider, DateTime nowUtc, CancellationToken cancellationToken)
+    private async Task AnnounceExpiredInvitationsAsync(ICredentialRetentionProvider provider, DateTime nowUtc, CancellationToken cancellationToken)
     {
-        var eventBus = services.GetRequiredService<IEventBus>();
-        var audit = services.GetService<IAuditWorkspaces>() ?? AuditWorkspaces.None;
-
+        // Each row comes back once, and its event is already in the outbox: the procedure marks the row
+        // and queues the event in one transaction, so a broker outage cannot lose the audit entry.
+        int announced = 0;
         IReadOnlyCollection<ExpiredInvitation> expired;
         do
         {
-            // Each row comes back once: the procedure marks it as announced as it returns it.
             expired = await provider.AnnounceExpiredInvitationsAsync(nowUtc, BatchSize, cancellationToken);
-            var workspacesByTenant = new Dictionary<int, IReadOnlyList<int>>();
-            foreach (var invitation in expired)
-            {
-                if (!workspacesByTenant.TryGetValue(invitation.TenantId, out var workspaceIds))
-                {
-                    workspacesByTenant[invitation.TenantId] = workspaceIds = await audit.OfTenantAsync(invitation.TenantId, cancellationToken);
-                }
-
-                await eventBus.PublishAsync(
-                    new InvitationExpiredEvent(invitation.RefId, invitation.Email) { WorkspaceIds = workspaceIds, CreatedAtUtc = invitation.ExpiresAt },
-                    cancellationToken);
-            }
+            announced += expired.Count;
         }
         while (expired.Count == BatchSize);
+
+        if (announced > 0)
+        {
+            Logger.LogInformation("Credential retention queued {Count} expired invitations for the audit log.", announced);
+        }
     }
 }

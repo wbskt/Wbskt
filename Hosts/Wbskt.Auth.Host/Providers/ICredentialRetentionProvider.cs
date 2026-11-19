@@ -10,7 +10,8 @@ public interface ICredentialRetentionProvider
 
     /// <summary>
     /// Up to <paramref name="batchSize"/> invitations that ran out unused by <paramref name="nowUtc"/>
-    /// and were not returned before; each is returned once.
+    /// and were not returned before; each is returned once, and its InvitationExpiredEvent is written to
+    /// the outbox in the same transaction (<c>dbo.TenantInvitation_AnnounceExpired</c>).
     /// </summary>
     Task<IReadOnlyCollection<ExpiredInvitation>> AnnounceExpiredInvitationsAsync(DateTime nowUtc, int batchSize, CancellationToken cancellationToken = default);
 

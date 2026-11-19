@@ -22,6 +22,7 @@ internal sealed class CredentialRetentionProvider : BaseSqlProvider, ICredential
         {
             p.Add("@NowUtc", SqlDbType.DateTime2).Value = nowUtc;
             p.AddWithValue("@BatchSize", batchSize);
+            p.AddWithValue("@QueueEvents", true);
         }, r => new ExpiredInvitation(
             r.GetGuid(r.GetOrdinal("RefId")),
             r.GetInt32(r.GetOrdinal("TenantId")),
