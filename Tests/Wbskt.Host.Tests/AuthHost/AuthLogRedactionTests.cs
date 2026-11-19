@@ -101,16 +101,17 @@ public sealed class AuthLogRedactionTests
         Assert.Contains("INTERNAL_ERROR", body);
         Assert.Contains("An unexpected error occurred while processing the request.", body);
 
+        // The event names the fault's type only; the message and stack stay in the log line.
         var fault = Assert.Single(harness.Published.OfType<SystemErrorEvent>());
-        foreach (var text in logger.Messages.Append(fault.Message).Append(fault.StackTrace ?? "").Append(body))
+        Assert.Equal("SignInFaultException", fault.ErrorType);
+        foreach (var text in logger.Messages.Append(body))
         {
             Assert.DoesNotContain("example.test", text, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("UNIQUE KEY", text);
         }
 
-        Assert.Contains(nameof(InvalidOperationException), fault.Message);
+        Assert.Contains(logger.Messages, m => m.Contains(nameof(InvalidOperationException)));
         // The original's frames survive, so the log still says where the fault happened.
-        Assert.Contains(nameof(FailsDeepInTheProvider), fault.StackTrace);
         Assert.Contains(logger.Messages, m => m.Contains(nameof(FailsDeepInTheProvider)));
     }
 
