@@ -34,11 +34,8 @@ internal sealed class DefaultCreditCostCalculator : ICreditCostCalculator
             return 0m;
         }
 
-        // A sub-workflow step pays for the run it starts too, through the step's budget-checked charge:
-        // the child's start, added to the root's spend as the child was created, could pass the budget
-        // and the workspace's cap by one start for every child started at the edge.
-        return node.Kind == NodeKind.ControlSubWorkflow
-            ? _options.CostFor(node.Kind) + _options.RunStartCost
-            : _options.CostFor(node.Kind);
+        // A sub-workflow step's child start is charged by SubWorkflowNodeExecutor, once it knows a child
+        // will start, so a step that starts none does not pay for one.
+        return _options.CostFor(node.Kind);
     }
 }

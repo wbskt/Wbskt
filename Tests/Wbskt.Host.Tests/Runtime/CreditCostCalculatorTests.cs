@@ -85,17 +85,17 @@ public sealed class CreditCostCalculatorTests
     }
 
     [Fact]
-    public void A_sub_workflow_step_also_pays_for_the_run_it_starts()
+    public void A_sub_workflow_step_is_priced_alone_and_its_child_start_is_charged_by_the_executor()
     {
-        // The child's start is charged here, through the step's budget-checked charge, so a child
-        // started at the budget's edge cannot take the root, or the workspace's cap, past it.
+        // The child's start is charged by SubWorkflowNodeExecutor once it knows a child will start, so
+        // a step refused before then (a depth, an input, a disabled child) pays only for itself.
         var calculator = new DefaultCreditCostCalculator(Options.Create(new CreditCostOptions
         {
             RunStartCost = 2.5m,
             PerKind = new Dictionary<string, decimal> { [NodeKind.ControlSubWorkflow] = 3m }
         }));
 
-        Assert.Equal(5.5m, calculator.Calculate(new SubWorkflowNode { NodeId = Guid.NewGuid(), Name = "child", Ports = [], Config = new SubWorkflowConfig { WorkflowRefId = Guid.NewGuid() } }));
+        Assert.Equal(3m, calculator.Calculate(new SubWorkflowNode { NodeId = Guid.NewGuid(), Name = "child", Ports = [], Config = new SubWorkflowConfig { WorkflowRefId = Guid.NewGuid() } }));
     }
 
     private sealed record UnpricedNode : BaseNode

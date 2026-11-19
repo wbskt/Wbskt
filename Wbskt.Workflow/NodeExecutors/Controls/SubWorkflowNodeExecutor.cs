@@ -40,9 +40,15 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 /// Says why a child did not start when it is disabled or deprecated. Optional so the executor's unit tests
 /// need no stub; without it such a child fails as not started.
 /// </param>
-internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runProvider, TimeProvider clock, IExpressionEvaluator? evaluator = null, IOptions<WorkflowEngineOptions>? options = null, ISubWorkflowCompletionHook? completionHook = null, IWorkflowStateProvider? workflowStates = null) : ParkingNodeExecutor(clock)
+/// <param name="counters">
+/// Charges the child's start (<see cref="CreditCostOptions.RunStartCost"/>) to the parent's budget just
+/// before the child is started. Optional so the executor's unit tests need no stub; without it the start
+/// is not charged.
+/// </param>
+internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runProvider, TimeProvider clock, IExpressionEvaluator? evaluator = null, IOptions<WorkflowEngineOptions>? options = null, ISubWorkflowCompletionHook? completionHook = null, IWorkflowStateProvider? workflowStates = null, IRunCountersProvider? counters = null, IOptions<CreditCostOptions>? creditCosts = null) : ParkingNodeExecutor(clock)
 {
     private readonly int _maxDepth = options?.Value.MaxSubWorkflowDepth ?? new WorkflowEngineOptions().MaxSubWorkflowDepth;
+    private readonly decimal _runStartCost = (creditCosts?.Value ?? new CreditCostOptions()).RunStartCost;
 
     internal const string ChildResultKey = "childResult";
     private const string DefaultPort = "default";
@@ -109,6 +115,25 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
                 null);
         }
 
+        // A child taken out of service is refused before its start is charged; the same read after the
+        // start below covers one disabled in between.
+        if (await FindOutOfServiceAsync(childRefId, ctx.Branch.WorkspaceId, ct) is { } outOfService)
+        {
+            return outOfService;
+        }
+
+        // The child's start is paid from the parent's budget through the same budget-checked charge as
+        // a step, once nothing above can refuse it, so a step that starts no child pays only for itself
+        // and a child started at the budget's edge cannot take the root, or the cap, past it.
+        if (counters is not null && _runStartCost > 0m)
+        {
+            CreditCharge? charge = await RetryExecutor.ChargeAsync(counters, (int)ctx.Branch.RunId, _runStartCost, Clock, ct);
+            if (charge is null || charge.Refusal is not null)
+            {
+                return OutOfCredits.Fail(charge?.Refusal ?? CreditRefusal.RunBudget);
+            }
+        }
+
         // The parent already holds a place under the plan's active-run ceiling, so its child is
         // started past it (InboundEvent.StartsChildRun). Only a workflow of the parent's own workspace
         // can be the child, whatever ref the step names (InboundEvent.WorkspaceId).
@@ -134,19 +159,9 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
 
         if (!result.RunId.HasValue)
         {
-            // Only a live version has a manual trigger, so a child taken out of service matches nothing.
-            // Said by name rather than as a missing trigger, since enabling the child is the fix.
-            WorkflowStateRow? child = workflowStates is null ? null : await workflowStates.FindAsync(childRefId, ctx.Branch.WorkspaceId, ct);
-            if (child is { State: WorkflowState.Disabled or WorkflowState.Deprecated })
+            if (await FindOutOfServiceAsync(childRefId, ctx.Branch.WorkspaceId, ct) is { } takenOutOfService)
             {
-                bool disabled = child.State == WorkflowState.Disabled;
-                return new NodeExecutionResult.Fail(
-                    disabled ? "SUBWORKFLOW_CHILD_DISABLED" : "SUBWORKFLOW_CHILD_DEPRECATED",
-                    disabled
-                        ? $"Child workflow '{childRefId}' did not start: it is disabled. Enable a version of it to call it."
-                        : $"Child workflow '{childRefId}' did not start: it is deprecated. Reinstate it and enable a version to call it.",
-                    false,
-                    null);
+                return takenOutOfService;
             }
 
             return new NodeExecutionResult.Fail(
@@ -163,6 +178,26 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
             // matched nothing. Read once parked, so one of the two always sees the other.
             AfterParked = afterCt => WakeIfChildEndedAsync(childRun.Id, afterCt)
         };
+    }
+
+    // Only a live version has a manual trigger, so a child taken out of service matches nothing.
+    // Said by name rather than as a missing trigger, since enabling the child is the fix.
+    private async Task<NodeExecutionResult.Fail?> FindOutOfServiceAsync(Guid childRefId, int workspaceId, CancellationToken ct)
+    {
+        WorkflowStateRow? child = workflowStates is null ? null : await workflowStates.FindAsync(childRefId, workspaceId, ct);
+        if (child is not { State: WorkflowState.Disabled or WorkflowState.Deprecated })
+        {
+            return null;
+        }
+
+        bool disabled = child.State == WorkflowState.Disabled;
+        return new NodeExecutionResult.Fail(
+            disabled ? "SUBWORKFLOW_CHILD_DISABLED" : "SUBWORKFLOW_CHILD_DEPRECATED",
+            disabled
+                ? $"Child workflow '{childRefId}' did not start: it is disabled. Enable a version of it to call it."
+                : $"Child workflow '{childRefId}' did not start: it is deprecated. Reinstate it and enable a version to call it.",
+            false,
+            null);
     }
 
     private async Task WakeIfChildEndedAsync(long childRunId, CancellationToken ct)

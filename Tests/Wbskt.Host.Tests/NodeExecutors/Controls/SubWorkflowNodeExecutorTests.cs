@@ -155,12 +155,68 @@ public sealed class SubWorkflowNodeExecutorTests
         var states = new Mock<IWorkflowStateProvider>();
         states.Setup(s => s.FindAsync(ChildRefId, ctx.Branch.WorkspaceId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new WorkflowStateRow(ChildRefId, ctx.Branch.WorkspaceId, state, null, null, 1));
-        var executor = new SubWorkflowNodeExecutor(hub.Object, new Mock<IRunProvider>().Object, new FixedClock(), workflowStates: states.Object);
+        var counters = new Mock<IRunCountersProvider>();
+        var executor = new SubWorkflowNodeExecutor(hub.Object, new Mock<IRunProvider>().Object, new FixedClock(), workflowStates: states.Object, counters: counters.Object);
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(ctx, CancellationToken.None));
 
         Assert.Equal(code, fail.ErrorCode);
         Assert.False(fail.Retryable);
+
+        // Refused before the child's start is paid for or asked for.
+        counters.Verify(c => c.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>()), Times.Never);
+        hub.Verify(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task The_childs_start_is_charged_to_the_parent_just_before_it_is_started()
+    {
+        var hub = StartingHub();
+        var counters = new Mock<IRunCountersProvider>();
+        var order = new List<string>();
+        counters.Setup(c => c.TryChargeAsync(It.IsAny<int>(), 2.5m, It.IsAny<CancellationToken>()))
+            .Callback(() => order.Add("charge"))
+            .ReturnsAsync(new CreditCharge(10m, 100m));
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .Callback(() => order.Add("start"))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 99, null, "ok"));
+        NodeContext ctx = Context(new Dictionary<string, JsonElement>());
+        var executor = new SubWorkflowNodeExecutor(hub.Object, StartedRunProvider().Object, new FixedClock(), counters: counters.Object,
+            creditCosts: Options.Create(new CreditCostOptions { RunStartCost = 2.5m }));
+
+        Assert.IsType<NodeExecutionResult.WaitForBookmark>(await executor.ExecuteAsync(ctx, CancellationToken.None));
+
+        Assert.Equal(["charge", "start"], order);
+        counters.Verify(c => c.TryChargeAsync((int)ctx.Branch.RunId, 2.5m, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_child_start_the_budget_cannot_pay_for_is_not_started()
+    {
+        var hub = StartingHub();
+        var counters = new Mock<IRunCountersProvider>();
+        counters.Setup(c => c.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreditCharge.Refused(CreditRefusal.WorkspaceCap));
+        var executor = new SubWorkflowNodeExecutor(hub.Object, StartedRunProvider().Object, new FixedClock(), counters: counters.Object);
+
+        var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(Context(new Dictionary<string, JsonElement>()), CancellationToken.None));
+
+        Assert.Equal(OutOfCredits.WorkspaceCapCode, fail.ErrorCode);
+        hub.Verify(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_step_refused_before_the_child_starts_does_not_pay_for_it()
+    {
+        var hub = StartingHub();
+        var counters = new Mock<IRunCountersProvider>();
+        var executor = new SubWorkflowNodeExecutor(hub.Object, StartedRunProvider().Object, new FixedClock(),
+            options: Options.Create(new WorkflowEngineOptions { MaxSubWorkflowDepth = 1 }), counters: counters.Object);
+
+        var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(Context(new Dictionary<string, JsonElement>(), triggerPayload: ChildTrigger(1)), CancellationToken.None));
+
+        Assert.Equal("SUBWORKFLOW_DEPTH_EXCEEDED", fail.ErrorCode);
+        counters.Verify(c => c.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
