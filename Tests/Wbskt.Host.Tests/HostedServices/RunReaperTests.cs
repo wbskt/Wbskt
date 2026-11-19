@@ -128,7 +128,6 @@ public sealed class RunReaperTests
             Status = status,
             PendingTakePort = null,
             LocalJson = "{}",
-            LastOutputJson = null,
             CreatedAt = new DateTime(2026, 5, 26, 11, 0, 0, DateTimeKind.Utc),
             UpdatedAt = new DateTime(2026, 5, 26, 11, 0, 0, DateTimeKind.Utc),
             RowVersion = []

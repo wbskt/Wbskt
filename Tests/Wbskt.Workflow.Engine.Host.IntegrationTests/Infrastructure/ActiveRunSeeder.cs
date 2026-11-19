@@ -27,7 +27,7 @@ internal static class ActiveRunSeeder
             Id = 0, RefId = Guid.NewGuid(), RunId = 0,
             ParentBranchId = null, ForkCohortId = null,
             NodeId = triggerNodeId, Status = BranchStatus.Active, PendingTakePort = null,
-            LocalJson = """{"trigger":{}}""", LastOutputJson = null,
+            LocalJson = """{"trigger":{}}""",
             CreatedAt = now, UpdatedAt = now, RowVersion = Array.Empty<byte>()
         };
 

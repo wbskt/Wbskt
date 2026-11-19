@@ -24,7 +24,8 @@ BEGIN
         br.Status,
         br.PendingTakePort,
         br.LocalJson,
-        br.LastOutputJson,
+        -- Always NULL: the previous image's engine still maps it during the rollout. Dropped next release.
+        CAST(NULL AS NVARCHAR(MAX)) AS LastOutputJson,
         br.CreatedAt,
         br.UpdatedAt,
         br.RowVersion

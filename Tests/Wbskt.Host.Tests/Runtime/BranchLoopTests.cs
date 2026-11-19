@@ -1520,7 +1520,7 @@ public sealed class BranchLoopTests
 
         // Assert
         Assert.True(branchProvider.SetFailedCalled);
-        Assert.Contains("EXECUTOR_CRASH", branchProvider.CurrentBranch.LastOutputJson);
+        Assert.Contains("EXECUTOR_CRASH", branchProvider.FailedErrorJson);
     }
 
     [Fact]
@@ -2093,7 +2093,6 @@ public sealed class BranchLoopTests
                 Status = "Active",
                 PendingTakePort = null,
                 LocalJson = initialLocalJson ?? "{}",
-                LastOutputJson = null,
                 CreatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
                 UpdatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
                 RowVersion = [1]
@@ -2114,6 +2113,8 @@ public sealed class BranchLoopTests
         public Action<int>? OnPointerUpdate { get; set; }
 
         public bool SetFailedCalled { get; private set; }
+
+        public string? FailedErrorJson { get; private set; }
 
         public BranchRow CurrentBranch => _rows[1001];
 
@@ -2146,10 +2147,10 @@ public sealed class BranchLoopTests
             return Task.FromResult<IReadOnlyCollection<BranchRow>>(_rows.Values.ToArray());
         }
 
-        public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct)
+        public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, CancellationToken ct)
         {
             PointerUpdates.Add((branchId, currentNodeId));
-            BranchRow updated = _rows[branchId] with { NodeId = currentNodeId, Status = status, LocalJson = localJson, LastOutputJson = lastOutputJson };
+            BranchRow updated = _rows[branchId] with { NodeId = currentNodeId, Status = status, LocalJson = localJson };
             _rows[branchId] = updated;
             OnPointerUpdate?.Invoke(PointerUpdates.Count);
             return Task.FromResult(updated);
@@ -2157,7 +2158,7 @@ public sealed class BranchLoopTests
 
         // Ends through the same recorders the unguarded writes use, so a test can keep asserting
         // SetCompletedCalled / SetFailedCalled, and refuses a branch that has already ended.
-        public async Task<bool> EndIfLiveAsync(long branchId, string toStatus, string? lastOutputJson, CancellationToken ct)
+        public async Task<bool> EndIfLiveAsync(long branchId, string toStatus, string? errorJson, CancellationToken ct)
         {
             BranchRow row = _rows[branchId];
             if (!BranchStatus.IsLive(row.Status))
@@ -2168,8 +2169,8 @@ public sealed class BranchLoopTests
             _ = toStatus switch
             {
                 BranchStatus.Completed => await SetCompletedAsync(branchId, ct),
-                BranchStatus.Failed => await SetFailedAsync(branchId, lastOutputJson, ct),
-                _ => await UpdatePointerAsync(branchId, row.NodeId, toStatus, row.LocalJson, lastOutputJson, ct)
+                BranchStatus.Failed => await SetFailedAsync(branchId, errorJson, ct),
+                _ => await UpdatePointerAsync(branchId, row.NodeId, toStatus, row.LocalJson, ct)
             };
             return true;
         }
@@ -2182,10 +2183,11 @@ public sealed class BranchLoopTests
             return Task.FromResult(updated);
         }
 
-        public Task<BranchRow> SetFailedAsync(long branchId, string? lastOutputJson, CancellationToken ct)
+        public Task<BranchRow> SetFailedAsync(long branchId, string? errorJson, CancellationToken ct)
         {
             SetFailedCalled = true;
-            BranchRow updated = _rows[branchId] with { Status = "Failed", LastOutputJson = lastOutputJson };
+            FailedErrorJson = errorJson;
+            BranchRow updated = _rows[branchId] with { Status = "Failed" };
             _rows[branchId] = updated;
             return Task.FromResult(updated);
         }

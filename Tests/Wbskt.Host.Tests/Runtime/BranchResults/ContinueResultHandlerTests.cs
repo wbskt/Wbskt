@@ -28,7 +28,6 @@ public sealed class ContinueResultHandlerTests
         Assert.Equal(new[] { $"update:{BranchStatus.Active}:{NodeB}" }, _log);
         var update = Assert.Single(branches.Updates);
         Assert.Equal(BranchId, update.BranchId);
-        Assert.Equal("\"last\"", update.LastOutputJson);
         var localState = LocalState(update.LocalJson);
         Assert.Equal(1, localState["keep"].GetInt32());
         Assert.Equal(3, localState["added"].GetInt32());

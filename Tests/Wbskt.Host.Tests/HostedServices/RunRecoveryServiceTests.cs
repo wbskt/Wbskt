@@ -281,7 +281,6 @@ public sealed class RunRecoveryServiceTests
             Status = "Running",
             PendingTakePort = null,
             LocalJson = "{}",
-            LastOutputJson = null,
             CreatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
             UpdatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
             RowVersion = [1]
@@ -315,7 +314,7 @@ public sealed class RunRecoveryServiceTests
         public Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct) => throw new NotSupportedException();
         public Task<BranchRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BranchRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct) => throw new NotSupportedException();
+        public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, CancellationToken ct) => throw new NotSupportedException();
         public Task<BranchRow> SetCompletedAsync(long branchId, CancellationToken ct) => throw new NotSupportedException();
     }
 

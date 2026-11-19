@@ -9,7 +9,9 @@ CREATE TABLE dbo.Branches
     Status                NVARCHAR(32)     NOT NULL,
     PendingTakePort       NVARCHAR(128)    NULL,
     LocalJson             NVARCHAR(MAX)    NOT NULL DEFAULT N'{}',
-    LastOutputJson        NVARCHAR(MAX)    NULL,
+    -- The error a branch failed with ({ errorCode, message }), written only by its Failed end; kept
+    -- for diagnosis, never read by the engine.
+    ErrorJson             NVARCHAR(MAX)    NULL,
     CreatedAt             DATETIME2(3)     NOT NULL DEFAULT SYSUTCDATETIME(),
     UpdatedAt             DATETIME2(3)     NOT NULL DEFAULT SYSUTCDATETIME(),
     -- Not an optimistic-concurrency guard: branch writes are last-writer-wins by design, since one

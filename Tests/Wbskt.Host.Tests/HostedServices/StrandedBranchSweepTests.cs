@@ -143,7 +143,7 @@ public sealed class StrandedBranchSweepTests
 
         // Act: its own dispatch runs it after the first pass.
         await harness.Gc.TickAsync(CancellationToken.None);
-        await new InMemoryBranchProvider(state).UpdatePointerAsync(BranchId, WaitNodeId, BranchStatus.Active, "{}", null, CancellationToken.None);
+        await new InMemoryBranchProvider(state).UpdatePointerAsync(BranchId, WaitNodeId, BranchStatus.Active, "{}", CancellationToken.None);
         await harness.Gc.TickAsync(CancellationToken.None);
         await harness.Gc.TickAsync(CancellationToken.None);
 
@@ -344,7 +344,6 @@ public sealed class StrandedBranchSweepTests
                 Status = status,
                 PendingTakePort = null,
                 LocalJson = "{}",
-                LastOutputJson = null,
                 CreatedAt = Start,
                 UpdatedAt = updatedAt ?? Clock.Now,
                 RowVersion = NextVersion()
@@ -436,8 +435,8 @@ public sealed class StrandedBranchSweepTests
             return Task.FromResult(rows);
         }
 
-        public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct) =>
-            Write(branchId, branch => branch with { NodeId = currentNodeId, Status = status, LocalJson = localJson, LastOutputJson = lastOutputJson, PendingTakePort = null });
+        public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, CancellationToken ct) =>
+            Write(branchId, branch => branch with { NodeId = currentNodeId, Status = status, LocalJson = localJson, PendingTakePort = null });
 
         public Task<BranchRow> SetCompletedAsync(long branchId, CancellationToken ct) => Write(branchId, branch => branch with { Status = BranchStatus.Completed });
 

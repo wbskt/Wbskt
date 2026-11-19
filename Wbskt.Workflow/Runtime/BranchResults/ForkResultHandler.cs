@@ -31,7 +31,7 @@ internal sealed class ForkResultHandler(
         {
             ForkSpec child = result.Children.Single();
             string childLocalJson = BranchLocalState.Serialize(BranchLocalState.Merge(baseLocalState, child.LocalState));
-            BranchRow moved = await branchProvider.UpdatePointerAsync(context.BranchId, BranchRouting.ResolveForkTarget(context.Definition, nodeId, child.OutboundPort), BranchStatus.Active, childLocalJson, branchRow.LastOutputJson, ct);
+            BranchRow moved = await branchProvider.UpdatePointerAsync(context.BranchId, BranchRouting.ResolveForkTarget(context.Definition, nodeId, child.OutboundPort), BranchStatus.Active, childLocalJson, ct);
             return BranchResultOutcome.Advanced(moved);
         }
 
@@ -47,7 +47,7 @@ internal sealed class ForkResultHandler(
         }
 
         string continueLocalJson = BranchLocalState.Serialize(baseLocalState);
-        BranchRow continued = await branchProvider.UpdatePointerAsync(context.BranchId, BranchRouting.ResolveForkTarget(context.Definition, nodeId, result.ContinueOutboundPort), BranchStatus.Active, continueLocalJson, branchRow.LastOutputJson, ct);
+        BranchRow continued = await branchProvider.UpdatePointerAsync(context.BranchId, BranchRouting.ResolveForkTarget(context.Definition, nodeId, result.ContinueOutboundPort), BranchStatus.Active, continueLocalJson, ct);
         return BranchResultOutcome.Advanced(continued);
     }
 
@@ -112,7 +112,6 @@ internal sealed class ForkResultHandler(
                 Status = BranchStatus.Active,
                 PendingTakePort = null,
                 LocalJson = BranchLocalState.Serialize(childState),
-                LastOutputJson = null,
                 CreatedAt = clock.GetUtcNow().UtcDateTime,
                 UpdatedAt = clock.GetUtcNow().UtcDateTime,
                 RowVersion = Array.Empty<byte>()

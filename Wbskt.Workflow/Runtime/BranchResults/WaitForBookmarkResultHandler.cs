@@ -25,7 +25,7 @@ internal sealed class WaitForBookmarkResultHandler(
     public override async Task<BranchResultOutcome> HandleAsync(NodeExecutionResult.WaitForBookmark result, BranchResultContext context, CancellationToken ct)
     {
         string localJson = context.MergedLocalJsonOr(result.LocalStatePatch, result.RemoveKeys);
-        BranchRow branchRow = await branchProvider.UpdatePointerAsync(context.BranchId, context.Branch.NodeId, BranchStatus.Waiting, localJson, context.Branch.LastOutputJson, ct);
+        BranchRow branchRow = await branchProvider.UpdatePointerAsync(context.BranchId, context.Branch.NodeId, BranchStatus.Waiting, localJson, ct);
         await journal.AppendBranchEventAsync(context.Run.Id, branchRow.RefId, branchRow.NodeId, HistoryEventKind.BranchParked, ct);
 
         // Single-row model (design §3.5): one bookmark row per wait. A TTL, if present,

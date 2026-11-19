@@ -1,7 +1,11 @@
 CREATE PROCEDURE dbo.Branch_EndIfLive
     @Id             BIGINT,
     @ToStatus       NVARCHAR(32),
-    @LastOutputJson NVARCHAR(MAX)
+    -- The error a Failed end records; NULL keeps what the branch had.
+    @ErrorJson      NVARCHAR(MAX) = NULL,
+    -- The previous image's name for @ErrorJson, accepted for one release so an engine still on it
+    -- keeps working while the hosts restart after the migration; dropped in the release after.
+    @LastOutputJson NVARCHAR(MAX) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -16,7 +20,7 @@ BEGIN
     UPDATE dbo.Branches WITH (ROWLOCK)
     SET
         Status = @ToStatus,
-        LastOutputJson = @LastOutputJson,
+        ErrorJson = COALESCE(@ErrorJson, @LastOutputJson, ErrorJson),
         PendingTakePort = NULL,
         WokenAt = NULL,
         UpdatedAt = SYSUTCDATETIME()

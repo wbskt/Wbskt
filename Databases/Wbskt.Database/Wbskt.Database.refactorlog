@@ -63,4 +63,11 @@
     <Property Name="ParentElementType" Value="SqlTable" />
     <Property Name="NewName" Value="UX_ClientTraffic_MessageId" />
   </Operation>
+  <Operation Name="Rename Refactor" Key="5b0c3e1d-7a42-4f6e-9d1b-2c8e4a6f1078" ChangeDateTime="11/19/2026 12:00:00">
+    <Property Name="ElementName" Value="[dbo].[Branches].[LastOutputJson]" />
+    <Property Name="ElementType" Value="SqlSimpleColumn" />
+    <Property Name="ParentElementName" Value="[dbo].[Branches]" />
+    <Property Name="ParentElementType" Value="SqlTable" />
+    <Property Name="NewName" Value="ErrorJson" />
+  </Operation>
 </Operations>

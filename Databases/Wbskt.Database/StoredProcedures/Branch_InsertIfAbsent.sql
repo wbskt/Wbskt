@@ -7,7 +7,9 @@ CREATE PROCEDURE dbo.Branch_InsertIfAbsent
     @Status                NVARCHAR(32),
     @PendingTakePort       NVARCHAR(128),
     @LocalJson             NVARCHAR(MAX),
-    @LastOutputJson        NVARCHAR(MAX)
+    -- Ignored. Accepted for one release so an engine on the previous image, which still passes it,
+    -- keeps working while the hosts restart after the migration; dropped in the release after.
+    @LastOutputJson        NVARCHAR(MAX) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -24,10 +26,10 @@ BEGIN
         BEGIN TRY
             INSERT INTO dbo.Branches
                 (RefId, RunId, ParentBranchId, ForkCohortId, NodeId,
-                 Status, PendingTakePort, LocalJson, LastOutputJson)
+                 Status, PendingTakePort, LocalJson)
             VALUES
                 (@RefId, @RunId, @ParentBranchId, @ForkCohortId, @NodeId,
-                 @Status, @PendingTakePort, @LocalJson, @LastOutputJson);
+                 @Status, @PendingTakePort, @LocalJson);
 
             SET @Inserted = 1;
         END TRY
@@ -50,7 +52,8 @@ BEGIN
         Status,
         PendingTakePort,
         LocalJson,
-        LastOutputJson,
+        -- Always NULL: the previous image's engine still maps it during the rollout. Dropped next release.
+        CAST(NULL AS NVARCHAR(MAX)) AS LastOutputJson,
         CreatedAt,
         UpdatedAt,
         RowVersion,
