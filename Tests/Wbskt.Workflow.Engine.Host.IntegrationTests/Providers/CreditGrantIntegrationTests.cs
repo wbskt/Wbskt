@@ -658,7 +658,7 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
     }
 
     private async Task PostAsync() =>
-        await ProviderFactory.CreditUsage(fixture.ConnectionString).PostAsync(DateOnly.FromDateTime(DateTime.UtcNow), 100_000, CancellationToken.None);
+        await ProviderFactory.CreditUsage(fixture.ConnectionString).PostAsync(DateTime.UtcNow, 100_000, CancellationToken.None);
 
     private async Task<(decimal Posted, decimal Drawn)> MonthAsync(int tenantId)
     {

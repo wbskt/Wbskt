@@ -232,9 +232,9 @@ public sealed class CreditUsagePosterTests
 
         public DateOnly CurrentMonth { get; init; } = new DateOnly(Now.Year, Now.Month, 1);
 
-        public Task<IReadOnlyCollection<WorkspaceCreditPost>> PostAsync(DateOnly day, int batchSize, CancellationToken ct)
+        public Task<IReadOnlyCollection<WorkspaceCreditPost>> PostAsync(DateTime nowUtc, int batchSize, CancellationToken ct)
         {
-            Calls.Add((day, batchSize));
+            Calls.Add((DateOnly.FromDateTime(nowUtc), batchSize));
             return Task.FromResult(_posts.Count > 0 ? _posts.Dequeue() : []);
         }
 

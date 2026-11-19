@@ -48,62 +48,15 @@ BEGIN
 
     BEGIN TRANSACTION;
 
-    -- Credits a run consumed after its last post go to the ledger before its counter is deleted, so the
-    -- ledger still adds up to what every run consumed. Same lock order as RunCredits_Post.
-    DECLARE @Moved TABLE (RunId INT NOT NULL PRIMARY KEY, Credits DECIMAL(18,4) NOT NULL);
-    -- The day and the month are the engine's (@NowUtc), as for the cutoff above and in RunCredits_Post.
+    -- Credits a run consumed after its last post go to the ledger, and past the allowance are drawn
+    -- from grants, before its counter is deleted, so the ledger still adds up to what every run
+    -- consumed. The day and the month are the engine's (@NowUtc), as for the cutoff above.
+    DECLARE @Retired dbo.IdTableType;
+    INSERT INTO @Retired (Id) SELECT Id FROM @Runs;
+    DECLARE @Posted TABLE (WorkspaceId INT NOT NULL PRIMARY KEY, Runs INT NOT NULL, Credits DECIMAL(18,4) NOT NULL);
     DECLARE @Today DATE = CAST(@NowUtc AS DATE);
-
-    UPDATE rc
-    SET PostedCredits = rc.CreditsConsumed,
-        HasUnposted = 0
-    OUTPUT inserted.RunId, inserted.PostedCredits - deleted.PostedCredits INTO @Moved (RunId, Credits)
-    FROM dbo.RunCounters rc
-    WHERE rc.RunId IN (SELECT Id FROM @Runs)
-      AND rc.CreditsConsumed <> rc.PostedCredits;
-
-    DECLARE @ByWorkspace TABLE (WorkspaceId INT NOT NULL PRIMARY KEY, Credits DECIMAL(18,4) NOT NULL);
-    INSERT INTO @ByWorkspace (WorkspaceId, Credits)
-    SELECT d.WorkspaceId, SUM(m.Credits)
-    FROM @Moved m
-    JOIN dbo.Runs r ON r.Id = m.RunId
-    JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
-    GROUP BY d.WorkspaceId;
-
-    MERGE dbo.WorkspaceCreditUsage WITH (HOLDLOCK) AS t
-    USING @ByWorkspace AS s
-    ON t.WorkspaceId = s.WorkspaceId AND t.Day = @Today
-    WHEN MATCHED THEN
-        UPDATE SET Credits = t.Credits + s.Credits, UpdatedAt = SYSUTCDATETIME()
-    WHEN NOT MATCHED THEN
-        INSERT (WorkspaceId, Day, Credits) VALUES (s.WorkspaceId, @Today, s.Credits);
-
-    -- Drawn from the tenants' grants past their allowance, as RunCredits_Post does.
-    DECLARE @Posts dbo.TenantCreditPostTableType;
-    INSERT INTO @Posts (TenantId, Credits, Allowance)
-    SELECT a.TenantId, SUM(w.Credits), MAX(a.CreditsPerMonth)
-    FROM @ByWorkspace w
-    JOIN dbo.WorkspaceAccounts a ON a.WorkspaceId = w.WorkspaceId
-    WHERE a.CreditsPerMonth IS NOT NULL
-    GROUP BY a.TenantId;
-
-    -- A deleted workspace's copy (RetiredAt) keeps the allowance it last had: use a live copy's when
-    -- there is one, as RunCredits_Post does.
-    UPDATE p
-    SET Allowance = l.Allowance
-    FROM @Posts p
-    CROSS APPLY (SELECT MAX(a.CreditsPerMonth) AS Allowance
-                 FROM dbo.WorkspaceAccounts a
-                 WHERE a.TenantId = p.TenantId
-                   AND a.RetiredAt IS NULL
-                   AND a.CreditsPerMonth IS NOT NULL) l
-    WHERE l.Allowance IS NOT NULL;
-
-    IF EXISTS (SELECT 1 FROM @Posts)
-    BEGIN
-        DECLARE @TodayMonth DATE = DATEFROMPARTS(YEAR(@Today), MONTH(@Today), 1);
-        EXEC dbo.TenantCreditGrants_Draw @Posts = @Posts, @MonthStart = @TodayMonth, @At = @NowUtc;
-    END
+    INSERT INTO @Posted (WorkspaceId, Runs, Credits)
+    EXEC dbo.RunCredits_PostRuns @RunIds = @Retired, @Day = @Today, @At = @NowUtc;
 
     DELETE FROM dbo.HistoryEvents  WHERE RunId IN (SELECT Id FROM @Runs);
     DELETE FROM dbo.Bookmarks      WHERE RunId IN (SELECT Id FROM @Runs);
