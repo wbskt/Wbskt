@@ -226,8 +226,10 @@ class FakeSocket:
                 self.client_close_codes[index] = ws.close_code
 
     async def start(self) -> None:
+        # No Pings of its own: a client has to notice a dead link by its own Pings (see go_silent).
         self._server = await serve(
-            self._handler, "127.0.0.1", 0, process_request=self._process_request, subprotocols=[SUBPROTOCOL]
+            self._handler, "127.0.0.1", 0, process_request=self._process_request, subprotocols=[SUBPROTOCOL],
+            ping_interval=None,
         )
         port = next(iter(self._server.sockets)).getsockname()[1]
         self.url = f"ws://127.0.0.1:{port}"
@@ -265,6 +267,11 @@ class FakeSocket:
                 await asyncio.sleep(0.02)
 
         await asyncio.wait_for(until(), timeout)
+
+    def go_silent(self, connection: int) -> None:
+        """Stop reading a connection, as if the link died without a FIN: the kernel still takes the
+        bytes, but no Pong, ack or close ever comes back."""
+        self.connections[connection].transport.pause_reading()
 
     async def close(self, connection: int, code: int, reason: str = "") -> None:
         self.close_codes[connection] = code

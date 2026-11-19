@@ -9,7 +9,7 @@ an item on one of those two checklists:
 |---|---|
 | Message model | registering once, pending approval, stopping once the credentials are rejected, reusing the token, logging in again inside a token's last minute, `Retry-After`, `capabilities` first, ping and pong, command acks, expired commands, plain messages, a throwing handler and malformed frames, `sentAt` and the offline backlog, pacing a large backlog under the message budget, reserved types, a message over 64 KB and one just under it |
 | Firmware updates (optional) | listing `ota`, rejecting while off, an expired update, plain `http`, accepted → downloading → installed |
-| WebSocket binding | the subprotocol and bearer token, renewing after a 401 on the upgrade, keeping the token while the gateway is down or the client is revoked (403 `CLIENT_REVOKED`), reconnecting after each close code (1000, 1001, 1008, 1009, 4001–4003), a second connection superseding the first |
+| WebSocket binding | the subprotocol and bearer token, renewing after a 401 on the upgrade, keeping the token while the gateway is down or the client is revoked (403 `CLIENT_REVOKED`), reconnecting after each close code (1000, 1001, 1008, 1009, 4001–4003), noticing a link that died without a close, a second connection superseding the first |
 
 A future binding (MQTT, HTTPS) adds its own checklist and its own scenarios.
 
