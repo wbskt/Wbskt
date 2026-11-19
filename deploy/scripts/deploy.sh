@@ -214,8 +214,12 @@ sync_and_reexec() {
 # of the ssh session (setsid, nohup), so when the session drops - the job timed out, the network went,
 # someone pressed Ctrl-C - it carries on and finishes, rather than stopping between a migration and
 # the hosts that need it. Its log stays on the VM for whoever looks next.
+#
+# The deploy's status is its exit code, which nohup and setsid --wait hand back to wait. A deploy of a
+# commit older than this script (a rollback) is run by that commit's script, which never writes the
+# status file, so the file is only a record in the log directory, not what the caller is told.
 detach_and_follow() {
-    local stamp log status pid old
+    local stamp log status pid old rc
 
     mkdir -p "$STATE_DIR"
     stamp="$(date -u +%Y%m%dT%H%M%SZ)-$$"
@@ -233,10 +237,11 @@ detach_and_follow() {
     done < <(ls -1t "$STATE_DIR"/deploy-*.log 2>/dev/null | tail -n +$((LOGS_KEPT + 1)))
 
     tail -n +1 -f --pid="$pid" "$log" || true
-    wait "$pid" || true
+    rc=0
+    wait "$pid" || rc=$?
 
-    [[ -s "$status" ]] || die "the deploy ended without recording how; see $log"
-    exit "$(cat "$status")"
+    echo "==> the deploy exited with $rc; its log is $log on the VM"
+    exit "$rc"
 }
 
 # Holds LOCK_FILE for the rest of the deploy, on fd 8. The fd survives the exec in sync_and_reexec, and
@@ -637,8 +642,8 @@ main() {
         detach_and_follow "$@"
     fi
 
-    # Read by detach_and_follow once this ends. An exec (sync_and_reexec) runs no trap, and the new
-    # script sets its own.
+    # Kept beside the log as a record of how it ended (detach_and_follow exits with the deploy's own
+    # code). An exec (sync_and_reexec) runs no trap, and the new script sets its own.
     trap 'echo "$?" > "$WBSKT_DEPLOY_STATUS"' EXIT
     take_deploy_lock
 
