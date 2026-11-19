@@ -18,15 +18,18 @@ public sealed class CommandChannel : TriggerChannel
 
     public static string Key(Guid commandId) => $"{Name}:{commandId}";
 
+    /// <param name="clientRefId">The client the outcome is about: the one that acked, or the command's target for a failure.</param>
     /// <param name="outcome"><see cref="Acked"/> or <see cref="Failed"/>.</param>
-    public static InboundEvent Event(Guid commandId, string outcome, string? reason) => new(
+    public static InboundEvent Event(Guid commandId, Guid clientRefId, string outcome, string? reason) => new(
         Name,
         [Key(commandId)],
-        // One id per outcome, so a redelivered ack is dropped by the idempotency claim.
-        $"{Name}:{commandId}:{outcome}",
+        // One id per client and outcome, so a redelivered ack is dropped by the idempotency claim, and an
+        // ack another client sends for the same id cannot claim it before the real one.
+        $"{Name}:{commandId}:{clientRefId}:{outcome}",
         new Dictionary<string, JsonElement>
         {
             ["commandId"] = Json(commandId),
+            ["clientRefId"] = Json(clientRefId),
             ["outcome"] = Json(outcome),
             ["reason"] = Json(reason)
         },

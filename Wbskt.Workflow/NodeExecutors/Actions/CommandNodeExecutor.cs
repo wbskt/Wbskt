@@ -76,13 +76,23 @@ internal sealed class CommandNodeExecutor(IClientCommandPublisher publisher, IBo
             : new NodeExecutionResult.Fail(CommandNotSentCode, outcome.RefusedReason ?? "The command was not sent.", false, null);
     }
 
-    // A wake is this step's answer only when it is for the command the step is waiting on. Anything
-    // else - a "__wake" left by an earlier wait, or by this step's previous lap - is stale.
+    // A wake is this step's answer only when it is for the command the step is waiting on, from the
+    // client it went to. Anything else - a "__wake" left by an earlier wait, by this step's previous lap,
+    // or an ack another client sent naming this command - is stale, and the step keeps waiting.
     protected override ResumeStep.Leave? OnWake(NodeContext ctx, string? waitingOn, JsonElement wake)
     {
         if (wake.ValueKind != JsonValueKind.Object
             || !wake.TryGetProperty("commandId", out JsonElement wokenFor)
             || !string.Equals(wokenFor.ToString(), waitingOn, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        // An outcome from an engine before the client was carried has none, and is taken as before.
+        if (wake.TryGetProperty("clientRefId", out JsonElement from)
+            && from.ValueKind == JsonValueKind.String
+            && Guid.TryParse(((SendClientMessageNode)ctx.Node).Config.ClientRef, out Guid target)
+            && !(Guid.TryParse(from.GetString(), out Guid sender) && sender == target))
         {
             return null;
         }
@@ -144,7 +154,7 @@ internal sealed class CommandNodeExecutor(IClientCommandPublisher publisher, IBo
                 // A fixed reason: the exception's own message can name brokers or hosts, and the
                 // reason is written to the branch's state, which the workspace can read.
                 await bookmarkResumer.MatchInboundAsync(
-                    CommandChannel.Event(commandId, CommandChannel.Failed, "The command could not be sent."),
+                    CommandChannel.Event(commandId, clientRefId, CommandChannel.Failed, "The command could not be sent."),
                     hasRegistrations: false,
                     ct);
             }

@@ -86,7 +86,7 @@ public sealed class TriggerDispatcherRegistrationCacheTests
         // Every client ack arrives on the command channel, and nothing can register a trigger there.
         var harness = new Harness();
 
-        TriggerDispatchResult result = await harness.Dispatcher.DispatchAsync(CommandChannel.Event(Guid.NewGuid(), CommandChannel.Acked, null), CancellationToken.None);
+        TriggerDispatchResult result = await harness.Dispatcher.DispatchAsync(CommandChannel.Event(Guid.NewGuid(), Guid.NewGuid(), CommandChannel.Acked, null), CancellationToken.None);
 
         Assert.Equal(TriggerDispatchOutcome.NoRegistration, result.Outcome);
         Assert.Equal(0, harness.Registrations.Reads);
