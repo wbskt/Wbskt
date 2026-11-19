@@ -212,7 +212,8 @@ never served after it. Entries also expire after a minute, which bounds a lost a
 * **Fail closed.** A filter that throws is no match. Every engine endpoint except the health probes
   needs the API key, including controllers someone forgets to mark; in Production an unset key
   makes every call fail (`ENGINE_API_KEY_NOT_CONFIGURED`) rather than open the API.
-* **Secrets out of payloads.** Webhook secrets are stored hashed and compared in fixed time;
+* **Secrets out of payloads.** A webhook secret is matched by its hash, kept on the registration and
+  compared in fixed time, and only the caller's hash crosses the broker;
   integration secrets are sealed (AES-256-GCM, bound to workspace, RefId and type), resolved fresh per
   send, and scrubbed from error messages. `RunStarted` is journaled without the trigger body.
 * **Outbound guard.** Webhook steps refuse non-HTTP(S) and private or reserved addresses

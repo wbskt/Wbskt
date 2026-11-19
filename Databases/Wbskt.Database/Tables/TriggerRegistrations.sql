@@ -13,6 +13,11 @@ CREATE TABLE dbo.TriggerRegistrations
     -- Shared secret a webhook caller must present in X-Wbskt-Secret. NULL means the trigger is open,
     -- which is what every registration published before this column existed will read as.
     WebhookSecret         NVARCHAR(200)    NULL,
+    -- Lower-case hex SHA-256 of the UTF-8 secret (WebhookSecretHash.Of), which the dispatcher compares
+    -- the caller's presented hash with. WebhookSecret is still written for one release, so an engine
+    -- rolled back to the previous image does not read a guarded webhook as open; the release after
+    -- stops writing it, clears it and drops it.
+    WebhookSecretHash     VARCHAR(64)      NULL,
     CreatedAt             DATETIME2(3)     NOT NULL DEFAULT SYSUTCDATETIME(),
     CONSTRAINT FK_TriggerRegistrations_WorkflowDefinitions
         FOREIGN KEY (WorkflowDefinitionId) REFERENCES dbo.WorkflowDefinitions (Id)

@@ -46,7 +46,8 @@ internal sealed class TriggerPlanner : ITriggerPlanner
                     // matches registrations by key and would otherwise have to load and deserialize a whole
                     // definition per candidate just to decide whether to discard the event.
                     spec.Filter is null ? null : JsonSerializer.Serialize(spec.Filter, EngineJson.Options),
-                    spec.WebhookSecret));
+                    spec.WebhookSecret,
+                    WebhookSecretHash.Of(spec.WebhookSecret)));
 
                 if (spec.Schedule is not null)
                 {

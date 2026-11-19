@@ -20,6 +20,8 @@ public sealed record TriggerPlan(IReadOnlyCollection<PlannedTrigger> Registratio
 
 /// <param name="ConcurrencyPolicy">Stored form, from <c>TriggerRegistrationRow.FormatConcurrencyPolicy</c>.</param>
 /// <param name="FilterExpression">Serialized <c>WorkflowExpression</c>, copied onto the row so the dispatcher need not load the definition.</param>
+/// <param name="WebhookSecret">The plaintext, still written for one release so an engine rolled back to the previous image does not read a guarded webhook as open.</param>
+/// <param name="WebhookSecretHash">What the dispatcher compares a caller's presented hash against.</param>
 public sealed record PlannedTrigger(
     Guid TriggerNodeId,
     string TriggerKind,
@@ -27,6 +29,7 @@ public sealed record PlannedTrigger(
     string? CorrelationExpression,
     string ConcurrencyPolicy,
     string? FilterExpression,
-    string? WebhookSecret);
+    string? WebhookSecret,
+    string? WebhookSecretHash);
 
 public sealed record PlannedSchedule(Guid TriggerNodeId, string CronOrInterval, DateTime NextFireAt);

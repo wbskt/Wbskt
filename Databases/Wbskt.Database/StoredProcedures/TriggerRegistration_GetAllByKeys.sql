@@ -20,6 +20,7 @@ BEGIN
         ConcurrencyPolicy,
         FilterExpression,
         WebhookSecret,
+        WebhookSecretHash,
         CreatedAt
     FROM dbo.TriggerRegistrations AS tr
     WHERE tr.TriggerKind = @TriggerKind

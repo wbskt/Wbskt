@@ -189,3 +189,9 @@ END
 GO
 DROP TABLE IF EXISTS dbo.WorkflowDeletions;
 GO
+
+-- 7. Hash the webhook secrets of registrations written before TriggerRegistrations.WebhookSecretHash
+-- existed (dbo.TriggerRegistration_BackfillWebhookSecretHash explains how). The dispatcher hashes a
+-- missing one itself, so this only stops it doing so per event. A no-op once every row has one.
+EXEC dbo.TriggerRegistration_BackfillWebhookSecretHash;
+GO

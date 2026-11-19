@@ -123,7 +123,7 @@ public sealed class EngineCorrectnessIntegrationTests(SqlEdgeFixture fixture)
         int definitionId = await ScalarAsync<int>("SELECT Id FROM dbo.WorkflowDefinitions WHERE RefId = @p0", refId);
         var triggerNodeId = Guid.NewGuid();
         var plan = new TriggerPlan(
-            [new PlannedTrigger(triggerNodeId, ScheduleChannel.Name, ScheduleChannel.Key(refId, triggerNodeId), null, "AllowParallel", null, null)],
+            [new PlannedTrigger(triggerNodeId, ScheduleChannel.Name, ScheduleChannel.Key(refId, triggerNodeId), null, "AllowParallel", null, null, null)],
             [new PlannedSchedule(triggerNodeId, "*/5 * * * *", DateTime.UtcNow)]);
 
         await LiveWorkflows.EnableAsync(fixture.ConnectionString, refId, workspaceId, plan: plan);

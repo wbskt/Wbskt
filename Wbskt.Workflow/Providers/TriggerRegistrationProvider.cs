@@ -50,6 +50,7 @@ internal sealed class TriggerRegistrationProvider : BaseSqlProvider, ITriggerReg
             ConcurrencyPolicy = reader.IsDBNull(reader.GetOrdinal("ConcurrencyPolicy")) ? null : reader.GetString(reader.GetOrdinal("ConcurrencyPolicy")),
             FilterExpression = reader.IsDBNull(reader.GetOrdinal("FilterExpression")) ? null : reader.GetString(reader.GetOrdinal("FilterExpression")),
             WebhookSecret = reader.IsDBNull(reader.GetOrdinal("WebhookSecret")) ? null : reader.GetString(reader.GetOrdinal("WebhookSecret")),
+            WebhookSecretHash = reader.IsDBNull(reader.GetOrdinal("WebhookSecretHash")) ? null : reader.GetString(reader.GetOrdinal("WebhookSecretHash")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
         };
     }

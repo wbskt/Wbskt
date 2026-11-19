@@ -106,10 +106,12 @@ public sealed class TriggerPlannerTests
         Assert.NotNull(webhook.FilterExpression);
         Assert.IsType<BinaryExpression>(JsonSerializer.Deserialize<WorkflowExpression>(webhook.FilterExpression!, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
         Assert.Equal("s3cret", webhook.WebhookSecret);
+        Assert.Equal(WebhookSecretHash.Of("s3cret"), webhook.WebhookSecretHash);
 
         Assert.NotNull(client.FilterExpression);
         // A secret is a webhook-only notion; a client trigger must not acquire one.
         Assert.Null(client.WebhookSecret);
+        Assert.Null(client.WebhookSecretHash);
     }
 
     [Fact]
@@ -119,6 +121,7 @@ public sealed class TriggerPlannerTests
         {
             Assert.Null(row.FilterExpression);
             Assert.Null(row.WebhookSecret);
+            Assert.Null(row.WebhookSecretHash);
         });
     }
 

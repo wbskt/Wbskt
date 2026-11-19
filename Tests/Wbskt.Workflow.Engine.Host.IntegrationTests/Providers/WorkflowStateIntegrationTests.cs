@@ -360,7 +360,7 @@ public sealed class WorkflowStateIntegrationTests(SqlEdgeFixture fixture)
         new([Registration(refId, triggerNodeId)], withSchedule ? [new PlannedSchedule(triggerNodeId, "*/5 * * * *", DateTime.UtcNow.AddMinutes(5))] : []);
 
     private static PlannedTrigger Registration(Guid refId, Guid triggerNodeId) =>
-        new(triggerNodeId, "manual", $"it-state:{refId}:{triggerNodeId}", null, "Queue", null, null);
+        new(triggerNodeId, "manual", $"it-state:{refId}:{triggerNodeId}", null, "Queue", null, null, null);
 
     private Task<WorkflowDefinitionRow> GetAsync(int id) =>
         ProviderFactory.WorkflowDefinition(fixture.ConnectionString).GetByIdAsync(id, CancellationToken.None);

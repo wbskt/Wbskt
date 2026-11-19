@@ -80,8 +80,8 @@ BEGIN
       FROM @Schedules;
 
     INSERT INTO dbo.TriggerRegistrations
-        (WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, TriggerKind, TriggerKey, CorrelationExpression, ConcurrencyPolicy, FilterExpression, WebhookSecret)
-    SELECT @LiveDefinitionId, @RefId, @Version, TriggerNodeId, TriggerKind, TriggerKey, CorrelationExpression, ConcurrencyPolicy, FilterExpression, WebhookSecret
+        (WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, TriggerKind, TriggerKey, CorrelationExpression, ConcurrencyPolicy, FilterExpression, WebhookSecret, WebhookSecretHash)
+    SELECT @LiveDefinitionId, @RefId, @Version, TriggerNodeId, TriggerKind, TriggerKey, CorrelationExpression, ConcurrencyPolicy, FilterExpression, WebhookSecret, WebhookSecretHash
       FROM @Registrations;
 
     -- Node ids carry across versions, so an event queued for a trigger the new version still has

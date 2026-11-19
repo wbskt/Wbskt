@@ -124,9 +124,10 @@ internal sealed class WorkflowStateProvider : BaseSqlProvider, IWorkflowStatePro
         table.Columns.Add("ConcurrencyPolicy", typeof(string));
         table.Columns.Add("FilterExpression", typeof(string));
         table.Columns.Add("WebhookSecret", typeof(string));
+        table.Columns.Add("WebhookSecretHash", typeof(string));
         foreach (PlannedTrigger r in registrations)
         {
-            table.Rows.Add(r.TriggerNodeId, r.TriggerKind, r.TriggerKey, (object?)r.CorrelationExpression ?? DBNull.Value, r.ConcurrencyPolicy, (object?)r.FilterExpression ?? DBNull.Value, (object?)r.WebhookSecret ?? DBNull.Value);
+            table.Rows.Add(r.TriggerNodeId, r.TriggerKind, r.TriggerKey, (object?)r.CorrelationExpression ?? DBNull.Value, r.ConcurrencyPolicy, (object?)r.FilterExpression ?? DBNull.Value, (object?)r.WebhookSecret ?? DBNull.Value, (object?)r.WebhookSecretHash ?? DBNull.Value);
         }
 
         return table;
