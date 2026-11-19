@@ -16,6 +16,9 @@ using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services;
 using Wbskt.Auth.Models;
+using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Abstractions;
+using Wbskt.Events.Auth;
 using Wbskt.Events.Billing;
 using Wbskt.Host.Tests.Infrastructure;
 using Wbskt.Infrastructure;
@@ -154,6 +157,28 @@ public sealed class AdminTenantsTests
         Assert.Equal(new StaffAction(AdminTenantService.SetPlanAction, AdminTenantService.TargetKind, tenantRef), runner.Action);
         Assert.Equal(Staff, runner.Staff);
         plans.Verify(p => p.SetAsync(tenantRef, new SetTenantPlanRequest(PlanCode.Business, null, 3, endsAt, 250), PlanSource.Operator, It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task A_staff_plan_shows_in_the_tenants_audit_log_as_wbskt_support()
+    {
+        var tenant = new TenantPlan(12, Guid.NewGuid(), PlanCode.Pro, null, 3, null);
+        var endsAt = Now.AddDays(30);
+        var plans = new Mock<ITenantPlanService>();
+        plans.Setup(p => p.SetAsync(tenant.TenantRefId, It.IsAny<SetTenantPlanRequest>(), PlanSource.Operator, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantPlanResponse(tenant.TenantRefId, PlanCode.Pro, null, 4, Now, PlanSource.Operator, endsAt));
+        var bus = new Mock<IEventBus>();
+
+        await Service(plans.Object, runner: new RecordingRunner(), tenants: Tenants(tenant), bus: bus.Object).SetPlanAsync(
+            tenant.TenantRefId, new AdminSetTenantPlanRequest(Staff, PlanCode.Pro, null, 3, endsAt), CancellationToken.None);
+
+        // No user is named: the staff member and their reason stay in the staff audit.
+        bus.Verify(b => b.PublishAsync(It.Is<TenantActorEvent>(e => e is SupportActionTakenEvent
+            && ((SupportActionTakenEvent)e).Action == AdminTenantService.SetPlanAction
+            && ((SupportActionTakenEvent)e).TargetRefId == tenant.TenantRefId
+            && e.ActorSource == EventSource.Support
+            && e.ActorUserId == null
+            && e.WorkspaceIds.SequenceEqual(new[] { 7 })), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -323,10 +348,13 @@ public sealed class AdminTenantsTests
         IStaffActionRunner? runner = null,
         ITenantPlanProvider? tenants = null,
         IOutboxWriter? outbox = null,
-        ITenantPlanReview? review = null) =>
+        ITenantPlanReview? review = null,
+        IEventBus? bus = null) =>
         new(plans, limits ?? new FixedTenantLimits(), runner ?? Mock.Of<IStaffActionRunner>(MockBehavior.Strict), new FixedClock(Now),
             tenants ?? Mock.Of<ITenantPlanProvider>(MockBehavior.Strict), new NoWorkspaces(), outbox ?? new RecordingOutbox(),
-            review ?? Mock.Of<ITenantPlanReview>(), NullLogger<AdminTenantService>.Instance);
+            review ?? Mock.Of<ITenantPlanReview>(),
+            new TenantAnnouncer(Mock.Of<IAccountProvider>(), bus ?? Mock.Of<IEventBus>(), new NoWorkspaces(), new RecordingAccessChanges().Changes, NullLogger<TenantAnnouncer>.Instance),
+            NullLogger<AdminTenantService>.Instance);
 
     private sealed class NoWorkspaces : IAuditWorkspaces
     {

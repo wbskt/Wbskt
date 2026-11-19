@@ -1,6 +1,7 @@
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Models;
+using Wbskt.Events.Auth;
 using Wbskt.Events.Billing;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Events.Outbox;
@@ -27,6 +28,7 @@ internal sealed class AdminTenantService(
     IAuditWorkspaces audit,
     IOutboxWriter outbox,
     ITenantPlanReview review,
+    TenantAnnouncer announcer,
     ILogger<AdminTenantService> logger)
     : IAdminTenantService
 {
@@ -52,21 +54,22 @@ internal sealed class AdminTenantService(
         return new AdminTenantLimitsResponse(plan.Value, await limits.ForTenantAsync(tenantRef, cancellationToken));
     }
 
-    public Task<Result<StaffActionResponse>> SetPlanAsync(Guid tenantRef, AdminSetTenantPlanRequest request, CancellationToken cancellationToken)
+    public async Task<Result<StaffActionResponse>> SetPlanAsync(Guid tenantRef, AdminSetTenantPlanRequest request, CancellationToken cancellationToken)
     {
         var now = time.GetUtcNow();
         if (request.EndsAt <= now || request.EndsAt > now + LongestStaffPlan)
         {
-            return Task.FromResult<Result<StaffActionResponse>>(
-                Error.Validation("PLAN_ENDS_AT_INVALID", "A staff plan ends in the future and within a year."));
+            return Error.Validation("PLAN_ENDS_AT_INVALID", "A staff plan ends in the future and within a year.");
         }
 
         var set = new SetTenantPlanRequest(request.PlanCode, request.LimitOverrides, request.ExpectedRevision, request.EndsAt, request.ContractClients, request.KeepSubscription);
-        return runner.RunAsync(
+        var result = await runner.RunAsync(
             request.Staff,
             new StaffAction(SetPlanAction, TargetKind, tenantRef),
             async ct => await plans.SetAsync(tenantRef, set, PlanSource.Operator, ct),
             cancellationToken);
+        await AnnounceAsync(result, SetPlanAction, tenantRef);
+        return result;
     }
 
     public async Task<Result<StaffActionResponse>> SetLimitsAsync(Guid tenantRef, AdminSetTenantLimitsRequest request, CancellationToken cancellationToken)
@@ -81,11 +84,13 @@ internal sealed class AdminTenantService(
         // the change if any of them moved since the staff member read them.
         var plan = current.Value;
         var set = new SetTenantPlanRequest(plan.PlanCode, request.LimitOverrides, request.ExpectedRevision, plan.EndsAt);
-        return await runner.RunAsync(
+        var result = await runner.RunAsync(
             request.Staff,
             new StaffAction(SetLimitsAction, TargetKind, tenantRef),
             async ct => await plans.SetAsync(tenantRef, set, plan.Source, ct),
             cancellationToken);
+        await AnnounceAsync(result, SetLimitsAction, tenantRef);
+        return result;
     }
 
     public async Task<Result<StaffActionResponse>> EndStaffPlanAsync(Guid tenantRef, AdminEndStaffPlanRequest request, CancellationToken cancellationToken)
@@ -120,25 +125,24 @@ internal sealed class AdminTenantService(
             await ReviewNowAsync(tenantId.Value, cancellationToken);
         }
 
+        await AnnounceAsync(result, EndPlanAction, tenantRef);
         return result;
     }
 
-    public Task<Result<StaffActionResponse>> GrantCreditsAsync(Guid tenantRef, AdminGrantCreditsRequest request, CancellationToken cancellationToken)
+    public async Task<Result<StaffActionResponse>> GrantCreditsAsync(Guid tenantRef, AdminGrantCreditsRequest request, CancellationToken cancellationToken)
     {
         if (request.Credits <= 0 || request.Credits > StaffCreditGrants.MaxCredits || decimal.Round(request.Credits, 4) != request.Credits)
         {
-            return Task.FromResult<Result<StaffActionResponse>>(
-                Error.Validation("CREDITS_INVALID", $"Give more than 0 and at most {StaffCreditGrants.MaxCredits:0} credits, to 4 decimal places."));
+            return Error.Validation("CREDITS_INVALID", $"Give more than 0 and at most {StaffCreditGrants.MaxCredits:0} credits, to 4 decimal places.");
         }
 
         var now = time.GetUtcNow();
         if (request.ExpiresAt <= now || request.ExpiresAt > now + LongestStaffGrant)
         {
-            return Task.FromResult<Result<StaffActionResponse>>(
-                Error.Validation("CREDITS_EXPIRES_AT_INVALID", "Staff credits expire in the future and within a year."));
+            return Error.Validation("CREDITS_EXPIRES_AT_INVALID", "Staff credits expire in the future and within a year.");
         }
 
-        return runner.RunAsync(
+        var result = await runner.RunAsync(
             request.Staff,
             new StaffAction(GrantCreditsAction, TargetKind, tenantRef),
             async ct =>
@@ -159,11 +163,13 @@ internal sealed class AdminTenantService(
                 return Result.Success();
             },
             cancellationToken);
+        await AnnounceAsync(result, GrantCreditsAction, tenantRef);
+        return result;
     }
 
-    public Task<Result<StaffActionResponse>> RevokeCreditGrantAsync(Guid tenantRef, Guid grantRef, AdminRevokeCreditGrantRequest request, CancellationToken cancellationToken)
+    public async Task<Result<StaffActionResponse>> RevokeCreditGrantAsync(Guid tenantRef, Guid grantRef, AdminRevokeCreditGrantRequest request, CancellationToken cancellationToken)
     {
-        return runner.RunAsync(
+        var result = await runner.RunAsync(
             request.Staff,
             new StaffAction(RevokeCreditsAction, TargetKind, tenantRef),
             async ct =>
@@ -185,7 +191,15 @@ internal sealed class AdminTenantService(
                 return Result.Success();
             },
             cancellationToken);
+        await AnnounceAsync(result, RevokeCreditsAction, tenantRef);
+        return result;
     }
+
+    private Task AnnounceAsync(Result<StaffActionResponse> result, string action, Guid tenantRef) =>
+        announcer.SupportActionAsync(
+            result,
+            new SupportActionTakenEvent(action, TargetKind, tenantRef),
+            async ct => (await tenants.FindByRefIdAsync(tenantRef, ct))?.TenantId);
 
     /// <summary>
     /// Moves the tenant to its subscription's plan now rather than at the next hourly review. It runs after

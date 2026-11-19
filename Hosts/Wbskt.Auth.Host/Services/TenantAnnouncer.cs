@@ -3,7 +3,9 @@ using Wbskt.Auth.Host.Providers;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Abstractions;
 using Wbskt.Events.Auth;
+using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
+using Wbskt.Models.Admin;
 
 namespace Wbskt.Auth.Host.Services;
 
@@ -39,11 +41,47 @@ internal sealed class TenantAnnouncer(IAccountProvider accounts, IEventBus event
     /// The action has already happened, so a failure to find the tenant's workspaces is logged rather
     /// than returned: reporting it as failed would only invite a retry of something that succeeded.
     /// </remarks>
-    public async Task ToTenantAsync(TenantActorEvent @event, int tenantId, CancellationToken cancellationToken)
+    public Task ToTenantAsync(TenantActorEvent @event, int tenantId, CancellationToken cancellationToken) =>
+        PublishAsync(@event, () => audit.OfTenantAsync(tenantId, cancellationToken), cancellationToken);
+
+    /// <summary>Publishes an action on one person, to be logged in each workspace they are a member of.</summary>
+    public Task ToUserAsync(TenantActorEvent @event, int userId, CancellationToken cancellationToken) =>
+        PublishAsync(@event, () => audit.OfUserAsync(userId, cancellationToken), cancellationToken);
+
+    /// <summary>
+    /// Tells the customer's audit log that Wbskt support made a change, once the staff runner has committed
+    /// it, and not for a replay, which was announced the first time (<see cref="SupportActionTakenEvent"/>).
+    /// </summary>
+    public async Task SupportActionAsync(Result<StaffActionResponse> result, SupportActionTakenEvent @event, Func<CancellationToken, Task<int?>> tenantId)
+    {
+        if (result.IsFailure || result.Value.Replayed)
+        {
+            return;
+        }
+
+        // The change has committed, so nothing here may fail the request or take the caller's token.
+        int? id;
+        try
+        {
+            id = await tenantId(CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Could not find the tenant of support action {Action} on {TargetRefId} for the audit log.", @event.Action, @event.TargetRefId);
+            return;
+        }
+
+        if (id is { } found)
+        {
+            await ToTenantAsync(@event, found, CancellationToken.None);
+        }
+    }
+
+    private async Task PublishAsync(TenantActorEvent @event, Func<Task<IReadOnlyList<int>>> workspaces, CancellationToken cancellationToken)
     {
         try
         {
-            await eventBus.PublishAsync(@event with { WorkspaceIds = await audit.OfTenantAsync(tenantId, cancellationToken) }, cancellationToken);
+            await eventBus.PublishAsync(@event with { WorkspaceIds = await workspaces() }, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

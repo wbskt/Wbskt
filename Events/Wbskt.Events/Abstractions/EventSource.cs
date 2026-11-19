@@ -19,7 +19,10 @@ public enum EventSource : byte
     Workflow = 4,
 
     /// <summary>The platform itself: a background job, a sweep, a host starting.</summary>
-    System = 5
+    System = 5,
+
+    /// <summary>Wbskt support staff, through the platform admin (wbskt/Wbskt.Admin), with a reason in the staff audit.</summary>
+    Support = 6
 }
 
 /// <summary>One field a change event changed: its name and its value before and after, as text.</summary>

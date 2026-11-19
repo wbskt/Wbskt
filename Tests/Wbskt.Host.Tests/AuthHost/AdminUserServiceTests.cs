@@ -5,6 +5,9 @@ using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services;
 using Wbskt.Auth.Host.Services.Email;
 using Wbskt.Auth.Models;
+using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Abstractions;
+using Wbskt.Events.Auth;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Infrastructure.StaffActions;
@@ -32,8 +35,12 @@ public sealed class AdminUserServiceTests
         _accounts.Setup(a => a.GetByIdAsync(_user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(_user);
     }
 
+    private readonly Mock<IEventBus> _bus = new();
+    private readonly Mock<IAuditWorkspaces> _audit = new();
+
     private AdminUserService Service() => new(_accounts.Object, _staffUsers.Object, _sessions.Object, _accessTokens.Object, _mailer.Object,
-        _runner, new FixedClock(Now), NullLogger<AdminUserService>.Instance);
+        _runner, new TenantAnnouncer(_accounts.Object, _bus.Object, _audit.Object, new RecordingAccessChanges().Changes, NullLogger<TenantAnnouncer>.Instance),
+        new FixedClock(Now), NullLogger<AdminUserService>.Instance);
 
     [Fact]
     public async Task An_unknown_person_is_not_found_and_nothing_runs()
@@ -157,6 +164,31 @@ public sealed class AdminUserServiceTests
         Assert.True(result.IsSuccess);
         Assert.Equal(AdminUserService.AllowSignInAction, _runner.Action!.Name);
         _accessTokens.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task Turning_sign_in_off_shows_in_each_of_their_workspaces_as_wbskt_support()
+    {
+        _audit.Setup(a => a.OfUserAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync([5, 6]);
+
+        await Service().SetSignInAsync(_user.RefId, new AdminSetUserSignInRequest(Staff, false), CancellationToken.None);
+
+        _bus.Verify(b => b.PublishAsync(It.Is<TenantActorEvent>(e => e is SupportActionTakenEvent
+            && ((SupportActionTakenEvent)e).Action == AdminUserService.BlockSignInAction
+            && ((SupportActionTakenEvent)e).TargetKind == AdminUserService.TargetKind
+            && ((SupportActionTakenEvent)e).TargetRefId == _user.RefId
+            && e.ActorSource == EventSource.Support
+            && e.WorkspaceIds.SequenceEqual(new[] { 5, 6 })), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_replayed_or_personal_change_is_not_told_to_the_workspaces()
+    {
+        await Service().SendPasswordResetAsync(_user.RefId, Request, CancellationToken.None);
+        _runner.Replay = true;
+        await Service().SignOutEverywhereAsync(_user.RefId, Request, CancellationToken.None);
+
+        _bus.VerifyNoOtherCalls();
     }
 
     [Fact]
