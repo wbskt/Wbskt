@@ -4,6 +4,10 @@
 -- the clients, which have to be approved again. New runs and enrolments are refused by dbo.Run_Start and
 -- dbo.Client_Create while dbo.WorkspaceAccounts.FrozenAt is set, which the caller copies first.
 --
+-- Does nothing unless the account copy says the workspace is frozen, read under a lock the account sync
+-- waits on: the repair (WorkspaceFreezer.StopFrozenStillGoingAsync) lists frozen workspaces first and
+-- stops them after, and a lift copied in between must not revoke clients approved again since.
+--
 -- Idempotent: a client already revoked is not reported again, and a run is reported for as long as it
 -- is still running, so a cancel that failed to send goes out next time.
 --
@@ -20,6 +24,17 @@ BEGIN
     DECLARE @Revoked TABLE (ClientId INT, ClientRefId UNIQUEIDENTIFIER, PolicyId INT);
 
     BEGIN TRANSACTION;
+
+    IF NOT EXISTS (SELECT 1
+                   FROM dbo.WorkspaceAccounts WITH (UPDLOCK, HOLDLOCK)
+                   WHERE WorkspaceId = @WorkspaceId
+                     AND FrozenAt IS NOT NULL)
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT N'client' AS Kind, CAST(NULL AS BIGINT) AS Id, CAST(NULL AS UNIQUEIDENTIFIER) AS RefId, CAST(NULL AS INT) AS PolicyId, CAST(NULL AS UNIQUEIDENTIFIER) AS PolicyRefId
+        WHERE 1 = 0;
+        RETURN;
+    END
 
     UPDATE dbo.Clients
     SET Status = 2 -- Revoked

@@ -380,6 +380,49 @@ public sealed class WorkspaceRetirementIntegrationTests(SqlEdgeFixture fixture)
             definitionId, workflowRefId, runningRunId, otherPolicyId, otherClient);
     }
 
+    /// <summary>
+    /// The account sync's repair for a lost freeze event: a frozen workspace is listed while a client
+    /// can still connect, and no longer once dbo.Workspace_Freeze has revoked it.
+    /// </summary>
+    [SkippableFact]
+    public async Task A_frozen_workspace_is_listed_as_still_going_until_it_is_stopped()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int frozen = await CreateAccountAsync(retiredAt: null);
+        int open = await CreateAccountAsync(retiredAt: null);
+        await ExecAsync("UPDATE dbo.WorkspaceAccounts SET FrozenAt = SYSUTCDATETIME() WHERE WorkspaceId = @p0", frozen);
+        var (frozenPolicy, _) = await CreatePolicyAsync(frozen);
+        var (openPolicy, _) = await CreatePolicyAsync(open);
+        await CreateClientAsync(frozen, frozenPolicy, status: 1);
+        await CreateClientAsync(open, openPolicy, status: 1);
+
+        Assert.Contains(frozen, await FrozenStillGoingAsync());
+        Assert.DoesNotContain(open, await FrozenStillGoingAsync());
+
+        // Stopping a workspace whose freeze has been lifted meanwhile revokes nothing.
+        await ExecAsync("EXEC dbo.Workspace_Freeze @WorkspaceId = @p0", open);
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Clients WHERE WorkspaceId = @p0 AND Status = 1", open));
+
+        await ExecAsync("EXEC dbo.Workspace_Freeze @WorkspaceId = @p0", frozen);
+
+        Assert.DoesNotContain(frozen, await FrozenStillGoingAsync());
+    }
+
+    private async Task<List<int>> FrozenStillGoingAsync()
+    {
+        await using var conn = new SqlConnection(fixture.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = new SqlCommand("dbo.Workspace_GetFrozenStillGoing", conn) { CommandType = System.Data.CommandType.StoredProcedure };
+        await using var reader = await cmd.ExecuteReaderAsync();
+        var ids = new List<int>();
+        while (await reader.ReadAsync())
+        {
+            ids.Add(reader.GetInt32(0));
+        }
+
+        return ids;
+    }
+
     private async Task<int> CreateAccountAsync(DateTime? retiredAt)
     {
         int workspaceId = Random.Shared.Next(1_000_000, int.MaxValue);
