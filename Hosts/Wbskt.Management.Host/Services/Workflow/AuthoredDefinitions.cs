@@ -36,7 +36,7 @@ internal static class AuthoredDefinitions
     {
         if (nodes is null)
         {
-            // The earlier nested body, kept for one release (#1059). Its own copies of the id, name and
+            // The earlier nested body (#1059), which the console still sends: kept until wbskt/Wbskt.Console#229. Its own copies of the id, name and
             // description give way to the request's, and its time to the server's.
             return nested is null
                 ? null
