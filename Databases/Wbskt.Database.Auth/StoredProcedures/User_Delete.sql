@@ -27,8 +27,9 @@
 -- longer matches, nothing is deleted (THROW 50019) and the caller can try again.
 --
 -- @UnconfirmedBefore is set by the sweep of accounts never confirmed (dbo.User_GetUnconfirmed). The
--- account must then, under the locks, still be unverified, active, never signed in, created before it
--- and alone in its tenants; otherwise nothing is deleted (THROW 50029) and the sweep moves on.
+-- account must then, under the locks, still be unverified, active, never signed in, created before it,
+-- without a verification link still open, alone in its tenants and never paid in one; otherwise nothing
+-- is deleted (THROW 50029) and the sweep moves on.
 CREATE PROCEDURE dbo.User_Delete
     @UserId INT,
     @DeletedWorkspaces NVARCHAR(MAX),
@@ -66,7 +67,21 @@ BEGIN
                       AND IsEmailVerified = 0
                       AND IsActive = 1
                       AND LastLoginAt IS NULL
-                      AND CreatedAt < @UnconfirmedBefore))
+                      AND CreatedAt < @UnconfirmedBefore)
+             -- HOLDLOCK: a link asked for meanwhile waits for this, rather than being deleted with the account.
+             OR EXISTS (
+                    SELECT 1
+                    FROM dbo.EmailVerificationTokens WITH (UPDLOCK, HOLDLOCK)
+                    WHERE UserId = @UserId
+                      AND ConsumedAt IS NULL
+                      AND ExpiresAt > SYSUTCDATETIME())
+             OR EXISTS (
+                    SELECT 1
+                    FROM @Tenants T
+                    -- Held to the commit, so a payment landing meanwhile waits and is refused rather
+                    -- than failing the delete on its foreign key.
+                    WHERE EXISTS (SELECT 1 FROM dbo.TenantSubscriptions S WITH (UPDLOCK, HOLDLOCK) WHERE S.TenantId = T.TenantId)
+                       OR EXISTS (SELECT 1 FROM dbo.TenantCreditPurchases P WITH (UPDLOCK, HOLDLOCK) WHERE P.TenantId = T.TenantId)))
     BEGIN
         THROW 50029, 'The account was confirmed or used while it was being deleted as unconfirmed.', 1;
     END
@@ -183,8 +198,8 @@ BEGIN
     FROM dbo.Tenants T
     WHERE T.Id IN (SELECT TenantId FROM @Sole)
       AND T.PlanRevision = 0
-      AND NOT EXISTS (SELECT 1 FROM dbo.TenantSubscriptions S WHERE S.TenantId = T.Id)
-      AND NOT EXISTS (SELECT 1 FROM dbo.TenantCreditPurchases P WHERE P.TenantId = T.Id);
+      AND NOT EXISTS (SELECT 1 FROM dbo.TenantSubscriptions S WITH (UPDLOCK, HOLDLOCK) WHERE S.TenantId = T.Id)
+      AND NOT EXISTS (SELECT 1 FROM dbo.TenantCreditPurchases P WITH (UPDLOCK, HOLDLOCK) WHERE P.TenantId = T.Id);
 
     DELETE FROM dbo.BillingNotices WHERE TenantId IN (SELECT TenantId FROM @Unkept);
     DELETE FROM dbo.Tenants WHERE Id IN (SELECT TenantId FROM @Unkept);
