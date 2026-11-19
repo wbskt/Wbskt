@@ -58,8 +58,10 @@ public static class OtaTiming
 {
     /// <summary>
     /// How long a client that closed to install an update counts as updating rather than offline. The
-    /// SDKs give a new image as long to connect before rolling it back, so a client not back by then
-    /// has failed in a way it could not report.
+    /// SDKs give a new image as long spent unable to reach Wbskt before rolling it back; time Wbskt answers
+    /// busy or down (429, 5xx) doesn't count. So a client not back by then has usually failed in a way it
+    /// could not report, but during a longer outage it may still connect later and report installed
+    /// (Client.Protocol.md §4.4).
     /// </summary>
     public static readonly TimeSpan UpdateWindow = TimeSpan.FromMinutes(5);
 }

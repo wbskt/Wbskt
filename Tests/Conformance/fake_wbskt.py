@@ -5,7 +5,8 @@ scenarios can check it against Docs/Client.Protocol.md, and it can misbehave on 
 throttle a login, reject credentials, close the socket. Like the real gateway, it refuses a revoked
 client's token with 403 CLIENT_REVOKED, refuses an upgrade offering only unknown subprotocols with 400
 SOCKET_PROTOCOL_UNSUPPORTED, closes a client's older connection when it connects again (4001), and
-enforces the per-client message budget (4003).
+enforces the per-client message budget (4003), letting through without charge a pong or ack it is owed
+for a ping or command it sent.
 """
 
 import asyncio
@@ -34,6 +35,8 @@ CLOSE_TOO_BIG = 1009
 # A message is at most 64 KB, as UTF-8 (ClientProtocol.MaxMessageBytes); the gateway ends the connection for a bigger one.
 MAX_MESSAGE_BYTES = 64 * 1024
 CLOSE_THROTTLED = 4003
+# The most pongs and acks a connection can be owed (ClientConnectionBase.MaxRepliesOwed).
+MAX_REPLIES_OWED = 256
 # The one close code a client sends of its own: closing to install a firmware update.
 CLOSE_UPDATING = 4000
 
@@ -45,6 +48,8 @@ class FakeApi:
         self.registrations: List[Dict[str, Any]] = []
         self.logins: List[Tuple[float, Dict[str, Any]]] = []
         self.registered_status = 1
+        # Answers for the next registrations, before the normal 200.
+        self.register_answers: List[Answer] = []
         # Answers for the next logins, before the normal 200.
         self.login_answers: List[Answer] = []
         # The lifetime the normal 200 gives a token, in seconds.
@@ -60,6 +65,8 @@ class FakeApi:
         with self._lock:
             if path == REGISTER_PATH:
                 self.registrations.append(body)
+                if self.register_answers:
+                    return self.register_answers.pop(0)
                 ref, secret = str(uuid.uuid4()), f"secret-{len(self.registrations)}"
                 self.known[ref] = secret
                 return 200, {"clientRefId": ref, "secret": secret, "status": self.registered_status}, {}
@@ -166,6 +173,11 @@ class FakeSocket:
         self.client_close_codes: Dict[int, int] = {}
         # While set, every upgrade is answered 503, as by a host that is down.
         self.down = False
+        # Commands sent as soon as a connection opens, as the server delivers those queued while offline.
+        self.queued_commands: List[Dict[str, Any]] = []
+        # Per connection: replies owed for pings and commands sent, and whether a ping is unanswered.
+        self._owed: Dict[int, int] = {}
+        self._ping_pending: Dict[int, bool] = {}
         self.url = ""
         self._server: Any = None
 
@@ -206,6 +218,8 @@ class FakeSocket:
                 self.close_codes[self.connections.index(older)] = CLOSE_SUPERSEDED
                 await older.close(CLOSE_SUPERSEDED, "Superseded by a new connection.")
         budget = _Budget()
+        for command in self.queued_commands:
+            await self.send(index, command)
         try:
             async for raw in ws:
                 if not isinstance(raw, str):
@@ -214,7 +228,7 @@ class FakeSocket:
                     self.close_codes[index] = CLOSE_TOO_BIG
                     await ws.close(CLOSE_TOO_BIG, f"Messages are limited to {MAX_MESSAGE_BYTES} bytes.")
                     return
-                if not budget.try_take():
+                if not self._take_reply(index, raw) and not budget.try_take():
                     self.dropped += 1
                     if budget.consecutive_dropped >= BUDGET_CLOSE_AFTER_DROPPED:
                         self.close_codes[index] = CLOSE_THROTTLED
@@ -281,4 +295,31 @@ class FakeSocket:
         await self.connections[connection].close(code, reason)
 
     async def send(self, connection: int, message: Dict[str, Any]) -> None:
+        # Like the gateway, a ping still unanswered is owed one pong, not one per ping.
+        message_type = str(message.get("type", "")).lower()
+        if message_type == "sys.ping":
+            if not self._ping_pending.get(connection):
+                self._ping_pending[connection] = True
+                self._owe(connection)
+        elif message.get("commandId"):
+            self._owe(connection)
         await self.connections[connection].send(json.dumps(message))
+
+    def _owe(self, connection: int) -> None:
+        self._owed[connection] = min(MAX_REPLIES_OWED, self._owed.get(connection, 0) + 1)
+
+    def _take_reply(self, connection: int, raw: str) -> bool:
+        """Whether this is a top-level sys.ack or sys.pong the fake is owed, which then skips the budget."""
+        if self._owed.get(connection, 0) <= 0:
+            return False
+        try:
+            message = json.loads(raw)
+        except ValueError:
+            return False
+        message_type = str(message.get("type", "")).lower() if isinstance(message, dict) else ""
+        if message_type not in ("sys.ack", "sys.pong"):
+            return False
+        if message_type == "sys.pong":
+            self._ping_pending[connection] = False
+        self._owed[connection] -= 1
+        return True

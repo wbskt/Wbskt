@@ -398,6 +398,16 @@ public sealed class ClientSessionTests
     }
 
     [Fact]
+    public void A_message_longer_than_any_reply_is_not_read_for_its_type()
+    {
+        var padded = $$$"""{"type":"sys.ack","payload":{"commandId":"c","pad":"{{{new string('x', ClientInbox.MaxReplyLength)}}}"}}""";
+        var refused = $$$"""{"type":"sys.ack","payload":{"commandId":"{{{Guid.NewGuid()}}}","type":"{{{new string('t', 100)}}}","refused":"expired"},"sentAt":"2026-11-19T12:00:00.000Z"}""";
+
+        Assert.False(ClientInbox.IsReply(padded));
+        Assert.True(ClientInbox.IsReply(refused));
+    }
+
+    [Fact]
     public async Task A_message_over_the_size_limit_is_closed_with_1009_whatever_the_transport_let_through()
     {
         var connection = Connection();

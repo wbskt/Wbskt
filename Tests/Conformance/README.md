@@ -7,7 +7,7 @@ an item on one of those two checklists:
 
 | Checklist | Scenarios |
 |---|---|
-| Message model | registering once, pending approval, stopping once the credentials are rejected, reusing the token, logging in again inside a token's last minute, `Retry-After`, `capabilities` first, ping and pong, command acks, expired commands, plain messages, a throwing handler and malformed frames, `sentAt` and the offline backlog, pacing a large backlog under the message budget, reserved types, a message over 64 KB and one just under it |
+| Message model | registering once, pending approval, stopping on a wrong PIN and retrying a disabled policy, stopping once the credentials are rejected, reusing the token, logging in again inside a token's last minute, `Retry-After`, `capabilities` first, ping and pong, command acks, expired commands, plain messages, a throwing handler and malformed frames, `sentAt` and the offline backlog, pacing a large backlog under the message budget, acking a backlog of queued commands on top of it, reserved types, a message over 64 KB and one just under it |
 | Firmware updates (optional) | listing `ota`, rejecting while off, an expired update, plain `http`, accepted → downloading → installed |
 | WebSocket binding | the subprotocol and bearer token, renewing after a 401 on the upgrade, keeping the token while the gateway is down or the client is revoked (403 `CLIENT_REVOKED`), backing off while the gateway is down, spreading reconnects after a restart (1001), reconnecting after each close code (1000, 1001, 1008, 1009, 4001–4003), noticing a link that died without a close, a second connection superseding the first |
 
@@ -23,7 +23,8 @@ does unprompted:
   subprotocols with 400 `SOCKET_PROTOCOL_UNSUPPORTED`, as Problem Details;
 - closes a client's older connection with 4001 when it connects again;
 - enforces the default message budget (10 a second, burst 100, closed with 4003 after 500 drops in a
-  row) and counts what it dropped;
+  row) and counts what it dropped, letting a top-level `sys.ack` or `sys.pong` it is owed (one per
+  command it sent with a `commandId`, one per unanswered ping) through without charge;
 - closes with 1009 a message over 64 KB as UTF-8.
 
 `nightly-conformance.yml` runs `test_live.py` against the real hosts every night, once with the .NET

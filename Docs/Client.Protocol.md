@@ -63,7 +63,20 @@ The user then does one of two things, and the SDK documents both:
 
 Only a client with no stored credentials registers.
 
-Registration is rate limited per address; a 429 is retried like a failed login (§5).
+Registration is rate limited per address, and every client behind one NAT shares the limit, so a
+refusal no wait can fix must stop the client rather than be retried:
+
+| Answer | Do |
+|---|---|
+| 200 | Store the credentials, then log in (§2). |
+| 404 `POLICY_NOT_FOUND` | No policy has this PIN (mistyped, or regenerated in the console). **Stop**, and report it. |
+| 400 `REGISTRATION_PIN_REQUIRED` | The PIN was empty. **Stop**, and report it. |
+| 400 `CLIENT_NAME_INVALID` | The name is blank or over 100 characters once trimmed. **Stop**, and report it; better, refuse such a name before registering. |
+| 403 `POLICY_DISABLED` | The policy is turned off. Retry on the reconnect schedule (§5): someone may turn it on. |
+| 400 `POLICY_LIMIT_REACHED`, 409 `PLAN_CLIENT_LIMIT_REACHED` | The policy or the account's plan is full. Retry on the schedule: someone may remove a client. |
+| 429 | Retried like a failed login (§5). |
+
+A stopped client starts again only when the app starts it, with a corrected PIN or name.
 
 ## 2. Log in
 
@@ -144,6 +157,12 @@ Any other `type` is yours: workflows trigger on it and the console shows it. Set
 whose `sentAt` is more than 30 seconds before it arrives is marked **late** (the client was offline
 and buffered it), and workflows can tell late readings from live ones.
 
+**NaN and infinity.** JSON has neither. An SDK **refuses** a message or state report holding one (it
+throws, or returns false on a microcontroller) and sends nothing; it never writes `null` in its place,
+because a reading that failed (a DHT22 returns NaN) would then reach workflows and charts as an empty
+value with no sign that anything went wrong. The app leaves the field out when its sensor fails. The
+gateway drops a frame that isn't valid JSON, so `NaN` written as a bare token is lost too.
+
 **Offline buffer.** While disconnected, queue outgoing messages in memory (the .NET SDK keeps 1,000
 and drops the oldest when full), and send them in order, with their original `sentAt`, as soon as
 the connection is back and `capabilities` has gone out. Never let a new message overtake the backlog.
@@ -221,8 +240,12 @@ message carries a link, not the image: an image is 1–2 MB and a message at mos
      `commandId` across the restart for this.
 3. A client that closes its connection to download closes with the binding's "updating" code (WebSocket:
    4000). The server then shows it as updating rather than offline, and holds presence triggers back,
-   for up to 5 minutes or until it connects again. Give the new image the same 5 minutes to connect
-   before rolling it back.
+   for up to 5 minutes or until it connects again. Give the new image 5 minutes **spent unable to reach
+   Wbskt** before rolling it back: a sign-in or upgrade that Wbskt answers with 429 or a 5xx proves the
+   new image can reach it and that Wbskt is busy or down, so that time doesn't count (time without a
+   network doesn't either). An image that fails at transport level, or is refused with another 4xx,
+   keeps counting. So during an outage longer than 5 minutes the server's window ends first: the client
+   shows as offline and presence triggers fire, and later it connects and reports `installed`.
 4. Check the SHA-256 before the new image can boot, and keep the credentials across the update so
    the client signs in as the same client.
 5. Send the running version as `firmwareVersion` in `capabilities` on every connection, so the
@@ -265,6 +288,7 @@ uses close codes, the MQTT binding DISCONNECT reason codes):
 An SDK conforms to the message model when it:
 
 - [ ] stores credentials durably and registers only when it has none;
+- [ ] stops on a registration answer no retry can fix (`POLICY_NOT_FOUND`, `REGISTRATION_PIN_REQUIRED`, `CLIENT_NAME_INVALID`) and retries the others;
 - [ ] on `CLIENT_UNAUTHORIZED` keeps its credentials, reports it, and stops instead of registering again;
 - [ ] reuses the access token until a minute before expiry, and logs in again only then or when the binding refuses it;
 - [ ] sends `capabilities` first on every connection;
@@ -272,7 +296,7 @@ An SDK conforms to the message model when it:
 - [ ] acks commands with `commandId` on arrival and refuses expired ones with `refused: "expired"`;
 - [ ] stamps `sentAt` on application messages and buffers them in order while offline;
 - [ ] sends no more than 8 messages a second after a burst of 50, a flushed backlog included;
-- [ ] never sends a reserved type of its own, or a message over 64 KB;
+- [ ] never sends a reserved type of its own, a message over 64 KB, or NaN or infinity (refused, not sent as `null`);
 - [ ] reconnects on the jittered schedule above, honouring `Retry-After`.
 
 And, if it takes firmware updates (§4.4), when it:
