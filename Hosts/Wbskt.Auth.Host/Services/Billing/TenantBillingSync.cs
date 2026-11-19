@@ -86,7 +86,17 @@ internal sealed class TenantBillingSync(
     /// that may have lapsed, or an operator's plan past its end. When the provider no longer knows the
     /// subscription, the stored copy decides.
     /// </summary>
-    public async Task ReviewAsync(int tenantId, CancellationToken ct)
+    public Task ReviewAsync(int tenantId, CancellationToken ct) => ReviewAsync(tenantId, whenKept: true, ct);
+
+    /// <summary>
+    /// The hourly review of a tenant <c>dbo.TenantSubscriptions_GetToReview</c> listed: as
+    /// <see cref="ReviewAsync(int, CancellationToken)"/>, but a tenant whose deciding subscription keeps its
+    /// plan (<see cref="SubscriptionPlan.KeepsPlan"/>) is left alone without asking the provider, so one
+    /// that resubscribed is not read again every hour for the subscription that ended before.
+    /// </summary>
+    public Task ReviewIfLapsedAsync(int tenantId, CancellationToken ct) => ReviewAsync(tenantId, whenKept: false, ct);
+
+    private async Task ReviewAsync(int tenantId, bool whenKept, CancellationToken ct)
     {
         if (await plans.FindByIdAsync(tenantId, ct) is not { } tenant)
         {
@@ -94,6 +104,11 @@ internal sealed class TenantBillingSync(
         }
 
         TenantSubscription? deciding = SubscriptionPlan.Deciding(await billing.GetSubscriptionsAsync(tenantId, ct));
+        if (!whenKept && SubscriptionPlan.KeepsPlan(tenant, deciding, clock.GetUtcNow().UtcDateTime, options.Value.PastDueGrace))
+        {
+            return;
+        }
+
         if (deciding is null || !gateway.IsConfigured)
         {
             await ApplyAsync(tenant, deciding, clock.GetUtcNow().UtcDateTime, ct);

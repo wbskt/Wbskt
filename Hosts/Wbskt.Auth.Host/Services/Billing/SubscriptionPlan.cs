@@ -30,6 +30,18 @@ public static class SubscriptionPlan
     }
 
     /// <summary>
+    /// True when the subscription deciding a tenant's plan keeps it on the plan it has, and nothing a
+    /// provider read could change is overdue: the hourly review then leaves the tenant alone, even when an
+    /// older subscription of its has ended. An active subscription a day past the period it paid for is
+    /// not, since its renewal or cancellation never reached us.
+    /// </summary>
+    public static bool KeepsPlan(TenantPlan tenant, TenantSubscription? deciding, DateTime nowUtc, TimeSpan pastDueGrace) =>
+        tenant.Source == PlanSource.Subscription
+        && deciding is not null
+        && !(deciding.Status == SubscriptionStatus.Active && deciding.CurrentPeriodEnd < nowUtc.AddDays(-1))
+        && Decide(deciding, nowUtc, pastDueGrace) == tenant.PlanCode;
+
+    /// <summary>
     /// Still billing or about to: a second checkout for a plan would charge the tenant twice. A
     /// subscription cancelled at the end of its period is not, so the tenant can pick another.
     /// </summary>

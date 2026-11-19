@@ -30,7 +30,7 @@ public sealed class SubscriptionReviewWorker(IServiceScopeFactory scopeFactory, 
         {
             try
             {
-                await sync.ReviewAsync(tenantId, ct);
+                await sync.ReviewIfLapsedAsync(tenantId, ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

@@ -548,6 +548,42 @@ public sealed class BillingPaymentsTests
     }
 
     [Fact]
+    public async Task The_hourly_review_leaves_alone_a_tenant_whose_new_subscription_keeps_its_plan()
+    {
+        Tenant = Tenant with { PlanCode = PlanCode.Pro, Source = PlanSource.Subscription };
+        DateTime t = Now.UtcDateTime;
+        var ended = Subscription(SubscriptionStatus.Expired, t.AddDays(-10)) with { SubscriptionId = "old", CreatedAt = t.AddDays(-40) };
+        _stored.Add(ended);
+        _stored.Add(Subscription(SubscriptionStatus.Active, t.AddDays(25)) with { SubscriptionId = "new", CreatedAt = t.AddDays(-5) });
+
+        await Sync().ReviewIfLapsedAsync(9, CancellationToken.None);
+
+        _gateway.Verify(g => g.FindSubscriptionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        VerifyPlanNotSet();
+    }
+
+    [Theory]
+    [InlineData("refunded")]
+    [InlineData("other-plan")]
+    [InlineData("stale")]
+    public async Task The_hourly_review_reads_a_tenant_whose_deciding_subscription_does_not_keep_its_plan(string why)
+    {
+        Tenant = Tenant with { PlanCode = PlanCode.Pro, Source = PlanSource.Subscription };
+        DateTime t = Now.UtcDateTime;
+        var deciding = Subscription(SubscriptionStatus.Active, t.AddDays(25)) with { CreatedAt = t.AddDays(-5) };
+        _stored.Add(why switch
+        {
+            "refunded" => deciding with { RefundedThrough = t.AddMonths(2) },
+            "other-plan" => deciding with { PlanCode = PlanCode.Maker },
+            _ => deciding with { CurrentPeriodEnd = t.AddDays(-2) }
+        });
+
+        await Sync().ReviewIfLapsedAsync(9, CancellationToken.None);
+
+        _gateway.Verify(g => g.FindSubscriptionAsync("sub_1", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task A_review_falls_back_to_the_stored_copy_when_the_provider_no_longer_knows_the_subscription()
     {
         Tenant = Tenant with { PlanCode = PlanCode.Maker };
