@@ -12,7 +12,19 @@ internal static class BranchLocalState
         IReadOnlyDictionary<string, JsonElement> patch,
         IReadOnlyCollection<string>? removeKeys = null)
     {
-        Dictionary<string, JsonElement> merged = new(Deserialize(existingJson), StringComparer.Ordinal);
+        return Merge(Deserialize(existingJson), patch, removeKeys);
+    }
+
+    /// <summary>
+    /// The same merge over state already parsed, for a caller that holds it: a branch's state is up to
+    /// 256 KB, and serializing it only to parse it straight back was most of a fork's cost per child.
+    /// </summary>
+    public static IReadOnlyDictionary<string, JsonElement> Merge(
+        IReadOnlyDictionary<string, JsonElement> existing,
+        IReadOnlyDictionary<string, JsonElement> patch,
+        IReadOnlyCollection<string>? removeKeys = null)
+    {
+        Dictionary<string, JsonElement> merged = new(existing, StringComparer.Ordinal);
 
         // Removals run first so a node can drop a key and re-add it in the same step.
         if (removeKeys is not null)

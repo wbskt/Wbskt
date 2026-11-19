@@ -32,7 +32,7 @@ internal sealed class ForkResultHandler(
         if (result.Children.Count == 1 && string.IsNullOrWhiteSpace(result.ContinueOutboundPort))
         {
             ForkSpec child = result.Children.Single();
-            string childLocalJson = BranchLocalState.Serialize(BranchLocalState.Merge(BranchLocalState.Serialize(baseLocalState), child.LocalState));
+            string childLocalJson = BranchLocalState.Serialize(BranchLocalState.Merge(baseLocalState, child.LocalState));
             BranchRow moved = await branchProvider.UpdatePointerAsync(context.BranchId, BranchRouting.ResolveForkTarget(context.Definition, nodeId, child.OutboundPort), BranchStatus.Active, childLocalJson, branchRow.LastOutputJson, ct);
             return BranchResultOutcome.Advanced(moved);
         }
@@ -94,13 +94,13 @@ internal sealed class ForkResultHandler(
         for (int index = 0; index < children.Count; index++)
         {
             ForkSpec child = children[index];
-            IReadOnlyDictionary<string, JsonElement> childState = BranchLocalState.Merge(BranchLocalState.Serialize(baseLocalState), child.LocalState);
+            IReadOnlyDictionary<string, JsonElement> childState = BranchLocalState.Merge(baseLocalState, child.LocalState);
             if (adoptedJoinState is not null)
             {
                 // The replayed Fork opened a new join cohort, but the children made on the first pass
                 // carry the first one's token; a child created now must join theirs, or neither cohort
                 // ever reaches its expected count.
-                childState = BranchLocalState.Merge(BranchLocalState.Serialize(childState), adoptedJoinState);
+                childState = BranchLocalState.Merge(childState, adoptedJoinState);
             }
 
             (BranchRow created, bool isNew) = await branchProvider.CreateIfAbsentAsync(new BranchRow
