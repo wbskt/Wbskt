@@ -113,13 +113,12 @@ internal sealed class BranchLoop : IBranchLoop
             BranchExecutionReason.Recovered => HistoryEventKind.BranchRecovered,
             _ => HistoryEventKind.BranchStarted
         };
-        await _journal.AppendBranchEventAsync(
-            runRow.Id,
-            branchRow.RefId,
-            null,
-            entryKind,
-            new { reason = reason.ToString() },
-            ct);
+        // Held back and written with the first node's NodeStarted (or before whatever ends the branch
+        // first), so a dispatch does not open with a round trip of its own.
+        List<RunJournalEntry> heldEntries =
+        [
+            BranchEntry(runRow.Id, branchRow.RefId, null, entryKind, new { reason = reason.ToString() })
+        ];
         _logger?.LogDebug("Started branch loop for run {RunId} branch {BranchId} reason {Reason}", runId, branchId, reason);
 
         // A branch recovered after a crash or a deploy was stopped in the node it is at, which was paid
@@ -130,6 +129,7 @@ internal sealed class BranchLoop : IBranchLoop
         {
             if (await IsRunStoppedAsync(runRow, step++, runToken, ct))
             {
+                await FlushAsync(heldEntries, ct);
                 await _endings.CancelAsync(runRow.Id, branchId, branchRow, ct);
                 return;
             }
@@ -137,6 +137,7 @@ internal sealed class BranchLoop : IBranchLoop
             BaseNode? node = definition.Nodes.SingleOrDefault(candidate => candidate.NodeId == branchRow.NodeId);
             if (node is null)
             {
+                await FlushAsync(heldEntries, ct);
                 await _endings.CompleteAsync(runRow.Id, branchId, branchRow.RefId, ct);
                 return;
             }
@@ -156,11 +157,12 @@ internal sealed class BranchLoop : IBranchLoop
             // the marker and passed deadline made the node, revisited in a loop, take its timeout at once.
             if (!string.IsNullOrEmpty(branchRow.PendingTakePort))
             {
+                await FlushAsync(heldEntries, ct);
                 result = new NodeExecutionResult.Continue(branchRow.PendingTakePort, new Dictionary<string, JsonElement>(), ParkStateKeysOf(node));
             }
             else
             {
-                result = await ExecuteNodeAsync(runId, branchId, runRow, branchRow, definition, node, branchContext, parkedAttempt, recovering, linkedToken, ct);
+                result = await ExecuteNodeAsync(runId, branchId, runRow, branchRow, definition, node, branchContext, parkedAttempt, recovering, heldEntries, linkedToken, ct);
                 recovering = false;
                 if (result is null)
                 {
@@ -245,11 +247,13 @@ internal sealed class BranchLoop : IBranchLoop
         BranchContext branchContext,
         int? parkedAttempt,
         bool isRecoveredVisit,
+        List<RunJournalEntry> heldEntries,
         CancellationToken linkedToken,
         CancellationToken ct)
     {
         NodeExecutionResult? result = null;
-        await _journal.AppendBranchEventAsync(runRow.Id, branchRow.RefId, node.NodeId, HistoryEventKind.NodeStarted, ct);
+        heldEntries.Add(BranchEntry(runRow.Id, branchRow.RefId, node.NodeId, HistoryEventKind.NodeStarted, null));
+        await FlushAsync(heldEntries, ct);
         // Per-node lines are Debug: a workflow triggered by every client message would otherwise log
         // two lines per node per message, and NodeStarted/NodeCompleted are journaled to history anyway.
         _logger?.LogDebug("Executing node {NodeId} ({NodeKind}) on run {RunId} branch {BranchId}", node.NodeId, node.Kind, runId, branchId);
@@ -348,9 +352,10 @@ internal sealed class BranchLoop : IBranchLoop
 
         result = GuardLocalStateSize(result, branchRow);
 
+        // The node's warnings and its outcome go in one write.
         foreach (NodeWarning warning in result.Warnings)
         {
-            await _journal.AppendBranchEventAsync(runRow.Id, branchRow.RefId, node.NodeId, warning.EventKind, warning.Payload, ct);
+            heldEntries.Add(BranchEntry(runRow.Id, branchRow.RefId, node.NodeId, warning.EventKind, warning.Payload));
         }
 
         // durationMs travels on every node outcome. Deriving it by subtracting the NodeStarted
@@ -366,9 +371,24 @@ internal sealed class BranchLoop : IBranchLoop
         };
 
         _logger?.Log(result is NodeExecutionResult.Fail ? LogLevel.Information : LogLevel.Debug, "Node {NodeId} ({NodeKind}) completed with outcome {Outcome} on run {RunId} branch {BranchId}", node.NodeId, node.Kind, result.GetType().Name, runId, branchId);
-        await _journal.AppendBranchEventAsync(runRow.Id, branchRow.RefId, node.NodeId, result is NodeExecutionResult.Fail ? HistoryEventKind.NodeFailed : HistoryEventKind.NodeCompleted, eventPayload, ct);
+        heldEntries.Add(BranchEntry(runRow.Id, branchRow.RefId, node.NodeId, result is NodeExecutionResult.Fail ? HistoryEventKind.NodeFailed : HistoryEventKind.NodeCompleted, eventPayload));
+        await FlushAsync(heldEntries, ct);
 
         return result;
+    }
+
+    private static RunJournalEntry BranchEntry(int runId, Guid branchRefId, Guid? nodeId, string eventKind, object? payload) =>
+        new(runId, eventKind) { BranchRefId = branchRefId, NodeId = nodeId, Payload = payload };
+
+    private async Task FlushAsync(List<RunJournalEntry> heldEntries, CancellationToken ct)
+    {
+        if (heldEntries.Count == 0)
+        {
+            return;
+        }
+
+        await _journal.AppendAsync(heldEntries.ToArray(), ct);
+        heldEntries.Clear();
     }
 
     /// <summary>

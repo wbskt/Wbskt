@@ -11,6 +11,15 @@ public interface IRunJournal
 {
     Task AppendAsync(RunJournalEntry entry, CancellationToken ct);
 
+    /// <summary>Several entries in one write, in the order given.</summary>
+    async Task AppendAsync(IReadOnlyCollection<RunJournalEntry> entries, CancellationToken ct)
+    {
+        foreach (RunJournalEntry entry in entries)
+        {
+            await AppendAsync(entry, ct);
+        }
+    }
+
     /// <summary>Everything recorded for a run, oldest first.</summary>
     Task<IReadOnlyCollection<HistoryEventRow>> ReadAllAsync(int runId, CancellationToken ct);
 }
