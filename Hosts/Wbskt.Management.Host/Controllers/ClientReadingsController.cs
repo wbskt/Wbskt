@@ -54,16 +54,19 @@ public class ClientReadingsController : ApiControllerBase
     }
 
     /// <summary>
-    /// Every reading over a time range as CSV (name, sentAt, receivedAt, value, late), for one
-    /// state variable or all of them.
+    /// The readings over a time range as CSV, for one state variable or all of them: every reading
+    /// (name, sentAt, receivedAt, value, late), which reaches back only the plan's raw days, or with
+    /// <c>resolution=hourly</c> one row per variable and hour (name, hourStart, count, min, avg, max)
+    /// as far back as the chart.
     /// </summary>
     /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="clientRef">The unique reference ID of the client.</param>
     /// <param name="name">One state variable; every variable when left out.</param>
     /// <param name="from">Start of the range (inclusive). Defaults to a day before <paramref name="to"/>.</param>
     /// <param name="to">End of the range (exclusive). Defaults to now.</param>
+    /// <param name="resolution"><c>raw</c> (the default) or <c>hourly</c>.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A CSV file, oldest reading first.</returns>
+    /// <returns>A CSV file, oldest row first.</returns>
     [HttpGet("csv")]
     [Produces("text/csv")]
     public async Task<IActionResult> GetCsv(
@@ -72,14 +75,15 @@ public class ClientReadingsController : ApiControllerBase
         [FromQuery] string? name,
         [FromQuery] DateTimeOffset? from,
         [FromQuery] DateTimeOffset? to,
+        [FromQuery] string? resolution,
         CancellationToken cancellationToken = default)
     {
-        var readings = await _readingService.GetRangeAsync(workspaceId, clientRef, name, from, to, cancellationToken);
-        if (readings.IsFailure)
+        var csv = await _readingService.ExportCsvAsync(workspaceId, clientRef, name, from, to, resolution, cancellationToken);
+        if (csv.IsFailure)
         {
-            return MapError(readings.Error);
+            return MapError(csv.Error);
         }
 
-        return File(Encoding.UTF8.GetBytes(ClientReadingsCsv.Write(readings.Value)), "text/csv; charset=utf-8", $"readings-{clientRef}.csv");
+        return File(Encoding.UTF8.GetBytes(csv.Value), "text/csv; charset=utf-8", $"readings-{clientRef}.csv");
     }
 }
