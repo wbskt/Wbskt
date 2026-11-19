@@ -87,8 +87,16 @@ public abstract class WbsktApiClient
         }
 
         var problem = await ApiProblem.ReadAsync(response, cancellationToken).ConfigureAwait(false);
-        throw new ApiException(response.StatusCode, problem, response.RequestMessage?.Method, response.RequestMessage?.RequestUri);
+        throw new ApiException(response.StatusCode, problem, response.RequestMessage?.Method, response.RequestMessage?.RequestUri, RetryAfter(response));
     }
+
+    // Retry-After is a number of seconds or a date; a date already past means "now".
+    private static TimeSpan? RetryAfter(HttpResponseMessage response) => response.Headers.RetryAfter switch
+    {
+        { Delta: { } delta } => delta,
+        { Date: { } date } => date > DateTimeOffset.UtcNow ? date - DateTimeOffset.UtcNow : TimeSpan.Zero,
+        _ => null
+    };
 
     /// <summary>Reads a successful response's body as <typeparamref name="T"/>; a failure throws <see cref="ApiException"/>.</summary>
     public static async Task<T> ReadAsync<T>(HttpResponseMessage response, CancellationToken cancellationToken = default)

@@ -30,10 +30,11 @@ var policies = await management.GetPoliciesAsync(workspaces.First().RefId);
   failure status. `XRawAsync` returns the `HttpResponseMessage` untouched, for a caller that asserts
   on the status, the error code or a header. `SendRawAsync` sends anything, including bodies the
   contract does not allow.
-* `ApiException` carries the `HttpStatusCode` and the parsed Problem Details as `ApiProblem`
-  (`Status`, `Title`, `Detail`, `Code`, `TraceId`, and `Errors` for a validation failure). Branch on
-  `Code` (`AUTH_ROLE_CONFLICT`, `CLIENT_NOT_FOUND`, ...), not on the message. `ApiProblem.ReadAsync`
-  reads one off a raw response.
+* `ApiException` carries the `HttpStatusCode`, the parsed Problem Details as `ApiProblem`
+  (`Status`, `Title`, `Detail`, `Code`, `TraceId`, `Errors` for a validation failure, `Plan`, `Limit`
+  and `Current` for a plan limit, and any other member in `Extensions`), and `RetryAfter` from a 429's
+  or 503's header. Branch on `Code` (`AUTH_ROLE_CONFLICT`, `CLIENT_NOT_FOUND`, ...), not on the
+  message. `ApiProblem.ReadAsync` reads one off a raw response.
 * Lists return `Page<T>`; pass its `NextCursor` back as `cursor` for the next page.
 * Request bodies are written with web defaults (enums as numbers, as the hosts read them);
   responses are read accepting an enum as a name or a number.
