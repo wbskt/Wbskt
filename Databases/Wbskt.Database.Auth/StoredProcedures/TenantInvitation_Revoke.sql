@@ -1,5 +1,7 @@
 -- Withdraws an outstanding invitation. Marked rather than deleted, so that "this invitation was
--- issued and then withdrawn" stays answerable; the filtered index treats a revoked row as gone and
+-- issued and then withdrawn" stays answerable until the credential retention deletes it with the other
+-- unaccepted invitations past their expiry (dbo.Credential_DeleteExpired); the filtered index treats a
+-- revoked row as gone and
 -- allows the same address to be invited again. Returns the address when it revoked something, and
 -- no row when the invitation was not outstanding.
 CREATE PROCEDURE dbo.TenantInvitation_Revoke

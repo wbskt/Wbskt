@@ -48,8 +48,8 @@ BEGIN
 
     -- One unpaid tenant per account: each Free tenant brings its own workspace and allowance, so
     -- without a cap one sign-up could create as many as it liked. A Free tenant counts while the owner
-    -- is its only member, suspended members aside, as the seat count has it; one that pays, or that
-    -- others have joined, does not. The seeded default tenant (Id 1) is the operator's own and does not
+    -- is its only member; one that pays, or that others have joined, does not. A suspended member still
+    -- counts as one, as in the seat count (dbo.TenantSeats_GetBy_TenantId). The seeded default tenant (Id 1) is the operator's own and does not
     -- count. A tenant upgraded, used to create another and then let lapse to Free does count again,
     -- which leaves one more Free tenant per billing cycle paid: an accepted gap.
     IF EXISTS (
