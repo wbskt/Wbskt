@@ -25,6 +25,7 @@ using Wbskt.Management.Host.Hosting;
 using Wbskt.Management.Host.Hubs;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
+using Wbskt.Management.Host.RateLimiting;
 using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Billing;
 using Wbskt.Management.Host.Services.Clients;
@@ -284,28 +285,15 @@ public static class Program
 
             // Client login. Same per-IP partitioning, with room for a fleet behind one address.
             options.AddPerIpPolicy(builder.Configuration, RateLimitPolicies.ClientLogin, "ClientLogin", defaultPermitLimit: 300);
-
-            // Integration tests, per workspace: generous for someone setting one up, a wall for a loop.
-            int testPermitLimit = builder.Configuration.GetValue("RateLimiting:IntegrationTest:PermitLimit", 20);
-            var testWindow = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:IntegrationTest:WindowMinutes", 1));
-            options.AddPolicy(RateLimitPolicies.IntegrationTest, httpContext =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    // Normalised: the route accepts any GUID spelling (case, braces, no dashes), and
-                    // each raw spelling would otherwise get a window of its own.
-                    partitionKey: Guid.TryParse(httpContext.GetRouteValue("workspaceRef")?.ToString(), out var workspaceRef) ? workspaceRef.ToString("N") : "unknown",
-                    factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = testPermitLimit, Window = testWindow, QueueLimit = 0 }));
-
-            // CSV exports, per workspace: enough for someone clicking through filters, a wall for a loop.
-            int exportPermitLimit = builder.Configuration.GetValue("RateLimiting:Export:PermitLimit", 10);
-            var exportWindow = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:Export:WindowMinutes", 1));
-            options.AddPolicy(RateLimitPolicies.Export, httpContext =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: Guid.TryParse(httpContext.GetRouteValue("workspaceRef")?.ToString(), out var workspaceRef) ? workspaceRef.ToString("N") : "unknown",
-                    factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = exportPermitLimit, Window = exportWindow, QueueLimit = 0 }));
         });
 
         // Signed-in callers: a budget per user (see UserRateLimiter), after authentication.
         builder.Services.AddUserRateLimit(builder.Configuration);
+
+        // Integration tests and CSV exports: a budget per workspace, spent only once the caller is
+        // known and holds the permission (see WorkspaceRateLimitFilter), so an outsider who knows a
+        // workspace's reference cannot use it up.
+        builder.Services.AddSingleton<WorkspaceRateLimiter>();
 
         builder.Services.AddWbsktCors(builder.Configuration, builder.Environment);
         builder.Services.AddWbsktForwardedHeaders(builder.Configuration);
@@ -319,7 +307,11 @@ public static class Program
 
         // Workspace-scoped actions declare their permissions with [RequiresPermission]; this filter
         // resolves the workspace once and refuses the request before it reaches the action.
-        builder.Services.AddControllers(options => options.Filters.Add<WorkspacePermissionFilter>()).ConfigureApplicationPartManager(manager =>
+        builder.Services.AddControllers(options =>
+        {
+            options.Filters.Add<WorkspacePermissionFilter>();
+            options.Filters.Add<WorkspaceRateLimitFilter>();
+        }).ConfigureApplicationPartManager(manager =>
         {
             manager.FeatureProviders.Remove(manager.FeatureProviders.OfType<ControllerFeatureProvider>().Single());
             manager.FeatureProviders.Add(new HostRoleControllerFeatureProvider(role));

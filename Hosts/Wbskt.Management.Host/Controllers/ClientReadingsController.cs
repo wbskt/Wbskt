@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Authorization;
 using Wbskt.Infrastructure.Csv;
@@ -8,6 +7,7 @@ using Wbskt.Management.Host.Authorization;
 using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Host.Services.Readings;
+using Wbskt.Management.Host.RateLimiting;
 using Wbskt.Management.Models;
 using Wbskt.Primitives.Constants;
 
@@ -69,7 +69,7 @@ public class ClientReadingsController : ApiControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A CSV file, oldest row first.</returns>
     [HttpGet("csv")]
-    [EnableRateLimiting(RateLimitPolicies.Export)]
+    [WorkspaceRateLimit(RateLimitPolicies.Export)]
     [Produces("text/csv")]
     public async Task<IActionResult> GetCsv(
         [FromWorkspace] int workspaceId,

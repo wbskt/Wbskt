@@ -51,14 +51,15 @@ public static class RateLimitPolicies
     /// <summary>
     /// Testing an integration. Each test reaches out to someone else's service (a bot API, a mail
     /// relay) with a workspace's credential, so a runaway console or script must not turn the engine
-    /// into a flood against it. Partitioned per workspace.
+    /// into a flood against it. Partitioned per workspace, and spent only by a member holding the
+    /// permission (the management host's WorkspaceRateLimitFilter).
     /// </summary>
     public const string IntegrationTest = "integration-test";
 
     /// <summary>
     /// CSV exports (the event log, a client's readings). Each one reads up to 100,000 rows and holds a
     /// database connection while it streams them, so a script fetching one in a loop is held to a few
-    /// a minute. Partitioned per workspace.
+    /// a minute. Partitioned per workspace, and spent only by a member holding the permission.
     /// </summary>
     public const string Export = "export";
 }
