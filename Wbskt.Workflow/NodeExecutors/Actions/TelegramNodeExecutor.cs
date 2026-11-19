@@ -1,8 +1,6 @@
-using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Integrations;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
-using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Integrations;
 using Wbskt.Workflow.Runtime;
 
@@ -17,42 +15,19 @@ namespace Wbskt.Workflow.NodeExecutors.Actions;
 /// versioned and readable by the whole workspace, so a token written into one leaks to every member
 /// and is frozen into every published version.
 /// </remarks>
-internal sealed class TelegramNodeExecutor(IIntegrationResolver resolver, TelegramChannel channel, ActionTemplates templates) : INodeExecutor
+internal sealed class TelegramNodeExecutor(IIntegrationResolver resolver, TelegramChannel channel, ActionTemplates templates)
+    : IntegrationStepExecutor<TelegramNotificationNode, TelegramConfig>(resolver, templates)
 {
-    public string Kind => NodeKind.ActionTelegram;
+    public override string Kind => NodeKind.ActionTelegram;
 
-    public async Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
-    {
-        var node = (TelegramNotificationNode)ctx.Node;
-        TelegramConfig config = node.Config
-            ?? throw new InvalidOperationException($"Telegram node {node.NodeId} is missing config.");
+    protected override IntegrationType IntegrationType => IntegrationType.Telegram;
 
-        var resolution = await resolver.ResolveAsync(ctx.Branch, config.IntegrationRef, IntegrationType.Telegram, ct);
-        if (resolution.Failure is not null)
-        {
-            return resolution.Failure;
-        }
+    protected override string? MetadataKey => "telegram";
 
-        var integration = resolution.Integration!;
-        var result = await channel.SendAsync(integration, await templates.FillAsync(ctx, config, ct), ct);
-        if (!result.Ok)
-        {
-            // 4xx means the request itself is wrong - unknown chat, revoked token, a chat that blocked
-            // the bot - and will be wrong again next time. 429 is the exception: Telegram rate-limits, and that is exactly what a
-            // retry is for.
-            return new NodeExecutionResult.Fail(result.Code!, result.Message!, result.Retryable, null);
-        }
+    protected override TelegramConfig? ConfigOf(TelegramNotificationNode node) => node.Config;
 
-        await resolver.MarkUsedAsync(integration, ct);
-        var patch = new Dictionary<string, JsonElement>
-        {
-            ["status"] = JsonSerializer.SerializeToElement(result.Status ?? 200)
-        };
-        if (result.Metadata is { } sent)
-        {
-            patch["telegram"] = sent;
-        }
+    protected override Guid? IntegrationRefOf(TelegramConfig config) => config.IntegrationRef;
 
-        return new NodeExecutionResult.Continue("default", patch);
-    }
+    protected override Task<ChannelResult> SendAsync(ResolvedIntegration integration, TelegramConfig config, CancellationToken ct) =>
+        channel.SendAsync(integration, config, ct);
 }
