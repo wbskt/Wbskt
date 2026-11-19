@@ -115,7 +115,7 @@ public sealed class EngineLeaseLifecycleTests
         var branches = new Mock<IBranchProvider>();
         branches.Setup(b => b.GetWokenAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        branches.Setup(b => b.GetRunningBranchesAsync(It.IsAny<CancellationToken>()))
+        branches.Setup(b => b.GetRunningBranchesAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("database unreachable"));
         var claims = new Mock<IIdempotencyKeyProvider>();
         claims.Setup(c => c.ReleaseAbandonedClaimsAsync(It.IsAny<CancellationToken>())).ReturnsAsync(0);
@@ -171,17 +171,12 @@ public sealed class EngineLeaseLifecycleTests
             .Callback(() => steps.Enqueue("bus-started"))
             .ReturnsAsync(Mock.Of<BusHandle>());
 
-        var woken = new BranchRow
-        {
-            Id = 81, RefId = Guid.NewGuid(), RunId = 181, ParentBranchId = null, ForkCohortId = null,
-            NodeId = Guid.NewGuid(), Status = "Waiting", PendingTakePort = null, LocalJson = "{}", LastOutputJson = null,
-            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow, RowVersion = [1]
-        };
+        var woken = new WokenBranch(81, 181, [1]);
         var branches = new Mock<IBranchProvider>();
         branches.Setup(b => b.GetWokenAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .Callback(() => steps.Enqueue(state.BusStarted ? "woken-read-after-gate" : "woken-read"))
             .ReturnsAsync([woken]);
-        branches.Setup(b => b.GetRunningBranchesAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        branches.Setup(b => b.GetRunningBranchesAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
         var claims = new Mock<IIdempotencyKeyProvider>();
         claims.Setup(c => c.ReleaseAbandonedClaimsAsync(It.IsAny<CancellationToken>()))
             .Callback(() => steps.Enqueue(state.BusStarted ? "claims-released-after-gate" : "claims-released"))

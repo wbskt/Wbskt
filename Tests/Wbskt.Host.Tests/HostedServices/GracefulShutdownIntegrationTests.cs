@@ -74,8 +74,8 @@ public sealed class GracefulShutdownIntegrationTests
     private static IBranchProvider CreateBranchProvider()
     {
         var mock = new Mock<IBranchProvider>(MockBehavior.Strict);
-        mock.Setup(x => x.GetRunningBranchesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<BranchRow>());
+        mock.Setup(x => x.GetRunningBranchesAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<RunningBranch>());
         return mock.Object;
     }
 

@@ -38,6 +38,9 @@ public sealed class RunRecoveryService : IEngineStartupTracker
     /// <summary>The page size <see cref="CollectWokenAsync"/> reads woken branches in.</summary>
     internal const int WokenPageSize = 1_000;
 
+    /// <summary>The page size Active branches are read in.</summary>
+    internal const int RunningPageSize = 1_000;
+
     /// <summary>The batch size <see cref="RecoverAsync"/> finalizes runs with no work left in.</summary>
     internal const int SettledPageSize = 100;
 
@@ -83,8 +86,8 @@ public sealed class RunRecoveryService : IEngineStartupTracker
             long afterId = 0;
             while (true)
             {
-                IReadOnlyCollection<BranchRow> page = await branchProvider.GetWokenAsync(afterId, WokenPageSize, ct);
-                foreach (BranchRow branch in page)
+                IReadOnlyCollection<WokenBranch> page = await branchProvider.GetWokenAsync(afterId, WokenPageSize, ct);
+                foreach (WokenBranch branch in page)
                 {
                     woken.Add(new BranchExecutionRequest(branch.RunId, branch.Id, BranchExecutionReason.Recovered));
                     afterId = Math.Max(afterId, branch.Id);
@@ -120,8 +123,8 @@ public sealed class RunRecoveryService : IEngineStartupTracker
             var runProvider = scope.ServiceProvider.GetService<IRunProvider>();
             var runCancellationService = scope.ServiceProvider.GetService<IRunCancellationService>();
 
-            IReadOnlyCollection<BranchRow> branches = await branchProvider.GetRunningBranchesAsync(ct);
-            
+            IReadOnlyCollection<RunningBranch> branches = await ReadRunningBranchesAsync(branchProvider, ct);
+
             var runGroups = branches.GroupBy(b => b.RunId);
             var reappliedRunIds = new HashSet<long>();
 
@@ -130,21 +133,22 @@ public sealed class RunRecoveryService : IEngineStartupTracker
                 long runId = group.Key;
                 reappliedRunIds.Add(runId);
                 
-                if (runProvider is not null && runCancellationService is not null)
+                if (runCancellationService is not null)
                 {
                     try
                     {
-                        RunRow run = await runProvider.GetByIdAsync(runId, ct);
-                        if (string.Equals(run.Status, RunStatus.Cancelling, StringComparison.Ordinal))
+                        // The run's status rode along with its branches, so no run is read on its own.
+                        RunningBranch run = group.First();
+                        if (string.Equals(run.RunStatus, RunStatus.Cancelling, StringComparison.Ordinal))
                         {
                             // Cancelling CTS alone left the run's bookmarks and waiting branches behind:
                             // the branches we are about to re-dispatch unwind, but a parked sibling keeps
                             // ActiveBranchCount above zero forever, and the reaper skips any run holding a
                             // bookmark - so the run could never reach a terminal status. Re-applying the
                             // cancellation is idempotent on an already-'Cancelling' run and does that cleanup.
-                            await runCancellationService.RequestCancellationAsync(runId, run.CancellationReason ?? "Cancellation re-applied during recovery", ct);
+                            await runCancellationService.RequestCancellationAsync(runId, run.RunCancellationReason ?? "Cancellation re-applied during recovery", ct);
                         }
-                        else if (string.Equals(run.Status, RunStatus.Failing, StringComparison.Ordinal))
+                        else if (string.Equals(run.RunStatus, RunStatus.Failing, StringComparison.Ordinal))
                         {
                             // Failing is not cancelled, so it must not be moved to 'Cancelling'. But the
                             // failure stops the run's work just as a cancel does, and the previous leader may
@@ -218,10 +222,10 @@ public sealed class RunRecoveryService : IEngineStartupTracker
 
         await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
         var branchProvider = scope.ServiceProvider.GetRequiredService<IBranchProvider>();
-        IReadOnlyCollection<BranchRow> branches = await branchProvider.GetRunningBranchesAsync(ct);
+        IReadOnlyCollection<RunningBranch> branches = await ReadRunningBranchesAsync(branchProvider, ct);
 
         int recovered = 0;
-        foreach (BranchRow branch in branches)
+        foreach (RunningBranch branch in branches)
         {
             if (dispatched.Contains(branch.Id) || branch.UpdatedAt >= cutoffUtc)
             {
@@ -312,6 +316,23 @@ public sealed class RunRecoveryService : IEngineStartupTracker
                     _logger.LogWarning(ex, "Failed to re-apply the stop of {Status} run {RunId} during startup recovery.", status, run.Id);
                 }
             }
+        }
+    }
+
+    private static async Task<IReadOnlyCollection<RunningBranch>> ReadRunningBranchesAsync(IBranchProvider branchProvider, CancellationToken ct)
+    {
+        var branches = new List<RunningBranch>();
+        long afterId = 0;
+        while (true)
+        {
+            IReadOnlyCollection<RunningBranch> page = await branchProvider.GetRunningBranchesAsync(afterId, RunningPageSize, ct);
+            branches.AddRange(page);
+            if (page.Count < RunningPageSize)
+            {
+                return branches;
+            }
+
+            afterId = page.Max(branch => branch.Id);
         }
     }
 }

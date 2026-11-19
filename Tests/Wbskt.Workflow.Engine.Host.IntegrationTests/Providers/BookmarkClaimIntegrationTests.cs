@@ -177,7 +177,7 @@ public sealed class BookmarkClaimIntegrationTests(SqlEdgeFixture fixture)
         long afterId = 0;
         while (true)
         {
-            IReadOnlyCollection<BranchRow> page = await branchProvider.GetWokenAsync(afterId, 500, CancellationToken.None);
+            IReadOnlyCollection<WokenBranch> page = await branchProvider.GetWokenAsync(afterId, 500, CancellationToken.None);
             ids.AddRange(page.Select(branch => branch.Id));
             if (page.Count < 500)
             {

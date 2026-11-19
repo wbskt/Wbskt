@@ -16,8 +16,8 @@ public sealed class RunRecoveryServiceTests
         // Arrange
         var branches = new[]
         {
-            CreateBranch(71, 171),
-            CreateBranch(72, 172)
+            Running(71, 171),
+            Running(72, 172)
         };
         var branchProvider = new RecordingBranchProvider(branches);
         var runDispatcher = new RecordingRunDispatcher();
@@ -35,7 +35,7 @@ public sealed class RunRecoveryServiceTests
     public async Task The_overlap_pass_runs_only_the_Active_branches_an_old_leader_left_with_nothing_to_drive_them()
     {
         DateTime now = new(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc);
-        var branches = new List<BranchRow> { CreateBranch(71, 171) };
+        var branches = new List<RunningBranch> { Running(71, 171) };
         var dispatcher = new ChannelRunDispatcher();
         var logger = new RecordingLogger<RunRecoveryService>();
         var service = new RunRecoveryService(WorkerTestServices.Scopes(new RecordingBranchProvider(branches)), dispatcher, logger, dispatcher, new FixedClock(now));
@@ -45,9 +45,9 @@ public sealed class RunRecoveryServiceTests
 
         // While this leader ran: the old one started a run (72), this one started one and dispatched it
         // (74), and this one has just written one it has yet to dispatch (73).
-        branches.Add(CreateBranch(72, 172));
-        branches.Add(CreateBranch(73, 173) with { UpdatedAt = now.AddSeconds(-2) });
-        branches.Add(CreateBranch(74, 174));
+        branches.Add(Running(72, 172));
+        branches.Add(Running(73, 173) with { UpdatedAt = now.AddSeconds(-2) });
+        branches.Add(Running(74, 174));
         await dispatcher.DispatchAsync(new BranchExecutionRequest(174, 74, BranchExecutionReason.TriggerStarted), CancellationToken.None);
 
         await service.RecoverOverlapAsync(CancellationToken.None);
@@ -79,7 +79,7 @@ public sealed class RunRecoveryServiceTests
     public async Task Start_resumes_the_woken_branches_it_was_given_after_the_running_ones()
     {
         // Arrange
-        var branchProvider = new RecordingBranchProvider([CreateBranch(71, 171)]);
+        var branchProvider = new RecordingBranchProvider([Running(71, 171)]);
         var runDispatcher = new RecordingRunDispatcher();
         var logger = new RecordingLogger<RunRecoveryService>();
         var service = new RunRecoveryService(WorkerTestServices.Scopes(branchProvider), runDispatcher, logger);
@@ -135,8 +135,8 @@ public sealed class RunRecoveryServiceTests
     public async Task Collecting_woken_branches_reads_every_page_and_dispatches_nothing()
     {
         // Arrange
-        BranchRow[] woken = Enumerable.Range(1, RunRecoveryService.WokenPageSize + 5)
-            .Select(id => CreateBranch(id, 1000 + id))
+        WokenBranch[] woken = Enumerable.Range(1, RunRecoveryService.WokenPageSize + 5)
+            .Select(id => new WokenBranch(id, 1000 + id, [1]))
             .ToArray();
         var branchProvider = new RecordingBranchProvider([], woken);
         var runDispatcher = new RecordingRunDispatcher();
@@ -192,13 +192,13 @@ public sealed class RunRecoveryServiceTests
         // Arrange
         var branches = new[]
         {
-            CreateBranch(71, 171),
-            CreateBranch(72, 172)
+            Running(71, 171, "Cancelling"),
+            Running(72, 172, "Failing")
         };
         var branchProvider = new RecordingBranchProvider(branches);
         var runDispatcher = new RecordingRunDispatcher();
         var logger = new RecordingLogger<RunRecoveryService>();
-        
+
         var runProvider = new RecordingRunProvider();
         runProvider.AddRun(CreateRunRow(171, "Cancelling"));
         runProvider.AddRun(CreateRunRow(172, "Failing"));
@@ -265,6 +265,9 @@ public sealed class RunRecoveryServiceTests
         };
     }
 
+    private static RunningBranch Running(int id, int runId, string runStatus = "Running") =>
+        new(id, runId, new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc), runStatus, null);
+
     private static BranchRow CreateBranch(int id, int runId)
     {
         return new BranchRow
@@ -290,14 +293,20 @@ public sealed class RunRecoveryServiceTests
         public override DateTimeOffset GetUtcNow() => new(utcNow);
     }
 
-    private sealed class RecordingBranchProvider(IReadOnlyCollection<BranchRow> branches, IReadOnlyCollection<BranchRow>? woken = null) : IBranchProvider
+    private sealed class RecordingBranchProvider(IReadOnlyCollection<RunningBranch> branches, IReadOnlyCollection<WokenBranch>? woken = null) : IBranchProvider
     {
         public List<long> WokenAfterIds { get; } = [];
 
-        public Task<IReadOnlyCollection<BranchRow>> GetWokenAsync(long afterId, int batchSize, CancellationToken ct)
+        public Task<IReadOnlyCollection<WokenBranch>> GetWokenAsync(long afterId, int batchSize, CancellationToken ct)
         {
             WokenAfterIds.Add(afterId);
-            IReadOnlyCollection<BranchRow> page = (woken ?? []).Where(branch => branch.Id > afterId).OrderBy(branch => branch.Id).Take(batchSize).ToArray();
+            IReadOnlyCollection<WokenBranch> page = (woken ?? []).Where(branch => branch.Id > afterId).OrderBy(branch => branch.Id).Take(batchSize).ToArray();
+            return Task.FromResult(page);
+        }
+
+        public Task<IReadOnlyCollection<RunningBranch>> GetRunningBranchesAsync(long afterId, int batchSize, CancellationToken ct)
+        {
+            IReadOnlyCollection<RunningBranch> page = branches.Where(branch => branch.Id > afterId).OrderBy(branch => branch.Id).Take(batchSize).ToArray();
             return Task.FromResult(page);
         }
 
@@ -309,11 +318,6 @@ public sealed class RunRecoveryServiceTests
         public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct) => throw new NotSupportedException();
         public Task<BranchRow> SetCompletedAsync(long branchId, CancellationToken ct) => throw new NotSupportedException();
         public Task<BranchRow> SetFailedAsync(long branchId, string? lastOutputJson, CancellationToken ct) => throw new NotSupportedException();
-
-        public Task<IReadOnlyCollection<BranchRow>> GetRunningBranchesAsync(CancellationToken ct)
-        {
-            return Task.FromResult(branches);
-        }
     }
 
     private sealed class RecordingRunDispatcher : IRunDispatcher

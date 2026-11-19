@@ -75,8 +75,8 @@ internal sealed class RunFinalizer : IRunFinalizer
     public async Task FinalizeAsync(long runId, CancellationToken ct)
     {
         RunRow run = await _runProvider.GetByIdAsync(runId, ct);
-        IReadOnlyCollection<BranchRow> branches = await _branchProvider.GetAllByRunIdAsync(run.Id, ct);
-        string terminalStatus = DetermineTerminalStatus(run, branches);
+        IReadOnlyCollection<string> branchStatuses = await _branchProvider.GetStatusesByRunIdAsync(run.Id, ct);
+        string terminalStatus = DetermineTerminalStatus(run, branchStatuses);
         DateTime completedAt = _clock.GetUtcNow().UtcDateTime;
 
         (bool transitioned, RunRow updatedRun) = await _runProvider.SetTerminalAsync(runId, terminalStatus, completedAt, ct);
@@ -130,7 +130,7 @@ internal sealed class RunFinalizer : IRunFinalizer
         }
     }
 
-    private static string DetermineTerminalStatus(RunRow run, IReadOnlyCollection<BranchRow> branches)
+    private static string DetermineTerminalStatus(RunRow run, IReadOnlyCollection<string> branchStatuses)
     {
         if (string.Equals(run.Status, RunStatus.Cancelling, StringComparison.Ordinal))
         {
@@ -143,8 +143,8 @@ internal sealed class RunFinalizer : IRunFinalizer
             // run only partially made it out - anything else (nothing completed, whether branches
             // were cancelled, failed, or the request simply beat every branch to the punch) is a
             // clean Cancelled.
-            bool hasCancelledBranch = branches.Any(branch => string.Equals(branch.Status, BranchStatus.Cancelled, StringComparison.Ordinal));
-            bool hasCompletedDespiteCancellation = branches.Any(branch => string.Equals(branch.Status, BranchStatus.Completed, StringComparison.Ordinal));
+            bool hasCancelledBranch = branchStatuses.Contains(BranchStatus.Cancelled, StringComparer.Ordinal);
+            bool hasCompletedDespiteCancellation = branchStatuses.Contains(BranchStatus.Completed, StringComparer.Ordinal);
             return hasCancelledBranch && hasCompletedDespiteCancellation ? RunStatus.PartiallyFailed : RunStatus.Cancelled;
         }
 
@@ -158,8 +158,8 @@ internal sealed class RunFinalizer : IRunFinalizer
             return RunStatus.Failed;
         }
 
-        bool hasCompleted = branches.Any(branch => string.Equals(branch.Status, BranchStatus.Completed, StringComparison.Ordinal));
-        bool hasFailed = branches.Any(branch => string.Equals(branch.Status, BranchStatus.Failed, StringComparison.Ordinal));
+        bool hasCompleted = branchStatuses.Contains(BranchStatus.Completed, StringComparer.Ordinal);
+        bool hasFailed = branchStatuses.Contains(BranchStatus.Failed, StringComparer.Ordinal);
 
         if (hasFailed && hasCompleted)
         {

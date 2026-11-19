@@ -10,7 +10,20 @@ public interface IBranchProvider
     Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct);
     Task<BranchRow> GetByRefIdAsync(Guid refId, CancellationToken ct);
     Task<IReadOnlyCollection<BranchRow>> GetAllByRunIdAsync(int runId, CancellationToken ct);
-    Task<IReadOnlyCollection<BranchRow>> GetRunningBranchesAsync(CancellationToken ct);
+
+    /// <summary>
+    /// The statuses the run's branches are in, each once. The finalizer needs no more to pick a run's
+    /// terminal status. Defaulted over <see cref="GetAllByRunIdAsync"/> for the test doubles.
+    /// </summary>
+    async Task<IReadOnlyCollection<string>> GetStatusesByRunIdAsync(int runId, CancellationToken ct) =>
+        (await GetAllByRunIdAsync(runId, ct)).Select(branch => branch.Status).Distinct(StringComparer.Ordinal).ToArray();
+
+    /// <summary>
+    /// Active branches, with their run's status, paged by Id after <paramref name="afterId"/>: what a new
+    /// leader recovers. Defaulted so the test doubles that never recover need no stub.
+    /// </summary>
+    Task<IReadOnlyCollection<RunningBranch>> GetRunningBranchesAsync(long afterId, int batchSize, CancellationToken ct)
+        => Task.FromResult<IReadOnlyCollection<RunningBranch>>(Array.Empty<RunningBranch>());
 
     /// <summary>
     /// Waiting branches of a live run that have no bookmark to wake them, no stored wake, and have not
@@ -26,16 +39,16 @@ public interface IBranchProvider
     /// these: the previous one may have stopped before dispatching them. Defaulted so the test doubles
     /// that never recover need no stub.
     /// </summary>
-    Task<IReadOnlyCollection<BranchRow>> GetWokenAsync(long afterId, int batchSize, CancellationToken ct)
-        => Task.FromResult<IReadOnlyCollection<BranchRow>>(Array.Empty<BranchRow>());
+    Task<IReadOnlyCollection<WokenBranch>> GetWokenAsync(long afterId, int batchSize, CancellationToken ct)
+        => Task.FromResult<IReadOnlyCollection<WokenBranch>>(Array.Empty<WokenBranch>());
 
     /// <summary>
     /// Waiting branches of a live run whose wake a claim stored and that have not been written since
     /// <paramref name="cutoffUtc"/>: woken, but not yet run, longer than a dispatch takes. Defaulted so the
     /// test doubles that never sweep need no stub.
     /// </summary>
-    Task<IReadOnlyCollection<BranchRow>> GetWokenNotWrittenSinceAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
-        => Task.FromResult<IReadOnlyCollection<BranchRow>>(Array.Empty<BranchRow>());
+    Task<IReadOnlyCollection<WokenBranch>> GetWokenNotWrittenSinceAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
+        => Task.FromResult<IReadOnlyCollection<WokenBranch>>(Array.Empty<WokenBranch>());
 
     Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct);
     Task<BranchRow> SetCompletedAsync(long branchId, CancellationToken ct);
