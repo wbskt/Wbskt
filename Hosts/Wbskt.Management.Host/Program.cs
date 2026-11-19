@@ -137,6 +137,7 @@ public static class Program
         builder.Services.AddScopedWithQueuedEvents<IIntegrationService, IntegrationService>();
         builder.Services.AddScoped<IntegrationReferenceCheck>();
         builder.Services.AddScoped<ClientReferenceCheck>();
+        builder.Services.AddScoped<SubWorkflowReferenceCheck>();
         builder.Services.AddScoped<IWorkflowQueryService, WorkflowQueryService>();
         builder.Services.AddScopedWithQueuedEvents<IWorkflowLifecycleService, WorkflowLifecycleService>();
         builder.Services.AddScoped<IWorkflowDraftService, WorkflowDraftService>();

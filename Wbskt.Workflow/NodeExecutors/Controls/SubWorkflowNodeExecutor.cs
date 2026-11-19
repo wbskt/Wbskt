@@ -109,8 +109,13 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
         }
 
         // The parent already holds a place under the plan's active-run ceiling, so its child is
-        // started past it (InboundEvent.StartsChildRun).
-        InboundEvent evt = ManualChannel.Event(childRefId, body, null, Clock.GetUtcNow().UtcDateTime) with { StartsChildRun = true };
+        // started past it (InboundEvent.StartsChildRun). Only a workflow of the parent's own workspace
+        // can be the child, whatever ref the step names (InboundEvent.WorkspaceId).
+        InboundEvent evt = ManualChannel.Event(childRefId, body, null, Clock.GetUtcNow().UtcDateTime) with
+        {
+            StartsChildRun = true,
+            WorkspaceId = ctx.Branch.WorkspaceId
+        };
 
         TriggerDispatchResult result = await hub.HandleAsync(evt, ct);
         if (result.Outcome == TriggerDispatchOutcome.Refused)

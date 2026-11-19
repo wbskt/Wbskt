@@ -45,6 +45,7 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
     private readonly ILogger<WorkflowLifecycleService> _logger;
     private readonly IConfiguration? _configuration;
     private readonly ClientReferenceCheck? _clientCheck;
+    private readonly SubWorkflowReferenceCheck? _subWorkflowCheck;
 
     public WorkflowLifecycleService(
         IWorkflowDefinitionProvider definitions,
@@ -57,7 +58,8 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
         IEventBus eventBus,
         ILogger<WorkflowLifecycleService> logger,
         IConfiguration? configuration = null,
-        ClientReferenceCheck? clientCheck = null)
+        ClientReferenceCheck? clientCheck = null,
+        SubWorkflowReferenceCheck? subWorkflowCheck = null)
     {
         _definitions = definitions;
         _states = states;
@@ -70,6 +72,7 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
         _logger = logger;
         _configuration = configuration;
         _clientCheck = clientCheck;
+        _subWorkflowCheck = subWorkflowCheck;
     }
 
     // Configuration, not a constant, so it can become a plan tier without a redeploy of the code.
@@ -377,8 +380,9 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
 
     /// <summary>
     /// What publishing and enabling both require of a definition: the validator passes, the integrations
-    /// its steps name are this workspace's and of the right type, and no client it names is gone (one
-    /// only revoked is a warning, as it can be registered again).
+    /// its steps name are this workspace's and of the right type, no client it names is gone (one
+    /// only revoked is a warning, as it can be registered again), and every workflow a step runs is
+    /// this workspace's.
     /// </summary>
     private async Task<Result<IntegrationReferences>> CheckAsync(int workspaceId, Guid refId, WorkflowDefinition definition, CancellationToken ct)
     {
@@ -402,6 +406,15 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
             if (clientIssues.Any(issue => issue.Severity == ValidationSeverity.Error))
             {
                 return Result<IntegrationReferences>.Failure(ValidationFailed(clientIssues));
+            }
+        }
+
+        if (_subWorkflowCheck is not null)
+        {
+            var subWorkflowIssues = await _subWorkflowCheck.CheckAsync(workspaceId, definition, ct);
+            if (subWorkflowIssues.Any(issue => issue.Severity == ValidationSeverity.Error))
+            {
+                return Result<IntegrationReferences>.Failure(ValidationFailed(subWorkflowIssues));
             }
         }
 

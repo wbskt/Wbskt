@@ -35,6 +35,13 @@ public sealed record InboundEvent(
     public Guid? ForTriggerNodeId { get; init; }
 
     /// <summary>
+    /// Set when the event may start only this workspace's workflows: a parent's sub-workflow node sets
+    /// its own, because a manual trigger's key is the workflow's ref alone, and without it a step naming
+    /// another workspace's workflow would start a run there. It only narrows what the event matches.
+    /// </summary>
+    public int? WorkspaceId { get; init; }
+
+    /// <summary>
     /// Set only by a parent's sub-workflow node starting its child. The parent already holds a place
     /// under the plan's active-run ceiling, so the child is started past it. Never read from
     /// JSON, so no inbound adapter (or a queued event's stored copy) can claim it.
