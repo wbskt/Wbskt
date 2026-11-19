@@ -26,12 +26,9 @@ RETURN
                       FROM dbo.TenantCreditMonths m
                       WHERE m.TenantId = @TenantId
                         AND m.MonthStart = DATEFROMPARTS(YEAR(@At), MONTH(@At), 1)), 0) AS PlanLeft,
-            ISNULL((SELECT SUM(rc.CreditsConsumed - rc.PostedCredits)
-                    FROM dbo.RunCounters rc
-                    JOIN dbo.Runs r ON r.Id = rc.RunId
-                    JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
-                    JOIN dbo.TenantWorkspaces(@WorkspaceId, @TenantId) w ON w.WorkspaceId = d.WorkspaceId
-                    WHERE rc.HasUnposted = 1), 0) AS Unposted,
+            ISNULL((SELECT SUM(h.Credits)
+                    FROM dbo.RunCreditsHeld(@WorkspaceId, @TenantId) h
+                    WHERE h.Kind = N'Unposted'), 0) AS Unposted,
             CASE WHEN @TenantId IS NULL THEN 0
                  ELSE (SELECT g.Credits FROM dbo.TenantCreditGrantBalance(@TenantId, @At) g) END AS Grants,
             (SELECT x.Credits FROM dbo.TenantCreditsReserved(@WorkspaceId, @TenantId) x) AS Reserved
