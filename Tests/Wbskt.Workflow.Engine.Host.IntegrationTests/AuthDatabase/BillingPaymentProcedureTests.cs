@@ -399,7 +399,7 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
     }
 
     [SkippableFact]
-    public async Task Review_leaves_out_an_ended_subscription_while_another_keeps_the_plan()
+    public async Task Review_lists_an_ended_subscription_even_while_another_keeps_the_plan()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
         int resubscribed = await CreateTenantAsync("Pro");
@@ -416,7 +416,9 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
 
         IReadOnlyCollection<int> listed = await GetToReviewAsync(Now, pastDueSince: Now.AddDays(-7));
 
-        Assert.DoesNotContain(resubscribed, listed);
+        // Candidates only: TenantBillingSync.ReviewIfLapsedAsync drops the one whose new subscription
+        // keeps the plan (SubscriptionPlan.KeepsPlan), so the rule is written once.
+        Assert.Contains(resubscribed, listed);
         Assert.Contains(refundedOnly, listed);
         Assert.Contains(otherPlan, listed);
     }
