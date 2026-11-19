@@ -19,5 +19,5 @@ namespace Wbskt.Events.Workflow;
 /// a bounded lifetime of their own as well.
 /// </remarks>
 [EventCriticality(EventCriticality.Info)]
-public sealed record WorkflowDefinitionChangedEvent(Guid? WorkflowRefId, int WorkspaceId, IReadOnlyList<int> DefinitionIds)
+public sealed record WorkflowDefinitionChangedEvent(Guid? WorkflowRefId, int WorkspaceId, [property: SignalRPrivate] IReadOnlyList<int> DefinitionIds)
     : BaseEvent, IWorkspaceContext;
