@@ -19,7 +19,6 @@ BEGIN
     -- No row returned means the run is out of credits; otherwise the row is what was spent of the budget
     -- the charge was held to, and that budget (its ceiling, for a leased one).
     DECLARE @Charged TABLE (Spent DECIMAL(18,4) NOT NULL, Budget DECIMAL(18,4) NOT NULL);
-    DECLARE @Reason NVARCHAR(20) = N'RunBudget';
     SET @Refusal = NULL;
 
     -- A run with its own budget and room in it: one statement, as on every charge before sub-workflow
@@ -156,19 +155,11 @@ BEGIN
                     SET @Extend = @TenantLeft;
 
                 -- Only an extension that lets the charge through is taken, so a refused charge leaves
-                -- nothing held by a run that cannot use it. A refusal names what ran short, in the order
-                -- that raising it would help: the run's own ceiling, then the account (raising the cap does
-                -- nothing while its month is spent), then the cap.
+                -- nothing held by a run that cannot use it.
                 IF @Extend >= @Need
                     UPDATE dbo.Runs
                     SET CreditBudget = @Budget + @Extend
                     WHERE Id = @Root;
-                ELSE IF @Ceiling - @Budget < @Need
-                    SET @Reason = N'RunBudget';
-                ELSE IF @TenantLeft < @Need
-                    SET @Reason = N'PlanCredits';
-                ELSE IF @CapLeft < @Need
-                    SET @Reason = N'WorkspaceCap';
             END
         END
 
@@ -195,8 +186,32 @@ BEGIN
         COMMIT TRANSACTION;
     END
 
+    -- A refusal names what ran short: the account's month (raising the cap or the run's budget does
+    -- nothing while it is spent), then the workspace's cap, then the run's own budget. A run whose ceiling
+    -- Run_Start already cut to what the account or the cap had left reaches it with no extension tried,
+    -- so what they have left is read here too when the extension did not read it; it only names the
+    -- refusal, so it is read without their locks.
     IF NOT EXISTS (SELECT 1 FROM @Charged)
-        SET @Refusal = @Reason;
+    BEGIN
+        DECLARE @Short DECIMAL(18,4) = CASE WHEN @Need > 0 THEN @Need ELSE @Cost END;
+        DECLARE @ReadAt DATETIME2(3) = COALESCE(@NowUtc, SYSUTCDATETIME());
+        IF @Allowance IS NOT NULL AND @TenantLeft IS NULL
+            SET @TenantLeft = (SELECT Credits FROM dbo.TenantCreditsLeft(@WorkspaceId, @TenantId, @Allowance, @ReadAt));
+        IF @CapLeft IS NULL
+        BEGIN
+            DECLARE @CapNow DECIMAL(18,4) = (SELECT MonthlyCreditCap FROM dbo.WorkspaceCreditCaps WHERE WorkspaceId = @WorkspaceId);
+            IF @CapNow IS NOT NULL
+                SET @CapLeft = @CapNow
+                    - (SELECT Credits FROM dbo.WorkspaceCreditsSpent(@WorkspaceId, DATEFROMPARTS(YEAR(@ReadAt), MONTH(@ReadAt), 1)))
+                    - (SELECT Credits FROM dbo.WorkspaceCreditsReserved(@WorkspaceId));
+        END
+
+        SET @Refusal = CASE
+            WHEN @TenantLeft < @Short THEN N'PlanCredits'
+            WHEN @CapLeft < @Short THEN N'WorkspaceCap'
+            ELSE N'RunBudget'
+        END;
+    END
 
     SELECT Spent, Budget FROM @Charged;
 END;
