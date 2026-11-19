@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Wbskt.Models.Admin;
 using Wbskt.Models.Billing;
 
@@ -59,6 +60,15 @@ public sealed record AdminUserActionRequest(StaffChange Staff);
 /// they have.
 /// </summary>
 public sealed record AdminSetUserSignInRequest(StaffChange Staff, bool Allowed);
+
+/// <summary>
+/// Corrects a person's address (<c>InternalRoutes.AdminUserEmail</c>) when they mistyped it at sign-up and
+/// never verified it, so the verification link can reach them. The new address starts unverified and is
+/// mailed a link. A verified address is refused: only its owner can move it, through the console.
+/// </summary>
+public sealed record AdminCorrectUserEmailRequest(
+    StaffChange Staff,
+    [Required, EmailAddress, StringLength(100)] string Email);
 
 /// <summary>
 /// Suspends a member in one tenant, or lifts it (<c>InternalRoutes.AdminTenantMemberSuspension</c>). Their

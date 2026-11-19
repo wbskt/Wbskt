@@ -16,4 +16,6 @@ public interface IAdminUserService
     Task<Result<StaffActionResponse>> SignOutEverywhereAsync(Guid userRef, AdminUserActionRequest request, CancellationToken cancellationToken);
 
     Task<Result<StaffActionResponse>> SetSignInAsync(Guid userRef, AdminSetUserSignInRequest request, CancellationToken cancellationToken);
+
+    Task<Result<StaffActionResponse>> CorrectEmailAsync(Guid userRef, AdminCorrectUserEmailRequest request, CancellationToken cancellationToken);
 }

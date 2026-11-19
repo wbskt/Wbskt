@@ -1,3 +1,4 @@
+using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services.Email;
@@ -37,12 +38,14 @@ internal sealed class AdminUserService(
     public const string SignOutEverywhereAction = "SignOutEverywhere";
     public const string AllowSignInAction = "AllowSignIn";
     public const string BlockSignInAction = "BlockSignIn";
+    public const string CorrectEmailAction = "CorrectEmail";
     public const string TargetKind = "Person";
 
     /// <summary>The address a token records as having asked for it or revoked it, for a staff change.</summary>
     internal const string StaffAddress = "staff";
 
     private static readonly Error UserNotFound = Error.NotFound("USER_NOT_FOUND", "No person has that RefId.");
+    private static readonly Error EmailVerified = Error.Conflict("EMAIL_ALREADY_VERIFIED", "This person's address is already verified.");
     private static readonly Error SignInOff = Error.Conflict("USER_SIGN_IN_OFF", "Sign-in is off for this person; turn it on first.");
 
     public async Task<Result<StaffActionResponse>> ClearLockoutAsync(Guid userRef, AdminUserActionRequest request, CancellationToken cancellationToken)
@@ -79,7 +82,7 @@ internal sealed class AdminUserService(
         {
             if (now.IsEmailVerified)
             {
-                return Result.Failure(Error.Conflict("EMAIL_ALREADY_VERIFIED", "This person's address is already verified."));
+                return Result.Failure(EmailVerified);
             }
 
             if (!now.IsActive)
@@ -164,6 +167,57 @@ internal sealed class AdminUserService(
         }
 
         await AnnounceAsync(result, request.Allowed ? AllowSignInAction : BlockSignInAction, user);
+        return result;
+    }
+
+    public async Task<Result<StaffActionResponse>> CorrectEmailAsync(Guid userRef, AdminCorrectUserEmailRequest request, CancellationToken cancellationToken)
+    {
+        var user = await FindAsync(userRef, cancellationToken);
+        if (user is null)
+        {
+            return UserNotFound;
+        }
+
+        var email = request.Email.Trim();
+        var token = SecurityTokens.Generate();
+        var expiresAt = time.GetUtcNow().UtcDateTime.Add(RegistrationService.EmailVerificationLifetime);
+
+        // The old address goes in the audit row's detail: it is the only record of where the account pointed.
+        var action = new StaffAction(CorrectEmailAction, TargetKind, user.RefId, $"From {user.Email} to {email}");
+        var result = await runner.RunAsync(request.Staff, action, async ct =>
+        {
+            var now = await accounts.GetByIdAsync(user.Id, ct);
+            if (now.IsEmailVerified)
+            {
+                return Result.Failure(EmailVerified);
+            }
+
+            if (!now.IsActive)
+            {
+                return Result.Failure(SignInOff);
+            }
+
+            if (string.Equals(now.Email, email, StringComparison.OrdinalIgnoreCase))
+            {
+                return Result.Failure(Error.Conflict("EMAIL_UNCHANGED", "That is already the person's address. Resend the verification link instead."));
+            }
+
+            try
+            {
+                await staffUsers.CorrectUnverifiedEmailAsync(now.Id, email, SecurityTokens.Hash(token), expiresAt, ct);
+                return Result.Success();
+            }
+            catch (SqlException ex) when (ex.Number is 50046)
+            {
+                return Result.Failure(EmailVerified);
+            }
+            catch (SqlException ex) when (ex.Number is 50047 or 2601 or 2627)
+            {
+                return Result.Failure(Error.Conflict("EMAIL_IN_USE", "Another account uses that address."));
+            }
+        }, cancellationToken);
+
+        await AfterCommitAsync(result, "email verification", user, () => mailer.QueueEmailVerificationAsync(email, user.Username, token, expiresAt, CancellationToken.None).AsTask());
         return result;
     }
 

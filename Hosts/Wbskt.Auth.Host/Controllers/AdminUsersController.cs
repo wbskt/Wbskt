@@ -59,4 +59,14 @@ public class AdminUsersController : ApiControllerBase
     {
         return MapResult(await _adminUserService.SetSignInAsync(userRef, request, cancellationToken));
     }
+
+    /// <summary>
+    /// Corrects a never-verified address and mails it a verification link; 409 when the address is
+    /// verified, sign-in is off, or another account holds the new one.
+    /// </summary>
+    [HttpPut(InternalRoutes.AdminUserEmail)]
+    public async Task<ActionResult<StaffActionResponse>> CorrectEmail(Guid userRef, [FromBody] AdminCorrectUserEmailRequest request, CancellationToken cancellationToken)
+    {
+        return MapResult(await _adminUserService.CorrectEmailAsync(userRef, request, cancellationToken));
+    }
 }
