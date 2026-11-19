@@ -85,6 +85,22 @@ internal sealed class RunCancellationService : IRunCancellationService
         return true;
     }
 
+    public async Task<bool> StopReplacedRunAsync(long runId, string reason, CancellationToken ct)
+    {
+        RunRow run = await _runProvider.GetByIdAsync(runId, ct);
+        if (!string.Equals(run.Status, RunStatus.Cancelling, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        await _journal.AppendAsync(
+            new RunJournalEntry(run.Id, HistoryEventKind.RunCancellationRequested) { Payload = new { Reason = reason } },
+            ct);
+        await StopRunWorkAsync(runId, ct);
+        await CancelChildRunsAsync(runId, run.RefId, "cancelled", ct);
+        return true;
+    }
+
     public async Task<bool> FailRunAsync(long runId, string reason, CancellationToken ct)
     {
         // Failing, not Cancelling: a run that failed by its own rule must finalize as Failed. It used

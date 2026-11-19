@@ -24,7 +24,11 @@ CREATE PROCEDURE dbo.Run_Start
     -- and with it the workspace's own cap (50034). On Business this is a multiple of the allowance
     -- (PlanCredits.RunsRefusedAt), since its runs carry on past it and the overage is invoiced. NULL
     -- for a sub-workflow child, which spends from its parent's budget instead.
-    @CreditAllowance      DECIMAL(18,4) = NULL
+    @CreditAllowance      DECIMAL(18,4) = NULL,
+    -- The runs a CancelExisting trigger replaces with this one. They are moved to Cancelling here, only
+    -- once every check above has let the start through, so a refused start leaves them running. The
+    -- engine then stops their work. Empty for any other start.
+    @ReplaceRunIds        dbo.IdTableType READONLY
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -74,8 +78,8 @@ BEGIN
             -- The concurrency policy read the active runs before this call; another event with the
             -- same key may have started one since (#467). Checked again under a lock per workflow,
             -- trigger and key so concurrent starts take turns. ActiveRunGuard: 1 refuses while any run
-            -- is active (DropIfRunning, Queue), 2 ignores Cancelling, which is where CancelExisting has
-            -- just put the runs it found. Taken before the plan lock below, always in that order.
+            -- is active (DropIfRunning, Queue), 2 ignores Cancelling runs and the ones this start replaces
+            -- (CancelExisting). Taken before the plan lock below, always in that order.
             IF @ActiveRunGuard > 0 AND @CorrelationKey IS NOT NULL
             BEGIN
                 DECLARE @KeyResource NVARCHAR(255) = dbo.TriggerStartLockResource(@WorkflowRefId, @TriggerNodeId, @CorrelationKey);
@@ -92,7 +96,8 @@ BEGIN
                              AND TriggerNodeId = @TriggerNodeId
                              AND CorrelationKey = @CorrelationKey
                              AND Status IN (N'Running', N'Failing', N'Cancelling')
-                             AND (@ActiveRunGuard = 1 OR Status <> N'Cancelling'))
+                             AND (@ActiveRunGuard = 1 OR Status <> N'Cancelling')
+                             AND Id NOT IN (SELECT Id FROM @ReplaceRunIds))
                     THROW 50028, 'A run is already active for this trigger and correlation key.', 1;
             END
 
@@ -263,6 +268,15 @@ BEGIN
                     WHERE r.Id = @BudgetRunId;
                 END
             END
+
+            -- Every check has passed: the runs this one replaces stop now, in the same transaction, so
+            -- a start that was refused (out of credits, at the cap, not live) cancelled nothing.
+            UPDATE dbo.Runs WITH (ROWLOCK)
+            SET Status = N'Cancelling',
+                CancellationRequestedAt = COALESCE(CancellationRequestedAt, @StartedAt),
+                CancellationReason = COALESCE(CancellationReason, N'Trigger-cancel-policy')
+            WHERE Id IN (SELECT Id FROM @ReplaceRunIds)
+              AND Status IN (N'Running', N'Failing');
 
             -- Last, after every check that can refuse the start, so the lock it takes on the workflow's
             -- counter row is held only for the inserts below and a refused start uses no number.

@@ -98,13 +98,15 @@ For each inbound event:
    * claim `trigger-start:{registrationId}:{sha256(eventId)}`, stored as the unique
      `Runs.TriggerStartKey`, so a redelivered event never starts a second run;
    * apply the concurrency policy (`TriggerConcurrencyEnforcer`): `AllowParallel`,
-     `DropIfRunning`, `Queue` (to `PendingTriggerEvents`) or `CancelExisting` (cancel every matching
-     run, then start);
+     `DropIfRunning`, `Queue` (to `PendingTriggerEvents`) or `CancelExisting` (replace every matching
+     run: `Run_Start` moves them to `Cancelling` in its own transaction once its checks pass, and the
+     dispatcher then stops their work, so a refused start cancels nothing);
    * start the run with `RunStarter`.
 
    The policy reads the active runs before the start, so `Run_Start` checks again (`ActiveRunGuard`)
    under a transaction applock on `trigger-start:{workflow}:{triggerNode}:{sha256(upper(key))}`: any active
-   run for `DropIfRunning` and `Queue`, any not already `Cancelling` for `CancelExisting`. A start that
+   run for `DropIfRunning` and `Queue`, any not already `Cancelling` and not being replaced for
+   `CancelExisting`. A start that
    finds one is refused (50028) and the dispatcher decides again, up to three times. Skipped for
    `AllowParallel` and for events without a correlation key.
 

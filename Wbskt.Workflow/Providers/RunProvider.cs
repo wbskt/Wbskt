@@ -45,7 +45,10 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
     public Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, PlanCeiling? ceiling, ActiveRunGuard activeRunGuard, CancellationToken ct)
         => StartAsync(run, rootBranch, triggerStartKey, workspaceId, ceiling, activeRunGuard, null, ct);
 
-    public async Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, PlanCeiling? ceiling, ActiveRunGuard activeRunGuard, PlanCredits? creditAllowance, CancellationToken ct)
+    public Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, PlanCeiling? ceiling, ActiveRunGuard activeRunGuard, PlanCredits? creditAllowance, CancellationToken ct)
+        => StartAsync(run, rootBranch, triggerStartKey, workspaceId, ceiling, activeRunGuard, creditAllowance, [], ct);
+
+    public async Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, PlanCeiling? ceiling, ActiveRunGuard activeRunGuard, PlanCredits? creditAllowance, IReadOnlyCollection<long> replaceRunIds, CancellationToken ct)
     {
         return await ExecuteSingleAsync(
             "dbo.Run_Start",
@@ -80,6 +83,20 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
                 if (creditAllowance is not null)
                 {
                     p.AddWithValue("@CreditAllowance", creditAllowance.RunsRefusedAt);
+                }
+
+                if (replaceRunIds.Count > 0)
+                {
+                    var replace = new DataTable();
+                    replace.Columns.Add("Id", typeof(int));
+                    foreach (long id in replaceRunIds.Distinct())
+                    {
+                        replace.Rows.Add(checked((int)id));
+                    }
+
+                    var parameter = p.AddWithValue("@ReplaceRunIds", replace);
+                    parameter.SqlDbType = SqlDbType.Structured;
+                    parameter.TypeName = "dbo.IdTableType";
                 }
             },
             MapStart,

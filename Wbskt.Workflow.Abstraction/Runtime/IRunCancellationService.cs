@@ -24,6 +24,14 @@ public interface IRunCancellationService
 
     Task<bool> IsCancellationRequestedAsync(long runId, CancellationToken ct);
 
+    /// <summary>
+    /// Stops the work of a run a new start has just moved to <c>Cancelling</c> in the start's own write
+    /// (a CancelExisting trigger): records the cancel in its history, then cleans up as
+    /// <see cref="RequestCancellationAsync"/> does. A run that is not <c>Cancelling</c> is left alone.
+    /// </summary>
+    Task<bool> StopReplacedRunAsync(long runId, string reason, CancellationToken ct) =>
+        RequestCancellationAsync(runId, reason, ct);
+
     CancellationToken GetToken(long runId) => CancellationToken.None;
     void CancelCts(long runId) {}
 }
