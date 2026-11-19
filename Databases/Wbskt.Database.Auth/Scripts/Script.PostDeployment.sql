@@ -309,9 +309,26 @@ BEGIN
     EXEC('INSERT INTO dbo.RolePermissions (RoleId, PermissionId, IsDeny)
           SELECT b.Id, p.Id, 0
           FROM dbo.__UserRoleDefaultsBackfill b
-          INNER JOIN dbo.Permissions p ON p.Slug IN (''clients.read'', ''policies.read'', ''templates.read'', ''workflows.read'', ''logs.read'', ''integrations.read'', ''billing.read'')
+          INNER JOIN dbo.Permissions p ON p.Slug IN (''clients.read'', ''policies.read'', ''templates.read'', ''workflows.read'', ''logs.read'', ''integrations.read'', ''billing.read'', ''workspace.join'')
           WHERE NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = b.Id AND rp.PermissionId = p.Id);');
     EXEC('DROP TABLE dbo.__UserRoleDefaultsBackfill;');
+END
+GO
+
+-- RolePermissions: workspace.join joined the User role's defaults (Tenant_Create) after tenants
+-- existed. Without it the console's live updates are refused, so the User roles that exist get it
+-- once. Recorded in dbo.DataMigrations, so an administrator who takes it away later is not overruled
+-- by the next deployment (#950).
+IF NOT EXISTS (SELECT 1 FROM dbo.DataMigrations WHERE Name = N'user-role-workspace-join')
+BEGIN
+    INSERT INTO dbo.RolePermissions (RoleId, PermissionId, IsDeny)
+    SELECT r.Id, p.Id, 0
+    FROM dbo.Roles r
+    INNER JOIN dbo.Permissions p ON p.Slug = 'workspace.join'
+    WHERE r.Kind = 'User'
+      AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = r.Id AND rp.PermissionId = p.Id);
+
+    INSERT INTO dbo.DataMigrations (Name) VALUES (N'user-role-workspace-join');
 END
 GO
 

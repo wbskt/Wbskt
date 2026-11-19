@@ -78,9 +78,12 @@ requires that permission *in that tenant* to act, so nobody is left who could gr
 
 Seeded per tenant, mirroring the post-deployment seed: `Admin` holds every permission in the
 catalogue, `User` holds the reads for a workspace's resources (`clients.read`, `policies.read`,
-`templates.read`, `workflows.read`, `logs.read`) and is a starting point the administrator customises.
-Existing `User` roles that held nothing got the same reads once, on the deploy that introduced them;
-a `User` role an administrator has shaped, or empties later, is never touched again.
+`templates.read`, `workflows.read`, `logs.read`, `integrations.read`, `billing.read`) and
+`workspace.join`, without which the console's live updates (presence, latency, runs, the message
+rate) are refused. It is a starting point the administrator customises. Existing `User` roles that
+held nothing got the reads once, on the deploy that introduced them, and every existing `User` role
+got `workspace.join` once (#950); a `User` role an administrator has shaped, or empties later, is
+never touched again. One-time data changes like these are recorded by name in `dbo.DataMigrations`.
 `Admin` is fixed: granting, denying or removing one of its permissions, or deleting it, is refused
 with 409 `ROLE_BUILT_IN`. It can be renamed. Everything administration rests on (`users.manage`,
 `roles.manage`, `billing.manage`) is in it, so whoever holds it tenant-wide can always repair the
