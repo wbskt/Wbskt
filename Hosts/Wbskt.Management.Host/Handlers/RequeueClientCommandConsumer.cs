@@ -11,7 +11,9 @@ namespace Wbskt.Management.Host.Handlers;
 /// it waits for the next connect like any command sent to an offline client. A command whose expiry
 /// has already passed goes in too, and the expiry sweep reports it, so there is one place that does.
 /// A command for a client that lost its registration meanwhile is ended as failed instead: queued, it
-/// would be delivered if the client were approved again before it expired.
+/// would be delivered if the client were approved again before it expired. So is one for a client
+/// deleted meanwhile, so a workflow step waiting on its acknowledgement leaves as failed rather than
+/// waiting out its timeout.
 /// </summary>
 public sealed class RequeueClientCommandConsumer : IConsumer<RequeueClientCommand>
 {
@@ -37,7 +39,13 @@ public sealed class RequeueClientCommandConsumer : IConsumer<RequeueClientComman
         // insert is missed, and the command waits until it expires: approving the client again in
         // that time would deliver it. Narrow, and no worse than before this check.
         var target = await _targets.FindAsync(message.ClientRefId, context.CancellationToken);
-        if (target is { Status: not ClientStatus.Registered })
+        if (target is null)
+        {
+            await EndAsDeletedAsync(message, context.CancellationToken);
+            return;
+        }
+
+        if (target.Status != ClientStatus.Registered)
         {
             _logger.LogInformation("Command '{CommandId}' was handed back for client '{ClientRefId}', which is no longer registered: ended as failed.", message.CommandId, message.ClientRefId);
             await _eventBus.PublishAsync(new ClientCommandFailedEvent(message.ClientRefId, message.ClientId, message.WorkspaceId, message.Type,
@@ -64,7 +72,14 @@ public sealed class RequeueClientCommandConsumer : IConsumer<RequeueClientComman
         var handBack = message.ReturnedByHostId is { } hostId ? new CommandHandBack(hostId, message.ReturnedAtUtc) : null;
         if (!await _queue.QueueAsync(command, announcement, int.MaxValue, handBack, context.CancellationToken))
         {
-            _logger.LogInformation("Command '{CommandId}' was not put back in the queue: client '{ClientRefId}' no longer exists.", message.CommandId, message.ClientRefId);
+            await EndAsDeletedAsync(message, context.CancellationToken);
         }
+    }
+
+    private async Task EndAsDeletedAsync(RequeueClientCommand message, CancellationToken ct)
+    {
+        _logger.LogInformation("Command '{CommandId}' was handed back for client '{ClientRefId}', which no longer exists: ended as failed.", message.CommandId, message.ClientRefId);
+        await _eventBus.PublishAsync(new ClientCommandFailedEvent(message.ClientRefId, message.ClientId, message.WorkspaceId, message.Type,
+            ClientCommandFailedEvent.DeletedWhileQueuedReason, message.CommandId), ct);
     }
 }
