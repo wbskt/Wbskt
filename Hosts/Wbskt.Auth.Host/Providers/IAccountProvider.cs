@@ -16,6 +16,8 @@ internal interface IAccountProvider : IReferenceProvider
     /// <summary>The id of the account holding <paramref name="username"/>, or null when none does.</summary>
     Task<int?> FindIdByUsernameAsync(string username, CancellationToken cancellationToken = default);
     Task<User> GetByIdAsync(int id, CancellationToken cancellationToken = default);
+
+    /// <summary>Creates the account and sets <paramref name="user"/>'s id and reference. Returns the id.</summary>
     Task<int> InsertUserAsync(User user, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -51,24 +53,25 @@ internal interface IAccountProvider : IReferenceProvider
 
     /// <summary>
     /// Writes the new password and revokes every refresh token the account has, in one transaction,
-    /// and returns the user id. Throws <see cref="Wbskt.Primitives.Exceptions.SecurityException"/>
+    /// and returns the account's id, reference, name and address (no password hash). Throws <see cref="Wbskt.Primitives.Exceptions.SecurityException"/>
     /// when the token is unknown, spent or expired -- one answer for all three.
     /// </summary>
-    Task<int> ConsumePasswordResetTokenAsync(byte[] tokenHash, string passwordHash, string? revokedByIp, CancellationToken cancellationToken = default);
+    Task<User> ConsumePasswordResetTokenAsync(byte[] tokenHash, string passwordHash, string? revokedByIp, CancellationToken cancellationToken = default);
 
     Task CreateEmailVerificationTokenAsync(int userId, byte[] tokenHash, DateTime expiresAt, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Marks the account's address verified and returns the user id. Throws
+    /// Marks the account's address verified and returns the user's id and reference. Throws
     /// <see cref="Wbskt.Primitives.Exceptions.SecurityException"/> when the token is not valid.
     /// </summary>
-    Task<int> ConsumeEmailVerificationTokenAsync(byte[] tokenHash, CancellationToken cancellationToken = default);
+    Task<(int UserId, Guid UserRefId)> ConsumeEmailVerificationTokenAsync(byte[] tokenHash, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Renames the account (<c>dbo.User_ChangeUsername</c>). Throws SQL guard 50022 when it was renamed
     /// less than <paramref name="minInterval"/> ago, and a unique-key violation when the name is taken.
+    /// Returns the name before and after.
     /// </summary>
-    Task ChangeUsernameAsync(int userId, string username, TimeSpan minInterval, CancellationToken cancellationToken = default);
+    Task<UsernameChange> ChangeUsernameAsync(int userId, string username, TimeSpan minInterval, CancellationToken cancellationToken = default);
 
     /// <summary>Starts a change of address to <paramref name="newEmail"/>, replacing any change still pending.</summary>
     Task CreateEmailChangeTokenAsync(int userId, string newEmail, byte[] tokenHash, DateTime expiresAt, string? requestedByIp, CancellationToken cancellationToken = default);

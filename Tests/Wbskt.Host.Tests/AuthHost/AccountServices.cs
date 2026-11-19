@@ -46,7 +46,7 @@ internal class AccountServices
         var time = TimeProvider.System;
         var hashing = CredentialFakes.Hashing();
         var tokens = new SessionTokens(jwt, Options.Create(new AccessTokenOptions()), time);
-        var announcer = new AccountAnnouncer(Accounts.Object, bus, audit ?? AuditWorkspaces.None, NullLogger<AccountAnnouncer>.Instance);
+        var announcer = new AccountAnnouncer(bus, audit ?? AuditWorkspaces.None, NullLogger<AccountAnnouncer>.Instance);
         var credentials = CredentialFakes.Credentials(Accounts, Sessions.Object, bus, Notices, AccessTokens.Object, hashing);
 
         SignIn = new SignInService(

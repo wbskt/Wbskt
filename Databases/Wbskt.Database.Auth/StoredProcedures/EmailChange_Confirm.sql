@@ -5,6 +5,8 @@
 -- 50020: the token is unknown, spent or expired, or the address has moved since it was issued.
 -- 50021: the new address belongs to another account by now, or another account's live undo holds it.
 -- UQ_Users_Email is the backstop for the first.
+--
+-- Returns the account's reference and name with the addresses, for the new session and the mail.
 CREATE PROCEDURE dbo.EmailChange_Confirm
     @TokenHash       VARBINARY(32),
     @RevertTokenHash VARBINARY(32),
@@ -12,7 +14,9 @@ CREATE PROCEDURE dbo.EmailChange_Confirm
     @RevokedByIp     NVARCHAR(50) = NULL,
     @UserId          INT OUTPUT,
     @OldEmail        NVARCHAR(100) OUTPUT,
-    @NewEmail        NVARCHAR(100) OUTPUT
+    @NewEmail        NVARCHAR(100) OUTPUT,
+    @UserRefId       UNIQUEIDENTIFIER = NULL OUTPUT,
+    @Username        NVARCHAR(50) = NULL OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -66,7 +70,9 @@ BEGIN
     UPDATE dbo.Users
     SET Email = @NewEmail,
         IsEmailVerified = 1,
-        UpdatedAt = SYSUTCDATETIME()
+        UpdatedAt = SYSUTCDATETIME(),
+        @UserRefId = RefId,
+        @Username = Username
     WHERE Id = @UserId;
 
     UPDATE dbo.RefreshTokens

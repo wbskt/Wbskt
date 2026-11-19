@@ -21,7 +21,7 @@ public interface ISignInService
     Task<Result<BrowserSignIn>> LoginFromBrowserAsync(string email, string password, string ipAddress, string? deviceToken, CancellationToken cancellationToken = default);
     Task<Result<LoginResponse>> RefreshTokenAsync(string token, string ipAddress, CancellationToken cancellationToken = default);
     Task<Result> LogoutAsync(string token, string ipAddress, CancellationToken cancellationToken = default);
-    Task<Result> LogoutAllAsync(int userId, string ipAddress, CancellationToken cancellationToken = default);
+    Task<Result> LogoutAllAsync(int userId, Guid userRef, string ipAddress, CancellationToken cancellationToken = default);
 
     /// <summary>The user's live sessions, newest first, with <paramref name="currentSessionId"/> marked as current.</summary>
     Task<Result<IReadOnlyCollection<SessionResponse>>> GetSessionsAsync(int userId, Guid? currentSessionId, CancellationToken cancellationToken = default);
@@ -30,5 +30,5 @@ public interface ISignInService
     /// Ends one of the user's own sessions, its access token included. NotFound when it is not a live
     /// session of theirs.
     /// </summary>
-    Task<Result> RevokeSessionAsync(int userId, Guid sessionId, string ipAddress, CancellationToken cancellationToken = default);
+    Task<Result> RevokeSessionAsync(int userId, Guid userRef, Guid sessionId, string ipAddress, CancellationToken cancellationToken = default);
 }

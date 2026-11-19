@@ -5,7 +5,8 @@ CREATE PROCEDURE dbo.User_Create
     @Username NVARCHAR(50),
     @Email NVARCHAR(100),
     @PasswordHash NVARCHAR(255),
-    @Id INT OUTPUT
+    @Id INT OUTPUT,
+    @RefId UNIQUEIDENTIFIER = NULL OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -37,6 +38,7 @@ BEGIN
     );
 
     SET @Id = SCOPE_IDENTITY();
+    SELECT @RefId = RefId FROM dbo.Users WHERE Id = @Id;
 
     COMMIT TRANSACTION;
 END

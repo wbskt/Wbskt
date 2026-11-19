@@ -28,7 +28,7 @@ public sealed class AccountServiceTests
         var harness = new Harness();
         User? inserted = null;
         harness.Accounts.Setup(p => p.InsertUserAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
-            .Callback<User, CancellationToken>((u, _) => inserted = u)
+            .Callback<User, CancellationToken>((u, _) => { inserted = u; u.Id = 42; u.RefId = UserRef; })
             .ReturnsAsync(42);
         harness.Accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
 
@@ -53,7 +53,7 @@ public sealed class AccountServiceTests
         // Addressed in a different case: the address match ignores it, as the database does.
         harness.Tenants.Setup(p => p.GetInvitationByTokenHashAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new InvitationLookup(invitationRef, Guid.NewGuid(), "Acme", "Someone@Example.TEST", DateTime.UtcNow.AddDays(1), IsLive: true));
-        harness.Accounts.Setup(p => p.InsertUserAsync(It.IsAny<User>(), It.IsAny<CancellationToken>())).ReturnsAsync(42);
+        harness.Accounts.Setup(p => p.InsertUserAsync(It.IsAny<User>(), It.IsAny<CancellationToken>())).Callback<User, CancellationToken>((u, _) => { u.Id = 42; u.RefId = UserRef; }).ReturnsAsync(42);
         harness.Accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
         harness.Tenants.Setup(p => p.AcceptInvitationAsync(It.IsAny<byte[]>(), 42, It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(9);
 
@@ -76,7 +76,7 @@ public sealed class AccountServiceTests
         var harness = new Harness();
         harness.Tenants.Setup(p => p.GetInvitationByTokenHashAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new InvitationLookup(Guid.NewGuid(), Guid.NewGuid(), "Acme", Email, DateTime.UtcNow.AddDays(1), IsLive: true));
-        harness.Accounts.Setup(p => p.InsertUserAsync(It.IsAny<User>(), It.IsAny<CancellationToken>())).ReturnsAsync(42);
+        harness.Accounts.Setup(p => p.InsertUserAsync(It.IsAny<User>(), It.IsAny<CancellationToken>())).Callback<User, CancellationToken>((u, _) => { u.Id = 42; u.RefId = UserRef; }).ReturnsAsync(42);
         harness.Accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
         harness.Tenants.Setup(p => p.AcceptInvitationAsync(It.IsAny<byte[]>(), 42, It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(SqlExceptions.WithNumber(50011, "The invitation is no longer valid."));
@@ -122,7 +122,7 @@ public sealed class AccountServiceTests
     public async Task Confirming_the_address_is_announced_for_the_account()
     {
         var harness = new Harness();
-        harness.Accounts.Setup(p => p.ConsumeEmailVerificationTokenAsync(It.Is<byte[]>(h => h.SequenceEqual(SecurityTokens.Hash("verify-token"))), It.IsAny<CancellationToken>())).ReturnsAsync(42);
+        harness.Accounts.Setup(p => p.ConsumeEmailVerificationTokenAsync(It.Is<byte[]>(h => h.SequenceEqual(SecurityTokens.Hash("verify-token"))), It.IsAny<CancellationToken>())).ReturnsAsync((42, UserRef));
         harness.Accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
 
         var result = await harness.Registration.VerifyEmailAsync("verify-token");
@@ -155,7 +155,7 @@ public sealed class AccountServiceTests
         string? storedHash = null;
         harness.Accounts.Setup(p => p.ConsumePasswordResetTokenAsync(It.Is<byte[]>(h => h.SequenceEqual(SecurityTokens.Hash("reset-token"))), It.IsAny<string>(), Ip, It.IsAny<CancellationToken>()))
             .Callback<byte[], string, string?, CancellationToken>((_, hash, _, _) => storedHash = hash)
-            .ReturnsAsync(42);
+            .ReturnsAsync(new User { Id = 42, RefId = UserRef, Username = "someone", Email = "someone@example.test" });
         harness.Accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
 
         var result = await harness.Passwords.ResetPasswordAsync("reset-token", "a brand new passphrase", Ip);

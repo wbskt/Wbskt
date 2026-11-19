@@ -142,8 +142,6 @@ internal sealed class RegistrationService : IRegistrationService
             var tenantRefId = await _tenants.CreateTenantAsync($"{username}'s Tenant", null, userId, DefaultWorkspaceName, cancellationToken);
             _logger.LogInformation("Created tenant {TenantRefId} for new user ID {UserId}", tenantRefId, userId);
 
-            user = await _accounts.GetByIdAsync(userId, cancellationToken);
-
             // The account exists and is unusable until this link is followed. Issued as its own step
             // rather than inside a transaction with the rows above, because there is no ambient
             // transaction here to join - the user insert and Tenant_Create are already separate calls,
@@ -225,9 +223,9 @@ internal sealed class RegistrationService : IRegistrationService
     {
         try
         {
-            var userId = await _accounts.ConsumeEmailVerificationTokenAsync(SecurityTokens.Hash(token), cancellationToken);
+            var (userId, userRef) = await _accounts.ConsumeEmailVerificationTokenAsync(SecurityTokens.Hash(token), cancellationToken);
             _logger.LogInformation("Email address confirmed for user {UserId}", userId);
-            await _announcer.AnnounceAsync(new EmailVerifiedEvent(userId, await _announcer.RefOfAsync(userId, cancellationToken)), null, cancellationToken);
+            await _announcer.AnnounceAsync(new EmailVerifiedEvent(userId, userRef), null, cancellationToken);
             return Result.Success();
         }
         catch (SecurityException)

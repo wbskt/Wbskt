@@ -44,6 +44,21 @@ public abstract class ApiControllerBase : ControllerBase
         return Result<int>.Success(identity.UserId);
     }
 
+    /// <summary>
+    /// The authenticated caller's internal id and the public reference their token names, for a
+    /// service that needs both and should not read the user back to recover the reference.
+    /// </summary>
+    protected Result<(int UserId, Guid UserRef)> CurrentUser()
+    {
+        var identityService = HttpContext?.RequestServices?.GetService<IIdentityService>();
+        if (identityService is null || !identityService.TryGetUserIdentity(out var identity) || identity.UserRefId is not { } userRef)
+        {
+            return Result<(int, Guid)>.Failure(Error.Unauthorized("AUTH_UNAUTHORIZED", "Unauthorized access."));
+        }
+
+        return Result<(int, Guid)>.Success((identity.UserId, userRef));
+    }
+
     protected ActionResult MapResult(Result result)
     {
         if (result.IsSuccess)

@@ -175,7 +175,7 @@ public sealed class AccountDeletionServiceTests
 
     private AccountDeletionService Service() =>
         new(_accounts.Object, _billing.Object, _gateway.Object, _bus.Object, NullLogger<AccountDeletionService>.Instance,
-            AuditWorkspaces.None, new TenantAnnouncer(_accounts.Object, _bus.Object, AuditWorkspaces.None, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance),
+            AuditWorkspaces.None, new TenantAnnouncer(_bus.Object, AuditWorkspaces.None, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance),
             CredentialFakes.Credentials(_accounts, Mock.Of<ISessionProvider>(), _bus.Object,
                 new SecurityNotices(Mock.Of<IAuthMailer>(), MailCooldownTests.InProcess(), new AuthMetrics(), TimeProvider.System), _accessTokens.Object));
 

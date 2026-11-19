@@ -353,7 +353,7 @@ public sealed class AdminTenantsTests
         new(plans, limits ?? new FixedTenantLimits(), runner ?? Mock.Of<IStaffActionRunner>(MockBehavior.Strict), new FixedClock(Now),
             tenants ?? Mock.Of<ITenantPlanProvider>(MockBehavior.Strict), new NoWorkspaces(), outbox ?? new RecordingOutbox(),
             review ?? Mock.Of<ITenantPlanReview>(),
-            new TenantAnnouncer(Mock.Of<IAccountProvider>(), bus ?? Mock.Of<IEventBus>(), new NoWorkspaces(), new RecordingAccessChanges().Changes, NullLogger<TenantAnnouncer>.Instance),
+            new TenantAnnouncer(bus ?? Mock.Of<IEventBus>(), new NoWorkspaces(), new RecordingAccessChanges().Changes, NullLogger<TenantAnnouncer>.Instance),
             NullLogger<AdminTenantService>.Instance);
 
     private sealed class NoWorkspaces : IAuditWorkspaces

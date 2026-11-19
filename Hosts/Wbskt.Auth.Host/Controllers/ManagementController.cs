@@ -363,8 +363,8 @@ public class ManagementController(ITenantService tenantService, IAccessControlSe
     [HttpPost("{tenantRef:guid}/leave")]
     public async Task<IActionResult> LeaveTenant(Guid tenantRef, CancellationToken cancellationToken)
     {
-        var caller = CurrentUserId();
-        return caller.IsFailure ? MapError(caller.Error) : MapResult(await tenantService.LeaveTenantAsync(caller.Value, tenantRef, cancellationToken));
+        var caller = CurrentUser();
+        return caller.IsFailure ? MapError(caller.Error) : MapResult(await tenantService.LeaveTenantAsync(caller.Value.UserId, caller.Value.UserRef, tenantRef, cancellationToken));
     }
 
     /// <summary>

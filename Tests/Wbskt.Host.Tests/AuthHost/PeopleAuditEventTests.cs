@@ -40,7 +40,7 @@ public sealed class PeopleAuditEventTests
             .Callback<IEvent, CancellationToken>((e, _) => _published.Add(e))
             .Returns(Task.CompletedTask);
 
-        var announcer = new TenantAnnouncer(Mock.Of<IAccountProvider>(), bus.Object, _audit.Object, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance);
+        var announcer = new TenantAnnouncer(bus.Object, _audit.Object, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance);
         _tenantService = new TenantService(
             _tenants.Object, _accessControl.Object, Mock.Of<IWorkspaceProvider>(), bus.Object, Mock.Of<IAuthMailer>(),
             NullLogger<TenantService>.Instance, new FixedTenantLimits(), announcer, TimeProvider.System);

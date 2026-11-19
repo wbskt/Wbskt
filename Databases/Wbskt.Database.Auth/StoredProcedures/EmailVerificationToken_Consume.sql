@@ -5,7 +5,8 @@
 -- consumed on first use, so a second attempt fails as an invalid token like any other spent one.
 CREATE PROCEDURE dbo.EmailVerificationToken_Consume
     @TokenHash VARBINARY(32),
-    @UserId INT OUTPUT
+    @UserId INT OUTPUT,
+    @UserRefId UNIQUEIDENTIFIER = NULL OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -33,7 +34,8 @@ BEGIN
     WHERE Id = @TokenId;
 
     UPDATE dbo.Users
-    SET IsEmailVerified = 1
+    SET IsEmailVerified = 1,
+        @UserRefId = RefId
     WHERE Id = @UserId;
 
     COMMIT TRANSACTION;

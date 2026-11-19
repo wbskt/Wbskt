@@ -3,10 +3,13 @@
 --
 -- 50022: renamed too recently; the message says when the next rename is allowed.
 -- A taken name is a unique-key violation on UQ_Users_Username, which the service reports as a conflict.
+-- Returns the name before and after, the same when nothing changed.
 CREATE PROCEDURE dbo.User_ChangeUsername
     @UserId             INT,
     @Username           NVARCHAR(50),
-    @MinIntervalSeconds INT
+    @MinIntervalSeconds INT,
+    @OldUsername        NVARCHAR(50) = NULL OUTPUT,
+    @NewUsername        NVARCHAR(50) = NULL OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -19,6 +22,9 @@ BEGIN
     SELECT @Current = Username, @ChangedAt = UsernameChangedAt
     FROM dbo.Users WITH (UPDLOCK, HOLDLOCK)
     WHERE Id = @UserId;
+
+    SET @OldUsername = @Current;
+    SET @NewUsername = @Current;
 
     -- Binary, so a change of case alone counts as a rename.
     IF @Current COLLATE Latin1_General_BIN2 = @Username COLLATE Latin1_General_BIN2
@@ -40,6 +46,8 @@ BEGIN
         UsernameChangedAt = SYSUTCDATETIME(),
         UpdatedAt = SYSUTCDATETIME()
     WHERE Id = @UserId;
+
+    SET @NewUsername = @Username;
 
     COMMIT TRANSACTION;
 END
