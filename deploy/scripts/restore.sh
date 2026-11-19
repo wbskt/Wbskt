@@ -19,6 +19,8 @@ REPO_ROOT="$(cd "$(dirname "$SCRIPT_PATH")/../.." && pwd)"
 readonly REPO_ROOT
 readonly COMPOSE_DIR="$REPO_ROOT/deploy/compose"
 readonly ENV_FILE="$COMPOSE_DIR/.env"
+# shellcheck source=deploy/scripts/env-file.sh
+source "$(dirname "$SCRIPT_PATH")/env-file.sh"
 readonly CONTAINER_DIR=/var/opt/mssql/backups
 
 BACKUP_FILE=""
@@ -66,8 +68,7 @@ parse_args() {
 load_env() {
     [[ -f "$ENV_FILE" ]] || die "no .env at $ENV_FILE"
 
-    # shellcheck disable=SC1090
-    set -a && source "$ENV_FILE" && set +a
+    env_load "$ENV_FILE" SQL_SA_PASSWORD
 
     : "${SQL_SA_PASSWORD:?SQL_SA_PASSWORD is required (deploy/compose/.env)}"
 }

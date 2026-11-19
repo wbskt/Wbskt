@@ -21,6 +21,8 @@ REPO_ROOT="$(cd "$(dirname "$SCRIPT_PATH")/../.." && pwd)"
 readonly REPO_ROOT
 readonly COMPOSE_DIR="$REPO_ROOT/deploy/compose"
 readonly ENV_FILE="$COMPOSE_DIR/.env"
+# shellcheck source=deploy/scripts/env-file.sh
+source "$(dirname "$SCRIPT_PATH")/env-file.sh"
 readonly LOG_FILE="${BACKUP_LOG:-/var/log/wbskt-backup.log}"
 readonly DATABASES=(Wbskt.Database Wbskt.Database.Auth)
 # A nightly job is late once a day and a bit has passed, the same window BackupMissing uses.
@@ -50,8 +52,7 @@ check_env() {
         fail "no .env at $ENV_FILE"
         return
     fi
-    # shellcheck disable=SC1090
-    set -a && source "$ENV_FILE" && set +a
+    env_load "$ENV_FILE" BACKUP_UPLOAD_CMD BACKUP_ALERT_CMD BACKUP_ALLOW_LOCAL_ONLY BACKUP_DIR BACKUP_METRICS_URL ALERT_EMAIL_TO ALERT_WEBHOOK_URL
 
     check_command BACKUP_UPLOAD_CMD "${BACKUP_UPLOAD_CMD:-}" true
     check_command BACKUP_ALERT_CMD "${BACKUP_ALERT_CMD:-}" true
