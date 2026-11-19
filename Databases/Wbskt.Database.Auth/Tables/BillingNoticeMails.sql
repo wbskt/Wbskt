@@ -21,7 +21,7 @@ CREATE TABLE dbo.BillingNoticeMails
     -- Last, so adding it was an ALTER rather than a table rebuild. Null on rows queued before it existed.
     TextBody      NVARCHAR(MAX)  NULL,
     CONSTRAINT PK_BillingNoticeMails PRIMARY KEY (Id),
-    CONSTRAINT FK_BillingNoticeMails_Tenants FOREIGN KEY (TenantId) REFERENCES dbo.Tenants (Id) ON DELETE CASCADE
+    CONSTRAINT FK_BillingNoticeMails_Tenants FOREIGN KEY (TenantId) REFERENCES dbo.Tenants (Id)
 );
 GO
 

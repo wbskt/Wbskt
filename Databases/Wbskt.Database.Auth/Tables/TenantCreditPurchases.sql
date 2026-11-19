@@ -21,7 +21,7 @@ CREATE TABLE dbo.TenantCreditPurchases
     Id           INT           IDENTITY (1, 1) NOT NULL,
     CONSTRAINT PK_TenantCreditPurchases PRIMARY KEY (Provider, PaymentId),
     CONSTRAINT UQ_TenantCreditPurchases_Id UNIQUE (Id),
-    CONSTRAINT FK_TenantCreditPurchases_Tenants FOREIGN KEY (TenantId) REFERENCES dbo.Tenants (Id) ON DELETE CASCADE
+    CONSTRAINT FK_TenantCreditPurchases_Tenants FOREIGN KEY (TenantId) REFERENCES dbo.Tenants (Id)
 );
 GO
 

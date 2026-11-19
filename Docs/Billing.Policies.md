@@ -59,3 +59,21 @@ applies and the sweeps remove what is older.
 
 A workspace's monthly credit cap is optional and set by the tenant. Runs that would pass it are refused
 or stopped; the cap is never exceeded to finish a run.
+
+## Deleting an account
+
+- A tenant that was the deleted account's alone is **closed, not deleted** (`dbo.Tenants.ClosedAt`). Its
+  workspaces, members, roles, groups, invitations, open checkout and billing mails go, and its name and
+  description are cleared. What it paid stays: its subscriptions, credit purchases and the record of
+  which billing notices it was sent. A refund or chargeback for one of its payments still matches, and
+  the payment record remains for tax and accounting.
+- Nothing acts for a closed tenant: the plan review skips it and no billing notice is sent to it.
+- How long those payment records are kept has not been decided yet; there is no automatic purge. They
+  carry no name or address, only the provider's customer and payment ids, amounts and dates.
+- The provider still holds its own record of the customer (name, address, card fingerprint). Each
+  customer the closed tenant paid as, and no open tenant still pays as, is listed in
+  `dbo.BillingCustomerErasures`. The operator erases it at the provider and sets `ErasedAt`; nothing
+  does that automatically yet.
+- If the person signs up again and the provider matches them to the same customer, the first payment
+  by an open tenant withdraws a pending erasure request, and the closed tenant no longer counts as
+  sharing that customer, so the new tenant's billing portal works.

@@ -29,6 +29,13 @@ BEGIN
         VALUES (@OutboxMessageType, @OutboxPayload);
 
         SET @Recorded = 1;
+
+        -- A customer an open tenant pays as again is no longer one to erase at the provider (#951).
+        DELETE FROM dbo.BillingCustomerErasures
+        WHERE Provider = @Provider
+          AND CustomerId = @CustomerId
+          AND ErasedAt IS NULL
+          AND EXISTS (SELECT 1 FROM dbo.Tenants WHERE Id = @TenantId AND ClosedAt IS NULL);
     END
 
     COMMIT TRANSACTION;
