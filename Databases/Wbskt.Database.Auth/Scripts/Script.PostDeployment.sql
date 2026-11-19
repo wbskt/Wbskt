@@ -307,3 +307,17 @@ BEGIN
     EXEC (N'GRANT SELECT ON SCHEMA::[admin] TO [wbskt_admin_reader]');
 END
 GO
+
+-- Closed tenants: dbo.User_Delete now puts a tenant it closes back on Free, so a cancelled
+-- subscription or a staff plan does not keep a deleted account counted as paying for good. The ones
+-- closed before that get the same here; once done it matches nothing.
+UPDATE dbo.Tenants
+SET PlanCode = N'Free',
+    PlanSource = N'Default',
+    PlanEndsAt = NULL,
+    PlanLimitOverrides = NULL,
+    PlanRevision = PlanRevision + 1,
+    PlanChangedAt = SYSUTCDATETIME()
+WHERE ClosedAt IS NOT NULL
+  AND (PlanCode <> N'Free' OR PlanSource <> N'Default' OR PlanEndsAt IS NOT NULL OR PlanLimitOverrides IS NOT NULL);
+GO

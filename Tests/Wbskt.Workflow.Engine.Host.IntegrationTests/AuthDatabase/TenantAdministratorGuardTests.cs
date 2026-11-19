@@ -299,6 +299,7 @@ public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
         string own = $"cus_own_{tenantId}";
         string shared = $"cus_shared_{tenantId}";
         await ExecSqlAsync("""
+            UPDATE dbo.Tenants SET PlanCode = N'Maker', PlanSource = N'Subscription', PlanRevision = 1 WHERE Id = @p0;
             INSERT INTO dbo.TenantSubscriptions (TenantId, Provider, SubscriptionId, CustomerId, ProductId, PlanCode, BillingInterval, Status, CurrentPeriodEnd, CancelAtPeriodEnd)
             VALUES (@p0, N'test', CONCAT(N'sub_', @p2), @p2, N'prod', N'Maker', N'Monthly', N'cancelled', SYSUTCDATETIME(), 1);
             INSERT INTO dbo.TenantCreditPurchases (Provider, PaymentId, TenantId, CustomerId, Credits, PurchasedAt, ExpiresAt)
@@ -315,6 +316,9 @@ public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
         await ExecAsync("dbo.User_Delete", ("@UserId", ownerId), ("@DeletedWorkspaces", workspaces));
 
         Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Tenants WHERE Id = @p0 AND ClosedAt IS NOT NULL AND Name = N'Closed account' AND Description IS NULL", tenantId));
+
+        // Back on Free, so the cancelled subscription does not keep it counted as paying (#1074).
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Tenants WHERE Id = @p0 AND PlanCode = N'Free' AND PlanSource = N'Default' AND PlanEndsAt IS NULL", tenantId));
         Assert.True(await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.DeletedWorkspaces WHERE TenantId = @p0", tenantId) > 0);
         Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.DeletedWorkspaces WHERE TenantId = @p0 AND Name <> N'Deleted workspace'", tenantId));
         Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.TenantMembers WHERE TenantId = @p0", tenantId));
@@ -333,6 +337,43 @@ public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
             ("@Credits", 100m), ("@PurchasedAt", DateTime.UtcNow), ("@ExpiresAt", DateTime.UtcNow.AddDays(365)),
             ("@OutboxMessageType", "test"), ("@OutboxPayload", "{}"));
         Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.BillingCustomerErasures WHERE CustomerId = @p0", own));
+    }
+
+    /// <summary>
+    /// A tenant with nothing to keep (never paid, its plan never set, never frozen), such as an abandoned
+    /// sign-up's, is deleted with the account rather than left as a tombstone for good.
+    /// </summary>
+    [SkippableFact]
+    public async Task Deleting_an_account_deletes_its_own_tenant_when_nothing_was_ever_paid()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var (tenantId, ownerId, _) = await CreateTenantAsync();
+        await ExecSqlAsync("INSERT INTO dbo.BillingNotices (TenantId, Kind, PeriodKey) VALUES (@p0, N'test', N'p');", tenantId);
+        string workspaces = await ScalarAsync<string>(
+            "SELECT (SELECT Id AS workspaceId, N'test' AS messageType, N'{}' AS payload FROM dbo.Workspaces WHERE TenantId = @p0 FOR JSON PATH)", tenantId);
+
+        await ExecAsync("dbo.User_Delete", ("@UserId", ownerId), ("@DeletedWorkspaces", workspaces));
+
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Tenants WHERE Id = @p0", tenantId));
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.BillingNotices WHERE TenantId = @p0", tenantId));
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Users WHERE Id = @p0 AND IsActive = 1", ownerId));
+    }
+
+    /// <summary>
+    /// A tenant staff froze or gave a plan to keeps its row, back on Free, though it never paid.
+    /// </summary>
+    [SkippableFact]
+    public async Task Deleting_an_account_keeps_a_tenant_staff_acted_on_as_a_free_tombstone()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var (tenantId, ownerId, _) = await CreateTenantAsync();
+        await ExecSqlAsync("UPDATE dbo.Tenants SET PlanCode = N'Pro', PlanSource = N'Operator', PlanRevision = 1 WHERE Id = @p0;", tenantId);
+        string workspaces = await ScalarAsync<string>(
+            "SELECT (SELECT Id AS workspaceId, N'test' AS messageType, N'{}' AS payload FROM dbo.Workspaces WHERE TenantId = @p0 FOR JSON PATH)", tenantId);
+
+        await ExecAsync("dbo.User_Delete", ("@UserId", ownerId), ("@DeletedWorkspaces", workspaces));
+
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Tenants WHERE Id = @p0 AND ClosedAt IS NOT NULL AND PlanCode = N'Free' AND PlanSource = N'Default' AND PlanRevision = 2", tenantId));
     }
 
     /// <summary>
