@@ -145,6 +145,7 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
             r => (
                 WorkspaceId: r.GetInt32(r.GetOrdinal("WorkspaceId")),
                 IsMember: r.GetBoolean(r.GetOrdinal("IsMember")),
+                IsFrozen: r.GetBoolean(r.GetOrdinal("IsFrozen")),
                 Slug: r.IsDBNull(r.GetOrdinal("Slug")) ? null : r.GetString(r.GetOrdinal("Slug"))),
             cancellationToken);
 
@@ -155,7 +156,7 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
 
         var first = rows.First();
         var permissions = rows.Where(r => r.Slug is not null).Select(r => r.Slug!).ToArray();
-        return new WorkspaceAccessResolution(first.WorkspaceId, first.IsMember, permissions);
+        return new WorkspaceAccessResolution(first.WorkspaceId, first.IsMember, permissions, first.IsFrozen);
     }
 
     public async Task<Workspace?> FindByIdAsync(int workspaceId, CancellationToken cancellationToken = default)

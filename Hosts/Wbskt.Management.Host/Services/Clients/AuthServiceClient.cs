@@ -91,7 +91,7 @@ internal sealed class AuthServiceClient : IAuthServiceClient
                 return Result<WorkspaceAccess>.Failure(Error.Failure("WORKSPACE_RESOLVE_ERROR", "Auth service returned an empty resolve response."));
             }
 
-            var access = new WorkspaceAccess(result.WorkspaceId, result.Permissions.ToHashSet(StringComparer.OrdinalIgnoreCase));
+            var access = new WorkspaceAccess(result.WorkspaceId, result.Permissions.ToHashSet(StringComparer.OrdinalIgnoreCase), result.Frozen);
             _logger.LogDebug("Successfully resolved workspace reference: '{WorkspaceRef}' to internal ID: {WorkspaceId} with {PermissionCount} permissions", workspaceRef, access.WorkspaceId, access.Permissions.Count);
             return Result<WorkspaceAccess>.Success(access);
         }

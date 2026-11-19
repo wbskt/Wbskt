@@ -7,7 +7,11 @@ namespace Wbskt.Auth.Models;
 
 public record ResolveWorkspaceRequest(Guid WorkspaceRef);
 
-public record ResolvedWorkspaceResponse(int WorkspaceId, string[] Permissions);
+/// <summary>
+/// The workspace's internal id and the caller's permissions in it. <see cref="Frozen"/>: its account is
+/// frozen by Wbskt support, so only reads are allowed whatever the permissions say.
+/// </summary>
+public record ResolvedWorkspaceResponse(int WorkspaceId, string[] Permissions, bool Frozen = false);
 
 /// <summary>The caller's internal user id (<c>InternalRoutes.CurrentUser</c>).</summary>
 public record CurrentUserResponse(int UserId);

@@ -25,6 +25,9 @@ internal interface IStaffUserProvider
     /// </summary>
     Task<Guid> RepairAdministratorAsync(int tenantId, int userId, CancellationToken cancellationToken);
 
+    /// <summary>Freezes the tenant, or lifts it. Throws <c>SqlException</c> 50049 when it is already in that state.</summary>
+    Task SetTenantFrozenAsync(int tenantId, bool frozen, CancellationToken cancellationToken);
+
     /// <summary>
     /// The tenant's id, or 0. Not scoped to a member, unlike <see cref="ITenantProvider"/>'s lookups,
     /// because staff act on every tenant; only the admin key reaches the routes that use it.

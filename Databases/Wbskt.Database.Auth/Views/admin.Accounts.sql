@@ -14,6 +14,7 @@ SELECT
     T.PlanLimitOverrides,
     T.CreatedAt,
     T.ClosedAt,
+    T.FrozenAt,
     (SELECT COUNT(*) FROM dbo.TenantMembers TM WHERE TM.TenantId = T.Id) AS MemberCount,
     (SELECT COUNT(*)
      FROM dbo.Workspaces W

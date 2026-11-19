@@ -26,6 +26,10 @@ CREATE TABLE dbo.Tenants (
     -- with its name cleared, so the payments recorded against it (subscriptions, credit purchases)
     -- still match a refund or chargeback and remain for the accounts. Nothing acts for a closed tenant.
     ClosedAt DATETIME2(3) NULL,
+    -- When Wbskt support froze the account (dbo.Tenant_StaffSetFrozen); NULL while it is not frozen.
+    -- A frozen account's members can still sign in and read, but no workspace in it takes a change
+    -- (dbo.Workspace_ResolveAccess reports it) and nothing runs in it.
+    FrozenAt DATETIME2(3) NULL,
     CONSTRAINT PK_Tenants PRIMARY KEY CLUSTERED (Id ASC),
     CONSTRAINT UQ_Tenants_RefId UNIQUE (RefId),
     CONSTRAINT CK_Tenants_PlanCode CHECK (PlanCode = N'Free' OR PlanCode = N'Maker' OR PlanCode = N'Pro' OR PlanCode = N'Team' OR PlanCode = N'Business'),

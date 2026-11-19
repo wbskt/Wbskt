@@ -49,7 +49,7 @@ public class InternalWorkspacesController : ApiControllerBase
         if (result.IsSuccess)
         {
             _metrics.RecordWorkspaceResolution("success");
-            return Ok(new ResolvedWorkspaceResponse(result.Value.WorkspaceId, result.Value.Permissions.ToArray()));
+            return Ok(new ResolvedWorkspaceResponse(result.Value.WorkspaceId, result.Value.Permissions.ToArray(), result.Value.IsFrozen));
         }
 
         if (result.Error.Code == "WORKSPACE_NOT_FOUND")

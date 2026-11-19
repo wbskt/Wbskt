@@ -6,7 +6,9 @@
 -- Returns no rows when the workspace does not exist. Otherwise one row per permission slug, every row
 -- carrying WorkspaceId and IsMember. A workspace the user may enter but holds no permissions in comes
 -- back as a single row with a NULL Slug, and so does a workspace they are not a member of (IsMember 0),
--- for which no permissions are computed at all.
+-- for which no permissions are computed at all. IsFrozen says the workspace's tenant is frozen
+-- (dbo.Tenants.FrozenAt), so its members may read but change nothing; it comes last, so a reader that
+-- goes by position still finds Slug third.
 CREATE PROCEDURE dbo.Workspace_ResolveAccess
     @UserId INT,
     @WorkspaceRef UNIQUEIDENTIFIER
@@ -17,10 +19,17 @@ BEGIN
     DECLARE @WorkspaceId INT = (SELECT Id FROM dbo.Workspaces WHERE RefId = @WorkspaceRef);
     IF @WorkspaceId IS NULL
     BEGIN
-        SELECT CAST(NULL AS INT) AS WorkspaceId, CAST(NULL AS BIT) AS IsMember, CAST(NULL AS NVARCHAR(100)) AS Slug
+        SELECT CAST(NULL AS INT) AS WorkspaceId, CAST(NULL AS BIT) AS IsMember, CAST(NULL AS NVARCHAR(100)) AS Slug, CAST(NULL AS BIT) AS IsFrozen
         WHERE 1 = 0;
         RETURN;
     END
+
+    DECLARE @IsFrozen BIT = IIF(EXISTS (
+        SELECT 1
+        FROM dbo.Workspaces W
+        INNER JOIN dbo.Tenants T ON T.Id = W.TenantId
+        WHERE W.Id = @WorkspaceId
+          AND T.FrozenAt IS NOT NULL), 1, 0);
 
     DECLARE @Membership TABLE (IsMember BIT NOT NULL);
     INSERT INTO @Membership (IsMember)
@@ -35,7 +44,7 @@ BEGIN
         EXEC dbo.Permission_EffectiveSet @UserId = @UserId, @WorkspaceId = @WorkspaceId;
     END
 
-    SELECT @WorkspaceId AS WorkspaceId, @IsMember AS IsMember, s.Slug
+    SELECT @WorkspaceId AS WorkspaceId, @IsMember AS IsMember, s.Slug, @IsFrozen AS IsFrozen
     FROM (SELECT 1 AS One) AS d
     LEFT JOIN @Slugs AS s ON 1 = 1;
 END

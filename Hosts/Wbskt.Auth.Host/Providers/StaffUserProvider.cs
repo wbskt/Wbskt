@@ -39,6 +39,15 @@ internal sealed class StaffUserProvider(IConfiguration configuration) : BaseSqlP
         }, cancellationToken);
     }
 
+    public Task SetTenantFrozenAsync(int tenantId, bool frozen, CancellationToken cancellationToken)
+    {
+        return ExecuteNonQueryAsync("dbo.Tenant_StaffSetFrozen", p =>
+        {
+            p.AddWithValue("@TenantId", tenantId);
+            p.AddWithValue("@Frozen", frozen);
+        }, cancellationToken);
+    }
+
     public Task<int> FindTenantIdByRefIdAsync(Guid tenantRef, CancellationToken cancellationToken)
     {
         return ExecuteScalarAsync<int>("dbo.Tenant_FindBy_RefId", p => p.AddWithValue("@RefId", tenantRef), cancellationToken);
