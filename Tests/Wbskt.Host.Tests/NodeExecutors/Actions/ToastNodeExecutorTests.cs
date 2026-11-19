@@ -59,7 +59,7 @@ public sealed class ToastNodeExecutorTests
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(result);
         Assert.Equal("TOAST_PUBLISH_ERROR", fail.ErrorCode);
-        Assert.Equal("broker down", fail.Message);
+        Assert.Equal(ToastNodeExecutor.PublishFailedMessage, fail.Message);
         Assert.True(fail.Retryable, "a briefly unavailable bus is worth retrying");
         Assert.Same(exception, fail.Cause);
     }

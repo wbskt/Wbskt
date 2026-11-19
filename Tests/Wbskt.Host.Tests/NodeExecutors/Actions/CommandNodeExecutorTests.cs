@@ -89,7 +89,7 @@ public sealed class CommandNodeExecutorTests
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(result);
         Assert.Equal("COMMAND_PUBLISH_ERROR", fail.ErrorCode);
-        Assert.Equal("broker down", fail.Message);
+        Assert.Equal(CommandNodeExecutor.PublishFailedMessage, fail.Message);
         Assert.True(fail.Retryable);
         Assert.Same(exception, fail.Cause);
     }

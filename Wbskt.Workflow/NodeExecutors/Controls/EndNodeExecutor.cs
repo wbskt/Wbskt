@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Wbskt.Workflow.Abstraction.Exceptions;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -39,7 +40,7 @@ internal sealed class EndNodeExecutor(IExpressionEvaluator? evaluator = null) : 
 
             output = (await evaluator.EvaluateForStepAsync(outputExpression, ctx, "output", ct)).Clone();
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is PermanentNodeException or JsonException)
         {
             // An output that cannot be evaluated is an authoring error that a retry would repeat.
             // Completing without it would hand the parent a child that "succeeded" with nothing to read,

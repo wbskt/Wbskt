@@ -311,6 +311,13 @@ internal sealed class BranchLoop : IBranchLoop
                 isRecoveredVisit: isRecoveredVisit,
                 firstAttempt: parkedAttempt ?? 1,
                 retryParkThreshold: _retryParkThreshold);
+
+            // The retry executor turns an unexpected exception into a fixed message for history; the
+            // exception itself is logged here, once, with the ids to find it by.
+            if (result is NodeExecutionResult.Fail { ErrorCode: NodeFailures.CrashCode, Cause: { } crash })
+            {
+                _logger?.LogError(crash, "Exception occurred executing node {NodeId} in branch {BranchId} for run {RunId}", branchRow.NodeId, branchId, runId);
+            }
         }
         catch (Exception ex)
         {
@@ -338,7 +345,7 @@ internal sealed class BranchLoop : IBranchLoop
             {
                 _logger?.LogError(ex, "Exception occurred executing node {NodeId} in branch {BranchId} for run {RunId}", branchRow.NodeId, branchId, runId);
                 outcome = "Failed";
-                result = new NodeExecutionResult.Fail("EXECUTOR_CRASH", ex.Message, false, ex);
+                result = new NodeExecutionResult.Fail(NodeFailures.CrashCode, NodeFailures.CrashMessage, false, ex);
             }
         }
         finally

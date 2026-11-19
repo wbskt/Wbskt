@@ -5,6 +5,7 @@ using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models.Bookmarks;
 using Wbskt.Workflow.Abstraction.Models.Expressions;
+using Wbskt.Workflow.Abstraction.Exceptions;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -96,7 +97,7 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
         {
             body = await BuildChildBodyAsync(config, ctx, childDepth, ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is PermanentNodeException or JsonException)
         {
             // An input that cannot be evaluated is an authoring error, not a transient one - retrying
             // would produce the same failure - and starting the child without it would hand it a
@@ -204,7 +205,7 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
                 // definition that predates the rule cannot overwrite the child's route home.
                 if (SubWorkflowConfig.ReservedInputKeys.Contains(key))
                 {
-                    throw new InvalidOperationException($"Input '{key}' is reserved by the engine and cannot be supplied by the workflow.");
+                    throw new PermanentNodeException($"Input '{key}' is reserved by the engine and cannot be supplied by the workflow.");
                 }
 
                 body[key] = (await evaluator.EvaluateForStepAsync(expression, ctx, $"input.{key}", ct)).Clone();
