@@ -16,7 +16,10 @@ public sealed class BillingOptions
     /// </summary>
     public Dictionary<PlanCode, Dictionary<BillingInterval, string>> Plans { get; set; } = [];
 
-    /// <summary>The credit packs offered, by name (<c>CreditPacks:{Name}:ProductId</c> and <c>:Credits</c>).</summary>
+    /// <summary>
+    /// The provider's product for each credit pack, by its name in <see cref="CreditPackPrices"/>
+    /// (<c>CreditPacks:Pack10k:ProductId</c>). A pack left out, or named nowhere in the catalogue, is not offered.
+    /// </summary>
     public Dictionary<string, CreditPackOptions> CreditPacks { get; set; } = [];
 
     /// <summary>How long a bought credit pack can be spent.</summary>
@@ -72,9 +75,17 @@ public sealed class BillingOptions
             ? productId
             : null;
 
-    /// <summary>The credit pack named <paramref name="name"/>, or null when it is not on sale (<see cref="CreditPackOptions.IsOffered"/>).</summary>
-    public CreditPackOptions? FindOfferedCreditPack(string name) =>
-        CreditPacks.TryGetValue(name, out CreditPackOptions? pack) && pack.IsOffered ? pack : null;
+    /// <summary>The packs on sale: each configured with a product and priced in <see cref="CreditPackPrices"/>.</summary>
+    public IReadOnlyCollection<OfferedCreditPack> OfferedCreditPacks() =>
+        CreditPacks
+            .Where(p => !string.IsNullOrEmpty(p.Value.ProductId))
+            .Select(p => CreditPackPrices.Find(p.Key) is { } pack ? new OfferedCreditPack(p.Key, p.Value.ProductId, pack) : null)
+            .OfType<OfferedCreditPack>()
+            .ToList();
+
+    /// <summary>The credit pack named <paramref name="name"/>, or null when it is not on sale.</summary>
+    public OfferedCreditPack? FindOfferedCreditPack(string name) =>
+        OfferedCreditPacks().FirstOrDefault(p => p.Name == name);
 
     /// <summary>The plan and interval <paramref name="productId"/> sells; null when it is not one of <see cref="Plans"/>.</summary>
     public (PlanCode Plan, BillingInterval Interval)? FindPlan(string productId)
@@ -93,20 +104,15 @@ public sealed class BillingOptions
         return null;
     }
 
-    /// <summary>The credit pack <paramref name="productId"/> sells; null when it is not one of <see cref="CreditPacks"/>.</summary>
-    public CreditPackOptions? FindCreditPack(string productId) =>
-        CreditPacks.Values.FirstOrDefault(p => !string.IsNullOrEmpty(p.ProductId) && p.ProductId == productId);
+    /// <summary>The credit pack <paramref name="productId"/> sells; null when it is not one of the <see cref="OfferedCreditPacks"/>.</summary>
+    public OfferedCreditPack? FindCreditPack(string productId) =>
+        OfferedCreditPacks().FirstOrDefault(p => p.ProductId == productId);
 }
 
 public sealed class CreditPackOptions
 {
     public string ProductId { get; set; } = "";
-
-    public decimal Credits { get; set; }
-
-    /// <summary>What the pack costs in USD, as its product is priced at the provider; checked at start.</summary>
-    public decimal PriceUsd { get; set; }
-
-    /// <summary>On sale: a product, credits and a price. A pack with no price is not shown as free.</summary>
-    public bool IsOffered => !string.IsNullOrEmpty(ProductId) && Credits > 0 && PriceUsd > 0;
 }
+
+/// <summary>A credit pack on sale: its catalogue name, its product at the provider, and what it adds and costs.</summary>
+public sealed record OfferedCreditPack(string Name, string ProductId, CreditPack Pack);

@@ -427,11 +427,12 @@ Money is taken by a payment provider on its own hosted pages; Dodo Payments is t
 Payments are off until the provider's API key and webhook signing secret are set
 (`Billing__Dodo__ApiKey`, `Billing__Dodo__WebhookSecret`, or `DODO_PAYMENTS_API_KEY` and
 `DODO_PAYMENTS_WEBHOOK_KEY`); the products sold are `Billing:Payments:Plans:{Plan}:{Interval}` and
-`Billing:Payments:CreditPacks:{Name}` (`ProductId`, `Credits`). The secrets come from the environment,
+`Billing:Payments:CreditPacks:{Name}:ProductId`. What each costs and adds is in code (`PlanPrices`,
+`CreditPackPrices`), not configuration. The secrets come from the environment,
 never from a file in the repository.
 
 What is sold: Maker, Pro and Team, monthly and yearly (`DODO_PRODUCT_{MAKER,PRO,TEAM}_{MONTHLY,YEARLY}`),
-and one credit pack, `Pack10k`: 10,000 credits for $5 (`DODO_PRODUCT_CREDITS_10K`, `PriceUsd: 5`), on every plan. At
+and one credit pack, `Pack10k`: 10,000 credits for $5 (`DODO_PRODUCT_CREDITS_10K`), on every plan. At
 $0.50 per 1,000 a pack costs more per credit than any plan (Maker gives 5,000 a dollar, Pro 6,250, Team
 6,060), so a pack covers a spike and an upgrade covers growth. Business is invoiced, never checked out.
 
@@ -563,12 +564,12 @@ exists, nothing is deleted: 503 `BILLING_SUBSCRIPTION_NOT_CANCELLED`, and the ca
   Once started, `PaymentGatewayCheck` asks the provider whether it accepts the API key and logs a
   Critical line if not (usually a key for the other mode). It then reads every configured plan and pack
   product (`GET /products/{id}`) and logs a Critical line for each one whose price, currency (USD) or
-  billing interval differs from the catalogue (`PlanPrices`, and a pack's `PriceUsd`), that carries a
+  billing interval differs from the catalogue (`PlanPrices`, `CreditPackPrices`), that carries a
   discount or a free trial, lets the buyer choose the amount, charges metered usage, or that does not
   exist or cannot be read: a product id set to another plan's
   product, or a price changed in the dashboard, would otherwise let a customer pay one price for another
-  plan's limits. The amounts are before tax. A plan the catalogue has no price for, or a pack with no
-  `PriceUsd`, is neither offered nor sold.
+  plan's limits. The amounts are before tax. A plan or pack the catalogue has no price for is neither
+  offered nor sold.
 - Webhook outcomes are counted (`wbskt_auth_billing_webhooks_total{type,outcome}`: `done`, `set_aside`,
   `failed`, `signature_invalid`, and `signature_missing` for a request with no signature at all, such as
   a scanner). `BillingWebhooksSetAside` fires on any webhook set aside in an hour (a

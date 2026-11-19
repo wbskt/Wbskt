@@ -78,7 +78,7 @@ internal sealed class TenantBillingService(
                     .OrderBy(o => o.Plan).ThenBy(o => o.Interval).ToList()
                 : [],
             gateway.IsConfigured
-                ? offers.CreditPacks.Where(p => p.Value.IsOffered).Select(p => new CreditPackOffer(p.Key, p.Value.Credits, p.Value.PriceUsd)).OrderBy(o => o.Credits).ToList()
+                ? offers.OfferedCreditPacks().Select(p => new CreditPackOffer(p.Name, p.Pack.Credits, p.Pack.Usd)).OrderBy(o => o.Credits).ToList()
                 : [],
             tenant.Source,
             tenant.Source == PlanSource.Operator ? tenant.EndsAt?.ToUtcOffset() : null,
@@ -326,8 +326,8 @@ internal sealed class TenantBillingService(
 
         if (request.CreditPack is { } pack)
         {
-            return offers.FindOfferedCreditPack(pack) is { } packOptions
-                ? packOptions.ProductId
+            return offers.FindOfferedCreditPack(pack) is { } offered
+                ? offered.ProductId
                 : Error.Validation("BILLING_OFFER_INVALID", $"Credit pack '{pack}' is not offered.");
         }
 
