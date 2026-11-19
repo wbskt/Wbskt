@@ -131,7 +131,7 @@ public sealed class AccountDeletionServiceTests
         var result = await Service().DeleteAccountAsync(42, Password, Ip);
 
         Assert.Equal("AUTH_USER_NOT_FOUND", result.Error.Code);
-        _accounts.Verify(p => p.RecordLoginFailureAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Never);
+        _accounts.Verify(p => p.EndPasswordCheckAsync(It.IsAny<int>(), false, It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Never);
         _accounts.Verify(p => p.DeleteUserAsync(It.IsAny<int>(), It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -141,7 +141,7 @@ public sealed class AccountDeletionServiceTests
         var result = await Service().DeleteAccountAsync(42, "not the password", Ip);
 
         Assert.Equal("AUTH_CURRENT_PASSWORD_INVALID", result.Error.Code);
-        _accounts.Verify(p => p.RecordLoginFailureAsync(42, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, It.IsAny<CancellationToken>()), Times.Once);
+        _accounts.Verify(p => p.EndPasswordCheckAsync(42, false, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, It.IsAny<CancellationToken>()), Times.Once);
         _accounts.Verify(p => p.DeleteUserAsync(It.IsAny<int>(), It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), It.IsAny<CancellationToken>()), Times.Never);
         _accessTokens.Verify(a => a.RevokeUserAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -174,9 +174,10 @@ public sealed class AccountDeletionServiceTests
     }
 
     private AccountDeletionService Service() =>
-        new(_accounts.Object, _billing.Object, _gateway.Object, _bus.Object, _accessTokens.Object, NullLogger<AccountDeletionService>.Instance,
+        new(_accounts.Object, _billing.Object, _gateway.Object, _bus.Object, NullLogger<AccountDeletionService>.Instance,
             AuditWorkspaces.None, new TenantAnnouncer(_accounts.Object, _bus.Object, AuditWorkspaces.None, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance),
-            new SecurityNotices(Mock.Of<IAuthMailer>(), MailCooldownTests.InProcess(), new AuthMetrics(), TimeProvider.System));
+            CredentialFakes.Credentials(_accounts, Mock.Of<ISessionProvider>(), _bus.Object,
+                new SecurityNotices(Mock.Of<IAuthMailer>(), MailCooldownTests.InProcess(), new AuthMetrics(), TimeProvider.System), _accessTokens.Object));
 
     private static TenantSubscription Subscription(string id) =>
         new(5, "dodo", id, "cus_1", "prod_maker_m", PlanCode.Maker, BillingInterval.Monthly, SubscriptionStatus.Active, DateTime.UtcNow.AddDays(20), false, null, null);

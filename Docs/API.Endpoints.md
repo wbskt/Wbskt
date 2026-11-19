@@ -131,12 +131,14 @@ account/change-email, forgot-password, reset-password), `RateLimiting:TokenRefre
 (10/min: verify-email, resend-verification, account/confirm-email-change,
 account/revert-email-change).
 
-The endpoints that hash a password (register, login, change-password, account/delete,
-account/change-email, reset-password) also share one
-host-wide concurrency limit, `RateLimiting:PasswordHashing` (`PermitLimit`, default twice the CPU
-count, with up to `QueueLimit` 20 waiting), so a burst from many addresses queues instead of starving
-every other request of CPU. A request that finds the queue full gets 429. A password stored with
-older hashing settings is re-hashed with the current ones on the next successful sign-in.
+At most `Auth:PasswordHashing:Concurrency` password hashes or checks (default twice the CPU count)
+run at once across the host, so a burst from many addresses queues instead of starving every other
+request of CPU. The limit covers the hash alone, so a slow breach check or database does not hold a
+slot. The endpoints that hash a password (register, login, change-password, account/delete,
+account/change-email, reset-password) also share a coarse host-wide queue,
+`RateLimiting:PasswordHashing` (`PermitLimit`, default eight times the CPU count, with up to
+`QueueLimit` 20 waiting); a request that finds it full gets 429. A password stored with older
+hashing settings is re-hashed with the current ones on the next successful sign-in.
 
 **Refresh cookie.** A browser client sends `X-Refresh-Token-Transport: cookie` on login,
 refresh-token, logout, logout-all, change-password and account/confirm-email-change. The refresh token then travels only in an
@@ -213,9 +215,11 @@ been used, is refused (401 `AUTH_TOKEN_INACTIVE`) but is not treated as a replay
 carried the replacement was most likely lost, so no session ends and no alert is raised. Once the
 replacement has been used, or the minute has passed, presenting the old token is a replay.
 
-Each account is locked for 15 minutes after 10 wrong passwords, counted across sign-in and
-`change-password` and wherever they come from — the per-IP limiter cannot see a guesser spread over
-many addresses. While locked, sign-in answers exactly as for a wrong password, so a lock does not
+Each account is locked for 15 minutes after 10 wrong passwords, counted wherever a password is
+typed (sign-in, `change-password`, `account/change-email` and `account/delete`) and wherever they
+come from — the per-IP limiter cannot see a guesser spread over many addresses. An attempt is counted
+before its password is checked and given back if it was right, so parallel guesses cannot all slip
+in before the count reaches the limit; once ten are counted or in flight the rest are refused. While locked, sign-in answers exactly as for a wrong password, so a lock does not
 confirm the address has an account. A successful sign-in resets the count; a password reset or
 change lifts a lock. Sessions issued before the lock keep working. The failure that locks the account
 mails its owner (when, from which IP, and a link to reset), at most once an hour and outside the

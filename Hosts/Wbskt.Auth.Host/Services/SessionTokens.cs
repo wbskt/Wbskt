@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Microsoft.Extensions.Options;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Infrastructure.Security;
 
@@ -14,13 +15,15 @@ internal sealed class SessionTokens
     private readonly IJwtService _jwtService;
     private readonly TimeSpan _accessTokenLifetime;
     private readonly TimeSpan _refreshTokenLifetime;
+    private readonly TimeProvider _time;
 
-    public SessionTokens(IJwtService jwtService, AccessTokenOptions options)
+    public SessionTokens(IJwtService jwtService, IOptions<AccessTokenOptions> options, TimeProvider time)
     {
         _jwtService = jwtService;
-        _accessTokenLifetime = options.AccessTokenLifetime;
-        _refreshTokenLifetime = options.RefreshTokenLifetime;
-        SessionLifetime = options.SessionLifetime;
+        _accessTokenLifetime = options.Value.AccessTokenLifetime;
+        _refreshTokenLifetime = options.Value.RefreshTokenLifetime;
+        SessionLifetime = options.Value.SessionLifetime;
+        _time = time;
     }
 
     /// <summary>How long a session lasts from sign-in, however often it is refreshed.</summary>
@@ -44,7 +47,7 @@ internal sealed class SessionTokens
             UserId = userId,
             SessionId = Guid.NewGuid(),
             Token = Convert.ToBase64String(randomBytes),
-            Expires = DateTime.UtcNow.Add(_refreshTokenLifetime),
+            Expires = _time.GetUtcNow().UtcDateTime.Add(_refreshTokenLifetime),
         };
     }
 }

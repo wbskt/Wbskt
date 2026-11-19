@@ -138,7 +138,7 @@ public sealed class AccountProfileServiceTests
         var result = await harness.Profile.RequestEmailChangeAsync(42, "not the password", NewEmail, "10.0.0.1");
 
         Assert.Equal("AUTH_CURRENT_PASSWORD_INVALID", result.Error.Code);
-        harness.Accounts.Verify(p => p.RecordLoginFailureAsync(42, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, It.IsAny<CancellationToken>()), Times.Once);
+        harness.Accounts.Verify(p => p.EndPasswordCheckAsync(42, false, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, It.IsAny<CancellationToken>()), Times.Once);
         Assert.Empty(harness.Mailer.Sent);
     }
 

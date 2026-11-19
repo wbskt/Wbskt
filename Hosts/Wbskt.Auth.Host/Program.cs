@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Identity;
 using OpenTelemetry.Metrics;
 using System.Net.Mail;
 using Wbskt.Infrastructure.Billing;
@@ -8,6 +9,7 @@ using Microsoft.Extensions.Options;
 using Wbskt.Auth.Host.Authorization;
 using Wbskt.Auth.Host.Controllers;
 using Wbskt.Auth.Host.Providers;
+using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Services;
 using Wbskt.Auth.Host.Services.Billing;
 using Wbskt.Auth.Host.Services.Email;
@@ -56,11 +58,19 @@ public static class Program
         // Sign-in, passwords and registration publish through the queued bus, so none of them waits
         // on RabbitMQ; see QueuedEventBus. So does tenant administration, below.
         builder.Services.AddQueuedEventBus();
+        builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
+        builder.Services.AddSingleton(sp => new PasswordHashing(
+            sp.GetRequiredService<IPasswordHasher<User>>(),
+            sp.GetRequiredService<AuthMetrics>(),
+            builder.Configuration.GetValue("Auth:PasswordHashing:Concurrency", PasswordHashing.DefaultConcurrency)));
+        builder.Services.AddSingleton<SessionTokens>();
+        builder.Services.AddScopedWithQueuedEvents<AccountAnnouncer, AccountAnnouncer>();
+        builder.Services.AddScopedWithQueuedEvents<AccountCredentials, AccountCredentials>();
         builder.Services.AddScopedWithQueuedEvents<ISignInService, SignInService>();
-        builder.Services.AddScopedWithQueuedEvents<IPasswordService, PasswordService>();
+        builder.Services.AddScoped<IPasswordService, PasswordService>();
         builder.Services.AddScopedWithQueuedEvents<IRegistrationService, RegistrationService>();
         builder.Services.AddScopedWithQueuedEvents<IAccountDeletionService, AccountDeletionService>();
-        builder.Services.AddScopedWithQueuedEvents<IAccountProfileService, AccountProfileService>();
+        builder.Services.AddScoped<IAccountProfileService, AccountProfileService>();
         // Tenant administration publishes once its change has committed, through the queued bus, so a
         // broker outage cannot turn a change that happened into a 500. Access control publishes only
         // through TenantAnnouncer, so it has no bus of its own.
@@ -216,9 +226,11 @@ public static class Program
         {
             options.RejectWithProblem();
 
-            // Across every caller, not per IP: how many password hashes run at once. See
-            // HashesPasswordAttribute. Twice the cores keeps them busy without starving the rest.
-            var hashingPermits = builder.Configuration.GetValue("RateLimiting:PasswordHashing:PermitLimit", Environment.ProcessorCount * 2);
+            // Across every caller, not per IP: how many requests that hash a password may be in
+            // progress at once (see HashesPasswordAttribute). A coarse queue only: PasswordHashing
+            // limits the hashes themselves, so this is set well above that and only bounds how many
+            // wait for it, turning a flood into fast 429s.
+            var hashingPermits = builder.Configuration.GetValue("RateLimiting:PasswordHashing:PermitLimit", Environment.ProcessorCount * 8);
             var hashingQueue = builder.Configuration.GetValue("RateLimiting:PasswordHashing:QueueLimit", 20);
             options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
                 httpContext.GetEndpoint()?.Metadata.GetMetadata<HashesPasswordAttribute>() is null

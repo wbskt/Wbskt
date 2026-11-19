@@ -19,10 +19,18 @@ internal interface IAccountProvider : IReferenceProvider
     Task<int> InsertUserAsync(User user, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Counts a wrong password (<c>User_RecordLoginFailure</c>) and returns the account's lock expiry,
-    /// which is set when this failure reached <paramref name="maxFailures"/>.
+    /// Reserves a password attempt before the password is checked (<c>User_BeginPasswordCheck</c>).
+    /// False when the account is locked (unless <paramref name="throughLock"/>) or already has
+    /// <paramref name="maxFailures"/> attempts counted or in flight; the password must not be checked then.
     /// </summary>
-    Task<DateTime?> RecordLoginFailureAsync(int userId, int maxFailures, TimeSpan lockout, CancellationToken cancellationToken = default);
+    Task<bool> BeginPasswordCheckAsync(int userId, int maxFailures, bool throughLock, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Settles a reserved attempt (<c>User_EndPasswordCheck</c>): a right password gives it back, a
+    /// wrong one stays counted and locks the account at <paramref name="maxFailures"/>. Returns the lock's
+    /// expiry when this call locked it.
+    /// </summary>
+    Task<DateTime?> EndPasswordCheckAsync(int userId, bool succeeded, int maxFailures, TimeSpan lockout, CancellationToken cancellationToken = default);
 
     /// <summary>Clears the failure count and stamps the last sign-in.</summary>
     Task RecordLoginSuccessAsync(int userId, CancellationToken cancellationToken = default);

@@ -1,13 +1,8 @@
-using Wbskt.Auth.Host.Models;
-using Wbskt.Auth.Host.Providers;
-using Wbskt.EventBus.Abstractions;
-using Wbskt.Events.Auth;
-
 namespace Wbskt.Auth.Host.Services;
 
 /// <summary>
 /// Per-account lockout: every wrong password counts, wherever it is typed - signing in, or confirming
-/// the current password before changing it.
+/// the current password before changing it. <see cref="AccountCredentials"/> applies it.
 /// </summary>
 internal static class AccountLockout
 {
@@ -32,23 +27,4 @@ internal static class AccountLockout
 
     /// <summary>Sign-in devices kept per account; the oldest goes when a new one is recorded.</summary>
     internal const int MaxDevicesPerUser = 10;
-
-    /// <summary>
-    /// Counts a wrong password against the account, and raises an alert and mails the owner when that
-    /// failure locks it.
-    /// </summary>
-    public static async Task RecordFailedPasswordAsync(IAccountProvider accounts, IEventBus eventBus, SecurityNotices notices, ILogger logger, User user, string ipAddress, CancellationToken cancellationToken)
-    {
-        var lockedUntil = await accounts.RecordLoginFailureAsync(user.Id, MaxFailedLogins, LoginLockout, cancellationToken);
-        if (lockedUntil > DateTime.UtcNow)
-        {
-            logger.LogWarning("Account {UserId} locked until {LockedUntil} after {MaxFailures} wrong passwords. IP: {IpAddress}", user.Id, lockedUntil, MaxFailedLogins, ipAddress);
-            await eventBus.PublishAsync(new SecurityAlertEvent(
-                "AccountLocked",
-                $"User ID {user.Id} was locked after {MaxFailedLogins} wrong passwords.",
-                ipAddress,
-                $"UserId: {user.Id}"), cancellationToken);
-            await notices.AccountLockedAsync(user, lockedUntil.Value, ipAddress, cancellationToken);
-        }
-    }
 }

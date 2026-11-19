@@ -31,94 +31,78 @@ internal sealed class PasswordService : IPasswordService
 
     private readonly IAccountProvider _accounts;
     private readonly ISessionProvider _sessions;
-    private readonly IEventBus _eventBus;
     private readonly IAuthMailer _mailer;
     private readonly MailCooldown _mailCooldown;
     private readonly ILogger<PasswordService> _logger;
     private readonly AuthMetrics _metrics;
-    private readonly IAccessTokenRevocation _accessTokens;
     private readonly SessionTokens _tokens;
     private readonly AccountAnnouncer _announcer;
     private readonly IBreachedPasswords _breachedPasswords;
     private readonly SecurityNotices _notices;
-    private readonly PasswordHasher<User> _passwordHasher = new();
+    private readonly AccountCredentials _credentials;
+    private readonly PasswordHashing _hashing;
+    private readonly TimeProvider _time;
 
     public PasswordService(
         IAccountProvider accounts,
         ISessionProvider sessions,
-        IJwtService jwtService,
-        IEventBus eventBus,
         IAuthMailer mailer,
         ILogger<PasswordService> logger,
         AuthMetrics metrics,
-        IAccessTokenRevocation accessTokens,
-        IOptions<AccessTokenOptions> accessTokenOptions,
+        SessionTokens tokens,
         MailCooldown mailCooldown,
         SecurityNotices notices,
-        IAuditWorkspaces? audit = null,
+        AccountCredentials credentials,
+        PasswordHashing hashing,
+        AccountAnnouncer announcer,
+        TimeProvider time,
         IBreachedPasswords? breachedPasswords = null)
     {
         _notices = notices;
         _breachedPasswords = breachedPasswords ?? BreachedPasswords.None;
         _accounts = accounts;
         _sessions = sessions;
-        _eventBus = eventBus;
         _mailer = mailer;
         _mailCooldown = mailCooldown;
         _logger = logger;
         _metrics = metrics;
-        _accessTokens = accessTokens;
-        _tokens = new SessionTokens(jwtService, accessTokenOptions.Value);
-        _announcer = new AccountAnnouncer(accounts, eventBus, audit ?? AuditWorkspaces.None, logger);
+        _tokens = tokens;
+        _credentials = credentials;
+        _hashing = hashing;
+        _announcer = announcer;
+        _time = time;
     }
 
     public async Task<Result<LoginResponse>> ChangePasswordAsync(int userId, string currentPassword, string newPassword, string ipAddress, CancellationToken cancellationToken = default)
     {
-        try
+        // Counted like a failed sign-in: a stolen access token must not become an unthrottled way to
+        // guess the password behind it.
+        var confirmed = await _credentials.ConfirmPasswordAsync(userId, currentPassword, ipAddress, cancellationToken);
+        if (confirmed.IsFailure)
         {
-            var user = await _accounts.GetByIdAsync(userId, cancellationToken);
-
-            // The caller is signed in as this account, so saying it is locked discloses nothing - and
-            // checking the current password while locked would reopen the guessing the lock closed.
-            if (user.LockedUntil > DateTime.UtcNow)
-            {
-                _logger.LogWarning("Password change refused: account {UserId} is locked. IP: {IpAddress}", userId, ipAddress);
-                return Result<LoginResponse>.Failure(Error.Forbidden("AUTH_ACCOUNT_LOCKED", "Too many wrong passwords. Try again later, or reset your password."));
-            }
-
-            if (_passwordHasher.VerifyHashedPassword(user, user.PasswordHash, currentPassword) == PasswordVerificationResult.Failed)
-            {
-                // Counted like a failed sign-in: a stolen access token must not become an unthrottled
-                // way to guess the password behind it.
-                _logger.LogWarning("Password change refused: current password did not match for user {UserId}. IP: {IpAddress}", userId, ipAddress);
-                await AccountLockout.RecordFailedPasswordAsync(_accounts, _eventBus, _notices, _logger, user, ipAddress, cancellationToken);
-                // 400, not 401: the session is fine, and a 401 would make a client sign the user out.
-                return Result<LoginResponse>.Failure(Error.Validation("AUTH_CURRENT_PASSWORD_INVALID", "The current password is not correct."));
-            }
-
-            // After the current password, so a stolen access token learns nothing from this either.
-            if (await _breachedPasswords.IsBreachedAsync(newPassword, cancellationToken))
-            {
-                return Result<LoginResponse>.Failure(BreachedPasswords.Breached);
-            }
-
-            await _accounts.ChangePasswordAsync(userId, _passwordHasher.HashPassword(user, newPassword), ipAddress, cancellationToken);
-            await RevokeAccessTokensAsync(userId, cancellationToken);
-
-            // Every session ended with the old password, including this one. The caller gets a new
-            // pair so changing a password does not also sign them out.
-            var refreshToken = _tokens.NewRefreshToken(userId);
-            await _sessions.InsertRefreshTokenAsync(refreshToken, ipAddress, cancellationToken);
-
-            _logger.LogInformation("Password changed for user {UserId}; all other sessions revoked. IP: {IpAddress}", userId, ipAddress);
-            await _announcer.AnnounceAsync(new PasswordChangedEvent(userId, user.RefId, "changed"), ipAddress, cancellationToken);
-            await _notices.PasswordChangedAsync(user, "changed", ipAddress, cancellationToken);
-            return Result<LoginResponse>.Success(new LoginResponse(_tokens.AccessToken(user, refreshToken.SessionId), refreshToken.Token));
+            return Result<LoginResponse>.Failure(confirmed.Error);
         }
-        catch (SecurityException)
+
+        var user = confirmed.Value;
+
+        // After the current password, so a stolen access token learns nothing from this either.
+        if (await _breachedPasswords.IsBreachedAsync(newPassword, cancellationToken))
         {
-            return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_USER_NOT_FOUND", "User not found."));
+            return Result<LoginResponse>.Failure(BreachedPasswords.Breached);
         }
+
+        await _accounts.ChangePasswordAsync(userId, await _hashing.HashAsync(newPassword, cancellationToken), ipAddress, cancellationToken);
+        await _credentials.RevokeAccessTokensAsync(user.RefId, cancellationToken);
+
+        // Every session ended with the old password, including this one. The caller gets a new
+        // pair so changing a password does not also sign them out.
+        var refreshToken = _tokens.NewRefreshToken(userId);
+        await _sessions.InsertRefreshTokenAsync(refreshToken, ipAddress, cancellationToken);
+
+        _logger.LogInformation("Password changed for user {UserId}; all other sessions revoked. IP: {IpAddress}", userId, ipAddress);
+        await _announcer.AnnounceAsync(new PasswordChangedEvent(userId, user.RefId, "changed"), ipAddress, cancellationToken);
+        await _notices.PasswordChangedAsync(user, "changed", ipAddress, cancellationToken);
+        return Result<LoginResponse>.Success(new LoginResponse(_tokens.AccessToken(user, refreshToken.SessionId), refreshToken.Token));
     }
 
     public async Task<Result> ForgotPasswordAsync(string email, string ipAddress, CancellationToken cancellationToken = default)
@@ -162,7 +146,7 @@ internal sealed class PasswordService : IPasswordService
         try
         {
             var token = SecurityTokens.Generate();
-            var expiresAt = DateTime.UtcNow.Add(PasswordResetLifetime);
+            var expiresAt = _time.GetUtcNow().UtcDateTime.Add(PasswordResetLifetime);
 
             await _accounts.CreatePasswordResetTokenAsync(user.Id, SecurityTokens.Hash(token), expiresAt, ipAddress, cancellationToken);
             await _mailer.QueuePasswordResetAsync(user.Email, user.Username, token, expiresAt, cancellationToken);
@@ -190,9 +174,8 @@ internal sealed class PasswordService : IPasswordService
         }
 
         // Hashed before the token is checked, so an invalid token costs the same work as a valid one
-        // and cannot be distinguished by how quickly it comes back. PasswordHasher<T> ignores the
-        // user argument when hashing, so a bare instance is correct here - there is no account yet.
-        var passwordHash = _passwordHasher.HashPassword(new User(), newPassword);
+        // and cannot be distinguished by how quickly it comes back.
+        var passwordHash = await _hashing.HashAsync(newPassword, cancellationToken);
 
         int userId;
         try
@@ -213,18 +196,11 @@ internal sealed class PasswordService : IPasswordService
         // the reset is for, and they are already done. This only shortens the life of access tokens
         // that were already issued.
         var user = await _accounts.GetByIdAsync(userId, cancellationToken);
-        await _accessTokens.RevokeUserAsync(user.RefId, cancellationToken);
+        await _credentials.RevokeAccessTokensAsync(user.RefId, cancellationToken);
         _logger.LogInformation("Password reset completed for user {UserId}; all sessions revoked. IP: {IpAddress}", userId, ipAddress);
         await _announcer.AnnounceAsync(new PasswordChangedEvent(userId, user.RefId, "reset"), ipAddress, cancellationToken);
         await _notices.PasswordChangedAsync(user, "reset", ipAddress, cancellationToken);
         return Result.Success();
     }
 
-    /// <summary>
-    /// Ends the user's access tokens on every host. Revocations are keyed by the RefId a token names;
-    /// unlike <see cref="AccountAnnouncer.RefOfAsync"/> a failed read is not swallowed, since a
-    /// revocation that silently named nobody would leave the tokens working.
-    /// </summary>
-    private async Task RevokeAccessTokensAsync(int userId, CancellationToken cancellationToken) =>
-        await _accessTokens.RevokeUserAsync((await _accounts.GetByIdAsync(userId, cancellationToken)).RefId, cancellationToken);
 }

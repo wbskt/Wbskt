@@ -1,11 +1,10 @@
-using System.Diagnostics;
-using System.Security.Cryptography;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services.Email;
+using Wbskt.Auth.Host.Services.Passwords;
 using Wbskt.Auth.Host.Telemetry;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Auth;
@@ -28,32 +27,25 @@ internal sealed class SignInService : ISignInService
     private readonly AccountAnnouncer _announcer;
     private readonly bool _requireVerifiedEmail;
     private readonly IAuditWorkspaces _audit;
-    private readonly SecurityNotices _notices;
-    private readonly PasswordHasher<User> _passwordHasher = new();
-
-    /// <summary>
-    /// A hash of a password nobody knows, verified against when there is no real one to check, so a
-    /// login for an address with no account (or a locked one) costs the same hashing work as one with
-    /// a wrong password. Without it, the time a login takes says whether the address is registered -
-    /// the one thing register, forgot-password and resend-verification are built not to reveal.
-    /// </summary>
-    private static readonly Lazy<string> DummyPasswordHash =
-        new(() => new PasswordHasher<User>().HashPassword(new User(), Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))));
+    private readonly AccountCredentials _credentials;
+    private readonly PasswordHashing _hashing;
+    private readonly TimeProvider _time;
 
     public SignInService(
         IAccountProvider accounts,
         ISessionProvider sessions,
-        IJwtService jwtService,
         IEventBus eventBus,
         IOptions<AuthEmailOptions> emailOptions,
         ILogger<SignInService> logger,
         AuthMetrics metrics,
         IAccessTokenRevocation accessTokens,
-        IOptions<AccessTokenOptions> accessTokenOptions,
-        SecurityNotices notices,
+        SessionTokens tokens,
+        AccountCredentials credentials,
+        PasswordHashing hashing,
+        AccountAnnouncer announcer,
+        TimeProvider time,
         IAuditWorkspaces? audit = null)
     {
-        _notices = notices;
         _audit = audit ?? AuditWorkspaces.None;
         _accounts = accounts;
         _sessions = sessions;
@@ -62,8 +54,11 @@ internal sealed class SignInService : ISignInService
         _metrics = metrics;
         _accessTokens = accessTokens;
         _requireVerifiedEmail = emailOptions.Value.RequireVerifiedEmailForSignIn;
-        _tokens = new SessionTokens(jwtService, accessTokenOptions.Value);
-        _announcer = new AccountAnnouncer(accounts, eventBus, _audit, logger);
+        _tokens = tokens;
+        _credentials = credentials;
+        _hashing = hashing;
+        _announcer = announcer;
+        _time = time;
     }
 
     public async Task<Result<LoginResponse>> LoginAsync(string email, string password, string ipAddress, CancellationToken cancellationToken = default)
@@ -89,7 +84,9 @@ internal sealed class SignInService : ISignInService
             }
             catch (SecurityException)
             {
-                SpendPasswordCheck(password);
+                // The same hashing work as an account's password check, so how long a sign-in takes
+                // does not say whether the address is registered.
+                await _hashing.SpendAsync(password, cancellationToken);
                 _logger.LogWarning("Login failed: no user with email {EmailHash}. IP: {IpAddress}", EmailFingerprint.Of(email), ipAddress);
                 _metrics.RecordLogin("invalid_credentials");
                 // The same lookup the known-account answers make for their audit entry, so an unknown
@@ -99,31 +96,23 @@ internal sealed class SignInService : ISignInService
                 return Result<BrowserSignIn>.Failure(Error.Unauthorized("AUTH_INVALID_CREDENTIALS", "Invalid credentials."));
             }
 
-            // Before the password check, so a locked account cannot be used to test passwords. The
-            // answer is the ordinary one: a distinct "locked" reply would confirm that the address has
-            // an account to anyone willing to make ten bad guesses. A browser this account signed in
-            // from before still gets its password tried, so a stranger's guesses cannot keep the owner
-            // out; anyone else gets in by resetting.
-            if (user.LockedUntil > DateTime.UtcNow && !await IsKnownDeviceAsync(user.Id, deviceToken, cancellationToken))
+            // A locked account is not tested, and the answer is the ordinary one: a distinct "locked"
+            // reply would confirm that the address has an account to anyone willing to make ten bad
+            // guesses. A browser this account signed in from before still gets its password tried, so a
+            // stranger's guesses cannot keep the owner out; anyone else gets in by resetting.
+            var check = await _credentials.CheckAsync(user, password, ipAddress, deviceToken, cancellationToken);
+            if (check == PasswordCheck.Locked)
             {
-                // Against the dummy hash, not the account's: the work is spent, the password is not tested.
-                SpendPasswordCheck(password);
-                _logger.LogWarning("Login refused: account {UserId} is locked until {LockedUntil}. IP: {IpAddress}", user.Id, user.LockedUntil, ipAddress);
+                _logger.LogWarning("Login refused: account {UserId} is locked. IP: {IpAddress}", user.Id, ipAddress);
                 _metrics.RecordLogin("locked_out");
                 await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "Account locked") { WorkspaceIds = await _audit.OfUserAsync(user.Id, cancellationToken) }, cancellationToken);
                 return Result<BrowserSignIn>.Failure(Error.Unauthorized("AUTH_INVALID_CREDENTIALS", "Invalid credentials."));
             }
 
-            var stopwatch = Stopwatch.StartNew();
-            var verificationResult = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
-            stopwatch.Stop();
-            _metrics.RecordPasswordHash(stopwatch.Elapsed.TotalMilliseconds);
-
-            if (verificationResult == PasswordVerificationResult.Failed)
+            if (check == PasswordCheck.Wrong)
             {
                 _logger.LogWarning("Login failed: Invalid password for user {UserId}. IP: {IpAddress}", user.Id, ipAddress);
                 _metrics.RecordLogin("invalid_credentials");
-                await AccountLockout.RecordFailedPasswordAsync(_accounts, _eventBus, _notices, _logger, user, ipAddress, cancellationToken);
                 await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "Invalid password") { WorkspaceIds = await _audit.OfUserAsync(user.Id, cancellationToken) }, cancellationToken);
                 return Result<BrowserSignIn>.Failure(Error.Unauthorized("AUTH_INVALID_CREDENTIALS", "Invalid credentials."));
             }
@@ -156,7 +145,7 @@ internal sealed class SignInService : ISignInService
 
             await _accounts.RecordLoginSuccessAsync(user.Id, cancellationToken);
 
-            if (verificationResult == PasswordVerificationResult.SuccessRehashNeeded)
+            if (check == PasswordCheck.VerifiedNeedsRehash)
             {
                 await UpgradePasswordHashAsync(user, password, cancellationToken);
             }
@@ -355,25 +344,13 @@ internal sealed class SignInService : ISignInService
         return Result.Success();
     }
 
-    private async Task<bool> IsKnownDeviceAsync(int userId, string? deviceToken, CancellationToken cancellationToken) =>
-        !string.IsNullOrEmpty(deviceToken) && await _sessions.IsKnownDeviceAsync(userId, deviceToken, cancellationToken);
-
     /// <summary>Records a new sign-in device for the account, whose token goes in the browser's cookie.</summary>
     private async Task<BrowserSignIn> IssueDeviceAsync(int userId, LoginResponse session, CancellationToken cancellationToken)
     {
         var token = SecurityTokens.Generate();
-        var expiresAt = DateTime.UtcNow.Add(AccountLockout.DeviceLifetime);
+        var expiresAt = _time.GetUtcNow().UtcDateTime.Add(AccountLockout.DeviceLifetime);
         await _sessions.InsertDeviceAsync(userId, token, expiresAt, AccountLockout.MaxDevicesPerUser, cancellationToken);
         return new BrowserSignIn(session, token, expiresAt.ToUtcOffset());
-    }
-
-    /// <summary>
-    /// Verifies <paramref name="password"/> against <see cref="DummyPasswordHash"/> and discards the
-    /// answer, so the paths that have no real hash to check take as long as the ones that do.
-    /// </summary>
-    private void SpendPasswordCheck(string password)
-    {
-        _passwordHasher.VerifyHashedPassword(new User(), DummyPasswordHash.Value, password);
     }
 
     /// <summary>
@@ -385,7 +362,7 @@ internal sealed class SignInService : ISignInService
     {
         try
         {
-            var upgraded = await _accounts.UpgradePasswordHashAsync(user.Id, user.PasswordHash, _passwordHasher.HashPassword(user, password), cancellationToken);
+            var upgraded = await _accounts.UpgradePasswordHashAsync(user.Id, user.PasswordHash, await _hashing.HashAsync(password, cancellationToken), cancellationToken);
             _logger.LogInformation("Password hash for user {UserId} {Outcome}", user.Id, upgraded ? "upgraded to the current settings" : "changed meanwhile; not upgraded");
         }
         catch (Exception ex)
@@ -395,10 +372,10 @@ internal sealed class SignInService : ISignInService
     }
 
     /// <summary>
-    /// Ends the user's access tokens on every host. Revocations are keyed by the RefId a token names;
-    /// unlike <see cref="AccountAnnouncer.RefOfAsync"/> a failed read is not swallowed, since a
-    /// revocation that silently named nobody would leave the tokens working.
+    /// Ends the user's access tokens on every host. Unlike <see cref="AccountAnnouncer.RefOfAsync"/> a
+    /// failed read is not swallowed, since a revocation that silently named nobody would leave the
+    /// tokens working.
     /// </summary>
     private async Task RevokeAccessTokensAsync(int userId, CancellationToken cancellationToken) =>
-        await _accessTokens.RevokeUserAsync((await _accounts.GetByIdAsync(userId, cancellationToken)).RefId, cancellationToken);
+        await _credentials.RevokeAccessTokensAsync((await _accounts.GetByIdAsync(userId, cancellationToken)).RefId, cancellationToken);
 }

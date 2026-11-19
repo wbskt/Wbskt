@@ -17,12 +17,10 @@ internal sealed class AccountDeletionService : IAccountDeletionService
     private readonly ITenantBillingProvider _billing;
     private readonly IPaymentGateway _gateway;
     private readonly IEventBus _eventBus;
-    private readonly IAccessTokenRevocation _accessTokens;
     private readonly IAuditWorkspaces _audit;
     private readonly ILogger<AccountDeletionService> _logger;
     private readonly TenantAnnouncer _tenantAnnouncer;
-    private readonly SecurityNotices _notices;
-    private readonly PasswordHasher<User> _passwordHasher = new();
+    private readonly AccountCredentials _credentials;
 
     private static readonly Error SubscriptionNotCancelled = Error.Unavailable(
         "BILLING_SUBSCRIPTION_NOT_CANCELLED",
@@ -33,18 +31,16 @@ internal sealed class AccountDeletionService : IAccountDeletionService
         ITenantBillingProvider billing,
         IPaymentGateway gateway,
         IEventBus eventBus,
-        IAccessTokenRevocation accessTokens,
         ILogger<AccountDeletionService> logger,
         IAuditWorkspaces audit,
         TenantAnnouncer tenantAnnouncer,
-        SecurityNotices notices)
+        AccountCredentials credentials)
     {
-        _notices = notices;
+        _credentials = credentials;
         _accounts = accounts;
         _billing = billing;
         _gateway = gateway;
         _eventBus = eventBus;
-        _accessTokens = accessTokens;
         _audit = audit;
         _logger = logger;
         _tenantAnnouncer = tenantAnnouncer;
@@ -59,29 +55,22 @@ internal sealed class AccountDeletionService : IAccountDeletionService
         }
         catch (SecurityException)
         {
-            return Result.Failure(Error.Unauthorized("AUTH_USER_NOT_FOUND", "User not found."));
+            return Result.Failure(AccountCredentials.UserNotFound);
         }
 
         // Deactivated by an operator, or already deleted (a retry after a response that never arrived):
         // either way there is nothing this person may delete.
         if (!user.IsActive)
         {
-            return Result.Failure(Error.Unauthorized("AUTH_USER_NOT_FOUND", "User not found."));
+            return Result.Failure(AccountCredentials.UserNotFound);
         }
 
         // Same rules as changing the password: a locked account is not asked, and a wrong password
         // counts towards the lock, so a stolen access token cannot guess its way to deleting anything.
-        if (user.LockedUntil > DateTime.UtcNow)
+        var confirmed = await _credentials.ConfirmPasswordAsync(user, password, ipAddress, cancellationToken);
+        if (confirmed.IsFailure)
         {
-            _logger.LogWarning("Account deletion refused: account {UserId} is locked. IP: {IpAddress}", userId, ipAddress);
-            return Result.Failure(Error.Forbidden("AUTH_ACCOUNT_LOCKED", "Too many wrong passwords. Try again later, or reset your password."));
-        }
-
-        if (_passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password) == PasswordVerificationResult.Failed)
-        {
-            _logger.LogWarning("Account deletion refused: password did not match for user {UserId}. IP: {IpAddress}", userId, ipAddress);
-            await AccountLockout.RecordFailedPasswordAsync(_accounts, _eventBus, _notices, _logger, user, ipAddress, cancellationToken);
-            return Result.Failure(Error.Validation("AUTH_CURRENT_PASSWORD_INVALID", "The password is not correct."));
+            return confirmed;
         }
 
         // Asked before the provider is: a deletion User_Delete would refuse must not cancel the
@@ -113,7 +102,7 @@ internal sealed class AccountDeletionService : IAccountDeletionService
 
         // The refresh tokens went with the account; this ends the access tokens already issued, on
         // every host. RefId is untouched by the anonymisation, so it still names them.
-        await _accessTokens.RevokeUserAsync(user.RefId, cancellationToken);
+        await _credentials.RevokeAccessTokensAsync(user.RefId, cancellationToken);
 
         await AnnounceAsync(user, deleted.Value, auditWorkspaces.Except(workspaceIds).ToList(), ipAddress, cancellationToken);
 

@@ -57,7 +57,8 @@ internal sealed class RegistrationService : IRegistrationService
     private readonly AccountAnnouncer _announcer;
     private readonly IBreachedPasswords _breachedPasswords;
     private readonly ITenantLimits _limits;
-    private readonly PasswordHasher<User> _passwordHasher = new();
+    private readonly PasswordHashing _hashing;
+    private readonly TimeProvider _time;
 
     public RegistrationService(
         IAccountProvider accounts,
@@ -68,9 +69,14 @@ internal sealed class RegistrationService : IRegistrationService
         AuthMetrics metrics,
         MailCooldown mailCooldown,
         ITenantLimits limits,
+        PasswordHashing hashing,
+        AccountAnnouncer announcer,
+        TimeProvider time,
         IAuditWorkspaces? audit = null,
         IBreachedPasswords? breachedPasswords = null)
     {
+        _hashing = hashing;
+        _time = time;
         _limits = limits;
         _audit = audit ?? AuditWorkspaces.None;
         _breachedPasswords = breachedPasswords ?? BreachedPasswords.None;
@@ -81,7 +87,7 @@ internal sealed class RegistrationService : IRegistrationService
         _mailCooldown = mailCooldown;
         _logger = logger;
         _metrics = metrics;
-        _announcer = new AccountAnnouncer(accounts, eventBus, _audit, logger);
+        _announcer = announcer;
     }
 
     public async Task<Result> RegisterUserAsync(string username, string email, string password, string? invitationToken = null, CancellationToken cancellationToken = default)
@@ -124,7 +130,7 @@ internal sealed class RegistrationService : IRegistrationService
                 Email = email
             };
 
-            user.PasswordHash = _passwordHasher.HashPassword(user, password);
+            user.PasswordHash = await _hashing.HashAsync(password, cancellationToken);
 
             var userId = await _accounts.InsertUserAsync(user, cancellationToken);
             _logger.LogDebug("User record inserted with database ID: {UserId}", userId);
@@ -280,7 +286,7 @@ internal sealed class RegistrationService : IRegistrationService
     private async Task IssueEmailVerificationAsync(User user, CancellationToken cancellationToken)
     {
         var token = SecurityTokens.Generate();
-        var expiresAt = DateTime.UtcNow.Add(EmailVerificationLifetime);
+        var expiresAt = _time.GetUtcNow().UtcDateTime.Add(EmailVerificationLifetime);
 
         await _accounts.CreateEmailVerificationTokenAsync(user.Id, SecurityTokens.Hash(token), expiresAt, cancellationToken);
         await _mailer.QueueEmailVerificationAsync(user.Email, user.Username, token, expiresAt, cancellationToken);
