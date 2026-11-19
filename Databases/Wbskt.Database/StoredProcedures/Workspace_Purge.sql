@@ -28,13 +28,13 @@ BEGIN
     END
 
     DECLARE @Deleted INT = 0;
-    DECLARE @Clients TABLE (Id INT PRIMARY KEY);
+    DECLARE @Clients TABLE (Id INT PRIMARY KEY, RefId UNIQUEIDENTIFIER NOT NULL);
 
     BEGIN TRANSACTION;
 
     -- Revoked (2) or rejected (3) only: Workspace_Retire revoked every one that could connect.
-    INSERT INTO @Clients (Id)
-    SELECT TOP (@BatchSize) C.Id
+    INSERT INTO @Clients (Id, RefId)
+    SELECT TOP (@BatchSize) C.Id, C.RefId
     FROM dbo.Clients C WITH (UPDLOCK, ROWLOCK)
     WHERE C.WorkspaceId = @WorkspaceId
       AND C.Status IN (2, 3)
@@ -47,6 +47,9 @@ BEGIN
     DELETE A FROM dbo.ClientCapabilities A INNER JOIN @Clients X ON X.Id = A.ClientId;
     DELETE T FROM dbo.ClientTags T INNER JOIN @Clients X ON X.Id = T.ClientId;
     DELETE Q FROM dbo.QueuedCommands Q INNER JOIN @Clients X ON X.Id = Q.ClientId;
+    -- A fired hold keeps the client's last matching message; its key starts with the client's RefId
+    -- (ClientHoldTriggerKey), so the prefix seeks UQ_ClientHoldStates_TriggerKey.
+    DELETE H FROM dbo.ClientHoldStates H INNER JOIN @Clients X ON H.TriggerKey LIKE N'hold:' + LOWER(CONVERT(NVARCHAR(36), X.RefId)) + N':%';
     DELETE C FROM dbo.Clients C INNER JOIN @Clients X ON X.Id = C.Id;
     SET @Deleted += @@ROWCOUNT;
 
