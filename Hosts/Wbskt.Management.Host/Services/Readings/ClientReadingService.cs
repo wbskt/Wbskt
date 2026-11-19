@@ -10,14 +10,15 @@ namespace Wbskt.Management.Host.Services.Readings;
 public interface IClientReadingService
 {
     /// <summary>
+    /// A client of another workspace, or none, is <c>CLIENT_NOT_FOUND</c> in both methods.
     /// One variable's history over [from, to), summarised per bucket. <paramref name="bucket"/> is
     /// "30s", "5m", "1h", "1d" or a number of seconds; without one, a size is picked that gives at
     /// most <see cref="ClientReadingService.TargetBuckets"/> buckets. The range defaults to the last day.
     /// </summary>
-    Task<Result<ClientReadingsResponse>> GetBucketsAsync(int clientId, string? name, DateTimeOffset? from, DateTimeOffset? to, string? bucket, CancellationToken cancellationToken = default);
+    Task<Result<ClientReadingsResponse>> GetBucketsAsync(int workspaceId, Guid clientRef, string? name, DateTimeOffset? from, DateTimeOffset? to, string? bucket, CancellationToken cancellationToken = default);
 
     /// <summary>The raw readings over [from, to), for export: one variable, or all of them when <paramref name="name"/> is null.</summary>
-    Task<Result<IReadOnlyCollection<ClientReading>>> GetRangeAsync(int clientId, string? name, DateTimeOffset? from, DateTimeOffset? to, CancellationToken cancellationToken = default);
+    Task<Result<IReadOnlyCollection<ClientReading>>> GetRangeAsync(int workspaceId, Guid clientRef, string? name, DateTimeOffset? from, DateTimeOffset? to, CancellationToken cancellationToken = default);
 }
 
 public sealed class ClientReadingService : IClientReadingService
@@ -35,16 +36,25 @@ public sealed class ClientReadingService : IClientReadingService
         [1, 10, 30, 60, 300, 900, 1800, 3600, 3 * 3600, 6 * 3600, 12 * 3600, 86400, 7 * 86400];
 
     private readonly IClientReadingProvider _provider;
+    private readonly IClientQueryService _clients;
     private readonly TimeProvider _timeProvider;
 
-    public ClientReadingService(IClientReadingProvider provider, TimeProvider timeProvider)
+    public ClientReadingService(IClientReadingProvider provider, IClientQueryService clients, TimeProvider timeProvider)
     {
         _provider = provider;
+        _clients = clients;
         _timeProvider = timeProvider;
     }
 
-    public async Task<Result<ClientReadingsResponse>> GetBucketsAsync(int clientId, string? name, DateTimeOffset? from, DateTimeOffset? to, string? bucket, CancellationToken cancellationToken = default)
+    public async Task<Result<ClientReadingsResponse>> GetBucketsAsync(int workspaceId, Guid clientRef, string? name, DateTimeOffset? from, DateTimeOffset? to, string? bucket, CancellationToken cancellationToken = default)
     {
+        var client = await _clients.EnsureClientInWorkspaceAsync(workspaceId, clientRef, cancellationToken);
+        if (client.IsFailure)
+        {
+            return Result<ClientReadingsResponse>.Failure(client.Error);
+        }
+
+        var clientId = client.Value;
         if (string.IsNullOrWhiteSpace(name) || name.Length > MaxNameLength)
         {
             return Result<ClientReadingsResponse>.Failure(Error.Validation("READINGS_NAME_REQUIRED", "Name the state variable to read, in 'name'."));
@@ -81,8 +91,15 @@ public sealed class ClientReadingService : IClientReadingService
         return Result<ClientReadingsResponse>.Success(new ClientReadingsResponse(name, fromUtc.ToUtcOffset(), toUtc.ToUtcOffset(), bucketSeconds, buckets));
     }
 
-    public async Task<Result<IReadOnlyCollection<ClientReading>>> GetRangeAsync(int clientId, string? name, DateTimeOffset? from, DateTimeOffset? to, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyCollection<ClientReading>>> GetRangeAsync(int workspaceId, Guid clientRef, string? name, DateTimeOffset? from, DateTimeOffset? to, CancellationToken cancellationToken = default)
     {
+        var client = await _clients.EnsureClientInWorkspaceAsync(workspaceId, clientRef, cancellationToken);
+        if (client.IsFailure)
+        {
+            return Result<IReadOnlyCollection<ClientReading>>.Failure(client.Error);
+        }
+
+        var clientId = client.Value;
         if (name is { Length: 0 or > MaxNameLength })
         {
             return Result<IReadOnlyCollection<ClientReading>>.Failure(Error.Validation("READINGS_NAME_INVALID", "'name' must be a state variable name, or left out for every variable."));

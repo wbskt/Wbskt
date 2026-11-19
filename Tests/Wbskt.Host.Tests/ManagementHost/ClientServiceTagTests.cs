@@ -33,7 +33,7 @@ public sealed class ClientServiceTagTests
         _provider.Setup(x => x.SetTagsAsync(ClientId, WorkspaceId, It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
         _service = new ClientLifecycleService(_provider.Object, Mock.Of<IEventBus>(), Mock.Of<IClientTokenCutoffs>(), NullLogger<ClientLifecycleService>.Instance, new FixedWorkspacePlans(), TimeProvider.System, TestClientCommands.Queue(new InMemoryQueuedCommandStore(), Mock.Of<Wbskt.Infrastructure.Clients.IClientCommandTargetProvider>(), Mock.Of<IEventBus>()));
-        _queries = new ClientQueryService(_provider.Object, Mock.Of<IClientMessageTypeProvider>(), NullLogger<ClientQueryService>.Instance);
+        _queries = new ClientQueryService(_provider.Object, Mock.Of<IClientMessageTypeProvider>(), Mock.Of<IRegistrationPolicyProvider>(), NullLogger<ClientQueryService>.Instance);
     }
 
     [Theory]
@@ -131,7 +131,7 @@ public sealed class ClientServiceTagTests
         _provider.Setup(x => x.GetAllAsync(WorkspaceId, null, null, "garage", 0, 100, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new PagedList<Wbskt.Management.Host.Models.Client>([client], 1));
 
-        var result = await _queries.GetAllAsync(WorkspaceId, null, null, " Garage", 0, 100);
+        var result = await _queries.GetAllAsync(WorkspaceId, null, null, null, " Garage", 0, 100);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Single().Tags.Should().Equal("garage", "greenhouse");
@@ -140,8 +140,8 @@ public sealed class ClientServiceTagTests
     [Fact]
     public async Task An_invalid_tag_filter_is_refused_without_querying()
     {
-        var all = await _queries.GetAllAsync(WorkspaceId, null, null, "a,b", 0, 100);
-        var byPolicy = await _queries.GetByPolicyIdAsync(WorkspaceId, 1, null, null, "", 0, 100);
+        var all = await _queries.GetAllAsync(WorkspaceId, null, null, null, "a,b", 0, 100);
+        var byPolicy = await _queries.GetAllAsync(WorkspaceId, Guid.NewGuid(), null, null, "", 0, 100);
 
         all.Error.Code.Should().Be("CLIENT_TAG_INVALID");
         byPolicy.Error.Code.Should().Be("CLIENT_TAG_INVALID");

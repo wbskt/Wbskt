@@ -13,54 +13,68 @@ internal sealed class ClientQueryService : IClientQueryService
 {
     private readonly IClientProvider _clientProvider;
     private readonly IClientMessageTypeProvider _messageTypeProvider;
+    private readonly IRegistrationPolicyProvider _policyProvider;
     private readonly ILogger<ClientQueryService> _logger;
 
-    public ClientQueryService(IClientProvider clientProvider, IClientMessageTypeProvider messageTypeProvider, ILogger<ClientQueryService> logger)
+    public ClientQueryService(IClientProvider clientProvider, IClientMessageTypeProvider messageTypeProvider, IRegistrationPolicyProvider policyProvider, ILogger<ClientQueryService> logger)
     {
         _clientProvider = clientProvider;
+        _policyProvider = policyProvider;
         _messageTypeProvider = messageTypeProvider;
         _logger = logger;
     }
 
-    public async Task<Result<IPagedList<ClientResponse>>> GetAllAsync(int workspaceId, IReadOnlyCollection<ClientStatus>? statuses, string? name,
+    public async Task<Result<IPagedList<ClientResponse>>> GetAllAsync(int workspaceId, Guid? policyRefId, IReadOnlyCollection<ClientStatus>? statuses, string? name,
         string? tag, int skip, int take, CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug("Querying clients for WorkspaceId: {WorkspaceId}", workspaceId);
+        _logger.LogDebug("Querying clients for WorkspaceId: {WorkspaceId}, policy {PolicyRefId}", workspaceId, policyRefId);
 
         if (!TryNormalizeFilter(tag, out var normalizedTag))
         {
             return Result<IPagedList<ClientResponse>>.Failure(ClientTags.Invalid);
         }
 
-        var pagedClients = await _clientProvider.GetAllAsync(workspaceId, statuses, name, normalizedTag, skip, take, cancellationToken);
+        var policy = await ResolvePolicyFilterAsync(workspaceId, policyRefId, cancellationToken);
+        if (policy.IsFailure)
+        {
+            return Result<IPagedList<ClientResponse>>.Failure(policy.Error);
+        }
+
+        var pagedClients = policy.Value is { } policyId
+            ? await _clientProvider.GetByPolicyIdAsync(workspaceId, policyId, statuses, name, normalizedTag, skip, take, cancellationToken)
+            : await _clientProvider.GetAllAsync(workspaceId, statuses, name, normalizedTag, skip, take, cancellationToken);
         _logger.LogTrace("Retrieved {Count} clients for WorkspaceId: {WorkspaceId}", pagedClients.TotalCount, workspaceId);
-        
+
         var result = new PagedList<ClientResponse>(pagedClients.Select(MapToResponse), pagedClients.TotalCount);
         return Result<IPagedList<ClientResponse>>.Success(result);
     }
 
-    public async Task<Result<IPagedList<ClientResponse>>> GetByPolicyIdAsync(int workspaceId, int policyId,
-        IReadOnlyCollection<ClientStatus>? statuses, string? name, string? tag, int skip, int take, CancellationToken cancellationToken = default)
+    public async Task<Result<ClientCountsResponse>> GetCountsAsync(int workspaceId, Guid? policyRefId, CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug("Querying clients by PolicyId: {PolicyId} in WorkspaceId: {WorkspaceId}", policyId, workspaceId);
+        _logger.LogDebug("Counting clients in WorkspaceId: {WorkspaceId}, policy {PolicyRefId}", workspaceId, policyRefId);
 
-        if (!TryNormalizeFilter(tag, out var normalizedTag))
+        var policy = await ResolvePolicyFilterAsync(workspaceId, policyRefId, cancellationToken);
+        if (policy.IsFailure)
         {
-            return Result<IPagedList<ClientResponse>>.Failure(ClientTags.Invalid);
+            return Result<ClientCountsResponse>.Failure(policy.Error);
         }
 
-        var pagedClients = await _clientProvider.GetByPolicyIdAsync(workspaceId, policyId, statuses, name, normalizedTag, skip, take, cancellationToken);
-        _logger.LogTrace("Retrieved {Count} clients by PolicyId: {PolicyId}", pagedClients.TotalCount, policyId);
-        
-        var result = new PagedList<ClientResponse>(pagedClients.Select(MapToResponse), pagedClients.TotalCount);
-        return Result<IPagedList<ClientResponse>>.Success(result);
+        return Result<ClientCountsResponse>.Success(await _clientProvider.GetCountsAsync(workspaceId, policy.Value, cancellationToken));
     }
 
-    public async Task<Result<ClientCountsResponse>> GetCountsAsync(int workspaceId, int? policyId, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// The internal id of the policy a list is filtered by, or null for no filter. A policy this
+    /// workspace does not own is <c>POLICY_NOT_FOUND</c>, never an empty page.
+    /// </summary>
+    private async Task<Result<int?>> ResolvePolicyFilterAsync(int workspaceId, Guid? policyRefId, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("Counting clients in WorkspaceId: {WorkspaceId}, PolicyId: {PolicyId}", workspaceId, policyId);
+        if (policyRefId is not { } refId)
+        {
+            return Result<int?>.Success(null);
+        }
 
-        return Result<ClientCountsResponse>.Success(await _clientProvider.GetCountsAsync(workspaceId, policyId, cancellationToken));
+        var policy = await WorkspaceOwnership.LoadAsync(workspaceId, () => _policyProvider.FindByRefIdAsync(refId, cancellationToken), WorkspaceOwnership.PolicyNotFound);
+        return policy.IsSuccess ? Result<int?>.Success(policy.Value.Id) : Result<int?>.Failure(policy.Error);
     }
 
     public Task<Result<ClientDetail>> LoadInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default) =>

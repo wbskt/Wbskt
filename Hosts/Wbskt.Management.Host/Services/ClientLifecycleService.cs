@@ -206,10 +206,41 @@ internal sealed class ClientLifecycleService : IClientLifecycleService
         return WorkspaceOwnership.LoadAsync(workspaceId, () => _clientProvider.FindDetailByRefIdAsync(clientRefId, cancellationToken), WorkspaceOwnership.ClientNotFound);
     }
 
+    public async Task<Result> UpdateAsync(int workspaceId, Guid clientRefId, UpdateClientRequest request, CancellationToken cancellationToken = default)
+    {
+        if (request.Name is null && request.Status is null)
+        {
+            return Result.Failure(UpdateEmpty);
+        }
+
+        // The name is checked before the status changes, so a bad name leaves the client as it was.
+        if (request.Name is not null && EntityNames.Normalize(request.Name) is null)
+        {
+            return Result.Failure(NameInvalid);
+        }
+
+        if (request.Status is { } status)
+        {
+            var statusResult = await UpdateStatusAsync(workspaceId, clientRefId, status, cancellationToken);
+            if (statusResult.IsFailure)
+            {
+                return statusResult;
+            }
+        }
+
+        return request.Name is null ? Result.Success() : await RenameAsync(workspaceId, clientRefId, request.Name, cancellationToken);
+    }
+
     public async Task<Result> RenameAsync(int workspaceId, Guid clientRefId, string name, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Renaming client RefId {ClientRefId} in WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
 
+        if (EntityNames.Normalize(name) is not { } normalized)
+        {
+            return Result.Failure(NameInvalid);
+        }
+
+        name = normalized;
         var lookup = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
         if (lookup.IsFailure)
         {
@@ -280,6 +311,8 @@ internal sealed class ClientLifecycleService : IClientLifecycleService
     }
 
     // A status the protocol does not define would lock the client out and show it as offline.
+    private static readonly Error UpdateEmpty = Error.Validation("CLIENT_UPDATE_EMPTY", "Name a field to change: 'name', 'status', or both.");
+    internal static readonly Error NameInvalid = Error.Validation("CLIENT_NAME_INVALID", "Client name must be 1-100 characters.");
     private static readonly Error StatusInvalid = Error.Validation("CLIENT_STATUS_INVALID", "Status must be Pending, Registered, Revoked or Rejected.");
 
     private static readonly Error PolicyFull = Error.Validation("POLICY_LIMIT_REACHED", "Policy registration limit reached. Cannot approve more clients.");

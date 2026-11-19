@@ -60,7 +60,7 @@ public sealed class ClientMessageTypeTests
             new ClientMessageType("reading", 1243, At, At.AddHours(1), """{"state":"open"}"""),
             new ClientMessageType("state.report", 3, At, At, "not json"),
         ]);
-        var service = new ClientQueryService(clients.Object, types.Object, NullLogger<ClientQueryService>.Instance);
+        var service = new ClientQueryService(clients.Object, types.Object, Mock.Of<IRegistrationPolicyProvider>(), NullLogger<ClientQueryService>.Instance);
 
         var result = await service.GetMessageTypesAsync(7, ClientRefId);
 
@@ -80,7 +80,7 @@ public sealed class ClientMessageTypeTests
         clients.Setup(x => x.FindDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ClientDetail { Id = 42, RefId = ClientRefId, WorkspaceId = 8 });
         var types = new Mock<IClientMessageTypeProvider>();
-        var service = new ClientQueryService(clients.Object, types.Object, NullLogger<ClientQueryService>.Instance);
+        var service = new ClientQueryService(clients.Object, types.Object, Mock.Of<IRegistrationPolicyProvider>(), NullLogger<ClientQueryService>.Instance);
 
         var result = await service.GetMessageTypesAsync(7, ClientRefId);
 

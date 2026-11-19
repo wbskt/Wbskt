@@ -22,12 +22,10 @@ namespace Wbskt.Management.Host.Controllers;
 [RequiresPermission(PermissionNames.ClientsRead)]
 public class ClientReadingsController : ApiControllerBase
 {
-    private readonly IClientQueryService _clientService;
     private readonly IClientReadingService _readingService;
 
-    public ClientReadingsController(IClientQueryService clientService, IClientReadingService readingService)
+    public ClientReadingsController(IClientReadingService readingService)
     {
-        _clientService = clientService;
         _readingService = readingService;
     }
 
@@ -52,13 +50,7 @@ public class ClientReadingsController : ApiControllerBase
         [FromQuery] string? bucket,
         CancellationToken cancellationToken = default)
     {
-        var clientId = await _clientService.EnsureClientInWorkspaceAsync(workspaceId, clientRef, cancellationToken);
-        if (clientId.IsFailure)
-        {
-            return MapError(clientId.Error);
-        }
-
-        return MapResult(await _readingService.GetBucketsAsync(clientId.Value, name, from, to, bucket, cancellationToken));
+        return MapResult(await _readingService.GetBucketsAsync(workspaceId, clientRef, name, from, to, bucket, cancellationToken));
     }
 
     /// <summary>
@@ -82,13 +74,7 @@ public class ClientReadingsController : ApiControllerBase
         [FromQuery] DateTimeOffset? to,
         CancellationToken cancellationToken = default)
     {
-        var clientId = await _clientService.EnsureClientInWorkspaceAsync(workspaceId, clientRef, cancellationToken);
-        if (clientId.IsFailure)
-        {
-            return MapError(clientId.Error);
-        }
-
-        var readings = await _readingService.GetRangeAsync(clientId.Value, name, from, to, cancellationToken);
+        var readings = await _readingService.GetRangeAsync(workspaceId, clientRef, name, from, to, cancellationToken);
         if (readings.IsFailure)
         {
             return MapError(readings.Error);

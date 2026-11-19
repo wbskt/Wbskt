@@ -1,13 +1,17 @@
 using Moq;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
+using Wbskt.Infrastructure;
+using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Readings;
 
 namespace Wbskt.Host.Tests.ManagementHost;
 
 public sealed class ClientReadingServiceTests
 {
+    private const int WorkspaceId = 7;
     private const int ClientId = 42;
+    private static readonly Guid ClientRef = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly DateTimeOffset Now = new(2026, 10, 4, 12, 34, 56, TimeSpan.Zero);
 
     private readonly Mock<IClientReadingProvider> _provider = new();
@@ -50,7 +54,7 @@ public sealed class ClientReadingServiceTests
     [Fact]
     public async Task The_range_defaults_to_the_last_day_and_aligns_to_the_bucket()
     {
-        var result = await Service().GetBucketsAsync(ClientId, "temp", null, null, "1h");
+        var result = await Service().GetBucketsAsync(WorkspaceId, ClientRef, "temp", null, null, "1h");
 
         Assert.True(result.IsSuccess);
         var from = new DateTime(2026, 10, 3, 12, 0, 0, DateTimeKind.Utc);
@@ -66,7 +70,7 @@ public sealed class ClientReadingServiceTests
         var from = new DateTimeOffset(2026, 10, 1, 5, 30, 0, TimeSpan.FromHours(5.5));
         var to = new DateTimeOffset(2026, 10, 2, 5, 30, 0, TimeSpan.FromHours(5.5));
 
-        var result = await Service().GetBucketsAsync(ClientId, "temp", from, to, "5m");
+        var result = await Service().GetBucketsAsync(WorkspaceId, ClientRef, "temp", from, to, "5m");
 
         Assert.Equal(new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc), result.Value.From);
         Assert.Equal(new DateTime(2026, 10, 2, 0, 0, 0, DateTimeKind.Utc), result.Value.To);
@@ -80,7 +84,7 @@ public sealed class ClientReadingServiceTests
     [InlineData("temp", -800, null, null, "TIME_RANGE_TOO_LONG")]
     public async Task Bad_queries_are_refused(string? name, int? fromDays, int? toDays, string? bucket, string code)
     {
-        var result = await Service().GetBucketsAsync(ClientId, name,
+        var result = await Service().GetBucketsAsync(WorkspaceId, ClientRef, name,
             fromDays is null ? null : Now.AddDays(fromDays.Value), toDays is null ? null : Now.AddDays(toDays.Value), bucket);
 
         Assert.True(result.IsFailure);
@@ -95,7 +99,7 @@ public sealed class ClientReadingServiceTests
         _provider.Setup(p => p.GetRangeAsync(ClientId, null, It.IsAny<DateTime>(), It.IsAny<DateTime>(), ClientReadingService.MaxExportRows + 1, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Enumerable.Repeat(reading, ClientReadingService.MaxExportRows + 1).ToList());
 
-        var result = await Service().GetRangeAsync(ClientId, null, null, null);
+        var result = await Service().GetRangeAsync(WorkspaceId, ClientRef, null, null, null);
 
         Assert.Equal("READINGS_RANGE_TOO_LARGE", result.Error.Code);
     }
@@ -107,12 +111,33 @@ public sealed class ClientReadingServiceTests
         _provider.Setup(p => p.GetRangeAsync(ClientId, "temp", It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([reading]);
 
-        var result = await Service().GetRangeAsync(ClientId, "temp", null, null);
+        var result = await Service().GetRangeAsync(WorkspaceId, ClientRef, "temp", null, null);
 
         Assert.Equal([reading], result.Value);
     }
 
-    private ClientReadingService Service() => new(_provider.Object, new FixedTimeProvider(Now));
+    private ClientReadingService Service()
+    {
+        var clients = new Mock<IClientQueryService>();
+        clients.Setup(c => c.EnsureClientInWorkspaceAsync(WorkspaceId, ClientRef, It.IsAny<CancellationToken>())).ReturnsAsync(Result<int>.Success(ClientId));
+        return new ClientReadingService(_provider.Object, clients.Object, new FixedTimeProvider(Now));
+    }
+
+    [Fact]
+    public async Task Another_workspaces_client_is_not_found_and_nothing_is_read()
+    {
+        var clients = new Mock<IClientQueryService>();
+        clients.Setup(c => c.EnsureClientInWorkspaceAsync(WorkspaceId, ClientRef, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<int>.Failure(Error.NotFound("CLIENT_NOT_FOUND", "Client not found.")));
+        var service = new ClientReadingService(_provider.Object, clients.Object, new FixedTimeProvider(Now));
+
+        var buckets = await service.GetBucketsAsync(WorkspaceId, ClientRef, "temp", null, null, null);
+        var range = await service.GetRangeAsync(WorkspaceId, ClientRef, null, null, null);
+
+        Assert.Equal("CLIENT_NOT_FOUND", buckets.Error.Code);
+        Assert.Equal("CLIENT_NOT_FOUND", range.Error.Code);
+        _provider.VerifyNoOtherCalls();
+    }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {

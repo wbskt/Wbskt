@@ -90,7 +90,7 @@ public sealed class BrokerOutageTests
         var bus = new Mock<IEventBus>();
         bus.Setup(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("broker down"));
-        var controller = new ClientsController(clientService.Object, Mock.Of<IClientLifecycleService>(), new ClientCommandService(clientService.Object, Wbskt.Host.Tests.Infrastructure.TestClientCommands.Sender(targets.Object, bus.Object), new Wbskt.Host.Tests.Infrastructure.InMemoryQueuedCommandStore(), bus.Object, Microsoft.Extensions.Options.Options.Create(new Wbskt.Infrastructure.Clients.CommandQueueOptions()), NullLogger<ClientCommandService>.Instance, new Wbskt.Management.Host.Telemetry.ManagementMetrics(), TimeProvider.System), Mock.Of<IRegistrationPolicyService>(), Mock.Of<IEventLogService>())
+        var controller = new ClientsController(clientService.Object, Mock.Of<IClientLifecycleService>(), new ClientCommandService(clientService.Object, Wbskt.Host.Tests.Infrastructure.TestClientCommands.Sender(targets.Object, bus.Object), new Wbskt.Host.Tests.Infrastructure.InMemoryQueuedCommandStore(), bus.Object, Microsoft.Extensions.Options.Options.Create(new Wbskt.Infrastructure.Clients.CommandQueueOptions()), NullLogger<ClientCommandService>.Instance, new Wbskt.Management.Host.Telemetry.ManagementMetrics(), TimeProvider.System), Mock.Of<IEventLogService>())
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };
