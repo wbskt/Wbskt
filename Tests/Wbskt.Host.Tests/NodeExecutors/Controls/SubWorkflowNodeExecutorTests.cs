@@ -191,6 +191,43 @@ public sealed class SubWorkflowNodeExecutorTests
     }
 
     [Fact]
+    public async Task A_charged_start_that_starts_no_child_is_given_back()
+    {
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.NoRegistration, null, null, "no-reg"));
+        var counters = new Mock<IRunCountersProvider>();
+        counters.Setup(c => c.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CreditCharge(10m, 100m));
+        NodeContext ctx = Context(new Dictionary<string, JsonElement>());
+        var executor = new SubWorkflowNodeExecutor(hub.Object, StartedRunProvider().Object, new FixedClock(), counters: counters.Object,
+            creditCosts: Options.Create(new CreditCostOptions { RunStartCost = 2.5m }));
+
+        Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(ctx, CancellationToken.None));
+
+        counters.Verify(c => c.TryChargeAsync((int)ctx.Branch.RunId, 2.5m, It.IsAny<CancellationToken>()), Times.Once);
+        counters.Verify(c => c.TryChargeAsync((int)ctx.Branch.RunId, -2.5m, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_queued_child_keeps_its_start_cost_since_its_replay_starts_it_free()
+    {
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.Queued, null, null, "queued"));
+        var counters = new Mock<IRunCountersProvider>();
+        counters.Setup(c => c.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CreditCharge(10m, 100m));
+        NodeContext ctx = Context(new Dictionary<string, JsonElement>());
+        var executor = new SubWorkflowNodeExecutor(hub.Object, StartedRunProvider().Object, new FixedClock(), counters: counters.Object,
+            creditCosts: Options.Create(new CreditCostOptions { RunStartCost = 2.5m }));
+
+        await executor.ExecuteAsync(ctx, CancellationToken.None);
+
+        counters.Verify(c => c.TryChargeAsync(It.IsAny<int>(), -2.5m, It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task A_child_start_the_budget_cannot_pay_for_is_not_started()
     {
         var hub = StartingHub();

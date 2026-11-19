@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Entities;
@@ -45,7 +46,7 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 /// before the child is started. Optional so the executor's unit tests need no stub; without it the start
 /// is not charged.
 /// </param>
-internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runProvider, TimeProvider clock, IExpressionEvaluator? evaluator = null, IOptions<WorkflowEngineOptions>? options = null, ISubWorkflowCompletionHook? completionHook = null, IWorkflowStateProvider? workflowStates = null, IRunCountersProvider? counters = null, IOptions<CreditCostOptions>? creditCosts = null) : ParkingNodeExecutor(clock)
+internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runProvider, TimeProvider clock, IExpressionEvaluator? evaluator = null, IOptions<WorkflowEngineOptions>? options = null, ISubWorkflowCompletionHook? completionHook = null, IWorkflowStateProvider? workflowStates = null, IRunCountersProvider? counters = null, IOptions<CreditCostOptions>? creditCosts = null, ILogger<SubWorkflowNodeExecutor>? logger = null) : ParkingNodeExecutor(clock)
 {
     private readonly int _maxDepth = options?.Value.MaxSubWorkflowDepth ?? new WorkflowEngineOptions().MaxSubWorkflowDepth;
     private readonly decimal _runStartCost = (creditCosts?.Value ?? new CreditCostOptions()).RunStartCost;
@@ -123,8 +124,11 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
         }
 
         // The child's start is paid from the parent's budget through the same budget-checked charge as
-        // a step, once nothing above can refuse it, so a step that starts no child pays only for itself
-        // and a child started at the budget's edge cannot take the root, or the cap, past it.
+        // a step, before it starts, so a child started at the budget's edge cannot take the root, or the
+        // cap, past it. When no child starts after all (the ref names nothing, it has no published manual
+        // trigger, or it was taken out of service meanwhile), the charge is given back, so a step that
+        // starts no child pays only for itself.
+        bool startCharged = false;
         if (counters is not null && _runStartCost > 0m)
         {
             CreditCharge? charge = await RetryExecutor.ChargeAsync(counters, (int)ctx.Branch.RunId, _runStartCost, Clock, ct);
@@ -132,6 +136,8 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
             {
                 return OutOfCredits.Fail(charge?.Refusal ?? CreditRefusal.RunBudget);
             }
+
+            startCharged = true;
         }
 
         // The parent already holds a place under the plan's active-run ceiling, so its child is
@@ -143,7 +149,21 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
             WorkspaceId = ctx.Branch.WorkspaceId
         };
 
+        // A throw keeps the charge: whether the child started is not known.
         TriggerDispatchResult result = await hub.HandleAsync(evt, ct);
+        if (!result.RunId.HasValue && result.Outcome != TriggerDispatchOutcome.Queued && startCharged && counters is not null)
+        {
+            // Given back whatever the step's token does, since the charge was made. A queued child keeps
+            // it: its replay still starts as a child, which RunStarter does not charge again. The refund
+            // is held to the budget like any charge, so a run already past its budget (a cap cut since)
+            // keeps the cost.
+            CreditCharge refund = await RetryExecutor.ChargeAsync(counters, (int)ctx.Branch.RunId, -_runStartCost, Clock, CancellationToken.None);
+            if (refund.Refusal is { } refused)
+            {
+                logger?.LogWarning("The start cost of a sub-workflow step that started no child was not given back to run {RunId}: {Refusal}.", ctx.Branch.RunId, refused);
+            }
+        }
+
         if (result.Outcome == TriggerDispatchOutcome.Refused)
         {
             // Not expected, since a child is exempt from the ceiling; kept as a safety net. Not
