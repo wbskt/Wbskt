@@ -36,7 +36,11 @@ internal interface IWorkspaceProvider : IReferenceProvider
     /// Makes <paramref name="userId"/> the owner, adding them as a member if needed. Throws 50009 when
     /// they are not in the workspace's tenant.
     /// </summary>
-    Task SetOwnerAsync(int workspaceId, int userId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Hands the workspace to <paramref name="userId"/> (<c>dbo.Workspace_SetOwner</c>) and returns the
+    /// previous owner's reference. Throws 50009 when the user is not an active member of its tenant.
+    /// </summary>
+    Task<Guid> SetOwnerAsync(int workspaceId, int userId, CancellationToken cancellationToken = default);
 
     /// <summary>The workspace, or null when there is none with that id.</summary>
     Task<Workspace?> FindByIdAsync(int workspaceId, CancellationToken cancellationToken = default);

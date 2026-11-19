@@ -206,25 +206,35 @@ internal sealed class WorkspaceService : IWorkspaceService
             return Result.Failure(RoleGrantGuard.RolesManageRequired);
         }
 
+        // Unknown, and known but outside this tenant, answer the same: as far as this tenant is
+        // concerned that user does not exist.
+        var newOwnerId = await _accounts.FindIdByRefIdAsync(newOwnerRef, cancellationToken);
+        if (newOwnerId <= 0)
+        {
+            return NewOwnerNotInTenant(workspaceId, newOwnerRef);
+        }
+
+        Guid previousOwnerRef;
         try
         {
-            var newOwnerId = await ResolveUserIdAsync(newOwnerRef, cancellationToken);
-            await _workspaceProvider.SetOwnerAsync(workspaceId, newOwnerId, cancellationToken);
-            _logger.LogInformation("Workspace ID {WorkspaceId} transferred to user ID {UserId} by user ID {CallerId}", workspaceId, newOwnerId, callerId);
-
-            var previousOwnerRef = (await _accounts.GetByIdAsync(before.OwnerUserId, cancellationToken)).RefId;
-            await AnnounceAsync(
-                new WorkspaceOwnershipTransferredEvent(workspaceId, newOwnerRef) { Changes = [new FieldChange("owner", previousOwnerRef.ToString(), newOwnerRef.ToString())] },
-                cancellationToken);
-            return Result.Success();
+            previousOwnerRef = await _workspaceProvider.SetOwnerAsync(workspaceId, newOwnerId, cancellationToken);
         }
-        catch (Exception ex) when (ex is SecurityException or SqlException { Number: 50009 })
+        catch (SqlException ex) when (ex.Number == 50009)
         {
-            // Unknown, and known but outside this tenant, answer the same: as far as this tenant is
-            // concerned that user does not exist.
-            _logger.LogWarning("Ownership transfer of workspace ID {WorkspaceId} refused: user {UserRef} is not in its tenant", workspaceId, newOwnerRef);
-            return Result.Failure(Error.NotFound("USER_NOT_FOUND", "User not found."));
+            return NewOwnerNotInTenant(workspaceId, newOwnerRef);
         }
+
+        _logger.LogInformation("Workspace ID {WorkspaceId} transferred to user ID {UserId} by user ID {CallerId}", workspaceId, newOwnerId, callerId);
+        await AnnounceAsync(
+            new WorkspaceOwnershipTransferredEvent(workspaceId, newOwnerRef) { Changes = [new FieldChange("owner", previousOwnerRef.ToString(), newOwnerRef.ToString())] },
+            cancellationToken);
+        return Result.Success();
+    }
+
+    private Result NewOwnerNotInTenant(int workspaceId, Guid newOwnerRef)
+    {
+        _logger.LogWarning("Ownership transfer of workspace ID {WorkspaceId} refused: user {UserRef} is not in its tenant", workspaceId, newOwnerRef);
+        return Result.Failure(Error.NotFound("USER_NOT_FOUND", "User not found."));
     }
 
     public async Task<Result> DeleteWorkspaceAsync(int callerId, int workspaceId, CancellationToken cancellationToken = default)
@@ -262,17 +272,6 @@ internal sealed class WorkspaceService : IWorkspaceService
         var ids = await _workspaceProvider.GetDeletedBetweenAsync(sinceUtc, untilUtc, cancellationToken);
         _logger.LogDebug("Listed {Count} workspace(s) deleted between {SinceUtc:o} and {UntilUtc:o}", ids.Count, sinceUtc, untilUtc);
         return Result<IReadOnlyCollection<int>>.Success(ids);
-    }
-
-    private async Task<int> ResolveUserIdAsync(Guid userRef, CancellationToken cancellationToken)
-    {
-        var userId = await _accounts.FindIdByRefIdAsync(userRef, cancellationToken);
-        if (userId <= 0)
-        {
-            throw new SecurityException($"User with reference {userRef} not found.");
-        }
-
-        return userId;
     }
 
     public async Task<Result<WorkspaceAccessResolution>> ResolveAccessAsync(int userId, Guid workspaceRef, CancellationToken cancellationToken = default)
