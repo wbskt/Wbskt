@@ -1,6 +1,8 @@
 -- Writes a tenant's subscription as just read from the provider. PastDueSince is kept from the stored
 -- row while the subscription stays past due or on hold, set when it becomes so, and cleared otherwise;
--- RefundedThrough is kept unless @RefundedThrough sets it, and the duplicate marks are always kept. The
+-- RefundedThrough only moves later: the daily reconcile re-reads old reversals too, and an earlier
+-- payment's date written over a newer one would give back the plan the newer refund took away. The
+-- duplicate marks are always kept. The
 -- scheduled change is the provider's, written as read (null for none).
 -- Returns the stored row.
 CREATE PROCEDURE dbo.TenantSubscription_Upsert
@@ -36,7 +38,9 @@ BEGIN
                 WHEN @PastDue = 0 THEN NULL
                 WHEN t.PastDueSince IS NOT NULL THEN t.PastDueSince
                 ELSE @Now END,
-            RefundedThrough = COALESCE(@RefundedThrough, t.RefundedThrough),
+            RefundedThrough = CASE
+                WHEN t.RefundedThrough IS NULL OR @RefundedThrough > t.RefundedThrough THEN COALESCE(@RefundedThrough, t.RefundedThrough)
+                ELSE t.RefundedThrough END,
             CustomerId = @CustomerId,
             ProductId = @ProductId,
             PlanCode = @PlanCode,

@@ -193,6 +193,21 @@ public sealed class BillingPaymentProcedureTests(AuthSqlFixture fixture)
     }
 
     [SkippableFact]
+    public async Task An_older_reversal_read_after_a_newer_one_keeps_the_later_refund_date()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int tenantId = await CreateTenantAsync();
+        string subscriptionId = $"sub_{Guid.NewGuid():N}";
+
+        await UpsertAsync(tenantId, subscriptionId, "active", Now, refundedThrough: Now.AddDays(62));
+        var reconciled = await UpsertAsync(tenantId, subscriptionId, "active", Now.AddHours(1), refundedThrough: Now.AddDays(31));
+        var later = await UpsertAsync(tenantId, subscriptionId, "active", Now.AddHours(2), refundedThrough: Now.AddDays(93));
+
+        Assert.Equal(Now.AddDays(62), reconciled.RefundedThrough);
+        Assert.Equal(Now.AddDays(93), later.RefundedThrough);
+    }
+
+    [SkippableFact]
     public async Task A_duplicate_is_marked_once_and_its_refund_claimed_once_until_released()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
