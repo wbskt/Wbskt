@@ -10,10 +10,10 @@ namespace Wbskt.Management.Models.Workflow;
 /// </summary>
 /// <param name="CreditBudget">The credits one run may use; null for the engine's default.</param>
 public sealed record WorkflowValidationRequest(
-    string Name,
+    string? Name,
     string? Description,
-    IReadOnlyCollection<BaseNode> Nodes,
-    IReadOnlyCollection<Edge> Edges,
+    IReadOnlyCollection<BaseNode>? Nodes,
+    IReadOnlyCollection<Edge>? Edges,
     IReadOnlyCollection<SharedVariableDeclaration>? SharedVariableSchema = null,
     decimal? CreditBudget = null,
     bool FailFast = false)

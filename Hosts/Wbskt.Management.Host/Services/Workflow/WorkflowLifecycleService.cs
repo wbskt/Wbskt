@@ -394,7 +394,7 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
     /// only revoked is a warning, as it can be registered again), and every workflow a step runs is
     /// this workspace's.
     /// </summary>
-    private async Task<Result<IntegrationReferences>> CheckAsync(int workspaceId, Guid refId, WorkflowDefinition definition, CancellationToken ct)
+    private async Task<Result<IntegrationReferences>> CheckAsync(int workspaceId, Guid refId, WorkflowDefinition? definition, CancellationToken ct)
     {
         // The request's id is the one the version is stored and triggered under, which the definition's
         // own WorkflowRefId is not required to match, so the validator is told it for the self-reference check.
