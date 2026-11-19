@@ -6,6 +6,7 @@ retry after a failure up to 2 s, 4 s, 8 s..., so waits are generous on purpose.
 """
 
 import asyncio
+import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -128,6 +129,20 @@ async def test_keeps_the_token_while_the_socket_host_is_down(api, socket_server,
     assert set(socket_server.upgrade_tokens) == {"token-1"}
 
 
+async def test_backs_off_while_the_socket_host_is_down(api, socket_server, client):
+    # With full jitter on 2 s x 2^n, more than 7 attempts in the first 10 s or 12 in 60 s happens
+    # about once in 100,000 runs. A fixed 1 s retry fails the first bound, a fixed 2 s one the second.
+    socket_server.down = True
+    await client()
+    await socket_server.wait_upgrades(1)
+    first = socket_server.upgrade_times[0]
+    await asyncio.sleep(60.0 - (time.monotonic() - first))
+
+    times = [t - first for t in socket_server.upgrade_times]
+    assert sum(1 for t in times if t < 10.0) <= 7, f"retried without backing off: {times}"
+    assert sum(1 for t in times if t < 60.0) <= 12, f"retried without backing off: {times}"
+
+
 async def test_keeps_the_token_while_the_client_is_revoked(api, socket_server, client):
     socket_server.revoked_tokens.add("token-1")
     harness = await client()
@@ -194,6 +209,22 @@ async def test_reconnects_after_each_close_code(api, socket_server, client, code
     # After 4003 (throttled) an SDK that can read the code waits 30-60 s.
     if code == 4003 and reads_codes:
         assert waited >= 29.0
+
+
+async def test_spreads_reconnects_after_a_restart(api, socket_server, client):
+    # 1001 asks for a random 0-30 s wait; two in a row under 100 ms means no spread at all.
+    harness = await client()
+    await harness.expect("connected")
+    waits = []
+    for index in range(2):
+        await socket_server.wait_connections(index + 1)
+        await socket_server.close(index, 1001, "restarting")
+        closed_at = time.monotonic()
+        await socket_server.wait_connections(index + 2, timeout=40.0)
+        waits.append(time.monotonic() - closed_at)
+        await harness.expect("connected")
+
+    assert max(waits) >= 0.1, f"reconnected at once after each restart: {waits}"
 
 
 async def test_notices_a_link_that_died_without_a_close(api, socket_server, client):
