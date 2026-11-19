@@ -67,7 +67,20 @@ public sealed class LeadershipHealthCheckTests
     }
 
     private static Task<HealthCheckResult> Check(LeadershipState state) =>
-        new LeadershipHealthCheck(state).CheckHealthAsync(new HealthCheckContext(), CancellationToken.None);
+        new LeadershipHealthCheck(state, new LeadershipGate(state, TimeProvider.System)).CheckHealthAsync(new HealthCheckContext(), CancellationToken.None);
+
+    /// <summary>The gate closes a safety margin before the lease ends; traffic has to leave with the work.</summary>
+    [Fact]
+    public async Task Leader_whose_lease_is_inside_its_safety_margin_is_not_ready()
+    {
+        var state = new LeadershipState();
+        state.SetLeader(DateTime.UtcNow.AddSeconds(2));
+        state.SetBusStarted();
+
+        HealthCheckResult result = await Check(state);
+
+        Assert.Equal(HealthStatus.Unhealthy, result.Status);
+    }
 }
 
 public sealed class SqlServerHealthCheckTests
