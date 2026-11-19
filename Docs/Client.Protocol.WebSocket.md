@@ -51,6 +51,13 @@ Separately, the gateway sends a WebSocket Ping control frame every 30 seconds an
 that has not answered within another 30, so a client that lost power does not stay "online" for
 minutes. WebSocket libraries answer these Pings on their own; a client does nothing for them.
 
+The gateway's Pings can't reach a client whose link died without a FIN (Wi-Fi moved to another
+access point, a NAT mapping expired, the gateway's machine lost power), and its socket stays open for
+as long as TCP takes to give up, which can be 15 minutes. So a client checks the link itself: it
+sends a WebSocket Ping every 20 seconds and drops the connection when no Pong comes back within
+another 20, then reconnects on the schedule. A library that can't time out a Ping may use TCP
+keep-alive at the same intervals instead.
+
 ## 4. Close codes
 
 How the gateway signals each reason the model gives for ending a connection (model §5):
@@ -85,6 +92,7 @@ An SDK conforms to the WebSocket binding when it:
 
 - [ ] offers `wbskt.v1` and sends the token as a bearer header (or `access_token`);
 - [ ] renews the token after a 401 on the upgrade, and keeps it after any other refusal;
+- [ ] notices a link that stops answering its Pings within a minute, and reconnects;
 - [ ] where its WebSocket library passes the close code up: drops the token after 4002, waits 30–60 s after 4003, and logs 4001.
 
 Together with the [message model's checklist](Client.Protocol.md#6-conformance-checklist), this is

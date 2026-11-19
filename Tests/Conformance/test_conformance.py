@@ -14,6 +14,7 @@ from conftest import RELAY
 
 RECONNECT = 25.0
 REJECTED_WAIT = 8.0
+LIVENESS = 100.0
 
 
 def lower_keys(value):
@@ -193,6 +194,18 @@ async def test_reconnects_after_each_close_code(api, socket_server, client, code
     # After 4003 (throttled) an SDK that can read the code waits 30-60 s.
     if code == 4003 and reads_codes:
         assert waited >= 29.0
+
+
+async def test_notices_a_link_that_died_without_a_close(api, socket_server, client):
+    harness = await client()
+    await harness.expect("connected")
+    await socket_server.wait_connections(1)
+
+    socket_server.go_silent(0)
+
+    # Ping every 20 s and give up 20 s later (binding §3), then the usual reconnect schedule.
+    await socket_server.wait_connections(2, timeout=LIVENESS)
+    await harness.expect("connected")
 
 
 async def test_a_second_connection_supersedes_the_first(api, socket_server, client):
