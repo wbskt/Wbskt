@@ -1,42 +1,23 @@
-using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Integrations;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
-using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Integrations;
 using Wbskt.Workflow.Runtime;
 
 namespace Wbskt.Workflow.NodeExecutors.Actions;
 
 /// <summary>Publishes a push notification to the ntfy topic of the integration the step names.</summary>
-internal sealed class NtfyNodeExecutor(IIntegrationResolver resolver, NtfyChannel channel, ActionTemplates templates) : INodeExecutor
+internal sealed class NtfyNodeExecutor(IIntegrationResolver resolver, NtfyChannel channel, ActionTemplates templates)
+    : IntegrationStepExecutor<NtfyNotificationNode, NtfyConfig>(resolver, templates)
 {
-    public string Kind => NodeKind.ActionNtfy;
+    public override string Kind => NodeKind.ActionNtfy;
 
-    public async Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
-    {
-        var node = (NtfyNotificationNode)ctx.Node;
-        NtfyConfig config = node.Config
-            ?? throw new InvalidOperationException($"ntfy node {node.NodeId} is missing config.");
+    protected override IntegrationType IntegrationType => IntegrationType.Ntfy;
 
-        var resolution = await resolver.ResolveAsync(ctx.Branch, config.IntegrationRef, IntegrationType.Ntfy, ct);
-        if (resolution.Failure is not null)
-        {
-            return resolution.Failure;
-        }
+    protected override NtfyConfig? ConfigOf(NtfyNotificationNode node) => node.Config;
 
-        var integration = resolution.Integration!;
-        config = await templates.FillAsync(ctx, config, ct);
-        var result = await channel.PublishAsync(integration, config.Message, config.Title, config.Priority, config.Tags, ct);
-        if (!result.Ok)
-        {
-            return new NodeExecutionResult.Fail(result.Code!, result.Message!, result.Retryable, null);
-        }
+    protected override Guid? IntegrationRefOf(NtfyConfig config) => config.IntegrationRef;
 
-        await resolver.MarkUsedAsync(integration, ct);
-        return new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>
-        {
-            ["status"] = JsonSerializer.SerializeToElement(result.Status ?? 200)
-        });
-    }
+    protected override Task<ChannelResult> SendAsync(ResolvedIntegration integration, NtfyConfig config, CancellationToken ct) =>
+        channel.PublishAsync(integration, config.Message, config.Title, config.Priority, config.Tags, ct);
 }
