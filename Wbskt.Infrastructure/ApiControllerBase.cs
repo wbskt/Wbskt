@@ -59,6 +59,12 @@ public abstract class ApiControllerBase : ControllerBase
         return Result<(int, Guid)>.Success((identity.UserId, userRef));
     }
 
+    /// <summary>
+    /// The caller's address as the forwarded headers resolved it (the real client, not the proxy), or
+    /// <c>unknown</c>. For logs and the audit trail, never for a security decision.
+    /// </summary>
+    protected string CallerIpAddress() => HttpContext?.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
     protected ActionResult MapResult(Result result)
     {
         if (result.IsSuccess)
