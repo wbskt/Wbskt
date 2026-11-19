@@ -193,7 +193,14 @@ public sealed class ClientReadingRetentionIntegrationTests(SqlEdgeFixture fixtur
         await CompactAsync();
         await ReadAsync(client, Now.AddHours(-1), 2);
 
+        Guid clientRef = await ScalarAsync<Guid>("SELECT RefId FROM dbo.Clients WHERE Id = @p0", client);
+        const string HoldStates = "SELECT COUNT(*) FROM dbo.ClientHoldStates WHERE TriggerKey LIKE N'hold:' + LOWER(CONVERT(NVARCHAR(36), @p0)) + N':%'";
+        await ScalarAsync<int>(
+            "INSERT INTO dbo.ClientHoldStates (TriggerKey, State, LastEventAt, Payload) VALUES (N'hold:' + LOWER(CONVERT(NVARCHAR(36), @p0)) + N':temp:300:' + CONVERT(NVARCHAR(36), NEWID()) + N':' + CONVERT(NVARCHAR(36), NEWID()), N'fired', SYSUTCDATETIME(), N'{}'); SELECT 0;",
+            clientRef);
+
         Assert.True(await new ClientProvider(Configuration()).DeleteAsync(client, workspaceId));
+        Assert.Equal(0, await ScalarAsync<int>(HoldStates, clientRef));
         await ReadAsync(client, Now, 3);
         Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.DeletedClientReadings WHERE ClientId = @p0", client));
         await CompactAsync();

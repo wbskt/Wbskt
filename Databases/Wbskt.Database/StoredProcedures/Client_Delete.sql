@@ -1,4 +1,4 @@
--- Removes a client, its tags, its waiting commands and what it reported about itself, and queues its
+-- Removes a client, its tags, its waiting commands, its hold states and what it reported about itself, and queues its
 -- readings to be cleared. Its event-log rows stay: they keep the
 -- client's RefId, and FK_EventLogs_Client was dropped so history does not pin the row (and so a
 -- message logged after the delete cannot fail the whole buffered insert batch).
@@ -15,7 +15,8 @@ BEGIN
 
     BEGIN TRANSACTION;
 
-    IF NOT EXISTS (SELECT 1 FROM dbo.Clients WITH (UPDLOCK, HOLDLOCK) WHERE Id = @Id AND WorkspaceId = @WorkspaceId)
+    DECLARE @RefId UNIQUEIDENTIFIER = (SELECT RefId FROM dbo.Clients WITH (UPDLOCK, HOLDLOCK) WHERE Id = @Id AND WorkspaceId = @WorkspaceId);
+    IF @RefId IS NULL
     BEGIN
         COMMIT TRANSACTION;
         SELECT 0 AS DeletedCount;
@@ -27,6 +28,8 @@ BEGIN
     DELETE FROM dbo.ClientCapabilities WHERE ClientId = @Id;
     DELETE FROM dbo.ClientTags WHERE ClientId = @Id;
     DELETE FROM dbo.QueuedCommands WHERE ClientId = @Id;
+    -- Its hold states, keyed by its RefId (ClientHoldTriggerKey); a fired one keeps its last matching message.
+    DELETE FROM dbo.ClientHoldStates WHERE TriggerKey LIKE N'hold:' + LOWER(CONVERT(NVARCHAR(36), @RefId)) + N':%';
     DELETE FROM dbo.Clients WHERE Id = @Id AND WorkspaceId = @WorkspaceId;
 
     -- Its readings are cleared later, in batches (dbo.ClientReadings_Compact).

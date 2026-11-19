@@ -262,7 +262,14 @@ public sealed class WorkspaceRetirementIntegrationTests(SqlEdgeFixture fixture)
             INSERT INTO dbo.ClientStateVariables (ClientId, Name, DataType, ValueJson) VALUES (@p1, N'temp', N'number', N'21');
             INSERT INTO dbo.MessageTemplates (WorkspaceId, PolicyId, Name, MessageType, PayloadJson) VALUES (@p0, @p2, N't', N'cmd', N'{}');
             INSERT INTO dbo.SharedVariables (WorkflowRefId, VarName, VarType, ValueJson) VALUES (@p3, N'n', N'number', N'1');
-            """, ws.WorkspaceId, ws.RegisteredClientId, ws.PolicyId, ws.WorkflowRefId);
+            INSERT INTO dbo.ClientHoldStates (TriggerKey, State, LastEventAt, Payload)
+            SELECT N'hold:' + LOWER(CONVERT(NVARCHAR(36), RefId)) + N':temp:300:' + CONVERT(NVARCHAR(36), NEWID()) + N':' + CONVERT(NVARCHAR(36), NEWID()), N'fired', SYSUTCDATETIME(), N'{"temp":31}'
+            FROM dbo.Clients WHERE Id IN (@p1, @p4);
+            """, ws.WorkspaceId, ws.RegisteredClientId, ws.PolicyId, ws.WorkflowRefId, ws.OtherClientId);
+
+        const string HoldStatesOf = "SELECT COUNT(*) FROM dbo.ClientHoldStates WHERE TriggerKey LIKE N'hold:' + LOWER(CONVERT(NVARCHAR(36), @p0)) + N':%'";
+        Guid purgedClientRef = await ScalarAsync<Guid>("SELECT RefId FROM dbo.Clients WHERE Id = @p0", ws.RegisteredClientId);
+        Guid otherClientRef = await ScalarAsync<Guid>("SELECT RefId FROM dbo.Clients WHERE Id = @p0", ws.OtherClientId);
 
         // Not retired yet: nothing goes.
         await ExecAsync("UPDATE dbo.WorkspaceAccounts SET RetiredAt = NULL WHERE WorkspaceId = @p0", ws.WorkspaceId);
@@ -280,6 +287,8 @@ public sealed class WorkspaceRetirementIntegrationTests(SqlEdgeFixture fixture)
 
         Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Clients WHERE WorkspaceId = @p0", ws.WorkspaceId));
         Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.ClientTags WHERE ClientId = @p0", ws.RegisteredClientId));
+        Assert.Equal(0, await ScalarAsync<int>(HoldStatesOf, purgedClientRef));
+        Assert.Equal(1, await ScalarAsync<int>(HoldStatesOf, otherClientRef));
         Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.RegistrationPolicies WHERE WorkspaceId = @p0", ws.WorkspaceId));
         Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.MessageTemplates WHERE WorkspaceId = @p0", ws.WorkspaceId));
         Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Workflows WHERE WorkspaceId = @p0", ws.WorkspaceId));
