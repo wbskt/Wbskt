@@ -376,7 +376,7 @@ pre { margin: 0; background: var(--canvas); border: 1px solid var(--line-soft); 
         <div class="cmd"><div class="cmdbox"><pre data-tpl="ssh -L 3000:127.0.0.1:3000 -L 9093:127.0.0.1:9093 {vm}
 # Grafana:      http://localhost:3000
 # Alertmanager: http://localhost:9093"></pre><button class="copy">Copy</button></div></div>
-        <p style="margin-top:10px">Alerts go to <code>ALERT_EMAIL_TO</code> (through the <code>SMTP_*</code> relay) and/or <code>ALERT_WEBHOOK_URL</code>. With neither set, alerts fire and reach nobody. Two checks live outside the VM: the Watchdog alert to the dead man's switch at <code>ALERT_DEADMANS_URL</code>, and outside-probe.yml.</p>
+        <p style="margin-top:10px">Alerts go to <code>ALERT_EMAIL_TO</code> (through the <code>SMTP_*</code> relay) and/or <code>ALERT_WEBHOOK_URL</code>. With neither set, alerts fire and reach nobody. Checks outside the VM: the Watchdog alert to the dead man's switch at <code>ALERT_DEADMANS_URL</code>, an uptime monitor on the public endpoints at the same service, and outside-probe.yml as a slow backup.</p>
       </div>
     </div>
     <h3 style="margin:18px 0 8px">Alert rules <span class="mono" style="color:var(--muted);font-weight:400">deploy/observability/alerts.yml</span></h3>
@@ -1079,7 +1079,7 @@ function buildPipeline() {
     <div class="stages">
       <div class="stage"><b>03:00 nightly-stress.yml</b><span>hosts from source; the thousand-run concurrency scenario and the load tester holding 200 clients, its account put on Team first through the internal plan route</span></div>
       <div class="stage"><b>03:30 nightly-conformance.yml</b><span>same hosts; the conformance suite's live scenarios through the .NET harness from wbskt/Wbskt.DotNet master, checking the fake still matches the gateway; fails if they skip</span></div>
-      <div class="stage"><b>every 10 min outside-probe.yml</b><span>from outside the VM: readiness of auth., api. and ws.&lt;PROBE_DOMAIN&gt; and the console; retried for about three minutes; a failure opens (or reopens) the issue “Outside probe failing”, the next pass closes it. Off until the PROBE_DOMAIN repository variable is set</span></div>
+      <div class="stage"><b>outside-probe.yml (a backup)</b><span>scheduled every 10 min, but GitHub starts it only 1 to 5 times a day; from outside the VM: readiness of auth., api. and ws.&lt;PROBE_DOMAIN&gt;, the console, and a TLS handshake with mqtt.&lt;PROBE_DOMAIN&gt;:8883; retried for about three minutes; a failure opens (or reopens) the issue “Outside probe failing”, the next pass closes it. On wbskt/Wbskt an unset PROBE_DOMAIN fails the run, so it cannot sit off unnoticed. The uptime monitor next to the dead man's switch is what notices a dead VM in minutes</span></div>
       <div class="stage"><b>On a failed scheduled run</b><span>report-nightly-failure.sh opens the issue “Nightly run failing: &lt;workflow&gt;”, or comments on the one already open</span></div>
     </div></div>
   <div class="twocol">
