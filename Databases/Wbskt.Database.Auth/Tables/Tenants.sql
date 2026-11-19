@@ -22,6 +22,10 @@ CREATE TABLE dbo.Tenants (
     -- When an operator's plan ends; the review worker then hands the tenant back to its subscription, or
     -- to Free. NULL while it has no end, and for every other source.
     PlanEndsAt DATETIME2(3) NULL,
+    -- When the account was deleted (dbo.User_Delete) while this tenant was its alone. The row stays,
+    -- with its name cleared, so the payments recorded against it (subscriptions, credit purchases)
+    -- still match a refund or chargeback and remain for the accounts. Nothing acts for a closed tenant.
+    ClosedAt DATETIME2(3) NULL,
     CONSTRAINT PK_Tenants PRIMARY KEY CLUSTERED (Id ASC),
     CONSTRAINT UQ_Tenants_RefId UNIQUE (RefId),
     CONSTRAINT CK_Tenants_PlanCode CHECK (PlanCode = N'Free' OR PlanCode = N'Maker' OR PlanCode = N'Pro' OR PlanCode = N'Team' OR PlanCode = N'Business'),

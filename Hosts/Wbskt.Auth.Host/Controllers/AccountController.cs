@@ -145,8 +145,8 @@ public class AccountController : ApiControllerBase
     /// Deletes the signed-in account, after the password is entered again.
     /// </summary>
     /// <remarks>
-    /// Tenants only this person belongs to are deleted with their workspaces, and everything in them;
-    /// they leave every other tenant, and the workspaces they own there pass to another administrator.
+    /// Tenants only this person belongs to lose their workspaces, and everything in them, and are
+    /// closed; only their payment records stay, so a refund still matches. They leave every other tenant, and the workspaces they own there pass to another administrator.
     /// While nobody else administers a tenant others belong to, the whole deletion is
     /// refused with 409 <c>ACCOUNT_SOLE_ADMINISTRATOR</c>, naming those tenants. Every session ends,
     /// on every host, and the account's username and address are anonymised, so the address can

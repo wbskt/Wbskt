@@ -286,6 +286,54 @@ public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
     }
 
     /// <summary>
+    /// A tenant that was the account's alone is closed, not deleted: its payments stay matched to it for
+    /// a refund, a chargeback and the accounts, and the provider customer it paid as is listed for erasure
+    /// unless another open tenant still pays as that customer (#951).
+    /// </summary>
+    [SkippableFact]
+    public async Task Deleting_an_account_closes_its_own_tenant_and_keeps_the_payments()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var (tenantId, ownerId, _) = await CreateTenantAsync();
+        var (otherTenantId, _, _) = await CreateTenantAsync();
+        string own = $"cus_own_{tenantId}";
+        string shared = $"cus_shared_{tenantId}";
+        await ExecSqlAsync("""
+            INSERT INTO dbo.TenantSubscriptions (TenantId, Provider, SubscriptionId, CustomerId, ProductId, PlanCode, BillingInterval, Status, CurrentPeriodEnd, CancelAtPeriodEnd)
+            VALUES (@p0, N'test', CONCAT(N'sub_', @p2), @p2, N'prod', N'Maker', N'Monthly', N'cancelled', SYSUTCDATETIME(), 1);
+            INSERT INTO dbo.TenantCreditPurchases (Provider, PaymentId, TenantId, CustomerId, Credits, PurchasedAt, ExpiresAt)
+            VALUES (N'test', CONCAT(N'pay_', @p2), @p0, @p2, 100, SYSUTCDATETIME(), DATEADD(DAY, 365, SYSUTCDATETIME())),
+                   (N'test', CONCAT(N'pay_', @p3), @p0, @p3, 100, SYSUTCDATETIME(), DATEADD(DAY, 365, SYSUTCDATETIME())),
+                   (N'test', CONCAT(N'pay_other_', @p3), @p1, @p3, 100, SYSUTCDATETIME(), DATEADD(DAY, 365, SYSUTCDATETIME()));
+            INSERT INTO dbo.BillingNotices (TenantId, Kind, PeriodKey) VALUES (@p0, N'test', N'p');
+            INSERT INTO dbo.BillingNoticeMails (TenantId, Kind, PeriodKey, ToAddress, Subject, HtmlBody, SentAt)
+            VALUES (@p0, N'test', N'p', N'someone@example.test', N's', N'Hello someone', SYSUTCDATETIME());
+            """, tenantId, otherTenantId, own, shared);
+        string workspaces = await ScalarAsync<string>(
+            "SELECT (SELECT Id AS workspaceId, N'test' AS messageType, N'{}' AS payload FROM dbo.Workspaces WHERE TenantId = @p0 FOR JSON PATH)", tenantId);
+
+        await ExecAsync("dbo.User_Delete", ("@UserId", ownerId), ("@DeletedWorkspaces", workspaces));
+
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Tenants WHERE Id = @p0 AND ClosedAt IS NOT NULL AND Name = N'Closed account' AND Description IS NULL", tenantId));
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.TenantMembers WHERE TenantId = @p0", tenantId));
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.TenantSubscriptions WHERE TenantId = @p0", tenantId));
+        Assert.Equal(2, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.TenantCreditPurchases WHERE TenantId = @p0", tenantId));
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.BillingNotices WHERE TenantId = @p0", tenantId));
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.BillingNoticeMails WHERE TenantId = @p0", tenantId));
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.BillingCustomerErasures WHERE TenantId = @p0 AND Provider = N'test' AND CustomerId = @p1 AND ErasedAt IS NULL", tenantId, own));
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.BillingCustomerErasures WHERE CustomerId = @p0", shared));
+
+        // The closed tenant no longer makes its customer shared, and a new purchase by an open tenant as
+        // that customer (the person signed up again) withdraws the erasure request.
+        Assert.False(await ProcScalarAsync<bool>("dbo.TenantBillingCustomer_IsShared", ("@Provider", "test"), ("@CustomerId", own), ("@TenantId", otherTenantId)));
+        await ExecAsync("dbo.TenantCreditPurchase_Record",
+            ("@Provider", "test"), ("@PaymentId", $"pay_again_{tenantId}"), ("@TenantId", otherTenantId), ("@CustomerId", own),
+            ("@Credits", 100m), ("@PurchasedAt", DateTime.UtcNow), ("@ExpiresAt", DateTime.UtcNow.AddDays(365)),
+            ("@OutboxMessageType", "test"), ("@OutboxPayload", "{}"));
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.BillingCustomerErasures WHERE CustomerId = @p0", own));
+    }
+
+    /// <summary>
     /// A shared tenant outlives a member's account, and with it the billing notices addressed to them: one
     /// not yet sent is dropped, and one sent keeps its row without the address.
     /// </summary>

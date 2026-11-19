@@ -36,7 +36,7 @@ CREATE TABLE dbo.TenantSubscriptions
     -- asked for again, which could refund twice; this is how an operator finds it.
     DuplicateRefundClaimedAt DATETIME2(3)  NULL,
     CONSTRAINT PK_TenantSubscriptions PRIMARY KEY (Provider, SubscriptionId),
-    CONSTRAINT FK_TenantSubscriptions_Tenants FOREIGN KEY (TenantId) REFERENCES dbo.Tenants (Id) ON DELETE CASCADE
+    CONSTRAINT FK_TenantSubscriptions_Tenants FOREIGN KEY (TenantId) REFERENCES dbo.Tenants (Id)
 );
 GO
 

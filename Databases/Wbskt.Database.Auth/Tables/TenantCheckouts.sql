@@ -12,6 +12,6 @@ CREATE TABLE dbo.TenantCheckouts
     ExpiresAt   DATETIME2(3)   NOT NULL,
     CreatedAt   DATETIME2(3)   NOT NULL CONSTRAINT DF_TenantCheckouts_CreatedAt DEFAULT SYSUTCDATETIME(),
     CONSTRAINT PK_TenantCheckouts PRIMARY KEY (TenantId, Provider),
-    CONSTRAINT FK_TenantCheckouts_Tenants FOREIGN KEY (TenantId) REFERENCES dbo.Tenants (Id) ON DELETE CASCADE
+    CONSTRAINT FK_TenantCheckouts_Tenants FOREIGN KEY (TenantId) REFERENCES dbo.Tenants (Id)
 );
 GO

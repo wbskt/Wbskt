@@ -8,7 +8,8 @@
 -- A tenant with another subscription that still keeps it on that plan (SubscriptionPlan.Decide: active,
 -- past due or on hold within the grace, cancelled but paid for, and not refunded) is not listed for an old
 -- one that ended: the review would read it from the provider every hour and change nothing.
--- TenantBillingSync decides; a tenant it leaves alone is listed again next time.
+-- TenantBillingSync decides; a tenant it leaves alone is listed again next time. A closed tenant (its
+-- account deleted) is never listed: its plan no longer governs anything.
 CREATE PROCEDURE dbo.TenantSubscriptions_GetToReview
     @Now          DATETIME2(3),
     @PastDueSince DATETIME2(3)
@@ -20,6 +21,7 @@ BEGIN
     FROM dbo.TenantSubscriptions s
     JOIN dbo.Tenants t ON t.Id = s.TenantId
     WHERE t.PlanCode <> N'Free'
+      AND t.ClosedAt IS NULL
       AND t.PlanSource = N'Subscription'
       AND t.PlanCode = s.PlanCode
       AND s.DuplicateAt IS NULL
@@ -42,6 +44,7 @@ BEGIN
     SELECT t.Id
     FROM dbo.Tenants t
     WHERE t.PlanSource = N'Operator'
+      AND t.ClosedAt IS NULL
       AND t.PlanEndsAt <= @Now;
 END
 GO

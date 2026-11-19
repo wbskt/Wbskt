@@ -1,9 +1,13 @@
 -- Deletes an account at its owner's request (POST /api/auth/account/delete), in one transaction:
 --
--- * A tenant where the user is the only member goes with them: its workspaces (through
+-- * A tenant where the user is the only member is closed: its workspaces go (through
 --   dbo.Workspace_Delete, so each is recorded in dbo.DeletedWorkspaces and its WorkspaceDeletedEvent,
---   passed in @DeletedWorkspaces, goes into the outbox for the management host to retire), roles,
---   groups, invitations and the tenant row.
+--   passed in @DeletedWorkspaces, goes into the outbox for the management host to retire), with its
+--   roles, groups, invitations, membership, checkouts and billing mails. The tenant row stays as a
+--   tombstone (ClosedAt set, name and description cleared) with its subscriptions, credit purchases
+--   and billing notices, so a refund or chargeback still matches and the payment records remain for
+--   the accounts (#951). Each provider customer it paid as, and no open tenant still does, is listed
+--   in dbo.BillingCustomerErasures to be erased at the provider.
 -- * A tenant with other members loses only this member, through dbo.TenantMember_Remove: workspaces
 --   they own pass to another administrator of that tenant. Refused (THROW 50018) while nobody else
 --   administers it: deleting them would leave the others in a tenant nobody can administer, so
@@ -119,8 +123,37 @@ BEGIN
     DELETE FROM dbo.TenantInvitations WHERE TenantId IN (SELECT TenantId FROM @Sole);
     DELETE RP FROM dbo.RolePermissions RP INNER JOIN dbo.Roles R ON R.Id = RP.RoleId WHERE R.TenantId IN (SELECT TenantId FROM @Sole);
     DELETE FROM dbo.Roles WHERE TenantId IN (SELECT TenantId FROM @Sole);
-    -- TenantMembers cascades.
-    DELETE FROM dbo.Tenants WHERE Id IN (SELECT TenantId FROM @Sole);
+    DELETE FROM dbo.TenantMembers WHERE TenantId IN (SELECT TenantId FROM @Sole);
+    DELETE FROM dbo.TenantCheckouts WHERE TenantId IN (SELECT TenantId FROM @Sole);
+    -- The mails' bodies greet the person by name; the claim in dbo.BillingNotices is what stays.
+    DELETE FROM dbo.BillingNoticeMails WHERE TenantId IN (SELECT TenantId FROM @Sole);
+
+    INSERT INTO dbo.BillingCustomerErasures (TenantId, Provider, CustomerId)
+    SELECT MIN(C.TenantId), C.Provider, C.CustomerId
+    FROM (
+        SELECT TenantId, Provider, CustomerId FROM dbo.TenantSubscriptions WHERE TenantId IN (SELECT TenantId FROM @Sole)
+        UNION
+        SELECT TenantId, Provider, CustomerId FROM dbo.TenantCreditPurchases WHERE TenantId IN (SELECT TenantId FROM @Sole)) C
+    WHERE NOT EXISTS (
+              SELECT 1
+              FROM (SELECT TenantId, Provider, CustomerId FROM dbo.TenantSubscriptions
+                    UNION ALL
+                    SELECT TenantId, Provider, CustomerId FROM dbo.TenantCreditPurchases) O
+              INNER JOIN dbo.Tenants T ON T.Id = O.TenantId
+              WHERE O.Provider = C.Provider
+                AND O.CustomerId = C.CustomerId
+                AND T.ClosedAt IS NULL
+                AND O.TenantId NOT IN (SELECT TenantId FROM @Sole))
+      AND NOT EXISTS (
+              SELECT 1 FROM dbo.BillingCustomerErasures E
+              WHERE E.Provider = C.Provider AND E.CustomerId = C.CustomerId)
+    GROUP BY C.Provider, C.CustomerId;
+
+    UPDATE dbo.Tenants
+    SET Name = N'Closed account',
+        Description = NULL,
+        ClosedAt = SYSUTCDATETIME()
+    WHERE Id IN (SELECT TenantId FROM @Sole);
 
     -- Anything left that names the user: assignments without a tenant row of theirs, sessions, tokens.
     DELETE FROM dbo.UserRoles WHERE UserId = @UserId;

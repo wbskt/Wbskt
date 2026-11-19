@@ -8,6 +8,6 @@ CREATE TABLE dbo.BillingNotices
     PeriodKey NVARCHAR(200) NOT NULL,
     CreatedAt DATETIME2(3)  NOT NULL CONSTRAINT DF_BillingNotices_CreatedAt DEFAULT SYSUTCDATETIME(),
     CONSTRAINT PK_BillingNotices PRIMARY KEY (TenantId, Kind, PeriodKey),
-    CONSTRAINT FK_BillingNotices_Tenants FOREIGN KEY (TenantId) REFERENCES dbo.Tenants (Id) ON DELETE CASCADE
+    CONSTRAINT FK_BillingNotices_Tenants FOREIGN KEY (TenantId) REFERENCES dbo.Tenants (Id)
 );
 GO
