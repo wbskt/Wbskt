@@ -99,9 +99,9 @@ public sealed class MessageMeterIntegrationTests(SqlEdgeFixture fixture)
 
         IReadOnlyCollection<WorkspaceMessageAccount> accounts = await provider.GetAccountsAsync(monthStart, CancellationToken.None);
 
-        Assert.Equal(new WorkspaceMessageAccount(busy, PlanCode.Maker, null, 2), accounts.Single(a => a.WorkspaceId == busy));
-        Assert.Equal(new WorkspaceMessageAccount(quiet, PlanCode.Maker, new PlanLimitOverrides { MessagesPerMonth = 5 }, 2), accounts.Single(a => a.WorkspaceId == quiet));
-        Assert.Equal(new WorkspaceMessageAccount(alone, PlanCode.Free, null, 1), accounts.Single(a => a.WorkspaceId == alone));
+        Assert.Equal(new WorkspaceMessageAccount(busy, PlanCode.Maker, null, 2, tenantId, 2), accounts.Single(a => a.WorkspaceId == busy));
+        Assert.Equal(new WorkspaceMessageAccount(quiet, PlanCode.Maker, new PlanLimitOverrides { MessagesPerMonth = 5 }, 2, tenantId, 0), accounts.Single(a => a.WorkspaceId == quiet));
+        Assert.Equal(new WorkspaceMessageAccount(alone, PlanCode.Free, null, 1, null, 1), accounts.Single(a => a.WorkspaceId == alone));
         Assert.Equal([busy, quiet], (await provider.RecordNoticeAsync([new(busy, 2), new(quiet, 5)], monthStart, 100, CancellationToken.None)).Order().Reverse());
         Assert.Equal([alone], await provider.RecordNoticeAsync([new(busy, 2), new(alone, 1)], monthStart, 100, CancellationToken.None));
         Assert.Equal([busy], await provider.RecordNoticeAsync([new(busy, 2)], monthStart, 80, CancellationToken.None));
@@ -141,7 +141,7 @@ public sealed class MessageMeterIntegrationTests(SqlEdgeFixture fixture)
 
         IReadOnlyCollection<WorkspaceMessageAccount> accounts = await new MessageAllowanceProvider(Configuration()).GetAccountsAsync(monthStart, CancellationToken.None);
 
-        Assert.Equal(new WorkspaceMessageAccount(kept, PlanCode.Maker, null, 3), accounts.Single(a => a.WorkspaceId == kept));
+        Assert.Equal(new WorkspaceMessageAccount(kept, PlanCode.Maker, null, 3, tenantId, 1), accounts.Single(a => a.WorkspaceId == kept));
         Assert.DoesNotContain(accounts, a => a.WorkspaceId == deleted);
     }
 

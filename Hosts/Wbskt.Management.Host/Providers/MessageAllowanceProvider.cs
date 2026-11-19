@@ -24,7 +24,9 @@ internal sealed class MessageAllowanceProvider : BaseSqlProvider, IMessageAllowa
                     r.GetInt32(r.GetOrdinal("WorkspaceId")),
                     r.IsDBNull(plan) ? PlanCode.Free : Enum.Parse<PlanCode>(r.GetString(plan)),
                     r.IsDBNull(overrides) ? null : PlanLimitOverridesJson.Read(r.GetString(overrides)),
-                    r.GetInt64(r.GetOrdinal("AccountMessages")));
+                    r.GetInt64(r.GetOrdinal("AccountMessages")),
+                    r.IsDBNull(r.GetOrdinal("TenantId")) ? null : r.GetInt32(r.GetOrdinal("TenantId")),
+                    r.GetInt64(r.GetOrdinal("WorkspaceMessages")));
             },
             ct);
     }

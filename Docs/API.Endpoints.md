@@ -687,8 +687,8 @@ board registering through an auto-approve policy, or someone approving a client)
 `clientRefId` is empty for a registration, which creates no client; `clientName` is the name it registered
 with, and null for an approval. A bulk approval announces it once, for the first client refused.
 
-An account found over its monthly messages raises `WorkspaceMessageLimitReachedEvent` once per workspace
-and month (Warning, `OnWorkspaceMessageLimitReachedEvent { messagesPerMonth, messagesUsed, throttled, throttleAt, createdAtUtc }`),
+An account found over its monthly messages raises `WorkspaceMessageLimitReachedEvent` once per account
+and month, in the workspace that carried the most of them (Warning, `OnWorkspaceMessageLimitReachedEvent { messagesPerMonth, messagesUsed, throttled, throttleAt, createdAtUtc }`),
 within about a minute of the crossing. `throttled` is true on Free, and on a paid plan already past its throttle.
 `throttleAt` is the month's count at which its clients are held to one message a minute (the allowance on Free,
 twice it on Maker and Pro, one and a half times it on Team), null on Business, which is never slowed. The 80%
