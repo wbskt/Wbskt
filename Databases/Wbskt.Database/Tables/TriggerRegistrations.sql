@@ -16,7 +16,7 @@ CREATE TABLE dbo.TriggerRegistrations
     -- Lower-case hex SHA-256 of the UTF-8 secret (WebhookSecretHash.Of), which the dispatcher compares
     -- the caller's presented hash with. WebhookSecret is still written for one release, so an engine
     -- rolled back to the previous image does not read a guarded webhook as open; the release after
-    -- stops writing it, clears it and drops it.
+    -- stops writing it, clears it and drops it (#1059).
     WebhookSecretHash     VARCHAR(64)      NULL,
     CreatedAt             DATETIME2(3)     NOT NULL DEFAULT SYSUTCDATETIME(),
     CONSTRAINT FK_TriggerRegistrations_WorkflowDefinitions

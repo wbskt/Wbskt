@@ -131,22 +131,6 @@ BEGIN
 END
 GO
 
--- 4. Mark the counters that held unposted credits before RunCounters.HasUnposted existed.
--- The column arrives as 0 on every row, and Run_Start and dbo.WorkspaceCreditsSpent read unposted
--- credits through it alone, so without this a run that consumed credits before the deploy would not
--- count against the caps, or ever be posted, until its next charge. A start racing the deploy between
--- the procedures changing and this update can undercount for that moment. A no-op once those are posted.
-UPDATE dbo.RunCounters
-    SET HasUnposted = 1
-    WHERE HasUnposted = 0
-        AND CreditsConsumed <> PostedCredits;
-GO
-
--- 5. Queue the readings of workspaces deleted before dbo.Workspace_Retire queued them itself
--- (dbo.DeletedClientReadings_InsertRetired explains which). A no-op once they are queued or cleared.
-EXEC dbo.DeletedClientReadings_InsertRetired;
-GO
-
 -- Login for the platform admin host (wbskt/Wbskt.Admin): [wbskt_admin_reader], which may read the views
 -- in the [admin] schema and nothing else, in this database and, under the same login, in the other one.
 -- Created as the per-host logins above are: from the $(AdminReaderPassword) SQLCMD variable, skipped
@@ -170,7 +154,7 @@ BEGIN
 END
 GO
 
--- 6. Fill dbo.Workflows from the state the pre-deployment script captured from
+-- 4. Fill dbo.Workflows from the state the pre-deployment script captured from
 -- WorkflowDefinitions.IsEnabled and dbo.WorkflowDeletions, then drop the capture and the tombstone
 -- table it replaces (DropObjectsNotInSource is off, so the diff leaves WorkflowDeletions in place).
 -- Runs once: the capture exists only on the deploy that still had WorkflowDeletions.
@@ -190,7 +174,7 @@ GO
 DROP TABLE IF EXISTS dbo.WorkflowDeletions;
 GO
 
--- 7. Hash the webhook secrets of registrations written before TriggerRegistrations.WebhookSecretHash
+-- 5. Hash the webhook secrets of registrations written before TriggerRegistrations.WebhookSecretHash
 -- existed (dbo.TriggerRegistration_BackfillWebhookSecretHash explains how). The dispatcher hashes a
 -- missing one itself, so this only stops it doing so per event. A no-op once every row has one.
 EXEC dbo.TriggerRegistration_BackfillWebhookSecretHash;

@@ -350,3 +350,10 @@ DROP PROCEDURE IF EXISTS dbo.Bookmark_GetBy_RefId;
 GO
 DROP PROCEDURE IF EXISTS dbo.WorkflowDefinition_FindBy_RefId_Version;
 GO
+/*
+DeletedClientReadings_InsertRetired was run only by the post-deployment script, to queue the readings
+of workspaces retired before Workspace_Retire queued them itself. Every deploy since has run it, so
+those are queued and it goes with its step (#1000).
+*/
+DROP PROCEDURE IF EXISTS dbo.DeletedClientReadings_InsertRetired;
+GO

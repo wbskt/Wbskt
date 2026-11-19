@@ -12,10 +12,7 @@
 -- Run_DeleteRetired).
 CREATE PROCEDURE dbo.RunCredits_Post
     @Day        DATE,
-    @BatchSize  INT,
-    -- Unused. Kept for one release for an engine that still passes it while the migrator runs ahead of
-    -- it (#740); remove in the release after.
-    @EndedSince DATETIME2(3) = NULL
+    @BatchSize  INT
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -87,25 +84,11 @@ BEGIN
     IF EXISTS (SELECT 1 FROM @Posts)
         EXEC dbo.TenantCreditGrants_Draw @Posts = @Posts, @MonthStart = @MonthStart, @At = @Now;
 
-    -- SpentThisMonth to TenantSpentThisMonth are read by no engine from #741 on. They stay for one
-    -- release so an engine still on the earlier reader (the migrator runs before the engine is replaced,
-    -- or a rollback keeps this schema) still posts; remove them in the release after.
     SELECT
         w.WorkspaceId,
         w.Runs,
-        w.Credits,
-        (SELECT SUM(u.Credits)
-         FROM dbo.WorkspaceCreditUsage u
-         WHERE u.WorkspaceId = w.WorkspaceId
-           AND u.Day >= @MonthStart) AS SpentThisMonth,
-        c.MonthlyCreditCap,
-        a.TenantId,
-        a.CreditsPerMonth,
-        m.Posted AS TenantSpentThisMonth
-    FROM @ByWorkspace w
-    LEFT JOIN dbo.WorkspaceCreditCaps c ON c.WorkspaceId = w.WorkspaceId
-    LEFT JOIN dbo.WorkspaceAccounts a ON a.WorkspaceId = w.WorkspaceId
-    LEFT JOIN dbo.TenantCreditMonths m ON m.TenantId = a.TenantId AND m.MonthStart = @MonthStart;
+        w.Credits
+    FROM @ByWorkspace w;
 
     COMMIT TRANSACTION;
 END;
