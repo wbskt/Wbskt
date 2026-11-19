@@ -7,7 +7,7 @@ namespace Wbskt.Management.Host.Handlers;
 /// <summary>
 /// Drops the commands waiting for a client that loses its registration: it will not sign in to take
 /// them. Each ends as a failed command, so the console and a waiting workflow step hear why. A deleted
-/// client's commands go with its row (dbo.Client_Delete).
+/// client's commands are ended the same way by ClientLifecycleService.DeleteAsync, before its row goes.
 /// </summary>
 public sealed class ClientCommandQueueRevocationHandler : IConsumer<ClientStatusChangedEvent>
 {

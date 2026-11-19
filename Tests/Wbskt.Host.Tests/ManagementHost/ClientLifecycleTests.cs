@@ -14,6 +14,9 @@ using Wbskt.Infrastructure.Billing;
 using Wbskt.Models.Billing;
 using Wbskt.Primitives.Exceptions;
 
+using Wbskt.Host.Tests.Infrastructure;
+using Wbskt.Infrastructure.Clients;
+
 namespace Wbskt.Host.Tests.ManagementHost;
 
 /// <summary>
@@ -39,6 +42,23 @@ public sealed class ClientLifecycleTests
         harness.Cutoffs.Verify(c => c.RevokeAsync(client.RefId), Times.Once);
         harness.Bus.Verify(b => b.PublishAsync(
             It.Is<ClientDeletedEvent>(e => e.ClientRefId == client.RefId && e.WorkspaceId == WorkspaceId),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Deleting_a_client_ends_each_waiting_command_as_failed_with_why()
+    {
+        var harness = new Harness();
+        var client = harness.AddClient();
+        harness.Provider.Setup(p => p.DeleteAsync(client.Id, WorkspaceId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var commandId = Guid.NewGuid();
+        await harness.Commands.EnqueueAsync(new QueuedCommand(commandId, client.Id, client.RefId, WorkspaceId, "reboot", "{}", DateTime.UtcNow.AddHours(1)), 100, CancellationToken.None);
+
+        await harness.Service.DeleteAsync(WorkspaceId, client.RefId);
+
+        harness.Commands.Rows.Should().BeEmpty();
+        harness.Bus.Verify(b => b.PublishAsync(
+            It.Is<ClientCommandFailedEvent>(e => e.CommandId == commandId && e.Reason == ClientCommandFailedEvent.DeletedWhileQueuedReason),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -275,10 +295,12 @@ public sealed class ClientLifecycleTests
                 .Setup(p => p.UpdateStatusesAsync(It.IsAny<int>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<ClientStatus>(), It.IsAny<PlanCeiling?>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((int workspaceId, IReadOnlyList<Guid> refIds, ClientStatus status, PlanCeiling? _, CancellationToken _) =>
                     refIds.Select(refId => Change(workspaceId, refId, status)).ToList());
-            Service = new ClientLifecycleService(Provider.Object, Bus.Object, Cutoffs.Object, NullLogger<ClientLifecycleService>.Instance, plans ?? new FixedWorkspacePlans(), TimeProvider.System);
+            Service = new ClientLifecycleService(Provider.Object, Bus.Object, Cutoffs.Object, NullLogger<ClientLifecycleService>.Instance, plans ?? new FixedWorkspacePlans(), TimeProvider.System, TestClientCommands.Queue(Commands, Mock.Of<Wbskt.Infrastructure.Clients.IClientCommandTargetProvider>(), Bus.Object));
         }
 
         public Mock<IClientProvider> Provider { get; } = new();
+
+        public InMemoryQueuedCommandStore Commands { get; } = new();
 
         /// <summary>Clients whose policy has no places left.</summary>
         public HashSet<Guid> Full { get; } = [];

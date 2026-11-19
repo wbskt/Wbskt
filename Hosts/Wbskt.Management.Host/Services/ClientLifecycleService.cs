@@ -5,6 +5,7 @@ using Wbskt.Events.Billing;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Billing;
+using Wbskt.Infrastructure.Clients;
 using Wbskt.Models.Billing;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Models;
@@ -24,6 +25,7 @@ internal sealed class ClientLifecycleService : IClientLifecycleService
     private readonly ClientAccessRevoker _access;
     private readonly ILogger<ClientLifecycleService> _logger;
     private readonly IWorkspacePlans _plans;
+    private readonly ClientCommandQueue _commandQueue;
 
     public ClientLifecycleService(
         IClientProvider clientProvider,
@@ -31,8 +33,10 @@ internal sealed class ClientLifecycleService : IClientLifecycleService
         IClientTokenCutoffs cutoffs,
         ILogger<ClientLifecycleService> logger,
         IWorkspacePlans plans,
-        TimeProvider time)
+        TimeProvider time,
+        ClientCommandQueue commandQueue)
     {
+        _commandQueue = commandQueue;
         _plans = plans;
         _clientProvider = clientProvider;
         _eventBus = eventBus;
@@ -156,6 +160,10 @@ internal sealed class ClientLifecycleService : IClientLifecycleService
         }
 
         var client = lookup.Value;
+
+        // Each waiting command ends as failed, with why, before Client_Delete takes the rows: a workflow
+        // step waiting on one hears it now instead of timing out, and so does the console.
+        await _commandQueue.DropAsync(client.Id, ClientCommandFailedEvent.DeletedWhileQueuedReason, cancellationToken);
 
         if (!await _clientProvider.DeleteAsync(client.Id, workspaceId, cancellationToken))
         {
