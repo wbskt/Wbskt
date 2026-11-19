@@ -71,6 +71,38 @@ public sealed class OutboxDispatcherTests
     }
 
     [Fact]
+    public async Task A_full_batch_of_unreadable_rows_does_not_hold_up_the_rows_behind_it()
+    {
+        for (int i = 0; i < OutboxDispatcher.BatchSize + 5; i++)
+        {
+            _store.Add(new OutboxMessage("Wbskt.Events.Auth.SomethingFromANewerVersion", "{}"));
+        }
+
+        _store.Add(OutboxMessage.Create(new WorkspaceDeletedEvent(9, 42)));
+        var dispatcher = CreateDispatcher();
+
+        Assert.True(await dispatcher.DispatchPendingAsync(CancellationToken.None));
+
+        _bus.Verify(x => x.PublishAsync(It.Is<WorkspaceDeletedEvent>(e => e.WorkspaceId == 9), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(OutboxDispatcher.BatchSize + 5, _store.Rows.Count);
+        Assert.Equal(OutboxDispatcher.BatchSize + 5, dispatcher.UnreadableRows);
+    }
+
+    [Fact]
+    public async Task The_unreadable_count_falls_once_the_rows_are_removed()
+    {
+        _store.Add(new OutboxMessage(typeof(WorkspaceDeletedEvent).FullName!, "not json"));
+        var dispatcher = CreateDispatcher();
+        Assert.True(await dispatcher.DispatchPendingAsync(CancellationToken.None));
+        Assert.Equal(1, dispatcher.UnreadableRows);
+
+        _store.Rows.Clear();
+        Assert.True(await dispatcher.DispatchPendingAsync(CancellationToken.None));
+
+        Assert.Equal(0, dispatcher.UnreadableRows);
+    }
+
+    [Fact]
     public async Task More_than_a_batch_is_sent_in_one_pass()
     {
         for (int i = 0; i < OutboxDispatcher.BatchSize + 3; i++)
@@ -107,8 +139,8 @@ public sealed class OutboxDispatcherTests
 
         public void Add(OutboxMessage message) => Rows.Add(new PendingOutboxMessage(_nextId++, message.MessageType, message.Payload, DateTime.UtcNow));
 
-        public Task<IReadOnlyCollection<PendingOutboxMessage>> GetPendingAsync(int take, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyCollection<PendingOutboxMessage>>(Rows.OrderBy(r => r.Id).Take(take).ToList());
+        public Task<IReadOnlyCollection<PendingOutboxMessage>> GetPendingAsync(int take, long? afterId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyCollection<PendingOutboxMessage>>(Rows.Where(r => afterId is null || r.Id > afterId).OrderBy(r => r.Id).Take(take).ToList());
 
         public Task DeleteAsync(long id, CancellationToken cancellationToken)
         {

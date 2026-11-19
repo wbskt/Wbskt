@@ -60,6 +60,8 @@ public sealed class WorkspaceDeleteOutboxProcedureTests(AuthSqlFixture fixture)
         }
 
         Assert.DoesNotContain(await GetPendingAsync(), p => p.Id == firstId);
+        Assert.DoesNotContain(await GetPendingAsync(afterId: secondId), p => p.Id <= secondId);
+        Assert.Contains(await GetPendingAsync(afterId: secondId - 1), p => p.Id == secondId);
     }
 
     private async Task<int> CreateWorkspaceAsync()
@@ -101,12 +103,13 @@ public sealed class WorkspaceDeleteOutboxProcedureTests(AuthSqlFixture fixture)
         await cmd.ExecuteNonQueryAsync();
     }
 
-    private async Task<List<(long Id, string Payload)>> GetPendingAsync()
+    private async Task<List<(long Id, string Payload)>> GetPendingAsync(long? afterId = null)
     {
         var rows = new List<(long, string)>();
         await using var conn = await OpenAsync();
         await using var cmd = new SqlCommand("dbo.OutboxMessage_GetPending", conn) { CommandType = CommandType.StoredProcedure };
         cmd.Parameters.AddWithValue("@Take", 1000);
+        cmd.Parameters.AddWithValue("@AfterId", (object?)afterId ?? DBNull.Value);
         await using var reader = await cmd.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
