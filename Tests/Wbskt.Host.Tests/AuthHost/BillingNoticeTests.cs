@@ -347,6 +347,29 @@ public sealed class BillingNoticeTests
         Assert.Contains(notice.Paragraphs, p => p.Contains("your contract includes"));
     }
 
+    [Theory]
+    [InlineData(PlanCode.Maker, 80)]
+    [InlineData(PlanCode.Maker, 100)]
+    [InlineData(PlanCode.Business, 80)]
+    [InlineData(PlanCode.Business, 100)]
+    public void A_credit_notice_says_runs_going_stop_once_nothing_is_left(PlanCode plan, int percent)
+    {
+        // #953: a run going stops at its next step when the credits run out; the notices used to speak only of new runs.
+        BillingNotice notice = BillingNotices.CreditAllowance(plan, percent, 25_000m, 25_000m * percent / 100, default, Now);
+
+        Assert.Contains(notice.Paragraphs, p => p.Contains("runs already going stop at their next step"));
+    }
+
+    [Theory]
+    [InlineData(80)]
+    [InlineData(100)]
+    public void A_cap_notice_says_the_workspaces_runs_going_stop_at_the_cap(int percent)
+    {
+        BillingNotice notice = BillingNotices.CreditCap(31, "Lab", percent, 500m, 5m * percent, default, Now);
+
+        Assert.Contains(notice.Paragraphs, p => p.Contains("stop at their next step"));
+    }
+
     [Fact]
     public void The_email_encodes_what_the_tenant_wrote_and_links_to_the_billing_page()
     {

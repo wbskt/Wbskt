@@ -195,8 +195,11 @@ sub-workflow step that starts it, which costs the step's price plus a run's star
 charge, so children started at the edge of a budget or a cap cannot pass it. It spends from its root run's
 budget (`dbo.RunCounters.BudgetRunId`): its charges add to its own `CreditsConsumed`, which is what is
 posted, and to the root's `ChildCreditsConsumed`, and `dbo.RunCounters_TryCharge` holds the root's own
-and its children's charges together to the root's budget. A parent is never failed halfway because the
-month ran out under its child.
+and its children's charges together to the root's budget. When the month runs out (the account's credits,
+or a workspace's cap), a run going stops at its next step that needs a lease extension, whether that is
+its own step or a child's: the child's charge is refused through the root's lease, and the root run ends
+`OutOfCredits` with its children (#953). The allowance and the cap are held exactly; neither is exceeded
+to finish a run.
 
 **Workspace caps.** An owner can hold one workspace to a monthly credit cap
 (`PUT …/workspaces/{workspaceRef}/credit-cap`, `billing.manage`; `dbo.WorkspaceCreditCaps`). Every
