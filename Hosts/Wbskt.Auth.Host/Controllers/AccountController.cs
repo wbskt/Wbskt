@@ -60,9 +60,10 @@ public class AccountController : ApiControllerBase
     /// <remarks>
     /// Needs the password (400 <c>AUTH_CURRENT_PASSWORD_INVALID</c>, counted towards the lockout). The
     /// address does not change until the link is followed (<c>confirm-email-change</c>), within 24 hours.
-    /// An address another account uses is 409 <c>EMAIL_CHANGE_CONFLICT</c>, which says no more than
-    /// that. A new request replaces one still pending. The per-address mail cooldown applies, and a
-    /// request it holds back answers 204 like any other.
+    /// An address another account uses answers 204 like a free one, so this cannot be used to find out
+    /// who is registered: its owner is mailed a notice instead of a link, and nothing starts. A new
+    /// request replaces one still pending. The per-address mail cooldown applies, and a request it
+    /// holds back answers 204 like any other.
     /// </remarks>
     [Authorize]
     [EnableRateLimiting(RateLimitPolicies.Authentication)]

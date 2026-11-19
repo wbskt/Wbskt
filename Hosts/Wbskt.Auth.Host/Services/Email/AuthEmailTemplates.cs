@@ -92,6 +92,23 @@ internal static class AuthEmailTemplates
     }
 
     /// <summary>
+    /// Sent when someone asks to move another account to an address that already has one. The request
+    /// answers as if it had gone ahead, so this goes to the address's owner instead, with no link: they
+    /// asked for nothing, and there is nothing for them to do.
+    /// </summary>
+    public static OutboundMail EmailChangeConflict(AuthEmailOptions options, string to, string username)
+    {
+        return AuthEmailRenderer.Render(options, to, new EmailContent(
+            $"Someone tried to use your address on another {options.ProductName} account",
+            "Nothing about your account has changed.",
+            "Your address is already in use",
+            [
+                new EmailParagraph($"Hello {username} — someone signed in to another {options.ProductName} account just asked to change its email address to this one. This address already belongs to your account, so no change was made."),
+                new EmailNote("Nothing about your account has changed and no action is needed. If you expected this, sign in to the other account with its own address instead.")
+            ]));
+    }
+
+    /// <summary>
     /// Sent to the old address once an email change goes through. The way back when the change was
     /// made with a stolen session, so it names the new address and carries the undo.
     /// </summary>
