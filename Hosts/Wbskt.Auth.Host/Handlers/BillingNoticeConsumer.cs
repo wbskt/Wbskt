@@ -59,7 +59,7 @@ internal sealed class BillingNoticeConsumer(
         WorkspaceMessageLimitApproachingEvent e = context.Message;
         if (await AccountOfAsync(e.WorkspaceId, context.CancellationToken) is { } account)
         {
-            await notifier.NotifyAsync(account.TenantId, BillingNotices.MessagesApproaching(account.PlanCode, e.MessagesPerMonth, e.MessagesUsed, e.CreatedAtUtc), context.CancellationToken);
+            await notifier.NotifyAsync(account.TenantId, BillingNotices.MessagesApproaching(account.PlanCode, e.MessagesPerMonth, e.MessagesUsed, e.ThrottleAt, e.CreatedAtUtc), context.CancellationToken);
         }
     }
 
@@ -68,7 +68,7 @@ internal sealed class BillingNoticeConsumer(
         WorkspaceMessageLimitReachedEvent e = context.Message;
         if (await AccountOfAsync(e.WorkspaceId, context.CancellationToken) is { } account)
         {
-            await notifier.NotifyAsync(account.TenantId, BillingNotices.MessagesReached(account.PlanCode, e.MessagesPerMonth, e.MessagesUsed, e.Throttled, e.CreatedAtUtc), context.CancellationToken);
+            await notifier.NotifyAsync(account.TenantId, BillingNotices.MessagesReached(account.PlanCode, e.MessagesPerMonth, e.MessagesUsed, e.Throttled, e.ThrottleAt, e.CreatedAtUtc), context.CancellationToken);
         }
     }
 

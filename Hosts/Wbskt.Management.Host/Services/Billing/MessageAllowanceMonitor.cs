@@ -65,7 +65,7 @@ public sealed class MessageAllowanceMonitor(
         {
             logger.LogInformation("Workspace {WorkspaceId} has carried {Used} of its plan's {Limit} messages this month.",
                 usage.Account.WorkspaceId, usage.Used, usage.Allowance);
-            await AnnounceAsync(new WorkspaceMessageLimitApproachingEvent(usage.Account.WorkspaceId, usage.Allowance, usage.Used), usage.Allowance, monthStart, WarningPercent, ct);
+            await AnnounceAsync(new WorkspaceMessageLimitApproachingEvent(usage.Account.WorkspaceId, usage.Allowance, usage.Used) { ThrottleAt = (long?)usage.ThrottleAt }, usage.Allowance, monthStart, WarningPercent, ct);
         }
 
         IReadOnlyCollection<int> newlyReached = await RecordAsync(reached, monthStart, ReachedPercent, ct);
@@ -73,7 +73,7 @@ public sealed class MessageAllowanceMonitor(
         {
             logger.LogInformation("Workspace {WorkspaceId} reached its plan's {Limit} messages this month ({Used}); throttled: {Throttled}.",
                 usage.Account.WorkspaceId, usage.Allowance, usage.Used, usage.IsThrottled);
-            await AnnounceAsync(new WorkspaceMessageLimitReachedEvent(usage.Account.WorkspaceId, usage.Allowance, usage.Used, usage.IsThrottled), usage.Allowance, monthStart, ReachedPercent, ct);
+            await AnnounceAsync(new WorkspaceMessageLimitReachedEvent(usage.Account.WorkspaceId, usage.Allowance, usage.Used, usage.IsThrottled) { ThrottleAt = (long?)usage.ThrottleAt }, usage.Allowance, monthStart, ReachedPercent, ct);
         }
 
         // A Free account's throttle starts at its allowance and is announced with it above.

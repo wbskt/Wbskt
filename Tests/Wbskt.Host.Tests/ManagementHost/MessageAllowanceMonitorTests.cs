@@ -63,10 +63,10 @@ public sealed class MessageAllowanceMonitorTests
         Assert.Equal(
             new IEvent[]
             {
-                new WorkspaceMessageLimitApproachingEvent(2, Free, Free - 1),
-                new WorkspaceMessageLimitReachedEvent(1, Free, Free, true),
-                new WorkspaceMessageLimitReachedEvent(3, Maker, Maker * 3 / 2, false),
-                new WorkspaceMessageLimitReachedEvent(4, Maker, Maker * 2, true),
+                new WorkspaceMessageLimitApproachingEvent(2, Free, Free - 1) { ThrottleAt = Free },
+                new WorkspaceMessageLimitReachedEvent(1, Free, Free, true) { ThrottleAt = Free },
+                new WorkspaceMessageLimitReachedEvent(3, Maker, Maker * 3 / 2, false) { ThrottleAt = Maker * 2 },
+                new WorkspaceMessageLimitReachedEvent(4, Maker, Maker * 2, true) { ThrottleAt = Maker * 2 },
                 new WorkspaceMessagesThrottledEvent(4, Maker, Maker * 2, Maker * 2)
             }.Select(Undated),
             _events.Select(Undated));
