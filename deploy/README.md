@@ -1068,6 +1068,17 @@ sudo du -sh "$BACKUP_DIR" /var/log/journal    # local backups and the systemd jo
 sudo journalctl --vacuum-size=200M
 ```
 
+If `sql-data` is the large volume, check the transaction logs:
+
+```bash
+docker exec wbskt-sql bash -c '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -W -Q "SELECT DB_NAME(database_id) AS db, type_desc, size/128 AS mb FROM sys.master_files ORDER BY size DESC; SELECT name, recovery_model_desc, log_reuse_wait_desc FROM sys.databases"'
+```
+
+Both databases use `SIMPLE` recovery (set in their `.sqlproj`), because `backup.sh` takes only full
+backups. Under `FULL` with no `BACKUP LOG`, a log waits on `LOG_BACKUP` and grows forever; in
+November 2026 that reached 10 GB of a 29 GB disk (#1045). A log that grew before the switch keeps its
+size until it is shrunk once: `USE [<db>]; CHECKPOINT; DBCC SHRINKFILE (2, 512);`.
+
 Do not run `docker system prune --volumes` or `docker volume prune`: the SQL Server, RabbitMQ and
 Grafana data live in named volumes. If the disk is simply too small for the stack plus two
 releases of images and `BACKUP_RETENTION_DAYS` of backups, grow it (the OS disk on Azure can be

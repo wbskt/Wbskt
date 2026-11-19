@@ -5,6 +5,8 @@
         <SqlServerVersion>Sql150</SqlServerVersion>
         <IncludeCompositeObjects>true</IncludeCompositeObjects>
         <EnableDefaultSqlItems>false</EnableDefaultSqlItems>
+        <!-- backup.sh takes full backups only, never BACKUP LOG, so FULL recovery grew the log forever (#1045). -->
+        <Recovery>SIMPLE</Recovery>
     </PropertyGroup>
 
     <ItemGroup>
