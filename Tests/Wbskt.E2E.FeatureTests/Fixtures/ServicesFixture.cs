@@ -411,8 +411,15 @@ public sealed class ServicesFixture : IDisposable
         var username = $"e2e-{suffix}";
 
         var token = await InviteAsync(adminToken, tenantRef, email);
+        var member = await RegisterAndLoginAsync(username, email, password, token);
 
-        return await RegisterAndLoginAsync(username, email, password, token);
+        // An invitation that names no role joins with the tenant's User role (#1004). Scenarios built on
+        // this member grant exactly what they test, so it starts from no role at all.
+        var userRole = (await GetRolesAsync(adminToken, tenantRef)).Single(r => r.Name == "User");
+        var memberRef = (await FindTenantMemberRefAsync(adminToken, tenantRef, email))!.Value;
+        await Auth.As(adminToken).RemoveMemberRoleAsync(tenantRef, memberRef, userRole.RefId);
+
+        return member;
     }
 
     /// <summary>Issues an invitation and returns its raw token — the only time it is available.</summary>

@@ -131,8 +131,9 @@ with extra steps. It also explains the separate controller: everything under
 `api/v1/tenants/{tenantRef}` resolves the tenant from the route, and discovering which tenant the token
 belongs to is this call's purpose, so it cannot also be its precondition.
 
-Redemption marks the invitation accepted, inserts the membership, and — if the invitation named a
-role — grants it **tenant-wide**. That is the tenant's answer to "what can a new member do";
+Redemption marks the invitation accepted, inserts the membership, and grants the invitation's role
+**tenant-wide**: the one it named, or the tenant's `User` role when it named none, so a new member
+can read any workspace they are added to. That is the tenant's answer to "what can a new member do";
 narrowing it to one workspace is a later, explicit act. The access change is then announced
 (`TenantAnnouncer.AccessChanged`), so anything caching the user's effective set drops it.
 
@@ -228,7 +229,8 @@ displays the permission graph does not need the right to rewrite it.
 `roleRef` grants it on acceptance, and adding someone to a group that carries roles (its own or any
 parent group's) grants them as well. Removing someone from such a group, or deleting it, takes the
 roles away, a deny included. Each of these needs `roles.manage` tenant-wide on top of the
-`users.manage` its endpoint declares; without it the answer is 403 `PERMISSION_UNAUTHORIZED`.
+`users.manage` its endpoint declares; without it the answer is 403 `PERMISSION_UNAUTHORIZED`. The
+exception is an invitation naming the `User` role, which grants no more than naming none does.
 Otherwise someone given `users.manage` to invite people could invite a second address of their own as
 `Admin`, or join the group that holds it, and end up with every permission. (Creating a workspace is
 the one grant without it: the creator gets `Admin` in that workspace, as below.) Removing or suspending a

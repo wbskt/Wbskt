@@ -15,6 +15,9 @@ internal interface IAccessControlProvider
     Task<int> FindRoleIdByRefIdAsync(Guid roleRef, int tenantId, CancellationToken cancellationToken = default);
     Task<int> FindGroupIdByRefIdAsync(Guid groupRef, int tenantId, CancellationToken cancellationToken = default);
 
+    /// <summary>The tenant's built-in User role, or null for a tenant without one.</summary>
+    Task<int?> FindUserRoleIdAsync(int tenantId, CancellationToken cancellationToken = default);
+
     Task<bool> VerifyPermissionAsync(int userId, int tenantId, int? workspaceId, string permissionSlug, CancellationToken cancellationToken = default);
 
     Task<IPagedList<PermissionResponse>> GetPermissionsAsync(int skip, int take, CancellationToken cancellationToken = default);

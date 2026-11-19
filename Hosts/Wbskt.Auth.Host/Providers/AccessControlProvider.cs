@@ -19,6 +19,11 @@ internal sealed class AccessControlProvider : BaseSqlProvider, IAccessControlPro
         }, cancellationToken);
     }
 
+    public async Task<int?> FindUserRoleIdAsync(int tenantId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteScalarAsync<int?>("dbo.Role_FindBy_UserKind", p => p.AddWithValue("@TenantId", tenantId), cancellationToken);
+    }
+
     public async Task<int> FindGroupIdByRefIdAsync(Guid groupRef, int tenantId, CancellationToken cancellationToken = default)
     {
         return await ExecuteScalarAsync<int>("dbo.Group_FindBy_RefId", p =>

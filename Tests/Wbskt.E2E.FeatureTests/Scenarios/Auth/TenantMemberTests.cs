@@ -787,6 +787,29 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         withRole.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await ServicesFixture.ReadErrorCodeAsync(withRole)).Should().Be("PERMISSION_UNAUTHORIZED");
         withoutRole.IsSuccessStatusCode.Should().BeTrue("inviting without a role needs only users.manage");
+
+        // Naming the User role is the same as naming none, so users.manage is enough for it too.
+        var userRole = (await fixture.GetRolesAsync(admin.Token, tenantRef)).Single(r => r.Name == "User");
+        var (_, thirdAddress, _) = ServicesFixture.NewCredentials();
+        var namingUser = await fixture.Auth.As(lead.Token).CreateInvitationRawAsync(tenantRef, new CreateInvitationRequest(thirdAddress, userRole.RefId));
+        namingUser.IsSuccessStatusCode.Should().BeTrue("the User role is what an invitation naming none grants");
+    }
+
+    [SkippableFact]
+    public async Task MEM_41_AnInvitationNamingNoRole_JoinsWithTheUserRole()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var (username, email, password) = ServicesFixture.NewCredentials();
+        var token = await fixture.InviteAsync(admin.Token, tenantRef, email);
+        await fixture.Auth.RegisterAsync(new RegisterRequest(username, email, password, token));
+
+        var memberRef = (await fixture.FindTenantMemberRefAsync(admin.Token, tenantRef, email))!.Value;
+        var roles = await fixture.Auth.As(admin.Token).GetMemberRolesAsync(tenantRef, memberRef);
+
+        roles.Should().ContainSingle("a member who joins with no role could not open a workspace they are added to")
+            .Which.Should().Match<RoleAssignmentResponse>(r => r.RoleName == "User" && r.WorkspaceRef == null);
     }
 
     [SkippableFact]
