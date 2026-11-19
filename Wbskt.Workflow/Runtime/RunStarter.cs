@@ -92,7 +92,7 @@ internal sealed class RunStarter : IRunStarter
             // month's credits and the workspace cap; a replay or a replacement run is new work.
             PlanCredits? credits = parentRunRefId is null ? plan.Credits : null;
 
-            // A sub-workflow child's start was paid by its parent's step (DefaultCreditCostCalculator).
+            // A sub-workflow child's start was paid by its parent's step (SubWorkflowNodeExecutor), which gives it back when no child starts.
             decimal startCost = parentRunRefId is null ? _runStartCost : 0m;
 
             // In practice the dispatcher has always set this by now - it normalizes the event per
