@@ -22,15 +22,6 @@ public sealed class ClientReadingRetentionService : PeriodicWorker
 
     public ClientReadingRetentionService(
         IServiceScopeFactory scopeFactory,
-        IOptions<ReadingsOptions> options,
-        PlanCatalog catalog,
-        ILogger<ClientReadingRetentionService> logger)
-        : this(scopeFactory, TimeProvider.System, options, catalog, logger)
-    {
-    }
-
-    internal ClientReadingRetentionService(
-        IServiceScopeFactory scopeFactory,
         TimeProvider timeProvider,
         IOptions<ReadingsOptions> options,
         PlanCatalog catalog,

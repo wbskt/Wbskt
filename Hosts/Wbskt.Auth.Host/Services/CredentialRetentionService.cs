@@ -23,12 +23,7 @@ public sealed class CredentialRetentionService : PeriodicWorker
 
     private readonly TimeProvider _timeProvider;
 
-    public CredentialRetentionService(IServiceScopeFactory scopeFactory, ILogger<CredentialRetentionService> logger)
-        : this(scopeFactory, TimeProvider.System, logger)
-    {
-    }
-
-    internal CredentialRetentionService(IServiceScopeFactory scopeFactory, TimeProvider timeProvider, ILogger<CredentialRetentionService> logger)
+    public CredentialRetentionService(IServiceScopeFactory scopeFactory, TimeProvider timeProvider, ILogger<CredentialRetentionService> logger)
         : base(AlwaysOpenWorkGate.Instance, scopeFactory, logger, timeProvider)
     {
         _timeProvider = timeProvider;

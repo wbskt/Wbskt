@@ -41,11 +41,12 @@ public sealed class WorkspaceFreezer
         IEventBus eventBus,
         IWorkflowEngineGateway engine,
         IClientTokenCutoffs cutoffs,
-        ILogger<WorkspaceFreezer> logger)
+        ILogger<WorkspaceFreezer> logger,
+        TimeProvider time)
     {
         _accounts = accounts;
         _provider = provider;
-        _access = new ClientAccessRevoker(eventBus, cutoffs);
+        _access = new ClientAccessRevoker(eventBus, cutoffs, time);
         _engine = engine;
         _logger = logger;
     }

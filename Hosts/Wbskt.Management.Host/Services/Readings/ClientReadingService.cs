@@ -37,11 +37,7 @@ public sealed class ClientReadingService : IClientReadingService
     private readonly IClientReadingProvider _provider;
     private readonly TimeProvider _timeProvider;
 
-    public ClientReadingService(IClientReadingProvider provider) : this(provider, TimeProvider.System)
-    {
-    }
-
-    internal ClientReadingService(IClientReadingProvider provider, TimeProvider timeProvider)
+    public ClientReadingService(IClientReadingProvider provider, TimeProvider timeProvider)
     {
         _provider = provider;
         _timeProvider = timeProvider;

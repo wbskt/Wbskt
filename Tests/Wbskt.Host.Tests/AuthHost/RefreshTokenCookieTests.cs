@@ -116,7 +116,8 @@ public sealed class RefreshTokenCookieTests
             Options.Create(new RefreshCookieOptions { SameSite = sameSite }),
             Options.Create(new AccessTokenOptions()),
             new ConfigurationBuilder().AddInMemoryCollection(settings).Build(),
-            environment.Object);
+            environment.Object,
+            TimeProvider.System);
     }
 
     private static HttpRequest Request(bool header, string? origin)

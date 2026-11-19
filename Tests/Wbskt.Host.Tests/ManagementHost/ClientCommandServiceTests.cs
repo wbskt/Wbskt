@@ -36,7 +36,7 @@ public sealed class ClientCommandServiceTests
     private readonly ManagementMetrics _metrics = new();
 
     private ClientCommandService Service =>
-        new(_clients.Object, TestClientCommands.Sender(_targets.Object, _bus.Object, _queue, options: _options), _queue, _bus.Object, Options.Create(_options), NullLogger<ClientCommandService>.Instance, _metrics);
+        new(_clients.Object, TestClientCommands.Sender(_targets.Object, _bus.Object, _queue, options: _options), _queue, _bus.Object, Options.Create(_options), NullLogger<ClientCommandService>.Instance, _metrics, TimeProvider.System);
 
     private void InWorkspace(int clientId) =>
         _clients.Setup(c => c.EnsureClientInWorkspaceAsync(WorkspaceId, ClientRef, It.IsAny<CancellationToken>())).ReturnsAsync(Result<int>.Success(clientId));

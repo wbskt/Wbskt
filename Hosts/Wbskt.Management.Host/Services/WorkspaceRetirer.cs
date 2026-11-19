@@ -46,10 +46,11 @@ public sealed class WorkspaceRetirer
         IEventBus eventBus,
         IWorkflowEngineGateway engine,
         IClientTokenCutoffs cutoffs,
-        ILogger<WorkspaceRetirer> logger)
+        ILogger<WorkspaceRetirer> logger,
+        TimeProvider time)
     {
         _provider = provider;
-        _access = new ClientAccessRevoker(eventBus, cutoffs);
+        _access = new ClientAccessRevoker(eventBus, cutoffs, time);
         _engine = engine;
         _eventBus = eventBus;
         _logger = logger;

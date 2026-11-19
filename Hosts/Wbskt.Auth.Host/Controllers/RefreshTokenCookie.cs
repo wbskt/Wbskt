@@ -44,9 +44,11 @@ public sealed class RefreshTokenCookie
     private readonly TimeSpan _lifetime;
     private readonly string[] _allowedOrigins;
     private readonly bool _anyOrigin;
+    private readonly TimeProvider _time;
 
-    public RefreshTokenCookie(IOptions<RefreshCookieOptions> options, IOptions<AccessTokenOptions> tokens, IConfiguration configuration, IHostEnvironment environment)
+    public RefreshTokenCookie(IOptions<RefreshCookieOptions> options, IOptions<AccessTokenOptions> tokens, IConfiguration configuration, IHostEnvironment environment, TimeProvider time)
     {
+        _time = time;
         _options = options.Value;
         _lifetime = tokens.Value.RefreshTokenLifetime;
         _allowedOrigins = configuration.GetCorsAllowedOrigins();
@@ -65,7 +67,7 @@ public sealed class RefreshTokenCookie
             : null;
 
     public void Write(HttpResponse response, string token) =>
-        response.Cookies.Append(_options.Name, token, CookieOptions(DateTimeOffset.UtcNow.Add(_lifetime)));
+        response.Cookies.Append(_options.Name, token, CookieOptions(_time.GetUtcNow().Add(_lifetime)));
 
     public void Clear(HttpResponse response) =>
         response.Cookies.Delete(_options.Name, CookieOptions(expires: null));
