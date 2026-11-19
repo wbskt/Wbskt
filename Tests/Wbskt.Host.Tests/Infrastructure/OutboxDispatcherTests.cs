@@ -26,7 +26,7 @@ public sealed class OutboxDispatcherTests
         bool ok = await CreateDispatcher().DispatchPendingAsync(CancellationToken.None);
 
         Assert.True(ok);
-        _bus.Verify(x => x.PublishAsync(deleted, It.IsAny<CancellationToken>()), Times.Once);
+        _bus.Verify(x => x.PublishAsync<IEvent>(deleted, It.IsAny<CancellationToken>()), Times.Once);
         Assert.Empty(_store.Rows);
     }
 
@@ -35,14 +35,14 @@ public sealed class OutboxDispatcherTests
     {
         _store.Add(OutboxMessage.Create(new WorkspaceDeletedEvent(1, 42)));
         _store.Add(OutboxMessage.Create(new WorkspaceDeletedEvent(2, 42)));
-        _bus.Setup(x => x.PublishAsync(It.IsAny<WorkspaceDeletedEvent>(), It.IsAny<CancellationToken>()))
+        _bus.Setup(x => x.PublishAsync<IEvent>(It.IsAny<WorkspaceDeletedEvent>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("broker unavailable"));
 
         bool ok = await CreateDispatcher().DispatchPendingAsync(CancellationToken.None);
 
         Assert.False(ok);
         Assert.Equal(2, _store.Rows.Count);
-        _bus.Verify(x => x.PublishAsync(It.IsAny<WorkspaceDeletedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _bus.Verify(x => x.PublishAsync<IEvent>(It.IsAny<WorkspaceDeletedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -55,7 +55,7 @@ public sealed class OutboxDispatcherTests
         Assert.True(await dispatcher.DispatchPendingAsync(CancellationToken.None));
         Assert.True(await dispatcher.DispatchPendingAsync(CancellationToken.None));
 
-        _bus.Verify(x => x.PublishAsync(It.Is<WorkspaceDeletedEvent>(e => e.WorkspaceId == 3), It.IsAny<CancellationToken>()), Times.Once);
+        _bus.Verify(x => x.PublishAsync<IEvent>(It.Is<WorkspaceDeletedEvent>(e => e.WorkspaceId == 3), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal("Wbskt.Events.Auth.SomethingFromANewerVersion", Assert.Single(_store.Rows).MessageType);
     }
 
@@ -83,7 +83,7 @@ public sealed class OutboxDispatcherTests
 
         Assert.True(await dispatcher.DispatchPendingAsync(CancellationToken.None));
 
-        _bus.Verify(x => x.PublishAsync(It.Is<WorkspaceDeletedEvent>(e => e.WorkspaceId == 9), It.IsAny<CancellationToken>()), Times.Once);
+        _bus.Verify(x => x.PublishAsync<IEvent>(It.Is<WorkspaceDeletedEvent>(e => e.WorkspaceId == 9), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(OutboxDispatcher.BatchSize + 5, _store.Rows.Count);
         Assert.Equal(OutboxDispatcher.BatchSize + 5, dispatcher.UnreadableRows);
     }
@@ -113,15 +113,15 @@ public sealed class OutboxDispatcherTests
         Assert.True(await CreateDispatcher().DispatchPendingAsync(CancellationToken.None));
 
         Assert.Empty(_store.Rows);
-        _bus.Verify(x => x.PublishAsync(It.IsAny<WorkspaceDeletedEvent>(), It.IsAny<CancellationToken>()), Times.Exactly(OutboxDispatcher.BatchSize + 3));
+        _bus.Verify(x => x.PublishAsync<IEvent>(It.IsAny<WorkspaceDeletedEvent>(), It.IsAny<CancellationToken>()), Times.Exactly(OutboxDispatcher.BatchSize + 3));
     }
 
     [Fact]
     public async Task Events_are_sent_oldest_first()
     {
         var sent = new List<int>();
-        _bus.Setup(x => x.PublishAsync(It.IsAny<WorkspaceDeletedEvent>(), It.IsAny<CancellationToken>()))
-            .Callback<WorkspaceDeletedEvent, CancellationToken>((e, _) => sent.Add(e.WorkspaceId))
+        _bus.Setup(x => x.PublishAsync<IEvent>(It.IsAny<WorkspaceDeletedEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<IEvent, CancellationToken>((e, _) => sent.Add(((WorkspaceDeletedEvent)e).WorkspaceId))
             .Returns(Task.CompletedTask);
         _store.Add(OutboxMessage.Create(new WorkspaceDeletedEvent(1, 42)));
         _store.Add(OutboxMessage.Create(new WorkspaceDeletedEvent(2, 42)));

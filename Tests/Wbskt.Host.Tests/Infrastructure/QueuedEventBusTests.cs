@@ -34,7 +34,7 @@ public sealed class QueuedEventBusTests
         var bus = new Mock<IEventBus>();
         var delivered = new TaskCompletionSource();
         var attempts = 0;
-        bus.Setup(b => b.PublishAsync(It.IsAny<TokenRotatedEvent>(), It.IsAny<CancellationToken>()))
+        bus.Setup(b => b.PublishAsync<IEvent>(It.IsAny<TokenRotatedEvent>(), It.IsAny<CancellationToken>()))
             .Returns(() =>
             {
                 if (++attempts < 3)
@@ -63,7 +63,7 @@ public sealed class QueuedEventBusTests
         var queue = new QueuedEventBus(NullLogger<QueuedEventBus>.Instance);
         var order = new List<string>();
         var bus = new Mock<IEventBus>();
-        bus.Setup(b => b.PublishAsync(It.IsAny<TokenRotatedEvent>(), It.IsAny<CancellationToken>()))
+        bus.Setup(b => b.PublishAsync<IEvent>(It.IsAny<TokenRotatedEvent>(), It.IsAny<CancellationToken>()))
             .Callback(() => order.Add("event"))
             .Returns(Task.CompletedTask);
         var commands = new Mock<ICommandSender>();
@@ -100,9 +100,9 @@ public sealed class QueuedEventBusTests
         var queue = new QueuedEventBus(NullLogger<QueuedEventBus>.Instance);
         var bus = new Mock<IEventBus>();
         var delivered = new TaskCompletionSource();
-        bus.Setup(b => b.PublishAsync(It.IsAny<UserLoginFailedEvent>(), It.IsAny<CancellationToken>()))
+        bus.Setup(b => b.PublishAsync<IEvent>(It.IsAny<UserLoginFailedEvent>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("cannot be serialized"));
-        bus.Setup(b => b.PublishAsync(It.IsAny<TokenRotatedEvent>(), It.IsAny<CancellationToken>()))
+        bus.Setup(b => b.PublishAsync<IEvent>(It.IsAny<TokenRotatedEvent>(), It.IsAny<CancellationToken>()))
             .Callback(() => delivered.TrySetResult())
             .Returns(Task.CompletedTask);
 
@@ -116,8 +116,8 @@ public sealed class QueuedEventBusTests
         await dispatcher.StopAsync(CancellationToken.None);
 
         // The first attempt plus one per retry delay, then it is dropped.
-        bus.Verify(b => b.PublishAsync(It.IsAny<UserLoginFailedEvent>(), It.IsAny<CancellationToken>()), Times.Exactly(FastRetries.Length + 1));
-        bus.Verify(b => b.PublishAsync(It.IsAny<TokenRotatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        bus.Verify(b => b.PublishAsync<IEvent>(It.IsAny<UserLoginFailedEvent>(), It.IsAny<CancellationToken>()), Times.Exactly(FastRetries.Length + 1));
+        bus.Verify(b => b.PublishAsync<IEvent>(It.IsAny<TokenRotatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -126,7 +126,7 @@ public sealed class QueuedEventBusTests
         var queue = new QueuedEventBus(NullLogger<QueuedEventBus>.Instance);
         var bus = new Mock<IEventBus>();
         var running = new TaskCompletionSource();
-        bus.Setup(b => b.PublishAsync(It.IsAny<UserLoginSuccessEvent>(), It.IsAny<CancellationToken>()))
+        bus.Setup(b => b.PublishAsync<IEvent>(It.IsAny<UserLoginSuccessEvent>(), It.IsAny<CancellationToken>()))
             .Callback(() => running.TrySetResult())
             .Returns(Task.CompletedTask);
         var dispatcher = new QueuedEventDispatcher(queue, bus.Object, NullLogger<QueuedEventDispatcher>.Instance);
@@ -142,7 +142,7 @@ public sealed class QueuedEventBusTests
         await queue.PublishAsync(new TokenRotatedEvent(2, Guid.NewGuid(), "10.0.0.1"));
         await dispatcher.StopAsync(CancellationToken.None);
 
-        bus.Verify(b => b.PublishAsync(It.IsAny<TokenRotatedEvent>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+        bus.Verify(b => b.PublishAsync<IEvent>(It.IsAny<TokenRotatedEvent>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
     [Fact]
     public void A_service_with_no_place_for_the_queued_bus_is_refused_at_registration()

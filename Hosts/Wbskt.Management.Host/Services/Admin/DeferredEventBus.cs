@@ -20,7 +20,6 @@ internal sealed class DeferredEventBus : IEventBus
             actorEvent.ActorSource = EventSource.Support;
         }
 
-        // Kept as a typed call: the bus routes on the event's static type.
         _held.Add((bus, token) => bus.PublishAsync(@event, token));
         return Task.CompletedTask;
     }

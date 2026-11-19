@@ -64,7 +64,7 @@ public sealed class SocketHostPresenceSnapshotHandler : IConsumer<SocketHostPres
             try
             {
                 // Dated as the database recorded the change, so presence and the engine's checks see the same
-                // moment. Published by its own type: the bus routes on the static type.
+                // moment.
                 if (client.Connected)
                 {
                     var connected = new ClientConnectedEvent(client.ClientRefId, client.ClientId, client.WorkspaceId, snapshot.HostId, IsRestored: true) { CreatedAtUtc = client.ChangedAt };
