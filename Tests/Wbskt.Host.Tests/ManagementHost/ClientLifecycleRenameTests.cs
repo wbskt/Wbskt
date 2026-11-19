@@ -85,6 +85,19 @@ public sealed class ClientLifecycleRenameTests
     }
 
     [Fact]
+    public async Task A_status_the_protocol_does_not_define_is_refused_before_anything_changes()
+    {
+        var (service, provider, _) = CreateService(CreateClient());
+
+        var single = await service.UpdateStatusAsync(WorkspaceId, ClientRefId, (Wbskt.Protocol.ClientStatus)7);
+        var bulk = await service.UpdateStatusesAsync(WorkspaceId, [ClientRefId], (Wbskt.Protocol.ClientStatus)7);
+
+        single.Error.Code.Should().Be("CLIENT_STATUS_INVALID");
+        bulk.Error.Code.Should().Be("CLIENT_STATUS_INVALID");
+        provider.Verify(x => x.UpdateStatusesAsync(It.IsAny<int>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<Wbskt.Protocol.ClientStatus>(), It.IsAny<Wbskt.Models.Billing.PlanCeiling>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task EnsureClientInWorkspace_returns_the_internal_id_when_owned()
     {
         var service = CreateQueries(CreateDetail());
