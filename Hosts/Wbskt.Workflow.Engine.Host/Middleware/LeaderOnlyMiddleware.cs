@@ -1,5 +1,5 @@
 using Wbskt.Infrastructure;
-using Wbskt.Workflow.Engine;
+using Wbskt.Workflow.Abstraction.Engine;
 
 namespace Wbskt.Workflow.Engine.Host.Middleware;
 
@@ -9,11 +9,12 @@ namespace Wbskt.Workflow.Engine.Host.Middleware;
 // backend network that bypasses the proxy.
 public sealed class LeaderOnlyMiddleware(RequestDelegate next)
 {
-    public async Task InvokeAsync(HttpContext context, LeadershipState leadershipState)
+    public async Task InvokeAsync(HttpContext context, ILeadershipGate leadershipGate)
     {
-        // Gate on the same signal as /healthz/ready: a "leader" whose bus never finished starting
-        // can't actually publish outbound events for a trigger it accepts, so it must not accept one.
-        bool canServeInbound = leadershipState.IsLeader && leadershipState.BusStarted;
+        // The same gate the periodic work and /healthz/ready use: a "leader" whose bus never finished
+        // starting can't publish outbound events for a trigger it accepts, and one whose lease is inside
+        // its safety margin may be replaced before the trigger's run is under way.
+        bool canServeInbound = leadershipGate.IsActive;
         bool isInboundEndpoint = context.GetEndpoint()?.Metadata.GetMetadata<InboundEndpointAttribute>() != null;
         if (isInboundEndpoint && !canServeInbound)
         {

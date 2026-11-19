@@ -25,6 +25,7 @@ public sealed class LeaderElectionService : BackgroundService
     private readonly ILogger<LeaderElectionService> _logger;
     private readonly TimeSpan _renewInterval;
     private readonly TimeSpan _leaseTtl;
+    private Task? _marginWatch;
 
     public LeaderElectionService(
         IServiceScopeFactory scopeFactory,
@@ -92,10 +93,13 @@ public sealed class LeaderElectionService : BackgroundService
             await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
             var leaseProvider = scope.ServiceProvider.GetRequiredService<ILeaseProvider>();
 
+            // Read before the call: the row's lease runs from when the database wrote it, which is no
+            // later than now, so a lease counted from after the call could outlive the row's.
+            DateTime requestedAtUtc = _clock.GetUtcNow().UtcDateTime;
             bool acquired = await leaseProvider.TryAcquireAsync(EngineLeaderLease, _hostIdentity.HostId, _leaseTtl, ct);
             if (acquired)
             {
-                _leadershipState.SetLeader(_clock.GetUtcNow().UtcDateTime.Add(_leaseTtl));
+                _leadershipState.SetLeader(requestedAtUtc.Add(_leaseTtl));
                 return;
             }
 
@@ -113,6 +117,11 @@ public sealed class LeaderElectionService : BackgroundService
             if (_leadershipState.HoldsLeaseAt(_clock.GetUtcNow().UtcDateTime))
             {
                 _logger.LogWarning(ex, "Failed to renew the engine-leader lease; keeping the role until it expires and retrying.");
+                if (_marginWatch is null || _marginWatch.IsCompleted)
+                {
+                    _marginWatch = StopAtMarginUnlessRenewedAsync(ct);
+                }
+
                 return;
             }
 
@@ -125,6 +134,40 @@ public sealed class LeaderElectionService : BackgroundService
 
             _logger.LogWarning(ex, "Failed to acquire the engine-leader lease; will retry.");
         }
+    }
+
+    /// <summary>
+    /// After a failed renewal, waits until the gate closes and stops the process then if no renewal has
+    /// succeeded meanwhile. Waiting for the next tick instead kept the bus consuming past the margin, up
+    /// to a whole renew interval, while a standby could already be taking the lease.
+    /// </summary>
+    private async Task StopAtMarginUnlessRenewedAsync(CancellationToken stoppingToken)
+    {
+        DateTime stopAtUtc = _leadershipState.WorkStopsAtUtc;
+        try
+        {
+            // A timer can wake a little before the wall clock reaches the margin, so wait out what is
+            // left rather than reading an early wake as the lease still being held.
+            for (TimeSpan left = stopAtUtc - _clock.GetUtcNow().UtcDateTime; left > TimeSpan.Zero; left = stopAtUtc - _clock.GetUtcNow().UtcDateTime)
+            {
+                await Task.Delay(left, _clock, stoppingToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The service is stopping; the lease is released on the way down.
+            return;
+        }
+
+        // Renewed while waiting (the margin moved), or no longer leading: a later failed renewal starts
+        // another wait.
+        if (_leadershipState.WorkStopsAtUtc != stopAtUtc || !_leadershipState.IsLeader)
+        {
+            return;
+        }
+
+        _logger.LogCritical("Could not renew the engine-leader lease before its safety margin; stopping so this instance rejoins as standby.");
+        _appLifetime.StopApplication();
     }
 
     private void HandleLostOrDeniedLease()

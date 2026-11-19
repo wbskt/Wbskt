@@ -1,7 +1,7 @@
 namespace Wbskt.Workflow.Engine;
 
 // Singleton, updated only by LeaderElectionService (single writer) and read by LeadershipGate,
-// EngineLeadershipCoordinator, LeaderOnlyMiddleware and the /healthz/ready endpoint. Keeping
+// EngineLeadershipCoordinator and the leadership health check. Keeping
 // leadership as in-memory state means those readers never need a DB round trip per check.
 public sealed class LeadershipState
 {
@@ -17,12 +17,15 @@ public sealed class LeadershipState
     public bool BusStarted => _busStarted;
     public DateTime LeaseValidUntilUtc => _leaseValidUntilUtc;
 
+    // The moment the gate closes: the lease's end less the safety margin.
+    public DateTime WorkStopsAtUtc => _leaseValidUntilUtc - SafetyMargin;
+
     // Completes the first time this instance becomes leader; EngineLeadershipCoordinator awaits
     // it once to know when to start the bus and run recovery.
     public Task WhenLeaderAsync() => _becameLeaderTcs.Task;
 
     // True while this instance leads and its lease has more than the safety margin left at nowUtc.
-    public bool HoldsLeaseAt(DateTime nowUtc) => _isLeader && nowUtc < _leaseValidUntilUtc - SafetyMargin;
+    public bool HoldsLeaseAt(DateTime nowUtc) => _isLeader && nowUtc < WorkStopsAtUtc;
 
     public void SetLeader(DateTime leaseValidUntilUtc)
     {

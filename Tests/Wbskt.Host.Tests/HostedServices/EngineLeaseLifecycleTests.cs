@@ -217,7 +217,27 @@ public sealed class EngineLeaseLifecycleTests
         Assert.Equal(["woken-read", "claims-released", "bus-started", "dispatch-81"], steps);
     }
 
-    private static LeaderElectionService CreateElectionService(ILeaseProvider lease, LeadershipState state, IHostApplicationLifetime? lifetime = null) =>
+    [Fact]
+    public async Task A_leader_whose_renewal_failed_stops_at_the_safety_margin_without_waiting_for_the_next_tick()
+    {
+        // Margin is 5 s, so the gate closes a second from now; the next renewal is an hour away.
+        var state = new LeadershipState();
+        state.SetLeader(DateTime.UtcNow.AddSeconds(6));
+        var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var lifetime = new Mock<IHostApplicationLifetime>();
+        lifetime.Setup(l => l.StopApplication()).Callback(() => stopped.TrySetResult());
+        (Mock<ILeaseProvider> lease, Task attempted) = ThrowingLease();
+        var service = CreateElectionService(lease.Object, state, lifetime.Object, renewInterval: TimeSpan.FromHours(1));
+
+        await service.StartAsync(CancellationToken.None);
+        await attempted.WaitAsync(TimeSpan.FromSeconds(5));
+        await stopped.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await service.StopAsync(CancellationToken.None);
+
+        lifetime.Verify(l => l.StopApplication(), Times.Once);
+    }
+
+    private static LeaderElectionService CreateElectionService(ILeaseProvider lease, LeadershipState state, IHostApplicationLifetime? lifetime = null, TimeSpan? renewInterval = null) =>
         new(
             WorkerTestServices.Scopes(lease),
             new FixedHostIdentity(),
@@ -225,7 +245,7 @@ public sealed class EngineLeaseLifecycleTests
             TimeProvider.System,
             lifetime ?? Mock.Of<IHostApplicationLifetime>(),
             NullLogger<LeaderElectionService>.Instance,
-            WorkerTestServices.Options(new WorkflowEngineOptions { LeaderElectionRenewInterval = TimeSpan.FromMilliseconds(50) }));
+            WorkerTestServices.Options(new WorkflowEngineOptions { LeaderElectionRenewInterval = renewInterval ?? TimeSpan.FromMilliseconds(50) }));
 
     private static (Mock<ILeaseProvider> Lease, Task Attempted) ThrowingLease()
     {

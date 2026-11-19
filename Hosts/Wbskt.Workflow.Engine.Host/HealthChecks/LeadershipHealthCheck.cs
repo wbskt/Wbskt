@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Engine;
 
 namespace Wbskt.Workflow.Engine.Host.HealthChecks;
@@ -18,10 +19,12 @@ namespace Wbskt.Workflow.Engine.Host.HealthChecks;
 internal sealed class LeadershipHealthCheck : IHealthCheck
 {
     private readonly LeadershipState _leadershipState;
+    private readonly ILeadershipGate _leadershipGate;
 
-    public LeadershipHealthCheck(LeadershipState leadershipState)
+    public LeadershipHealthCheck(LeadershipState leadershipState, ILeadershipGate leadershipGate)
     {
         _leadershipState = leadershipState;
+        _leadershipGate = leadershipGate;
     }
 
     public Task<HealthCheckResult> CheckHealthAsync(
@@ -36,6 +39,12 @@ internal sealed class LeadershipHealthCheck : IHealthCheck
         if (!_leadershipState.BusStarted)
         {
             return Task.FromResult(HealthCheckResult.Unhealthy("This instance is the leader but its bus has not finished starting."));
+        }
+
+        // Ready on the same condition as the gate the work checks, so traffic leaves with the work.
+        if (!_leadershipGate.IsActive)
+        {
+            return Task.FromResult(HealthCheckResult.Unhealthy("This instance's lease is inside its safety margin and has not been renewed."));
         }
 
         return Task.FromResult(HealthCheckResult.Healthy());

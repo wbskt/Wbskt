@@ -176,10 +176,18 @@ success.
 
 ### Leader gate
 
-Every piece of leader-only work checks `ILeadershipGate`: bus consumers (MassTransit only starts on
-the leader), periodic workers (`LeaderPeriodicWorker`), and `[InboundEndpoint]` controllers
-(`LeaderOnlyMiddleware`). The gate trusts the lease minus a 5 s margin, so an instance stops working
-before another can take over.
+Leader-only work is gated three ways, all on the same `ILeadershipGate`, which trusts the lease
+minus a 5 s margin and requires the bus to have started:
+
+- periodic workers (`LeaderPeriodicWorker`) skip every tick while it is closed;
+- `[InboundEndpoint]` controllers answer 503 through `LeaderOnlyMiddleware`, and `/healthz/ready`
+  (`LeadershipHealthCheck`) reports unready, so Traefik routes nothing to the instance;
+- bus consumers do not check it per message: MassTransit only runs on the leader, and the process
+  stops when the gate would close. A lost lease stops it at once; a renewal that keeps failing stops
+  it at the margin (`LeaderElectionService`), not at the next tick, so consumers never run past it.
+
+The lease's end is counted from the clock read before the renewal is sent, so it is never later than
+the row's.
 
 ### Recovery before traffic
 
