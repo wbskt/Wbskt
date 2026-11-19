@@ -29,7 +29,7 @@ public sealed class PolicyChangeEventTests
         bus.Setup(b => b.PublishAsync(It.IsAny<BaseEvent>(), It.IsAny<CancellationToken>()))
             .Callback<IEvent, CancellationToken>((e, _) => { lock (_published) { _published.Add(e); } })
             .Returns(Task.CompletedTask);
-        return new RegistrationPolicyService(_provider.Object, Mock.Of<IClientProvider>(), bus.Object, NullLogger<RegistrationPolicyService>.Instance);
+        return new RegistrationPolicyService(_provider.Object, bus.Object, NullLogger<RegistrationPolicyService>.Instance);
     }
 
     private static RegistrationPolicy Policy(string name, int? maxClients, bool enabled) =>

@@ -67,7 +67,7 @@ public sealed class PolicyDeletionTests
     private RegistrationPolicyService Service(RegistrationPolicy policy)
     {
         _provider.Setup(p => p.FindByRefIdAsync(PolicyRef, It.IsAny<CancellationToken>())).ReturnsAsync(policy);
-        return new RegistrationPolicyService(_provider.Object, Mock.Of<IClientProvider>(), _bus.Object, NullLogger<RegistrationPolicyService>.Instance);
+        return new RegistrationPolicyService(_provider.Object, _bus.Object, NullLogger<RegistrationPolicyService>.Instance);
     }
 
     private static RegistrationPolicy Policy(int workspaceId) => new() { Id = 5, RefId = PolicyRef, WorkspaceId = workspaceId, Name = "lab", IsEnabled = true };
