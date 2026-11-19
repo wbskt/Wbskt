@@ -10,7 +10,7 @@ public record PropertySchema(
     string Label,
     string DataType, // "string", "number", "boolean", "object"
     string Description,
-    bool IsRequired = true,
+    bool IsRequired = false,
     string? DefaultValue = null
 );
 
