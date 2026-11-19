@@ -205,6 +205,33 @@ public sealed partial class WorkflowValidator
                 continue;
             }
 
+            if (retry.MaxAttempts is < 1 or > RetryPolicy.MaxAttemptsLimit)
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "RETRY_ATTEMPTS_INVALID",
+                    $"Node '{node.NodeId}': the retry maxAttempts must be between 1 and {RetryPolicy.MaxAttemptsLimit}.",
+                    node.NodeId, "retry.maxAttempts"));
+            }
+
+            if (retry.InitialDelay < TimeSpan.Zero)
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "RETRY_DELAY_INVALID",
+                    $"Node '{node.NodeId}': the retry initialDelay must not be negative.",
+                    node.NodeId, "retry.initialDelay"));
+            }
+
+            if (retry.JitterPct is < 0 or > RetryPolicy.MaxJitterPct)
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "RETRY_JITTER_INVALID",
+                    $"Node '{node.NodeId}': the retry jitterPct must be between 0 and {RetryPolicy.MaxJitterPct}.",
+                    node.NodeId, "retry.jitterPct"));
+            }
+
             if (retry.Factor is { } factor && (!double.IsFinite(factor) || factor <= 0))
             {
                 issues.Add(new ValidationIssue(

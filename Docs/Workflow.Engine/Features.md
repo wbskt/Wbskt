@@ -179,11 +179,11 @@ An action node's `retry` policy:
 | Field | Meaning |
 |---|---|
 | `strategy` | `Constant`, `Linear` or `Exponential`. |
-| `initialDelay` | First delay. |
+| `initialDelay` | First delay. Must not be negative (`RETRY_DELAY_INVALID`). |
 | `factor` | Growth for `Exponential` (default 2). Must be > 0 (`RETRY_FACTOR_INVALID`). |
 | `maxDelay` | Ceiling, applied after jitter. Must be ≥ `initialDelay` (`RETRY_MAX_DELAY_BELOW_INITIAL`). |
-| `maxAttempts` | Total attempts including the first. |
-| `jitterPct` | Random spread in percent. |
+| `maxAttempts` | Total attempts including the first, 1 to 20 (`RETRY_ATTEMPTS_INVALID`). |
+| `jitterPct` | Random spread in percent, 0 to 100 (`RETRY_JITTER_INVALID`). |
 | `retryOn` | Error codes or exception type names to retry; empty means any retryable failure. |
 
 Only failures the node marks retryable are retried (for example a webhook 5xx). Each attempt is
@@ -314,7 +314,7 @@ publish. An expression error fails the node with `EXPRESSION_EVALUATION_ERROR`.
 | Area | Codes |
 |---|---|
 | Structure | `NULL_DEFINITION`, `INVALID_WORKFLOW_REF_ID`, `INVALID_VERSION`, `DUPLICATE_NODE_ID`, `UNKNOWN_NODE_KIND`, `EDGE_UNKNOWN_NODE`, `EDGE_UNKNOWN_PORT`, `DUPLICATE_PORT_EDGE`, `MISSING_PORT`, `EXTRA_PORT` |
-| Failure handling | `COMPENSATION_NOT_SUPPORTED`, `ONFAILURE_TARGET_MISSING`, `ONFAILURE_TARGET_NOT_FOUND`, `ONFAILURE_TARGET_INVALID`, `CONTINUE_ON_ERROR_WITHOUT_ERROR_PORT`, `RETRY_FACTOR_INVALID`, `RETRY_MAX_DELAY_BELOW_INITIAL` |
+| Failure handling | `COMPENSATION_NOT_SUPPORTED`, `ONFAILURE_TARGET_MISSING`, `ONFAILURE_TARGET_NOT_FOUND`, `ONFAILURE_TARGET_INVALID`, `CONTINUE_ON_ERROR_WITHOUT_ERROR_PORT`, `RETRY_FACTOR_INVALID`, `RETRY_MAX_DELAY_BELOW_INITIAL`, `RETRY_ATTEMPTS_INVALID`, `RETRY_DELAY_INVALID`, `RETRY_JITTER_INVALID` |
 | Fan-out and joins | `PARALLEL_FOREACH_WITHOUT_JOIN`, `FORK_BRANCH_WITHOUT_JOIN`, `FORK_BRANCHES_JOIN_MISMATCH`, `JOIN_WITHOUT_COHORT` |
 | Sub-workflows and end | `SUBWORKFLOW_INPUT_KEY_RESERVED`, `SUBWORKFLOW_SELF_REFERENCE`, `END_OUTPUT_WITHOUT_MANUAL_TRIGGER` |
 | Variables and waits | `VARIABLE_NAME_RESERVED`, `WAITFORHTTP_WEAK_TOKEN` |

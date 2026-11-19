@@ -373,6 +373,36 @@ public sealed class WorkflowValidatorRuleTests
         Assert.DoesNotContain(result.Issues, i => i.Code is "RETRY_FACTOR_INVALID" or "RETRY_MAX_DELAY_BELOW_INITIAL");
     }
 
+    [Theory]
+    [InlineData(0, 1, 0, "RETRY_ATTEMPTS_INVALID")]
+    [InlineData(21, 1, 0, "RETRY_ATTEMPTS_INVALID")]
+    [InlineData(3, -1, 0, "RETRY_DELAY_INVALID")]
+    [InlineData(3, 1, -1, "RETRY_JITTER_INVALID")]
+    [InlineData(3, 1, 101, "RETRY_JITTER_INVALID")]
+    public void Validate_bounds_a_retry_policy_s_tries_first_wait_and_jitter(int maxAttempts, int initialDelaySeconds, int jitterPct, string code)
+    {
+        // A definition sent through the API, not the designer, could otherwise retry a step thousands of times.
+        var def = ValidWorkflowBuilder.Build();
+        var retry = Retry(factor: null, maxDelay: null) with { MaxAttempts = maxAttempts, InitialDelay = TimeSpan.FromSeconds(initialDelaySeconds), JitterPct = jitterPct };
+        var action = CreateToast(withErrorPort: false) with { Retry = retry };
+
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, action] });
+
+        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == code && i.NodeId == action.NodeId);
+    }
+
+    [Fact]
+    public void Validate_accepts_a_retry_policy_at_its_bounds()
+    {
+        var def = ValidWorkflowBuilder.Build();
+        var retry = Retry(factor: null, maxDelay: null) with { MaxAttempts = RetryPolicy.MaxAttemptsLimit, InitialDelay = TimeSpan.Zero, JitterPct = RetryPolicy.MaxJitterPct };
+        var action = CreateToast(withErrorPort: false) with { Retry = retry };
+
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, action] });
+
+        Assert.DoesNotContain(result.Issues, i => i.Code.StartsWith("RETRY_", StringComparison.Ordinal));
+    }
+
     private static RetryPolicy Retry(double? factor, TimeSpan? maxDelay) => new()
     {
         Strategy = RetryStrategy.Exponential,

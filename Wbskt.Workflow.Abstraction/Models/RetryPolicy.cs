@@ -5,6 +5,10 @@ namespace Wbskt.Workflow.Abstraction.Models;
 
 public sealed record RetryPolicy
 {
+    // The bounds the validator enforces and the designer offers; the console reads the same numbers.
+    public const int MaxAttemptsLimit = 20;
+    public const int MaxJitterPct = 100;
+
     [JsonPropertyName("strategy")]
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public required RetryStrategy Strategy { get; init; }
