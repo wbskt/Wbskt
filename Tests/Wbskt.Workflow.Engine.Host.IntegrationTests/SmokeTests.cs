@@ -60,7 +60,6 @@ public sealed class SmokeTests(SqlEdgeFixture fixture)
             "WorkflowDefinition_GetBy_RefId_Version",
             "WorkflowDefinition_GetLatestVersion_By_RefId",
             "WorkflowDefinition_GetBy_Ids",
-            "WorkflowDefinition_FindWorkspaceIdBy_Id",
             "Run_SetTerminal",
             "RunCounters_IncrementActiveBranches",
             "RunCounters_DecrementActiveBranches",

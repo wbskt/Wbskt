@@ -261,13 +261,12 @@ public sealed class WorkflowRunsControllerTests
     }
 
     [Fact]
-    public async Task Opening_a_run_checks_its_workspace_without_reading_the_definition()
+    public async Task Opening_a_run_checks_the_workspace_it_carries_without_reading_the_definition()
     {
         var runRefId = Guid.NewGuid();
         var runProvider = new Mock<IRunProvider>();
         var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
         runProvider.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(5, runRefId, Guid.NewGuid(), 1, "Succeeded"));
-        definitionProvider.Setup(x => x.FindWorkspaceIdAsync(9, It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceId);
         var branchProvider = new Mock<IBranchProvider>();
         branchProvider.Setup(x => x.GetAllByRunIdAsync(5, It.IsAny<CancellationToken>())).ReturnsAsync([]);
         var service = new WorkflowRunQueryService(runProvider.Object, branchProvider.Object, definitionProvider.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
@@ -429,7 +428,7 @@ public sealed class WorkflowRunsControllerTests
                 Id = 7, RefId = runRefId, WorkflowDefinitionId = 1, WorkflowRefId = workflowRefId, WorkflowVersion = 1,
                 TriggerNodeId = Guid.NewGuid(), CorrelationKey = null, Status = "Running", StartedAt = DateTime.UtcNow,
                 CompletedAt = null, CancellationRequestedAt = null, CancellationReason = null, CreditBudget = 10m,
-                CreatedAt = DateTime.UtcNow, Number = 42
+                CreatedAt = DateTime.UtcNow, Number = 42, WorkspaceId = WorkspaceId
             });
         runProvider.Setup(x => x.GetListDetailsAsync(It.Is<IReadOnlyCollection<int>>(ids => ids.Single() == 7), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new RunListDetailRow { RunId = 7, IsWaiting = true, WaitingKind = "signal", WaitingNodeId = nodeId, WaitingSignalName = "approve" }]);
@@ -689,7 +688,7 @@ public sealed class WorkflowRunsControllerTests
         var definitionProvider = new Mock<IWorkflowDefinitionProvider> { CallBase = true };
         var runRefId = Guid.NewGuid();
         var workflowRefId = Guid.NewGuid();
-        runProvider.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(70, runRefId, workflowRefId, 1, "Running"));
+        runProvider.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(70, runRefId, workflowRefId, 1, "Running") with { WorkspaceId = WorkspaceId + 99 });
         definitionProvider.Setup(x => x.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId + 99));
         var service = new WorkflowRunQueryService(runProvider.Object, branchProvider.Object, definitionProvider.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
@@ -734,7 +733,7 @@ public sealed class WorkflowRunsControllerTests
         {
             var runRefId = Guid.NewGuid();
             var workflowRefId = Guid.NewGuid();
-            Runs.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(id, runRefId, workflowRefId, 2, status));
+            Runs.Setup(x => x.FindRowByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(id, runRefId, workflowRefId, 2, status) with { WorkspaceId = workspaceId });
             Definitions.Setup(x => x.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(CreateDefinitionRow(workflowRefId, workspaceId));
             return runRefId;
@@ -774,7 +773,8 @@ public sealed class WorkflowRunsControllerTests
             CancellationRequestedAt = null,
             CancellationReason = null,
             CreditBudget = 10m,
-            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            WorkspaceId = WorkspaceId
         };
     }
 }

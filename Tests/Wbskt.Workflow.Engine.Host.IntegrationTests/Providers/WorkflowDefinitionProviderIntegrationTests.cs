@@ -68,8 +68,6 @@ public sealed class WorkflowDefinitionProviderIntegrationTests(SqlEdgeFixture fi
 
         rows.Select(r => r.Id).Should().BeEquivalentTo([a.Id, b.Id]);
         rows.Single(r => r.Id == b.Id).Name.Should().Be(b.Name);
-        (await provider.FindWorkspaceIdAsync(a.Id, CancellationToken.None)).Should().Be(1);
-        (await provider.FindWorkspaceIdAsync(int.MaxValue, CancellationToken.None)).Should().BeNull();
     }
 
     [SkippableFact]

@@ -156,7 +156,9 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
         first.Run.Number.Should().Be(1);
         retry.Run.Number.Should().Be(1);
         afterRefusal.Run.Number.Should().Be(2);
-        (await runProvider.FindRowByRefIdAsync(next.RefId, CancellationToken.None))!.Number.Should().Be(2);
+        RunRow read = (await runProvider.FindRowByRefIdAsync(next.RefId, CancellationToken.None))!;
+        read.Number.Should().Be(2);
+        read.WorkspaceId.Should().Be(workspaceId);
     }
 
     [SkippableFact]
