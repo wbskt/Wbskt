@@ -175,7 +175,7 @@ public sealed class SignInServiceTests
         harness.WithUser(AUser());
         harness.Sessions.Setup(p => p.RevokeAllRefreshTokensForUserAsync(42, Ip, It.IsAny<CancellationToken>())).ReturnsAsync(3);
 
-        var result = await harness.SignIn.LogoutAllAsync(42, Ip);
+        var result = await harness.SignIn.LogoutAllAsync(42, UserRef, Ip);
 
         Assert.True(result.IsSuccess);
         harness.Sessions.Verify(p => p.RevokeAllRefreshTokensForUserAsync(42, Ip, It.IsAny<CancellationToken>()), Times.Once);
@@ -192,7 +192,7 @@ public sealed class SignInServiceTests
         var sessionId = Guid.NewGuid();
         harness.Sessions.Setup(p => p.RevokeSessionAsync(sessionId, 42, Ip, It.IsAny<CancellationToken>())).ReturnsAsync(1);
 
-        var result = await harness.SignIn.RevokeSessionAsync(42, sessionId, Ip);
+        var result = await harness.SignIn.RevokeSessionAsync(42, UserRef, sessionId, Ip);
 
         Assert.True(result.IsSuccess);
         harness.AccessTokens.Verify(a => a.RevokeSessionAsync(sessionId, It.IsAny<CancellationToken>()), Times.Once);

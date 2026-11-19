@@ -177,14 +177,14 @@ internal sealed class PasswordService : IPasswordService
         // and cannot be distinguished by how quickly it comes back.
         var passwordHash = await _hashing.HashAsync(newPassword, cancellationToken);
 
-        int userId;
+        User user;
         try
         {
             // One call, one transaction: the new password and the revocation of every existing
             // session land together or not at all. Whoever the victim is resetting away from is
             // often already holding a session, and a gap between the two writes is that session
             // surviving the reset.
-            userId = await _accounts.ConsumePasswordResetTokenAsync(SecurityTokens.Hash(token), passwordHash, ipAddress, cancellationToken);
+            user = await _accounts.ConsumePasswordResetTokenAsync(SecurityTokens.Hash(token), passwordHash, ipAddress, cancellationToken);
         }
         catch (SecurityException)
         {
@@ -195,10 +195,9 @@ internal sealed class PasswordService : IPasswordService
         // Outside the transaction above, and best effort: the password and the refresh tokens are what
         // the reset is for, and they are already done. This only shortens the life of access tokens
         // that were already issued.
-        var user = await _accounts.GetByIdAsync(userId, cancellationToken);
         await _credentials.RevokeAccessTokensAsync(user.RefId, cancellationToken);
-        _logger.LogInformation("Password reset completed for user {UserId}; all sessions revoked. IP: {IpAddress}", userId, ipAddress);
-        await _announcer.AnnounceAsync(new PasswordChangedEvent(userId, user.RefId, "reset"), ipAddress, cancellationToken);
+        _logger.LogInformation("Password reset completed for user {UserId}; all sessions revoked. IP: {IpAddress}", user.Id, ipAddress);
+        await _announcer.AnnounceAsync(new PasswordChangedEvent(user.Id, user.RefId, "reset"), ipAddress, cancellationToken);
         await _notices.PasswordChangedAsync(user, "reset", ipAddress, cancellationToken);
         return Result.Success();
     }

@@ -84,11 +84,12 @@ internal sealed class AccountProfileService : IAccountProfileService
             return Result<LoginResponse>.Failure(UsernameReserved);
         }
 
-        User before;
+        User user;
+        UsernameChange change;
         try
         {
-            before = await _accounts.GetByIdAsync(userId, cancellationToken);
-            await _accounts.ChangeUsernameAsync(userId, username, UsernameChangeInterval, cancellationToken);
+            user = await _accounts.GetByIdAsync(userId, cancellationToken);
+            change = await _accounts.ChangeUsernameAsync(userId, username, UsernameChangeInterval, cancellationToken);
         }
         catch (SecurityException)
         {
@@ -103,17 +104,17 @@ internal sealed class AccountProfileService : IAccountProfileService
             return Result<LoginResponse>.Failure(Error.Validation("USERNAME_CHANGED_RECENTLY", ex.Message));
         }
 
-        // Read back rather than patched: the access token carries what the database holds.
-        var user = await _accounts.GetByIdAsync(userId, cancellationToken);
-        if (!string.Equals(before.Username, user.Username, StringComparison.Ordinal))
+        if (!string.Equals(change.From, change.To, StringComparison.Ordinal))
         {
             _logger.LogInformation("User {UserId} changed their username. IP: {IpAddress}", userId, ipAddress);
-            await _announcer.AnnounceAsync(new UserProfileChangedEvent(userId, user.RefId, "username", before.Username, user.Username, "changed"), ipAddress, cancellationToken);
+            await _announcer.AnnounceAsync(new UserProfileChangedEvent(userId, user.RefId, "username", change.From, change.To, "changed"), ipAddress, cancellationToken);
         }
 
         // Sessions from before tokens carried a session id get a token for an unknown one, which
         // works until the next refresh replaces it; nothing revokes by that id.
-        return Result<LoginResponse>.Success(new LoginResponse(_tokens.AccessToken(user, sessionId ?? Guid.Empty), null));
+        // The access token carries the name the database now holds.
+        var renamed = new User { Id = user.Id, RefId = user.RefId, Username = change.To, Email = user.Email };
+        return Result<LoginResponse>.Success(new LoginResponse(_tokens.AccessToken(renamed, sessionId ?? Guid.Empty), null));
     }
 
     public async Task<Result> RequestEmailChangeAsync(int userId, string password, string newEmail, string ipAddress, CancellationToken cancellationToken = default)
@@ -181,12 +182,11 @@ internal sealed class AccountProfileService : IAccountProfileService
             return Result<LoginResponse?>.Failure(EmailUnavailable);
         }
 
-        var user = await _accounts.GetByIdAsync(change.UserId, cancellationToken);
-        await _credentials.RevokeAccessTokensAsync(user.RefId, cancellationToken);
-        await _mailer.QueueEmailChangedAsync(change.From, user.Username, change.To, revertToken, revertExpiresAt, cancellationToken);
+        await _credentials.RevokeAccessTokensAsync(change.UserRefId, cancellationToken);
+        await _mailer.QueueEmailChangedAsync(change.From, change.Username, change.To, revertToken, revertExpiresAt, cancellationToken);
 
         _logger.LogInformation("Email changed for user {UserId}; all sessions revoked. IP: {IpAddress}", change.UserId, ipAddress);
-        await _announcer.AnnounceAsync(new UserProfileChangedEvent(change.UserId, user.RefId, "email", change.From, change.To, "changed"), ipAddress, cancellationToken);
+        await _announcer.AnnounceAsync(new UserProfileChangedEvent(change.UserId, change.UserRefId, "email", change.From, change.To, "changed"), ipAddress, cancellationToken);
 
         if (callerUserId != change.UserId)
         {
@@ -195,6 +195,7 @@ internal sealed class AccountProfileService : IAccountProfileService
 
         var refreshToken = _tokens.NewRefreshToken(change.UserId);
         await _sessions.InsertRefreshTokenAsync(refreshToken, ipAddress, cancellationToken);
+        var user = new User { Id = change.UserId, RefId = change.UserRefId, Username = change.Username, Email = change.To };
         return Result<LoginResponse?>.Success(new LoginResponse(_tokens.AccessToken(user, refreshToken.SessionId), refreshToken.Token));
     }
 
@@ -215,12 +216,10 @@ internal sealed class AccountProfileService : IAccountProfileService
             return Result.Failure(EmailUnavailable);
         }
 
-        // Not RefOfAsync: a revocation that silently named nobody would leave the tokens working.
-        var userRef = (await _accounts.GetByIdAsync(change.UserId, cancellationToken)).RefId;
-        await _credentials.RevokeAccessTokensAsync(userRef, cancellationToken);
+        await _credentials.RevokeAccessTokensAsync(change.UserRefId, cancellationToken);
 
         _logger.LogWarning("Email change reverted for user {UserId}; all sessions revoked. IP: {IpAddress}", change.UserId, ipAddress);
-        await _announcer.AnnounceAsync(new UserProfileChangedEvent(change.UserId, userRef, "email", change.From, change.To, "reverted"), ipAddress, cancellationToken);
+        await _announcer.AnnounceAsync(new UserProfileChangedEvent(change.UserId, change.UserRefId, "email", change.From, change.To, "reverted"), ipAddress, cancellationToken);
         return Result.Success();
     }
 

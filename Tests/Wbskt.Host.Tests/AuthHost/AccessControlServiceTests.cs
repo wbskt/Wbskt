@@ -48,7 +48,7 @@ public sealed class AccessControlServiceTests
         _service = new AccessControlService(
             _accessControl.Object, _tenants.Object, _workspaces.Object,
             NullLogger<AccessControlService>.Instance,
-            new TenantAnnouncer(_accounts.Object, _bus, AuditWorkspaces.None, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance));
+            new TenantAnnouncer(_bus, AuditWorkspaces.None, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance));
     }
 
     // ---------------------------------------------------------------- roles and groups

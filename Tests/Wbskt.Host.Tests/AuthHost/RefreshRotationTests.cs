@@ -174,7 +174,7 @@ public sealed class RefreshRotationTests
             CredentialFakes.Credentials(Accounts, Sessions.Object, bus,
                 new SecurityNotices(Mock.Of<IAuthMailer>(), MailCooldownTests.InProcess(), new AuthMetrics(), TimeProvider.System), AccessTokens.Object),
             CredentialFakes.Hashing(),
-            new AccountAnnouncer(Accounts.Object, bus, AuditWorkspaces.None, NullLogger<AccountAnnouncer>.Instance),
+            new AccountAnnouncer(bus, AuditWorkspaces.None, NullLogger<AccountAnnouncer>.Instance),
             TimeProvider.System);
     }
 }

@@ -8,11 +8,17 @@
 --
 -- An unknown token, a spent one and an expired one all raise the same error: they are the same
 -- answer to the caller, and distinguishing them would say whether a token ever existed.
+--
+-- Returns the account's reference, name and address, which the caller needs for the access-token
+-- revocation and the notice, so it does not read the user back.
 CREATE PROCEDURE dbo.PasswordResetToken_Consume
     @TokenHash VARBINARY(32),
     @PasswordHash NVARCHAR(255),
     @RevokedByIp NVARCHAR(50) = NULL,
-    @UserId INT OUTPUT
+    @UserId INT OUTPUT,
+    @UserRefId UNIQUEIDENTIFIER = NULL OUTPUT,
+    @Username NVARCHAR(50) = NULL OUTPUT,
+    @Email NVARCHAR(100) = NULL OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -51,6 +57,12 @@ BEGIN
         -- Recovery is how a locked-out owner gets back in, so it lifts the lock too.
         FailedLoginCount = 0,
         LockedUntil = NULL
+    WHERE Id = @UserId;
+
+    SELECT @UserRefId = RefId,
+           @Username = Username,
+           @Email = Email
+    FROM dbo.Users
     WHERE Id = @UserId;
 
     UPDATE dbo.RefreshTokens

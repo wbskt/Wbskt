@@ -177,7 +177,7 @@ public sealed class AccountRecoveryTests
         harness.Accounts
             .Setup(p => p.ConsumePasswordResetTokenAsync(It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Callback<byte[], string, string?, CancellationToken>((_, hash, _, _) => stored = hash)
-            .ReturnsAsync(42);
+            .ReturnsAsync(new User { Id = 42, RefId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Username = "someone", Email = "someone@example.test" });
 
         var result = await harness.Passwords.ResetPasswordAsync("token", "a new long password", "10.0.0.1");
 
@@ -197,7 +197,7 @@ public sealed class AccountRecoveryTests
         var harness = new Harness();
         harness.Accounts
             .Setup(p => p.ConsumePasswordResetTokenAsync(It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(42);
+            .ReturnsAsync(new User { Id = 42, RefId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Username = "someone", Email = "someone@example.test" });
 
         await harness.Passwords.ResetPasswordAsync("token", "a new long password", "10.0.0.1");
 
@@ -210,7 +210,7 @@ public sealed class AccountRecoveryTests
         var harness = new Harness();
         harness.Accounts
             .Setup(p => p.ConsumePasswordResetTokenAsync(It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(42);
+            .ReturnsAsync(new User { Id = 42, RefId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Username = "someone", Email = "someone@example.test" });
 
         await harness.Passwords.ResetPasswordAsync("token", "a new long password", "10.0.0.1");
 
@@ -275,7 +275,7 @@ public sealed class AccountRecoveryTests
         var harness = new Harness();
         harness.Accounts
             .Setup(p => p.ConsumePasswordResetTokenAsync(It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(42);
+            .ReturnsAsync(new User { Id = 42, RefId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Username = "someone", Email = "someone@example.test" });
 
         await harness.Passwords.ResetPasswordAsync("token", "a new long password", "10.0.0.1");
 
@@ -317,7 +317,7 @@ public sealed class AccountRecoveryTests
         var harness = new Harness();
         harness.Accounts
             .Setup(p => p.ConsumeEmailVerificationTokenAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(42);
+            .ReturnsAsync((42, Guid.Parse("11111111-1111-1111-1111-111111111111")));
 
         var result = await harness.Registration.VerifyEmailAsync("a-token");
 
@@ -337,7 +337,7 @@ public sealed class AccountRecoveryTests
         harness.Accounts
             .Setup(p => p.ConsumeEmailVerificationTokenAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
             .Callback<byte[], CancellationToken>((hash, _) => seen = hash)
-            .ReturnsAsync(42);
+            .ReturnsAsync((42, Guid.Parse("11111111-1111-1111-1111-111111111111")));
 
         await harness.Registration.VerifyEmailAsync("a-token");
 
@@ -524,7 +524,7 @@ public sealed class AccountRecoveryTests
                 IsActive = true
             };
 
-            Accounts.Setup(p => p.InsertUserAsync(It.IsAny<User>(), It.IsAny<CancellationToken>())).ReturnsAsync(42);
+            Accounts.Setup(p => p.InsertUserAsync(It.IsAny<User>(), It.IsAny<CancellationToken>())).Callback<User, CancellationToken>((u, _) => { u.Id = 42; u.RefId = created.RefId; }).ReturnsAsync(42);
             Tenants.Setup(p => p.CreateTenantAsync(It.IsAny<string>(), It.IsAny<string>(), 42, It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Guid.NewGuid());
             Accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(created);

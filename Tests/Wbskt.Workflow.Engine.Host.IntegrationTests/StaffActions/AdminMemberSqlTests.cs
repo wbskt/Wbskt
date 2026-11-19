@@ -38,7 +38,7 @@ public sealed class AdminMemberSqlTests(AuthSqlFixture auth)
             new TenantProvider(configuration),
             accounts,
             _bus,
-            new TenantAnnouncer(accounts, _bus, new AuditWorkspaces(new WorkspaceProvider(configuration), NullLogger<AuditWorkspaces>.Instance), new WorkspaceAccessChanges(null, NullLogger<WorkspaceAccessChanges>.Instance), NullLogger<TenantAnnouncer>.Instance),
+            new TenantAnnouncer(_bus, new AuditWorkspaces(new WorkspaceProvider(configuration), NullLogger<AuditWorkspaces>.Instance), new WorkspaceAccessChanges(null, NullLogger<WorkspaceAccessChanges>.Instance), NullLogger<TenantAnnouncer>.Instance),
             runner,
             NullLogger<AdminMemberService>.Instance);
     }

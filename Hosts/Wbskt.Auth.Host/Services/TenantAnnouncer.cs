@@ -1,5 +1,4 @@
 using Wbskt.Auth.Host.Models;
-using Wbskt.Auth.Host.Providers;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Abstractions;
 using Wbskt.Events.Auth;
@@ -21,20 +20,13 @@ namespace Wbskt.Auth.Host.Services;
 /// than only from a filter on the public controllers, covers every path that changes access: staff
 /// suspensions and removals, account deletion, and whatever calls this next (#949).
 /// </remarks>
-internal sealed class TenantAnnouncer(IAccountProvider accounts, IEventBus eventBus, IAuditWorkspaces audit, WorkspaceAccessChanges accessChanges, ILogger<TenantAnnouncer> logger)
+internal sealed class TenantAnnouncer(IEventBus eventBus, IAuditWorkspaces audit, WorkspaceAccessChanges accessChanges, ILogger<TenantAnnouncer> logger)
 {
     /// <summary>
     /// Announces that someone's access to some workspace may have changed: a role, group, grant,
     /// membership or suspension. Call it once the change has committed.
     /// </summary>
     public void AccessChanged() => accessChanges.Publish();
-
-    /// <summary>Announces an access change of the user's, and returns the user for the audit event that follows.</summary>
-    public async Task<User> AccessChangedAsync(int userId, CancellationToken cancellationToken)
-    {
-        AccessChanged();
-        return await accounts.GetByIdAsync(userId, cancellationToken);
-    }
 
     /// <summary>Publishes an action on the tenant's people, to be logged in each of its workspaces.</summary>
     /// <remarks>

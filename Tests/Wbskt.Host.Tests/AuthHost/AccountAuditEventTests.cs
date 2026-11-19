@@ -134,7 +134,7 @@ public sealed class AccountAuditEventTests
     [Fact]
     public async Task Signing_out_everywhere_is_logged()
     {
-        await _signIn.LogoutAllAsync(42, "10.0.0.1");
+        await _signIn.LogoutAllAsync(42, Guid.Parse("11111111-1111-1111-1111-111111111111"), "10.0.0.1");
 
         var revoked = Assert.IsType<SessionsRevokedEvent>(Assert.Single(_published));
         Assert.Equal("all", revoked.Which);

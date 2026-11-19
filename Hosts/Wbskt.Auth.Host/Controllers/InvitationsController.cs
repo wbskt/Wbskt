@@ -35,12 +35,12 @@ public class InvitationsController : ApiControllerBase
     [HttpPost("accept")]
     public async Task<ActionResult<AcceptInvitationResponse>> Accept([FromBody] AcceptInvitationRequest request, CancellationToken cancellationToken)
     {
-        var caller = CurrentUserId();
+        var caller = CurrentUser();
         if (caller.IsFailure)
         {
             return MapError(caller.Error);
         }
 
-        return MapResult(await _tenantService.AcceptInvitationAsync(caller.Value, request.Token, cancellationToken));
+        return MapResult(await _tenantService.AcceptInvitationAsync(caller.Value.UserId, caller.Value.UserRef, request.Token, cancellationToken));
     }
 }

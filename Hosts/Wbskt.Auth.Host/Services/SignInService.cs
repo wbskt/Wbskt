@@ -309,14 +309,14 @@ internal sealed class SignInService : ISignInService
         return Result.Success();
     }
 
-    public async Task<Result> LogoutAllAsync(int userId, string ipAddress, CancellationToken cancellationToken = default)
+    public async Task<Result> LogoutAllAsync(int userId, Guid userRef, string ipAddress, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Attempting to revoke all sessions for user ID: {UserId} from IP: {IpAddress}", userId, ipAddress);
 
         var revoked = await _sessions.RevokeAllRefreshTokensForUserAsync(userId, ipAddress, cancellationToken);
-        await RevokeAccessTokensAsync(userId, cancellationToken);
+        await _credentials.RevokeAccessTokensAsync(userRef, cancellationToken);
         _logger.LogInformation("Revoked {RevokedCount} refresh token(s) for user ID: {UserId}", revoked, userId);
-        await _announcer.AnnounceAsync(new SessionsRevokedEvent(userId, await _announcer.RefOfAsync(userId, cancellationToken), "all"), ipAddress, cancellationToken);
+        await _announcer.AnnounceAsync(new SessionsRevokedEvent(userId, userRef, "all"), ipAddress, cancellationToken);
         return Result.Success();
     }
 
@@ -327,7 +327,7 @@ internal sealed class SignInService : ISignInService
             sessions.Select(s => s with { IsCurrent = s.Id == currentSessionId }).ToList());
     }
 
-    public async Task<Result> RevokeSessionAsync(int userId, Guid sessionId, string ipAddress, CancellationToken cancellationToken = default)
+    public async Task<Result> RevokeSessionAsync(int userId, Guid userRef, Guid sessionId, string ipAddress, CancellationToken cancellationToken = default)
     {
         var revoked = await _sessions.RevokeSessionAsync(sessionId, userId, ipAddress, cancellationToken);
         if (revoked == 0)
@@ -340,7 +340,7 @@ internal sealed class SignInService : ISignInService
         await _accessTokens.RevokeSessionAsync(sessionId, cancellationToken);
 
         _logger.LogInformation("User {UserId} ended session {SessionId}. IP: {IpAddress}", userId, sessionId, ipAddress);
-        await _announcer.AnnounceAsync(new SessionsRevokedEvent(userId, await _announcer.RefOfAsync(userId, cancellationToken), "one"), ipAddress, cancellationToken);
+        await _announcer.AnnounceAsync(new SessionsRevokedEvent(userId, userRef, "one"), ipAddress, cancellationToken);
         return Result.Success();
     }
 
@@ -372,9 +372,7 @@ internal sealed class SignInService : ISignInService
     }
 
     /// <summary>
-    /// Ends the user's access tokens on every host. Unlike <see cref="AccountAnnouncer.RefOfAsync"/> a
-    /// failed read is not swallowed, since a revocation that silently named nobody would leave the
-    /// tokens working.
+    /// Ends the user's access tokens on every host, for a replay, where only the user's id is known.
     /// </summary>
     private async Task RevokeAccessTokensAsync(int userId, CancellationToken cancellationToken) =>
         await _credentials.RevokeAccessTokensAsync((await _accounts.GetByIdAsync(userId, cancellationToken)).RefId, cancellationToken);

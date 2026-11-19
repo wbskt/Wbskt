@@ -38,7 +38,7 @@ public interface ITenantService
     /// each shared tenant: their workspaces there pass to another administrator. Refused when it is
     /// their only tenant, when nobody else belongs to it, and when nobody else administers it.
     /// </summary>
-    Task<Result> LeaveTenantAsync(int callerId, Guid tenantRef, CancellationToken cancellationToken = default);
+    Task<Result> LeaveTenantAsync(int callerId, Guid callerRef, Guid tenantRef, CancellationToken cancellationToken = default);
 
     Task<Result> SetMemberSuspendedAsync(int callerId, int tenantId, Guid userRef, bool isSuspended, string ipAddress, CancellationToken cancellationToken = default);
 
@@ -50,5 +50,5 @@ public interface ITenantService
     /// Redeems an invitation for the calling account. Not tenant-scoped: the caller does not know
     /// which tenant the token belongs to, and learning that is the point of the call.
     /// </summary>
-    Task<Result<AcceptInvitationResponse>> AcceptInvitationAsync(int callerId, string token, CancellationToken cancellationToken = default);
+    Task<Result<AcceptInvitationResponse>> AcceptInvitationAsync(int callerId, Guid callerRef, string token, CancellationToken cancellationToken = default);
 }

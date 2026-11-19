@@ -39,7 +39,7 @@ public sealed class AdminUserServiceTests
     private readonly Mock<IAuditWorkspaces> _audit = new();
 
     private AdminUserService Service() => new(_accounts.Object, _staffUsers.Object, _sessions.Object, _accessTokens.Object, _mailer.Object,
-        _runner, new TenantAnnouncer(_accounts.Object, _bus.Object, _audit.Object, new RecordingAccessChanges().Changes, NullLogger<TenantAnnouncer>.Instance),
+        _runner, new TenantAnnouncer(_bus.Object, _audit.Object, new RecordingAccessChanges().Changes, NullLogger<TenantAnnouncer>.Instance),
         new FixedClock(Now), NullLogger<AdminUserService>.Instance);
 
     [Fact]

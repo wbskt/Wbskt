@@ -68,8 +68,7 @@ public sealed class AccountProfileServiceTests
         var user = harness.WithUser();
         harness.Accounts
             .Setup(p => p.ChangeUsernameAsync(42, "ada", AccountProfileService.UsernameChangeInterval, It.IsAny<CancellationToken>()))
-            .Callback(() => harness.WithUser(username: "ada"))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(new UsernameChange("someone", "ada"));
 
         var result = await harness.Profile.ChangeUsernameAsync(42, SessionId, "ada", "10.0.0.1");
 
@@ -204,7 +203,7 @@ public sealed class AccountProfileServiceTests
         harness.Accounts
             .Setup(p => p.ConfirmEmailChangeAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), "10.0.0.1", It.IsAny<CancellationToken>()))
             .Callback<byte[], byte[], DateTime, string?, CancellationToken>((_, _, expires, _, _) => revertExpiry = expires)
-            .ReturnsAsync(new EmailChange(42, Email, NewEmail));
+            .ReturnsAsync(new EmailChange(42, UserRef, "someone", Email, NewEmail));
 
         var result = await harness.Profile.ConfirmEmailChangeAsync("token", callerUserId: null, "10.0.0.1");
 
@@ -225,7 +224,7 @@ public sealed class AccountProfileServiceTests
         harness.WithUser();
         harness.Accounts
             .Setup(p => p.ConfirmEmailChangeAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new EmailChange(42, Email, NewEmail));
+            .ReturnsAsync(new EmailChange(42, UserRef, "someone", Email, NewEmail));
 
         var result = await harness.Profile.ConfirmEmailChangeAsync("token", callerUserId: 42, "10.0.0.1");
 
@@ -259,7 +258,7 @@ public sealed class AccountProfileServiceTests
         harness.WithUser();
         harness.Accounts
             .Setup(p => p.RevertEmailChangeAsync(It.IsAny<byte[]>(), "10.0.0.1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new EmailChange(42, NewEmail, Email));
+            .ReturnsAsync(new EmailChange(42, UserRef, "someone", NewEmail, Email));
 
         var result = await harness.Profile.RevertEmailChangeAsync("token", "10.0.0.1");
 

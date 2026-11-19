@@ -185,13 +185,13 @@ public class AuthController : ApiControllerBase
     [HttpPost("logout-all")]
     public async Task<IActionResult> LogoutAll(CancellationToken cancellationToken)
     {
-        var userIdResult = CurrentUserId();
-        if (userIdResult.IsFailure)
+        var caller = CurrentUser();
+        if (caller.IsFailure)
         {
-            return MapError(userIdResult.Error);
+            return MapError(caller.Error);
         }
 
-        var result = await _signIn.LogoutAllAsync(userIdResult.Value, CallerIpAddress(), cancellationToken);
+        var result = await _signIn.LogoutAllAsync(caller.Value.UserId, caller.Value.UserRef, CallerIpAddress(), cancellationToken);
         ClearRefreshCookieIfRequested();
         return MapResult(result);
     }
@@ -247,14 +247,13 @@ public class AuthController : ApiControllerBase
     [HttpDelete("sessions/{sessionId:guid}")]
     public async Task<IActionResult> RevokeSession(Guid sessionId, CancellationToken cancellationToken)
     {
-
-        var userIdResult = CurrentUserId();
-        if (userIdResult.IsFailure)
+        var caller = CurrentUser();
+        if (caller.IsFailure)
         {
-            return MapError(userIdResult.Error);
+            return MapError(caller.Error);
         }
 
-        var result = await _signIn.RevokeSessionAsync(userIdResult.Value, sessionId, CallerIpAddress(), cancellationToken);
+        var result = await _signIn.RevokeSessionAsync(caller.Value.UserId, caller.Value.UserRef, sessionId, CallerIpAddress(), cancellationToken);
         return MapResult(result);
     }
 

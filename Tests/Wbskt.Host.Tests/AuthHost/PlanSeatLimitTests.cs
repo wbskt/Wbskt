@@ -210,7 +210,7 @@ public sealed class PlanSeatLimitTests
         _tenants.Setup(p => p.AcceptInvitationAsync(It.IsAny<byte[]>(), CallerId, 4, It.IsAny<CancellationToken>()))
             .ThrowsAsync(SqlExceptions.WithNumber(50031, "The plan has reached its member limit."));
 
-        var result = await Tenants().AcceptInvitationAsync(CallerId, "invitation-token");
+        var result = await Tenants().AcceptInvitationAsync(CallerId, Guid.NewGuid(), "invitation-token");
 
         Assert.Equal("PLAN_MEMBER_LIMIT_REACHED", result.Error.Code);
     }
@@ -221,7 +221,7 @@ public sealed class PlanSeatLimitTests
         var harness = new AccountServices(limits: new FixedTenantLimits(Limits));
         harness.Tenants.Setup(p => p.GetInvitationByTokenHashAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new InvitationLookup(Guid.NewGuid(), TenantRef, "Acme", "someone@example.test", DateTime.UtcNow.AddDays(1), IsLive: true));
-        harness.Accounts.Setup(p => p.InsertUserAsync(It.IsAny<User>(), It.IsAny<CancellationToken>())).ReturnsAsync(42);
+        harness.Accounts.Setup(p => p.InsertUserAsync(It.IsAny<User>(), It.IsAny<CancellationToken>())).Callback<User, CancellationToken>((u, _) => u.Id = 42).ReturnsAsync(42);
         harness.Accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new User { Id = 42, RefId = Guid.NewGuid(), Username = "someone", Email = "someone@example.test" });
         harness.Tenants.Setup(p => p.AcceptInvitationAsync(It.IsAny<byte[]>(), 42, 4, It.IsAny<CancellationToken>()))
@@ -244,5 +244,5 @@ public sealed class PlanSeatLimitTests
     private TenantService Tenants() => new(
         _tenants.Object, Mock.Of<IAccessControlProvider>(), _workspaces.Object, Mock.Of<IEventBus>(), Mock.Of<IAuthMailer>(),
         NullLogger<TenantService>.Instance, new FixedTenantLimits(Limits),
-        new TenantAnnouncer(Mock.Of<IAccountProvider>(), Mock.Of<IEventBus>(), AuditWorkspaces.None, new RecordingAccessChanges().Changes, NullLogger<TenantAnnouncer>.Instance), TimeProvider.System);
+        new TenantAnnouncer(Mock.Of<IEventBus>(), AuditWorkspaces.None, new RecordingAccessChanges().Changes, NullLogger<TenantAnnouncer>.Instance), TimeProvider.System);
 }

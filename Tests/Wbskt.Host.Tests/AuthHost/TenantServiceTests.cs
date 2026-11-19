@@ -41,7 +41,7 @@ public sealed class TenantServiceTests
         _service = new TenantService(
             _tenants.Object, _accessControl.Object, _workspaces.Object, _bus, Mock.Of<IAuthMailer>(),
             NullLogger<TenantService>.Instance, new FixedTenantLimits(),
-            new TenantAnnouncer(_accounts.Object, _bus, AuditWorkspaces.None, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance), TimeProvider.System);
+            new TenantAnnouncer(_bus, AuditWorkspaces.None, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance), TimeProvider.System);
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public sealed class TenantServiceTests
         var tenantRef = Guid.NewGuid();
         _tenants.Setup(p => p.LeaveTenantAsync(tenantRef, MemberId, It.IsAny<CancellationToken>())).ReturnsAsync(TenantId);
 
-        var result = await _service.LeaveTenantAsync(MemberId, tenantRef);
+        var result = await _service.LeaveTenantAsync(MemberId, MemberRef, tenantRef);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(1, _accessChanges.Announced);
@@ -129,7 +129,7 @@ public sealed class TenantServiceTests
         _tenants.Setup(p => p.LeaveTenantAsync(It.IsAny<Guid>(), MemberId, It.IsAny<CancellationToken>()))
             .ThrowsAsync(SqlExceptions.WithNumber(guard, "Nobody else administers Acme."));
 
-        var result = await _service.LeaveTenantAsync(MemberId, Guid.NewGuid());
+        var result = await _service.LeaveTenantAsync(MemberId, MemberRef, Guid.NewGuid());
 
         Assert.Equal(code, result.Error.Code);
         Assert.Equal(type, result.Error.Type);
@@ -222,7 +222,7 @@ public sealed class TenantServiceTests
     {
         _tenants.Setup(p => p.GetInvitationByTokenHashAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>())).ThrowsAsync(new SecurityException("No invitation."));
 
-        var result = await _service.AcceptInvitationAsync(MemberId, "invitation-token");
+        var result = await _service.AcceptInvitationAsync(MemberId, MemberRef, "invitation-token");
 
         Assert.Equal("INVITATION_INVALID", result.Error.Code);
         _tenants.Verify(p => p.AcceptInvitationAsync(It.IsAny<byte[]>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -237,7 +237,7 @@ public sealed class TenantServiceTests
             .ReturnsAsync(new InvitationLookup(invitationRef, acme, "Acme", "amal@example.test", DateTime.UtcNow.AddDays(1), IsLive: true));
         _tenants.Setup(p => p.AcceptInvitationAsync(It.Is<byte[]>(h => h.SequenceEqual(SecurityTokens.Hash("invitation-token"))), MemberId, It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(TenantId);
 
-        var result = await _service.AcceptInvitationAsync(MemberId, "invitation-token");
+        var result = await _service.AcceptInvitationAsync(MemberId, MemberRef, "invitation-token");
 
         Assert.Equal(new AcceptInvitationResponse(acme, "Acme"), result.Value);
         Assert.Equal(1, _accessChanges.Announced);

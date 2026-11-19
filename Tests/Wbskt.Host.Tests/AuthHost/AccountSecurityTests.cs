@@ -231,7 +231,7 @@ public sealed class AccountSecurityTests
             .Setup(p => p.RevokeSessionAsync(SessionId, 42, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(0);
 
-        var result = await harness.SignIn.RevokeSessionAsync(42, SessionId, "10.0.0.1");
+        var result = await harness.SignIn.RevokeSessionAsync(42, Guid.Parse("11111111-1111-1111-1111-111111111111"), SessionId, "10.0.0.1");
 
         Assert.Equal("AUTH_SESSION_NOT_FOUND", result.Error.Code);
         Assert.Equal(ErrorType.NotFound, result.Error.Type);
@@ -250,7 +250,7 @@ public sealed class AccountSecurityTests
             .Setup(p => p.RevokeSessionAsync(SessionId, 42, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        var result = await harness.SignIn.RevokeSessionAsync(42, SessionId, "10.0.0.1");
+        var result = await harness.SignIn.RevokeSessionAsync(42, Guid.Parse("11111111-1111-1111-1111-111111111111"), SessionId, "10.0.0.1");
 
         Assert.True(result.IsSuccess);
         harness.AccessTokens.Verify(a => a.RevokeSessionAsync(SessionId, It.IsAny<CancellationToken>()), Times.Once);

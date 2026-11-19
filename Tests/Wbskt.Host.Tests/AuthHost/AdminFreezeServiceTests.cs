@@ -32,7 +32,7 @@ public sealed class AdminFreezeServiceTests
     }
 
     private AdminFreezeService Service() => new(_staff.Object, _runner,
-        new TenantAnnouncer(_accounts.Object, _bus.Object, _audit.Object, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance),
+        new TenantAnnouncer(_bus.Object, _audit.Object, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance),
         NullLogger<AdminFreezeService>.Instance);
 
     [Fact]

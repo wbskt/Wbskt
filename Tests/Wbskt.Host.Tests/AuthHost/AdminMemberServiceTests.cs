@@ -37,7 +37,7 @@ public sealed class AdminMemberServiceTests
     }
 
     private AdminMemberService Service() => new(_staff.Object, _tenants.Object, _accounts.Object, _bus.Object,
-        new TenantAnnouncer(_accounts.Object, _bus.Object, _audit.Object, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance), _runner,
+        new TenantAnnouncer(_bus.Object, _audit.Object, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance), _runner,
         NullLogger<AdminMemberService>.Instance);
 
     [Fact]

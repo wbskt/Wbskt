@@ -59,9 +59,12 @@ internal sealed class AccountProvider : BaseSqlProvider, IAccountProvider
             p.AddWithValue("@Email", user.Email);
             p.AddWithValue("@PasswordHash", user.PasswordHash);
             p.Add("@Id", SqlDbType.Int).Direction = ParameterDirection.Output;
+            p.Add("@RefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
         }, cancellationToken);
 
-        return (int)parameters["@Id"].Value;
+        user.Id = (int)parameters["@Id"].Value;
+        user.RefId = (Guid)parameters["@RefId"].Value;
+        return user.Id;
     }
 
     public async Task<bool> BeginPasswordCheckAsync(int userId, int maxFailures, bool throughLock, CancellationToken cancellationToken = default)
@@ -121,7 +124,7 @@ internal sealed class AccountProvider : BaseSqlProvider, IAccountProvider
         }, cancellationToken);
     }
 
-    public async Task<int> ConsumePasswordResetTokenAsync(byte[] tokenHash, string passwordHash, string? revokedByIp, CancellationToken cancellationToken = default)
+    public async Task<User> ConsumePasswordResetTokenAsync(byte[] tokenHash, string passwordHash, string? revokedByIp, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -131,9 +134,18 @@ internal sealed class AccountProvider : BaseSqlProvider, IAccountProvider
                 p.AddWithValue("@PasswordHash", passwordHash);
                 p.AddWithValue("@RevokedByIp", (object?)revokedByIp ?? DBNull.Value);
                 p.Add("@UserId", SqlDbType.Int).Direction = ParameterDirection.Output;
+                p.Add("@UserRefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
+                p.Add("@Username", SqlDbType.NVarChar, 50).Direction = ParameterDirection.Output;
+                p.Add("@Email", SqlDbType.NVarChar, 100).Direction = ParameterDirection.Output;
             }, cancellationToken);
 
-            return (int)parameters["@UserId"].Value;
+            return new User
+            {
+                Id = (int)parameters["@UserId"].Value,
+                RefId = (Guid)parameters["@UserRefId"].Value,
+                Username = (string)parameters["@Username"].Value,
+                Email = (string)parameters["@Email"].Value,
+            };
         }
         catch (SqlException ex) when (ex.Number == 50014)
         {
@@ -151,7 +163,7 @@ internal sealed class AccountProvider : BaseSqlProvider, IAccountProvider
         }, cancellationToken);
     }
 
-    public async Task<int> ConsumeEmailVerificationTokenAsync(byte[] tokenHash, CancellationToken cancellationToken = default)
+    public async Task<(int UserId, Guid UserRefId)> ConsumeEmailVerificationTokenAsync(byte[] tokenHash, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -159,9 +171,10 @@ internal sealed class AccountProvider : BaseSqlProvider, IAccountProvider
             {
                 p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = tokenHash;
                 p.Add("@UserId", SqlDbType.Int).Direction = ParameterDirection.Output;
+                p.Add("@UserRefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
             }, cancellationToken);
 
-            return (int)parameters["@UserId"].Value;
+            return ((int)parameters["@UserId"].Value, (Guid)parameters["@UserRefId"].Value);
         }
         catch (SqlException ex) when (ex.Number == 50015)
         {
@@ -169,14 +182,18 @@ internal sealed class AccountProvider : BaseSqlProvider, IAccountProvider
         }
     }
 
-    public async Task ChangeUsernameAsync(int userId, string username, TimeSpan minInterval, CancellationToken cancellationToken = default)
+    public async Task<UsernameChange> ChangeUsernameAsync(int userId, string username, TimeSpan minInterval, CancellationToken cancellationToken = default)
     {
-        await ExecuteNonQueryAsync("dbo.User_ChangeUsername", p =>
+        var parameters = await ExecuteNonQueryAsync("dbo.User_ChangeUsername", p =>
         {
             p.AddWithValue("@UserId", userId);
             p.AddWithValue("@Username", username);
             p.AddWithValue("@MinIntervalSeconds", (int)minInterval.TotalSeconds);
+            p.Add("@OldUsername", SqlDbType.NVarChar, 50).Direction = ParameterDirection.Output;
+            p.Add("@NewUsername", SqlDbType.NVarChar, 50).Direction = ParameterDirection.Output;
         }, cancellationToken);
+
+        return new UsernameChange((string)parameters["@OldUsername"].Value, (string)parameters["@NewUsername"].Value);
     }
 
     public async Task CreateEmailChangeTokenAsync(int userId, string newEmail, byte[] tokenHash, DateTime expiresAt, string? requestedByIp, CancellationToken cancellationToken = default)
@@ -204,9 +221,16 @@ internal sealed class AccountProvider : BaseSqlProvider, IAccountProvider
                 p.Add("@UserId", SqlDbType.Int).Direction = ParameterDirection.Output;
                 p.Add("@OldEmail", SqlDbType.NVarChar, 100).Direction = ParameterDirection.Output;
                 p.Add("@NewEmail", SqlDbType.NVarChar, 100).Direction = ParameterDirection.Output;
+                p.Add("@UserRefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
+                p.Add("@Username", SqlDbType.NVarChar, 50).Direction = ParameterDirection.Output;
             }, cancellationToken);
 
-            return new EmailChange((int)parameters["@UserId"].Value, (string)parameters["@OldEmail"].Value, (string)parameters["@NewEmail"].Value);
+            return new EmailChange(
+                (int)parameters["@UserId"].Value,
+                (Guid)parameters["@UserRefId"].Value,
+                (string)parameters["@Username"].Value,
+                (string)parameters["@OldEmail"].Value,
+                (string)parameters["@NewEmail"].Value);
         }
         catch (SqlException ex) when (ex.Number == 50020)
         {
@@ -225,9 +249,16 @@ internal sealed class AccountProvider : BaseSqlProvider, IAccountProvider
                 p.Add("@UserId", SqlDbType.Int).Direction = ParameterDirection.Output;
                 p.Add("@RestoredEmail", SqlDbType.NVarChar, 100).Direction = ParameterDirection.Output;
                 p.Add("@AbandonedEmail", SqlDbType.NVarChar, 100).Direction = ParameterDirection.Output;
+                p.Add("@UserRefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
+                p.Add("@Username", SqlDbType.NVarChar, 50).Direction = ParameterDirection.Output;
             }, cancellationToken);
 
-            return new EmailChange((int)parameters["@UserId"].Value, (string)parameters["@AbandonedEmail"].Value, (string)parameters["@RestoredEmail"].Value);
+            return new EmailChange(
+                (int)parameters["@UserId"].Value,
+                (Guid)parameters["@UserRefId"].Value,
+                (string)parameters["@Username"].Value,
+                (string)parameters["@AbandonedEmail"].Value,
+                (string)parameters["@RestoredEmail"].Value);
         }
         catch (SqlException ex) when (ex.Number == 50020)
         {

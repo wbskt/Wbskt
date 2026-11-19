@@ -110,7 +110,7 @@ internal sealed class TenantService : ITenantService
         });
     }
 
-    public async Task<Result> LeaveTenantAsync(int callerId, Guid tenantRef, CancellationToken cancellationToken = default)
+    public async Task<Result> LeaveTenantAsync(int callerId, Guid callerRef, Guid tenantRef, CancellationToken cancellationToken = default)
     {
         int tenantId;
         try
@@ -124,8 +124,8 @@ internal sealed class TenantService : ITenantService
         }
 
         _logger.LogInformation("User ID {UserId} left tenant ID {TenantId}", callerId, tenantId);
-        var user = await _announcer.AccessChangedAsync(callerId, cancellationToken);
-        await _announcer.ToTenantAsync(new MemberLeftEvent(user.RefId), tenantId, cancellationToken);
+        _announcer.AccessChanged();
+        await _announcer.ToTenantAsync(new MemberLeftEvent(callerRef), tenantId, cancellationToken);
         return Result.Success();
     }
 
@@ -259,7 +259,7 @@ internal sealed class TenantService : ITenantService
         });
     }
 
-    public async Task<Result<AcceptInvitationResponse>> AcceptInvitationAsync(int callerId, string token, CancellationToken cancellationToken = default)
+    public async Task<Result<AcceptInvitationResponse>> AcceptInvitationAsync(int callerId, Guid callerRef, string token, CancellationToken cancellationToken = default)
     {
         var tokenHash = SecurityTokens.Hash(token);
 
@@ -282,8 +282,8 @@ internal sealed class TenantService : ITenantService
             var tenantId = await _tenants.AcceptInvitationAsync(tokenHash, callerId, limits.Members, cancellationToken);
             _logger.LogInformation("User ID {CallerId} joined tenant {TenantRef} by invitation", callerId, invitation.TenantRef);
 
-            var joiner = await _announcer.AccessChangedAsync(callerId, cancellationToken);
-            await _announcer.ToTenantAsync(new InvitationAcceptedEvent(invitation.RefId, invitation.Email, callerId, joiner.RefId), tenantId, cancellationToken);
+            _announcer.AccessChanged();
+            await _announcer.ToTenantAsync(new InvitationAcceptedEvent(invitation.RefId, invitation.Email, callerId, callerRef), tenantId, cancellationToken);
             return new AcceptInvitationResponse(invitation.TenantRef, invitation.TenantName);
         });
         return accepted.IsSuccess ? accepted : Result<AcceptInvitationResponse>.Failure(await _limits.WithSeatsAsync(accepted.Error, invitation.TenantRef, cancellationToken));

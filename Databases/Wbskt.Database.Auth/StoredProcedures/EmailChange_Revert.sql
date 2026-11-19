@@ -4,12 +4,16 @@
 --
 -- 50020: the token is unknown, spent or expired.
 -- 50021: the old address belongs to another account by now.
+--
+-- Returns the account's reference and name with the addresses, as dbo.EmailChange_Confirm does.
 CREATE PROCEDURE dbo.EmailChange_Revert
     @TokenHash     VARBINARY(32),
     @RevokedByIp   NVARCHAR(50) = NULL,
     @UserId        INT OUTPUT,
     @RestoredEmail NVARCHAR(100) OUTPUT,
-    @AbandonedEmail NVARCHAR(100) OUTPUT
+    @AbandonedEmail NVARCHAR(100) OUTPUT,
+    @UserRefId     UNIQUEIDENTIFIER = NULL OUTPUT,
+    @Username      NVARCHAR(50) = NULL OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -40,7 +44,7 @@ BEGIN
         THROW 50021, 'That address cannot be used.', 1;
     END
 
-    SELECT @AbandonedEmail = Email FROM dbo.Users WITH (UPDLOCK) WHERE Id = @UserId;
+    SELECT @AbandonedEmail = Email, @UserRefId = RefId, @Username = Username FROM dbo.Users WITH (UPDLOCK) WHERE Id = @UserId;
 
     -- Every pending change goes, so one made with the stolen session cannot be confirmed afterwards,
     -- and so does this undo and every later one. Earlier undos stay: whoever holds a later address
