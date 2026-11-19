@@ -3433,7 +3433,10 @@
             ]
           },
           "edges": {
-            "type": "array"
+            "type": [
+              "null",
+              "array"
+            ]
           },
           "expectedRevision": {
             "format": "int32",
@@ -3449,10 +3452,16 @@
             "type": "boolean"
           },
           "name": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "nodes": {
-            "type": "array"
+            "type": [
+              "null",
+              "array"
+            ]
           },
           "sharedVariableSchema": {
             "items": {
@@ -3584,7 +3593,10 @@
             ]
           },
           "edges": {
-            "type": "array"
+            "type": [
+              "null",
+              "array"
+            ]
           },
           "enable": {
             "type": "boolean"
@@ -3597,7 +3609,10 @@
             "type": "string"
           },
           "nodes": {
-            "type": "array"
+            "type": [
+              "null",
+              "array"
+            ]
           },
           "refId": {
             "format": "uuid",
@@ -3993,17 +4008,26 @@
             ]
           },
           "edges": {
-            "type": "array"
+            "type": [
+              "null",
+              "array"
+            ]
           },
           "failFast": {
             "default": false,
             "type": "boolean"
           },
           "name": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "nodes": {
-            "type": "array"
+            "type": [
+              "null",
+              "array"
+            ]
           },
           "refId": {
             "format": "uuid",
