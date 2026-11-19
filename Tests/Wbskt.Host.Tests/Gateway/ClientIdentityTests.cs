@@ -20,9 +20,9 @@ public sealed class ClientIdentityTests
     }
 
     [Fact]
-    public void A_client_token_from_before_the_claims_contract_is_still_read()
+    public void A_client_token_from_before_the_claims_contract_is_no_longer_read()
     {
-        // #306: sub under its mapped name and the old "type" claim, for one token lifetime.
+        // #306: the old "type" claim was read for one token lifetime (an hour); that has long passed.
         Claim[] legacy =
         [
             new(ClaimTypes.NameIdentifier, ClientRefId.ToString()),
@@ -32,8 +32,7 @@ public sealed class ClientIdentityTests
             new(ClientClaims.IssuedAt, "1760000000")
         ];
 
-        Assert.True(ClientIdentity.TryRead(Principal(legacy), out var identity));
-        Assert.Equal(ClientRefId, identity.ClientRefId);
+        Assert.False(ClientIdentity.TryRead(Principal(legacy), out _));
     }
 
     [Theory]

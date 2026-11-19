@@ -37,20 +37,6 @@ public sealed class IdentityMiddlewareTests
     }
 
     [Fact]
-    public async Task A_token_from_before_the_claims_contract_carries_its_own_id()
-    {
-        var legacy = Principal(
-            new Claim(ClaimTypes.NameIdentifier, "5"),
-            new Claim("type", WbsktClaims.UserType),
-            new Claim("uref", UserRef.ToString()));
-
-        var (seen, _) = await RunAsync(legacy);
-
-        seen.Should().Be(new UserIdentity(5) { UserRefId = UserRef });
-        _lookup.VerifyNoOtherCalls();
-    }
-
-    [Fact]
     public async Task A_user_the_host_cannot_find_is_no_one()
     {
         _lookup.Setup(l => l.FindUserIdAsync(UserRef, It.IsAny<CancellationToken>())).ReturnsAsync((int?)null);
@@ -118,9 +104,8 @@ public sealed class IdentityMiddlewareTests
         });
         var principal = new ClaimsPrincipal(result.ClaimsIdentity);
 
-        WbsktClaims.TryReadUser(principal, out Guid userRef, out int? legacyId).Should().BeTrue();
+        WbsktClaims.TryReadUser(principal, out Guid userRef).Should().BeTrue();
         userRef.Should().Be(UserRef);
-        legacyId.Should().BeNull();
         WbsktClaims.SessionOf(principal).Should().Be(SessionId);
         WbsktClaims.Find(principal, WbsktClaims.Email).Should().Be("ada@example.com");
     }

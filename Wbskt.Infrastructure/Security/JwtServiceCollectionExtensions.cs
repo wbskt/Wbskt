@@ -138,7 +138,7 @@ public static class JwtServiceCollectionExtensions
         }
 
         return context.Principal is { } principal
-            && WbsktClaims.TryReadUser(principal, out Guid userRef, out _)
+            && WbsktClaims.TryReadUser(principal, out Guid userRef)
             && revocation.IsRevoked(userRef, token.IssuedAt);
     }
 
