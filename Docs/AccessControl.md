@@ -78,7 +78,7 @@ did not end up with tenant-wide `users.manage` cannot be repaired: every managem
 requires that permission *in that tenant* to act, so nobody is left who could grant it.
 
 Seeded per tenant, mirroring the post-deployment seed: `Admin` holds every permission in the
-catalogue, `User` holds the reads for a workspace's resources (`clients.read`, `policies.read`,
+catalogue, `User` holds the defaults the catalogue marks: the reads for a workspace's resources (`clients.read`, `policies.read`,
 `templates.read`, `workflows.read`, `logs.read`, `integrations.read`, `billing.read`) and
 `workspace.join`, without which the console's live updates (presence, latency, runs, the message
 rate) are refused. It is a starting point the administrator customises. Existing `User` roles that
@@ -259,12 +259,17 @@ caller must be its owner or hold `workspaces.delete` tenant-wide, which only `Ad
 default. Either refusal is 403 `PERMISSION_UNAUTHORIZED`. Without this, a member given `users.manage` in
 one workspace to add and remove people could make themselves its administrator, or delete it.
 
-The permission catalogue is **code-defined**: `Wbskt.Primitives/Constants/Permissions.cs` seeded by
-`Databases/Wbskt.Database.Auth/Scripts/Script.PostDeployment.sql`. There is deliberately no API to
-create permissions — a slug invented at runtime cannot gate anything, because every check in the
-codebase is a compile-time `Permissions.X` constant.
+The permission catalogue is **code-defined**: `Wbskt.Primitives/Constants/PermissionNames.cs` on the
+host side and the `dbo.PermissionCatalogue` view (`Databases/Wbskt.Database.Auth/Views/PermissionCatalogue.sql`)
+on the database side, which `PermissionCatalogueTests` holds equal. The view lists each slug once, with
+its description and whether it is one of the `User` role's defaults; the post-deployment script writes
+it into `dbo.Permissions` and `Tenant_Create` reads the defaults from it. There is deliberately no API
+to create permissions — a slug invented at runtime cannot gate anything, because every check in the
+codebase is a compile-time constant.
 
-Adding a slug to that file is only half the job. `Tenant_Create` grants the tenant's `Admin` role the
+Adding a slug is one line in each of those two files. A new `User` default reaches the `User` roles
+that already exist once, on the deploy that adds it, and is never put back after an administrator
+takes it away. `Tenant_Create` grants the tenant's `Admin` role the
 catalogue **as it stood when the tenant was created** and never revisits it, so a new slug reaches
 existing tenants only through the post-deployment script's `RolePermissions` backfill. That backfill
 runs across every `Admin` role, not just the default tenant's, and must stay set-based — a scalar

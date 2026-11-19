@@ -91,7 +91,7 @@ BEGIN
     INSERT INTO dbo.RolePermissions (RoleId, PermissionId, IsDeny)
     SELECT R.Id, P.Id, 0
     FROM dbo.Roles R
-    INNER JOIN dbo.Permissions P ON P.Slug IN ('clients.read', 'policies.read', 'templates.read', 'workflows.read', 'logs.read', 'integrations.read', 'billing.read', 'workspace.join')
+    INNER JOIN dbo.Permissions P ON P.Slug IN (SELECT Slug FROM dbo.PermissionCatalogue WHERE IsUserDefault = 1)
     WHERE R.TenantId = @TenantId AND R.Kind = 'User';
 
     INSERT INTO dbo.TenantMembers (TenantId, UserId)
