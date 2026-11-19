@@ -20,7 +20,8 @@ CREATE PROCEDURE dbo.TenantInvitation_Create
     @MemberLimit INT = NULL,
     -- The workspaces' public references as a JSON array of strings, resolved here within @TenantId in
     -- place of @WorkspaceIds, so the caller needs no lookup per workspace. One that names nothing in
-    -- the tenant is refused (50017). @WorkspaceIds stays for the host still running during a rollout.
+    -- the tenant is refused (50017). @WorkspaceIds stays for the host still running during a rollout;
+    -- dropped in the release after (#1059).
     @WorkspaceRefIds NVARCHAR(MAX) = NULL
 AS
 BEGIN

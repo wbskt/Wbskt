@@ -6,7 +6,7 @@ CREATE PROCEDURE dbo.UserRole_Assign
     @WorkspaceId INT = NULL,
     -- The public references, resolved here within @TenantId (dbo.TenantReferences_Resolve) in place
     -- of the ids above, so the caller needs no lookup first. The ids stay for the host still running
-    -- during a rollout; remove them once no caller passes them.
+    -- during a rollout; dropped in the release after (#1059).
     @UserRefId UNIQUEIDENTIFIER = NULL,
     @RoleRefId UNIQUEIDENTIFIER = NULL,
     @WorkspaceRefId UNIQUEIDENTIFIER = NULL

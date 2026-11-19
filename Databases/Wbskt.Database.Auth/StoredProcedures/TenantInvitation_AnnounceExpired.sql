@@ -6,6 +6,8 @@
 -- transaction as the mark, dated when the invitation expired and naming every workspace of its tenant
 -- (as IAuditWorkspaces.OfTenantAsync would), so a broker outage cannot lose the audit entry once the
 -- row is marked. Without it (the host before this change) the caller publishes the events itself.
+-- @QueueEvents defaults to 0 only for that previous host; it becomes required, or the only behaviour,
+-- in the release after (#1059).
 CREATE PROCEDURE dbo.TenantInvitation_AnnounceExpired
     @NowUtc DATETIME2(3),
     @BatchSize INT,
