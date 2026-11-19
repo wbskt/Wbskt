@@ -163,6 +163,7 @@ public sealed class AdminMemberServiceTests
     [Theory]
     [InlineData(50016, "MEMBER_NOT_FOUND")]
     [InlineData(50048, "MEMBER_CANNOT_ACT")]
+    [InlineData(50050, "TENANT_HAS_ADMINISTRATOR")]
     public async Task A_member_who_could_not_administer_is_refused(int number, string code)
     {
         _staff.Setup(s => s.RepairAdministratorAsync(TenantId, 42, It.IsAny<CancellationToken>())).ThrowsAsync(SqlExceptions.WithNumber(number, "guard"));
