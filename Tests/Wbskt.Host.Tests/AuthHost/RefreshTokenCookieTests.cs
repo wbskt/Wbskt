@@ -74,6 +74,32 @@ public sealed class RefreshTokenCookieTests
         Assert.Contains("expires=", setCookie);
     }
 
+    [Fact]
+    public void The_device_cookie_is_read_under_the_same_rules()
+    {
+        var cookie = Cookie();
+
+        Assert.Equal("device", cookie.ReadDevice(Request(header: true, origin: Console)));
+        Assert.Null(cookie.ReadDevice(Request(header: false, origin: Console)));
+        Assert.Null(cookie.ReadDevice(Request(header: true, origin: "https://evil.example.test")));
+    }
+
+    [Fact]
+    public void The_written_device_cookie_is_HttpOnly_and_lasts_until_the_device_lapses()
+    {
+        var context = new DefaultHttpContext();
+        var expiresAt = new DateTimeOffset(2030, 1, 2, 3, 4, 5, TimeSpan.Zero);
+
+        Cookie().WriteDevice(context.Response, "device", expiresAt);
+
+        var setCookie = context.Response.Headers.SetCookie.ToString().ToLowerInvariant();
+        Assert.StartsWith("wbskt_device=device", setCookie);
+        Assert.Contains("httponly", setCookie);
+        Assert.Contains("secure", setCookie);
+        Assert.Contains("path=/api/auth", setCookie);
+        Assert.Contains("expires=wed, 02 jan 2030 03:04:05 gmt", setCookie);
+    }
+
     private static RefreshTokenCookie Cookie(string[]? origins = null, bool development = false, SameSiteMode sameSite = SameSiteMode.Strict)
     {
         var settings = new Dictionary<string, string?>();
@@ -96,7 +122,7 @@ public sealed class RefreshTokenCookieTests
     private static HttpRequest Request(bool header, string? origin)
     {
         var context = new DefaultHttpContext();
-        context.Request.Headers.Cookie = "wbskt_refresh=token";
+        context.Request.Headers.Cookie = "wbskt_refresh=token; wbskt_device=device";
         if (header)
         {
             context.Request.Headers[RefreshTokenCookie.TransportHeader] = RefreshTokenCookie.CookieTransport;

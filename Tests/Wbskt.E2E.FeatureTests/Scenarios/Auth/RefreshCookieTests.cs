@@ -19,6 +19,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 public sealed class RefreshCookieTests(ServicesFixture fixture) : IDisposable
 {
     private const string CookieName = "wbskt_refresh";
+    private const string DeviceCookieName = "wbskt_device";
     private const string TransportHeader = "X-Refresh-Token-Transport";
 
     private readonly HttpClient _http = new(new HttpClientHandler
@@ -123,7 +124,31 @@ public sealed class RefreshCookieTests(ServicesFixture fixture) : IDisposable
             "a browser whose cookie expired is signed out, the same answer as an expired token");
     }
 
-    private async Task<HttpResponseMessage> LoginAsync(ServicesFixture.TestUser user)
+    [SkippableFact]
+    public async Task AUTH_RC_07_A_browser_that_signed_in_before_gets_through_a_lock()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+        var user = await fixture.CreateUserAsync();
+        using var first = await LoginAsync(user);
+        var device = SetCookieValue(first, DeviceCookieName) ?? throw new InvalidOperationException("No device cookie was set.");
+        SetCookie(first, DeviceCookieName)!.ToLowerInvariant().Should().Contain("httponly").And.Contain("path=/api/auth");
+
+        // Someone else locks the account by guessing.
+        for (var i = 0; i < 10; i++)
+        {
+            (await fixture.LoginRawAsync(user.Email, "wrong-password")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        }
+
+        using var stranger = await LoginAsync(user);
+        stranger.StatusCode.Should().Be(HttpStatusCode.Unauthorized, "a browser the account has not signed in from is still locked out");
+        (await ServicesFixture.ReadErrorCodeAsync(stranger)).Should().Be("AUTH_INVALID_CREDENTIALS");
+
+        using var owner = await LoginAsync(user, device);
+        owner.StatusCode.Should().Be(HttpStatusCode.OK, "the owner's browser still gets its password tried");
+        SetCookieValue(owner, DeviceCookieName).Should().NotBeNullOrEmpty().And.NotBe(device);
+    }
+
+    private async Task<HttpResponseMessage> LoginAsync(ServicesFixture.TestUser user, string? device = null)
     {
         // Bespoke: the cookie transport header and the Cookie header are what is under test, and the typed client sends neither.
         using var request = new HttpRequestMessage(HttpMethod.Post, ServicesFixture.AuthUrl("/api/auth/login"))
@@ -131,8 +156,21 @@ public sealed class RefreshCookieTests(ServicesFixture fixture) : IDisposable
             Content = JsonContent.Create(new { email = user.Email, password = user.Password })
         };
         request.Headers.Add(TransportHeader, "cookie");
+        if (device is not null)
+        {
+            request.Headers.Add("Cookie", $"{DeviceCookieName}={device}");
+        }
+
         return await _http.SendAsync(request);
     }
+
+    private static string? SetCookie(HttpResponseMessage response, string name) =>
+        response.Headers.TryGetValues("Set-Cookie", out var values)
+            ? values.FirstOrDefault(v => v.StartsWith($"{name}=", StringComparison.Ordinal))
+            : null;
+
+    private static string? SetCookieValue(HttpResponseMessage response, string name) =>
+        SetCookie(response, name)?[(name.Length + 1)..].Split(';')[0];
 
     /// <summary>A body-less POST in the cookie transport, as the console sends refresh and logout.</summary>
     private async Task<HttpResponseMessage> PostWithCookieAsync(string path, string? cookie)
@@ -148,10 +186,7 @@ public sealed class RefreshCookieTests(ServicesFixture fixture) : IDisposable
         return await _http.SendAsync(request);
     }
 
-    private static string? RefreshSetCookie(HttpResponseMessage response) =>
-        response.Headers.TryGetValues("Set-Cookie", out var values)
-            ? values.FirstOrDefault(v => v.StartsWith($"{CookieName}=", StringComparison.Ordinal))
-            : null;
+    private static string? RefreshSetCookie(HttpResponseMessage response) => SetCookie(response, CookieName);
 
     private static string CookieValue(HttpResponseMessage response)
     {

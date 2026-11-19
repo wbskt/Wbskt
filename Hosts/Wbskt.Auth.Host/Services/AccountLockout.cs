@@ -25,6 +25,15 @@ internal static class AccountLockout
     internal static readonly TimeSpan LoginLockout = TimeSpan.FromMinutes(15);
 
     /// <summary>
+    /// How long a browser that signed in keeps getting its password tried through a lock. Long enough
+    /// to cover someone who signs in once a quarter; the refresh session itself is much shorter.
+    /// </summary>
+    internal static readonly TimeSpan DeviceLifetime = TimeSpan.FromDays(90);
+
+    /// <summary>Sign-in devices kept per account; the oldest goes when a new one is recorded.</summary>
+    internal const int MaxDevicesPerUser = 10;
+
+    /// <summary>
     /// Counts a wrong password against the account, and raises an alert when that failure locks it.
     /// </summary>
     public static async Task RecordFailedPasswordAsync(IAccountProvider accounts, IEventBus eventBus, ILogger logger, User user, string ipAddress, CancellationToken cancellationToken)

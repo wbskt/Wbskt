@@ -1,6 +1,6 @@
--- Retention sweep for spent credentials: refresh, password-reset, email-verification and email-change tokens, and
--- invitations nobody accepted, once they expired before @CutoffUtc. Deletes up to @BatchSize rows from
--- each table and returns the total; the caller repeats until it comes back 0.
+-- Retention sweep for spent credentials: refresh, sign-in device, password-reset, email-verification and
+-- email-change tokens, and invitations nobody accepted, once they expired before @CutoffUtc. Deletes up
+-- to @BatchSize rows from each table and returns the total; the caller repeats until it comes back 0.
 --
 -- The caller passes a cutoff well behind "now" rather than now itself: an expired token is already
 -- useless, but keeping it a while longer lets a sign-in with a stolen, rotated-away token still be
@@ -15,6 +15,9 @@ BEGIN
     DECLARE @Deleted INT = 0;
 
     DELETE TOP (@BatchSize) FROM dbo.RefreshTokens WHERE Expires < @CutoffUtc;
+    SET @Deleted += @@ROWCOUNT;
+
+    DELETE TOP (@BatchSize) FROM dbo.UserDevices WHERE ExpiresAt < @CutoffUtc;
     SET @Deleted += @@ROWCOUNT;
 
     DELETE TOP (@BatchSize) FROM dbo.PasswordResetTokens WHERE ExpiresAt < @CutoffUtc;

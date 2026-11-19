@@ -112,4 +112,24 @@ internal sealed class SessionProvider : BaseSqlProvider, ISessionProvider
             p.AddWithValue("@RevokedByIp", (object?)revokedByIp ?? DBNull.Value);
         }, cancellationToken);
     }
+
+    public async Task InsertDeviceAsync(int userId, string deviceToken, DateTime expiresAt, int maxPerUser, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.UserDevice_Create", p =>
+        {
+            p.AddWithValue("@UserId", userId);
+            p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = SecurityTokens.Hash(deviceToken);
+            p.AddWithValue("@ExpiresAt", expiresAt);
+            p.AddWithValue("@MaxPerUser", maxPerUser);
+        }, cancellationToken);
+    }
+
+    public async Task<bool> IsKnownDeviceAsync(int userId, string deviceToken, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteScalarAsync<bool>("dbo.UserDevice_Verify", p =>
+        {
+            p.AddWithValue("@UserId", userId);
+            p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = SecurityTokens.Hash(deviceToken);
+        }, cancellationToken);
+    }
 }

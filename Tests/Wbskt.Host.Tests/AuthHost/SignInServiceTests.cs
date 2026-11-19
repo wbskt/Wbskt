@@ -103,6 +103,72 @@ public sealed class SignInServiceTests
     }
 
     [Fact]
+    public async Task A_locked_account_refuses_the_right_password_from_a_browser_it_does_not_know()
+    {
+        var harness = new Harness();
+        harness.WithUser(ALockedUser());
+        harness.Sessions.Setup(p => p.IsKnownDeviceAsync(42, "stranger-device", It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var fromStranger = await harness.SignIn.LoginFromBrowserAsync(Email, Password, Ip, "stranger-device");
+        var withoutCookie = await harness.SignIn.LoginFromBrowserAsync(Email, Password, Ip, null);
+        var fromApi = await harness.SignIn.LoginAsync(Email, Password, Ip);
+
+        Assert.All([fromStranger.Error, withoutCookie.Error, fromApi.Error], e => Assert.Equal("AUTH_INVALID_CREDENTIALS", e.Code));
+        harness.Sessions.Verify(p => p.InsertRefreshTokenAsync(It.IsAny<RefreshToken>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.Sessions.Verify(p => p.IsKnownDeviceAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_browser_that_signed_in_before_gets_through_a_lock_with_the_right_password()
+    {
+        var harness = new Harness();
+        harness.WithUser(ALockedUser());
+        harness.Sessions.Setup(p => p.IsKnownDeviceAsync(42, "owner-device", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var result = await harness.SignIn.LoginFromBrowserAsync(Email, Password, Ip, "owner-device");
+
+        Assert.True(result.IsSuccess);
+        Assert.NotEqual("owner-device", result.Value.DeviceToken);
+        harness.Sessions.Verify(p => p.InsertRefreshTokenAsync(It.IsAny<RefreshToken>(), Ip, It.IsAny<CancellationToken>()), Times.Once);
+        harness.Accounts.Verify(p => p.RecordLoginSuccessAsync(42, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_browser_that_signed_in_before_still_needs_the_right_password_through_a_lock()
+    {
+        var harness = new Harness();
+        harness.WithUser(ALockedUser());
+        harness.Sessions.Setup(p => p.IsKnownDeviceAsync(42, "owner-device", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var result = await harness.SignIn.LoginFromBrowserAsync(Email, "not the password", Ip, "owner-device");
+
+        Assert.Equal("AUTH_INVALID_CREDENTIALS", result.Error.Code);
+        harness.Accounts.Verify(p => p.RecordLoginFailureAsync(42, It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Once);
+        harness.Sessions.Verify(p => p.InsertDeviceAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_browser_sign_in_records_a_new_device_and_an_api_sign_in_records_none()
+    {
+        var harness = new Harness();
+        harness.WithUser(AUser());
+        string? recorded = null;
+        harness.Sessions.Setup(p => p.InsertDeviceAsync(42, It.IsAny<string>(), It.IsAny<DateTime>(), AccountLockout.MaxDevicesPerUser, It.IsAny<CancellationToken>()))
+            .Callback<int, string, DateTime, int, CancellationToken>((_, token, _, _, _) => recorded = token)
+            .Returns(Task.CompletedTask);
+
+        await harness.SignIn.LoginAsync(Email, Password, Ip);
+        Assert.Null(recorded);
+
+        var result = await harness.SignIn.LoginFromBrowserAsync(Email, Password, Ip, null);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(recorded, result.Value.DeviceToken);
+        Assert.InRange(result.Value.DeviceExpiresAt, DateTimeOffset.UtcNow.AddDays(89), DateTimeOffset.UtcNow.Add(AccountLockout.DeviceLifetime));
+        harness.Sessions.Verify(p => p.IsKnownDeviceAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Signing_out_everywhere_ends_refresh_and_access_tokens()
     {
         var harness = new Harness();
@@ -145,6 +211,13 @@ public sealed class SignInServiceTests
         IsActive = true,
         IsEmailVerified = true
     };
+
+    private static User ALockedUser()
+    {
+        var user = AUser();
+        user.LockedUntil = DateTime.UtcNow.AddMinutes(10);
+        return user;
+    }
 
     private sealed class Harness : AccountServices
     {

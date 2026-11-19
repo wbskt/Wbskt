@@ -203,6 +203,7 @@ The most security-sensitive area, and entirely uncovered today.
 | `AUTH_RC_04` | − | Cookie sent without the header | **400** — read as a body-only request with no token |
 | `AUTH_RC_05` | + | Logout with the header and cookie | **204**, cookie cleared, the token then fails refresh |
 | `AUTH_RC_06` | − | Header but no cookie | **401** |
+| `AUTH_RC_07` | + | Sign in with the header, lock the account with ten wrong passwords, sign in again | Login sets `wbskt_device`. During the lock the right password is **401** `AUTH_INVALID_CREDENTIALS` without the device cookie and **200** with it, with a new device cookie |
 
 ---
 

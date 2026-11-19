@@ -106,6 +106,42 @@ public sealed class AccountSecurityProcedureTests(AuthSqlFixture fixture)
         Assert.Empty(await ListSessionsAsync(userId));
     }
 
+    [SkippableFact]
+    public async Task A_recorded_device_is_known_only_to_its_own_account_and_only_while_live()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int userId = await CreateUserAsync();
+        int otherId = await CreateUserAsync();
+        byte[] live = RandomHash();
+        byte[] lapsed = RandomHash();
+
+        await AddDeviceAsync(userId, live, DateTime.UtcNow.AddDays(1));
+        await ExecAsync("INSERT INTO dbo.UserDevices (UserId, TokenHash, ExpiresAt) VALUES (@p0, @p1, DATEADD(DAY, -1, SYSUTCDATETIME()))", userId, lapsed);
+
+        Assert.True(await IsKnownDeviceAsync(userId, live));
+        Assert.False(await IsKnownDeviceAsync(otherId, live));
+        Assert.False(await IsKnownDeviceAsync(userId, lapsed));
+        Assert.False(await IsKnownDeviceAsync(userId, RandomHash()));
+    }
+
+    [SkippableFact]
+    public async Task Recording_a_device_keeps_only_the_newest_and_drops_lapsed_ones()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int userId = await CreateUserAsync();
+        await ExecAsync("INSERT INTO dbo.UserDevices (UserId, TokenHash, ExpiresAt) VALUES (@p0, CRYPT_GEN_RANDOM(32), DATEADD(DAY, -1, SYSUTCDATETIME()))", userId);
+        var hashes = Enumerable.Range(0, 4).Select(_ => RandomHash()).ToList();
+
+        foreach (var hash in hashes)
+        {
+            await AddDeviceAsync(userId, hash, DateTime.UtcNow.AddDays(1), maxPerUser: 3);
+        }
+
+        Assert.Equal(3, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.UserDevices WHERE UserId = @p0", userId));
+        Assert.False(await IsKnownDeviceAsync(userId, hashes[0]));
+        Assert.True(await IsKnownDeviceAsync(userId, hashes[3]));
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private Task<int> CreateUserAsync() =>
@@ -164,6 +200,20 @@ public sealed class AccountSecurityProcedureTests(AuthSqlFixture fixture)
         cmd.Parameters.AddWithValue("@SessionId", sessionId);
         cmd.Parameters.AddWithValue("@UserId", userId);
         return (int)(await cmd.ExecuteScalarAsync())!;
+    }
+
+    private static byte[] RandomHash() => System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
+
+    private Task AddDeviceAsync(int userId, byte[] hash, DateTime expiresAt, int maxPerUser = 10) =>
+        ProcAsync("dbo.UserDevice_Create", ("@UserId", userId), ("@TokenHash", hash), ("@ExpiresAt", expiresAt), ("@MaxPerUser", maxPerUser));
+
+    private async Task<bool> IsKnownDeviceAsync(int userId, byte[] hash)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = new SqlCommand("dbo.UserDevice_Verify", conn) { CommandType = CommandType.StoredProcedure };
+        cmd.Parameters.AddWithValue("@UserId", userId);
+        cmd.Parameters.AddWithValue("@TokenHash", hash);
+        return (bool)(await cmd.ExecuteScalarAsync())!;
     }
 
     private async Task ProcAsync(string procedure, params (string Name, object Value)[] parameters)
