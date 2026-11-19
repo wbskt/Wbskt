@@ -75,11 +75,14 @@ public sealed class AccessRecheckTests
         _cutoffs.Setup(c => c.FindRefusedAsync(It.IsAny<IReadOnlyCollection<ClientToken>>(), It.IsAny<CancellationToken>()))
             .Callback(() => _cache.Revoke(lateRef))
             .ReturnsAsync([missedRef, lateRef]);
+        var metrics = new GatewayMetrics(GatewayTransport.WebSocket);
         var counted = new List<long>();
         using var listener = new MeterListener();
         listener.InstrumentPublished = (instrument, l) =>
         {
-            if (instrument.Name == "wbskt_socket_access_recheck_closed_total")
+            // Only this test's own instance: other gateway tests count on the same meter name in parallel,
+            // and their measurements arriving here broke the enumeration below.
+            if (ReferenceEquals(instrument.Meter, metrics.Meter) && instrument.Name == "wbskt_socket_access_recheck_closed_total")
             {
                 l.EnableMeasurementEvents(instrument);
             }
@@ -87,7 +90,7 @@ public sealed class AccessRecheckTests
         listener.SetMeasurementEventCallback<long>((_, value, _, _) => counted.Add(value));
         listener.Start();
 
-        await Recheck().TickAsync(CancellationToken.None);
+        await Recheck(metrics).TickAsync(CancellationToken.None);
 
         Assert.Equal(DisconnectReason.Revoked, late.CloseRequest?.Reason);
         Assert.Equal([1L], counted.Where(v => v > 0));
@@ -139,10 +142,10 @@ public sealed class AccessRecheckTests
         return connection;
     }
 
-    private AccessRecheck Recheck() => new(
+    private AccessRecheck Recheck(GatewayMetrics? metrics = null) => new(
         _connections,
         new ClientAccessGate(_cache, _cutoffs.Object, _connections),
-        new GatewayMetrics(GatewayTransport.WebSocket),
+        metrics ?? new GatewayMetrics(GatewayTransport.WebSocket),
         Options.Create(new AccessRecheckOptions()),
         new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
         TimeProvider.System,
