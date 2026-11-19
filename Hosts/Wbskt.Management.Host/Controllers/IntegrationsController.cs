@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Authorization;
 using Wbskt.Management.Host.Authorization;
 using Wbskt.Management.Host.Services.Integrations;
+using Wbskt.Management.Host.RateLimiting;
 using Wbskt.Management.Models;
 using Wbskt.Models;
 using Wbskt.Primitives.Constants;
@@ -105,7 +105,7 @@ public sealed class IntegrationsController(IIntegrationService integrations) : A
     /// </summary>
     [HttpPost("test")]
     [RequiresPermission(PermissionNames.IntegrationsManage)]
-    [EnableRateLimiting(RateLimitPolicies.IntegrationTest)]
+    [WorkspaceRateLimit(RateLimitPolicies.IntegrationTest)]
     public async Task<ActionResult<IntegrationTestResponse>> Test([FromWorkspace] int workspaceId, IntegrationTestRequest request, CancellationToken ct) =>
         MapResult(await integrations.TestAsync(workspaceId, request, ct));
 
@@ -117,7 +117,7 @@ public sealed class IntegrationsController(IIntegrationService integrations) : A
     /// </summary>
     [HttpGet("{integrationRef:guid}/chats")]
     [RequiresPermission(PermissionNames.IntegrationsRead)]
-    [EnableRateLimiting(RateLimitPolicies.IntegrationTest)]
+    [WorkspaceRateLimit(RateLimitPolicies.IntegrationTest)]
     public async Task<ActionResult<TelegramChatsResponse>> GetChats([FromWorkspace] int workspaceId, Guid integrationRef, CancellationToken ct) =>
         MapResult(await integrations.GetTelegramChatsAsync(workspaceId, integrationRef, ct));
 }
