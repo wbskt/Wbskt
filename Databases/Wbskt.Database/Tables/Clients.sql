@@ -21,7 +21,7 @@ CREATE TABLE dbo.Clients (
     CONSTRAINT UQ_Clients_RefId               UNIQUE (RefId),
     CONSTRAINT FK_Clients_RegistrationPolicies FOREIGN KEY (PolicyId)
         REFERENCES dbo.RegistrationPolicies (Id),
-    CONSTRAINT CK_Clients_Status CHECK (Status IN (0, 1, 2, 3))
+    CONSTRAINT CK_Clients_Status CHECK (Status >= 0 AND Status <= 3)
 );
 GO
 
