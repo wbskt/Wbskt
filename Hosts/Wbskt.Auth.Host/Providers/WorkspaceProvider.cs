@@ -29,7 +29,7 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
         }, cancellationToken);
     }
 
-    public async Task<Guid> CreateWorkspaceAsync(string name, string description, int ownerId, int tenantId, int? workspaceLimit, CancellationToken cancellationToken = default)
+    public async Task<Workspace> CreateWorkspaceAsync(string name, string description, int ownerId, int tenantId, int? workspaceLimit, OutboxMessage created, CancellationToken cancellationToken = default)
     {
         var parameters = await ExecuteNonQueryAsync("dbo.Workspace_Create", p =>
         {
@@ -39,9 +39,22 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
             p.AddWithValue("@TenantId", tenantId);
             p.Add("@RefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
             p.AddWithValue("@WorkspaceLimit", (object?)workspaceLimit ?? DBNull.Value);
+            p.Add("@WorkspaceId", SqlDbType.Int).Direction = ParameterDirection.Output;
+            p.Add("@CreatedAt", SqlDbType.DateTime2).Direction = ParameterDirection.Output;
+            p.AddWithValue("@OutboxMessageType", created.MessageType);
+            p.Add("@OutboxPayload", SqlDbType.NVarChar, -1).Value = created.Payload;
         }, cancellationToken);
 
-        return (Guid)parameters["@RefId"].Value;
+        return new Workspace
+        {
+            Id = (int)parameters["@WorkspaceId"].Value,
+            RefId = (Guid)parameters["@RefId"].Value,
+            Name = name,
+            Description = description,
+            OwnerUserId = ownerId,
+            TenantId = tenantId,
+            CreatedAt = DateTime.SpecifyKind((DateTime)parameters["@CreatedAt"].Value, DateTimeKind.Utc)
+        };
     }
 
     public async Task<IReadOnlyCollection<Workspace>> GetWorkspacesForUserAsync(int userId, CancellationToken cancellationToken = default)

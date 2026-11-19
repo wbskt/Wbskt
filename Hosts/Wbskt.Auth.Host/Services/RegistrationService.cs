@@ -46,6 +46,7 @@ internal sealed class RegistrationService : IRegistrationService
     /// </summary>
     internal static readonly TimeSpan EmailVerificationLifetime = TimeSpan.FromHours(24);
 
+    private readonly WorkspaceCreatedOutbox _workspaceCreated;
     private readonly IAccountProvider _accounts;
     private readonly ITenantProvider _tenants;
     private readonly IEventBus _eventBus;
@@ -72,12 +73,14 @@ internal sealed class RegistrationService : IRegistrationService
         PasswordHashing hashing,
         AccountAnnouncer announcer,
         TimeProvider time,
+        WorkspaceCreatedOutbox workspaceCreated,
         IAuditWorkspaces? audit = null,
         IBreachedPasswords? breachedPasswords = null)
     {
         _hashing = hashing;
         _time = time;
         _limits = limits;
+        _workspaceCreated = workspaceCreated;
         _audit = audit ?? AuditWorkspaces.None;
         _breachedPasswords = breachedPasswords ?? BreachedPasswords.None;
         _accounts = accounts;
@@ -139,7 +142,7 @@ internal sealed class RegistrationService : IRegistrationService
             // live, and it means a member who later leaves the tenant that invited them still has
             // somewhere to be — an account belonging to no tenant can do nothing at all and no
             // endpoint can repair it.
-            var tenantRefId = await _tenants.CreateTenantAsync($"{username}'s Tenant", null, userId, DefaultWorkspaceName, cancellationToken);
+            var tenantRefId = await _tenants.CreateTenantAsync($"{username}'s Tenant", null, userId, DefaultWorkspaceName, _workspaceCreated.For(DefaultWorkspaceName), cancellationToken);
             _logger.LogInformation("Created tenant {TenantRefId} for new user ID {UserId}", tenantRefId, userId);
 
             // The account exists and is unusable until this link is followed. Issued as its own step

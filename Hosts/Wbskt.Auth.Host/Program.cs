@@ -78,7 +78,8 @@ public static class Program
         builder.Services.AddScopedWithQueuedEvents<ITenantService, TenantService>();
         builder.Services.AddScoped<IAccessControlService, AccessControlService>();
         builder.Services.AddScoped<IWorkspaceProvider, WorkspaceProvider>();
-        builder.Services.AddScoped<IWorkspaceService, WorkspaceService>();
+        builder.Services.AddSingleton<WorkspaceCreatedOutbox>();
+        builder.Services.AddScopedWithQueuedEvents<IWorkspaceService, WorkspaceService>();
         builder.Services.AddScoped<IWorkspaceAccessResolver, WorkspaceServiceAccessResolver>();
         builder.Services.AddScoped<IAuditWorkspaces, AuditWorkspaces>();
         builder.Services.AddScoped<ITenantPlanProvider, TenantPlanProvider>();

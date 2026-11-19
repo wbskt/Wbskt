@@ -103,6 +103,7 @@ internal class AccountServices
             hashing,
             announcer,
             time,
+            WorkspaceFakes.Created(),
             audit,
             breachedPasswords);
     }

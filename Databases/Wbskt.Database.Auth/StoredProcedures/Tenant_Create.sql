@@ -11,13 +11,21 @@
 -- workspace was not cannot re-register (their email is taken) and has nothing to work in. Only the
 -- two INSERTs are duplicated from Workspace_Create -- the owner already holds Admin tenant-wide, so
 -- the workspace-scoped role grant that procedure performs would be redundant here.
+--
+-- @OutboxMessageType and @OutboxPayload are the default workspace's WorkspaceCreatedEvent, which goes into
+-- dbo.OutboxMessages in this transaction, so the management host hears of the workspace (and its plan)
+-- even if the host stops or the broker is down right after the commit. The caller cannot know the new
+-- workspace's id and reference, so they are written into the payload's workspaceId and workspaceRefId
+-- here.
 CREATE PROCEDURE dbo.Tenant_Create
     @Name NVARCHAR(100),
     @Description NVARCHAR(500),
     @OwnerUserId INT,
     @WorkspaceName NVARCHAR(100),
     @RefId UNIQUEIDENTIFIER OUTPUT,
-    @TenantId INT OUTPUT
+    @TenantId INT OUTPUT,
+    @OutboxMessageType NVARCHAR(256) = NULL,
+    @OutboxPayload NVARCHAR(MAX) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -94,8 +102,9 @@ BEGIN
     INSERT INTO dbo.UserRoles (UserId, RoleId, TenantId, WorkspaceId)
     VALUES (@OwnerUserId, @AdminRoleId, @TenantId, NULL);
 
+    DECLARE @WorkspaceRefId UNIQUEIDENTIFIER = NEWID();
     INSERT INTO dbo.Workspaces (RefId, TenantId, Name, Description, OwnerUserId)
-    VALUES (NEWID(), @TenantId, @WorkspaceName, 'Default workspace.', @OwnerUserId);
+    VALUES (@WorkspaceRefId, @TenantId, @WorkspaceName, 'Default workspace.', @OwnerUserId);
 
     -- Captured explicitly rather than calling SCOPE_IDENTITY() inline: every INSERT above targets a
     -- table with an identity column, so an inline call is correct only while it stays the statement
@@ -104,6 +113,13 @@ BEGIN
 
     INSERT INTO dbo.WorkspaceMembers (WorkspaceId, UserId)
     VALUES (@WorkspaceId, @OwnerUserId);
+
+    IF @OutboxMessageType IS NOT NULL
+    BEGIN
+        INSERT INTO dbo.OutboxMessages (MessageType, Payload)
+        VALUES (@OutboxMessageType,
+                JSON_MODIFY(JSON_MODIFY(@OutboxPayload, '$.workspaceId', @WorkspaceId), '$.workspaceRefId', CONVERT(NVARCHAR(36), @WorkspaceRefId)));
+    END
 
     COMMIT TRANSACTION;
 END
