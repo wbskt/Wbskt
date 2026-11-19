@@ -385,6 +385,49 @@ public sealed class WorkflowValidatorRuleTests
     };
 
     [Fact]
+    public void Validate_rejects_an_onFailure_jump_with_no_target()
+    {
+        var def = ValidWorkflowBuilder.Build();
+        var action = CreateToast(withErrorPort: false) with
+        {
+            OnFailure = new OnFailureConfig { Outcome = ErrorOutcome.JumpToNode, TargetNodeId = null }
+        };
+
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, action] });
+
+        ValidationIssue issue = Assert.Single(result.Issues, i => i.Code == "ONFAILURE_TARGET_MISSING");
+        Assert.Equal(ValidationSeverity.Error, issue.Severity);
+        Assert.Equal(action.NodeId, issue.NodeId);
+        Assert.Equal("onFailure.targetNodeId", issue.Field);
+    }
+
+    [Fact]
+    public void Validate_rejects_an_onFailure_jump_to_the_step_itself_or_a_trigger()
+    {
+        var def = ValidWorkflowBuilder.Build();
+        var toast = CreateToast(withErrorPort: false);
+        var toSelf = toast with { OnFailure = new OnFailureConfig { Outcome = ErrorOutcome.JumpToNode, TargetNodeId = toast.NodeId } };
+        Guid triggerId = def.Nodes.First(node => node.Kind.StartsWith("trigger:", StringComparison.Ordinal)).NodeId;
+        var toTrigger = CreateToast(withErrorPort: false) with { OnFailure = new OnFailureConfig { Outcome = ErrorOutcome.JumpToNode, TargetNodeId = triggerId } };
+
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, toSelf, toTrigger] });
+
+        Assert.Equal(2, result.Issues.Count(i => i.Code == "ONFAILURE_TARGET_INVALID" && i.Severity == ValidationSeverity.Error));
+    }
+
+    [Fact]
+    public void Validate_accepts_an_onFailure_jump_to_another_step()
+    {
+        var def = ValidWorkflowBuilder.Build();
+        var target = CreateToast(withErrorPort: false);
+        var action = CreateToast(withErrorPort: false) with { OnFailure = new OnFailureConfig { Outcome = ErrorOutcome.JumpToNode, TargetNodeId = target.NodeId } };
+
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, target, action] });
+
+        Assert.DoesNotContain(result.Issues, i => i.Code.StartsWith("ONFAILURE_", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Validate_rejects_an_onFailure_jump_target_that_does_not_exist()
     {
         var def = ValidWorkflowBuilder.Build();
