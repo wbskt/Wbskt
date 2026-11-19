@@ -208,7 +208,6 @@ internal sealed class RecordingBranchProvider(List<string> log, BranchRow curren
 
     public Task<IReadOnlyCollection<BranchRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
 
-    public Task<IReadOnlyCollection<BranchRow>> GetRunningBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
 }
 
 internal sealed class RecordingRunJournal(List<string> log) : IRunJournal

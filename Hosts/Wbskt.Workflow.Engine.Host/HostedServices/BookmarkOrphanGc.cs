@@ -103,7 +103,7 @@ public sealed class BookmarkOrphanGc(
         var suspects = new Dictionary<long, byte[]>();
         IStrandedBranchFailer? failer = null;
         int failedCount = 0;
-        foreach (BranchRow branch in SeenTwice(stranded, _suspects, suspects))
+        foreach (BranchRow branch in SeenTwice(stranded, branch => branch.Id, branch => branch.RowVersion, _suspects, suspects))
         {
             try
             {
@@ -140,12 +140,12 @@ public sealed class BookmarkOrphanGc(
     {
         var branchProvider = services.GetRequiredService<IBranchProvider>();
         DateTime cutoffUtc = clock.GetUtcNow().UtcDateTime - _strandedThreshold;
-        IReadOnlyCollection<BranchRow> woken = await branchProvider.GetWokenNotWrittenSinceAsync(cutoffUtc, StrandedBatchSize, ct);
+        IReadOnlyCollection<WokenBranch> woken = await branchProvider.GetWokenNotWrittenSinceAsync(cutoffUtc, StrandedBatchSize, ct);
 
         DateTime now = clock.GetUtcNow().UtcDateTime;
         var suspects = new Dictionary<long, byte[]>();
         var redispatched = new Dictionary<long, (byte[] Version, DateTime At)>();
-        foreach (BranchRow branch in woken)
+        foreach (WokenBranch branch in woken)
         {
             if (_redispatched.TryGetValue(branch.Id, out var sent)
                 && sent.Version.AsSpan().SequenceEqual(branch.RowVersion)
@@ -157,7 +157,7 @@ public sealed class BookmarkOrphanGc(
 
         IRunDispatcher? dispatcher = null;
         int dispatched = 0;
-        foreach (BranchRow branch in SeenTwice(woken.Where(branch => !redispatched.ContainsKey(branch.Id)), _wokenSuspects, suspects))
+        foreach (WokenBranch branch in SeenTwice(woken.Where(branch => !redispatched.ContainsKey(branch.Id)), branch => branch.Id, branch => branch.RowVersion, _wokenSuspects, suspects))
         {
             dispatcher ??= services.GetRequiredService<IRunDispatcher>();
             await dispatcher.DispatchAsync(new BranchExecutionRequest(branch.RunId, branch.Id, BranchExecutionReason.Recovered), ct);
@@ -177,18 +177,18 @@ public sealed class BookmarkOrphanGc(
     /// The branches also seen, unchanged, on the previous pass. Every other branch is recorded in
     /// <paramref name="next"/> as a suspect for the next pass.
     /// </summary>
-    private static List<BranchRow> SeenTwice(IEnumerable<BranchRow> branches, Dictionary<long, byte[]> previous, Dictionary<long, byte[]> next)
+    private static List<T> SeenTwice<T>(IEnumerable<T> branches, Func<T, long> idOf, Func<T, byte[]> versionOf, Dictionary<long, byte[]> previous, Dictionary<long, byte[]> next)
     {
-        var confirmed = new List<BranchRow>();
-        foreach (BranchRow branch in branches)
+        var confirmed = new List<T>();
+        foreach (T branch in branches)
         {
-            if (previous.TryGetValue(branch.Id, out byte[]? seenVersion) && seenVersion.AsSpan().SequenceEqual(branch.RowVersion))
+            if (previous.TryGetValue(idOf(branch), out byte[]? seenVersion) && seenVersion.AsSpan().SequenceEqual(versionOf(branch)))
             {
                 confirmed.Add(branch);
             }
             else
             {
-                next[branch.Id] = branch.RowVersion;
+                next[idOf(branch)] = versionOf(branch);
             }
         }
 

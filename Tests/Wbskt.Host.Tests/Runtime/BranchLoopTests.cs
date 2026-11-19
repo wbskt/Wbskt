@@ -2146,7 +2146,6 @@ public sealed class BranchLoopTests
             return Task.FromResult<IReadOnlyCollection<BranchRow>>(_rows.Values.ToArray());
         }
 
-        public Task<IReadOnlyCollection<BranchRow>> GetRunningBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct)
         {
             PointerUpdates.Add((branchId, currentNodeId));

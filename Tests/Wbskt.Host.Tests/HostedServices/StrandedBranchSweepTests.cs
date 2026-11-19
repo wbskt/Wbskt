@@ -404,7 +404,6 @@ public sealed class StrandedBranchSweepTests
         public Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct) => Task.FromResult(state.Branches[branchId]);
         public Task<BranchRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult(state.Branches.Values.Single(branch => branch.RefId == refId));
         public Task<IReadOnlyCollection<BranchRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BranchRow>>(state.Branches.Values.Where(branch => branch.RunId == runId).ToArray());
-        public Task<IReadOnlyCollection<BranchRow>> GetRunningBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
 
         // What Branch_GetWaitingWithoutBookmark selects.
         public Task<IReadOnlyCollection<BranchRow>> GetWaitingWithoutBookmarkAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
@@ -423,15 +422,16 @@ public sealed class StrandedBranchSweepTests
         }
 
         // What Branch_GetWoken selects with @UpdatedBefore.
-        public Task<IReadOnlyCollection<BranchRow>> GetWokenNotWrittenSinceAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
+        public Task<IReadOnlyCollection<WokenBranch>> GetWokenNotWrittenSinceAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
         {
-            IReadOnlyCollection<BranchRow> rows = state.Branches.Values
+            IReadOnlyCollection<WokenBranch> rows = state.Branches.Values
                 .Where(branch => branch.Status == BranchStatus.Waiting
                     && state.Woken.Contains(branch.Id)
                     && branch.UpdatedAt < cutoffUtc
                     && !RunStatus.IsTerminal(state.Runs[branch.RunId].Status))
                 .OrderBy(branch => branch.Id)
                 .Take(batchSize)
+                .Select(branch => new WokenBranch(branch.Id, branch.RunId, branch.RowVersion))
                 .ToArray();
             return Task.FromResult(rows);
         }

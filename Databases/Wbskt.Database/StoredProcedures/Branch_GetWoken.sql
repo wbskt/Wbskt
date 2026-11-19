@@ -12,19 +12,11 @@ BEGIN
     -- Waiting with no bookmark and no WokenAt was stopped mid-park instead; it is not listed here, and
     -- the orphan GC deals with it. Paged by Id, after @AfterId. A new leader reads them all; the orphan
     -- GC passes @UpdatedBefore to read only those whose wake has waited past its grace period.
+    -- Only what dispatching one takes, and the row version the orphan GC compares to tell a branch it
+    -- already re-dispatched; the branch loop reads the rest itself.
     SELECT TOP (@BatchSize)
         br.Id,
-        br.RefId,
         br.RunId,
-        br.ParentBranchId,
-        br.ForkCohortId,
-        br.NodeId,
-        br.Status,
-        br.PendingTakePort,
-        br.LocalJson,
-        br.LastOutputJson,
-        br.CreatedAt,
-        br.UpdatedAt,
         br.RowVersion
     FROM dbo.Branches br
     INNER JOIN dbo.Runs r ON r.Id = br.RunId

@@ -72,15 +72,28 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
         );
     }
 
-    public async Task<IReadOnlyCollection<BranchRow>> GetRunningBranchesAsync(CancellationToken ct)
-    {
-        return await ExecuteCollectionAsync(
+    public Task<IReadOnlyCollection<string>> GetStatusesByRunIdAsync(int runId, CancellationToken ct) =>
+        ExecuteCollectionAsync(
+            "dbo.Branch_GetStatuses_By_RunId",
+            p => p.AddWithValue("@RunId", runId),
+            reader => reader.GetString(reader.GetOrdinal("Status")),
+            ct);
+
+    public Task<IReadOnlyCollection<RunningBranch>> GetRunningBranchesAsync(long afterId, int batchSize, CancellationToken ct) =>
+        ExecuteCollectionAsync(
             "dbo.Branch_GetRunning",
-            null,
-            Map,
-            ct
-        );
-    }
+            p =>
+            {
+                p.AddWithValue("@AfterId", afterId);
+                p.AddWithValue("@BatchSize", batchSize);
+            },
+            reader => new RunningBranch(
+                reader.GetInt64(reader.GetOrdinal("Id")),
+                reader.GetInt32(reader.GetOrdinal("RunId")),
+                reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
+                reader.GetString(reader.GetOrdinal("RunStatus")),
+                reader.IsDBNull(reader.GetOrdinal("RunCancellationReason")) ? null : reader.GetString(reader.GetOrdinal("RunCancellationReason"))),
+            ct);
 
     public async Task<IReadOnlyCollection<BranchRow>> GetWaitingWithoutBookmarkAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
     {
@@ -96,7 +109,7 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
         );
     }
 
-    public async Task<IReadOnlyCollection<BranchRow>> GetWokenAsync(long afterId, int batchSize, CancellationToken ct)
+    public async Task<IReadOnlyCollection<WokenBranch>> GetWokenAsync(long afterId, int batchSize, CancellationToken ct)
     {
         return await ExecuteCollectionAsync(
             "dbo.Branch_GetWoken",
@@ -105,12 +118,12 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
                 p.AddWithValue("@AfterId", afterId);
                 p.AddWithValue("@BatchSize", batchSize);
             },
-            Map,
+            MapWoken,
             ct
         );
     }
 
-    public async Task<IReadOnlyCollection<BranchRow>> GetWokenNotWrittenSinceAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
+    public async Task<IReadOnlyCollection<WokenBranch>> GetWokenNotWrittenSinceAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
     {
         return await ExecuteCollectionAsync(
             "dbo.Branch_GetWoken",
@@ -120,7 +133,7 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
                 p.AddWithValue("@BatchSize", batchSize);
                 p.AddWithValue("@UpdatedBefore", cutoffUtc);
             },
-            Map,
+            MapWoken,
             ct
         );
     }
@@ -214,4 +227,9 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
             RowVersion = (byte[])reader.GetValue(reader.GetOrdinal("RowVersion"))
         };
     }
+
+    private static WokenBranch MapWoken(DbDataReader reader) => new(
+        reader.GetInt64(reader.GetOrdinal("Id")),
+        reader.GetInt32(reader.GetOrdinal("RunId")),
+        (byte[])reader.GetValue(reader.GetOrdinal("RowVersion")));
 }
