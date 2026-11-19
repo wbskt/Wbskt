@@ -76,6 +76,8 @@ public static class Program
         builder.Services.AddScoped<ITenantWorkspaceProvider, TenantWorkspaceProvider>();
         // The one way a deleted workspace is retired: WorkspaceDeletedHandler and DeletedWorkspaceSweeper share it.
         builder.Services.AddScoped<WorkspaceRetirer>();
+        builder.Services.AddScoped<IWorkspaceFreezeProvider, WorkspaceFreezeProvider>();
+        builder.Services.AddScoped<WorkspaceFreezer>();
         builder.Services.AddScoped<IEventLogService, EventLogService>();
         builder.Services.AddScopedWithQueuedEvents<IClientRegistrationService, ClientRegistrationService>();
         builder.Services.AddScoped<IClientQueryService, ClientQueryService>();

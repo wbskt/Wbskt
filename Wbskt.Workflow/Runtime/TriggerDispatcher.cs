@@ -355,6 +355,13 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
                 // not start it either.
                 return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.NoRegistration, null, correlationValue), null);
             }
+            catch (AccountFrozenException)
+            {
+                // Wbskt support froze the account: nothing runs, and nobody is told per event, since the
+                // freeze was announced once. Settled as unmatched, as the not-live case above, so a
+                // redelivered event does not start it once the freeze is lifted.
+                return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.NoRegistration, null, correlationValue), null);
+            }
             catch (PlanRunLimitException ex)
             {
                 // Thrown away for good, so the user is told: the event itself cannot say so to anyone.

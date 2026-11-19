@@ -21,6 +21,8 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
     /// limit on registered clients.
     /// </summary>
     private const int PlanLimitReachedError = 50025;
+    private const int AccountFrozenError = 50044;
+    private static readonly Error AccountFrozen = Error.Conflict("ACCOUNT_FROZEN", "This account is frozen, so no device can enrol in it.");
 
     private readonly IClientProvider _clientProvider;
     private readonly IRegistrationPolicyProvider _policyProvider;
@@ -102,11 +104,22 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
         var initialStatus = policy.AutoApproval ? ClientStatus.Registered : ClientStatus.Pending;
 
         WorkspacePlan plan = await _plans.GetAsync(policy.WorkspaceId, cancellationToken);
+        if (plan.Frozen)
+        {
+            _logger.LogWarning("Client registration failed: WorkspaceId {WorkspaceId}'s account is frozen", policy.WorkspaceId);
+            return Result<ClientRegistrationResponse>.Failure(AccountFrozen);
+        }
+
         PlanCeiling ceiling = plan.ClientCeiling;
         Client client;
         try
         {
             client = await _clientProvider.InsertClientAsync(policy.WorkspaceId, policy.Id, request.Name, ClientSecrets.Hash(secret), initialStatus, ceiling, cancellationToken);
+        }
+        catch (SqlException ex) when (ex.Number == AccountFrozenError)
+        {
+            _logger.LogWarning("Client registration failed: WorkspaceId {WorkspaceId}'s account was frozen during registration", policy.WorkspaceId);
+            return Result<ClientRegistrationResponse>.Failure(AccountFrozen);
         }
         catch (SqlException ex) when (ex.Number == PlanLimitReachedError)
         {

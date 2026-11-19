@@ -9,10 +9,12 @@ internal sealed class FixedWorkspacePlans : IWorkspacePlans
     private readonly PlanCode _plan;
     private readonly int? _tenantId;
     private readonly PlanLimits _limits;
+    private readonly bool _frozen;
 
-    public FixedWorkspacePlans(PlanCode plan = PlanCode.Free, int? tenantId = null, Func<PlanLimits, PlanLimits>? adjust = null)
+    public FixedWorkspacePlans(PlanCode plan = PlanCode.Free, int? tenantId = null, Func<PlanLimits, PlanLimits>? adjust = null, bool frozen = false)
     {
         _plan = plan;
+        _frozen = frozen;
         _tenantId = tenantId;
         PlanLimits limits = PlanCatalog.BuiltIn[plan];
         _limits = adjust is null ? limits : adjust(limits);
@@ -21,7 +23,7 @@ internal sealed class FixedWorkspacePlans : IWorkspacePlans
     public PlanLimits Limits => _limits;
 
     public Task<WorkspacePlan> GetAsync(int workspaceId, CancellationToken ct) =>
-        Task.FromResult(new WorkspacePlan(workspaceId, _tenantId, _plan, _limits));
+        Task.FromResult(new WorkspacePlan(workspaceId, _tenantId, _plan, _limits, _frozen));
 
     public void Invalidate(int workspaceId)
     {

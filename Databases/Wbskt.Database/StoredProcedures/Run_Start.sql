@@ -121,6 +121,10 @@ BEGIN
             IF @WorkspaceId IS NOT NULL
                 SET @TenantId = COALESCE((SELECT TenantId FROM dbo.WorkspaceAccounts WHERE WorkspaceId = @WorkspaceId), @TenantId);
 
+            -- Nothing runs in an account Wbskt support has frozen (dbo.WorkspaceAccounts.FrozenAt).
+            IF @WorkspaceId IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.WorkspaceAccounts WHERE WorkspaceId = @WorkspaceId AND FrozenAt IS NOT NULL)
+                THROW 50044, 'The account is frozen.', 1;
+
             -- The plan's limit on runs going at once (Running, Failing or Cancelling, as in
             -- IX_Runs_WorkflowRefId_CorrelationKey_Active), pooled across the tenant's workspaces
             -- (dbo.TenantWorkspaces). Counted under an application lock per tenant, so concurrent

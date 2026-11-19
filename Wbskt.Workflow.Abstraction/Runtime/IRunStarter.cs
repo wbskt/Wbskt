@@ -83,6 +83,16 @@ public sealed class WorkspaceCreditCapException(int workspaceId)
 }
 
 /// <summary>
+/// Thrown by <see cref="IRunStarter.StartAsync"/> when Wbskt support has frozen the account the workflow's
+/// workspace belongs to: nothing runs in it until the freeze is lifted. Nothing was created.
+/// </summary>
+public sealed class AccountFrozenException(int workspaceId)
+    : InvalidOperationException($"The account of workspace {workspaceId} is frozen.")
+{
+    public int WorkspaceId { get; } = workspaceId;
+}
+
+/// <summary>
 /// Thrown by <see cref="IRunStarter.StartAsync"/> when the start could not get its tenant's or workspace's
 /// lock after a few tries: other starts are holding it. Nothing was created, and nothing about the plan
 /// refused it; the caller may try again.

@@ -17,6 +17,10 @@
 -- RetentionGraceDays later), and the retention sweeps keep the longer of the two until then, so data a
 -- customer who pays again the next day still wants is not deleted the night they lapse.
 --
+-- FrozenAt is when Wbskt support froze the tenant (dbo.Tenants.FrozenAt in the auth database), NULL
+-- while it is not frozen. A frozen workspace starts no run (dbo.Run_Start) and enrols no client
+-- (dbo.Client_Create). A freeze raises the tenant's PlanRevision, so it is copied like a plan change.
+--
 -- RetiredAt is when the workspace was deleted (dbo.Workspace_Retire). The row is kept while anything
 -- reads it: the tenant's month is summed through it, so deleting it early would hand back the credits
 -- and messages the workspace spent, and the retention sweeps reach its readings and runs through it.
@@ -37,6 +41,7 @@ CREATE TABLE dbo.WorkspaceAccounts
     HeldHourlyReadingsDays INT          NULL,
     HeldRunHistoryDays     INT          NULL,
     RetentionHeldUntil     DATETIME2(3) NULL,
+    FrozenAt       DATETIME2(3)     NULL,
     UpdatedAt      DATETIME2(3)     NOT NULL CONSTRAINT DF_WorkspaceAccounts_UpdatedAt DEFAULT SYSUTCDATETIME(),
     CreatedAt      DATETIME2(3)     NOT NULL CONSTRAINT DF_WorkspaceAccounts_CreatedAt DEFAULT SYSUTCDATETIME(),
     RetiredAt      DATETIME2(3)     NULL,

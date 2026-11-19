@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
+using Wbskt.Models;
 using Wbskt.Models.Billing;
 
 namespace Wbskt.Infrastructure.Billing;
@@ -38,7 +40,9 @@ public sealed class WorkspaceAccountProvider(IConfiguration configuration, PlanC
                 limits.CreditsPerMonth,
                 limits.RawReadingsDays,
                 limits.HourlyReadingsDays,
-                limits.RunHistoryDays
+                limits.RunHistoryDays,
+                // Without an offset: OPENJSON reads it into DATETIME2, which takes no 'Z'.
+                FrozenAt = account.FrozenAt?.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fff", CultureInfo.InvariantCulture)
             };
         }));
 
@@ -52,12 +56,14 @@ public sealed class WorkspaceAccountProvider(IConfiguration configuration, PlanC
     private static WorkspaceAccount Map(SqlDataReader r)
     {
         int overrides = r.GetOrdinal("LimitOverrides");
+        int frozenAt = r.GetOrdinal("FrozenAt");
         return new WorkspaceAccount(
             r.GetInt32(r.GetOrdinal("WorkspaceId")),
             r.GetInt32(r.GetOrdinal("TenantId")),
             r.GetGuid(r.GetOrdinal("TenantRefId")),
             Enum.Parse<PlanCode>(r.GetString(r.GetOrdinal("PlanCode"))),
             r.IsDBNull(overrides) ? null : PlanLimitOverridesJson.Read(r.GetString(overrides)),
-            r.GetInt32(r.GetOrdinal("PlanRevision")));
+            r.GetInt32(r.GetOrdinal("PlanRevision")),
+            r.IsDBNull(frozenAt) ? null : r.GetDateTime(frozenAt).ToUtcOffset());
     }
 }

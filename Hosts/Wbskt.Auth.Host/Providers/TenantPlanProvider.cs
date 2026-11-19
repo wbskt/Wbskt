@@ -4,6 +4,7 @@ using Wbskt.Auth.Models;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Billing;
 using Wbskt.Infrastructure.Events.Outbox;
+using Wbskt.Models;
 using Wbskt.Models.Billing;
 
 namespace Wbskt.Auth.Host.Providers;
@@ -67,7 +68,8 @@ internal sealed class TenantPlanProvider(IConfiguration configuration) : BaseSql
         r.GetGuid(r.GetOrdinal("TenantRefId")),
         ReadPlanCode(r),
         ReadOverrides(r),
-        r.GetInt32(r.GetOrdinal("PlanRevision")));
+        r.GetInt32(r.GetOrdinal("PlanRevision")),
+        r.IsDBNull(r.GetOrdinal("FrozenAt")) ? null : r.GetDateTime(r.GetOrdinal("FrozenAt")).ToUtcOffset());
 
     private static TenantPlan MapPlan(SqlDataReader r)
     {
