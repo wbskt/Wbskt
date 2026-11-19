@@ -172,8 +172,10 @@ public sealed class BillingNoticeTests
 
         Assert.Contains("Clients: 500 → 100", notice.Paragraphs);
         Assert.Contains("Workflow credits a month: 150,000 → 25,000", notice.Paragraphs);
-        Assert.Contains(notice.Paragraphs, p => p.Contains("raw readings for 14 days (was 30)") && p.Contains("until 9 December 2026"));
-        Assert.Contains(notice.Paragraphs, p => p.Contains("hourly readings for 365 days (was 730)") && !p.Contains("run history for 30"));
+        Assert.Contains(notice.Paragraphs, p => p.Contains("hourly readings for 365 days (was 730)") && p.Contains("until 9 December 2026") && !p.Contains("run history for 30"));
+
+        // Both plans keep raw readings 7 days, so that is not a limit that drops.
+        Assert.DoesNotContain(notice.Paragraphs, p => p.Contains("raw readings"));
     }
 
     [Theory]
