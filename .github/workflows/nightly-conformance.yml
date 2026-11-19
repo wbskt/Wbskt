@@ -1,6 +1,7 @@
 name: Nightly conformance
 
-# Runs Tests/Conformance/test_live.py with the .NET harness (wbskt/Wbskt.DotNet master) against the real hosts, started from
+# Runs Tests/Conformance/test_live.py with each SDK's harness (wbskt/Wbskt.DotNet and wbskt/Wbskt.Python master)
+# against the real hosts, one job per SDK, started from
 # source as in nightly-stress.yml (the setup is copied from there; keep them in step). The pull-request
 # suite (sdk-conformance.yml) checks the SDKs against fake_wbskt.py; this checks that what the fake does
 # is still what the gateway does. Nothing here gates a merge or an image.
@@ -21,6 +22,10 @@ jobs:
   live:
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        sdk: [dotnet, python]
     services:
       sqlserver:
         image: mcr.microsoft.com/mssql/server:2022-latest
@@ -119,17 +124,27 @@ jobs:
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          repository: wbskt/Wbskt.DotNet
-          path: wbskt-dotnet
+          repository: ${{ matrix.sdk == 'python' && 'wbskt/Wbskt.Python' || 'wbskt/Wbskt.DotNet' }}
+          path: sdk
 
-      - name: Live scenarios with the .NET harness
+      - name: .NET harness
+        if: matrix.sdk == 'dotnet'
+        run: |
+          dotnet build "$GITHUB_WORKSPACE/sdk/conformance/Wbskt.Conformance.Harness" -c Release -o "$RUNNER_TEMP/harness" --nologo -v q
+          echo "WBSKT_HARNESS=dotnet $RUNNER_TEMP/harness/Wbskt.Conformance.Harness.dll" >> "$GITHUB_ENV"
+
+      - name: Python harness
+        if: matrix.sdk == 'python'
+        run: |
+          pip install -e "$GITHUB_WORKSPACE/sdk"
+          echo "WBSKT_HARNESS=python $GITHUB_WORKSPACE/sdk/conformance/harness.py" >> "$GITHUB_ENV"
+
+      - name: Live scenarios
         working-directory: Tests/Conformance
         run: |
           set -o pipefail
           pip install -r requirements.txt
-          dotnet build "$GITHUB_WORKSPACE/wbskt-dotnet/conformance/Wbskt.Conformance.Harness" -c Release -o "$RUNNER_TEMP/harness" --nologo -v q
-          WBSKT_HARNESS="dotnet $RUNNER_TEMP/harness/Wbskt.Conformance.Harness.dll" \
-            python -m pytest -v test_live.py 2>&1 | tee "$GITHUB_WORKSPACE/live-output.txt"
+          python -m pytest -v test_live.py 2>&1 | tee "$GITHUB_WORKSPACE/live-output.txt"
 
       # Every scenario is skipped when WBSKT_LIVE_* is missing, and a skipped run exits 0.
       - name: Fail if the live scenarios did not run
@@ -152,7 +167,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: nightly-conformance
+          name: nightly-conformance-${{ matrix.sdk }}
           path: |
             e2e-hosts/*.log
             live-output.txt

@@ -26,7 +26,8 @@ does unprompted:
   row) and counts what it dropped;
 - closes with 1009 a message over 64 KB as UTF-8.
 
-`nightly-conformance.yml` runs `test_live.py` against the real hosts every night, so the fake and the
+`nightly-conformance.yml` runs `test_live.py` against the real hosts every night, once with the .NET
+harness and once with the Python one, so the fake and the
 gateway can't drift apart unnoticed: the scenarios there need no misbehaviour on cue and check what the
 platform recorded through the management API.
 
