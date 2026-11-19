@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events;
+using Wbskt.Events.Billing;
 using Wbskt.Events.Client;
 using Wbskt.Events.Management;
 using Wbskt.Management.Host.Hubs;
@@ -39,6 +40,18 @@ public sealed class SignalRPayloadPrivacyTests
         Assert.False(json.ContainsKey("clientAddress"));
         Assert.False(json.ContainsKey("userAgent"));
         Assert.True(json.ContainsKey("policyRefId"));
+    }
+
+    [Fact]
+    public void The_account_credit_notice_goes_out_with_its_percent_and_not_the_accounts_figures()
+    {
+        var json = Serialize(new TenantCreditAllowanceReachedEvent(7, 40, 80, 25_000m, 20_000m, new DateOnly(2026, 11, 1)));
+
+        Assert.Equal(80, json["percent"]!.GetValue<int>());
+        Assert.True(json.ContainsKey("monthStart"));
+        Assert.False(json.ContainsKey("creditsPerMonth"));
+        Assert.False(json.ContainsKey("creditsSpent"));
+        Assert.False(json.ContainsKey("tenantId"));
     }
 
     [Fact]
