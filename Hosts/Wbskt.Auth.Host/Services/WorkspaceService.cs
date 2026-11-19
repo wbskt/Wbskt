@@ -135,7 +135,7 @@ internal sealed class WorkspaceService : IWorkspaceService
             // A reference that names nobody and one that names someone outside the workspace answer
             // alike, so the pair does not say whether a user exists anywhere.
             var userId = await _accounts.FindIdByRefIdAsync(userRef, cancellationToken);
-            if (userId <= 0 || !await _workspaceProvider.RemoveUserFromWorkspaceAsync(workspaceId, userId, cancellationToken))
+            if (userId is not { } id || !await _workspaceProvider.RemoveUserFromWorkspaceAsync(workspaceId, id, cancellationToken))
             {
                 _logger.LogWarning("Remove member failed: user {UserRef} is not a member of workspace ID {WorkspaceId}", userRef, workspaceId);
                 return Result.Failure(Error.NotFound("USER_NOT_FOUND", "User not found."));
@@ -204,8 +204,7 @@ internal sealed class WorkspaceService : IWorkspaceService
 
         // Unknown, and known but outside this tenant, answer the same: as far as this tenant is
         // concerned that user does not exist.
-        var newOwnerId = await _accounts.FindIdByRefIdAsync(newOwnerRef, cancellationToken);
-        if (newOwnerId <= 0)
+        if (await _accounts.FindIdByRefIdAsync(newOwnerRef, cancellationToken) is not { } newOwnerId)
         {
             return NewOwnerNotInTenant(workspaceId, newOwnerRef);
         }

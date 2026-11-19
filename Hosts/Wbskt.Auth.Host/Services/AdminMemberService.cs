@@ -175,8 +175,7 @@ internal sealed class AdminMemberService(
             return TenantNotFound;
         }
 
-        int userId = await accounts.FindIdByRefIdAsync(userRef, cancellationToken);
-        if (userId == 0)
+        if (await accounts.FindIdByRefIdAsync(userRef, cancellationToken) is not { } userId)
         {
             return MemberNotFound;
         }

@@ -240,8 +240,7 @@ internal sealed class AdminUserService(
 
     private async Task<User?> FindAsync(Guid userRef, CancellationToken cancellationToken)
     {
-        int id = await accounts.FindIdByRefIdAsync(userRef, cancellationToken);
-        return id == 0 ? null : await accounts.FindByIdAsync(id, cancellationToken);
+        return await accounts.FindIdByRefIdAsync(userRef, cancellationToken) is { } id ? await accounts.FindByIdAsync(id, cancellationToken) : null;
     }
 
     /// <summary>
