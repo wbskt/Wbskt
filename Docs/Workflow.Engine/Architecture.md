@@ -244,7 +244,9 @@ Every executor runs inside `RetryExecutor.RunWithRetryAsync`:
   branch coming back from a bookmark) is free; a retry is not. A refused charge fails the node with a
   code naming the budget that ran short, which `dbo.RunCounters_TryCharge` returns in `@Refusal`:
   `OUT_OF_CREDITS_RUN_BUDGET` (the workflow's credit budget), `PLAN_CREDIT_LIMIT_REACHED` (the
-  account's month and packs) or `WORKSPACE_CREDIT_CAP_REACHED` (the workspace's cap). Each cancels
+  account's month and packs) or `WORKSPACE_CREDIT_CAP_REACHED` (the workspace's cap). The account is
+  checked first, since raising the cap or the budget does nothing while it is spent, then the cap,
+  then the run's own budget. Each cancels
   the run with `OUT_OF_CREDITS` (`OutOfCredits` in `Wbskt.Workflow.Runtime`).
 * **Retry decision.** One `Decide()` handles both a retryable `Fail` and a thrown
   `TransientNodeException`, using the node's `retry` policy, and journals `NodeRetrying`.
