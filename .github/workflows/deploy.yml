@@ -112,6 +112,7 @@ jobs:
           exit 1
 
       - name: Deploy
+        id: deploy
         # bash, not the default `bash -e`: with pipefail the tee below cannot hide a failed deploy.
         shell: bash
         env:
@@ -139,7 +140,14 @@ jobs:
             -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
             -o UserKnownHostsFile="$RUNNER_TEMP/known_hosts" \
             "$DEPLOY_USER@$DEPLOY_HOST" \
-            "$DEPLOY_PATH/deploy/scripts/deploy.sh" "${args[@]}" | tee "$RUNNER_TEMP/deploy.log"
+            "$DEPLOY_PATH/deploy/scripts/deploy.sh" "${args[@]}" | tee "$RUNNER_TEMP/deploy.log" \
+            || status=("${PIPESTATUS[@]}")
+          # ssh's own failure (255) is the dropped session detaching exists for: the deploy may well
+          # have carried on, so the report below says so rather than calling it a plain failure.
+          if [[ -n "${status[*]:-}" ]]; then
+            [[ "${status[0]}" == 255 ]] && echo "ssh-dropped=true" >> "$GITHUB_OUTPUT"
+            exit "$(( status[0] == 0 ? 1 : status[0] ))"
+          fi
 
       # :latest means what production runs: the migrator the upgrade rehearsal starts from, and what a
       # compose file with no IMAGE_TAG pulls. So it moves here, once deploy.sh has succeeded, for a
@@ -203,6 +211,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
           RESULT: ${{ job.status }}
+          SSH_DROPPED: ${{ steps.deploy.outputs.ssh-dropped }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           title="Production deploy failed"
@@ -213,6 +222,8 @@ jobs:
             note=""
             if [[ "$RESULT" == cancelled ]]; then
               note=" A cancelled or timed-out job stops only the watching: the deploy may still be running, or have finished, on the VM. Its log is under ~/.local/state/wbskt-deploy there."
+            elif [[ "$SSH_DROPPED" == true ]]; then
+              note=" The ssh session dropped (or never opened), which stops only the watching: the deploy may still be running, or have finished, on the VM. Its log is under ~/.local/state/wbskt-deploy there; :latest was not moved."
             fi
             COMMENT_IF_OPEN=true .github/scripts/sync-labelled-issue.sh open deploy-failed "$title" \
               "The deploy of \`$TAG\` ended in $RESULT: $RUN_URL$note"

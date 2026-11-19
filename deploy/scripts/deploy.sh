@@ -277,9 +277,9 @@ pull_images() {
 }
 
 # Persisted rather than just exported, so a later bare `docker compose ps/up` on the VM refers to
-# the same images this deploy started. Written only once the images are pulled (and migrated for),
-# just before the first container is started on them: until then compose reads the tag from the
-# environment, so .env keeps naming what is running if the deploy stops before that.
+# the same images this deploy started. Written only once the hosts started on them are healthy: until
+# then compose reads the tag from the environment, so .env keeps naming the release that last passed
+# if the deploy stops before that.
 set_env_var() {
     local key="$1" value="$2"
     if grep -q "^${key}=" "$ENV_FILE"; then
@@ -412,10 +412,10 @@ deploy_console() {
     pull_images pull console
 
     echo "==> starting console"
-    set_env_var CONSOLE_IMAGE_TAG "$CONSOLE_TAG"
     docker compose up -d --no-build --no-deps console
 
     wait_for_health
+    set_env_var CONSOLE_IMAGE_TAG "$CONSOLE_TAG"
     echo "==> deployed console $CONSOLE_TAG"
 }
 
@@ -448,10 +448,10 @@ deploy_admin() {
     docker compose run --rm --no-deps admin-migrator
 
     echo "==> starting admin"
-    set_env_var ADMIN_IMAGE_TAG "$ADMIN_TAG"
     docker compose up -d --no-build --no-deps admin
 
     wait_for_health admin
+    set_env_var ADMIN_IMAGE_TAG "$ADMIN_TAG"
     echo "==> deployed admin $ADMIN_TAG on 127.0.0.1:8090"
 }
 
@@ -491,9 +491,14 @@ deploy_backend() {
     # client-auth and falls back to management while no client-auth instance is healthy. Restarting them
     # together would leave client login with neither, so client-auth goes first and must be healthy before
     # the rest (management among them) are touched.
+    #
+    # .env takes the new tag only once every host started here is healthy (compose reads the exported
+    # IMAGE_TAG meanwhile): after a failed start, `docker compose up -d <host>` brings back the release
+    # that last passed, not the one that did not (#986). A deploy of some hosts only still leaves .env
+    # naming a release the others never ran, which it says below.
     local -a rest=()
     local svc
-    set_env_var IMAGE_TAG "$TAG"
+    echo "==> .env keeps IMAGE_TAG=$(grep -E '^IMAGE_TAG=' "$ENV_FILE" | cut -d= -f2- || true) until ${SERVICES[*]} are healthy at $TAG"
     if [[ " ${SERVICES[*]} " == *" client-auth "* && " ${SERVICES[*]} " == *" management "* ]]; then
         echo "==> starting client-auth before management"
         start_services client-auth
@@ -503,6 +508,14 @@ deploy_backend() {
         start_services "${rest[@]}"
     else
         start_services "${SERVICES[@]}"
+    fi
+    set_env_var IMAGE_TAG "$TAG"
+    local -a behind=()
+    for svc in "${DEFAULT_SERVICES[@]}"; do
+        [[ " ${SERVICES[*]} " == *" $svc "* ]] || behind+=("$svc")
+    done
+    if [[ ${#behind[@]} -gt 0 ]]; then
+        echo "::warning::.env now names $TAG, which ${behind[*]} never ran; \`docker compose up -d\` on one of them starts $TAG unchecked"
     fi
 
     echo "==> deployed $TAG (${SERVICES[*]}) at $(git -C "$REPO_ROOT" rev-parse --short HEAD)"
