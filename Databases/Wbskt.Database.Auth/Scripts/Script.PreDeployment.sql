@@ -153,3 +153,10 @@ GO
 -- it is dropped here, which is a no-op on a fresh database.
 DROP PROCEDURE IF EXISTS dbo.User_SetActive;
 GO
+
+-- User_RecordLoginFailure left the project when a password check started reserving its attempt
+-- first (User_BeginPasswordCheck and User_EndPasswordCheck). The host that called it is no longer
+-- running, so it is dropped here rather than left callable; the upgrade rehearsal fails on any
+-- object the DACPAC no longer defines.
+DROP PROCEDURE IF EXISTS dbo.User_RecordLoginFailure;
+GO
