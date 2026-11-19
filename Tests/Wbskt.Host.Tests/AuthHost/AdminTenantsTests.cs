@@ -130,7 +130,7 @@ public sealed class AdminTenantsTests
     [InlineData(367)]
     public async Task A_staff_plan_ends_in_the_future_and_within_a_year(int days)
     {
-        var runner = new RecordingRunner();
+        var runner = new RecordingStaffActionRunner();
         var plans = new Mock<ITenantPlanService>(MockBehavior.Strict);
 
         var result = await Service(plans.Object, runner: runner).SetPlanAsync(
@@ -145,7 +145,7 @@ public sealed class AdminTenantsTests
     {
         var tenantRef = Guid.NewGuid();
         var endsAt = Now.AddDays(30);
-        var runner = new RecordingRunner();
+        var runner = new RecordingStaffActionRunner();
         var plans = new Mock<ITenantPlanService>();
         plans.Setup(p => p.SetAsync(tenantRef, It.IsAny<SetTenantPlanRequest>(), PlanSource.Operator, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TenantPlanResponse(tenantRef, PlanCode.Business, null, 4, Now, PlanSource.Operator, endsAt));
@@ -169,7 +169,7 @@ public sealed class AdminTenantsTests
             .ReturnsAsync(new TenantPlanResponse(tenant.TenantRefId, PlanCode.Pro, null, 4, Now, PlanSource.Operator, endsAt));
         var bus = new Mock<IEventBus>();
 
-        await Service(plans.Object, runner: new RecordingRunner(), tenants: Tenants(tenant), bus: bus.Object).SetPlanAsync(
+        await Service(plans.Object, runner: new RecordingStaffActionRunner(), tenants: Tenants(tenant), bus: bus.Object).SetPlanAsync(
             tenant.TenantRefId, new AdminSetTenantPlanRequest(Staff, PlanCode.Pro, null, 3, endsAt), CancellationToken.None);
 
         // No user is named: the staff member and their reason stay in the staff audit.
@@ -188,7 +188,7 @@ public sealed class AdminTenantsTests
         plans.Setup(p => p.SetAsync(It.IsAny<Guid>(), It.IsAny<SetTenantPlanRequest>(), It.IsAny<PlanSource>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Error.Conflict("TENANT_PLAN_CHANGED", "Changed."));
 
-        var result = await Service(plans.Object, runner: new RecordingRunner()).SetPlanAsync(
+        var result = await Service(plans.Object, runner: new RecordingStaffActionRunner()).SetPlanAsync(
             Guid.NewGuid(), new AdminSetTenantPlanRequest(Staff, PlanCode.Pro, null, 3, Now.AddDays(30)), CancellationToken.None);
 
         Assert.Equal("TENANT_PLAN_CHANGED", result.Error.Code);
@@ -198,7 +198,7 @@ public sealed class AdminTenantsTests
     public async Task A_limits_change_keeps_the_plan_its_source_and_its_end()
     {
         var tenantRef = Guid.NewGuid();
-        var runner = new RecordingRunner();
+        var runner = new RecordingStaffActionRunner();
         var current = new TenantPlanResponse(tenantRef, PlanCode.Business, new PlanLimitOverrides { Clients = 300 }, 9, Now, PlanSource.Subscription);
         var plans = new Mock<ITenantPlanService>();
         plans.Setup(p => p.GetAsync(tenantRef, It.IsAny<CancellationToken>())).ReturnsAsync(current);
@@ -217,7 +217,7 @@ public sealed class AdminTenantsTests
     [Fact]
     public async Task A_limits_change_for_an_unknown_tenant_is_not_found_and_not_run()
     {
-        var runner = new RecordingRunner();
+        var runner = new RecordingStaffActionRunner();
         var plans = new Mock<ITenantPlanService>();
         plans.Setup(p => p.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Error.NotFound("TENANT_NOT_FOUND", "No tenant."));
@@ -238,7 +238,7 @@ public sealed class AdminTenantsTests
     [InlineData(500, 367)]
     public async Task Staff_credits_are_1_to_100000_and_expire_within_a_year(double credits, int days)
     {
-        var runner = new RecordingRunner();
+        var runner = new RecordingStaffActionRunner();
 
         var result = await Service(new Mock<ITenantPlanService>(MockBehavior.Strict).Object, runner: runner).GrantCreditsAsync(
             Guid.NewGuid(), new AdminGrantCreditsRequest(Staff, (decimal)credits, Now.AddDays(days)), CancellationToken.None);
@@ -251,7 +251,7 @@ public sealed class AdminTenantsTests
     public async Task Staff_credits_are_an_outbox_event_named_by_the_idempotency_key()
     {
         var tenant = new TenantPlan(12, Guid.NewGuid(), PlanCode.Pro, null, 3, null);
-        var runner = new RecordingRunner();
+        var runner = new RecordingStaffActionRunner();
         var outbox = new RecordingOutbox();
         var expiresAt = Now.AddDays(90);
 
@@ -276,7 +276,7 @@ public sealed class AdminTenantsTests
         var grantRef = Guid.NewGuid();
         var outbox = new RecordingOutbox();
 
-        var result = await Service(Mock.Of<ITenantPlanService>(), runner: new RecordingRunner(), tenants: Tenants(tenant), outbox: outbox)
+        var result = await Service(Mock.Of<ITenantPlanService>(), runner: new RecordingStaffActionRunner(), tenants: Tenants(tenant), outbox: outbox)
             .RevokeCreditGrantAsync(tenant.TenantRefId, grantRef, new AdminRevokeCreditGrantRequest(Staff), CancellationToken.None);
 
         Assert.True(result.IsSuccess);
@@ -292,7 +292,7 @@ public sealed class AdminTenantsTests
     {
         var outbox = new RecordingOutbox();
 
-        var result = await Service(Mock.Of<ITenantPlanService>(), runner: new RecordingRunner(), tenants: Tenants(null), outbox: outbox)
+        var result = await Service(Mock.Of<ITenantPlanService>(), runner: new RecordingStaffActionRunner(), tenants: Tenants(null), outbox: outbox)
             .GrantCreditsAsync(Guid.NewGuid(), new AdminGrantCreditsRequest(Staff, 10m, Now.AddDays(1)), CancellationToken.None);
 
         Assert.Equal("TENANT_NOT_FOUND", result.Error.Code);
@@ -307,7 +307,7 @@ public sealed class AdminTenantsTests
         var tenant = new TenantPlan(12, Guid.NewGuid(), PlanCode.Team, null, 3, null, source, Now.AddDays(endsInDays).UtcDateTime);
         var review = new Mock<ITenantPlanReview>(MockBehavior.Strict);
 
-        var result = await Service(new Mock<ITenantPlanService>(MockBehavior.Strict).Object, runner: new RecordingRunner(), tenants: Tenants(tenant), review: review.Object)
+        var result = await Service(new Mock<ITenantPlanService>(MockBehavior.Strict).Object, runner: new RecordingStaffActionRunner(), tenants: Tenants(tenant), review: review.Object)
             .EndStaffPlanAsync(tenant.TenantRefId, new AdminEndStaffPlanRequest(Staff, 3), CancellationToken.None);
 
         Assert.Equal("STAFF_PLAN_NOT_ACTIVE", result.Error.Code);
@@ -323,7 +323,7 @@ public sealed class AdminTenantsTests
             .ReturnsAsync(new TenantPlanResponse(tenant.TenantRefId, PlanCode.Team, overrides, 4, Now, PlanSource.Operator, Now));
         var review = new Mock<ITenantPlanReview>();
         review.Setup(r => r.ReviewAsync(12, It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("provider down"));
-        var runner = new RecordingRunner();
+        var runner = new RecordingStaffActionRunner();
 
         var result = await Service(plans.Object, runner: runner, tenants: Tenants(tenant), review: review.Object)
             .EndStaffPlanAsync(tenant.TenantRefId, new AdminEndStaffPlanRequest(Staff, 3), CancellationToken.None);
@@ -353,8 +353,7 @@ public sealed class AdminTenantsTests
         new(plans, limits ?? new FixedTenantLimits(), runner ?? Mock.Of<IStaffActionRunner>(MockBehavior.Strict), new FixedClock(Now),
             tenants ?? Mock.Of<ITenantPlanProvider>(MockBehavior.Strict), new NoWorkspaces(), outbox ?? new RecordingOutbox(),
             review ?? Mock.Of<ITenantPlanReview>(),
-            new TenantAnnouncer(bus ?? Mock.Of<IEventBus>(), new NoWorkspaces(), new RecordingAccessChanges().Changes, NullLogger<TenantAnnouncer>.Instance),
-            NullLogger<AdminTenantService>.Instance);
+            new TenantAnnouncer(bus ?? Mock.Of<IEventBus>(), new NoWorkspaces(), new RecordingAccessChanges().Changes, NullLogger<TenantAnnouncer>.Instance));
 
     private sealed class NoWorkspaces : IAuditWorkspaces
     {
@@ -380,20 +379,6 @@ public sealed class AdminTenantsTests
     }
 
     /// <summary>Runs the change at once and remembers what it was asked to audit.</summary>
-    private sealed class RecordingRunner : IStaffActionRunner
-    {
-        public StaffChange? Staff { get; private set; }
-
-        public StaffAction? Action { get; private set; }
-
-        public async Task<Result<StaffActionResponse>> RunAsync(StaffChange staff, StaffAction action, Func<CancellationToken, Task<Result>> change, CancellationToken cancellationToken)
-        {
-            Staff = staff;
-            Action = action;
-            var outcome = await change(cancellationToken);
-            return outcome.IsFailure ? outcome.Error : new StaffActionResponse(1, false);
-        }
-    }
 
     private static AuthorizationFilterContext FilterContext(string? adminHeader, string? configured, string? internalHeader = null)
     {

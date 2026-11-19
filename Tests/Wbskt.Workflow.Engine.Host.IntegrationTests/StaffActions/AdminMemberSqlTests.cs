@@ -39,8 +39,7 @@ public sealed class AdminMemberSqlTests(AuthSqlFixture auth)
             accounts,
             _bus,
             new TenantAnnouncer(_bus, new AuditWorkspaces(new WorkspaceProvider(configuration), NullLogger<AuditWorkspaces>.Instance), new WorkspaceAccessChanges(null, NullLogger<WorkspaceAccessChanges>.Instance), NullLogger<TenantAnnouncer>.Instance),
-            runner,
-            NullLogger<AdminMemberService>.Instance);
+            runner);
     }
 
     private static StaffChange Staff(Guid key) => new(Guid.NewGuid(), "pika", "Integration test of a member change", key);

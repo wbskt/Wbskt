@@ -25,7 +25,7 @@ public sealed class AdminMemberServiceTests
     private readonly Mock<IEventBus> _bus = new();
     private readonly RecordingAccessChanges _accessChanges = new();
     private readonly Mock<IAuditWorkspaces> _audit = new();
-    private readonly RecordingRunner _runner = new();
+    private readonly RecordingStaffActionRunner _runner = new();
     private readonly User _user = new() { Id = 42, RefId = Guid.NewGuid(), Username = "bob", Email = "bob@example.test", IsActive = true };
 
     public AdminMemberServiceTests()
@@ -38,8 +38,7 @@ public sealed class AdminMemberServiceTests
     }
 
     private AdminMemberService Service() => new(_staff.Object, _tenants.Object, _accounts.Object, _bus.Object,
-        new TenantAnnouncer(_bus.Object, _audit.Object, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance), _runner,
-        NullLogger<AdminMemberService>.Instance);
+        new TenantAnnouncer(_bus.Object, _audit.Object, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance), _runner);
 
     [Fact]
     public async Task An_unknown_tenant_is_not_found_and_nothing_runs()
@@ -185,27 +184,5 @@ public sealed class AdminMemberServiceTests
         Assert.True(result.Value.Replayed);
         _tenants.VerifyNoOtherCalls();
         _bus.VerifyNoOtherCalls();
-    }
-
-    private sealed class RecordingRunner : IStaffActionRunner
-    {
-        public StaffAction? Action { get; private set; }
-
-        public bool Replay { get; set; }
-
-        public System.Action? Inspect { get; set; }
-
-        public async Task<Result<StaffActionResponse>> RunAsync(StaffChange staff, StaffAction action, Func<CancellationToken, Task<Result>> change, CancellationToken cancellationToken)
-        {
-            Action = action;
-            if (Replay)
-            {
-                return new StaffActionResponse(1, true);
-            }
-
-            var outcome = await change(cancellationToken);
-            Inspect?.Invoke();
-            return outcome.IsFailure ? outcome.Error : new StaffActionResponse(1, false);
-        }
     }
 }

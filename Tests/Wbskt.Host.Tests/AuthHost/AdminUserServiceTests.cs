@@ -26,7 +26,7 @@ public sealed class AdminUserServiceTests
     private readonly Mock<ISessionProvider> _sessions = new();
     private readonly Mock<IAccessTokenRevocation> _accessTokens = new();
     private readonly Mock<IAuthMailer> _mailer = new();
-    private readonly RecordingRunner _runner = new();
+    private readonly RecordingStaffActionRunner _runner = new();
     private readonly User _user = new() { Id = 42, RefId = Guid.NewGuid(), Username = "alice", Email = "alice@example.test", IsActive = true };
 
     public AdminUserServiceTests()
@@ -41,7 +41,7 @@ public sealed class AdminUserServiceTests
 
     private AdminUserService Service() => new(_accounts.Object, _staffUsers.Object, _sessions.Object, _accessTokens.Object, _mailer.Object,
         _runner, new TenantAnnouncer(_bus.Object, _audit.Object, new RecordingAccessChanges().Changes, NullLogger<TenantAnnouncer>.Instance),
-        new FixedClock(Now), NullLogger<AdminUserService>.Instance);
+        new FixedClock(Now));
 
     [Fact]
     public async Task An_unknown_person_is_not_found_and_nothing_runs()
@@ -263,28 +263,5 @@ public sealed class AdminUserServiceTests
     private sealed class FixedClock(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
-    }
-
-    private sealed class RecordingRunner : IStaffActionRunner
-    {
-        public StaffAction? Action { get; private set; }
-
-        public bool Replay { get; set; }
-
-        /// <summary>Runs after the change, while its transaction would still be open.</summary>
-        public System.Action? Inspect { get; set; }
-
-        public async Task<Result<StaffActionResponse>> RunAsync(StaffChange staff, StaffAction action, Func<CancellationToken, Task<Result>> change, CancellationToken cancellationToken)
-        {
-            Action = action;
-            if (Replay)
-            {
-                return new StaffActionResponse(1, true);
-            }
-
-            var outcome = await change(cancellationToken);
-            Inspect?.Invoke();
-            return outcome.IsFailure ? outcome.Error : new StaffActionResponse(1, false);
-        }
     }
 }

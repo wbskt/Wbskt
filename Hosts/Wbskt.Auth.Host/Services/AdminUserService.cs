@@ -28,8 +28,7 @@ internal sealed class AdminUserService(
     IAuthMailer mailer,
     IStaffActionRunner runner,
     TenantAnnouncer announcer,
-    TimeProvider time,
-    ILogger<AdminUserService> logger)
+    TimeProvider time)
     : IAdminUserService
 {
     public const string ClearLockoutAction = "ClearSignInLockout";
@@ -78,7 +77,7 @@ internal sealed class AdminUserService(
 
         var token = SecurityTokens.Generate();
         var expiresAt = time.GetUtcNow().UtcDateTime.Add(RegistrationService.EmailVerificationLifetime);
-        var result = await RunAsync(request.Staff, ResendVerificationAction, user, async (now, ct) =>
+        return await RunAsync(request.Staff, ResendVerificationAction, user, async (now, ct) =>
         {
             if (now.IsEmailVerified)
             {
@@ -92,10 +91,7 @@ internal sealed class AdminUserService(
 
             await accounts.CreateEmailVerificationTokenAsync(now.Id, SecurityTokens.Hash(token), expiresAt, ct);
             return Result.Success();
-        }, cancellationToken);
-
-        await AfterCommitAsync(result, "email verification", user, () => mailer.QueueEmailVerificationAsync(user.Email, user.Username, token, expiresAt, CancellationToken.None).AsTask());
-        return result;
+        }, [VerificationMail(user.Email, user, token, expiresAt)], cancellationToken);
     }
 
     public async Task<Result<StaffActionResponse>> SendPasswordResetAsync(Guid userRef, AdminUserActionRequest request, CancellationToken cancellationToken)
@@ -108,7 +104,7 @@ internal sealed class AdminUserService(
 
         var token = SecurityTokens.Generate();
         var expiresAt = time.GetUtcNow().UtcDateTime.Add(PasswordService.PasswordResetLifetime);
-        var result = await RunAsync(request.Staff, SendPasswordResetAction, user, async (now, ct) =>
+        return await RunAsync(request.Staff, SendPasswordResetAction, user, async (now, ct) =>
         {
             if (!now.IsActive)
             {
@@ -117,10 +113,7 @@ internal sealed class AdminUserService(
 
             await accounts.CreatePasswordResetTokenAsync(now.Id, SecurityTokens.Hash(token), expiresAt, StaffAddress, ct);
             return Result.Success();
-        }, cancellationToken);
-
-        await AfterCommitAsync(result, "password reset", user, () => mailer.QueuePasswordResetAsync(user.Email, user.Username, token, expiresAt, CancellationToken.None).AsTask());
-        return result;
+        }, [new AfterCommit("password reset", ct => mailer.QueuePasswordResetAsync(user.Email, user.Username, token, expiresAt, ct).AsTask())], cancellationToken);
     }
 
     public async Task<Result<StaffActionResponse>> SignOutEverywhereAsync(Guid userRef, AdminUserActionRequest request, CancellationToken cancellationToken)
@@ -131,15 +124,11 @@ internal sealed class AdminUserService(
             return UserNotFound;
         }
 
-        var result = await RunAsync(request.Staff, SignOutEverywhereAction, user, async (now, ct) =>
+        return await RunAsync(request.Staff, SignOutEverywhereAction, user, async (now, ct) =>
         {
             await sessions.RevokeAllRefreshTokensForUserAsync(now.Id, StaffAddress, ct);
             return Result.Success();
-        }, cancellationToken);
-
-        await AfterCommitAsync(result, "access token revocation", user, () => accessTokens.RevokeUserAsync(user.RefId, CancellationToken.None));
-        await AnnounceAsync(result, SignOutEverywhereAction, user);
-        return result;
+        }, [RevokeAccessTokens(user), Announce(SignOutEverywhereAction, user)], cancellationToken);
     }
 
     public async Task<Result<StaffActionResponse>> SetSignInAsync(Guid userRef, AdminSetUserSignInRequest request, CancellationToken cancellationToken)
@@ -150,7 +139,11 @@ internal sealed class AdminUserService(
             return UserNotFound;
         }
 
-        var result = await RunAsync(request.Staff, request.Allowed ? AllowSignInAction : BlockSignInAction, user, async (now, ct) =>
+        var action = request.Allowed ? AllowSignInAction : BlockSignInAction;
+        IReadOnlyList<AfterCommit> afterCommit = request.Allowed
+            ? [Announce(action, user)]
+            : [RevokeAccessTokens(user), Announce(action, user)];
+        return await RunAsync(request.Staff, action, user, async (now, ct) =>
         {
             if (now.IsActive == request.Allowed)
             {
@@ -159,15 +152,7 @@ internal sealed class AdminUserService(
 
             await staffUsers.SetActiveAsync(now.Id, request.Allowed, StaffAddress, ct);
             return Result.Success();
-        }, cancellationToken);
-
-        if (!request.Allowed)
-        {
-            await AfterCommitAsync(result, "access token revocation", user, () => accessTokens.RevokeUserAsync(user.RefId, CancellationToken.None));
-        }
-
-        await AnnounceAsync(result, request.Allowed ? AllowSignInAction : BlockSignInAction, user);
-        return result;
+        }, afterCommit, cancellationToken);
     }
 
     public async Task<Result<StaffActionResponse>> CorrectEmailAsync(Guid userRef, AdminCorrectUserEmailRequest request, CancellationToken cancellationToken)
@@ -184,7 +169,7 @@ internal sealed class AdminUserService(
 
         // The old address goes in the audit row's detail: it is the only record of where the account pointed.
         var action = new StaffAction(CorrectEmailAction, TargetKind, user.RefId, $"From {user.Email} to {email}");
-        var result = await runner.RunAsync(request.Staff, action, async ct =>
+        return await runner.RunAsync(request.Staff, action, async ct =>
         {
             var now = await accounts.FindByIdAsync(user.Id, ct);
             if (now is null)
@@ -220,14 +205,17 @@ internal sealed class AdminUserService(
             {
                 return Result.Failure(Error.Conflict("EMAIL_IN_USE", "Another account uses that address."));
             }
-        }, cancellationToken);
-
-        await AfterCommitAsync(result, "email verification", user, () => mailer.QueueEmailVerificationAsync(email, user.Username, token, expiresAt, CancellationToken.None).AsTask());
-        return result;
+        }, [VerificationMail(email, user, token, expiresAt)], cancellationToken);
     }
 
-    private Task AnnounceAsync(Result<StaffActionResponse> result, string action, User user) =>
-        AfterCommitAsync(result, "audit event", user, () => announcer.ToUserAsync(new SupportActionTakenEvent(action, TargetKind, user.RefId), user.Id, CancellationToken.None));
+    private AfterCommit Announce(string action, User user) =>
+        new("audit event", ct => announcer.ToUserAsync(new SupportActionTakenEvent(action, TargetKind, user.RefId), user.Id, ct));
+
+    private AfterCommit RevokeAccessTokens(User user) =>
+        new("access token revocation", ct => accessTokens.RevokeUserAsync(user.RefId, ct));
+
+    private AfterCommit VerificationMail(string email, User user, string token, DateTime expiresAt) =>
+        new("email verification", ct => mailer.QueueEmailVerificationAsync(email, user.Username, token, expiresAt, ct).AsTask());
 
     /// <summary>
     /// Checks the person's state inside the runner, after its replay check, so a retry of a change that
@@ -235,33 +223,14 @@ internal sealed class AdminUserService(
     /// change's transaction; a refusal there is audited as Refused.
     /// </summary>
     private Task<Result<StaffActionResponse>> RunAsync(StaffChange staff, string action, User user, Func<User, CancellationToken, Task<Result>> change, CancellationToken cancellationToken) =>
+        RunAsync(staff, action, user, change, [], cancellationToken);
+
+    private Task<Result<StaffActionResponse>> RunAsync(StaffChange staff, string action, User user, Func<User, CancellationToken, Task<Result>> change, IReadOnlyList<AfterCommit> afterCommit, CancellationToken cancellationToken) =>
         runner.RunAsync(staff, new StaffAction(action, TargetKind, user.RefId), async ct =>
-            await accounts.FindByIdAsync(user.Id, ct) is { } now ? await change(now, ct) : Result.Failure(UserNotFound), cancellationToken);
+            await accounts.FindByIdAsync(user.Id, ct) is { } now ? await change(now, ct) : Result.Failure(UserNotFound), afterCommit, cancellationToken);
 
     private async Task<User?> FindAsync(Guid userRef, CancellationToken cancellationToken)
     {
         return await accounts.FindIdByRefIdAsync(userRef, cancellationToken) is { } id ? await accounts.FindByIdAsync(id, cancellationToken) : null;
-    }
-
-    /// <summary>
-    /// Runs <paramref name="effect"/> once the change has committed, and not for a replay. Best effort: the
-    /// change is made and audited, so a failure here is logged rather than reported as the change failing.
-    /// Effects take no request token, so a caller that goes away after the commit cannot cut them short.
-    /// </summary>
-    private async Task AfterCommitAsync(Result<StaffActionResponse> result, string what, User user, Func<Task> effect)
-    {
-        if (result.IsFailure || result.Value.Replayed)
-        {
-            return;
-        }
-
-        try
-        {
-            await effect();
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogError(ex, "The staff change to user {UserId} committed, but its {What} failed.", user.Id, what);
-        }
     }
 }

@@ -26,10 +26,18 @@ public sealed class StaffActionRunner(IStaffAuditProvider audit, ILogger<StaffAc
 
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
 
+    public Task<Result<StaffActionResponse>> RunAsync(
+        StaffChange staff,
+        StaffAction action,
+        Func<CancellationToken, Task<Result>> change,
+        CancellationToken cancellationToken) =>
+        RunAsync(staff, action, change, [], cancellationToken);
+
     public async Task<Result<StaffActionResponse>> RunAsync(
         StaffChange staff,
         StaffAction action,
         Func<CancellationToken, Task<Result>> change,
+        IReadOnlyList<AfterCommit> afterCommit,
         CancellationToken cancellationToken)
     {
         if (Validate(staff) is { } invalid)
@@ -44,6 +52,7 @@ public sealed class StaffActionRunner(IStaffAuditProvider audit, ILogger<StaffAc
         }
 
         Result outcome;
+        long? committedId = null;
         using (var scope = new TransactionScope(
                    TransactionScopeOption.Required,
                    new TransactionOptions { IsolationLevel = IsolationLevel.ReadCommitted, Timeout = Timeout },
@@ -65,8 +74,15 @@ public sealed class StaffActionRunner(IStaffAuditProvider audit, ILogger<StaffAc
             if (outcome.IsSuccess)
             {
                 scope.Complete();
-                return new StaffActionResponse(auditId, false);
+                committedId = auditId;
             }
+        }
+
+        // Disposing the scope is the commit, so what follows the change runs only out here.
+        if (committedId is { } id)
+        {
+            await RunAfterCommitAsync(action, afterCommit);
+            return new StaffActionResponse(id, false);
         }
 
         // The scope rolled the change and its row back; the refusal gets a row of its own.
@@ -82,6 +98,21 @@ public sealed class StaffActionRunner(IStaffAuditProvider audit, ILogger<StaffAc
         }
 
         return outcome.Error;
+    }
+
+    private async Task RunAfterCommitAsync(StaffAction action, IReadOnlyList<AfterCommit> afterCommit)
+    {
+        foreach (var step in afterCommit)
+        {
+            try
+            {
+                await step.Effect(CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Staff action {Action} on {TargetRefId} committed, but its {What} failed.", action.Name, action.TargetRefId, step.What);
+            }
+        }
     }
 
     private static Error? Validate(StaffChange staff)

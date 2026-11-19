@@ -28,8 +28,7 @@ internal sealed class AdminTenantService(
     IAuditWorkspaces audit,
     IOutboxWriter outbox,
     ITenantPlanReview review,
-    TenantAnnouncer announcer,
-    ILogger<AdminTenantService> logger)
+    TenantAnnouncer announcer)
     : IAdminTenantService
 {
     public const string SetPlanAction = "SetTenantPlan";
@@ -63,13 +62,12 @@ internal sealed class AdminTenantService(
         }
 
         var set = new SetTenantPlanRequest(request.PlanCode, request.LimitOverrides, request.ExpectedRevision, request.EndsAt, request.ContractClients, request.KeepSubscription);
-        var result = await runner.RunAsync(
+        return await runner.RunAsync(
             request.Staff,
             new StaffAction(SetPlanAction, TargetKind, tenantRef),
             async ct => await plans.SetAsync(tenantRef, set, PlanSource.Operator, ct),
+            [Announce(SetPlanAction, tenantRef)],
             cancellationToken);
-        await AnnounceAsync(result, SetPlanAction, tenantRef);
-        return result;
     }
 
     public async Task<Result<StaffActionResponse>> SetLimitsAsync(Guid tenantRef, AdminSetTenantLimitsRequest request, CancellationToken cancellationToken)
@@ -84,19 +82,18 @@ internal sealed class AdminTenantService(
         // the change if any of them moved since the staff member read them.
         var plan = current.Value;
         var set = new SetTenantPlanRequest(plan.PlanCode, request.LimitOverrides, request.ExpectedRevision, plan.EndsAt);
-        var result = await runner.RunAsync(
+        return await runner.RunAsync(
             request.Staff,
             new StaffAction(SetLimitsAction, TargetKind, tenantRef),
             async ct => await plans.SetAsync(tenantRef, set, plan.Source, ct),
+            [Announce(SetLimitsAction, tenantRef)],
             cancellationToken);
-        await AnnounceAsync(result, SetLimitsAction, tenantRef);
-        return result;
     }
 
     public async Task<Result<StaffActionResponse>> EndStaffPlanAsync(Guid tenantRef, AdminEndStaffPlanRequest request, CancellationToken cancellationToken)
     {
         int? tenantId = null;
-        var result = await runner.RunAsync(
+        return await runner.RunAsync(
             request.Staff,
             new StaffAction(EndPlanAction, TargetKind, tenantRef),
             async ct =>
@@ -118,15 +115,8 @@ internal sealed class AdminTenantService(
                 var end = new SetTenantPlanRequest(current.PlanCode, current.LimitOverrides, request.ExpectedRevision, now.ToUtcOffset());
                 return await plans.SetAsync(tenantRef, end, PlanSource.Operator, ct);
             },
+            [ReviewNow(() => tenantId), Announce(EndPlanAction, tenantRef)],
             cancellationToken);
-
-        if (result.IsSuccess && tenantId.HasValue)
-        {
-            await ReviewNowAsync(tenantId.Value, cancellationToken);
-        }
-
-        await AnnounceAsync(result, EndPlanAction, tenantRef);
-        return result;
     }
 
     public async Task<Result<StaffActionResponse>> GrantCreditsAsync(Guid tenantRef, AdminGrantCreditsRequest request, CancellationToken cancellationToken)
@@ -142,7 +132,7 @@ internal sealed class AdminTenantService(
             return Error.Validation("CREDITS_EXPIRES_AT_INVALID", "Staff credits expire in the future and within a year.");
         }
 
-        var result = await runner.RunAsync(
+        return await runner.RunAsync(
             request.Staff,
             new StaffAction(GrantCreditsAction, TargetKind, tenantRef),
             async ct =>
@@ -162,14 +152,13 @@ internal sealed class AdminTenantService(
                 await outbox.AddAsync(OutboxMessage.Create(granted), ct);
                 return Result.Success();
             },
+            [Announce(GrantCreditsAction, tenantRef)],
             cancellationToken);
-        await AnnounceAsync(result, GrantCreditsAction, tenantRef);
-        return result;
     }
 
     public async Task<Result<StaffActionResponse>> RevokeCreditGrantAsync(Guid tenantRef, Guid grantRef, AdminRevokeCreditGrantRequest request, CancellationToken cancellationToken)
     {
-        var result = await runner.RunAsync(
+        return await runner.RunAsync(
             request.Staff,
             new StaffAction(RevokeCreditsAction, TargetKind, tenantRef),
             async ct =>
@@ -190,31 +179,24 @@ internal sealed class AdminTenantService(
                 await outbox.AddAsync(OutboxMessage.Create(revoked), ct);
                 return Result.Success();
             },
+            [Announce(RevokeCreditsAction, tenantRef)],
             cancellationToken);
-        await AnnounceAsync(result, RevokeCreditsAction, tenantRef);
-        return result;
     }
 
-    private Task AnnounceAsync(Result<StaffActionResponse> result, string action, Guid tenantRef) =>
-        announcer.SupportActionAsync(
-            result,
-            new SupportActionTakenEvent(action, TargetKind, tenantRef),
-            async ct => (await tenants.FindByRefIdAsync(tenantRef, ct))?.TenantId);
+    private AfterCommit Announce(string action, Guid tenantRef) =>
+        new("audit event", async ct =>
+        {
+            if (await tenants.FindByRefIdAsync(tenantRef, ct) is { } tenant)
+            {
+                await announcer.ToTenantAsync(new SupportActionTakenEvent(action, TargetKind, tenantRef), tenant.TenantId, ct);
+            }
+        });
 
     /// <summary>
-    /// Moves the tenant to its subscription's plan now rather than at the next hourly review. It runs after
-    /// the change has committed and asks the payment provider, so a failure is only logged: the hourly review
-    /// picks the tenant up, since its staff plan has ended.
+    /// Moves the tenant to its subscription's plan now rather than at the next hourly review. It asks the
+    /// payment provider, so a failure is only logged: the hourly review picks the tenant up, since its staff
+    /// plan has ended.
     /// </summary>
-    private async Task ReviewNowAsync(int tenantId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await review.ReviewAsync(tenantId, cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(ex, "Ended tenant {TenantId}'s staff plan; billing will move it at the next hourly review.", tenantId);
-        }
-    }
+    private AfterCommit ReviewNow(Func<int?> tenantId) =>
+        new("plan review", ct => tenantId() is { } id ? review.ReviewAsync(id, ct) : Task.CompletedTask);
 }

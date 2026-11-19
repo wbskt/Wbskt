@@ -14,9 +14,23 @@ public interface IStaffActionRunner
     /// another, never two at once, so the transaction stays on one connection (see the remarks on
     /// <see cref="StaffActionRunner"/>).
     /// </param>
+    /// <param name="afterCommit">
+    /// What follows the change once it has committed, in order, and only for a change made now, not for a
+    /// replay, which did it the first time. The change is made and audited by then, so each step runs on
+    /// <see cref="CancellationToken.None"/> and a step that throws is logged, not reported as the change
+    /// failing; the steps after it still run.
+    /// </param>
     Task<Result<StaffActionResponse>> RunAsync(
         StaffChange staff,
         StaffAction action,
         Func<CancellationToken, Task<Result>> change,
+        IReadOnlyList<AfterCommit> afterCommit,
         CancellationToken cancellationToken);
+
+    Task<Result<StaffActionResponse>> RunAsync(
+        StaffChange staff,
+        StaffAction action,
+        Func<CancellationToken, Task<Result>> change,
+        CancellationToken cancellationToken) =>
+        RunAsync(staff, action, change, [], cancellationToken);
 }
