@@ -46,6 +46,9 @@ there. See [Build and release flow](#build-and-release-flow).
 - `scripts/ssh-forced-command.sh` — what the CI deploy key is pinned to in `authorized_keys`, so
   that key can only ever invoke `deploy.sh`.
 - `..\..\.github\workflows\build-images.yml` — builds and pushes the 5 backend images to GHCR.
+  Its `deploy-config` job checks `observability/prometheus.yml`, `alerts.yml` (and the rule tests in
+  `alerts.test.yml`), the Alertmanager config the entrypoint writes, and the compose file, so a typo
+  fails the pull request instead of silencing alerts on the next deploy.
 - `..\..\.github\workflows\deploy.yml` — SSHes to the VM and invokes `scripts/deploy.sh`. Called
   automatically by `build-images.yml` after each master push; can also be dispatched by hand.
 
