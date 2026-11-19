@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services;
+using Wbskt.Management.Models;
 using Wbskt.Models.Billing;
 using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 
@@ -44,6 +45,35 @@ public sealed class MessageMeterIntegrationTests(SqlEdgeFixture fixture)
             "SELECT Inbound FROM dbo.WorkspaceMessageUsage WHERE WorkspaceId = @p0 AND Day = CAST(@p1 AS DATE)", workspaceId, today));
         Assert.Equal(2L, await ScalarAsync<long>(
             "SELECT Outbound FROM dbo.WorkspaceMessageUsage WHERE WorkspaceId = @p0 AND Day = CAST(@p1 AS DATE)", workspaceId, today));
+    }
+
+    [SkippableFact]
+    public async Task The_hourly_counts_sum_to_the_day_and_are_read_back_by_hour_and_day()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int workspaceId = Random.Shared.Next(1_000_000, int.MaxValue);
+        int received = await EventIdAsync("ClientMessageReceivedEvent");
+        int delivered = await EventIdAsync("ClientCommandDeliveredEvent");
+        var day = new DateTime(2026, 3, 4, 0, 0, 0, DateTimeKind.Utc);
+        EventLogEntry Entry(int eventId, DateTime at) => new(eventId, "{}", at, workspaceId, MessageId: Guid.NewGuid());
+
+        await TrafficAsync(Entry(received, day.AddHours(9).AddMinutes(5)), Entry(received, day.AddHours(9).AddMinutes(59)), Entry(delivered, day.AddHours(13)));
+        await TrafficAsync(Entry(received, day.AddHours(13).AddMinutes(30)));
+
+        var usage = new WorkspaceUsageProvider(Configuration());
+        var hours = await usage.GetHourlyMessagesAsync(workspaceId, day, day.AddDays(1), CancellationToken.None);
+        var days = await usage.GetDailyMessagesAsync(workspaceId, DateOnly.FromDateTime(day), DateOnly.FromDateTime(day), CancellationToken.None);
+
+        Assert.Equal(
+            [new MessageCountBucket(new DateTimeOffset(day.AddHours(9)), 2, 0), new MessageCountBucket(new DateTimeOffset(day.AddHours(13)), 1, 1)],
+            hours);
+        Assert.Equal([new MessageCountBucket(new DateTimeOffset(day), 3, 1)], days);
+
+        var events = new EventProvider(Configuration());
+        // The sweep is across every workspace, so other tests' old hours may go with these two.
+        Assert.True(await events.DeleteHourlyMessageCountsBeforeAsync(day.AddDays(1), 1_000_000, CancellationToken.None) >= 2);
+        Assert.Empty(await usage.GetHourlyMessagesAsync(workspaceId, day, day.AddDays(1), CancellationToken.None));
+        Assert.Single(await usage.GetDailyMessagesAsync(workspaceId, DateOnly.FromDateTime(day), DateOnly.FromDateTime(day), CancellationToken.None));
     }
 
     [SkippableFact]

@@ -30,6 +30,7 @@ using Wbskt.Management.Host.Services.Billing;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Host.Services.Integrations;
 using Wbskt.Management.Host.Services.Readings;
+using Wbskt.Management.Host.Services.Stats;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Primitives;
 using Wbskt.Workflow.Abstraction.Validation;
@@ -119,6 +120,7 @@ public static class Program
         builder.Services.AddScoped<IAdminWorkspaceService, AdminWorkspaceService>();
         builder.Services.AddScoped<IWorkspaceUsageProvider, WorkspaceUsageProvider>();
         builder.Services.AddScoped<IWorkspaceUsageService, WorkspaceUsageService>();
+        builder.Services.AddScoped<IWorkspaceMessageHistoryService, WorkspaceMessageHistoryService>();
         builder.Services.AddScoped<IBusinessUsageProvider, BusinessUsageProvider>();
         builder.Services.AddScoped<IBusinessOverageService, BusinessOverageService>();
         builder.Services.AddScoped<IMessageAllowanceProvider, MessageAllowanceProvider>();

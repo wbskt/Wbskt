@@ -589,6 +589,16 @@ while a connection is re-establishing. `GET /api/v1/workspaces/{workspaceRef}/st
 returns the last window's value, so a status bar has a number before the first event. Like the cap,
 it is counted per management instance: with more than one, each reports its share.
 
+For a chart, `GET /api/v1/workspaces/{workspaceRef}/stats/messages/history?from=&to=&bucket=` (`clients.read`)
+returns `{ from, to, bucketSeconds, buckets: [{ start, inbound, outbound }] }`: messages clients sent and
+commands delivered to them per UTC hour (`bucket=1h`, a range of at most 31 days) or day (`1d`, at most
+366). Left out, the bucket is hours up to two days and days beyond, and the range is the last 24 hours.
+The range is widened to whole buckets and every bucket in it is listed, zero where nothing was carried.
+The counts come from the message meter (`dbo.WorkspaceMessageUsage` by day, kept as long as the
+workspace, and `dbo.WorkspaceMessageUsageHourly`, kept `EventLogging:RetentionDays`), not from the
+two-day traffic table, so they are exact and cheap at any range, and unlike the rate they are not split
+per instance. Hourly counts start from the release that added them.
+
 A client whose connections keep replacing each other (5 supersedes within 10 minutes on one gateway)
 raises `ClientCredentialsSharedEvent`, a Warning in the event log and `OnClientCredentialsSharedEvent
 { clientRefId, supersedes, windowMinutes, createdAtUtc }` to the client's watchers, at most once per

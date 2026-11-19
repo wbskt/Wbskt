@@ -1418,6 +1418,35 @@
         "type": "object"
       },
       "JsonElement": {},
+      "MessageCountBucket": {
+        "properties": {
+          "inbound": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "outbound": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "start": {
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "start",
+          "inbound",
+          "outbound"
+        ],
+        "type": "object"
+      },
       "MessageTemplateRequest": {
         "properties": {
           "messageType": {
@@ -3979,6 +4008,37 @@
           "monthlyCreditCap",
           "creditsSpentThisMonth",
           "capReached"
+        ],
+        "type": "object"
+      },
+      "WorkspaceMessageHistory": {
+        "properties": {
+          "bucketSeconds": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "buckets": {
+            "items": {
+              "$ref": "#/components/schemas/MessageCountBucket"
+            },
+            "type": "array"
+          },
+          "from": {
+            "format": "date-time"
+          },
+          "to": {
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "bucketSeconds",
+          "buckets"
         ],
         "type": "object"
       },
@@ -7167,6 +7227,67 @@
               "text/plain": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkspaceMessageRate"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "WorkspaceMessageStats"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspaceRef}/stats/messages/history": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "from",
+            "schema": {
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "schema": {
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bucket",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspaceRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceMessageHistory"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceMessageHistory"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceMessageHistory"
                 }
               }
             },
