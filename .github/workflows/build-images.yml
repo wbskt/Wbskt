@@ -1,6 +1,6 @@
 name: Build images
 
-# Builds the 4 host images + the migrator and pushes them to GHCR. The VM never builds anything;
+# Builds the 5 host images + the migrator and pushes them to GHCR. The VM never builds anything;
 # deploy/scripts/deploy.sh only pulls what this workflow published. Pull requests run only the
 # tests, the package scan and the upgrade rehearsal: the image jobs are skipped there, so a broken
 # Dockerfile first shows up on the master push that would publish it. On master, no image is built
@@ -224,7 +224,7 @@ jobs:
             coverage-report/
           if-no-files-found: ignore
 
-  # The black-box suite in Tests/Wbskt.E2E.FeatureTests, against all five hosts started from source
+  # The black-box suite in Tests/Wbskt.E2E.FeatureTests, against all six hosts started from source (the five, and management again as client-auth)
   # as Development. That environment is what raises the auth host's per-IP rate limit (every test
   # shares the runner's address) and lets freshly registered users sign in without a mailbox.
   #

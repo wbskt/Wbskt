@@ -5,7 +5,7 @@ name: Deploy
 # credential, and it should be locked to a forced command (see deploy/README.md).
 #
 # "Build images" calls this automatically after every master push, with that run's sha-<short> tag,
-# once the tests and E2E have passed and all five images are published. Dispatch it by hand to
+# once the tests and E2E have passed and all six images (the five hosts and the migrator) are published. Dispatch it by hand to
 # redeploy or roll back to an older tag.
 
 on:

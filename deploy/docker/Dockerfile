@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Single parameterized Dockerfile for all 4 ASP.NET Core hosts. Build with:
+# Single parameterized Dockerfile for all 5 ASP.NET Core hosts. Build with:
 #   docker build -f deploy/docker/Dockerfile \
 #     --build-arg HOST_PROJECT=Hosts/Wbskt.Auth.Host/Wbskt.Auth.Host.csproj \
 #     --build-arg HOST_DLL=Wbskt.Auth.Host.dll \
@@ -16,7 +16,7 @@ FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:${DOTNET_SDK_VERSION
 ARG HOST_PROJECT
 WORKDIR /src
 COPY . .
-# sharing=locked: all 4 host images build from this same Dockerfile and share this cache mount.
+# sharing=locked: all 5 host images build from this same Dockerfile and share this cache mount.
 # NuGet's package extraction isn't safe for concurrent writers to the same global packages folder
 # (observed firsthand: parallel `docker compose build` corrupted the shared cache with a
 # "Could not find file '.../cronos/.../<tmp>'" error) - locked serializes access instead of
@@ -36,7 +36,7 @@ COPY --from=build /app/publish .
 # The host .csproj files copy Config\*.json into the publish output at content root, which loads
 # at HIGHER precedence than the /Config bind mount (see SharedConfigurationExtension.cs). Remove
 # them so the mounted /Config (and env vars) are what actually apply in the container.
-RUN rm -f rabbitmq.json serilog.json connectionstrings.json workflow-engine.json
+RUN rm -f rabbitmq.json serilog.json connectionstrings.json workflow-engine.json email.json
 
 ARG HOST_DLL
 ENV HOST_DLL=${HOST_DLL}

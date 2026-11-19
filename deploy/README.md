@@ -21,9 +21,9 @@ there. See [Build and release flow](#build-and-release-flow).
 - The Angular console has no assets here at all — the [Dashboard](https://github.com/wbskt/Dashboard)
   repo owns its `Dockerfile`/`nginx.conf` and publishes `wbskt-console` itself. The `console`
   service below is the only reference to it, and it has no `build:` key.
-- `compose/docker-compose.yml` + `compose/.env.example` — the full stack: Traefik, the 4 hosts,
+- `compose/docker-compose.yml` + `compose/.env.example` — the full stack: Traefik, the 5 hosts,
   console, RabbitMQ, Redis, SQL Server, the observability stack, and a one-shot `migrator`
-  (profile `migrate`). The 4 hosts and the migrator carry both `image:` (what the VM pulls) and
+  (profile `migrate`). The 5 hosts and the migrator carry both `image:` (what the VM pulls) and
   `build:` (local development).
 - `compose/docker-compose.e2e.yml` — the E2E environment, local only: SQL Server, RabbitMQ, Redis,
   Mailpit, the migrator, and (profile `hosts`) the five hosts built from source and run as
@@ -147,7 +147,7 @@ Prerequisites you handle outside this repo: provision the VM, point DNS (`auth.<
 `api.<domain>`, `ws.<domain>`, `mqtt.<domain>`, `console.<domain>`, or one wildcard `*.<domain>`) at its
 IP, and open inbound 22/80/443/8883/1883 in the cloud firewall. If the VM has under ~4GB RAM, add swap first
 (`fallocate` a few GB, `mkswap`, `swapon`, persist in `/etc/fstab`) — SQL Server + RabbitMQ +
-Redis + 4 hosts + Traefik is not a light stack.
+Redis + 5 hosts + Traefik is not a light stack.
 
 ```bash
 # Docker
@@ -637,15 +637,8 @@ Two things outside the VM cover that:
   routes, so `api.<DOMAIN>/healthz/ready` reaches management.
 
 Disk and container alerts come from `node-exporter` (host filesystems) and `cadvisor` (per-container
-start times), both on the backend network only. Neither is started by `deploy.sh`; on a VM that
-predates them, start them once after the first deploy that includes them (deploy.sh syncs the
-checkout), and recreate Prometheus so it reads the new scrape config and rules:
-
-```bash
-cd ~/Wbskt/deploy/compose
-docker compose up -d node-exporter cadvisor
-docker compose up -d --force-recreate prometheus   # picks up the new prometheus.yml and alerts.yml
-```
+start times), both on the backend network only. `deploy.sh` starts and recreates them; on a VM where
+they are missing, the next deploy brings them up.
 
 For backups, set `BACKUP_ALERT_CMD` to `deploy/scripts/alert.sh` in `.env`. A failed run then
 raises `BackupFailed` straight away, and every successful run pushes its timestamp to the
