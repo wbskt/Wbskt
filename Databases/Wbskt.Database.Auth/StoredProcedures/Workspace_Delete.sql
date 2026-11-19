@@ -5,7 +5,7 @@
 -- WorkspaceDeletedEvent. That event goes into dbo.OutboxMessages in this transaction, so it is sent
 -- even if the host stops or the broker is down right after the delete commits. The delete is also
 -- recorded in dbo.DeletedWorkspaces, which the management host's daily sweep reads to catch a
--- retirement the event did not achieve.
+-- retirement the event did not achieve, with what the admin views show of a deleted workspace.
 CREATE PROCEDURE dbo.Workspace_Delete
     @Id INT,
     @OutboxMessageType NVARCHAR(256) = NULL,
@@ -20,13 +20,24 @@ BEGIN
     DELETE FROM dbo.UserRoles WHERE WorkspaceId = @Id;
     DELETE FROM dbo.GroupRoles WHERE WorkspaceId = @Id;
     DELETE FROM dbo.UserPermissions WHERE WorkspaceId = @Id;
-    DELETE FROM dbo.Workspaces WHERE Id = @Id;
+    DECLARE @Deleted TABLE (
+        RefId UNIQUEIDENTIFIER NOT NULL,
+        TenantId INT NOT NULL,
+        Name NVARCHAR(100) NOT NULL,
+        OwnerUserId INT NOT NULL,
+        CreatedAt DATETIME2(3) NOT NULL);
+
+    DELETE FROM dbo.Workspaces
+    OUTPUT DELETED.RefId, DELETED.TenantId, DELETED.Name, DELETED.OwnerUserId, DELETED.CreatedAt
+    INTO @Deleted (RefId, TenantId, Name, OwnerUserId, CreatedAt)
+    WHERE Id = @Id;
 
     -- Only for a workspace that existed: a repeated delete records and announces nothing.
-    IF @@ROWCOUNT > 0
+    IF EXISTS (SELECT 1 FROM @Deleted)
     BEGIN
-        INSERT INTO dbo.DeletedWorkspaces (WorkspaceId)
-        SELECT @Id
+        INSERT INTO dbo.DeletedWorkspaces (WorkspaceId, RefId, TenantId, Name, OwnerUserId, CreatedAt)
+        SELECT @Id, D.RefId, D.TenantId, D.Name, D.OwnerUserId, D.CreatedAt
+        FROM @Deleted D
         WHERE NOT EXISTS (SELECT 1 FROM dbo.DeletedWorkspaces WHERE WorkspaceId = @Id);
 
         IF @OutboxMessageType IS NOT NULL

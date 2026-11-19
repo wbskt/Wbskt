@@ -63,6 +63,41 @@ public sealed class DeletedWorkspacesProcedureTests(AuthSqlFixture fixture)
         Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.DeletedWorkspaces WHERE WorkspaceId = @p0", workspaceId));
     }
 
+    [SkippableFact]
+    public async Task A_deleted_workspace_stays_in_the_admin_view_with_its_details_and_leaves_the_count()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int workspaceId = await CreateWorkspaceAsync();
+        var (refId, name) = await ReadLiveAsync(workspaceId);
+        int countBefore = await ScalarAsync<int>("SELECT WorkspaceCount FROM [admin].Accounts WHERE Id = 1");
+
+        await DeleteAsync(workspaceId, withEvent: false);
+
+        await using var conn = await OpenAsync();
+        await using var cmd = new SqlCommand(
+            "SELECT RefId, TenantId, Name, DeletedAt, MemberCount FROM [admin].Workspaces WHERE Id = @Id", conn);
+        cmd.Parameters.AddWithValue("@Id", workspaceId);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(refId, reader.GetGuid(0));
+        Assert.Equal(1, reader.GetInt32(1));
+        Assert.Equal(name, reader.GetString(2));
+        Assert.False(reader.IsDBNull(3));
+        Assert.Equal(0, reader.GetInt32(4));
+        Assert.False(await reader.ReadAsync(), "a deleted workspace is listed once, from its tombstone");
+        Assert.Equal(countBefore - 1, await ScalarAsync<int>("SELECT WorkspaceCount FROM [admin].Accounts WHERE Id = 1"));
+    }
+
+    private async Task<(Guid RefId, string Name)> ReadLiveAsync(int workspaceId)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = new SqlCommand("SELECT RefId, Name FROM dbo.Workspaces WHERE Id = @Id", conn);
+        cmd.Parameters.AddWithValue("@Id", workspaceId);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        await reader.ReadAsync();
+        return (reader.GetGuid(0), reader.GetString(1));
+    }
+
     private async Task<List<int>> GetDeletedBetweenAsync(DateTime since, DateTime until)
     {
         var ids = new List<int>();
