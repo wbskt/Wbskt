@@ -134,7 +134,7 @@ internal sealed class RunFinalizer : IRunFinalizer
     {
         if (string.Equals(run.Status, RunStatus.Cancelling, StringComparison.Ordinal))
         {
-            if (string.Equals(run.CancellationReason, "OUT_OF_CREDITS", StringComparison.Ordinal))
+            if (string.Equals(run.CancellationReason, OutOfCredits.CancellationReason, StringComparison.Ordinal))
             {
                 return RunStatus.OutOfCredits;
             }
