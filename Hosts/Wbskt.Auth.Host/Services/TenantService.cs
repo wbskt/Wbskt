@@ -24,6 +24,7 @@ internal sealed class TenantService : ITenantService
     /// </summary>
     private static readonly Error InvalidInvitation = SqlGuardErrors.InvalidInvitation;
 
+    private readonly WorkspaceCreatedOutbox _workspaceCreated;
     private readonly ITenantProvider _tenants;
     private readonly IAccessControlProvider _accessControl;
     private readonly IWorkspaceProvider _workspaceProvider;
@@ -43,10 +44,12 @@ internal sealed class TenantService : ITenantService
         ILogger<TenantService> logger,
         ITenantLimits limits,
         TenantAnnouncer announcer,
-        TimeProvider time)
+        TimeProvider time,
+        WorkspaceCreatedOutbox workspaceCreated)
     {
         _time = time;
         _limits = limits;
+        _workspaceCreated = workspaceCreated;
         _tenants = tenants;
         _accessControl = accessControl;
         _workspaceProvider = workspaceProvider;
@@ -75,7 +78,7 @@ internal sealed class TenantService : ITenantService
         // requiring one to create the first tenant would be circular. Authentication is the bar.
         return await GuardAsync("CreateTenant", async () =>
         {
-            var refId = await _tenants.CreateTenantAsync(request.Name, request.Description, callerId, DefaultWorkspaceName, cancellationToken);
+            var refId = await _tenants.CreateTenantAsync(request.Name, request.Description, callerId, DefaultWorkspaceName, _workspaceCreated.For(DefaultWorkspaceName), cancellationToken);
             _logger.LogInformation("Tenant '{TenantName}' created by user ID {CallerId} with RefId {RefId}", request.Name, callerId, refId);
             return new TenantResponse(refId, request.Name);
         });

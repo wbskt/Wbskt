@@ -39,7 +39,7 @@ public sealed class AccountServiceTests
         Assert.NotEqual(Password, inserted.PasswordHash);
         Assert.NotEqual(PasswordVerificationResult.Failed, new PasswordHasher<User>().VerifyHashedPassword(inserted, inserted.PasswordHash, Password));
         // Everyone gets a tenant of their own, invited or not.
-        harness.Tenants.Verify(p => p.CreateTenantAsync("someone's Tenant", null, 42, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        harness.Tenants.Verify(p => p.CreateTenantAsync("someone's Tenant", null, 42, It.IsAny<string>(), It.IsAny<Wbskt.Infrastructure.Events.Outbox.OutboxMessage>(), It.IsAny<CancellationToken>()), Times.Once);
         harness.Tenants.Verify(p => p.AcceptInvitationAsync(It.IsAny<byte[]>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
         var registered = Assert.IsType<UserRegisteredEvent>(Assert.Single(harness.Bus.Published));
         Assert.Equal((42, UserRef), (registered.UserId, registered.UserRefId));
@@ -60,7 +60,7 @@ public sealed class AccountServiceTests
         var result = await harness.Registration.RegisterUserAsync("someone", Email, Password, "invitation-token");
 
         Assert.True(result.IsSuccess);
-        harness.Tenants.Verify(p => p.CreateTenantAsync("someone's Tenant", null, 42, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        harness.Tenants.Verify(p => p.CreateTenantAsync("someone's Tenant", null, 42, It.IsAny<string>(), It.IsAny<Wbskt.Infrastructure.Events.Outbox.OutboxMessage>(), It.IsAny<CancellationToken>()), Times.Once);
         harness.Tenants.Verify(p => p.AcceptInvitationAsync(It.Is<byte[]>(h => h.SequenceEqual(SecurityTokens.Hash("invitation-token"))), 42, It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Once);
         var accepted = Assert.Single(harness.Bus.Published.OfType<InvitationAcceptedEvent>());
         Assert.Equal((invitationRef, 42, UserRef), (accepted.InvitationRefId, accepted.UserId, accepted.UserRefId));

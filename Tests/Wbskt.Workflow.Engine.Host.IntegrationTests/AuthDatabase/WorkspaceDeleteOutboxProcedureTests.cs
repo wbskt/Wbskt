@@ -28,6 +28,34 @@ public sealed class WorkspaceDeleteOutboxProcedureTests(AuthSqlFixture fixture)
     }
 
     [SkippableFact]
+    public async Task Creating_a_workspace_queues_its_event_with_the_new_id_and_reference()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        string marker = Guid.NewGuid().ToString("N");
+        await using var conn = await OpenAsync();
+        await using var cmd = new SqlCommand("dbo.Workspace_Create", conn) { CommandType = CommandType.StoredProcedure };
+        cmd.Parameters.AddWithValue("@Name", $"created-{marker}"[..30]);
+        cmd.Parameters.AddWithValue("@Description", "outbox-test");
+        cmd.Parameters.AddWithValue("@OwnerUserId", await CreateUserAsync());
+        cmd.Parameters.AddWithValue("@TenantId", 1);
+        var refId = cmd.Parameters.Add("@RefId", SqlDbType.UniqueIdentifier);
+        refId.Direction = ParameterDirection.Output;
+        var id = cmd.Parameters.Add("@WorkspaceId", SqlDbType.Int);
+        id.Direction = ParameterDirection.Output;
+        var createdAt = cmd.Parameters.Add("@CreatedAt", SqlDbType.DateTime2);
+        createdAt.Direction = ParameterDirection.Output;
+        cmd.Parameters.AddWithValue("@OutboxMessageType", "Wbskt.Events.Auth.WorkspaceCreatedEvent");
+        cmd.Parameters.AddWithValue("@OutboxPayload", $"{{\"workspaceId\":0,\"workspaceRefId\":\"00000000-0000-0000-0000-000000000000\",\"name\":\"{marker}\"}}");
+        await cmd.ExecuteNonQueryAsync();
+
+        Assert.IsType<DateTime>(createdAt.Value);
+        var payload = await ScalarAsync<string>("SELECT Payload FROM dbo.OutboxMessages WHERE Payload LIKE @p0", $"%{marker}%");
+        using var json = System.Text.Json.JsonDocument.Parse(payload);
+        Assert.Equal((int)id.Value, json.RootElement.GetProperty("workspaceId").GetInt32());
+        Assert.Equal((Guid)refId.Value, json.RootElement.GetProperty("workspaceRefId").GetGuid());
+    }
+
+    [SkippableFact]
     public async Task Deleting_a_workspace_that_is_already_gone_queues_nothing()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);

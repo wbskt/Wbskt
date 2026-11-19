@@ -3,6 +3,7 @@ using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Models;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Events.Outbox;
 using Wbskt.Models;
 using Wbskt.Primitives.Exceptions;
 
@@ -47,7 +48,7 @@ internal sealed class TenantProvider : BaseSqlProvider, ITenantProvider
         );
     }
 
-    public async Task<Guid> CreateTenantAsync(string name, string? description, int ownerUserId, string workspaceName, CancellationToken cancellationToken = default)
+    public async Task<Guid> CreateTenantAsync(string name, string? description, int ownerUserId, string workspaceName, OutboxMessage workspaceCreated, CancellationToken cancellationToken = default)
     {
         var parameters = await ExecuteNonQueryAsync("dbo.Tenant_Create", p =>
         {
@@ -57,6 +58,8 @@ internal sealed class TenantProvider : BaseSqlProvider, ITenantProvider
             p.AddWithValue("@WorkspaceName", workspaceName);
             p.Add("@RefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
             p.Add("@TenantId", SqlDbType.Int).Direction = ParameterDirection.Output;
+            p.AddWithValue("@OutboxMessageType", workspaceCreated.MessageType);
+            p.Add("@OutboxPayload", SqlDbType.NVarChar, -1).Value = workspaceCreated.Payload;
         }, cancellationToken);
 
         return (Guid)parameters["@RefId"].Value;

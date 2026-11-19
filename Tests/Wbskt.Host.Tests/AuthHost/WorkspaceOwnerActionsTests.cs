@@ -103,5 +103,5 @@ public sealed class WorkspaceOwnerActionsTests
 
     private WorkspaceService Service() => new(
         _workspaces.Object, _accounts.Object, Mock.Of<ITenantProvider>(), _access.Object,
-        Mock.Of<IEventBus>(), NullLogger<WorkspaceService>.Instance, new AuthMetrics(), new FixedTenantLimits(), TimeProvider.System);
+        Mock.Of<IEventBus>(), NullLogger<WorkspaceService>.Instance, new AuthMetrics(), new FixedTenantLimits(), WorkspaceFakes.Created());
 }

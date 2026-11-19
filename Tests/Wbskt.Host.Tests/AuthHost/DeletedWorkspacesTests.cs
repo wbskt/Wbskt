@@ -127,7 +127,7 @@ public sealed class DeletedWorkspacesTests
 
     private WorkspaceService Service() => new(
         _workspaces.Object, Mock.Of<IAccountProvider>(), Mock.Of<ITenantProvider>(), Mock.Of<IAccessControlProvider>(),
-        Mock.Of<IEventBus>(), NullLogger<WorkspaceService>.Instance, new AuthMetrics(), new FixedTenantLimits(), TimeProvider.System);
+        Mock.Of<IEventBus>(), NullLogger<WorkspaceService>.Instance, new AuthMetrics(), new FixedTenantLimits(), WorkspaceFakes.Created());
 
     private static AuthorizationFilterContext FilterContext(string? sent, string? configured, string environment)
     {

@@ -8,11 +8,15 @@ namespace Wbskt.Auth.Host.Providers;
 
 internal interface IWorkspaceProvider : IReferenceProvider
 {
-    /// <summary>Throws 50030 when the tenant already has <paramref name="workspaceLimit"/> workspaces (null is no limit).</summary>
     /// <summary>The workspace's id when it is in the tenant, 0 when it is not or does not exist.</summary>
     Task<int> FindIdByRefIdInTenantAsync(Guid workspaceRef, int tenantId, CancellationToken cancellationToken = default);
 
-    Task<Guid> CreateWorkspaceAsync(string name, string description, int ownerId, int tenantId, int? workspaceLimit, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Creates the workspace and writes <paramref name="created"/> to the outbox in the same transaction,
+    /// with the new workspace's id and reference filled in. Throws 50030 when the tenant already has
+    /// <paramref name="workspaceLimit"/> workspaces (null is no limit).
+    /// </summary>
+    Task<Workspace> CreateWorkspaceAsync(string name, string description, int ownerId, int tenantId, int? workspaceLimit, OutboxMessage created, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<Workspace>> GetWorkspacesForUserAsync(int userId, CancellationToken cancellationToken = default);
     Task AddUserToWorkspaceAsync(int workspaceId, int userId, CancellationToken cancellationToken = default);
     /// <summary>False when the user was not a member of the workspace.</summary>

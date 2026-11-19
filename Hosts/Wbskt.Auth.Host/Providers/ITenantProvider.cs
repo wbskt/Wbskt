@@ -1,3 +1,4 @@
+using Wbskt.Infrastructure.Events.Outbox;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Models;
 using Wbskt.Models;
@@ -18,9 +19,10 @@ internal interface ITenantProvider
     /// <summary>
     /// Creates a tenant with its own roles, the owner's membership and a tenant-wide Admin
     /// assignment, plus a default workspace. All of it or none — a tenant missing any part of that
-    /// has no administrator, and no endpoint can grant one after the fact.
+    /// has no administrator, and no endpoint can grant one after the fact. The default workspace's
+    /// <paramref name="workspaceCreated"/> goes to the outbox in the same transaction.
     /// </summary>
-    Task<Guid> CreateTenantAsync(string name, string? description, int ownerUserId, string workspaceName, CancellationToken cancellationToken = default);
+    Task<Guid> CreateTenantAsync(string name, string? description, int ownerUserId, string workspaceName, OutboxMessage workspaceCreated, CancellationToken cancellationToken = default);
     Task UpdateTenantAsync(int tenantId, string name, string? description, CancellationToken cancellationToken = default);
 
     Task<IPagedList<TenantMemberResponse>> GetTenantMembersAsync(int tenantId, string? search, int skip, int take, CancellationToken cancellationToken = default);

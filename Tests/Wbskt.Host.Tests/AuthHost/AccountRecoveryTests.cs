@@ -525,7 +525,7 @@ public sealed class AccountRecoveryTests
             };
 
             Accounts.Setup(p => p.InsertUserAsync(It.IsAny<User>(), It.IsAny<CancellationToken>())).Callback<User, CancellationToken>((u, _) => { u.Id = 42; u.RefId = created.RefId; }).ReturnsAsync(42);
-            Tenants.Setup(p => p.CreateTenantAsync(It.IsAny<string>(), It.IsAny<string>(), 42, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            Tenants.Setup(p => p.CreateTenantAsync(It.IsAny<string>(), It.IsAny<string>(), 42, It.IsAny<string>(), It.IsAny<Wbskt.Infrastructure.Events.Outbox.OutboxMessage>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Guid.NewGuid());
             Accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(created);
         }

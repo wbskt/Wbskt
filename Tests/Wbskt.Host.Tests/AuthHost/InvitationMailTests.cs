@@ -80,7 +80,7 @@ public sealed class InvitationMailTests
                 Mock.Of<IEventBus>(),
                 Mailer,
                 NullLogger<TenantService>.Instance, new FixedTenantLimits(),
-                new TenantAnnouncer(Mock.Of<IEventBus>(), AuditWorkspaces.None, new RecordingAccessChanges().Changes, NullLogger<TenantAnnouncer>.Instance), TimeProvider.System);
+                new TenantAnnouncer(Mock.Of<IEventBus>(), AuditWorkspaces.None, new RecordingAccessChanges().Changes, NullLogger<TenantAnnouncer>.Instance), TimeProvider.System, WorkspaceFakes.Created());
         }
 
         public Mock<ITenantProvider> Tenants { get; } = new();

@@ -36,6 +36,8 @@ public sealed class PlanSeatLimitTests
     {
         _access.Setup(p => p.VerifyPermissionAsync(CallerId, TenantId, null, PermissionNames.WorkspacesCreate, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
+        _workspaces.Setup(p => p.CreateWorkspaceAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<Wbskt.Infrastructure.Events.Outbox.OutboxMessage>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Workspace { Id = 9, RefId = Guid.NewGuid(), Name = "lab", CreatedAt = DateTime.UtcNow });
     }
 
     [Fact]
@@ -86,7 +88,7 @@ public sealed class PlanSeatLimitTests
 
         await Workspaces().CreateWorkspaceAsync(CallerId, new CreateWorkspaceRequest("lab", null));
 
-        _workspaces.Verify(p => p.CreateWorkspaceAsync("lab", string.Empty, CallerId, TenantId, 3, It.IsAny<CancellationToken>()), Times.Once);
+        _workspaces.Verify(p => p.CreateWorkspaceAsync("lab", string.Empty, CallerId, TenantId, 3, It.IsAny<Wbskt.Infrastructure.Events.Outbox.OutboxMessage>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -95,7 +97,7 @@ public sealed class PlanSeatLimitTests
         var bus = new Mock<IEventBus>();
         _tenants.Setup(p => p.GetTenantsForUserAsync(CallerId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new Tenant { Id = TenantId, RefId = TenantRef, Name = "Acme" }]);
-        _workspaces.Setup(p => p.CreateWorkspaceAsync(It.IsAny<string>(), It.IsAny<string>(), CallerId, TenantId, 3, It.IsAny<CancellationToken>()))
+        _workspaces.Setup(p => p.CreateWorkspaceAsync(It.IsAny<string>(), It.IsAny<string>(), CallerId, TenantId, 3, It.IsAny<Wbskt.Infrastructure.Events.Outbox.OutboxMessage>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(SqlExceptions.WithNumber(50030, "The plan has reached its workspace limit."));
 
         var result = await Workspaces(bus.Object).CreateWorkspaceAsync(CallerId, new CreateWorkspaceRequest("lab", null));
@@ -116,7 +118,7 @@ public sealed class PlanSeatLimitTests
         var result = await Workspaces().CreateWorkspaceAsync(CallerId, new CreateWorkspaceRequest("lab", null, TenantRef));
 
         Assert.True(result.IsSuccess);
-        _workspaces.Verify(p => p.CreateWorkspaceAsync("lab", string.Empty, CallerId, TenantId, 3, It.IsAny<CancellationToken>()), Times.Once);
+        _workspaces.Verify(p => p.CreateWorkspaceAsync("lab", string.Empty, CallerId, TenantId, 3, It.IsAny<Wbskt.Infrastructure.Events.Outbox.OutboxMessage>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -161,7 +163,7 @@ public sealed class PlanSeatLimitTests
         var result = await Workspaces().CreateWorkspaceAsync(CallerId, new CreateWorkspaceRequest("lab", null));
 
         Assert.True(result.IsSuccess);
-        _workspaces.Verify(p => p.CreateWorkspaceAsync("lab", string.Empty, CallerId, OwnTenant.Id, 3, It.IsAny<CancellationToken>()), Times.Once);
+        _workspaces.Verify(p => p.CreateWorkspaceAsync("lab", string.Empty, CallerId, OwnTenant.Id, 3, It.IsAny<Wbskt.Infrastructure.Events.Outbox.OutboxMessage>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -231,7 +233,7 @@ public sealed class PlanSeatLimitTests
 
         Assert.Equal("PLAN_MEMBER_LIMIT_REACHED", result.Error.Code);
         Assert.Contains("account was created", result.Error.Message);
-        harness.Tenants.Verify(p => p.CreateTenantAsync("someone's Tenant", null, 42, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        harness.Tenants.Verify(p => p.CreateTenantAsync("someone's Tenant", null, 42, It.IsAny<string>(), It.IsAny<Wbskt.Infrastructure.Events.Outbox.OutboxMessage>(), It.IsAny<CancellationToken>()), Times.Once);
 
         // The account cannot sign in without confirming its address, so the link goes out regardless.
         harness.Accounts.Verify(p => p.CreateEmailVerificationTokenAsync(42, It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
@@ -239,10 +241,10 @@ public sealed class PlanSeatLimitTests
 
     private WorkspaceService Workspaces(IEventBus? bus = null) => new(
         _workspaces.Object, Mock.Of<IAccountProvider>(), _tenants.Object, _access.Object,
-        bus ?? Mock.Of<IEventBus>(), NullLogger<WorkspaceService>.Instance, new AuthMetrics(), new FixedTenantLimits(Limits), TimeProvider.System);
+        bus ?? Mock.Of<IEventBus>(), NullLogger<WorkspaceService>.Instance, new AuthMetrics(), new FixedTenantLimits(Limits), WorkspaceFakes.Created());
 
     private TenantService Tenants() => new(
         _tenants.Object, Mock.Of<IAccessControlProvider>(), _workspaces.Object, Mock.Of<IEventBus>(), Mock.Of<IAuthMailer>(),
         NullLogger<TenantService>.Instance, new FixedTenantLimits(Limits),
-        new TenantAnnouncer(Mock.Of<IEventBus>(), AuditWorkspaces.None, new RecordingAccessChanges().Changes, NullLogger<TenantAnnouncer>.Instance), TimeProvider.System);
+        new TenantAnnouncer(Mock.Of<IEventBus>(), AuditWorkspaces.None, new RecordingAccessChanges().Changes, NullLogger<TenantAnnouncer>.Instance), TimeProvider.System, WorkspaceFakes.Created());
 }

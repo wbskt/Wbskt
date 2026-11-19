@@ -27,6 +27,7 @@ internal sealed class WorkspaceService : IWorkspaceService
     private static readonly Error WorkspaceGone =
         Error.Forbidden("WORKSPACE_UNAUTHORIZED", "user does not have permission to this workspace");
 
+    private readonly WorkspaceCreatedOutbox _workspaceCreated;
     private readonly IWorkspaceProvider _workspaceProvider;
     private readonly IAccountProvider _accounts;
     private readonly ITenantProvider _tenants;
@@ -35,7 +36,6 @@ internal sealed class WorkspaceService : IWorkspaceService
     private readonly ILogger<WorkspaceService> _logger;
     private readonly AuthMetrics _metrics;
     private readonly ITenantLimits _limits;
-    private readonly TimeProvider _time;
 
     public WorkspaceService(
         IWorkspaceProvider workspaceProvider,
@@ -46,10 +46,10 @@ internal sealed class WorkspaceService : IWorkspaceService
         ILogger<WorkspaceService> logger,
         AuthMetrics metrics,
         ITenantLimits limits,
-        TimeProvider time)
+        WorkspaceCreatedOutbox workspaceCreated)
     {
-        _time = time;
         _limits = limits;
+        _workspaceCreated = workspaceCreated;
         _workspaceProvider = workspaceProvider;
         _accounts = accounts;
         _tenants = tenants;
@@ -71,10 +71,10 @@ internal sealed class WorkspaceService : IWorkspaceService
 
         var tenant = chosen.Value;
         var limits = await _limits.ForTenantAsync(tenant.Id, cancellationToken);
-        Guid refId;
+        Workspace workspace;
         try
         {
-            refId = await _workspaceProvider.CreateWorkspaceAsync(request.Name, request.Description ?? string.Empty, ownerId, tenant.Id, limits.Workspaces, cancellationToken);
+            workspace = await _workspaceProvider.CreateWorkspaceAsync(request.Name, request.Description ?? string.Empty, ownerId, tenant.Id, limits.Workspaces, _workspaceCreated.For(request.Name), cancellationToken);
         }
         catch (SqlException ex) when (ex.Number == 50030)
         {
@@ -82,11 +82,8 @@ internal sealed class WorkspaceService : IWorkspaceService
             return Result<WorkspaceResponse>.Failure(await _limits.WithSeatsAsync(SqlGuardErrors.PlanWorkspaceLimitReached, tenant.Id, cancellationToken));
         }
 
-        _logger.LogInformation("Workspace '{WorkspaceName}' created successfully with RefId: {RefId}", request.Name, refId);
-
-        var workspaceId = await _workspaceProvider.FindIdByRefIdAsync(refId, cancellationToken);
-        await AnnounceAsync(new WorkspaceCreatedEvent(workspaceId, refId, request.Name), cancellationToken);
-        return Result<WorkspaceResponse>.Success(new WorkspaceResponse(refId, request.Name, request.Description, _time.GetUtcNow(), tenant.RefId));
+        _logger.LogInformation("Workspace '{WorkspaceName}' created successfully with RefId: {RefId}", request.Name, workspace.RefId);
+        return Result<WorkspaceResponse>.Success(new WorkspaceResponse(workspace.RefId, request.Name, request.Description, workspace.CreatedAt.ToUtcOffset(), tenant.RefId));
     }
 
     public async Task<Result<IReadOnlyCollection<WorkspaceResponse>>> GetWorkspacesForUserAsync(int userId, CancellationToken cancellationToken = default)
