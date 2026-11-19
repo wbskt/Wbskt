@@ -7,7 +7,6 @@ using Wbskt.Events.Auth;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Events.Outbox;
 using Wbskt.Infrastructure.Security;
-using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Auth.Host.Services;
 
@@ -48,12 +47,8 @@ internal sealed class AccountDeletionService : IAccountDeletionService
 
     public async Task<Result> DeleteAccountAsync(int userId, string password, string ipAddress, CancellationToken cancellationToken = default)
     {
-        User user;
-        try
-        {
-            user = await _accounts.GetByIdAsync(userId, cancellationToken);
-        }
-        catch (SecurityException)
+        var user = await _accounts.FindByIdAsync(userId, cancellationToken);
+        if (user is null)
         {
             return Result.Failure(AccountCredentials.UserNotFound);
         }
@@ -107,12 +102,8 @@ internal sealed class AccountDeletionService : IAccountDeletionService
 
     public async Task<bool> DeleteUnconfirmedAsync(int userId, DateTime createdBeforeUtc, CancellationToken cancellationToken = default)
     {
-        User user;
-        try
-        {
-            user = await _accounts.GetByIdAsync(userId, cancellationToken);
-        }
-        catch (SecurityException)
+        var user = await _accounts.FindByIdAsync(userId, cancellationToken);
+        if (user is null)
         {
             return false;
         }

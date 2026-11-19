@@ -6,7 +6,6 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Auth;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
-using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Auth.Host.Services;
 
@@ -78,12 +77,8 @@ internal sealed class AccountCredentials(
     /// </summary>
     public async Task<Result<User>> ConfirmPasswordAsync(int userId, string password, string ipAddress, CancellationToken cancellationToken)
     {
-        User user;
-        try
-        {
-            user = await accounts.GetByIdAsync(userId, cancellationToken);
-        }
-        catch (SecurityException)
+        var user = await accounts.FindByIdAsync(userId, cancellationToken);
+        if (user is null)
         {
             return Result<User>.Failure(UserNotFound);
         }

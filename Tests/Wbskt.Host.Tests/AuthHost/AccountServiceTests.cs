@@ -31,6 +31,7 @@ public sealed class AccountServiceTests
             .Callback<User, CancellationToken>((u, _) => { inserted = u; u.Id = 42; u.RefId = UserRef; })
             .ReturnsAsync(42);
         harness.Accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
+        harness.Accounts.Setup(p => p.FindByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
 
         var result = await harness.Registration.RegisterUserAsync("someone", Email, Password);
 
@@ -51,10 +52,11 @@ public sealed class AccountServiceTests
         var harness = new Harness();
         var invitationRef = Guid.NewGuid();
         // Addressed in a different case: the address match ignores it, as the database does.
-        harness.Tenants.Setup(p => p.GetInvitationByTokenHashAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+        harness.Tenants.Setup(p => p.FindInvitationByTokenHashAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new InvitationLookup(invitationRef, Guid.NewGuid(), "Acme", "Someone@Example.TEST", DateTime.UtcNow.AddDays(1), IsLive: true));
         harness.Accounts.Setup(p => p.InsertUserAsync(It.IsAny<User>(), It.IsAny<CancellationToken>())).Callback<User, CancellationToken>((u, _) => { u.Id = 42; u.RefId = UserRef; }).ReturnsAsync(42);
         harness.Accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
+        harness.Accounts.Setup(p => p.FindByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
         harness.Tenants.Setup(p => p.AcceptInvitationAsync(It.IsAny<byte[]>(), 42, It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(9);
 
         var result = await harness.Registration.RegisterUserAsync("someone", Email, Password, "invitation-token");
@@ -74,10 +76,11 @@ public sealed class AccountServiceTests
     public async Task An_invitation_lost_after_the_account_is_made_still_leaves_a_confirmation_link()
     {
         var harness = new Harness();
-        harness.Tenants.Setup(p => p.GetInvitationByTokenHashAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+        harness.Tenants.Setup(p => p.FindInvitationByTokenHashAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new InvitationLookup(Guid.NewGuid(), Guid.NewGuid(), "Acme", Email, DateTime.UtcNow.AddDays(1), IsLive: true));
         harness.Accounts.Setup(p => p.InsertUserAsync(It.IsAny<User>(), It.IsAny<CancellationToken>())).Callback<User, CancellationToken>((u, _) => { u.Id = 42; u.RefId = UserRef; }).ReturnsAsync(42);
         harness.Accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
+        harness.Accounts.Setup(p => p.FindByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
         harness.Tenants.Setup(p => p.AcceptInvitationAsync(It.IsAny<byte[]>(), 42, It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(SqlExceptions.WithNumber(50011, "The invitation is no longer valid."));
 
@@ -93,7 +96,7 @@ public sealed class AccountServiceTests
     public async Task An_invitation_sent_to_another_address_creates_no_account()
     {
         var harness = new Harness();
-        harness.Tenants.Setup(p => p.GetInvitationByTokenHashAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+        harness.Tenants.Setup(p => p.FindInvitationByTokenHashAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new InvitationLookup(Guid.NewGuid(), Guid.NewGuid(), "Acme", "someone.else@example.test", DateTime.UtcNow.AddDays(1), IsLive: true));
 
         var result = await harness.Registration.RegisterUserAsync("someone", Email, Password, "invitation-token");
@@ -107,8 +110,8 @@ public sealed class AccountServiceTests
     public async Task An_unknown_invitation_reads_like_a_misaddressed_one()
     {
         var harness = new Harness();
-        harness.Tenants.Setup(p => p.GetInvitationByTokenHashAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new SecurityException("No invitation."));
+        harness.Tenants.Setup(p => p.FindInvitationByTokenHashAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((InvitationLookup?)null);
 
         var result = await harness.Registration.RegisterUserAsync("someone", Email, Password, "invitation-token");
 
@@ -124,6 +127,7 @@ public sealed class AccountServiceTests
         var harness = new Harness();
         harness.Accounts.Setup(p => p.ConsumeEmailVerificationTokenAsync(It.Is<byte[]>(h => h.SequenceEqual(SecurityTokens.Hash("verify-token"))), It.IsAny<CancellationToken>())).ReturnsAsync((42, UserRef));
         harness.Accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
+        harness.Accounts.Setup(p => p.FindByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
 
         var result = await harness.Registration.VerifyEmailAsync("verify-token");
 
@@ -157,6 +161,7 @@ public sealed class AccountServiceTests
             .Callback<byte[], string, string?, CancellationToken>((_, hash, _, _) => storedHash = hash)
             .ReturnsAsync(new User { Id = 42, RefId = UserRef, Username = "someone", Email = "someone@example.test" });
         harness.Accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
+        harness.Accounts.Setup(p => p.FindByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
 
         var result = await harness.Passwords.ResetPasswordAsync("reset-token", "a brand new passphrase", Ip);
 
@@ -172,7 +177,7 @@ public sealed class AccountServiceTests
     public async Task Changing_the_password_of_an_unknown_account_is_unauthorized()
     {
         var harness = new Harness();
-        harness.Accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ThrowsAsync(new SecurityException("User with id 42 not found."));
+        harness.Accounts.Setup(p => p.FindByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync((User?)null);
 
         var result = await harness.Passwords.ChangePasswordAsync(42, Password, "a brand new passphrase", Ip);
 
@@ -185,6 +190,7 @@ public sealed class AccountServiceTests
     {
         var harness = new Harness();
         harness.Accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
+        harness.Accounts.Setup(p => p.FindByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(AUser());
         RefreshToken? inserted = null;
         harness.Sessions.Setup(p => p.InsertRefreshTokenAsync(It.IsAny<RefreshToken>(), Ip, It.IsAny<CancellationToken>()))
             .Callback<RefreshToken, string, CancellationToken>((t, _, _) => inserted = t)

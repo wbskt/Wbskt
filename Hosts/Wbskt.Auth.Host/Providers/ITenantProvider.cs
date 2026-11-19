@@ -11,8 +11,8 @@ internal interface ITenantProvider
     // Reference resolution. Scoped to the caller's membership (a tenant) or to the tenant (a member)
     // rather than being a bare Guid lookup, so a reference belonging to another tenant does not
     // resolve and cannot be acted on or probed for.
-    Task<int> FindTenantIdByRefIdForUserAsync(Guid tenantRef, int userId, CancellationToken cancellationToken = default);
-    Task<int> FindUserIdByRefIdInTenantAsync(Guid userRef, int tenantId, CancellationToken cancellationToken = default);
+    Task<int?> FindTenantIdByRefIdForUserAsync(Guid tenantRef, int userId, CancellationToken cancellationToken = default);
+    Task<int?> FindUserIdByRefIdInTenantAsync(Guid userRef, int tenantId, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyCollection<Tenant>> GetTenantsForUserAsync(int userId, CancellationToken cancellationToken = default);
 
@@ -51,8 +51,8 @@ internal interface ITenantProvider
     /// tenant already has <paramref name="memberLimit"/> members (null is no limit).
     /// </summary>
     Task<CreatedInvitation> CreateInvitationAsync(int tenantId, string email, int? roleId, byte[] tokenHash, DateTime expiresAt, int invitedByUserId, IReadOnlyCollection<int> workspaceIds, int? memberLimit, CancellationToken cancellationToken = default);
-    /// <summary>Throws <see cref="Wbskt.Primitives.Exceptions.SecurityException"/> when no invitation carries that hash.</summary>
-    Task<InvitationLookup> GetInvitationByTokenHashAsync(byte[] tokenHash, CancellationToken cancellationToken = default);
+    /// <summary>The invitation carrying that hash, or null when none does.</summary>
+    Task<InvitationLookup?> FindInvitationByTokenHashAsync(byte[] tokenHash, CancellationToken cancellationToken = default);
     /// <summary>
     /// Joins the user to the invitation's tenant and returns its id. Throws 50011 for an invitation that
     /// cannot be redeemed, and 50031 when joining would take the tenant past <paramref name="memberLimit"/>

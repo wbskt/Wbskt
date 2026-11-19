@@ -5,7 +5,6 @@ using Wbskt.Auth.Models;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Events.Outbox;
 using Wbskt.Models;
-using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Auth.Host.Providers;
 
@@ -13,18 +12,18 @@ internal sealed class TenantProvider : BaseSqlProvider, ITenantProvider
 {
     public TenantProvider(IConfiguration configuration) : base(configuration, "AuthDBConnection") { }
 
-    public async Task<int> FindTenantIdByRefIdForUserAsync(Guid tenantRef, int userId, CancellationToken cancellationToken = default)
+    public async Task<int?> FindTenantIdByRefIdForUserAsync(Guid tenantRef, int userId, CancellationToken cancellationToken = default)
     {
-        return await ExecuteScalarAsync<int>("dbo.Tenant_FindBy_RefIdForUser", p =>
+        return await ExecuteScalarAsync<int?>("dbo.Tenant_FindBy_RefIdForUser", p =>
         {
             p.AddWithValue("@RefId", tenantRef);
             p.AddWithValue("@UserId", userId);
         }, cancellationToken);
     }
 
-    public async Task<int> FindUserIdByRefIdInTenantAsync(Guid userRef, int tenantId, CancellationToken cancellationToken = default)
+    public async Task<int?> FindUserIdByRefIdInTenantAsync(Guid userRef, int tenantId, CancellationToken cancellationToken = default)
     {
-        return await ExecuteScalarAsync<int>("dbo.User_FindBy_RefIdInTenant", p =>
+        return await ExecuteScalarAsync<int?>("dbo.User_FindBy_RefIdInTenant", p =>
         {
             p.AddWithValue("@RefId", userRef);
             p.AddWithValue("@TenantId", tenantId);
@@ -143,9 +142,9 @@ internal sealed class TenantProvider : BaseSqlProvider, ITenantProvider
         return new CreatedInvitation((Guid)parameters["@RefId"].Value, (string)parameters["@TenantName"].Value);
     }
 
-    public async Task<InvitationLookup> GetInvitationByTokenHashAsync(byte[] tokenHash, CancellationToken cancellationToken = default)
+    public async Task<InvitationLookup?> FindInvitationByTokenHashAsync(byte[] tokenHash, CancellationToken cancellationToken = default)
     {
-        return await ExecuteSingleAsync(
+        return await ExecuteFindAsync(
             "dbo.TenantInvitation_GetBy_TokenHash",
             p => p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = tokenHash,
             r => new InvitationLookup(
@@ -155,7 +154,6 @@ internal sealed class TenantProvider : BaseSqlProvider, ITenantProvider
                 r.GetString(r.GetOrdinal("Email")),
                 r.GetDateTime(r.GetOrdinal("ExpiresAt")),
                 r.GetBoolean(r.GetOrdinal("IsLive"))),
-            new SecurityException("Invitation not found."),
             cancellationToken
         );
     }

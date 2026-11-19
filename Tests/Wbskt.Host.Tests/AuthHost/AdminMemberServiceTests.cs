@@ -33,6 +33,7 @@ public sealed class AdminMemberServiceTests
         _staff.Setup(s => s.FindTenantIdByRefIdAsync(TenantRef, It.IsAny<CancellationToken>())).ReturnsAsync(TenantId);
         _accounts.Setup(a => a.FindIdByRefIdAsync(_user.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(_user.Id);
         _accounts.Setup(a => a.GetByIdAsync(_user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(_user);
+        _accounts.Setup(a => a.FindByIdAsync(_user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(_user);
         _audit.Setup(a => a.OfTenantAsync(TenantId, It.IsAny<CancellationToken>())).ReturnsAsync([3, 4]);
     }
 

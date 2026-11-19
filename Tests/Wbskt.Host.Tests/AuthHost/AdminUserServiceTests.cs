@@ -33,6 +33,7 @@ public sealed class AdminUserServiceTests
     {
         _accounts.Setup(a => a.FindIdByRefIdAsync(_user.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(_user.Id);
         _accounts.Setup(a => a.GetByIdAsync(_user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(_user);
+        _accounts.Setup(a => a.FindByIdAsync(_user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(_user);
     }
 
     private readonly Mock<IEventBus> _bus = new();

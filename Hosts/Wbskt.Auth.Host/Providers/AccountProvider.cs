@@ -20,16 +20,9 @@ internal sealed class AccountProvider : BaseSqlProvider, IAccountProvider
         }, cancellationToken);
     }
 
-    public async Task<User> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
+    public async Task<User?> FindByEmailAsync(string email, CancellationToken cancellationToken = default)
     {
-        return await ExecuteSingleAsync(
-            "dbo.User_GetBy_Email",
-            p => p.AddWithValue("@Email", email),
-            MapUser,
-            // No address in the message: whatever lets this escape logs it.
-            new SecurityException("No user with that email address."),
-            cancellationToken
-        );
+        return await ExecuteFindAsync("dbo.User_GetBy_Email", p => p.AddWithValue("@Email", email), MapUser, cancellationToken);
     }
 
     public async Task<int?> FindIdByUsernameAsync(string username, CancellationToken cancellationToken = default)
@@ -38,6 +31,11 @@ internal sealed class AccountProvider : BaseSqlProvider, IAccountProvider
         {
             p.AddWithValue("@Username", username);
         }, cancellationToken);
+    }
+
+    public async Task<User?> FindByIdAsync(int id, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteFindAsync("dbo.User_GetBy_Id", p => p.AddWithValue("@Id", id), MapUser, cancellationToken);
     }
 
     public async Task<User> GetByIdAsync(int id, CancellationToken cancellationToken = default)

@@ -315,8 +315,9 @@ public sealed class AccountSecurityTests
     {
         public void WithUser(User user)
         {
-            Accounts.Setup(p => p.GetByEmailAsync(user.Email, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+            Accounts.Setup(p => p.FindByEmailAsync(user.Email, It.IsAny<CancellationToken>())).ReturnsAsync(user);
             Accounts.Setup(p => p.GetByIdAsync(user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+            Accounts.Setup(p => p.FindByIdAsync(user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(user);
         }
     }
 }

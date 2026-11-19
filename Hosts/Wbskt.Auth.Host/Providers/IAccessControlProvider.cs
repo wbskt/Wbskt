@@ -12,8 +12,8 @@ internal interface IAccessControlProvider
     // Reference resolution, scoped to the tenant rather than being a bare Guid lookup, so a role or
     // group belonging to another tenant does not resolve and cannot be acted on or probed for. This
     // is why these are not IReferenceProvider.FindIdByRefIdAsync, which takes only a Guid.
-    Task<int> FindRoleIdByRefIdAsync(Guid roleRef, int tenantId, CancellationToken cancellationToken = default);
-    Task<int> FindGroupIdByRefIdAsync(Guid groupRef, int tenantId, CancellationToken cancellationToken = default);
+    Task<int?> FindRoleIdByRefIdAsync(Guid roleRef, int tenantId, CancellationToken cancellationToken = default);
+    Task<int?> FindGroupIdByRefIdAsync(Guid groupRef, int tenantId, CancellationToken cancellationToken = default);
 
     /// <summary>The tenant's built-in User role, or null for a tenant without one.</summary>
     Task<int?> FindUserRoleIdAsync(int tenantId, CancellationToken cancellationToken = default);

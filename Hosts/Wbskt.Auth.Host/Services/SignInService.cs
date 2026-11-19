@@ -11,7 +11,6 @@ using Wbskt.Events.Auth;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Models;
-using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Auth.Host.Services;
 
@@ -76,13 +75,8 @@ internal sealed class SignInService : ISignInService
 
         try 
         {
-            User user;
-            try
-            {
-                user = await _accounts.GetByEmailAsync(email, cancellationToken);
-                _logger.LogDebug("User record resolved for email {EmailHash}", EmailFingerprint.Of(email));
-            }
-            catch (SecurityException)
+            var user = await _accounts.FindByEmailAsync(email, cancellationToken);
+            if (user is null)
             {
                 // The same hashing work as an account's password check, so how long a sign-in takes
                 // does not say whether the address is registered.

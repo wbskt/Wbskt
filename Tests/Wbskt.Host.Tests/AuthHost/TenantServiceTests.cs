@@ -37,6 +37,7 @@ public sealed class TenantServiceTests
     {
         _tenants.Setup(p => p.FindUserIdByRefIdInTenantAsync(MemberRef, TenantId, It.IsAny<CancellationToken>())).ReturnsAsync(MemberId);
         _accounts.Setup(p => p.GetByIdAsync(MemberId, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = MemberId, RefId = MemberRef });
+        _accounts.Setup(p => p.FindByIdAsync(MemberId, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = MemberId, RefId = MemberRef });
 
         _service = new TenantService(
             _tenants.Object, _accessControl.Object, _workspaces.Object, _bus, Mock.Of<IAuthMailer>(),
@@ -189,6 +190,7 @@ public sealed class TenantServiceTests
         var self = Guid.NewGuid();
         _tenants.Setup(p => p.FindUserIdByRefIdInTenantAsync(self, TenantId, It.IsAny<CancellationToken>())).ReturnsAsync(CallerId);
         _accounts.Setup(p => p.GetByIdAsync(CallerId, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = CallerId, RefId = self });
+        _accounts.Setup(p => p.FindByIdAsync(CallerId, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = CallerId, RefId = self });
 
         var suspend = await _service.SetMemberSuspendedAsync(CallerId, TenantId, self, true, Ip);
         var lift = await _service.SetMemberSuspendedAsync(CallerId, TenantId, self, false, Ip);
@@ -236,7 +238,7 @@ public sealed class TenantServiceTests
     [Fact]
     public async Task Accepting_an_unknown_invitation_is_invalid()
     {
-        _tenants.Setup(p => p.GetInvitationByTokenHashAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>())).ThrowsAsync(new SecurityException("No invitation."));
+        _tenants.Setup(p => p.FindInvitationByTokenHashAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>())).ReturnsAsync((InvitationLookup?)null);
 
         var result = await _service.AcceptInvitationAsync(MemberId, MemberRef, "invitation-token");
 
@@ -249,7 +251,7 @@ public sealed class TenantServiceTests
     {
         var invitationRef = Guid.NewGuid();
         var acme = Guid.NewGuid();
-        _tenants.Setup(p => p.GetInvitationByTokenHashAsync(It.Is<byte[]>(h => h.SequenceEqual(SecurityTokens.Hash("invitation-token"))), It.IsAny<CancellationToken>()))
+        _tenants.Setup(p => p.FindInvitationByTokenHashAsync(It.Is<byte[]>(h => h.SequenceEqual(SecurityTokens.Hash("invitation-token"))), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new InvitationLookup(invitationRef, acme, "Acme", "amal@example.test", DateTime.UtcNow.AddDays(1), IsLive: true));
         _tenants.Setup(p => p.AcceptInvitationAsync(It.Is<byte[]>(h => h.SequenceEqual(SecurityTokens.Hash("invitation-token"))), MemberId, It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(TenantId);
 

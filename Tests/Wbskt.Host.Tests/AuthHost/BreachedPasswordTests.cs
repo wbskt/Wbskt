@@ -126,6 +126,14 @@ public sealed class BreachedPasswordTests
             PasswordHash = new PasswordHasher<User>().HashPassword(new User(), Fresh),
             IsActive = true
         });
+        harness.Accounts.Setup(p => p.FindByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(new User
+        {
+            Id = 42,
+            RefId = Guid.NewGuid(),
+            Email = "ada@example.test",
+            PasswordHash = new PasswordHasher<User>().HashPassword(new User(), Fresh),
+            IsActive = true
+        });
 
         var result = await harness.Passwords.ChangePasswordAsync(42, Fresh, Leaked, "10.0.0.1");
 

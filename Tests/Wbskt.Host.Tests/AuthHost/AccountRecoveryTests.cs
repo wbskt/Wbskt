@@ -501,12 +501,13 @@ public sealed class AccountRecoveryTests
             // Revoking a user's access tokens names them by RefId. WithUser and the sign-up setup
             // replace this for tests that read the account.
             Accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(Verified(true));
+            Accounts.Setup(p => p.FindByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(Verified(true));
         }
 
         public RecordingMailer Mailer { get; }
 
         public void WithUser(User user) =>
-            Accounts.Setup(p => p.GetByEmailAsync(user.Email, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+            Accounts.Setup(p => p.FindByEmailAsync(user.Email, It.IsAny<CancellationToken>())).ReturnsAsync(user);
 
         /// <summary>
         /// The provider throws for an unknown address rather than returning null — that is the shape
@@ -528,11 +529,12 @@ public sealed class AccountRecoveryTests
             Tenants.Setup(p => p.CreateTenantAsync(It.IsAny<string>(), It.IsAny<string>(), 42, It.IsAny<string>(), It.IsAny<Wbskt.Infrastructure.Events.Outbox.OutboxMessage>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Guid.NewGuid());
             Accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(created);
+            Accounts.Setup(p => p.FindByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(created);
         }
 
         public void WithNoUser() =>
-            Accounts.Setup(p => p.GetByEmailAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .ThrowsAsync(new SecurityException("User not found."));
+            Accounts.Setup(p => p.FindByEmailAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((User?)null);
     }
 
     /// <summary>
@@ -646,7 +648,7 @@ public sealed class RegistrationDisclosureTests
         Assert.True(result.IsFailure);
         Assert.Equal("AUTH_USERNAME_CONFLICT", result.Error.Code);
         Assert.Empty(harness.Mailer.Sent);
-        harness.Accounts.Verify(p => p.GetByEmailAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.Accounts.Verify(p => p.FindByEmailAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     /// <summary>
@@ -729,7 +731,7 @@ public sealed class RegistrationDisclosureTests
         public ThrowingMailer Mailer { get; }
 
         public void WithExistingAccount() =>
-            Accounts.Setup(p => p.GetByEmailAsync("taken@example.test", It.IsAny<CancellationToken>()))
+            Accounts.Setup(p => p.FindByEmailAsync("taken@example.test", It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new User { Id = 7, Username = "original", Email = "taken@example.test", IsActive = true, IsEmailVerified = true });
 
         public void WithUsernameTaken() =>
@@ -737,8 +739,8 @@ public sealed class RegistrationDisclosureTests
                 .ReturnsAsync(9);
 
         public void WithNoAccountOnThatAddress() =>
-            Accounts.Setup(p => p.GetByEmailAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .ThrowsAsync(new SecurityException("User not found."));
+            Accounts.Setup(p => p.FindByEmailAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((User?)null);
     }
 
     private sealed class ThrowingMailer(bool shouldThrow) : IAuthMailer

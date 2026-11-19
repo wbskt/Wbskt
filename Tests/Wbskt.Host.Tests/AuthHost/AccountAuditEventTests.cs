@@ -11,7 +11,6 @@ using Wbskt.Auth.Host.Telemetry;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Auth;
 using Wbskt.Infrastructure.Security;
-using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Host.Tests.AuthHost;
 
@@ -61,8 +60,9 @@ public sealed class AccountAuditEventTests
             IsActive = true,
             IsEmailVerified = true
         };
-        _accounts.Setup(p => p.GetByEmailAsync(Email, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+        _accounts.Setup(p => p.FindByEmailAsync(Email, It.IsAny<CancellationToken>())).ReturnsAsync(user);
         _accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+        _accounts.Setup(p => p.FindByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(user);
     }
 
     [Fact]
@@ -78,7 +78,7 @@ public sealed class AccountAuditEventTests
     [Fact]
     public async Task A_sign_in_with_no_account_is_logged_nowhere()
     {
-        _accounts.Setup(p => p.GetByEmailAsync("nobody@example.test", It.IsAny<CancellationToken>())).ThrowsAsync(new SecurityException("no such user"));
+        _accounts.Setup(p => p.FindByEmailAsync("nobody@example.test", It.IsAny<CancellationToken>())).ReturnsAsync((User?)null);
 
         var result = await _signIn.LoginAsync("nobody@example.test", Password, "10.0.0.1");
 
@@ -115,7 +115,7 @@ public sealed class AccountAuditEventTests
     [Fact]
     public async Task A_reset_request_for_an_unknown_address_is_logged_nowhere()
     {
-        _accounts.Setup(p => p.GetByEmailAsync("nobody@example.test", It.IsAny<CancellationToken>())).ThrowsAsync(new SecurityException("no such user"));
+        _accounts.Setup(p => p.FindByEmailAsync("nobody@example.test", It.IsAny<CancellationToken>())).ReturnsAsync((User?)null);
 
         await _passwords.ForgotPasswordAsync("nobody@example.test", "10.0.0.1");
 
