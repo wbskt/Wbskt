@@ -19,7 +19,7 @@ public sealed class AdminViewContractTests(SqlEdgeFixture main, AuthSqlFixture a
     private static readonly Dictionary<string, string[]> AuthViews = new()
     {
         ["People"] = ["Id", "RefId", "Username", "Email", "IsActive", "IsEmailVerified", "FailedLoginCount", "LockedUntil", "LastLoginAt", "PasswordChangedAt", "UsernameChangedAt", "UpdatedAt", "CreatedAt", "AccountCount", "WorkspaceCount"],
-        ["Accounts"] = ["Id", "RefId", "Name", "Description", "PlanCode", "PlanSource", "PlanRevision", "PlanChangedAt", "PlanEndsAt", "PlanLimitOverrides", "CreatedAt", "ClosedAt", "MemberCount", "WorkspaceCount"],
+        ["Accounts"] = ["Id", "RefId", "Name", "Description", "PlanCode", "PlanSource", "PlanRevision", "PlanChangedAt", "PlanEndsAt", "PlanLimitOverrides", "CreatedAt", "ClosedAt", "FrozenAt", "MemberCount", "WorkspaceCount"],
         ["AccountMembers"] = ["TenantId", "UserId", "IsSuspended"],
         ["RoleAssignments"] = ["UserId", "TenantId", "WorkspaceId", "RoleRefId", "RoleName", "RoleKind"],
         ["Workspaces"] = ["Id", "RefId", "TenantId", "Name", "Description", "OwnerUserId", "CreatedAt", "DeletedAt", "MemberCount"],

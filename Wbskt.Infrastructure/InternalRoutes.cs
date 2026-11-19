@@ -117,6 +117,9 @@ public static class InternalRoutes
     /// <summary>Auth host: <c>PUT</c> corrects a person's mistyped, never-verified address and mails it a verification link.</summary>
     public const string AdminUserEmail = AdminPrefix + "/users/{userRef:guid}/email";
 
+    /// <summary>Auth host: <c>PUT</c> freezes a tenant, or lifts the freeze.</summary>
+    public const string AdminTenantFreeze = AdminPrefix + "/tenants/{tenantRef:guid}/freeze";
+
     /// <summary>Auth host: <c>PUT</c> suspends a member of a tenant, or lifts it.</summary>
     public const string AdminTenantMemberSuspension = AdminPrefix + "/tenants/{tenantRef:guid}/members/{userRef:guid}/suspension";
 

@@ -4,4 +4,4 @@ namespace Wbskt.Auth.Host.Models;
 /// What <c>dbo.Workspace_ResolveAccess</c> found: the workspace's internal id, whether the user may
 /// enter it, and their effective permissions there (always empty when they may not).
 /// </summary>
-public sealed record WorkspaceAccessResolution(int WorkspaceId, bool IsMember, IReadOnlyCollection<string> Permissions);
+public sealed record WorkspaceAccessResolution(int WorkspaceId, bool IsMember, IReadOnlyCollection<string> Permissions, bool IsFrozen = false);

@@ -8,11 +8,14 @@ using Microsoft.Extensions.Logging;
 
 namespace Wbskt.Infrastructure.Authorization;
 
-/// <summary>A resolved scope: its internal id, and which of the permissions asked about the caller holds in it.</summary>
-public sealed record PermissionScope(int Id, IReadOnlySet<string> Granted)
+/// <summary>
+/// A resolved scope: its internal id, which of the permissions asked about the caller holds in it, and
+/// whether its account is frozen by Wbskt support, which allows reads only.
+/// </summary>
+public sealed record PermissionScope(int Id, IReadOnlySet<string> Granted, bool Frozen = false)
 {
     /// <summary>The scope a resolver answers with: the permission names compared ordinally.</summary>
-    public static PermissionScope Of(int id, IEnumerable<string> granted) => new(id, granted.ToHashSet(StringComparer.Ordinal));
+    public static PermissionScope Of(int id, IEnumerable<string> granted, bool frozen = false) => new(id, granted.ToHashSet(StringComparer.Ordinal), frozen);
 }
 
 /// <summary>
@@ -22,12 +25,14 @@ public sealed record PermissionScope(int Id, IReadOnlySet<string> Granted)
 /// and says how that scope is resolved.
 /// </summary>
 /// <remarks>
-/// A refusal is the resolve's own error as is (403 for a scope the caller cannot use), or 403
-/// <c>PERMISSION_UNAUTHORIZED</c> naming what is missing.
+/// A refusal is the resolve's own error as is (403 for a scope the caller cannot use), 409
+/// <c>ACCOUNT_FROZEN</c> for an action needing anything but a read permission (<c>*.read</c>) in a frozen
+/// scope, or 403 <c>PERMISSION_UNAUTHORIZED</c> naming what is missing.
 /// </remarks>
 public abstract class ScopedPermissionFilter<TAttribute> : IAsyncAuthorizationFilter where TAttribute : PermissionRequirementAttribute
 {
     private static readonly object ScopeIdKey = new();
+    private const string ReadSuffix = ".read";
 
     /// <summary>The route value holding the scope's reference, such as <c>workspaceRef</c>.</summary>
     protected abstract string RouteKey { get; }
@@ -62,6 +67,13 @@ public abstract class ScopedPermissionFilter<TAttribute> : IAsyncAuthorizationFi
         if (scope.IsFailure)
         {
             context.Result = ErrorResult(context, scope.Error);
+            return;
+        }
+
+        // A frozen account keeps its reads; the freeze is checked before permissions so the answer says why.
+        if (scope.Value.Frozen && !requirements.All(IsRead))
+        {
+            context.Result = ErrorResult(context, Error.Conflict("ACCOUNT_FROZEN", "Wbskt support has frozen this account. It can be read, but nothing in it can be changed."));
             return;
         }
 
@@ -105,6 +117,13 @@ public abstract class ScopedPermissionFilter<TAttribute> : IAsyncAuthorizationFi
         var own = method.GetCustomAttributes<TAttribute>(inherit: true).ToList();
         return own.Count > 0 ? own : controller.GetCustomAttributes<TAttribute>(inherit: true).ToList();
     }
+
+    /// <summary>Whether a requirement can be met with reads alone, which is all a frozen scope allows.</summary>
+    private static bool IsRead(TAttribute requirement) => requirement.Mode == PermissionMatch.Any
+        ? requirement.Permissions.Any(IsRead)
+        : requirement.Permissions.All(IsRead);
+
+    private static bool IsRead(string permission) => permission.EndsWith(ReadSuffix, StringComparison.Ordinal);
 
     private IActionResult ErrorResult(AuthorizationFilterContext context, Error error)
     {

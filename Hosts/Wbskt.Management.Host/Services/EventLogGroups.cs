@@ -36,6 +36,8 @@ public static class EventLogGroups
         nameof(MemberRemovedEvent),
         nameof(MemberSuspendedEvent),
         nameof(SupportActionTakenEvent),
+        nameof(TenantFrozenEvent),
+        nameof(TenantUnfrozenEvent),
         nameof(RolePermissionsUpdatedEvent),
         nameof(WorkspaceOwnershipTransferredEvent),
         nameof(WorkspaceDeletedEvent),

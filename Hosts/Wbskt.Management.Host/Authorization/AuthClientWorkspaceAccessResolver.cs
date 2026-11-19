@@ -15,6 +15,6 @@ public sealed class AuthClientWorkspaceAccessResolver(IAuthServiceClient authCli
         var access = await authClient.ResolveWorkspaceAsync(workspaceRef, cancellationToken);
         return access.IsFailure
             ? Result<PermissionScope>.Failure(access.Error)
-            : Result<PermissionScope>.Success(PermissionScope.Of(access.Value.WorkspaceId, access.Value.Permissions));
+            : Result<PermissionScope>.Success(PermissionScope.Of(access.Value.WorkspaceId, access.Value.Permissions, access.Value.Frozen));
     }
 }

@@ -32,9 +32,10 @@ public interface IAuthServiceClient : IUserIdLookup
 }
 
 /// <summary>
-/// The caller's resolved access to a workspace: its internal ID and the effective permission slugs.
+/// The caller's resolved access to a workspace: its internal ID, the effective permission slugs, and
+/// whether its account is frozen (reads only).
 /// </summary>
-public sealed record WorkspaceAccess(int WorkspaceId, IReadOnlySet<string> Permissions)
+public sealed record WorkspaceAccess(int WorkspaceId, IReadOnlySet<string> Permissions, bool Frozen = false)
 {
     public bool HasPermission(PermissionSlug permission) => Permissions.Contains(permission);
 }

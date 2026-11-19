@@ -344,6 +344,13 @@ permission gate, not being a workspace member, or touching a resource in another
 **401** is reserved for "we cannot identify the caller" — bad credentials, or an invalid, expired or
 revoked token. Consumers such as `AuthServiceClient` rely on the distinction.
 
+**A frozen account** (Wbskt support froze its tenant, `dbo.Tenants.FrozenAt`) answers **409**
+`ACCOUNT_FROZEN` to any workspace-scoped action that needs more than a read permission (`*.read`),
+whatever the caller holds; reads pass as usual. `dbo.Workspace_ResolveAccess` reports the freeze with the
+permissions, so both hosts' `WorkspacePermissionFilter` refuse it before checking permissions. Tenant
+administration (`api/tenants/{tenantRef}/...`) is not frozen, so its members and roles can still be put
+right.
+
 ## Deploying schema upgrades to an existing DB
 
 Run these against the Auth DB once, in order, **before** `sqlpackage /Action:Publish` (or before

@@ -87,3 +87,10 @@ public sealed record AdminRemoveMemberRequest(StaffChange Staff);
 /// its Admin role tenant-wide, and their own tenant-wide denies of users.manage and roles.manage removed.
 /// </summary>
 public sealed record AdminRepairAdministratorRequest(StaffChange Staff);
+
+/// <summary>
+/// Freezes a tenant, or lifts the freeze (<c>InternalRoutes.AdminTenantFreeze</c>). While frozen its
+/// members can sign in and read, no workspace in it takes a change, and nothing runs; a freeze cancels
+/// its running workflow runs and revokes its clients, which stay revoked after the freeze is lifted.
+/// </summary>
+public sealed record AdminSetTenantFrozenRequest(StaffChange Staff, bool Frozen);

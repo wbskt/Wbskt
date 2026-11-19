@@ -157,6 +157,31 @@ public sealed class WorkspacePermissionFilterTests
     }
 
     [Fact]
+    public async Task A_frozen_account_still_reads()
+    {
+        var (context, http) = Context(nameof(FakeController.AnyOfTwo), resolve: Frozen(PermissionNames.ClientsRead));
+
+        await new WorkspacePermissionFilter().OnAuthorizationAsync(context);
+
+        context.Result.Should().BeNull();
+        WorkspacePermissionFilter.TryGetWorkspaceId(http, out _).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task A_frozen_account_refuses_a_change_even_to_a_caller_who_may_make_it()
+    {
+        var (context, http) = Context(nameof(FakeController.UpdateAndOneRead), resolve: Frozen(PermissionNames.ClientsUpdate, PermissionNames.ClientsRead));
+
+        await new WorkspacePermissionFilter().OnAuthorizationAsync(context);
+
+        ProblemAssert.Is(context.Result, StatusCodes.Status409Conflict).Should().Be("ACCOUNT_FROZEN");
+        WorkspacePermissionFilter.TryGetWorkspaceId(http, out _).Should().BeFalse();
+    }
+
+    private static Result<WorkspaceAccess> Frozen(params string[] held) =>
+        Result<WorkspaceAccess>.Success(new WorkspaceAccess(WorkspaceId, held.ToHashSet(StringComparer.OrdinalIgnoreCase), Frozen: true));
+
+    [Fact]
     public async Task An_action_without_requirements_is_left_alone_and_resolves_nothing()
     {
         var auth = new Mock<IAuthServiceClient>(MockBehavior.Strict);
