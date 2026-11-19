@@ -23,8 +23,9 @@ namespace Wbskt.Management.Host.Services;
 /// commands to it, not done here.
 /// </para>
 /// <para>
-/// Safe to repeat: the procedure only reports clients it revoked on this call, and it reports a run
-/// for as long as it is still running, so a cancel command that failed to send goes out next time.
+/// Safe to repeat: the procedure reports every revoked client of the workspace on each call, and a run
+/// for as long as it is still running, so an announcement or a cancel command that failed to send goes
+/// out next time.
 /// The engine treats a cancel for a run that is already cancelling, or finished, as a no-op, and
 /// clearing its caches twice is harmless. Everything is sent on the real bus, not the queued one: a
 /// failure throws, and the caller's retry (the event's redelivery, the sweep's next tick) reports the
@@ -61,9 +62,24 @@ public sealed class WorkspaceRetirer
     {
         var retired = await _provider.RetireAsync(workspaceId, cancellationToken);
 
+        // Every client is tried before a failure is thrown, so one the broker refused does not leave the
+        // connections of all those after it open until the retry.
+        var failures = new List<Exception>();
         foreach (var client in retired.RevokedClients)
         {
-            await _access.RevokedAsync(workspaceId, client.ClientRefId, client.ClientId, client.PolicyRefId, client.PolicyId, cancellationToken);
+            try
+            {
+                await _access.RevokedAsync(workspaceId, client.ClientRefId, client.ClientId, client.PolicyRefId, client.PolicyId, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                failures.Add(ex);
+            }
+        }
+
+        if (failures.Count > 0)
+        {
+            throw new AggregateException($"Announcing {failures.Count} of workspace {workspaceId}'s {retired.RevokedClients.Count} revoked client(s) failed; the retry announces them again.", failures);
         }
 
         foreach (var runId in retired.ActiveRunIds)
@@ -78,7 +94,7 @@ public sealed class WorkspaceRetirer
         }
 
         _logger.LogInformation(
-            "Retired deleted workspace {WorkspaceId}: revoked {ClientCount} client(s), asked the engine to cancel {RunCount} run(s), disabled {DefinitionCount} definition version(s).",
+            "Retired deleted workspace {WorkspaceId}: announced {ClientCount} revoked client(s), asked the engine to cancel {RunCount} run(s), disabled {DefinitionCount} definition version(s).",
             workspaceId, retired.RevokedClients.Count, retired.ActiveRunIds.Count, retired.DefinitionIds.Count);
 
         return retired;

@@ -115,6 +115,27 @@ public sealed class WorkspaceDeletedHandlerTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => handler.Consume(Context()));
     }
 
+    [Fact]
+    public async Task A_client_the_broker_refuses_does_not_stop_the_others_being_announced()
+    {
+        // The retry reports every revoked client again, but until it runs the clients after a failed
+        // one would keep their connections; so each is tried, then the failure fails the event.
+        RetiredClient first = new(5, Guid.NewGuid(), 9, Guid.NewGuid()), second = new(6, Guid.NewGuid(), 9, first.PolicyRefId);
+        var provider = new Mock<IWorkspaceRetirementProvider>();
+        provider.Setup(p => p.RetireAsync(WorkspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkspaceRetirement([first, second], [], []));
+        var bus = new Mock<IEventBus>();
+        bus.Setup(b => b.PublishAsync(It.Is<ClientStatusChangedEvent>(e => e.ClientRefId == first.ClientRefId), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("broker down"));
+        var cutoffs = new Mock<IClientTokenCutoffs>();
+
+        var handler = Handler(provider.Object, bus.Object, Mock.Of<IWorkflowEngineGateway>(), cutoffs.Object);
+
+        await Assert.ThrowsAsync<AggregateException>(() => handler.Consume(Context()));
+        bus.Verify(b => b.PublishAsync(It.Is<ClientStatusChangedEvent>(e => e.ClientRefId == second.ClientRefId), It.IsAny<CancellationToken>()), Times.Once);
+        cutoffs.Verify(c => c.RevokeAsync(second.ClientRefId), Times.Once);
+    }
+
     private static WorkspaceDeletedHandler Handler(IWorkspaceRetirementProvider provider, IEventBus bus, IWorkflowEngineGateway engine, IClientTokenCutoffs cutoffs) =>
         new(new WorkspaceRetirer(provider, bus, engine, cutoffs, NullLogger<WorkspaceRetirer>.Instance, TimeProvider.System));
 
