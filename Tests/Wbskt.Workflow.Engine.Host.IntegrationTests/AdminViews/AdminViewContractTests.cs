@@ -25,7 +25,7 @@ public sealed class AdminViewContractTests(SqlEdgeFixture main, AuthSqlFixture a
         ["Workspaces"] = ["Id", "RefId", "TenantId", "Name", "Description", "OwnerUserId", "CreatedAt", "DeletedAt", "MemberCount"],
         ["WorkspaceMembers"] = ["WorkspaceId", "UserId"],
         ["Sessions"] = ["SessionId", "UserId", "StartedAt", "LastRefreshedAt", "ExpiresAt", "RevokedAt", "IpAddress"],
-        ["Subscriptions"] = ["TenantId", "Provider", "SubscriptionId", "CustomerId", "PlanCode", "BillingInterval", "Status", "CurrentPeriodEnd", "CancelAtPeriodEnd", "PastDueSince", "ScheduledPlanCode", "ScheduledBillingInterval", "ScheduledAt", "UpdatedAt", "CreatedAt"],
+        ["Subscriptions"] = ["TenantId", "Provider", "SubscriptionId", "CustomerId", "PlanCode", "BillingInterval", "Status", "CurrentPeriodEnd", "CancelAtPeriodEnd", "PastDueSince", "ScheduledPlanCode", "ScheduledBillingInterval", "ScheduledAt", "UpdatedAt", "CreatedAt", "DuplicateAt"],
         ["CreditPurchases"] = ["TenantId", "Provider", "PaymentId", "Credits", "PurchasedAt", "ExpiresAt", "RefundedAt", "HeldAt", "CreatedAt"],
         ["StaffAudit"] = ["Id", "StaffRefId", "StaffName", "Action", "TargetKind", "TargetRefId", "Reason", "Outcome", "Detail", "IdempotencyKey", "CreatedAt", "SubjectRefId"]
     };
