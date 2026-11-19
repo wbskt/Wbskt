@@ -16,7 +16,7 @@ tenant with three workspaces has 100 clients between them, not 100 each.
 | Runs going at once | 20 | 100 | 200 | 200 | 200 |
 | Workspaces | 1 | 3 | 10 | 25 | 50 |
 | Members | 1 | 3 | 10 | 25 | 50 |
-| Raw readings kept | 3 days | 14 days | 30 days | 30 days | 90 days |
+| Raw readings kept | 3 days | 7 days | 7 days | 7 days | 90 days |
 | Hourly readings kept | 30 days | 1 year | 2 years | 2 years | 2 years |
 | Run history kept | 7 days | 14 days | 30 days | 30 days | 90 days |
 
@@ -329,7 +329,16 @@ included.
   and Pro, 1.5 for Team) are they throttled the same way as Free, which stops one account loading the
   hosts without end. Team's is lower because one Team account at 2x (154 msg/s, about 5 GB of traffic
   rows) would fill the single VM's Express database by itself (#751). Each is a setting so pricing can
-  move it; a plan left out keeps its default. The throttle notice is recorded under one key (200) for
+  move it; a plan left out keeps its default. Readings weigh on the database as much as traffic does: every number in a
+  `state.report` is a `dbo.ClientReadings` row (about 45 bytes with its index, page compressed; an
+  estimate from the schema, not yet measured on a staging copy). A Team account at its 1.5x throttle
+  whose clients send one number per message is about 115 msg/s: 2 days of traffic rows (about 3.8 GB)
+  plus 7 days of raw readings (about 70 M, 3.2 GB) is about 7 GB, near the 8 GB
+  `DatabaseNearExpressLimit` alert. A Pro account at 2x keeps about 23 M raw readings (1 GB), a Maker one
+  about 5 M (0.2 GB). That is why raw readings are kept 7 days on every paid self-serve plan, where Pro
+  and Team once kept 30 (about 13 GB of readings for one Team account, #952); the hourly roll-up keeps
+  charts exact for a year or two. With one Team account able to come near the limit alone, a second Pro
+  or Team account is the point to move off SQL Express. The throttle notice is recorded under one key (200) for
   every plan, so a changed multiple never announces it twice. `PlatformMessageRateHigh` warns when the
   platform as a whole nears the single VM's 300 msg/s, whatever the plans.
 - **Business is never throttled**; what it carries past the allowance is invoiced at $1 per million

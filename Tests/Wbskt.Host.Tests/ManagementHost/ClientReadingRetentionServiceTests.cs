@@ -47,7 +47,7 @@ public sealed class ClientReadingRetentionServiceTests
         Assert.NotNull(sent);
         Assert.Contains(new ReadingRetention(PlanCode.Free, 3, 30), sent);
         Assert.Contains(new ReadingRetention(PlanCode.Maker, 21, 365), sent);
-        Assert.Contains(new ReadingRetention(PlanCode.Pro, 30, 730), sent);
+        Assert.Contains(new ReadingRetention(PlanCode.Pro, 7, 730), sent);
         Assert.Equal(Enum.GetValues<PlanCode>().Length, sent.Count);
     }
 
