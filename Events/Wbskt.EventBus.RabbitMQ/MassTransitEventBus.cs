@@ -14,6 +14,8 @@ internal sealed class MassTransitEventBus : IEventBus
 
     public Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct = default) where TEvent : IEvent
     {
-        return _bus.Publish(@event, ct);
+        // As object, so MassTransit routes on the event's runtime type: one published through a
+        // BaseEvent or IEvent variable still reaches the consumers of its own type.
+        return _bus.Publish((object)@event, ct);
     }
 }

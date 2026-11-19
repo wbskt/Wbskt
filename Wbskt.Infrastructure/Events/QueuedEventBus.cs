@@ -25,8 +25,7 @@ namespace Wbskt.Infrastructure.Events;
 /// <para>
 /// Same shape as <c>OutboundMailQueue</c>: bounded, <see cref="ChannelWriter{T}.TryWrite"/> only, and
 /// a full queue drops the event with a log line rather than blocking a caller. Queued events do not
-/// survive a restart. Each entry captures the event's static type, because MassTransit routes on it;
-/// queuing the bare <see cref="IEvent"/> would publish everything as that interface.
+/// survive a restart. The bus routes on an event's runtime type, so an entry needs only the event.
 /// </para>
 /// </remarks>
 public sealed class QueuedEventBus : IEventBus, IDisposable
@@ -60,7 +59,7 @@ public sealed class QueuedEventBus : IEventBus, IDisposable
     /// <summary>Queues the event. Never blocks, never throws, and ignores <paramref name="ct"/>: the request may end before the event is sent.</summary>
     public Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct = default) where TEvent : IEvent
     {
-        Queue(new QueuedEvent(typeof(TEvent).Name, (bus, token) => bus.PublishAsync(@event, token)));
+        Queue(new QueuedEvent(@event.GetType().Name, (bus, token) => bus.PublishAsync<IEvent>(@event, token)));
         return Task.CompletedTask;
     }
 

@@ -1,6 +1,4 @@
-using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
-using System.Reflection;
 using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -37,7 +35,6 @@ public sealed class OutboxDispatcher : BackgroundService
     internal static readonly TimeSpan DefaultPollInterval = TimeSpan.FromSeconds(2);
     internal static readonly TimeSpan MaxBackoff = TimeSpan.FromSeconds(30);
 
-    private static readonly MethodInfo PublishMethod = typeof(IEventBus).GetMethod(nameof(IEventBus.PublishAsync))!;
     private static readonly IReadOnlyDictionary<string, Type> KnownEventTypes = typeof(Wbskt.Events.Auth.WorkspaceDeletedEvent).Assembly
         .GetTypes()
         .Where(t => t is { IsAbstract: false, IsGenericTypeDefinition: false } && typeof(IEvent).IsAssignableFrom(t) && t.FullName is not null)
@@ -48,7 +45,6 @@ public sealed class OutboxDispatcher : BackgroundService
     private readonly ILogger<OutboxDispatcher> _logger;
     private readonly TimeSpan _pollInterval;
     private readonly HashSet<long> _unknownRows = [];
-    private readonly ConcurrentDictionary<Type, MethodInfo> _publishers = new();
     private readonly Meter _meter = new(MeterName);
     private int _unreadableRows;
 
@@ -121,7 +117,7 @@ public sealed class OutboxDispatcher : BackgroundService
                     continue;
                 }
 
-                if (!TryRead(row, out var @event, out var type))
+                if (!TryRead(row, out var @event))
                 {
                     _unknownRows.Add(row.Id);
                     unreadable.Add(row.Id);
@@ -130,7 +126,7 @@ public sealed class OutboxDispatcher : BackgroundService
 
                 try
                 {
-                    await PublishAsync(@event, type, ct);
+                    await _bus.PublishAsync(@event, ct);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
                 {
@@ -149,10 +145,10 @@ public sealed class OutboxDispatcher : BackgroundService
         return true;
     }
 
-    private bool TryRead(PendingOutboxMessage row, out object @event, out Type type)
+    private bool TryRead(PendingOutboxMessage row, out IEvent @event)
     {
         @event = null!;
-        if (!KnownEventTypes.TryGetValue(row.MessageType, out type!))
+        if (!KnownEventTypes.TryGetValue(row.MessageType, out var type))
         {
             _logger.LogError("Outbox event {OutboxId} has a type this host does not know ({MessageType}); it is left in the outbox.", row.Id, row.MessageType);
             return false;
@@ -160,7 +156,7 @@ public sealed class OutboxDispatcher : BackgroundService
 
         try
         {
-            @event = JsonSerializer.Deserialize(row.Payload, type, OutboxMessage.JsonOptions)!;
+            @event = (IEvent)JsonSerializer.Deserialize(row.Payload, type, OutboxMessage.JsonOptions)!;
             return @event is not null;
         }
         catch (JsonException ex)
@@ -168,14 +164,6 @@ public sealed class OutboxDispatcher : BackgroundService
             _logger.LogError(ex, "Outbox event {OutboxId} ({MessageType}) could not be read; it is left in the outbox.", row.Id, row.MessageType);
             return false;
         }
-    }
-
-    private Task PublishAsync(object @event, Type type, CancellationToken ct)
-    {
-        // IEventBus routes on the static type (MassTransit binds exchanges to it), so the event is
-        // published as its own type, not as IEvent.
-        var publish = _publishers.GetOrAdd(type, t => PublishMethod.MakeGenericMethod(t));
-        return (Task)publish.Invoke(_bus, [@event, ct])!;
     }
 
     public override void Dispose()

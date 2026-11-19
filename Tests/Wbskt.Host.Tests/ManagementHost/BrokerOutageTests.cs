@@ -88,7 +88,7 @@ public sealed class BrokerOutageTests
         targets.Setup(x => x.FindAsync(clientRef, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Wbskt.Infrastructure.Clients.ClientCommandTarget(42, WorkspaceId, true, "socket-a"));
         var bus = new Mock<IEventBus>();
-        bus.Setup(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()))
+        bus.Setup(b => b.PublishAsync<IEvent>(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("broker down"));
         var controller = new ClientsController(clientService.Object, Mock.Of<IClientLifecycleService>(), new ClientCommandService(clientService.Object, Wbskt.Host.Tests.Infrastructure.TestClientCommands.Sender(targets.Object, bus.Object), new Wbskt.Host.Tests.Infrastructure.InMemoryQueuedCommandStore(), bus.Object, Microsoft.Extensions.Options.Options.Create(new Wbskt.Infrastructure.Clients.CommandQueueOptions()), NullLogger<ClientCommandService>.Instance, new Wbskt.Management.Host.Telemetry.ManagementMetrics(), TimeProvider.System), Mock.Of<IEventLogService>())
         {
@@ -154,7 +154,7 @@ public sealed class BrokerOutageTests
         public Task<TEvent> Expect<TEvent>() where TEvent : IEvent
         {
             var sent = new TaskCompletionSource<TEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _bus.Setup(b => b.PublishAsync(It.IsAny<TEvent>(), It.IsAny<CancellationToken>()))
+            _bus.Setup(b => b.PublishAsync<IEvent>(It.IsAny<TEvent>(), It.IsAny<CancellationToken>()))
                 .Returns<TEvent, CancellationToken>((e, _) =>
                 {
                     if (!_brokerUp)
