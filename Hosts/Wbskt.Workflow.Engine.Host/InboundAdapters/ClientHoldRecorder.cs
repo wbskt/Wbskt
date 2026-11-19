@@ -66,6 +66,7 @@ public sealed class ClientHoldRecorder(
                 await holdStates.RecordAsync(
                     registration.TriggerKey,
                     matches,
+                    sentAtUtc,
                     token => provider.RecordAsync(registration.TriggerKey, matches, sentAtUtc, holdSeconds, matchedPayload, token),
                     ct);
             }

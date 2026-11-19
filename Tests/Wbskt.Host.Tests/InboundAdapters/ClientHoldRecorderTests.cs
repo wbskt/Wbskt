@@ -76,6 +76,30 @@ public sealed class ClientHoldRecorderTests
     }
 
     [Fact]
+    public async Task A_skipped_reading_still_ends_a_hold_a_late_older_match_would_start()
+    {
+        // 'temp > 30 for 60 s', clear. 31 is sent at 10:00:00 and 25 at 10:00:01, but 25 is handled
+        // first and skipped as already clear. The late 31 must not start a hold the newer 25 ended.
+        TriggerRegistrationRow hold = Registration(ClientHoldTriggerKey.Build(ClientRef, "temperature", 60, Guid.NewGuid(), Guid.NewGuid()));
+        var provider = new RecordingHoldStateProvider(hold);
+        var filter = new SwitchableFilterEvaluator { Passes = false };
+        var recorder = new ClientHoldRecorder(provider, filter, UncachedTriggerRegistrationCache.Instance, holdStates: new ClientHoldStateCache());
+        var message = new InboundEvent("client", [], "evt", new Dictionary<string, JsonElement>(), DateTime.UtcNow);
+        DateTime tenOClock = new(2026, 11, 19, 10, 0, 0, DateTimeKind.Utc);
+
+        await recorder.RecordAsync(message, ClientRef, "temperature", 34, tenOClock.AddSeconds(-1), CancellationToken.None);
+        await recorder.RecordAsync(message, ClientRef, "temperature", 34, tenOClock.AddSeconds(1), CancellationToken.None);
+        filter.Passes = true;
+        await recorder.RecordAsync(message, ClientRef, "temperature", 34, tenOClock, CancellationToken.None);
+
+        Assert.Equal([false], provider.Records.Select(record => record.Matches));
+
+        // A match newer than the skipped reading still starts the hold.
+        await recorder.RecordAsync(message, ClientRef, "temperature", 34, tenOClock.AddSeconds(2), CancellationToken.None);
+        Assert.Equal([false, true], provider.Records.Select(record => record.Matches));
+    }
+
+    [Fact]
     public async Task A_buffered_message_is_recorded_at_the_time_the_client_sent_it()
     {
         // A reading sent offline must not look newer than readings that arrived before it,
