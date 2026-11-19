@@ -84,7 +84,17 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
     {
         _logger.LogInformation("Updating registration policy '{PolicyRefId}' in WorkspaceId: {WorkspaceId}", policyRefId, workspaceId);
 
-        if (string.IsNullOrWhiteSpace(request.Name))
+        if (request is { Name: null, MaxClients: null, AutoApproval: null, IsEnabled: null, RemoveMaxClients: false })
+        {
+            return Result.Failure(Error.Validation("POLICY_UPDATE_EMPTY", "Name a field to change: 'name', 'maxClients', 'removeMaxClients', 'autoApproval' or 'isEnabled'."));
+        }
+
+        if (request.MaxClients.HasValue && request.RemoveMaxClients)
+        {
+            return Result.Failure(Error.Validation("POLICY_LIMIT_AMBIGUOUS", "Send either 'maxClients' or 'removeMaxClients', not both."));
+        }
+
+        if (request.Name is not null && string.IsNullOrWhiteSpace(request.Name))
         {
             _logger.LogWarning("Registration policy update failed: Name is empty");
             return Result.Failure(Error.Validation("POLICY_NAME_REQUIRED", "Policy name is required."));

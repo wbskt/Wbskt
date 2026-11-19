@@ -22,11 +22,16 @@ public record RegistrationPolicyResponse(
     int ConnectedClientCount
 );
 
+/// <summary>
+/// A partial edit: a field left out keeps its value, and a request naming no field is refused.
+/// <see cref="MaxClients"/> sets a limit; <see cref="RemoveMaxClients"/> makes the policy unlimited.
+/// </summary>
 public record UpdateRegistrationPolicyRequest(
-    string Name,
-    int? MaxClients,
-    bool AutoApproval,
-    bool IsEnabled
+    string? Name = null,
+    int? MaxClients = null,
+    bool? AutoApproval = null,
+    bool? IsEnabled = null,
+    bool RemoveMaxClients = false
 );
 
 /// <summary>A client's new secret, shown once. The old one stops working at once.</summary>

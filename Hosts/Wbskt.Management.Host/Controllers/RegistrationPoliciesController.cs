@@ -86,7 +86,7 @@ public class RegistrationPoliciesController : ApiControllerBase
     /// </summary>
     /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="policyRef">The unique reference ID of the policy to update.</param>
-    /// <param name="request">The updated policy details (Name, AutoApproval, IsEnabled).</param>
+    /// <param name="request">The fields to change; a field left out keeps its value.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     [HttpPatch("{policyRef:guid}")]

@@ -111,10 +111,11 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
         {
             p.AddWithValue("@WorkspaceId", workspaceId);
             p.AddWithValue("@Id", id);
-            p.AddWithValue("@Name", request.Name);
+            p.AddWithValue("@Name", (object?)request.Name ?? DBNull.Value);
             p.AddWithValue("@MaxClients", (object?)request.MaxClients ?? DBNull.Value);
-            p.AddWithValue("@AutoApproval", request.AutoApproval);
-            p.AddWithValue("@IsEnabled", request.IsEnabled);
+            p.AddWithValue("@RemoveMaxClients", request.RemoveMaxClients);
+            p.AddWithValue("@AutoApproval", (object?)request.AutoApproval ?? DBNull.Value);
+            p.AddWithValue("@IsEnabled", (object?)request.IsEnabled ?? DBNull.Value);
         }, cancellationToken);
     }
 

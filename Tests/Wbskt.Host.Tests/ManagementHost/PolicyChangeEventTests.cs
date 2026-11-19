@@ -86,4 +86,37 @@ public sealed class PolicyChangeEventTests
 
         _published.Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task An_edit_naming_no_field_is_refused()
+    {
+        var service = CreateService(Policy("lab", 10, enabled: true), Policy("lab", 10, enabled: true));
+
+        var result = await service.UpdateAsync(WorkspaceId, PolicyRef, new UpdateRegistrationPolicyRequest());
+
+        result.Error.Code.Should().Be("POLICY_UPDATE_EMPTY");
+        _provider.Verify(p => p.UpdateAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<UpdateRegistrationPolicyRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_limit_and_its_removal_together_are_refused()
+    {
+        var service = CreateService(Policy("lab", 10, enabled: true), Policy("lab", 10, enabled: true));
+
+        var result = await service.UpdateAsync(WorkspaceId, PolicyRef, new UpdateRegistrationPolicyRequest(MaxClients: 5, RemoveMaxClients: true));
+
+        result.Error.Code.Should().Be("POLICY_LIMIT_AMBIGUOUS");
+    }
+
+    [Fact]
+    public async Task A_blank_name_is_refused_but_a_missing_one_is_kept()
+    {
+        var service = CreateService(Policy("lab", 10, enabled: true), Policy("lab", 10, enabled: false));
+
+        (await service.UpdateAsync(WorkspaceId, PolicyRef, new UpdateRegistrationPolicyRequest(Name: " "))).Error.Code.Should().Be("POLICY_NAME_REQUIRED");
+        (await service.UpdateAsync(WorkspaceId, PolicyRef, new UpdateRegistrationPolicyRequest(IsEnabled: false))).IsSuccess.Should().BeTrue();
+
+        _provider.Verify(p => p.UpdateAsync(WorkspaceId, 5, new UpdateRegistrationPolicyRequest(null, null, null, false, false), It.IsAny<CancellationToken>()), Times.Once);
+        _published.Should().ContainSingle().Which.Should().BeOfType<PolicyDisabledEvent>();
+    }
 }

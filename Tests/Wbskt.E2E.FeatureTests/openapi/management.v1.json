@@ -3032,10 +3032,16 @@
       "UpdateRegistrationPolicyRequest": {
         "properties": {
           "autoApproval": {
-            "type": "boolean"
+            "type": [
+              "null",
+              "boolean"
+            ]
           },
           "isEnabled": {
-            "type": "boolean"
+            "type": [
+              "null",
+              "boolean"
+            ]
           },
           "maxClients": {
             "format": "int32",
@@ -3047,15 +3053,16 @@
             ]
           },
           "name": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "removeMaxClients": {
+            "default": false,
+            "type": "boolean"
           }
         },
-        "required": [
-          "name",
-          "maxClients",
-          "autoApproval",
-          "isEnabled"
-        ],
         "type": "object"
       },
       "UsageCount": {
