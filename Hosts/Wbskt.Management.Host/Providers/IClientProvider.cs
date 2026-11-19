@@ -8,7 +8,7 @@ using Wbskt.Primitives;
 
 namespace Wbskt.Management.Host.Providers;
 
-public interface IClientProvider : IReferenceProvider
+public interface IClientProvider
 {
     /// <summary>Registered clients across the account of <paramref name="workspaceId"/>, as its plan's client limit counts them.</summary>
     Task<int> GetRegisteredCountByAccountAsync(int workspaceId, int? tenantId, CancellationToken cancellationToken = default);
