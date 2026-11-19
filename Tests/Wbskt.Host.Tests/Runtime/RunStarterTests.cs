@@ -31,7 +31,6 @@ public sealed class RunStarterTests
         var starter = new RunStarter(
             runProvider,
             new RunJournal(historyProvider, new FixedClock()),
-            workflowDefinitionProvider,
             new WorkflowDefinitionCache(new MemoryCache(new MemoryCacheOptions()), workflowDefinitionProvider),
             new CorrelationKeyResolver(TriggerChannelRegistry.Default),
             new NullRunStartedPublisher(),
@@ -90,7 +89,6 @@ public sealed class RunStarterTests
         var starter = new RunStarter(
             runProvider,
             new RunJournal(new RecordingHistoryEventProvider(operations), new FixedClock()),
-            new RecordingWorkflowDefinitionProvider(),
             CacheOver(new RecordingWorkflowDefinitionProvider()),
             new CorrelationKeyResolver(TriggerChannelRegistry.Default),
             new NullRunStartedPublisher(),
@@ -127,7 +125,6 @@ public sealed class RunStarterTests
         var starter = new RunStarter(
             runProvider,
             new RunJournal(historyProvider, new FixedClock()),
-            new RecordingWorkflowDefinitionProvider(),
             CacheOver(new RecordingWorkflowDefinitionProvider()),
             new CorrelationKeyResolver(TriggerChannelRegistry.Default),
             new NullRunStartedPublisher(),
@@ -429,7 +426,6 @@ public sealed class RunStarterTests
     private static RunStarter Starter(RecordingRunProvider runProvider, List<string> operations, WorkflowEngineOptions options, RecordingHistoryEventProvider? historyProvider = null, IWorkflowDefinitionCache? definitionCache = null, CreditCostOptions? creditCosts = null, WorkflowMetrics? workflowMetrics = null, IWorkspacePlans? plans = null) => new(
         runProvider,
         new RunJournal(historyProvider ?? new RecordingHistoryEventProvider(operations), new FixedClock()),
-        new RecordingWorkflowDefinitionProvider(),
         definitionCache ?? CacheOver(new RecordingWorkflowDefinitionProvider()),
         new CorrelationKeyResolver(TriggerChannelRegistry.Default),
         new NullRunStartedPublisher(),

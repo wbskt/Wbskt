@@ -128,7 +128,7 @@ internal sealed class BranchLoop : IBranchLoop
         long step = 0;
         while (true)
         {
-            if (await IsRunStoppedAsync(runId, step++, runToken, ct))
+            if (await IsRunStoppedAsync(runRow, step++, runToken, ct))
             {
                 await _endings.CancelAsync(runRow.Id, branchId, branchRow, ct);
                 return;
@@ -206,22 +206,28 @@ internal sealed class BranchLoop : IBranchLoop
 
     /// <summary>
     /// Whether the branch must stop before its next node because its run was cancelled or failed. The
-    /// run row is read on the first step of a dispatch and every
-    /// <see cref="WorkflowEngineOptions.CancellationCheckInterval"/> steps after it: the first, because a
+    /// run row is consulted on the first step of a dispatch (the row the dispatch read to start with) and
+    /// read again every <see cref="WorkflowEngineOptions.CancellationCheckInterval"/> steps after it: the first, because a
     /// cancel taken while the branch was parked, or by another host, or before a restart is only on the
     /// row; the later ones, because a cancel taken by another host mid-branch never reaches this host's
     /// token. Every step in between trusts the run's token, which a cancel or failure taken on this host
     /// trips at once, so reading the row before every node bought nothing on this host but a round trip.
     /// </summary>
-    private async Task<bool> IsRunStoppedAsync(long runId, long step, CancellationToken runToken, CancellationToken ct)
+    private async Task<bool> IsRunStoppedAsync(RunRow runRow, long step, CancellationToken runToken, CancellationToken ct)
     {
         if (runToken.IsCancellationRequested)
         {
             return true;
         }
 
+        // The first step answers from the row this dispatch has just read rather than reading it again.
+        if (step == 0)
+        {
+            return RunStatus.IsStopping(runRow.Status);
+        }
+
         return step % _cancellationCheckInterval == 0
-            && await _runCancellationService.IsCancellationRequestedAsync(runId, ct);
+            && await _runCancellationService.IsCancellationRequestedAsync(runRow.Id, ct);
     }
 
     /// <summary>

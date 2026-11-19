@@ -34,7 +34,16 @@ internal sealed class WorkflowDefinitionCache : IWorkflowDefinitionCache
         var definition = JsonSerializer.Deserialize<WorkflowDefinition>(row.DefinitionJson, EngineJson.Options)
             ?? throw new InvalidOperationException($"Workflow definition {workflowDefinitionId} could not be deserialized.");
 
-        definition = definition with { WorkspaceId = row.WorkspaceId, PublishedBy = row.PublishedBy };
+        // The row, not the JSON, says which workflow and version this is: a test copy keeps the version it
+        // was taken from, and a run is recorded against the row's. Stamping them here lets a run start
+        // from the cache alone instead of reading the row (and its JSON) again.
+        definition = definition with
+        {
+            WorkflowRefId = row.RefId,
+            Version = row.Version,
+            WorkspaceId = row.WorkspaceId,
+            PublishedBy = row.PublishedBy
+        };
 
         _cache.Set(workflowDefinitionId, definition, new MemoryCacheEntryOptions
         {

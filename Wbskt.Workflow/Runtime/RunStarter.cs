@@ -32,7 +32,6 @@ internal sealed class RunStarter : IRunStarter
 
     private readonly IRunProvider _runProvider;
     private readonly IRunJournal _journal;
-    private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
     private readonly IWorkflowDefinitionCache _workflowDefinitionCache;
     private readonly ICorrelationKeyResolver _correlationKeyResolver;
     private readonly IRunStartedPublisher _runStartedPublisher;
@@ -47,7 +46,6 @@ internal sealed class RunStarter : IRunStarter
     public RunStarter(
         IRunProvider runProvider,
         IRunJournal journal,
-        IWorkflowDefinitionProvider workflowDefinitionProvider,
         IWorkflowDefinitionCache workflowDefinitionCache,
         ICorrelationKeyResolver correlationKeyResolver,
         IRunStartedPublisher runStartedPublisher,
@@ -61,7 +59,6 @@ internal sealed class RunStarter : IRunStarter
     {
         _runProvider = runProvider;
         _journal = journal;
-        _workflowDefinitionProvider = workflowDefinitionProvider;
         _workflowDefinitionCache = workflowDefinitionCache;
         _correlationKeyResolver = correlationKeyResolver;
         _runStartedPublisher = runStartedPublisher;
@@ -84,8 +81,8 @@ internal sealed class RunStarter : IRunStarter
     {
         try
         {
-            WorkflowDefinitionRow definition = await _workflowDefinitionProvider.GetByIdAsync(workflowDefinitionId, ct);
-            decimal creditBudget = ResolveCreditBudget(await _workflowDefinitionCache.GetAsync(workflowDefinitionId, ct));
+            WorkflowDefinition definition = await _workflowDefinitionCache.GetAsync(workflowDefinitionId, ct);
+            decimal creditBudget = ResolveCreditBudget(definition);
             DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
             WorkspacePlan plan = await _plans.GetAsync(definition.WorkspaceId, ct);
             PlanCeiling? ceiling = exemptFromCeiling ? null : plan.ActiveRunCeiling;
@@ -127,7 +124,7 @@ internal sealed class RunStarter : IRunStarter
                         Id = 0,
                         RefId = runRefId,
                         WorkflowDefinitionId = workflowDefinitionId,
-                        WorkflowRefId = definition.RefId,
+                        WorkflowRefId = definition.WorkflowRefId,
                         WorkflowVersion = definition.Version,
                         TriggerNodeId = Guid.Parse(triggerNodeId),
                         CorrelationKey = correlationKey,
@@ -155,8 +152,8 @@ internal sealed class RunStarter : IRunStarter
             {
                 // The trigger was matched before a disable or a switch of the live version committed.
                 _logger?.LogInformation("Workflow {WorkflowRefId} version {Version} is no longer live; not started for {Channel}",
-                    definition.RefId, definition.Version, triggerEvent.ChannelKind);
-                throw new WorkflowNotLiveException(definition.RefId, workflowDefinitionId);
+                    definition.WorkflowRefId, definition.Version, triggerEvent.ChannelKind);
+                throw new WorkflowNotLiveException(definition.WorkflowRefId, workflowDefinitionId);
             }
             catch (SqlException ex) when (ex.Number == ActiveRunConflictError)
             {
@@ -164,34 +161,34 @@ internal sealed class RunStarter : IRunStarter
             }
             catch (SqlException ex) when (ex.Number == TestRunActiveError)
             {
-                throw new TestRunActiveException(definition.RefId);
+                throw new TestRunActiveException(definition.WorkflowRefId);
             }
             catch (SqlException ex) when (ex.Number == PlanRunLimitError)
             {
-                _workflowMetrics?.RecordRunRefused(definition.RefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId);
+                _workflowMetrics?.RecordRunRefused(definition.WorkflowRefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId);
                 _logger?.LogWarning("Workspace {WorkspaceId} is at its plan's limit of {Limit} active runs; workflow {WorkflowRefId} was not started for {Channel}",
-                    definition.WorkspaceId, ceiling!.Limit, definition.RefId, triggerEvent.ChannelKind);
+                    definition.WorkspaceId, ceiling!.Limit, definition.WorkflowRefId, triggerEvent.ChannelKind);
                 throw new PlanRunLimitException(definition.WorkspaceId, ceiling.Limit);
             }
             catch (SqlException ex) when (ex.Number == PlanCreditLimitError)
             {
-                _workflowMetrics?.RecordRunRefused(definition.RefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId);
+                _workflowMetrics?.RecordRunRefused(definition.WorkflowRefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId);
                 _logger?.LogWarning("Workspace {WorkspaceId} has spent its plan's {Allowance} credits for the month; workflow {WorkflowRefId} was not started for {Channel}",
-                    definition.WorkspaceId, credits!.RunsRefusedAt, definition.RefId, triggerEvent.ChannelKind);
+                    definition.WorkspaceId, credits!.RunsRefusedAt, definition.WorkflowRefId, triggerEvent.ChannelKind);
                 throw new PlanCreditLimitException(definition.WorkspaceId, credits.RunsRefusedAt);
             }
             catch (SqlException ex) when (ex.Number == AccountFrozenError)
             {
-                _workflowMetrics?.RecordRunRefused(definition.RefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId);
+                _workflowMetrics?.RecordRunRefused(definition.WorkflowRefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId);
                 _logger?.LogInformation("Workspace {WorkspaceId}'s account is frozen; workflow {WorkflowRefId} was not started for {Channel}",
-                    definition.WorkspaceId, definition.RefId, triggerEvent.ChannelKind);
+                    definition.WorkspaceId, definition.WorkflowRefId, triggerEvent.ChannelKind);
                 throw new AccountFrozenException(definition.WorkspaceId);
             }
             catch (SqlException ex) when (ex.Number == WorkspaceCreditCapError)
             {
-                _workflowMetrics?.RecordRunRefused(definition.RefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId);
+                _workflowMetrics?.RecordRunRefused(definition.WorkflowRefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId);
                 _logger?.LogWarning("Workspace {WorkspaceId} has spent its monthly credit cap; workflow {WorkflowRefId} was not started for {Channel}",
-                    definition.WorkspaceId, definition.RefId, triggerEvent.ChannelKind);
+                    definition.WorkspaceId, definition.WorkflowRefId, triggerEvent.ChannelKind);
                 throw new WorkspaceCreditCapException(definition.WorkspaceId);
             }
 
@@ -205,13 +202,13 @@ internal sealed class RunStarter : IRunStarter
                 return new RunStartResult(createdRun.Id, createdRun.RefId, started.RootBranchId, false);
             }
 
-            _workflowMetrics?.RecordRunStarted(definition.RefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId, createdRun.IsTest);
+            _workflowMetrics?.RecordRunStarted(definition.WorkflowRefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId, createdRun.IsTest);
 
             // The start charge went into the counters with the run, so it is counted here and not again
             // on a recovered start above, which charged nothing new.
             if (startCost > 0)
             {
-                _workflowMetrics?.RecordCreditsConsumed(definition.RefId.ToString(), (double)startCost, definition.WorkspaceId);
+                _workflowMetrics?.RecordCreditsConsumed(definition.WorkflowRefId.ToString(), (double)startCost, definition.WorkspaceId);
             }
 
             await _journal.AppendAsync(

@@ -25,6 +25,14 @@ public static class RunStatus
     public static bool IsFailure(string status) =>
         status is Failed or PartiallyFailed or OutOfCredits;
 
+    /// <summary>
+    /// Whether a run's branches must stop before their next node: it is being cancelled or failed, or
+    /// already was. A run only reaches Failing through a fail that stops its work, so a branch that did
+    /// not see the run's token (another host's, or one dispatched after a restart) stops as well.
+    /// </summary>
+    public static bool IsStopping(string status) =>
+        status is Cancelling or Cancelled or Failing;
+
     public static bool IsTerminal(string status) =>
         status is Succeeded or Failed or PartiallyFailed or Cancelled or OutOfCredits;
 }
