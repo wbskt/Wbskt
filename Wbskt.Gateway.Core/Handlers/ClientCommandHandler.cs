@@ -137,16 +137,20 @@ public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
         await connection.SendAsync(message, ct);
     }
 
-    // A platform command's payload is a JSON object the client reads fields from, so it goes out as
-    // that object. A client's own commands keep going out as the text they were sent with.
+    // A command's payload goes out as the JSON value its sender gave, so a device reads fields from it
+    // (payload["on"]) as the protocol and every SDK sample say. The API takes the payload as text, so
+    // text that is not JSON (a plain word typed in the console) still goes out as a string.
+    // A platform command is always JSON: the management host builds it.
     private static object PayloadFor(ClientCommandEvent command)
     {
-        if (!MessageTypes.IsPlatformCommand(command.Type))
+        try
+        {
+            using var document = JsonDocument.Parse(command.Payload);
+            return document.RootElement.Clone();
+        }
+        catch (JsonException) when (!MessageTypes.IsPlatformCommand(command.Type))
         {
             return command.Payload;
         }
-
-        using var document = JsonDocument.Parse(command.Payload);
-        return document.RootElement.Clone();
     }
 }

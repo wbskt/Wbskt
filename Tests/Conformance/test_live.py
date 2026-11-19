@@ -125,7 +125,8 @@ async def test_live_a_command_is_acked_and_survives_a_throwing_handler(live_clie
     await harness.command("throw-next")
     await harness.expect("armed")
     first = await api("POST", f"/clients/{ref}/commands", {"type": "relay.set", "payload": json.dumps({"on": True})})
-    await harness.expect("message", type="relay.set", commandId=first["commandId"])
+    received = await harness.expect("message", type="relay.set", commandId=first["commandId"])
+    assert received["payload"] == {"on": True}
     second = await api("POST", f"/clients/{ref}/commands", {"type": "relay.set", "payload": json.dumps({"on": False})})
     await harness.expect("message", type="relay.set", commandId=second["commandId"])
 

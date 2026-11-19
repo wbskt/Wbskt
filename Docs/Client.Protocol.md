@@ -169,7 +169,10 @@ most 50 characters. Send `capabilities` again whenever either set changes.
 
 ### 4.3 Commands (server → client)
 
-A command is an ordinary message with a `type` that isn't reserved. If it carries `commandId`:
+A command is an ordinary message with a `type` that isn't reserved. Its `payload` is the JSON value
+whoever sent it gave, so `{"on": true}` sent from the API or a workflow arrives as that object, not as
+a string holding it. The API takes a command's payload as text: text that is not JSON (`lights on`)
+arrives as a JSON string. If it carries `commandId`:
 
 1. If `expiresAt` is present and in the past, **don't act on it**. Answer
    `sys.ack` `{ "commandId": "…", "type": "<the command's type>", "refused": "expired" }`.
