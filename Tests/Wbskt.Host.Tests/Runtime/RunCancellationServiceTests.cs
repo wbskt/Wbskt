@@ -525,7 +525,7 @@ public sealed class RunCancellationServiceTests
             WorkflowVersion = 1,
             TriggerNodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
             CorrelationKey = "corr-42",
-            Status = "Running",
+            Status = "Cancelling",
             StartedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
             CompletedAt = null,
             CancellationRequestedAt = null,

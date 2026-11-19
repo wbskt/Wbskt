@@ -1302,19 +1302,19 @@ public sealed class BranchLoopTests
         var cancellation = new RowAndTokenRunCancellationService { RowCancelled = true };
         var executor = new CountingContinueExecutor();
         var branchProvider = new RecordingBranchProvider(ChainNodeId(0));
-        BranchLoop loop = CreateChainLoop(branchProvider, executor, cancellation, checkInterval: 10);
+        BranchLoop loop = CreateChainLoop(branchProvider, executor, cancellation, checkInterval: 10, runStatus: "Cancelling");
 
         // Act
         await loop.RunAsync(42, 1001, reason, CancellationToken.None);
 
-        // Assert
+        // Assert: the row the dispatch read to start with answers; it is not read a second time.
         Assert.Equal(0, executor.CallCount);
-        Assert.Equal(1, cancellation.RowReads);
+        Assert.Equal(0, cancellation.RowReads);
         Assert.Equal(BranchStatus.Cancelled, branchProvider.CurrentBranch.Status);
     }
 
     [Fact]
-    public async Task The_run_row_is_read_on_the_first_step_and_then_once_every_interval()
+    public async Task The_run_row_is_read_once_every_interval_after_the_first_step()
     {
         // Arrange
         var cancellation = new RowAndTokenRunCancellationService();
@@ -1325,10 +1325,11 @@ public sealed class BranchLoopTests
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
 
-        // Assert: steps 0, 10 and 20 read the row; the 22 steps in between trust the token. (The
-        // 26th step finds no node and completes the branch without a read.)
+        // Assert: step 0 answers from the row the dispatch read to start with, steps 10 and 20 read it
+        // again, and the 22 steps in between trust the token. (The 26th step finds no node and
+        // completes the branch without a read.)
         Assert.Equal(25, executor.CallCount);
-        Assert.Equal(3, cancellation.RowReads);
+        Assert.Equal(2, cancellation.RowReads);
         Assert.True(branchProvider.SetCompletedCalled);
     }
 
@@ -1338,8 +1339,8 @@ public sealed class BranchLoopTests
     [InlineData(10)]
     public async Task A_cancel_written_to_the_run_row_mid_branch_is_seen_within_the_interval(int checkInterval)
     {
-        // Arrange: another host cancels the run while the first node runs, just after this dispatch's
-        // first row read. Nothing trips this host's token.
+        // Arrange: another host cancels the run while the first node runs, just after this dispatch
+        // read the row. Nothing trips this host's token.
         var cancellation = new RowAndTokenRunCancellationService();
         var executor = new CountingContinueExecutor(call =>
         {
@@ -1356,7 +1357,7 @@ public sealed class BranchLoopTests
 
         // Assert: the next row read, at step checkInterval, sees it, so the branch ran that many nodes.
         Assert.Equal(checkInterval, executor.CallCount);
-        Assert.Equal(2, cancellation.RowReads);
+        Assert.Equal(1, cancellation.RowReads);
         Assert.Equal(BranchStatus.Cancelled, branchProvider.CurrentBranch.Status);
         Assert.False(branchProvider.SetCompletedCalled);
     }
@@ -1382,7 +1383,7 @@ public sealed class BranchLoopTests
 
         // Assert
         Assert.Equal(3, executor.CallCount);
-        Assert.Equal(1, cancellation.RowReads);
+        Assert.Equal(0, cancellation.RowReads);
         Assert.Equal(BranchStatus.Cancelled, branchProvider.CurrentBranch.Status);
         Assert.Equal(ChainNodeId(3), branchProvider.CurrentBranch.NodeId);
     }
@@ -1407,7 +1408,7 @@ public sealed class BranchLoopTests
 
         // Assert: the node's Continue is turned into a Cancelled end, and the branch stays on it.
         Assert.Equal(2, executor.CallCount);
-        Assert.Equal(1, cancellation.RowReads);
+        Assert.Equal(0, cancellation.RowReads);
         Assert.Equal(BranchStatus.Cancelled, branchProvider.CurrentBranch.Status);
         Assert.Equal(ChainNodeId(1), branchProvider.CurrentBranch.NodeId);
     }
@@ -1420,7 +1421,8 @@ public sealed class BranchLoopTests
         INodeExecutor executor,
         IRunCancellationService cancellation,
         int checkInterval,
-        int nodeCount = 1)
+        int nodeCount = 1,
+        string runStatus = "Running")
     {
         TestNode[] nodes = Enumerable.Range(0, nodeCount)
             .Select(index => new TestNode { NodeId = ChainNodeId(index), Name = $"n{index}", Ports = Array.Empty<PortDefinition>(), KindValue = "test" })
@@ -1442,7 +1444,7 @@ public sealed class BranchLoopTests
         var runCounters = new StubRunCountersProvider();
         return TestBranchLoop.Create(
             branchProvider,
-            new StubRunProvider(),
+            new StubRunProvider(runStatus),
             runCounters,
             new RecordingBookmarkProvider(),
             new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),

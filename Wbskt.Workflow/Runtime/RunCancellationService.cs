@@ -58,6 +58,7 @@ internal sealed class RunCancellationService : IRunCancellationService
         // silent and inexplicable from the outside. (A parked run is still 'Running'; only its branch is
         // 'Waiting'.) Single status write (2.3): the reason/timestamp ride along with the transition
         // itself, so there's no follow-up UpdateStatusAsync call.
+        RunRow? current = null;
         bool transitioned = await _runProvider.TransitionStatusAsync(runId, RunStatus.Running, RunStatus.Cancelling, _clock.GetUtcNow().UtcDateTime, reason, ct)
             || await _runProvider.TransitionStatusAsync(runId, RunStatus.Failing, RunStatus.Cancelling, _clock.GetUtcNow().UtcDateTime, reason, ct);
 
@@ -66,8 +67,8 @@ internal sealed class RunCancellationService : IRunCancellationService
             // Not transitioning means either "already Cancelling" or "terminal". The first still gets the
             // cleanup below: a redelivered cancel command, or one sent while the run was already
             // cancelling, must not leave bookmarks or a waiting branch behind.
-            string currentStatus = (await _runProvider.GetByIdAsync(runId, ct)).Status;
-            if (!string.Equals(currentStatus, RunStatus.Cancelling, StringComparison.Ordinal))
+            current = await _runProvider.GetByIdAsync(runId, ct);
+            if (!string.Equals(current.Status, RunStatus.Cancelling, StringComparison.Ordinal))
             {
                 return false;
             }
@@ -80,7 +81,7 @@ internal sealed class RunCancellationService : IRunCancellationService
         }
 
         await StopRunWorkAsync(runId, ct);
-        await CancelChildRunsAsync(runId, "cancelled", ct);
+        await CancelChildRunsAsync(runId, current?.RefId, "cancelled", ct);
         return true;
     }
 
@@ -91,6 +92,7 @@ internal sealed class RunCancellationService : IRunCancellationService
         // Cancelled - in the console that read as if someone had pressed cancel. The status write
         // carries no reason, because the run row's reason column is the cancellation reason the
         // finalizer reads (OUT_OF_CREDITS); the failure's reason lives in the journal entry instead.
+        RunRow? current = null;
         bool transitioned = await _runProvider.TransitionStatusAsync(runId, RunStatus.Running, RunStatus.Failing, null, null, ct);
 
         if (!transitioned)
@@ -98,8 +100,8 @@ internal sealed class RunCancellationService : IRunCancellationService
             // Already 'Failing' (a second branch failing by the same rule, or recovery on a new
             // leader) still gets the cleanup below, like the already-Cancelling path of a cancel.
             // Anything else - 'Cancelling' or terminal - is already being stopped, or is over.
-            string currentStatus = (await _runProvider.GetByIdAsync(runId, ct)).Status;
-            if (!string.Equals(currentStatus, RunStatus.Failing, StringComparison.Ordinal))
+            current = await _runProvider.GetByIdAsync(runId, ct);
+            if (!string.Equals(current.Status, RunStatus.Failing, StringComparison.Ordinal))
             {
                 return false;
             }
@@ -114,7 +116,7 @@ internal sealed class RunCancellationService : IRunCancellationService
         // Failing the run used to only move its status: a sibling parked on a signal kept the run in
         // 'Failing' until the signal came or its TTL ran out, so "fail fast" was not fast at all.
         await StopRunWorkAsync(runId, ct);
-        await CancelChildRunsAsync(runId, "failed", ct);
+        await CancelChildRunsAsync(runId, current?.RefId, "failed", ct);
 
         return true;
     }
@@ -127,13 +129,13 @@ internal sealed class RunCancellationService : IRunCancellationService
     /// follow it. Best-effort per child: one that cannot be cancelled is logged and the rest go on,
     /// because the parent's stop has already happened and must not be reported as failed over a child.
     /// </summary>
-    private async Task CancelChildRunsAsync(long runId, string parentOutcome, CancellationToken ct)
+    private async Task CancelChildRunsAsync(long runId, Guid? knownRefId, string parentOutcome, CancellationToken ct)
     {
         IReadOnlyCollection<RunRow> children;
         Guid parentRefId;
         try
         {
-            parentRefId = (await _runProvider.GetByIdAsync(runId, ct)).RefId;
+            parentRefId = knownRefId ?? (await _runProvider.GetByIdAsync(runId, ct)).RefId;
             children = await _runProvider.GetActiveChildrenAsync(parentRefId, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -205,9 +207,6 @@ internal sealed class RunCancellationService : IRunCancellationService
         // 'Failing' counts too: a run only gets there through FailRunAsync, which stops its work, so a
         // branch that did not see the token (another host's, or one dispatched after a restart) must
         // stop as well rather than keep a failed run alive.
-        string status = (await _runProvider.GetByIdAsync(runId, ct)).Status;
-        return string.Equals(status, RunStatus.Cancelling, StringComparison.Ordinal)
-            || string.Equals(status, RunStatus.Cancelled, StringComparison.Ordinal)
-            || string.Equals(status, RunStatus.Failing, StringComparison.Ordinal);
+        return RunStatus.IsStopping((await _runProvider.GetByIdAsync(runId, ct)).Status);
     }
 }
