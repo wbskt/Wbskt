@@ -51,8 +51,11 @@ internal static class SqlGuardErrors
             // is not observable from outside.
             SqlException { Number: 50011 } => InvalidInvitation,
 
-            // A workspace that left the tenant after it was looked up reads like one that never was in it.
+            // A reference the write resolved itself (dbo.TenantReferences_Resolve, TenantInvitation_Create)
+            // that names nothing in the tenant, or a workspace that left it after it was looked up.
             SqlException { Number: 50017 } => TenantReferences.WorkspaceNotFound,
+            SqlException { Number: 50037 } => TenantReferences.UserNotFound,
+            SqlException { Number: 50038 } => TenantReferences.RoleNotFound,
 
             SqlException { Number: 50012 } => Error.Conflict("AUTH_ALREADY_MEMBER", "That user is already a member of this tenant."),
 

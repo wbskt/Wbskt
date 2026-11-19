@@ -1,13 +1,31 @@
 -- Removes a role assignment from a user at a scope (@WorkspaceId NULL = tenant-wide).
 CREATE PROCEDURE dbo.UserRole_Remove
-    @UserId INT,
-    @RoleId INT,
+    @UserId INT = NULL,
+    @RoleId INT = NULL,
     @TenantId INT,
-    @WorkspaceId INT = NULL
+    @WorkspaceId INT = NULL,
+    -- The public references, resolved here within @TenantId (dbo.TenantReferences_Resolve) in place
+    -- of the ids above, so the caller needs no lookup first. The ids stay for the host still running
+    -- during a rollout; remove them once no caller passes them.
+    @UserRefId UNIQUEIDENTIFIER = NULL,
+    @RoleRefId UNIQUEIDENTIFIER = NULL,
+    @WorkspaceRefId UNIQUEIDENTIFIER = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
+
+    IF @UserRefId IS NOT NULL
+    BEGIN
+        EXEC dbo.TenantReferences_Resolve
+            @TenantId = @TenantId,
+            @UserRefId = @UserRefId,
+            @RoleRefId = @RoleRefId,
+            @WorkspaceRefId = @WorkspaceRefId,
+            @UserId = @UserId OUTPUT,
+            @RoleId = @RoleId OUTPUT,
+            @WorkspaceId = @WorkspaceId OUTPUT;
+    END
 
     BEGIN TRANSACTION;
 

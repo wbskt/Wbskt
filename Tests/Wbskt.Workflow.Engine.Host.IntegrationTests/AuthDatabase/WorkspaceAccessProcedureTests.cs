@@ -23,7 +23,7 @@ public sealed class WorkspaceAccessProcedureTests(AuthSqlFixture fixture)
         var (inviteeId, email) = await CreateUserWithEmailAsync();
         byte[] tokenHash = RandomHash();
 
-        await CreateInvitationAsync(tenantId, email, tokenHash, ownerId, $"{named}");
+        await CreateInvitationAsync(tenantId, email, tokenHash, ownerId, named);
         await AcceptAsync(tokenHash, inviteeId);
 
         Assert.True(await IsWorkspaceMemberAsync(named, inviteeId));
@@ -40,10 +40,48 @@ public sealed class WorkspaceAccessProcedureTests(AuthSqlFixture fixture)
         int foreign = await CreateWorkspaceAsync(otherTenantId, otherOwnerId);
         var (_, email) = await CreateUserWithEmailAsync();
 
-        var ex = await Assert.ThrowsAsync<SqlException>(() => CreateInvitationAsync(tenantId, email, RandomHash(), ownerId, $"{foreign}"));
+        var ex = await Assert.ThrowsAsync<SqlException>(() => CreateInvitationAsync(tenantId, email, RandomHash(), ownerId, foreign));
 
         Assert.Equal(50017, ex.Number);
         Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.TenantInvitations WHERE TenantId = @p0", tenantId));
+    }
+
+    [SkippableFact]
+    public async Task A_role_assignment_by_reference_resolves_each_reference_in_the_tenant()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var (tenantId, ownerId) = await CreateTenantAsync();
+        var (otherTenantId, otherOwnerId) = await CreateTenantAsync();
+        int workspaceId = await CreateWorkspaceAsync(tenantId, ownerId);
+        int foreignWorkspaceId = await CreateWorkspaceAsync(otherTenantId, otherOwnerId);
+        int memberId = await CreateUserAsync();
+        await ExecAsync("INSERT INTO dbo.TenantMembers (TenantId, UserId) VALUES (@p0, @p1)", tenantId, memberId);
+        Guid memberRef = await ScalarAsync<Guid>("SELECT RefId FROM dbo.Users WHERE Id = @p0", memberId);
+        Guid outsiderRef = await ScalarAsync<Guid>("SELECT RefId FROM dbo.Users WHERE Id = @p0", otherOwnerId);
+        Guid roleRef = await ScalarAsync<Guid>("SELECT RefId FROM dbo.Roles WHERE TenantId = @p0 AND Kind = 'User'", tenantId);
+        Guid foreignRoleRef = await ScalarAsync<Guid>("SELECT RefId FROM dbo.Roles WHERE TenantId = @p0 AND Kind = 'User'", otherTenantId);
+        Guid workspaceRef = await ScalarAsync<Guid>("SELECT RefId FROM dbo.Workspaces WHERE Id = @p0", workspaceId);
+        Guid foreignWorkspaceRef = await ScalarAsync<Guid>("SELECT RefId FROM dbo.Workspaces WHERE Id = @p0", foreignWorkspaceId);
+
+        Assert.Equal(50037, (await Assert.ThrowsAsync<SqlException>(() => AssignRoleAsync(tenantId, outsiderRef, roleRef, null))).Number);
+        Assert.Equal(50038, (await Assert.ThrowsAsync<SqlException>(() => AssignRoleAsync(tenantId, memberRef, foreignRoleRef, null))).Number);
+        Assert.Equal(50017, (await Assert.ThrowsAsync<SqlException>(() => AssignRoleAsync(tenantId, memberRef, roleRef, foreignWorkspaceRef))).Number);
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.UserRoles WHERE UserId = @p0", memberId));
+
+        await AssignRoleAsync(tenantId, memberRef, roleRef, workspaceRef);
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.UserRoles WHERE UserId = @p0 AND TenantId = @p1 AND WorkspaceId = @p2", memberId, tenantId, workspaceId));
+
+        await using (var conn = await OpenAsync())
+        await using (var cmd = new SqlCommand("dbo.UserRole_Remove", conn) { CommandType = CommandType.StoredProcedure })
+        {
+            cmd.Parameters.AddWithValue("@TenantId", tenantId);
+            cmd.Parameters.AddWithValue("@UserRefId", memberRef);
+            cmd.Parameters.AddWithValue("@RoleRefId", roleRef);
+            cmd.Parameters.AddWithValue("@WorkspaceRefId", workspaceRef);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.UserRoles WHERE UserId = @p0", memberId));
     }
 
     [SkippableFact]
@@ -55,7 +93,7 @@ public sealed class WorkspaceAccessProcedureTests(AuthSqlFixture fixture)
         int deleted = await CreateWorkspaceAsync(tenantId, ownerId);
         var (inviteeId, email) = await CreateUserWithEmailAsync();
         byte[] tokenHash = RandomHash();
-        await CreateInvitationAsync(tenantId, email, tokenHash, ownerId, $"{kept},{deleted}");
+        await CreateInvitationAsync(tenantId, email, tokenHash, ownerId, kept, deleted);
 
         await ProcAsync("dbo.Workspace_Delete", ("@Id", deleted));
         await AcceptAsync(tokenHash, inviteeId);
@@ -265,8 +303,15 @@ public sealed class WorkspaceAccessProcedureTests(AuthSqlFixture fixture)
         return (id, email);
     }
 
-    private async Task CreateInvitationAsync(int tenantId, string email, byte[] tokenHash, int invitedBy, string workspaceIds)
+    // Names the workspaces by reference, as the auth host does; the procedure resolves them in the tenant.
+    private async Task CreateInvitationAsync(int tenantId, string email, byte[] tokenHash, int invitedBy, params int[] workspaceIds)
     {
+        var workspaceRefs = new List<Guid>();
+        foreach (int workspaceId in workspaceIds)
+        {
+            workspaceRefs.Add(await ScalarAsync<Guid>("SELECT RefId FROM dbo.Workspaces WHERE Id = @p0", workspaceId));
+        }
+
         await using var conn = await OpenAsync();
         await using var cmd = new SqlCommand("dbo.TenantInvitation_Create", conn) { CommandType = CommandType.StoredProcedure };
         cmd.Parameters.AddWithValue("@TenantId", tenantId);
@@ -277,7 +322,18 @@ public sealed class WorkspaceAccessProcedureTests(AuthSqlFixture fixture)
         cmd.Parameters.AddWithValue("@InvitedByUserId", invitedBy);
         cmd.Parameters.Add("@RefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
         cmd.Parameters.Add("@TenantName", SqlDbType.NVarChar, 100).Direction = ParameterDirection.Output;
-        cmd.Parameters.AddWithValue("@WorkspaceIds", workspaceIds);
+        cmd.Parameters.AddWithValue("@WorkspaceRefIds", System.Text.Json.JsonSerializer.Serialize(workspaceRefs));
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private async Task AssignRoleAsync(int tenantId, Guid userRef, Guid roleRef, Guid? workspaceRef)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = new SqlCommand("dbo.UserRole_Assign", conn) { CommandType = CommandType.StoredProcedure };
+        cmd.Parameters.AddWithValue("@TenantId", tenantId);
+        cmd.Parameters.AddWithValue("@UserRefId", userRef);
+        cmd.Parameters.AddWithValue("@RoleRefId", roleRef);
+        cmd.Parameters.AddWithValue("@WorkspaceRefId", (object?)workspaceRef ?? DBNull.Value);
         await cmd.ExecuteNonQueryAsync();
     }
 

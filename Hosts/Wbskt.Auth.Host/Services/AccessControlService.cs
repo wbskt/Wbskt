@@ -273,33 +273,19 @@ internal sealed class AccessControlService : IAccessControlService
     public Task<Result> RemoveGroupRoleAsync(int tenantId, Guid groupRef, Guid roleRef, Guid? workspaceRef, CancellationToken cancellationToken = default)
         => ChangeGroupRoleAsync(tenantId, groupRef, roleRef, workspaceRef, assign: false, cancellationToken);
 
+    // The procedures resolve the three references within the tenant themselves, and a miss comes back
+    // as that reference's 404 through SqlGuardErrors, so there is no lookup round trip first.
     private async Task<Result> ChangeUserRoleAsync(int tenantId, Guid userRef, Guid roleRef, Guid? workspaceRef, bool assign, CancellationToken cancellationToken)
     {
-        if (await _tenants.FindUserIdByRefIdInTenantAsync(userRef, tenantId, cancellationToken) is not { } userId)
-        {
-            return Result.Failure(TenantReferences.UserNotFound);
-        }
-
-        if (await _accessControl.FindRoleIdByRefIdAsync(roleRef, tenantId, cancellationToken) is not { } roleId)
-        {
-            return Result.Failure(TenantReferences.RoleNotFound);
-        }
-
-        var workspace = await ResolveWorkspaceScopeAsync(tenantId, workspaceRef, cancellationToken);
-        if (workspace.IsFailure)
-        {
-            return Result.Failure(workspace.Error);
-        }
-
         return await GuardAsync(assign ? "AssignUserRole" : "RemoveUserRole", async () =>
         {
             if (assign)
             {
-                await _accessControl.AssignUserRoleAsync(userId, roleId, tenantId, workspace.Value, cancellationToken);
+                await _accessControl.AssignUserRoleAsync(userRef, roleRef, tenantId, workspaceRef, cancellationToken);
             }
             else
             {
-                await _accessControl.RemoveUserRoleAsync(userId, roleId, tenantId, workspace.Value, cancellationToken);
+                await _accessControl.RemoveUserRoleAsync(userRef, roleRef, tenantId, workspaceRef, cancellationToken);
             }
 
             _announcer.AccessChanged();

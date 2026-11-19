@@ -239,25 +239,25 @@ internal sealed class AccessControlProvider : BaseSqlProvider, IAccessControlPro
         }, cancellationToken);
     }
 
-    public async Task AssignUserRoleAsync(int userId, int roleId, int tenantId, int? workspaceId, CancellationToken cancellationToken = default)
+    public async Task AssignUserRoleAsync(Guid userRef, Guid roleRef, int tenantId, Guid? workspaceRef, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.UserRole_Assign", p =>
         {
-            p.AddWithValue("@UserId", userId);
-            p.AddWithValue("@RoleId", roleId);
+            p.AddWithValue("@UserRefId", userRef);
+            p.AddWithValue("@RoleRefId", roleRef);
             p.AddWithValue("@TenantId", tenantId);
-            p.AddWithValue("@WorkspaceId", workspaceId ?? (object)DBNull.Value);
+            p.AddWithValue("@WorkspaceRefId", workspaceRef ?? (object)DBNull.Value);
         }, cancellationToken);
     }
 
-    public async Task RemoveUserRoleAsync(int userId, int roleId, int tenantId, int? workspaceId, CancellationToken cancellationToken = default)
+    public async Task RemoveUserRoleAsync(Guid userRef, Guid roleRef, int tenantId, Guid? workspaceRef, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.UserRole_Remove", p =>
         {
-            p.AddWithValue("@UserId", userId);
-            p.AddWithValue("@RoleId", roleId);
+            p.AddWithValue("@UserRefId", userRef);
+            p.AddWithValue("@RoleRefId", roleRef);
             p.AddWithValue("@TenantId", tenantId);
-            p.AddWithValue("@WorkspaceId", workspaceId ?? (object)DBNull.Value);
+            p.AddWithValue("@WorkspaceRefId", workspaceRef ?? (object)DBNull.Value);
         }, cancellationToken);
     }
 

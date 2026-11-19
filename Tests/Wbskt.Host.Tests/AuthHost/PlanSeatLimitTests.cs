@@ -196,7 +196,7 @@ public sealed class PlanSeatLimitTests
     [Fact]
     public async Task An_invitation_is_issued_under_the_plans_member_limit()
     {
-        _tenants.Setup(p => p.CreateInvitationAsync(TenantId, "amal@example.test", null, It.IsAny<byte[]>(), It.IsAny<DateTime>(), CallerId, It.IsAny<IReadOnlyCollection<int>>(), 4, It.IsAny<CancellationToken>()))
+        _tenants.Setup(p => p.CreateInvitationAsync(TenantId, "amal@example.test", null, It.IsAny<byte[]>(), It.IsAny<DateTime>(), CallerId, It.IsAny<IReadOnlyCollection<Guid>>(), 4, It.IsAny<CancellationToken>()))
             .ThrowsAsync(SqlExceptions.WithNumber(50031, "The plan has reached its member limit."));
 
         var result = await Tenants().CreateInvitationAsync(CallerId, TenantId, new CreateInvitationRequest("amal@example.test"));
@@ -246,7 +246,7 @@ public sealed class PlanSeatLimitTests
         bus ?? Mock.Of<IEventBus>(), NullLogger<WorkspaceService>.Instance, new AuthMetrics(), new FixedTenantLimits(Limits), WorkspaceFakes.Created());
 
     private TenantService Tenants() => new(
-        _tenants.Object, Mock.Of<IAccessControlProvider>(), _workspaces.Object, Mock.Of<IEventBus>(), Mock.Of<IAuthMailer>(),
+        _tenants.Object, Mock.Of<IAccessControlProvider>(), Mock.Of<IEventBus>(), Mock.Of<IAuthMailer>(),
         NullLogger<TenantService>.Instance, new FixedTenantLimits(Limits),
         new TenantAnnouncer(Mock.Of<IEventBus>(), AuditWorkspaces.None, new RecordingAccessChanges().Changes, NullLogger<TenantAnnouncer>.Instance), TimeProvider.System, WorkspaceFakes.Created());
 }

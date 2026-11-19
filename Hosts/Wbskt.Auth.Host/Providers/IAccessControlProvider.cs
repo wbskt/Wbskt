@@ -40,8 +40,12 @@ internal interface IAccessControlProvider
     Task GrantUserPermissionAsync(int userId, string permissionSlug, bool isDeny, int tenantId, int? workspaceId, CancellationToken cancellationToken = default);
     Task RemoveUserPermissionAsync(int userId, string permissionSlug, int tenantId, int? workspaceId, CancellationToken cancellationToken = default);
 
-    Task AssignUserRoleAsync(int userId, int roleId, int tenantId, int? workspaceId, CancellationToken cancellationToken = default);
-    Task RemoveUserRoleAsync(int userId, int roleId, int tenantId, int? workspaceId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Takes the public references and resolves them within the tenant in the same call. Throws 50037
+    /// for a user who is not a member, 50038 for an unknown role and 50017 for an unknown workspace.
+    /// </summary>
+    Task AssignUserRoleAsync(Guid userRef, Guid roleRef, int tenantId, Guid? workspaceRef, CancellationToken cancellationToken = default);
+    Task RemoveUserRoleAsync(Guid userRef, Guid roleRef, int tenantId, Guid? workspaceRef, CancellationToken cancellationToken = default);
     Task AssignGroupRoleAsync(int groupId, int roleId, int tenantId, int? workspaceId, CancellationToken cancellationToken = default);
     Task RemoveGroupRoleAsync(int groupId, int roleId, int tenantId, int? workspaceId, CancellationToken cancellationToken = default);
 

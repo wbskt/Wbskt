@@ -40,7 +40,7 @@ public sealed class TenantServiceTests
         _accounts.Setup(p => p.FindByIdAsync(MemberId, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = MemberId, RefId = MemberRef });
 
         _service = new TenantService(
-            _tenants.Object, _accessControl.Object, _workspaces.Object, _bus, Mock.Of<IAuthMailer>(),
+            _tenants.Object, _accessControl.Object, _bus, Mock.Of<IAuthMailer>(),
             NullLogger<TenantService>.Instance, new FixedTenantLimits(),
             new TenantAnnouncer(_bus, AuditWorkspaces.None, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance), TimeProvider.System, WorkspaceFakes.Created());
     }
@@ -78,7 +78,7 @@ public sealed class TenantServiceTests
         // An unknown reference is refused the same, so the answer says nothing about whether it exists.
         var unknown = await _service.CreateInvitationAsync(CallerId, TenantId, new CreateInvitationRequest("lead+3@example.test", Guid.NewGuid()));
         Assert.Equal(withRole.Error, unknown.Error);
-        _tenants.Verify(p => p.CreateInvitationAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _tenants.Verify(p => p.CreateInvitationAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -88,7 +88,7 @@ public sealed class TenantServiceTests
         _accessControl.Setup(p => p.FindRoleIdByRefIdAsync(userRoleRef, TenantId, It.IsAny<CancellationToken>())).ReturnsAsync(4);
         _accessControl.Setup(p => p.FindUserRoleIdAsync(TenantId, It.IsAny<CancellationToken>())).ReturnsAsync(4);
         _accessControl.Setup(p => p.VerifyPermissionAsync(CallerId, TenantId, null, PermissionNames.RolesManage, It.IsAny<CancellationToken>())).ReturnsAsync(false);
-        _tenants.Setup(p => p.CreateInvitationAsync(TenantId, "member@example.test", 4, It.IsAny<byte[]>(), It.IsAny<DateTime>(), CallerId, It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+        _tenants.Setup(p => p.CreateInvitationAsync(TenantId, "member@example.test", 4, It.IsAny<byte[]>(), It.IsAny<DateTime>(), CallerId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CreatedInvitation(Guid.NewGuid(), "Acme"));
 
         var result = await _service.CreateInvitationAsync(CallerId, TenantId, new CreateInvitationRequest("member@example.test", userRoleRef));
@@ -102,7 +102,7 @@ public sealed class TenantServiceTests
         var adminRef = Guid.NewGuid();
         _accessControl.Setup(p => p.FindRoleIdByRefIdAsync(adminRef, TenantId, It.IsAny<CancellationToken>())).ReturnsAsync(3);
         _accessControl.Setup(p => p.VerifyPermissionAsync(CallerId, TenantId, null, PermissionNames.RolesManage, It.IsAny<CancellationToken>())).ReturnsAsync(true);
-        _tenants.Setup(p => p.CreateInvitationAsync(TenantId, "new@example.test", 3, It.IsAny<byte[]>(), It.IsAny<DateTime>(), CallerId, It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+        _tenants.Setup(p => p.CreateInvitationAsync(TenantId, "new@example.test", 3, It.IsAny<byte[]>(), It.IsAny<DateTime>(), CallerId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CreatedInvitation(Guid.NewGuid(), "Acme"));
 
         var result = await _service.CreateInvitationAsync(CallerId, TenantId, new CreateInvitationRequest("new@example.test", adminRef));
@@ -229,10 +229,17 @@ public sealed class TenantServiceTests
     [Fact]
     public async Task An_invitation_naming_an_unknown_workspace_is_refused()
     {
-        var result = await _service.CreateInvitationAsync(CallerId, TenantId, new CreateInvitationRequest("amal@example.test", WorkspaceRefs: [Guid.NewGuid()]));
+        var unknown = Guid.NewGuid();
+        _tenants.Setup(p => p.CreateInvitationAsync(
+                TenantId, "amal@example.test", null, It.IsAny<byte[]>(), It.IsAny<DateTime>(), CallerId,
+                It.Is<IReadOnlyCollection<Guid>>(refs => refs.SequenceEqual(new[] { unknown })), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(SqlExceptions.WithNumber(50017, "Workspace does not belong to the specified tenant."));
+
+        var result = await _service.CreateInvitationAsync(CallerId, TenantId, new CreateInvitationRequest("amal@example.test", WorkspaceRefs: [unknown, unknown]));
 
         Assert.Equal("WORKSPACE_NOT_FOUND", result.Error.Code);
-        AssertNoInvitationCreated();
+        Assert.Equal(ErrorType.NotFound, result.Error.Type);
+        Assert.Empty(_bus.Published);
     }
 
     [Fact]
@@ -267,7 +274,7 @@ public sealed class TenantServiceTests
     {
         _tenants.Verify(p => p.CreateInvitationAsync(
             It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<int>(),
-            It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
         Assert.Empty(_bus.Published);
     }
 

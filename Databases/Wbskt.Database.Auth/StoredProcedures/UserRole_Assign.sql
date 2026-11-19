@@ -1,12 +1,30 @@
 -- Assigns a role to a user at a scope (@WorkspaceId NULL = tenant-wide). Idempotent.
 CREATE PROCEDURE dbo.UserRole_Assign
-    @UserId INT,
-    @RoleId INT,
+    @UserId INT = NULL,
+    @RoleId INT = NULL,
     @TenantId INT,
-    @WorkspaceId INT = NULL
+    @WorkspaceId INT = NULL,
+    -- The public references, resolved here within @TenantId (dbo.TenantReferences_Resolve) in place
+    -- of the ids above, so the caller needs no lookup first. The ids stay for the host still running
+    -- during a rollout; remove them once no caller passes them.
+    @UserRefId UNIQUEIDENTIFIER = NULL,
+    @RoleRefId UNIQUEIDENTIFIER = NULL,
+    @WorkspaceRefId UNIQUEIDENTIFIER = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+
+    IF @UserRefId IS NOT NULL
+    BEGIN
+        EXEC dbo.TenantReferences_Resolve
+            @TenantId = @TenantId,
+            @UserRefId = @UserRefId,
+            @RoleRefId = @RoleRefId,
+            @WorkspaceRefId = @WorkspaceRefId,
+            @UserId = @UserId OUTPUT,
+            @RoleId = @RoleId OUTPUT,
+            @WorkspaceId = @WorkspaceId OUTPUT;
+    END
 
     IF NOT EXISTS (SELECT 1 FROM dbo.Roles WHERE Id = @RoleId AND TenantId = @TenantId)
     BEGIN
