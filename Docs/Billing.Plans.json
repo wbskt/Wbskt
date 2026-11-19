@@ -1,0 +1,93 @@
+{
+  "plans": [
+    {
+      "plan": "Free",
+      "limits": {
+        "clients": 20,
+        "messagesPerMonth": 1500000,
+        "creditsPerMonth": 2000,
+        "activeRuns": 20,
+        "workspaces": 1,
+        "members": 1,
+        "rawReadingsDays": 3,
+        "hourlyReadingsDays": 30,
+        "runHistoryDays": 7
+      },
+      "pricesUsd": {}
+    },
+    {
+      "plan": "Maker",
+      "limits": {
+        "clients": 100,
+        "messagesPerMonth": 10000000,
+        "creditsPerMonth": 25000,
+        "activeRuns": 100,
+        "workspaces": 3,
+        "members": 3,
+        "rawReadingsDays": 7,
+        "hourlyReadingsDays": 365,
+        "runHistoryDays": 14
+      },
+      "pricesUsd": {
+        "monthly": 5,
+        "yearly": 50
+      }
+    },
+    {
+      "plan": "Pro",
+      "limits": {
+        "clients": 500,
+        "messagesPerMonth": 50000000,
+        "creditsPerMonth": 150000,
+        "activeRuns": 200,
+        "workspaces": 10,
+        "members": 10,
+        "rawReadingsDays": 7,
+        "hourlyReadingsDays": 730,
+        "runHistoryDays": 30
+      },
+      "pricesUsd": {
+        "monthly": 24,
+        "yearly": 240
+      }
+    },
+    {
+      "plan": "Team",
+      "limits": {
+        "clients": 2000,
+        "messagesPerMonth": 200000000,
+        "creditsPerMonth": 600000,
+        "activeRuns": 200,
+        "workspaces": 25,
+        "members": 25,
+        "rawReadingsDays": 7,
+        "hourlyReadingsDays": 730,
+        "runHistoryDays": 30
+      },
+      "pricesUsd": {
+        "monthly": 99,
+        "yearly": 990
+      }
+    },
+    {
+      "plan": "Business",
+      "limits": {
+        "clients": 2000,
+        "messagesPerMonth": 200000000,
+        "creditsPerMonth": 600000,
+        "activeRuns": 200,
+        "workspaces": 50,
+        "members": 50,
+        "rawReadingsDays": 90,
+        "hourlyReadingsDays": 730,
+        "runHistoryDays": 90
+      },
+      "pricesUsd": {}
+    }
+  ],
+  "business": {
+    "minimumClients": 2000,
+    "usdPerMillionExtraMessages": 1,
+    "usdPerThousandExtraCredits": 0.50
+  }
+}
