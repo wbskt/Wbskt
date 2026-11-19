@@ -2003,7 +2003,7 @@
             "type": "string"
           },
           "isRequired": {
-            "default": true,
+            "default": false,
             "type": "boolean"
           },
           "label": {
