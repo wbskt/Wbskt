@@ -119,4 +119,52 @@ public sealed class PolicyChangeEventTests
         _provider.Verify(p => p.UpdateAsync(WorkspaceId, 5, new UpdateRegistrationPolicyRequest(null, null, null, false, false), It.IsAny<CancellationToken>()), Times.Once);
         _published.Should().ContainSingle().Which.Should().BeOfType<PolicyDisabledEvent>();
     }
+
+    [Theory]
+    [InlineData("   ", null, "POLICY_NAME_REQUIRED")]
+    [InlineData("lab", 0, "POLICY_LIMIT_INVALID")]
+    [InlineData("lab", -3, "POLICY_LIMIT_INVALID")]
+    public async Task A_create_with_a_blank_name_or_a_limit_below_one_is_refused(string name, int? maxClients, string code)
+    {
+        var service = CreateService(Policy("lab", 10, enabled: true), Policy("lab", 10, enabled: true));
+
+        var result = await service.CreateAsync(WorkspaceId, new RegistrationPolicyRequest(name, maxClients));
+
+        result.Error.Code.Should().Be(code);
+        _provider.Verify(p => p.InsertAsync(It.IsAny<int>(), It.IsAny<RegistrationPolicyRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_name_over_100_characters_is_refused_rather_than_cut()
+    {
+        var service = CreateService(Policy("lab", 10, enabled: true), Policy("lab", 10, enabled: true));
+
+        var created = await service.CreateAsync(WorkspaceId, new RegistrationPolicyRequest(new string('a', 101), null));
+        var updated = await service.UpdateAsync(WorkspaceId, PolicyRef, new UpdateRegistrationPolicyRequest(Name: new string('a', 101)));
+
+        created.Error.Code.Should().Be("POLICY_NAME_TOO_LONG");
+        updated.Error.Code.Should().Be("POLICY_NAME_TOO_LONG");
+        _provider.Verify(p => p.UpdateAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<UpdateRegistrationPolicyRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task An_update_lowering_the_limit_below_one_is_refused()
+    {
+        var service = CreateService(Policy("lab", 10, enabled: true), Policy("lab", 10, enabled: true));
+
+        var result = await service.UpdateAsync(WorkspaceId, PolicyRef, new UpdateRegistrationPolicyRequest(MaxClients: 0));
+
+        result.Error.Code.Should().Be("POLICY_LIMIT_INVALID");
+        _provider.Verify(p => p.UpdateAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<UpdateRegistrationPolicyRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_policy_name_is_stored_trimmed()
+    {
+        var service = CreateService(Policy("lab", 10, enabled: true), Policy("garden", 10, enabled: true));
+
+        await service.UpdateAsync(WorkspaceId, PolicyRef, new UpdateRegistrationPolicyRequest(Name: "  garden "));
+
+        _provider.Verify(p => p.UpdateAsync(WorkspaceId, 5, It.Is<UpdateRegistrationPolicyRequest>(r => r.Name == "garden"), It.IsAny<CancellationToken>()), Times.Once);
+    }
 }

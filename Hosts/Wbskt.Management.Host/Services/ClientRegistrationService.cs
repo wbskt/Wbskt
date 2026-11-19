@@ -75,6 +75,13 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
             return Result<ClientRegistrationResponse>.Failure(Error.Validation("REGISTRATION_PIN_REQUIRED", "Registration PIN is required."));
         }
 
+        // A name the column cannot hold would be cut by SQL without a word, so it is refused here.
+        if (EntityNames.Normalize(request.Name) is not { } name)
+        {
+            _logger.LogWarning("Client registration failed: the name is blank or longer than {MaxLength} characters", EntityNames.MaxLength);
+            return Result<ClientRegistrationResponse>.Failure(ClientLifecycleService.NameInvalid);
+        }
+
         var policy = await _policyProvider.FindByPinAsync(request.Pin, cancellationToken);
         if (policy is null)
         {
@@ -86,7 +93,7 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
         if (!policy.IsEnabled)
         {
             _logger.LogWarning("Client registration failed: Policy '{PolicyName}' is disabled", policy.Name);
-            await _eventBus.PublishAsync(new PolicyRegistrationAttemptedOnDisabledEvent(policy.RefId, policy.Id, policy.WorkspaceId, request.Name), cancellationToken);
+            await _eventBus.PublishAsync(new PolicyRegistrationAttemptedOnDisabledEvent(policy.RefId, policy.Id, policy.WorkspaceId, name), cancellationToken);
             return Result<ClientRegistrationResponse>.Failure(Error.Forbidden("POLICY_DISABLED", "This registration policy is currently disabled."));
         }
 
@@ -116,7 +123,7 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
         Client client;
         try
         {
-            client = await _clientProvider.InsertClientAsync(policy.WorkspaceId, policy.Id, request.Name, ClientSecrets.Hash(secret), initialStatus, ceiling, cancellationToken);
+            client = await _clientProvider.InsertClientAsync(policy.WorkspaceId, policy.Id, name, ClientSecrets.Hash(secret), initialStatus, ceiling, cancellationToken);
         }
         catch (SqlException ex) when (ex.Number == AccountFrozenError)
         {
@@ -127,7 +134,7 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
         {
             _logger.LogWarning("Client registration failed: WorkspaceId {WorkspaceId} is at its plan's limit of {MaxClients} clients", policy.WorkspaceId, ceiling.Limit);
             int current = await _clientProvider.GetRegisteredCountByAccountAsync(policy.WorkspaceId, plan.TenantId, cancellationToken);
-            await _eventBus.PublishAsync(new PlanClientLimitReachedEvent(policy.RefId, policy.Id, policy.WorkspaceId, plan.PlanCode.ToString(), plan.Limits.Clients, current, Guid.Empty, request.Name), cancellationToken);
+            await _eventBus.PublishAsync(new PlanClientLimitReachedEvent(policy.RefId, policy.Id, policy.WorkspaceId, plan.PlanCode.ToString(), plan.Limits.Clients, current, Guid.Empty, name), cancellationToken);
             return Result<ClientRegistrationResponse>.Failure(PlanLimitReached(plan, current));
         }
         catch (SqlException ex) when (ex.Number == PolicyLimitReachedError && policy.MaxClients.HasValue)
@@ -139,7 +146,7 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
             return Result<ClientRegistrationResponse>.Failure(Error.Validation("POLICY_LIMIT_REACHED", "Policy registration limit reached."));
         }
 
-        _logger.LogInformation("Client '{ClientName}' record created with status: '{ClientStatus}'", request.Name, initialStatus);
+        _logger.LogInformation("Client '{ClientName}' record created with status: '{ClientStatus}'", name, initialStatus);
 
         await _eventBus.PublishAsync(new ClientRegistrationInitiatedEvent(client.RefId, client.Id, policy.RefId, policy.Id, client.WorkspaceId, client.Name), cancellationToken);
 

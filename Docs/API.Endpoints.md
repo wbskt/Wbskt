@@ -454,8 +454,8 @@ approval is automatic or manual.
 |---|---|---|
 | `GET /` | `policies.read` | Lists policies, filterable by `autoApproval` and `name`, each enriched with its registered and connected client counts. |
 | `GET {policyRef}` | `policies.read` | One policy, after verifying it belongs to the workspace. |
-| `POST /` | `policies.manage` | Creates a policy. The enrolment PIN is generated server-side, not supplied by the caller. |
-| `PATCH {policyRef}` | `policies.manage` | Changes any of `name`, `maxClients`, `autoApproval` and `isEnabled`; a field left out keeps its value, and a request naming none is `400 POLICY_UPDATE_EMPTY`. `removeMaxClients: true` makes the policy unlimited (a `null` `maxClients` means "leave it"), and sending it with `maxClients` is `400 POLICY_LIMIT_AMBIGUOUS`. A limit below the clients already registered is `400 POLICY_LIMIT_CONFLICT`. Disabling stops the policy accepting new registrations and leaves registered clients as they are; `isEnabled: true` turns it back on. |
+| `POST /` | `policies.manage` | Creates a policy. The enrolment PIN is generated server-side, not supplied by the caller. The name is trimmed: a blank one is `400 POLICY_NAME_REQUIRED`, one over 100 characters `400 POLICY_NAME_TOO_LONG`. A `maxClients` below 1 is `400 POLICY_LIMIT_INVALID`; leave it out for no limit. |
+| `PATCH {policyRef}` | `policies.manage` | Changes any of `name`, `maxClients`, `autoApproval` and `isEnabled`; a field left out keeps its value, and a request naming none is `400 POLICY_UPDATE_EMPTY`. `removeMaxClients: true` makes the policy unlimited (a `null` `maxClients` means "leave it"), and sending it with `maxClients` is `400 POLICY_LIMIT_AMBIGUOUS`. A limit below the clients already registered is `400 POLICY_LIMIT_CONFLICT`. Names and limits are checked as on create. Disabling stops the policy accepting new registrations and leaves registered clients as they are; `isEnabled: true` turns it back on. |
 | `POST {policyRef}/rotate-pin` | `policies.manage` | Replaces the PIN and returns the policy with the new one. The old PIN stops registering clients; already-registered clients are unaffected. |
 | `DELETE {policyRef}` | `policies.manage` | Deletes a policy no client is enrolled through, in any status; otherwise `409 POLICY_HAS_CLIENTS` with the count. Templates pinned to it are unpinned and stay in the workspace; its event-log history is kept. Raises `PolicyDeletedEvent`. |
 
@@ -625,7 +625,7 @@ them too, and take over while no client-auth instance is healthy (see deploy/REA
 
 | Endpoint | What it does |
 |---|---|
-| `POST api/v1/client-registrations/initiate` | A client presents a policy PIN and a name; gets back its `RefId` and secret. Auto-approval policies return it registered, otherwise it waits for an operator. |
+| `POST api/v1/client-registrations/initiate` | A client presents a policy PIN and a name; gets back its `RefId` and secret. Auto-approval policies return it registered, otherwise it waits for an operator. The name is trimmed, and a blank one or one over 100 characters is `400 CLIENT_NAME_INVALID`. |
 | `POST api/v1/client-auth/login` | A client exchanges its `RefId` + secret for a short-lived access token, which it then presents to the WebSocket gateway. |
 
 ### 2.10 Public workflow callbacks (anonymous)
