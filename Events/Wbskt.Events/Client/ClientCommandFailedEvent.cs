@@ -17,4 +17,7 @@ public sealed record ClientCommandFailedEvent(Guid ClientRefId, int ClientId, in
 
     /// <summary>The reason given for a waiting command whose client was revoked.</summary>
     public const string RevokedWhileQueuedReason = "The client was revoked before it came back.";
+
+    /// <summary>The reason given for a waiting command whose client was deleted.</summary>
+    public const string DeletedWhileQueuedReason = "The client was deleted before it came back.";
 }

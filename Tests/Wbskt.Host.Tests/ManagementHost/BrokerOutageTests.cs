@@ -130,6 +130,7 @@ public sealed class BrokerOutageTests
             services.AddSingleton(Mock.Of<IClientTokenCutoffs>());
             services.AddSingleton<IWorkspacePlans>(new FixedWorkspacePlans());
             services.AddSingleton<Wbskt.Management.Host.Telemetry.ManagementMetrics>();
+            services.AddSingleton(TestClientCommands.Queue(new InMemoryQueuedCommandStore(), Mock.Of<Wbskt.Infrastructure.Clients.IClientCommandTargetProvider>(), _bus.Object));
             services.AddQueuedEventBus();
             services.AddScopedWithQueuedEvents<IClientLifecycleService, ClientLifecycleService>();
             services.AddScopedWithQueuedEvents<IClientRegistrationService, ClientRegistrationService>();
