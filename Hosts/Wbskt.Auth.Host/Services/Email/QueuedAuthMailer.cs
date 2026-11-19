@@ -37,6 +37,12 @@ internal sealed class QueuedAuthMailer(
     public ValueTask QueueEmailChangeConflictAsync(string to, string username, CancellationToken ct) =>
         Enqueue(AuthEmailTemplates.EmailChangeConflict(_options, to, username), nameof(QueueEmailChangeConflictAsync));
 
+    public ValueTask QueuePasswordChangedAsync(string to, string username, string how, DateTime atUtc, string ipAddress, CancellationToken ct) =>
+        Enqueue(AuthEmailTemplates.PasswordChanged(_options, to, username, how, atUtc, ipAddress), nameof(QueuePasswordChangedAsync));
+
+    public ValueTask QueueAccountLockedAsync(string to, string username, DateTime lockedUntilUtc, string ipAddress, CancellationToken ct) =>
+        Enqueue(AuthEmailTemplates.AccountLocked(_options, to, username, lockedUntilUtc, ipAddress), nameof(QueueAccountLockedAsync));
+
     public ValueTask QueueEmailChangedAsync(string to, string username, string newEmail, string revertToken, DateTime expiresAtUtc, CancellationToken ct) =>
         Enqueue(AuthEmailTemplates.EmailChanged(_options, to, username, newEmail, revertToken, expiresAtUtc), nameof(QueueEmailChangedAsync));
 

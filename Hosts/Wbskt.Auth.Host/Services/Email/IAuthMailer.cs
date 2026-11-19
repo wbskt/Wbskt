@@ -35,6 +35,14 @@ internal interface IAuthMailer
     /// </summary>
     ValueTask QueueEmailChangeConflictAsync(string to, string username, CancellationToken ct);
 
+    /// Tells the owner their password was <paramref name="how"/> (changed or reset), when and from
+    /// where, with the way to reset it if they did not.
+    /// </summary>
+    ValueTask QueuePasswordChangedAsync(string to, string username, string how, DateTime atUtc, string ipAddress, CancellationToken ct);
+
+    /// <summary>Tells the owner wrong passwords locked their account until <paramref name="lockedUntilUtc"/>, and how to get back in.</summary>
+    ValueTask QueueAccountLockedAsync(string to, string username, DateTime lockedUntilUtc, string ipAddress, CancellationToken ct);
+
     /// <summary>Tells the old address the account moved to <paramref name="newEmail"/>, with the link that undoes it.</summary>
     ValueTask QueueEmailChangedAsync(string to, string username, string newEmail, string revertToken, DateTime expiresAtUtc, CancellationToken ct);
 }

@@ -217,7 +217,10 @@ Each account is locked for 15 minutes after 10 wrong passwords, counted across s
 `change-password` and wherever they come from — the per-IP limiter cannot see a guesser spread over
 many addresses. While locked, sign-in answers exactly as for a wrong password, so a lock does not
 confirm the address has an account. A successful sign-in resets the count; a password reset or
-change lifts a lock. Sessions issued before the lock keep working.
+change lifts a lock. Sessions issued before the lock keep working. The failure that locks the account
+mails its owner (when, from which IP, and a link to reset), at most once an hour and outside the
+per-address hourly mail limit, so it never uses up the owner's reset mail. A password
+change or reset also mails the owner, with the time, the IP and a link to reset if it was not them.
 
 A lock does not keep out a browser the account signed in from before, so a stranger who knows the
 address cannot lock the owner out by guessing. A sign-in in the cookie transport also sets

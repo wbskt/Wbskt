@@ -205,6 +205,71 @@ public sealed class AccountRecoveryTests
     }
 
     [Fact]
+    public async Task A_reset_tells_the_owner_their_password_was_reset()
+    {
+        var harness = new Harness();
+        harness.Accounts
+            .Setup(p => p.ConsumePasswordResetTokenAsync(It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(42);
+
+        await harness.Passwords.ResetPasswordAsync("token", "a new long password", "10.0.0.1");
+
+        Assert.Equal("password-reset:someone@example.test", Assert.Single(harness.Mailer.Sent));
+    }
+
+    [Fact]
+    public async Task A_change_tells_the_owner_their_password_was_changed()
+    {
+        var harness = new Harness();
+
+        var result = await harness.Passwords.ChangePasswordAsync(42, Password, "a new long password", "10.0.0.1");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("password-changed:someone@example.test", Assert.Single(harness.Mailer.Sent));
+    }
+
+    [Fact]
+    public async Task A_refused_change_mails_nobody()
+    {
+        var harness = new Harness();
+
+        await harness.Passwords.ChangePasswordAsync(42, "not the password", "a new long password", "10.0.0.1");
+
+        Assert.Empty(harness.Mailer.Sent);
+    }
+
+    /// <summary>
+    /// The sign-in page answers a lock like a wrong password, so the owner learns of it here. Whoever
+    /// is guessing decides how often the account locks, so the mail is held to the cooldown.
+    /// </summary>
+    [Fact]
+    public async Task The_wrong_password_that_locks_the_account_mails_the_owner_once_per_cooldown()
+    {
+        var harness = new Harness();
+        harness.WithUser(Verified(true));
+        harness.Accounts.Setup(p => p.RecordLoginFailureAsync(42, It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DateTime.UtcNow.AddMinutes(15));
+
+        await harness.SignIn.LoginAsync("someone@example.test", "not the password", "10.0.0.1");
+        await harness.SignIn.LoginAsync("someone@example.test", "not the password either", "10.0.0.1");
+
+        Assert.Equal("locked:someone@example.test", Assert.Single(harness.Mailer.Sent));
+    }
+
+    [Fact]
+    public async Task A_wrong_password_short_of_the_lock_mails_nobody()
+    {
+        var harness = new Harness();
+        harness.WithUser(Verified(true));
+        harness.Accounts.Setup(p => p.RecordLoginFailureAsync(42, It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime?)null);
+
+        await harness.SignIn.LoginAsync("someone@example.test", "not the password", "10.0.0.1");
+
+        Assert.Empty(harness.Mailer.Sent);
+    }
+
+    [Fact]
     public async Task ResetPassword_ends_the_access_tokens_already_issued()
     {
         var harness = new Harness();
@@ -510,6 +575,18 @@ public sealed class AccountRecoveryTests
 
         public ValueTask QueueEmailChangeConflictAsync(string to, string username, CancellationToken ct) => ValueTask.CompletedTask;
 
+        public ValueTask QueuePasswordChangedAsync(string to, string username, string how, DateTime atUtc, string ipAddress, CancellationToken ct)
+        {
+            Sent.Add($"password-{how}:{to}");
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask QueueAccountLockedAsync(string to, string username, DateTime lockedUntilUtc, string ipAddress, CancellationToken ct)
+        {
+            Sent.Add($"locked:{to}");
+            return ValueTask.CompletedTask;
+        }
+
         public ValueTask QueueEmailChangedAsync(string to, string username, string newEmail, string revertToken, DateTime expiresAtUtc, CancellationToken ct) => ValueTask.CompletedTask;
     }
 }
@@ -690,6 +767,10 @@ public sealed class RegistrationDisclosureTests
         public ValueTask QueueEmailChangeAsync(string to, string username, string token, DateTime expiresAtUtc, CancellationToken ct) => ValueTask.CompletedTask;
 
         public ValueTask QueueEmailChangeConflictAsync(string to, string username, CancellationToken ct) => ValueTask.CompletedTask;
+
+        public ValueTask QueuePasswordChangedAsync(string to, string username, string how, DateTime atUtc, string ipAddress, CancellationToken ct) => ValueTask.CompletedTask;
+
+        public ValueTask QueueAccountLockedAsync(string to, string username, DateTime lockedUntilUtc, string ipAddress, CancellationToken ct) => ValueTask.CompletedTask;
 
         public ValueTask QueueEmailChangedAsync(string to, string username, string newEmail, string revertToken, DateTime expiresAtUtc, CancellationToken ct) => ValueTask.CompletedTask;
     }

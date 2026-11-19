@@ -34,9 +34,10 @@ internal static class AccountLockout
     internal const int MaxDevicesPerUser = 10;
 
     /// <summary>
-    /// Counts a wrong password against the account, and raises an alert when that failure locks it.
+    /// Counts a wrong password against the account, and raises an alert and mails the owner when that
+    /// failure locks it.
     /// </summary>
-    public static async Task RecordFailedPasswordAsync(IAccountProvider accounts, IEventBus eventBus, ILogger logger, User user, string ipAddress, CancellationToken cancellationToken)
+    public static async Task RecordFailedPasswordAsync(IAccountProvider accounts, IEventBus eventBus, SecurityNotices notices, ILogger logger, User user, string ipAddress, CancellationToken cancellationToken)
     {
         var lockedUntil = await accounts.RecordLoginFailureAsync(user.Id, MaxFailedLogins, LoginLockout, cancellationToken);
         if (lockedUntil > DateTime.UtcNow)
@@ -47,6 +48,7 @@ internal static class AccountLockout
                 $"User ID {user.Id} was locked after {MaxFailedLogins} wrong passwords.",
                 ipAddress,
                 $"UserId: {user.Id}"), cancellationToken);
+            await notices.AccountLockedAsync(user, lockedUntil.Value, ipAddress, cancellationToken);
         }
     }
 }

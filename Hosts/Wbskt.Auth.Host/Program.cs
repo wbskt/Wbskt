@@ -147,6 +147,7 @@ public static class Program
             sp.GetService<IConnectionMultiplexer>(),
             sp.GetRequiredService<TimeProvider>(),
             sp.GetRequiredService<ILogger<MailCooldown>>()));
+        builder.Services.AddSingleton<SecurityNotices>();
         builder.Services.AddHostedService<OutboundMailDispatcher>();
         builder.Services.AddSingleton(Options.Create(builder.Configuration.GetSection("Auth:SignUpChallenge").Get<SignUpChallengeOptions>() ?? new SignUpChallengeOptions()));
         builder.Services.AddSingleton(sp => new SignUpChallenges(

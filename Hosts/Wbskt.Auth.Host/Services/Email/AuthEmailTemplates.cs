@@ -109,6 +109,44 @@ internal static class AuthEmailTemplates
     }
 
     /// <summary>
+    /// Sent once the password is changed or reset. Every session has just ended, so if someone else
+    /// did it, this is how the owner learns why they were signed out, and the way back in. No token:
+    /// the reset it points to mails its own link.
+    /// </summary>
+    public static OutboundMail PasswordChanged(AuthEmailOptions options, string to, string username, string how, DateTime atUtc, string ipAddress)
+    {
+        var verb = how == "reset" ? "reset" : "changed";
+        return AuthEmailRenderer.Render(options, to, new EmailContent(
+            $"Your {options.ProductName} password was {verb}",
+            "If you did not do this, reset your password now.",
+            $"Your password was {verb}",
+            [
+                new EmailParagraph($"Hello {username} — the password for your {options.ProductName} account was {verb} at {Time(atUtc)} UTC, from {ipAddress}. Every other session was signed out."),
+                new EmailParagraph("If this was you, no action is needed. If it was not, someone else knows your password: reset it now."),
+                new EmailAction(ForgotPassword(options), "Reset your password"),
+                new EmailNote("Resetting signs the account out everywhere again.")
+            ]));
+    }
+
+    /// <summary>
+    /// Sent when wrong passwords lock the account. The sign-in page answers a lock like a wrong
+    /// password, so it does not tell anyone that the address has an account; this tells the owner.
+    /// </summary>
+    public static OutboundMail AccountLocked(AuthEmailOptions options, string to, string username, DateTime lockedUntilUtc, string ipAddress)
+    {
+        return AuthEmailRenderer.Render(options, to, new EmailContent(
+            $"Your {options.ProductName} account was locked after too many wrong passwords",
+            "Sign-in is paused for a few minutes. Resetting your password lifts it at once.",
+            "Your account was locked",
+            [
+                new EmailParagraph($"Hello {username} — there were too many wrong passwords for your {options.ProductName} account, the last from {ipAddress}, so new sign-ins are paused until {Time(lockedUntilUtc)} UTC. Sessions already signed in keep working."),
+                new EmailParagraph("If that was you, wait and try again, or reset your password to get in now. If it was not, someone may be guessing your password: a reset lifts the lock and makes the guessing pointless."),
+                new EmailAction(ForgotPassword(options), "Reset your password"),
+                new EmailNote("A browser you signed in from before can still sign in with the right password during the lock.")
+            ]));
+    }
+
+    /// <summary>
     /// Sent to the old address once an email change goes through. The way back when the change was
     /// made with a stolen session, so it names the new address and carries the undo.
     /// </summary>
@@ -151,6 +189,10 @@ internal static class AuthEmailTemplates
     /// </summary>
     private static string Link(AuthEmailOptions options, string path, string token) =>
         $"{options.ConsoleBaseUrl.TrimEnd('/')}/{path}?token={Uri.EscapeDataString(token)}";
+
+    private static string ForgotPassword(AuthEmailOptions options) => $"{options.ConsoleBaseUrl.TrimEnd('/')}/forgot-password";
+
+    private static string Time(DateTime utc) => utc.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
 
     private static EmailNote Expiry(DateTime expiresAtUtc) =>
         new($"This link stops working at {expiresAtUtc.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)} UTC, and can only be used once.");
