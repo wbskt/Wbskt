@@ -73,6 +73,13 @@ BEGIN
     BEGIN
         INSERT INTO dbo.TenantMembers (TenantId, UserId)
         VALUES (@TenantId, @UserId);
+
+        -- An invitation that names no role joins a new member with the tenant's User role, so they can
+        -- see the tenant at all; a member already in it keeps the roles they have.
+        IF @RoleId IS NULL
+        BEGIN
+            SET @RoleId = (SELECT Id FROM dbo.Roles WHERE TenantId = @TenantId AND Kind = N'User');
+        END
     END
 
     -- Tenant-wide (WorkspaceId NULL). The invited role is the tenant's answer to "what can a new

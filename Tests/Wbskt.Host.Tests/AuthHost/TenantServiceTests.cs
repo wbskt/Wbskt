@@ -74,9 +74,25 @@ public sealed class TenantServiceTests
         Assert.Equal("PERMISSION_UNAUTHORIZED", withRole.Error.Code);
         Assert.Equal(ErrorType.Forbidden, withRole.Error.Type);
 
-        // Refused before the role is looked up, so the answer says nothing about whether it exists.
-        _accessControl.Verify(p => p.FindRoleIdByRefIdAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        // An unknown reference is refused the same, so the answer says nothing about whether it exists.
+        var unknown = await _service.CreateInvitationAsync(CallerId, TenantId, new CreateInvitationRequest("lead+3@example.test", Guid.NewGuid()));
+        Assert.Equal(withRole.Error, unknown.Error);
         _tenants.Verify(p => p.CreateInvitationAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task An_invitation_naming_the_User_role_needs_only_users_manage()
+    {
+        var userRoleRef = Guid.NewGuid();
+        _accessControl.Setup(p => p.FindRoleIdByRefIdAsync(userRoleRef, TenantId, It.IsAny<CancellationToken>())).ReturnsAsync(4);
+        _accessControl.Setup(p => p.FindUserRoleIdAsync(TenantId, It.IsAny<CancellationToken>())).ReturnsAsync(4);
+        _accessControl.Setup(p => p.VerifyPermissionAsync(CallerId, TenantId, null, PermissionNames.RolesManage, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        _tenants.Setup(p => p.CreateInvitationAsync(TenantId, "member@example.test", 4, It.IsAny<byte[]>(), It.IsAny<DateTime>(), CallerId, It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CreatedInvitation(Guid.NewGuid(), "Acme"));
+
+        var result = await _service.CreateInvitationAsync(CallerId, TenantId, new CreateInvitationRequest("member@example.test", userRoleRef));
+
+        Assert.True(result.IsSuccess);
     }
 
     [Fact]

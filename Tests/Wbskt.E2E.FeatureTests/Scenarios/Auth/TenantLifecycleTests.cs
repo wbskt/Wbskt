@@ -293,7 +293,7 @@ public sealed class TenantLifecycleTests(ServicesFixture fixture)
             member.Token);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden,
-            "the member was invited without a role, so they hold no users.manage");
+            "the member holds no role, so no users.manage");
 
         // Note the last-administrator guard (THROW 50008) is deliberately *not* what rejects this.
         // It cannot be reached along the ordinary path: the caller must hold tenant-wide

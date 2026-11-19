@@ -188,25 +188,36 @@ internal sealed class TenantService : ITenantService
 
     // ----- Invitations -------------------------------------------------------------------------
 
+    /// <summary>
+    /// The role an invitation names. Accepting grants it, so naming one needs what assigning it needs,
+    /// roles.manage, except for the tenant's User role, which is what an invitation naming none grants
+    /// anyway, so users.manage (the endpoint's own permission) is enough for it. Without roles.manage a
+    /// reference that is not the User role is refused the same whether it exists or not.
+    /// </summary>
+    private async Task<Result<int>> ResolveInvitedRoleAsync(int callerId, int tenantId, Guid roleRef, CancellationToken cancellationToken)
+    {
+        var mayGrant = await RoleGrantGuard.MayGrantRolesAsync(_accessControl, callerId, tenantId, cancellationToken);
+        var roleId = await _accessControl.FindRoleIdByRefIdAsync(roleRef, tenantId, cancellationToken);
+        if (!mayGrant && (roleId <= 0 || roleId != await _accessControl.FindUserRoleIdAsync(tenantId, cancellationToken)))
+        {
+            return Result<int>.Failure(RoleGrantGuard.RolesManageRequired);
+        }
+
+        return roleId <= 0 ? Result<int>.Failure(TenantReferences.RoleNotFound) : Result<int>.Success(roleId);
+    }
+
     public async Task<Result<CreatedInvitationResponse>> CreateInvitationAsync(int callerId, int tenantId, CreateInvitationRequest request, CancellationToken cancellationToken = default)
     {
         int? roleId = null;
         if (request.RoleRef.HasValue)
         {
-            // Accepting grants the role, so naming one needs what assigning it needs. Asked before the role
-            // is looked up, so a caller without it cannot tell a real role reference from an unknown one.
-            if (!await RoleGrantGuard.MayGrantRolesAsync(_accessControl, callerId, tenantId, cancellationToken))
+            var named = await ResolveInvitedRoleAsync(callerId, tenantId, request.RoleRef.Value, cancellationToken);
+            if (named.IsFailure)
             {
-                return Result<CreatedInvitationResponse>.Failure(RoleGrantGuard.RolesManageRequired);
+                return Result<CreatedInvitationResponse>.Failure(named.Error);
             }
 
-            var resolvedRoleId = await _accessControl.FindRoleIdByRefIdAsync(request.RoleRef.Value, tenantId, cancellationToken);
-            if (resolvedRoleId <= 0)
-            {
-                return Result<CreatedInvitationResponse>.Failure(TenantReferences.RoleNotFound);
-            }
-
-            roleId = resolvedRoleId;
+            roleId = named.Value;
         }
 
         var workspaceIds = new List<int>();
