@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Wbskt.Api.Client;
 
@@ -6,7 +7,9 @@ namespace Wbskt.Api.Client;
 /// The error body every Wbskt host answers with: RFC 9457 Problem Details, with the application's
 /// <see cref="Code"/> (<c>AUTH_ROLE_CONFLICT</c>, <c>CLIENT_NOT_FOUND</c>, ...) and the request's
 /// <see cref="TraceId"/> as extensions. <see cref="Errors"/> is set on a validation failure
-/// (<c>VALIDATION_FAILED</c>) and names each field that was refused.
+/// (<c>VALIDATION_FAILED</c>) and names each field that was refused. A refusal by a plan limit carries
+/// <see cref="Plan"/>, <see cref="Limit"/> and <see cref="Current"/>; any other extension a host adds is in
+/// <see cref="Extensions"/>.
 /// </summary>
 public sealed record ApiProblem
 {
@@ -30,6 +33,19 @@ public sealed record ApiProblem
 
     /// <summary>For a validation failure, the messages for each field that was refused.</summary>
     public IReadOnlyDictionary<string, string[]>? Errors { get; init; }
+
+    /// <summary>For a plan limit, the plan that set it.</summary>
+    public string? Plan { get; init; }
+
+    /// <summary>For a plan limit, how many the plan allows.</summary>
+    public long? Limit { get; init; }
+
+    /// <summary>For a plan limit, how many there are now.</summary>
+    public long? Current { get; init; }
+
+    /// <summary>Any other member of the body, such as an integration's <c>usedBy</c>.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extensions { get; init; }
 
     /// <summary>
     /// Reads the problem off a response, or returns null when the body is empty or not a problem.
