@@ -18,6 +18,9 @@ public interface IEventProvider
     /// <summary>Deletes client traffic older than the cutoff from among the <paramref name="batchSize"/> oldest rows.</summary>
     Task<int> DeleteClientTrafficBeforeAsync(DateTime cutoffUtc, int batchSize, CancellationToken cancellationToken = default);
 
+    /// <summary>Deletes up to <paramref name="batchSize"/> hourly message counts (dbo.WorkspaceMessageUsageHourly) older than the cutoff.</summary>
+    Task<int> DeleteHourlyMessageCountsBeforeAsync(DateTime cutoffUtc, int batchSize, CancellationToken cancellationToken = default);
+
     /// <summary>Up to <paramref name="take"/> entries matching <paramref name="filter"/>, newest first, older than <paramref name="cursorId"/> when given.</summary>
     Task<IReadOnlyCollection<EventLogRow>> GetLogsAsync(
         int workspaceId,

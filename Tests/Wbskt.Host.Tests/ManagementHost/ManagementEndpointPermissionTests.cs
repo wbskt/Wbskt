@@ -97,6 +97,7 @@ public sealed class ManagementEndpointPermissionTests
         ["WorkflowsController.StartManualRun"] = PermissionNames.WorkflowsExecute,
         ["WorkflowTriggersController.GetRecent"] = PermissionNames.WorkflowsRead,
         ["WorkspaceMessageStatsController.Get"] = PermissionNames.ClientsRead,
+        ["WorkspaceMessageStatsController.GetHistory"] = PermissionNames.ClientsRead,
     };
 
     private static Assembly ManagementHostAssembly => typeof(global::Wbskt.Management.Host.Program).Assembly;

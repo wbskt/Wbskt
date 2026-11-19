@@ -45,6 +45,20 @@ public sealed class EventLogRetentionServiceTests
     }
 
     [Fact]
+    public async Task Hourly_message_counts_go_after_the_audit_window()
+    {
+        var provider = new Mock<IEventProvider>();
+        provider.SetupSequence(p => p.DeleteHourlyMessageCountsBeforeAsync(It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(EventLogRetentionService.BatchSize)
+            .ReturnsAsync(4);
+
+        var total = await CreateService(provider.Object, new EventRegistry(), retentionDays: 90).SweepAsync(CancellationToken.None);
+
+        Assert.Equal(EventLogRetentionService.BatchSize + 4, total);
+        provider.Verify(p => p.DeleteHourlyMessageCountsBeforeAsync(Now.UtcDateTime.AddDays(-90), EventLogRetentionService.BatchSize, It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
     public async Task Client_traffic_goes_after_its_own_shorter_window_and_audit_events_after_theirs()
     {
         var registry = new EventRegistry();

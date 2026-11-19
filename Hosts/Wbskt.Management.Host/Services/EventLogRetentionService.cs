@@ -13,6 +13,7 @@ namespace Wbskt.Management.Host.Services;
 /// <see cref="ClientTrafficAttribute"/>, kept in dbo.ClientTraffic) goes sooner, after
 /// <see cref="EventLoggingOptions.ClientTrafficRetentionDays"/>: it arrives at the rate clients talk,
 /// and the audit records (sign-ins, policy and workflow changes) are what is worth keeping longer.
+/// The hourly message counts (dbo.WorkspaceMessageUsageHourly) are kept as long as the audit log.
 /// </summary>
 public sealed class EventLogRetentionService : PeriodicWorker
 {
@@ -90,6 +91,12 @@ public sealed class EventLogRetentionService : PeriodicWorker
         }
 
         total += await DeleteAsync(provider, nowUtc - _retention, null, "all events", cancellationToken);
+
+        // The hourly message counts behind the Overview chart go with the audit log; the daily ones stay.
+        total += await DeleteBatchesAsync(
+            batchSize => provider.DeleteHourlyMessageCountsBeforeAsync(nowUtc - _retention, batchSize, cancellationToken),
+            nowUtc - _retention,
+            "hourly message counts");
         return total;
     }
 

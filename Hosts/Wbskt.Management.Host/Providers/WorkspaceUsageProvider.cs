@@ -1,3 +1,5 @@
+using Microsoft.Data.SqlClient;
+using Wbskt.Models;
 using System.Data;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
@@ -53,4 +55,35 @@ internal sealed class WorkspaceUsageProvider : BaseSqlProvider, IWorkspaceUsageP
             r => new DailyCreditUsage(DateOnly.FromDateTime(r.GetDateTime(r.GetOrdinal("Day"))), r.GetDecimal(r.GetOrdinal("Credits"))),
             ct);
     }
+
+    public async Task<IReadOnlyCollection<MessageCountBucket>> GetDailyMessagesAsync(int workspaceId, DateOnly from, DateOnly to, CancellationToken ct)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.WorkspaceMessageUsage_GetDaily",
+            p =>
+            {
+                p.AddWithValue("@WorkspaceId", workspaceId);
+                p.Add("@From", SqlDbType.Date).Value = from.ToDateTime(TimeOnly.MinValue);
+                p.Add("@To", SqlDbType.Date).Value = to.ToDateTime(TimeOnly.MinValue);
+            },
+            r => ReadMessageCount(r, "Day"),
+            ct);
+    }
+
+    public async Task<IReadOnlyCollection<MessageCountBucket>> GetHourlyMessagesAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, CancellationToken ct)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.WorkspaceMessageUsageHourly_GetRange",
+            p =>
+            {
+                p.AddWithValue("@WorkspaceId", workspaceId);
+                p.Add("@From", SqlDbType.DateTime2).Value = fromUtc;
+                p.Add("@To", SqlDbType.DateTime2).Value = toUtc;
+            },
+            r => ReadMessageCount(r, "Hour"),
+            ct);
+    }
+
+    private static MessageCountBucket ReadMessageCount(SqlDataReader r, string startColumn) =>
+        new(r.GetDateTime(r.GetOrdinal(startColumn)).ToUtcOffset(), r.GetInt64(r.GetOrdinal("Inbound")), r.GetInt64(r.GetOrdinal("Outbound")));
 }

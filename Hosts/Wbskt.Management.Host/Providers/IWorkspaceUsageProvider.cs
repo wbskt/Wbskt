@@ -10,4 +10,10 @@ public interface IWorkspaceUsageProvider
 
     /// <summary>The workspace's credits per UTC day from <paramref name="from"/> to <paramref name="to"/>, both included; days with none are left out.</summary>
     Task<IReadOnlyCollection<DailyCreditUsage>> GetDailyCreditsAsync(int workspaceId, DateOnly from, DateOnly to, CancellationToken ct);
+
+    /// <summary>The workspace's client messages per UTC day from <paramref name="from"/> to <paramref name="to"/>, both included; days with none are left out.</summary>
+    Task<IReadOnlyCollection<MessageCountBucket>> GetDailyMessagesAsync(int workspaceId, DateOnly from, DateOnly to, CancellationToken ct);
+
+    /// <summary>The workspace's client messages per UTC hour in [<paramref name="fromUtc"/>, <paramref name="toUtc"/>); hours with none are left out.</summary>
+    Task<IReadOnlyCollection<MessageCountBucket>> GetHourlyMessagesAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, CancellationToken ct);
 }
