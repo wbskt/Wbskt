@@ -15,16 +15,6 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
 {
     public ClientProvider(IConfiguration configuration) : base(configuration) { }
 
-    public async Task<int> FindIdByRefIdAsync(Guid referenceId, CancellationToken cancellationToken = default)
-    {
-        var result = await ExecuteScalarAsync<int>("dbo.Client_FindBy_RefId", p =>
-        {
-            p.AddWithValue("@RefId", referenceId);
-        }, cancellationToken);
-
-        return result;
-    }
-
     public async Task<int> GetRegisteredCountByAccountAsync(int workspaceId, int? tenantId, CancellationToken cancellationToken = default)
     {
         return await ExecuteScalarAsync<int>("dbo.Client_GetCountBy_Account", p =>

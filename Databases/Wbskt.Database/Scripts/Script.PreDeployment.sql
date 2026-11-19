@@ -367,3 +367,11 @@ BEGIN
     EXEC sp_executesql N'UPDATE dbo.Clients SET Status = 2 WHERE Status NOT IN (0, 1, 2, 3);';
 END
 GO
+/*
+Client_FindBy_RefId and RegistrationPolicy_FindBy_RefId were implemented only to satisfy
+IReferenceProvider; no host called them (#995 item 119). DropObjectsNotInSource is off.
+*/
+DROP PROCEDURE IF EXISTS dbo.Client_FindBy_RefId;
+GO
+DROP PROCEDURE IF EXISTS dbo.RegistrationPolicy_FindBy_RefId;
+GO

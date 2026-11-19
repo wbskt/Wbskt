@@ -5,7 +5,7 @@ using Wbskt.Primitives;
 
 namespace Wbskt.Management.Host.Providers;
 
-public interface IRegistrationPolicyProvider : IReferenceProvider
+public interface IRegistrationPolicyProvider
 {
     Task<RegistrationPolicy?> FindByRefIdAsync(Guid refId, CancellationToken cancellationToken = default);
     Task<RegistrationPolicy?> FindByIdAsync(int id, CancellationToken cancellationToken = default);

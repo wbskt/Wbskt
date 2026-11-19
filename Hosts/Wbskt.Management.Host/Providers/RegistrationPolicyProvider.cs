@@ -15,14 +15,6 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
 
     public RegistrationPolicyProvider(IConfiguration configuration) : base(configuration) { }
 
-    public async Task<int> FindIdByRefIdAsync(Guid referenceId, CancellationToken cancellationToken = default)
-    {
-        return await ExecuteScalarAsync<int>("dbo.RegistrationPolicy_FindBy_RefId", p =>
-        {
-            p.AddWithValue("@RefId", referenceId);
-        }, cancellationToken);
-    }
-
     public async Task<RegistrationPolicy?> FindByRefIdAsync(Guid refId, CancellationToken cancellationToken = default)
     {
         return await ExecuteFindAsync(
