@@ -40,6 +40,14 @@ public sealed class WorkflowEngineOptions
     public int BranchWorkerLimit { get; init; } = 50;
 
     /// <summary>
+    /// How long a stopping engine lets the branches it is running finish the step they are in before it
+    /// cuts them short. A step cut short is run again by the next leader, so an email, webhook or client
+    /// command it had already sent would go twice. Well under the host's shutdown timeout (25 s on the
+    /// engine) so the lease is still released cleanly after it.
+    /// </summary>
+    public TimeSpan BranchDrainGrace { get; init; } = TimeSpan.FromSeconds(15);
+
+    /// <summary>
     /// The shortest retry backoff that parks the branch on a timer bookmark instead of waiting it out on
     /// the worker. A backoff slept in-process holds one of the <see cref="BranchWorkerLimit"/> slots for
     /// its whole length, so a handful of branches in a long backoff stopped every other run on the host,
@@ -103,8 +111,8 @@ public sealed class WorkflowEngineOptions
     /// <summary>
     /// How long after taking over a new leader looks once more for Active branches nothing drives: an old
     /// leader still stopping can start a run, or fork a branch, after the new one's recovery read them.
-    /// Longer than the lease TTL plus the old leader's shutdown (the host's 30 s, and compose's
-    /// stop_grace_period of 30 s after it), so the old process is gone by then.
+    /// Longer than the lease TTL plus the old leader's shutdown (the engine's 25 s shutdown timeout,
+    /// inside compose's stop_grace_period of 30 s), so the old process is gone by then.
     /// </summary>
     public TimeSpan LeaderOverlapRecheckDelay { get; init; } = TimeSpan.FromSeconds(90);
 }

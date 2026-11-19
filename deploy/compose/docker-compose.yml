@@ -513,6 +513,9 @@ services:
     mem_limit: ${HOST_MEM_LIMIT:-384m}
     memswap_limit: ${HOST_MEM_LIMIT:-384m}
     logging: *default-logging
+    # Outlasts the engine's 25 s shutdown timeout, in which running branches finish the step they are in
+    # before the lease is released; Docker's default 10 s would kill it mid-step and the step would run twice.
+    stop_grace_period: 30s
     # Active/standby: one process holds the engine-leader lease and does all the work; any further
     # replica is a warm spare that takes over when the lease lapses.
     deploy:

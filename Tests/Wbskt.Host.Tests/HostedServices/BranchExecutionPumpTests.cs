@@ -51,6 +51,56 @@ public sealed class BranchExecutionPumpTests
         Assert.Contains((42L, 1002L, BranchExecutionReason.ForkChild), recorder.Calls);
     }
 
+    [Fact]
+    public async Task Stop_lets_a_running_step_finish_before_cutting_it_short()
+    {
+        // Arrange
+        var dispatcher = new ChannelRunDispatcher();
+        var loop = new SteppingBranchLoop();
+        var services = new ServiceCollection();
+        services.AddScoped<IBranchLoop>(_ => loop);
+        await using var provider = services.BuildServiceProvider();
+        var pump = new BranchExecutionPump(dispatcher, provider.GetRequiredService<IServiceScopeFactory>(), NullLogger<BranchExecutionPump>.Instance, drainGrace: TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await pump.StartAsync(cts.Token);
+        await dispatcher.DispatchAsync(new BranchExecutionRequest(42, 1001, BranchExecutionReason.TriggerStarted), cts.Token);
+        await loop.StepStarted.Task.WaitAsync(cts.Token);
+
+        // Act
+        Task stopping = pump.StopAsync(CancellationToken.None);
+        await loop.DrainSeen.Task.WaitAsync(cts.Token);
+        Assert.False(stopping.IsCompleted);
+        loop.FinishStep.TrySetResult();
+        await stopping.WaitAsync(cts.Token);
+
+        // Assert
+        Assert.True(loop.StepCompleted);
+        Assert.False(loop.StepTokenCancelledDuringStep);
+    }
+
+    [Fact]
+    public async Task Stop_cuts_a_step_short_once_the_grace_runs_out()
+    {
+        // Arrange
+        var dispatcher = new ChannelRunDispatcher();
+        var loop = new SteppingBranchLoop();
+        var services = new ServiceCollection();
+        services.AddScoped<IBranchLoop>(_ => loop);
+        await using var provider = services.BuildServiceProvider();
+        var pump = new BranchExecutionPump(dispatcher, provider.GetRequiredService<IServiceScopeFactory>(), NullLogger<BranchExecutionPump>.Instance, drainGrace: TimeSpan.FromMilliseconds(50));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await pump.StartAsync(cts.Token);
+        await dispatcher.DispatchAsync(new BranchExecutionRequest(42, 1001, BranchExecutionReason.TriggerStarted), cts.Token);
+        await loop.StepStarted.Task.WaitAsync(cts.Token);
+
+        // Act
+        await pump.StopAsync(CancellationToken.None).WaitAsync(cts.Token);
+
+        // Assert
+        Assert.False(loop.StepCompleted);
+        Assert.True(loop.StepTokenCancelledDuringStep);
+    }
+
     private static ServiceProvider CreateProvider(BranchLoopRecorder recorder, bool shouldThrow)
     {
         var services = new ServiceCollection();
@@ -62,7 +112,7 @@ public sealed class BranchExecutionPumpTests
     {
         private bool _hasThrown;
 
-        public Task RunAsync(long runId, long branchId, BranchExecutionReason reason, CancellationToken ct)
+        public Task RunAsync(long runId, long branchId, BranchExecutionReason reason, CancellationToken drainToken, CancellationToken ct)
         {
             recorder.Record((runId, branchId, reason));
             if (shouldThrow && !_hasThrown)
@@ -72,6 +122,32 @@ public sealed class BranchExecutionPumpTests
             }
 
             return Task.CompletedTask;
+        }
+    }
+
+    // One step that waits to be told to finish, watching both tokens as BranchLoop does.
+    private sealed class SteppingBranchLoop : IBranchLoop
+    {
+        public TaskCompletionSource StepStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource DrainSeen { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource FinishStep { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public bool StepCompleted { get; private set; }
+        public bool StepTokenCancelledDuringStep { get; private set; }
+
+        public async Task RunAsync(long runId, long branchId, BranchExecutionReason reason, CancellationToken drainToken, CancellationToken ct)
+        {
+            using CancellationTokenRegistration drain = drainToken.Register(() => DrainSeen.TrySetResult());
+            StepStarted.TrySetResult();
+            try
+            {
+                await FinishStep.Task.WaitAsync(ct);
+                StepCompleted = true;
+            }
+            catch (OperationCanceledException)
+            {
+                StepTokenCancelledDuringStep = true;
+                throw;
+            }
         }
     }
 

@@ -76,7 +76,12 @@ internal sealed class BranchLoop : IBranchLoop
         _logger = logger;
     }
 
-    public async Task RunAsync(long runId, long branchId, BranchExecutionReason reason, CancellationToken ct)
+    public Task RunAsync(long runId, long branchId, BranchExecutionReason reason, CancellationToken ct)
+    {
+        return RunAsync(runId, branchId, reason, CancellationToken.None, ct);
+    }
+
+    public async Task RunAsync(long runId, long branchId, BranchExecutionReason reason, CancellationToken drainToken, CancellationToken ct)
     {
         CancellationToken runToken = _runCancellationService.GetToken(runId);
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, runToken);
@@ -186,6 +191,14 @@ internal sealed class BranchLoop : IBranchLoop
             }
 
             branchRow = advanced;
+
+            // The engine is stopping: the node just run has its outcome written and the branch now stands
+            // at the next one, which has not started. Recovery on the next leader starts it from there.
+            if (drainToken.IsCancellationRequested)
+            {
+                _logger?.LogInformation("Engine stopping; leaving branch {BranchId} of run {RunId} Active at node {NodeId} for recovery.", branchId, runId, branchRow.NodeId);
+                return;
+            }
         }
     }
 

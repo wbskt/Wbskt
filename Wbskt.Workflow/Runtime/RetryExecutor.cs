@@ -123,13 +123,15 @@ internal static class RetryExecutor
                     return;
                 }
 
+                // Not on the step's token: the side effect has happened, and a key left Pending because the
+                // engine began stopping just now makes the next leader run the node again.
                 if (succeeded)
                 {
-                    await idempotencyKeyProvider.MarkSucceededAsync(keyValue, json, ct);
+                    await idempotencyKeyProvider.MarkSucceededAsync(keyValue, json, CancellationToken.None);
                 }
                 else
                 {
-                    await idempotencyKeyProvider.MarkFailedAsync(keyValue, json, ct);
+                    await idempotencyKeyProvider.MarkFailedAsync(keyValue, json, CancellationToken.None);
                 }
             }
 
