@@ -161,11 +161,18 @@ already a tenant member (`THROW 50009`), and `WorkspaceService` reports that as 
 `USER_NOT_FOUND` as an unknown address, so the endpoint does not reveal whether an address is
 registered.
 
-**Leaving:** `DELETE /{tenantRef}/members/{userRef}` removes a member and every assignment scoped to
-that tenant, and transfers workspaces they owned to the caller — access resolution gates on a
-`WorkspaceMembers` row before evaluating any permission, so a workspace owned by a non-member would
-be unreachable to everyone. It refuses to remove the last administrator (`THROW 50008`) and refuses
-self-removal, since the transfer would have no recipient.
+**Removing and leaving.** `DELETE /{tenantRef}/members/{userRef}` removes a member and every
+assignment scoped to that tenant, and hands the workspaces they owned to the caller. It refuses to
+remove the last administrator (`THROW 50008`) and refuses self-removal (`CANNOT_REMOVE_SELF`), since
+the hand-over would have no recipient. A member leaves on their own with `POST /{tenantRef}/leave`
+(`dbo.TenantMember_Leave`), which hands their workspaces to another administrator and is refused
+when it is their only tenant or nobody else could administer it. Deleting an account does the same
+in each of its tenants. Every one of these goes through `dbo.WorkspaceOwner_Grant` for each
+workspace, as an explicit transfer does: the new owner joins the workspace, gets the tenant's
+`Admin` role scoped to it if they do not already hold it there or tenant-wide, and a
+`WorkspaceOwnershipTransferredEvent` is written to the outbox so the audit log shows the hand-over.
+A workspace has to keep an owner who is a member, because access resolution gates on a
+`WorkspaceMembers` row before evaluating any permission.
 
 **Suspending:** `PATCH /{tenantRef}/members/{userRef}` with `{ "isSuspended": true }` keeps the
 member and every assignment but makes access resolution treat them as holding nothing in this
@@ -201,14 +208,12 @@ so a cross-tenant reference is reported the same as one that does not exist. Res
 additionally gated on their `TenantMembers` row, so an administrator cannot pull an outsider into
 their tenant's permission graph.
 
-| Area | Endpoints |
-|---|---|
-| Tenants | `GET /api/v1/tenants`, `POST /api/v1/tenants`, `PUT /{tenantRef}` |
-| Invitations | `GET/POST /{tenantRef}/invitations`, `DELETE /{tenantRef}/invitations/{invitationRef}`, `POST /api/v1/invitations/accept` |
-| Roles | `GET/POST /roles`, `PUT/DELETE /roles/{roleRef}`, `GET/POST /roles/{roleRef}/permissions`, `DELETE /roles/{roleRef}/permissions/{permissionSlug}` |
-| Groups | `GET/POST /groups`, `PUT/DELETE /groups/{groupRef}`, `GET /groups/{groupRef}/roles`, `POST/DELETE /groups/{groupRef}/roles/{roleRef}` |
-| Members | `GET /members`, `GET /members/{userRef}/roles\|permissions\|groups`, `POST/DELETE /members/{userRef}/roles/{roleRef}`, `POST /members/{userRef}/permissions`, `DELETE /members/{userRef}/permissions/{permissionSlug}`, `POST/DELETE /members/{userRef}/groups/{groupRef}`, `PATCH /members/{userRef}` |
-| Catalogue | `GET /permissions` |
+The routes, with the permission each needs, are listed in `Docs/API.Endpoints.md` (§1.2 Invitations,
+§1.3 Tenant administration, §1.4 Workspaces). `AuthEndpointPermissionTests` pins every action's
+permission, so it is the authority when the two disagree. Each action declares what it needs with
+`[RequiresTenantPermission]` (or `[RequiresPermission]` under `{workspaceRef}`) and takes the
+resolved id with `[FromTenant]` / `[FromWorkspace]`; the filter answers a refusal before the action
+runs, so services never check the permission again.
 
 Assignment scope travels in the body as `workspaceRef` on POST (null = tenant-wide) and as a query
 parameter on DELETE.
@@ -237,9 +242,8 @@ the one grant without it: the creator gets `Admin` in that workspace, as below.)
 tenant member is not covered: it ends their access as a whole rather than moving a role, it is what
 `users.manage` is for, and the tenant's last administrator cannot be removed.
 
-`POST /api/v1/workspaces/{ref}/members` requires `users.manage` **in that workspace**, and also adds the
-user to the workspace's tenant (`WorkspaceMember_Add`) — without that row they would pass the
-membership gate but resolve no roles, since every assignment is filtered by `TenantId`.
+`POST /api/v1/workspaces/{ref}/members` requires `users.manage` **in that workspace**, and adds only
+someone who is already a member of the workspace's tenant (see `WorkspaceMember_Add` above).
 Workspace owners automatically receive the tenant's `Admin` role scoped to the new workspace
 (`Workspace_Create`), and so does a member a workspace is handed to (`PUT /api/v1/workspaces/{ref}/owner`,
 `Workspace_SetOwner`) unless they already hold it there or tenant-wide. A suspended member cannot be
@@ -268,30 +272,16 @@ runs across every `Admin` role, not just the default tenant's, and must stay set
 
 ## Workspace-scoped permissions (management host)
 
-Every route below is `api/v1/workspaces/{workspaceRef:guid}/…` and resolves through
-`POST /api/internal/workspaces/resolve` before doing anything else. The resolve call is the membership gate;
-the slug is the second gate.
+Every workspace route on the management host is `api/v1/workspaces/{workspaceRef:guid}/…`. Each
+action declares the permission it needs with `[RequiresPermission]`, and `WorkspacePermissionFilter`
+resolves the workspace once, through `POST /api/internal/workspaces/resolve` on the auth host, before
+model binding. The resolve call is the membership gate; the permission is the second gate.
 
-| Area | Endpoint | Permission |
-|---|---|---|
-| Clients | `GET clients`, `GET clients/counts`, `GET clients/tags`, `GET clients/policy/{ref}`, `GET clients/{ref}`, `GET clients/{ref}/state` | `clients.read` |
-| Clients | `PATCH clients/{ref}/status`, `PATCH clients/status` (bulk), `PATCH clients/{ref}/name`, `PUT clients/{ref}/tags` | `clients.update` |
-| Clients | `DELETE clients/{ref}`, `POST clients/{ref}/rotate-secret` | `clients.manage` |
-| Clients | `POST clients/{ref}/command` | `clients.command` |
-| Clients | `POST clients/{ref}/ping` | `clients.ping` |
-| Clients | `POST clients/{ref}/ota` | `clients.firmware` |
-| Clients | `GET clients/{ref}/comms` | `logs.read` — it is a projection of the event log, not client state |
-| Policies | `GET registration-policies…` | `policies.read` |
-| Policies | `POST`, `PATCH {ref}`, `POST {ref}/rotate-pin` | `policies.manage` |
-| Templates | `GET message-templates` | `templates.read` |
-| Templates | `POST`, `PUT {ref}`, `DELETE {ref}` | `templates.manage` |
-| Logs | `GET event-logs` | `logs.read` |
-| Workflows | `GET workflows…`, `GET runs…`, `GET runs/{ref}/history`, `GET …/variables/{name}` | `workflows.read` |
-| Workflows | `POST workflows` (publish) | `workflows.create` |
-| Workflows | `POST workflows/{ref}/deprecate`, `POST workflows/{ref}/reinstate`, `DELETE workflows/{ref}` | `workflows.delete` |
-| Workflows | `POST workflows/{ref}/enable`, `POST workflows/{ref}/disable`, `POST workflows/{ref}/runs`, `POST runs/{ref}/cancel`, `POST runs/{ref}/signals/{name}`, `PUT …/variables/{name}` | `workflows.execute` |
-| Realtime | `NotificationHub.JoinWorkspace` | `workspace.join` |
-| Realtime | `NotificationHub.JoinClient` | `workspace.join` + `logs.read` |
+The routes and their permissions are listed in `Docs/API.Endpoints.md` §2, and
+`ManagementEndpointPermissionTests` pins every action's permission (and fails for a workspace route
+without one). Two that are easy to get wrong: a client's comms (`GET clients/{clientRef}/comms`) need
+`logs.read`, since they are a projection of the event log rather than client state, and the realtime
+hub's `JoinWorkspace` needs `workspace.join` while `JoinClient` needs `workspace.join` and `logs.read`.
 
 `workflows.update` currently gates nothing on its own — authoring a new version goes through
 `workflows.create` (publish is versioned, never in-place) and the run-control endpoints that used to
@@ -307,16 +297,13 @@ client and rotating its secret. Approving and revoking, singly or in bulk, stay 
 Two structural notes on scoping, since neither is enforced by the resolve call:
 
 - **A reference is not a scope.** Resolving `workspaceRef` establishes *which* workspace the caller
-  is acting in; it says nothing about whether the `clientRefId` or `runRefId` in the same route
-  belongs to it. Every endpoint that acts on a nested resource has to check ownership separately —
-  `IClientQueryService.EnsureClientInWorkspaceAsync`, `IWorkflowRunQueryService.EnsureRunInWorkspaceAsync`,
-  `IWorkflowQueryService.EnsureWorkflowInWorkspaceAsync`, or a `WorkspaceId` comparison inside
-  the service. This matters most where the endpoint publishes to the bus: the socket host dispatches
-  `ClientCommandEvent`/`ClientPingEvent` on `ClientRefId` alone and has no workspace to check against,
-  so the controller's check is the only one there is. Per "The ID Boundary" in
-  `Docs/Coding.Conventions.md`, these checks answer 403 for both "no such resource" and "not yours" —
-  splitting them turns the endpoint into a way to confirm that a guessed reference names something
-  real.
+  is acting in; it says nothing about whether the `clientRef` or `runRef` in the same route belongs
+  to it. Every service that acts on a nested resource loads it through `WorkspaceOwnership.LoadAsync`
+  (or `Check` for one already in hand), which answers the resource's `<RESOURCE>_NOT_FOUND` 404 both
+  for a reference that names nothing and for another workspace's, so the endpoint cannot be used to
+  confirm that a guessed reference is real. This matters most where the endpoint publishes to the
+  bus: the socket host dispatches `ClientCommandEvent`/`ClientPingEvent` on `ClientRefId` alone and
+  has no workspace to check against, so the service's check is the only one there is.
 - **The realtime feed is per workspace, not per permission.** `workspace.join` puts a connection in
   `ws:{workspaceId}`, which carries every `[SignalRNotify]` event for that workspace. A member who
   holds only `workflows.read` still receives client command payloads over the hub. Narrowing that
@@ -342,10 +329,17 @@ Two structural notes on scoping, since neither is enforced by the resolve call:
 
 ## Error semantics
 
-`ErrorType.Forbidden` → **403** is used for "authenticated but not permitted": failing a management
-permission gate, not being a workspace member, or touching a resource in another workspace.
-**401** is reserved for "we cannot identify the caller" — bad credentials, or an invalid, expired or
-revoked token. Consumers such as `AuthServiceClient` rely on the distinction.
+Following "The ID Boundary" in `Docs/Coding.Conventions.md`:
+
+- **401** means "we cannot identify the caller": bad credentials, or an invalid, expired or revoked
+  token. Consumers such as `AuthServiceClient` rely on it, so a known caller is never answered 401.
+- **403** on a workspace or tenant reference means the caller is not a member of it, or it does not
+  exist; the two are not told apart (`WORKSPACE_NOT_FOUND`, `TENANT_NOT_FOUND`).
+- **403** inside a workspace or tenant the caller belongs to means a missing permission
+  (`PERMISSION_UNAUTHORIZED`), and nothing else.
+- **404** inside one is a resource reference that does not exist or belongs to another workspace or
+  tenant, with the resource's `<RESOURCE>_NOT_FOUND` code and the same message in both cases. A
+  reference used as a filter (`?clientRefId=`) answers the same 404, never an empty page.
 
 **A frozen account** (Wbskt support froze its tenant, `dbo.Tenants.FrozenAt`) answers **409**
 `ACCOUNT_FROZEN` to any workspace-scoped action that needs more than a read permission (`*.read`),
