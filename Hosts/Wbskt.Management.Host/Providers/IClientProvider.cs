@@ -80,6 +80,8 @@ public interface IClientProvider
     /// </summary>
     Task<IReadOnlyCollection<PresenceRepair>> ReconcilePresenceByHostAsync(string hostId, IReadOnlyCollection<Guid> connectedRefIds, DateTime takenAtUtc, TimeSpan margin, CancellationToken cancellationToken = default);
     Task<ClientDetail?> FindDetailByRefIdAsync(Guid refId, CancellationToken cancellationToken = default);
+    /// <summary>The client's id and workspace, or null when there is no such client.</summary>
+    Task<ClientOwner?> FindOwnerByRefIdAsync(Guid refId, CancellationToken cancellationToken = default);
     Task UpdateNameAsync(int id, string name, CancellationToken cancellationToken = default);
     Task UpdateRttAsync(int id, int lastRttMs, DateTime measuredAt, CancellationToken cancellationToken = default);
     /// <summary>Stores a capabilities report received at <paramref name="reportedAt"/>; false when a newer one is already stored.</summary>
