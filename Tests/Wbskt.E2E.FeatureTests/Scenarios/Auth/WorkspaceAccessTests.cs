@@ -128,6 +128,31 @@ public sealed class WorkspaceAccessTests(ServicesFixture fixture)
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
+    [SkippableFact]
+    public async Task WS_OWN_04_UsersManageInTheWorkspace_CannotTakeItOverOrDeleteIt()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var owner = await fixture.CreateUserAsync();
+        var tenantRef = await fixture.GetTenantRefAsync(owner.Token);
+        var workspace = await fixture.CreateWorkspaceAsync(owner.Token);
+        var lead = await fixture.CreateUserInTenantAsync(owner.Token, tenantRef);
+        await fixture.Auth.As(owner.Token).AddWorkspaceMemberRawAsync(workspace, new AddMemberRequest(Email: lead.Email));
+        var leadRef = await fixture.FindTenantMemberRefAsync(owner.Token, tenantRef, lead.Email);
+
+        var roleRef = await fixture.CreateRoleAsync(owner.Token, tenantRef);
+        (await fixture.Auth.As(owner.Token).GrantRolePermissionRawAsync(tenantRef, roleRef, new GrantRolePermissionRequest(Slug: "users.manage", IsDeny: false)))
+            .IsSuccessStatusCode.Should().BeTrue();
+        (await fixture.Auth.As(owner.Token).AssignMemberRoleRawAsync(tenantRef, leadRef!.Value, roleRef, new AssignmentScopeRequest(WorkspaceRef: workspace)))
+            .IsSuccessStatusCode.Should().BeTrue();
+
+        (await TransferAsync(lead.Token, workspace, leadRef.Value)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await fixture.Auth.As(lead.Token).DeleteWorkspaceRawAsync(workspace)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        (await fixture.GetEffectivePermissionsAsync(lead.Token, workspace)).Should().NotContain("clients.manage");
+        (await fixture.ResolveWorkspaceAsync(owner.Token, workspace)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
     // ── What the caller sees of a workspace ───────────────────────────────────────────────
 
     [SkippableFact]

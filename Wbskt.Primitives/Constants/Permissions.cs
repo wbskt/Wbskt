@@ -53,6 +53,11 @@ public static class Permissions
     // of its own rather than something any member can do. Admin roles get it.
     public static readonly PermissionSlug WorkspacesCreate = PermissionSlug.CreateInternal(PermissionNames.WorkspacesCreate);
 
+    // Tenant-wide: deleting a workspace retires every device, policy and workflow in it, so it is not
+    // something users.manage in that one workspace can do. The owner may delete their own without it.
+    // Admin roles get it.
+    public static readonly PermissionSlug WorkspacesDelete = PermissionSlug.CreateInternal(PermissionNames.WorkspacesDelete);
+
     // Authoring the definition — never a running instance of it.
     public static readonly PermissionSlug WorkflowsRead = PermissionSlug.CreateInternal(PermissionNames.WorkflowsRead);
     public static readonly PermissionSlug WorkflowsCreate = PermissionSlug.CreateInternal(PermissionNames.WorkflowsCreate);

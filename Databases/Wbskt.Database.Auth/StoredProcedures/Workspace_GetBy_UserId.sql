@@ -10,6 +10,7 @@ BEGIN
         W.Name,
         W.Description,
         W.OwnerUserId,
+        W.TenantId,
         W.CreatedAt,
         T.RefId AS TenantRefId
     FROM dbo.Workspaces W

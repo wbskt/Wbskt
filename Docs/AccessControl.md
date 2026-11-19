@@ -233,6 +233,14 @@ made owner; they answer 404 `USER_NOT_FOUND`, as someone outside the tenant does
 Creating a workspace (`POST /api/v1/workspaces`) needs `workspaces.create` **tenant-wide** in the tenant
 it goes in, because a workspace counts against that tenant's plan. Only `Admin` roles hold it by default.
 
+**Handing a workspace on or deleting it needs more than `users.manage` there.** A transfer
+(`PUT /api/v1/workspaces/{ref}/owner`) gives the new owner `Admin` in the workspace, so it is a role grant:
+the caller must be the current owner (handing on what they hold) or hold `roles.manage` tenant-wide.
+A delete (`DELETE /api/v1/workspaces/{ref}`) retires every device, policy and workflow in it, so the
+caller must be its owner or hold `workspaces.delete` tenant-wide, which only `Admin` roles hold by
+default. Either refusal is 403 `PERMISSION_UNAUTHORIZED`. Without this, a member given `users.manage` in
+one workspace to add and remove people could make themselves its administrator, or delete it.
+
 The permission catalogue is **code-defined**: `Wbskt.Primitives/Constants/Permissions.cs` seeded by
 `Databases/Wbskt.Database.Auth/Scripts/Script.PostDeployment.sql`. There is deliberately no API to
 create permissions — a slug invented at runtime cannot gate anything, because every check in the

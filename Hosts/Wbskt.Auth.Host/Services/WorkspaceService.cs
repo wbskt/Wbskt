@@ -21,6 +21,12 @@ internal sealed class WorkspaceService : IWorkspaceService
     private static readonly Error MayNotCreateWorkspaces =
         Error.Forbidden("PERMISSION_UNAUTHORIZED", $"user does not have permission(s) {PermissionNames.WorkspacesCreate}");
 
+    private static readonly Error MayNotDeleteWorkspace =
+        Error.Forbidden("PERMISSION_UNAUTHORIZED", $"user does not have permission(s) {PermissionNames.WorkspacesDelete}");
+
+    private static readonly Error WorkspaceGone =
+        Error.Forbidden("WORKSPACE_UNAUTHORIZED", "user does not have permission to this workspace");
+
     private readonly IWorkspaceProvider _workspaceProvider;
     private readonly IAccountProvider _accounts;
     private readonly ITenantProvider _tenants;
@@ -184,16 +190,31 @@ internal sealed class WorkspaceService : IWorkspaceService
 
     public async Task<Result> TransferOwnershipAsync(int callerId, int workspaceId, Guid newOwnerRef, CancellationToken cancellationToken = default)
     {
+        var before = await _workspaceProvider.FindByIdAsync(workspaceId, cancellationToken);
+        if (before is null)
+        {
+            return Result.Failure(WorkspaceGone);
+        }
+
+        // The new owner is given the tenant's Admin role in the workspace (Workspace_SetOwner), which
+        // is a role grant like any other: it needs roles.manage tenant-wide, or the caller must be the
+        // owner handing on what they already hold. users.manage in the workspace alone would let a
+        // member make themselves its administrator.
+        if (before.OwnerUserId != callerId && !await RoleGrantGuard.MayGrantRolesAsync(_accessControl, callerId, before.TenantId, cancellationToken))
+        {
+            _logger.LogWarning("Ownership transfer of workspace ID {WorkspaceId} refused: user ID {CallerId} is not its owner and lacks {Permission}", workspaceId, callerId, PermissionNames.RolesManage);
+            return Result.Failure(RoleGrantGuard.RolesManageRequired);
+        }
+
         try
         {
             var newOwnerId = await ResolveUserIdAsync(newOwnerRef, cancellationToken);
-            var before = await _workspaceProvider.FindByIdAsync(workspaceId, cancellationToken);
             await _workspaceProvider.SetOwnerAsync(workspaceId, newOwnerId, cancellationToken);
             _logger.LogInformation("Workspace ID {WorkspaceId} transferred to user ID {UserId} by user ID {CallerId}", workspaceId, newOwnerId, callerId);
 
-            var previousOwnerRef = before is null ? (Guid?)null : (await _accounts.GetByIdAsync(before.OwnerUserId, cancellationToken)).RefId;
+            var previousOwnerRef = (await _accounts.GetByIdAsync(before.OwnerUserId, cancellationToken)).RefId;
             await AnnounceAsync(
-                new WorkspaceOwnershipTransferredEvent(workspaceId, newOwnerRef) { Changes = [new FieldChange("owner", previousOwnerRef?.ToString(), newOwnerRef.ToString())] },
+                new WorkspaceOwnershipTransferredEvent(workspaceId, newOwnerRef) { Changes = [new FieldChange("owner", previousOwnerRef.ToString(), newOwnerRef.ToString())] },
                 cancellationToken);
             return Result.Success();
         }
@@ -208,6 +229,20 @@ internal sealed class WorkspaceService : IWorkspaceService
 
     public async Task<Result> DeleteWorkspaceAsync(int callerId, int workspaceId, CancellationToken cancellationToken = default)
     {
+        var workspace = await _workspaceProvider.FindByIdAsync(workspaceId, cancellationToken);
+        if (workspace is null)
+        {
+            return Result.Failure(WorkspaceGone);
+        }
+
+        // Deleting retires everything in the workspace, so users.manage there is not enough: only its
+        // owner, or someone holding workspaces.delete tenant-wide, may.
+        if (workspace.OwnerUserId != callerId && !await _accessControl.VerifyPermissionAsync(callerId, workspace.TenantId, null, PermissionNames.WorkspacesDelete, cancellationToken))
+        {
+            _logger.LogWarning("Delete of workspace ID {WorkspaceId} refused: user ID {CallerId} is not its owner and lacks {Permission}", workspaceId, callerId, PermissionNames.WorkspacesDelete);
+            return Result.Failure(MayNotDeleteWorkspace);
+        }
+
         // The workspace's policies, clients and workflows live in the main database, which the
         // management host retires on this event. It is written to the outbox in the delete's own
         // transaction (see OutboxDispatcher), so a broker outage or a restart right after the
