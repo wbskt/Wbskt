@@ -139,6 +139,11 @@ public sealed class CredentialRetentionIntegrationTests(AuthSqlFixture fixture)
         var error = await Assert.ThrowsAsync<SqlException>(() => DeleteUnconfirmedAsync(verified));
         Assert.Equal(50029, error.Number);
         Assert.True(await ScalarAsync<bool>("SELECT IsActive FROM dbo.Users WHERE Id = @p0", verified));
+
+        // A new link asked for between the read and the delete: refused too, so the link keeps working.
+        var asked = await Assert.ThrowsAsync<SqlException>(() => DeleteUnconfirmedAsync(resent));
+        Assert.Equal(50029, asked.Number);
+        Assert.True(await ScalarAsync<bool>("SELECT IsActive FROM dbo.Users WHERE Id = @p0", resent));
     }
 
     private async Task<int> UserAsync(bool verified, bool signedIn)
