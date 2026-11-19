@@ -1,5 +1,6 @@
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
+using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 
@@ -72,6 +73,26 @@ public sealed class RegistrationPolicyDeletionIntegrationTests(SqlEdgeFixture fi
         Assert.False(outcome.Deleted);
         Assert.Equal(0, outcome.ClientCount);
         Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.RegistrationPolicies WHERE Id = @p0", policyId));
+    }
+
+    [SkippableFact]
+    public async Task A_limit_notice_is_claimed_once_an_interval_per_policy_and_kind_and_goes_with_the_policy()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int workspaceId = NewWorkspaceId();
+        var (policyId, _) = await CreatePolicyAsync(workspaceId);
+        var provider = Provider();
+        var start = new DateTime(2026, 11, 19, 10, 0, 0, DateTimeKind.Utc);
+        var hour = TimeSpan.FromHours(1);
+
+        Assert.True(await provider.TryClaimLimitNoticeAsync(policyId, RegistrationLimitKind.Plan, start, hour));
+        Assert.False(await provider.TryClaimLimitNoticeAsync(policyId, RegistrationLimitKind.Plan, start.AddMinutes(30), hour));
+        Assert.True(await provider.TryClaimLimitNoticeAsync(policyId, RegistrationLimitKind.Policy, start.AddMinutes(30), hour));
+        Assert.True(await provider.TryClaimLimitNoticeAsync(policyId, RegistrationLimitKind.Plan, start.AddHours(1), hour));
+        Assert.False(await provider.TryClaimLimitNoticeAsync(int.MaxValue, RegistrationLimitKind.Plan, start, hour));
+
+        Assert.True((await provider.DeleteAsync(workspaceId, policyId)).Deleted);
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.RegistrationLimitNotices WHERE PolicyId = @p0", policyId));
     }
 
     // ---------------------------------------------------------------- helpers

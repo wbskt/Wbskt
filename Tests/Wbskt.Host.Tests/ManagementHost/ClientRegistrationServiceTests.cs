@@ -38,9 +38,10 @@ public sealed class ClientRegistrationServiceTests
             .Setup(p => p.InsertClientAsync(WorkspaceId, policy.Id, "sensor", It.IsAny<byte[]>(), ClientStatus.Registered, new PlanCeiling(25, 3), It.IsAny<CancellationToken>()))
             .ThrowsAsync(SqlExceptions.WithNumber(50025, "The plan has reached its client limit."));
         clients.Setup(p => p.GetRegisteredCountByAccountAsync(WorkspaceId, 3, It.IsAny<CancellationToken>())).ReturnsAsync(140);
+        policies.Setup(p => p.TryClaimLimitNoticeAsync(policy.Id, RegistrationLimitKind.Plan, It.IsAny<DateTime>(), TimeSpan.FromHours(1), It.IsAny<CancellationToken>())).ReturnsAsync(true);
         var plans = new FixedWorkspacePlans(PlanCode.Maker, tenantId: 3, adjust: l => l with { Clients = 25 });
         using var metrics = new ManagementMetrics();
-        var service = new ClientRegistrationService(clients.Object, policies.Object, bus.Object, NullLogger<ClientRegistrationService>.Instance, metrics, plans);
+        var service = new ClientRegistrationService(clients.Object, policies.Object, bus.Object, NullLogger<ClientRegistrationService>.Instance, metrics, plans, TimeProvider.System);
         var controller = new ClientRegistrationsController(service, NullLogger<ClientRegistrationsController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
@@ -66,6 +67,40 @@ public sealed class ClientRegistrationServiceTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
+    public async Task A_board_retrying_at_a_limit_is_announced_once_an_hour_and_refused_every_time(bool policyLimit)
+    {
+        // #1081: a refused board retries every half minute; each retry used to write a Warning.
+        var clients = new Mock<IClientProvider>();
+        var policies = new Mock<IRegistrationPolicyProvider>();
+        var bus = new Mock<IEventBus>();
+        var policy = new RegistrationPolicy { Id = 5, RefId = Guid.NewGuid(), WorkspaceId = WorkspaceId, Name = "lab", IsEnabled = true, AutoApproval = true };
+        if (policyLimit)
+        {
+            policy.MaxClients = 3;
+            policy.RegisteredClientCount = 3;
+        }
+
+        policies.Setup(p => p.FindByPinAsync("PIN", It.IsAny<CancellationToken>())).ReturnsAsync(policy);
+        clients
+            .Setup(p => p.InsertClientAsync(WorkspaceId, policy.Id, "sensor", It.IsAny<byte[]>(), ClientStatus.Registered, It.IsAny<PlanCeiling>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(SqlExceptions.WithNumber(50025, "The plan has reached its client limit."));
+        var claimed = new Queue<bool>([true, false]);
+        policies.Setup(p => p.TryClaimLimitNoticeAsync(policy.Id, policyLimit ? RegistrationLimitKind.Policy : RegistrationLimitKind.Plan, It.IsAny<DateTime>(), TimeSpan.FromHours(1), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => claimed.Dequeue());
+        using var metrics = new ManagementMetrics();
+        var service = new ClientRegistrationService(clients.Object, policies.Object, bus.Object, NullLogger<ClientRegistrationService>.Instance, metrics, new FixedWorkspacePlans(PlanCode.Maker, tenantId: 3), TimeProvider.System);
+
+        var first = await service.InitiateRegistrationAsync(new ClientRegistrationRequest("PIN", "sensor"), CancellationToken.None);
+        var retry = await service.InitiateRegistrationAsync(new ClientRegistrationRequest("PIN", "sensor"), CancellationToken.None);
+
+        first.Error.Code.Should().Be(retry.Error.Code).And.Be(policyLimit ? "POLICY_LIMIT_REACHED" : "PLAN_CLIENT_LIMIT_REACHED");
+        bus.Verify(b => b.PublishAsync(It.IsAny<PolicyRegistrationLimitReachedEvent>(), It.IsAny<CancellationToken>()), policyLimit ? Times.Once() : Times.Never());
+        bus.Verify(b => b.PublishAsync(It.IsAny<PlanClientLimitReachedEvent>(), It.IsAny<CancellationToken>()), policyLimit ? Times.Never() : Times.Once());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
     public async Task A_frozen_account_enrols_nothing(bool seenFirst)
     {
         var clients = new Mock<IClientProvider>();
@@ -79,7 +114,7 @@ public sealed class ClientRegistrationServiceTests
             .Setup(p => p.InsertClientAsync(WorkspaceId, policy.Id, "sensor", It.IsAny<byte[]>(), ClientStatus.Registered, It.IsAny<PlanCeiling>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(SqlExceptions.WithNumber(50044, "The account is frozen."));
         using var metrics = new ManagementMetrics();
-        var service = new ClientRegistrationService(clients.Object, policies.Object, bus.Object, NullLogger<ClientRegistrationService>.Instance, metrics, new FixedWorkspacePlans(PlanCode.Pro, tenantId: 3, frozen: seenFirst));
+        var service = new ClientRegistrationService(clients.Object, policies.Object, bus.Object, NullLogger<ClientRegistrationService>.Instance, metrics, new FixedWorkspacePlans(PlanCode.Pro, tenantId: 3, frozen: seenFirst), TimeProvider.System);
 
         var result = await service.InitiateRegistrationAsync(new ClientRegistrationRequest("PIN", "sensor"), CancellationToken.None);
 
@@ -97,7 +132,7 @@ public sealed class ClientRegistrationServiceTests
         var policy = new RegistrationPolicy { Id = 5, RefId = Guid.NewGuid(), WorkspaceId = WorkspaceId, Name = "lab", IsEnabled = true, AutoApproval = true, MaxClients = 3, RegisteredClientCount = 3 };
         policies.Setup(p => p.FindByPinAsync("PIN", It.IsAny<CancellationToken>())).ReturnsAsync(policy);
         using var metrics = new ManagementMetrics();
-        var service = new ClientRegistrationService(clients.Object, policies.Object, bus.Object, NullLogger<ClientRegistrationService>.Instance, metrics, new FixedWorkspacePlans());
+        var service = new ClientRegistrationService(clients.Object, policies.Object, bus.Object, NullLogger<ClientRegistrationService>.Instance, metrics, new FixedWorkspacePlans(), TimeProvider.System);
 
         var result = await service.InitiateRegistrationAsync(new ClientRegistrationRequest("PIN", "sensor"), CancellationToken.None);
 
@@ -115,7 +150,7 @@ public sealed class ClientRegistrationServiceTests
         var clients = new Mock<IClientProvider>();
         var policies = new Mock<IRegistrationPolicyProvider>();
         using var metrics = new ManagementMetrics();
-        var service = new ClientRegistrationService(clients.Object, policies.Object, Mock.Of<IEventBus>(), NullLogger<ClientRegistrationService>.Instance, metrics, new FixedWorkspacePlans());
+        var service = new ClientRegistrationService(clients.Object, policies.Object, Mock.Of<IEventBus>(), NullLogger<ClientRegistrationService>.Instance, metrics, new FixedWorkspacePlans(), TimeProvider.System);
 
         var result = await service.InitiateRegistrationAsync(new ClientRegistrationRequest("PIN", name));
 
@@ -134,7 +169,7 @@ public sealed class ClientRegistrationServiceTests
         clients.Setup(p => p.InsertClientAsync(WorkspaceId, policy.Id, "sensor", It.IsAny<byte[]>(), ClientStatus.Registered, It.IsAny<PlanCeiling>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Client { Id = 9, RefId = Guid.NewGuid(), WorkspaceId = WorkspaceId, Name = "sensor", Status = ClientStatus.Registered });
         using var metrics = new ManagementMetrics();
-        var service = new ClientRegistrationService(clients.Object, policies.Object, Mock.Of<IEventBus>(), NullLogger<ClientRegistrationService>.Instance, metrics, new FixedWorkspacePlans());
+        var service = new ClientRegistrationService(clients.Object, policies.Object, Mock.Of<IEventBus>(), NullLogger<ClientRegistrationService>.Instance, metrics, new FixedWorkspacePlans(), TimeProvider.System);
 
         var result = await service.InitiateRegistrationAsync(new ClientRegistrationRequest("PIN", "  sensor  "));
 

@@ -179,4 +179,18 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
 
         return 0;
     }
+
+    public async Task<bool> TryClaimLimitNoticeAsync(int policyId, RegistrationLimitKind kind, DateTime nowUtc, TimeSpan interval, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteScalarAsync<bool>(
+            "dbo.RegistrationLimitNotice_Claim",
+            p =>
+            {
+                p.AddWithValue("@PolicyId", policyId);
+                p.AddWithValue("@Kind", kind == RegistrationLimitKind.Plan ? "plan" : "policy");
+                p.Add("@NowUtc", SqlDbType.DateTime2).Value = nowUtc;
+                p.AddWithValue("@IntervalSeconds", (int)interval.TotalSeconds);
+            },
+            cancellationToken);
+    }
 }
