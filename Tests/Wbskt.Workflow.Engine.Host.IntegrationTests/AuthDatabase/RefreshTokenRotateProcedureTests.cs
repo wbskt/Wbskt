@@ -57,6 +57,7 @@ public sealed class RefreshTokenRotateProcedureTests(AuthSqlFixture fixture)
         await AddTokenAsync(otherUserId);
         byte[] successor = NewHash();
         await RotateAsync(old, successor);
+        await RotateAsync(successor, NewHash());
 
         var replay = await RotateAsync(old, NewHash());
 
@@ -65,6 +66,45 @@ public sealed class RefreshTokenRotateProcedureTests(AuthSqlFixture fixture)
         Assert.Null(replay.Username);
         Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.RefreshTokens WHERE UserId = @p0 AND Revoked IS NULL", userId));
         Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.RefreshTokens WHERE UserId = @p0 AND Revoked IS NULL", otherUserId));
+    }
+
+    /// <summary>
+    /// The answer to a rotation was lost, so the client presents the token it still holds. Its
+    /// replacement was never used, so this is not theft: refused, and every session carries on.
+    /// </summary>
+    [SkippableFact]
+    public async Task A_token_rotated_moments_ago_into_an_unused_replacement_is_refused_without_ending_anything()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int userId = await CreateUserAsync();
+        byte[] old = await AddTokenAsync(userId);
+        await AddTokenAsync(userId);
+        byte[] successor = NewHash();
+        await RotateAsync(old, successor);
+        byte[] attempted = NewHash();
+
+        var again = await RotateAsync(old, attempted);
+
+        Assert.Equal("Superseded", again.Outcome);
+        Assert.Null(again.Username);
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.RefreshTokens WHERE TokenHash = @p0", attempted));
+        Assert.Equal(2, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.RefreshTokens WHERE UserId = @p0 AND Revoked IS NULL", userId));
+        Assert.Equal("Rotated", (await RotateAsync(successor, NewHash())).Outcome);
+    }
+
+    [SkippableFact]
+    public async Task A_token_rotated_before_the_grace_period_is_a_replay_even_when_its_replacement_is_unused()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int userId = await CreateUserAsync();
+        byte[] old = await AddTokenAsync(userId);
+        await RotateAsync(old, NewHash());
+        await ExecAsync("UPDATE dbo.RefreshTokens SET Revoked = DATEADD(SECOND, -61, SYSUTCDATETIME()) WHERE TokenHash = @p0", old);
+
+        var replay = await RotateAsync(old, NewHash());
+
+        Assert.Equal("Replayed", replay.Outcome);
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.RefreshTokens WHERE UserId = @p0 AND Revoked IS NULL", userId));
     }
 
     /// <summary>
@@ -212,7 +252,7 @@ public sealed class RefreshTokenRotateProcedureTests(AuthSqlFixture fixture)
         var results = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => RotateAsync(old, NewHash())));
 
         Assert.Single(results, r => r.Outcome == "Rotated");
-        Assert.All(results, r => Assert.Contains(r.Outcome, new[] { "Rotated", "Raced", "Replayed" }));
+        Assert.All(results, r => Assert.Contains(r.Outcome, new[] { "Rotated", "Raced", "Superseded" }));
         Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.RefreshTokens WHERE UserId = @p0 AND ReplacedByTokenHash IS NULL AND TokenHash <> @p1", userId, old));
     }
 

@@ -177,7 +177,7 @@ The most security-sensitive area, and entirely uncovered today.
 | `AUTH_RT_02` | + | New access token authenticates a protected call | `GET /api/workspaces` → 200 |
 | `AUTH_RT_03` | + | Chained rotation: refresh three times in sequence | Each returns 200 with fresh tokens |
 | `AUTH_RT_04` | − | **Replay.** Refresh with token A → get B; refresh with A again | **401** `AUTH_TOKEN_INACTIVE` |
-| `AUTH_RT_05` | − | After the `AUTH_RT_04` replay, try to use B | **401** — replay revokes the *entire* session family, not just the replayed token. This is the assertion that proves the theft-detection works |
+| `AUTH_RT_05` | − | Refresh A → B, then B → C; replay A, then try to use C | **401** — replaying a token whose replacement has been used revokes the *entire* session family, not just the replayed token. This is the assertion that proves the theft-detection works |
 | `AUTH_RT_06` | − | After `AUTH_RT_05`, the user must log in again | Fresh login succeeds; the account is not locked |
 | `AUTH_RT_07` | − | Garbage token string | **401** `AUTH_INVALID_TOKEN` |
 | `AUTH_RT_08` | − | Empty-string token | model-validation 400 |
@@ -190,6 +190,7 @@ The most security-sensitive area, and entirely uncovered today.
 | `AUTH_RT_15` | − | Two concurrent refreshes with the same token | Exactly one 200; the other 401. Must not mint two live families |
 | `AUTH_RT_16` | + | Rotation is anonymous (no `Authorization` header) | **200** — the refresh token is the credential |
 | `AUTH_RT_17` | + | Access token issued before rotation stays valid until expiry | Documents that rotation does not retro-invalidate access tokens |
+| `AUTH_RT_19` | − | Refresh A → B, then A again at once (B never used); check another session and B | A is **401** `AUTH_TOKEN_INACTIVE`, but the other session and B still refresh (**200**). Within 60 seconds of a rotation whose replacement is unused, `RefreshToken_Rotate` answers `Superseded`: the answer was most likely lost, so nothing is revoked and no alert is raised. The caller gets no token, so a thief gains nothing (#943) |
 | `AUTH_RT_18` | − | Log out on client A, then client A retries its refresh; check client B | A's retry is **401** `AUTH_TOKEN_INACTIVE` and B still refreshes (**200**). A token revoked on purpose (logout, a revoked session, a password change) has no successor, so `RefreshToken_Rotate` tells it from a replay of a token rotation retired (`AUTH_RT_04`), and changes nothing. The trade-off: a revoked token that was stolen before the revocation is refused but no longer ends the thief's other sessions, which a rotated one still does; the refusal is logged as a warning |
 
 

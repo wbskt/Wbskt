@@ -10,7 +10,13 @@ public enum RefreshRotationOutcome
     Expired,
     SessionExpired,
     UserInactive,
-    Raced
+    Raced,
+
+    /// <summary>
+    /// Retired by rotation moments ago into a replacement that has not been used: the answer that
+    /// carried it was most likely lost. Refused without treating it as theft.
+    /// </summary>
+    Superseded
 }
 
 /// <summary>
