@@ -167,6 +167,46 @@ public sealed class DeletedWorkspaceSweeperTests : IDisposable
     }
 
     [Fact]
+    public async Task A_tick_purges_each_deleted_workspace_until_nothing_is_left_then_prunes()
+    {
+        // #965: the purge finds a workspace by its account copy, so it has to run before the prune.
+        _auth.Setup(a => a.GetDeletedBetweenAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        var calls = new List<string>();
+        _provider.Setup(p => p.GetPurgeableAsync(DeletedWorkspaceSweeper.PurgeWorkspaceBatchSize, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([8, 9]);
+        _provider.SetupSequence(p => p.PurgeAsync(8, DeletedWorkspaceSweeper.PurgeBatchSize, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DeletedWorkspaceSweeper.PurgeBatchSize)
+            .ReturnsAsync(4)
+            .ReturnsAsync(0);
+        _provider.Setup(p => p.PurgeAsync(9, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Callback(() => calls.Add("purge 9"))
+            .ReturnsAsync(0);
+        _provider.Setup(p => p.DeleteRetiredAccountsAsync(It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Callback(() => calls.Add("prune"))
+            .ReturnsAsync(0);
+
+        await Sweeper().TickAsync(CancellationToken.None);
+
+        _provider.Verify(p => p.PurgeAsync(8, DeletedWorkspaceSweeper.PurgeBatchSize, It.IsAny<CancellationToken>()), Times.Exactly(3));
+        _provider.Verify(p => p.PurgeAsync(9, DeletedWorkspaceSweeper.PurgeBatchSize, It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(["purge 9", "prune"], calls);
+    }
+
+    [Fact]
+    public async Task A_purge_that_fails_does_not_stop_the_prune_or_fail_the_tick()
+    {
+        _auth.Setup(a => a.GetDeletedBetweenAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        _provider.Setup(p => p.GetPurgeableAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TimeoutException("database busy"));
+
+        await Sweeper().TickAsync(CancellationToken.None);
+
+        _provider.Verify(p => p.DeleteRetiredAccountsAsync(Now.UtcDateTime, DeletedWorkspaceSweeper.PruneBatchSize, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task A_workspace_it_retires_is_announced_as_the_delete_event_would_announce_it()
     {
         Deleted(7);

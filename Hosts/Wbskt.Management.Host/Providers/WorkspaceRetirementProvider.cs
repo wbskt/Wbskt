@@ -48,4 +48,25 @@ internal sealed class WorkspaceRetirementProvider : BaseSqlProvider, IWorkspaceR
             },
             cancellationToken);
     }
+
+    public async Task<IReadOnlyCollection<int>> GetPurgeableAsync(int batchSize, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.Workspace_GetPurgeable",
+            p => p.AddWithValue("@BatchSize", batchSize),
+            reader => reader.GetInt32(reader.GetOrdinal("WorkspaceId")),
+            cancellationToken);
+    }
+
+    public async Task<int> PurgeAsync(int workspaceId, int batchSize, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteScalarAsync<int>(
+            "dbo.Workspace_Purge",
+            p =>
+            {
+                p.AddWithValue("@WorkspaceId", workspaceId);
+                p.AddWithValue("@BatchSize", batchSize);
+            },
+            cancellationToken);
+    }
 }

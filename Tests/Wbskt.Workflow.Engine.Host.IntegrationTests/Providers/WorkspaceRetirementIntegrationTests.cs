@@ -240,6 +240,84 @@ public sealed class WorkspaceRetirementIntegrationTests(SqlEdgeFixture fixture)
         Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.ClientReadings WHERE ClientId = @p0", ws.RegisteredClientId));
     }
 
+    /// <summary>
+    /// #965: once a deleted workspace's readings and runs are gone, the purge removes its clients (with
+    /// what they reported about themselves), policies, templates, workflows and definitions, in that
+    /// order, and leaves the neighbouring workspace alone. The account copy can then be pruned.
+    /// </summary>
+    [SkippableFact]
+    public async Task A_deleted_workspace_is_purged_once_its_runs_are_gone()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var ws = await SeedWorkspaceAsync();
+        await ExecAsync("""
+            INSERT INTO dbo.WorkspaceAccounts (WorkspaceId, TenantId, TenantRefId, PlanCode, PlanRevision, RetiredAt)
+            VALUES (@p0, @p0, NEWID(), N'Free', 1, '2026-01-01');
+            INSERT INTO dbo.ClientTags (ClientId, Tag) VALUES (@p1, N'kitchen');
+            INSERT INTO dbo.ClientStateVariables (ClientId, Name, DataType, ValueJson) VALUES (@p1, N'temp', N'number', N'21');
+            INSERT INTO dbo.MessageTemplates (WorkspaceId, PolicyId, Name, MessageType, PayloadJson) VALUES (@p0, @p2, N't', N'cmd', N'{}');
+            INSERT INTO dbo.SharedVariables (WorkflowRefId, VarName, VarType, ValueJson) VALUES (@p3, N'n', N'number', N'1');
+            """, ws.WorkspaceId, ws.RegisteredClientId, ws.PolicyId, ws.WorkflowRefId);
+
+        // Not retired yet: nothing goes.
+        await ExecAsync("UPDATE dbo.WorkspaceAccounts SET RetiredAt = NULL WHERE WorkspaceId = @p0", ws.WorkspaceId);
+        Assert.Equal(0, await Provider().PurgeAsync(ws.WorkspaceId, batchSize: 100));
+        await ExecAsync("UPDATE dbo.WorkspaceAccounts SET RetiredAt = '2026-01-01' WHERE WorkspaceId = @p0", ws.WorkspaceId);
+
+        await Provider().RetireAsync(ws.WorkspaceId);
+        Assert.Contains(ws.WorkspaceId, await Provider().GetPurgeableAsync(batchSize: 100_000));
+
+        // Two clients a call, then the policy and template once none is left. The runs keep the workflow.
+        Assert.Equal(2, await Provider().PurgeAsync(ws.WorkspaceId, batchSize: 2));
+        while (await Provider().PurgeAsync(ws.WorkspaceId, batchSize: 2) > 0)
+        {
+        }
+
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Clients WHERE WorkspaceId = @p0", ws.WorkspaceId));
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.ClientTags WHERE ClientId = @p0", ws.RegisteredClientId));
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.RegistrationPolicies WHERE WorkspaceId = @p0", ws.WorkspaceId));
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.MessageTemplates WHERE WorkspaceId = @p0", ws.WorkspaceId));
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Workflows WHERE WorkspaceId = @p0", ws.WorkspaceId));
+        Assert.DoesNotContain(ws.WorkspaceId, await Provider().GetPurgeableAsync(batchSize: 100_000));
+
+        await ExecAsync("DELETE FROM dbo.Runs WHERE WorkflowDefinitionId = @p0", ws.DefinitionId);
+        Assert.True(await Provider().PurgeAsync(ws.WorkspaceId, batchSize: 2) > 0);
+
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Workflows WHERE WorkspaceId = @p0", ws.WorkspaceId));
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.WorkflowDefinitions WHERE WorkspaceId = @p0", ws.WorkspaceId));
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.SharedVariables WHERE WorkflowRefId = @p0", ws.WorkflowRefId));
+        Assert.DoesNotContain(ws.WorkspaceId, await Provider().GetPurgeableAsync(batchSize: 100_000));
+        Assert.Equal(0, await Provider().PurgeAsync(ws.WorkspaceId, batchSize: 2));
+
+        // The neighbouring workspace is untouched.
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.RegistrationPolicies WHERE Id = @p0", ws.OtherPolicyId));
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Clients WHERE Id = @p0", ws.OtherClientId));
+    }
+
+    /// <summary>A client with readings left waits for the readings sweep, and so do its policy and the account copy.</summary>
+    [SkippableFact]
+    public async Task A_client_with_readings_left_is_not_purged()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int workspaceId = await CreateAccountAsync(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var (policyId, _) = await CreatePolicyAsync(workspaceId);
+        int clientId = await CreateClientAsync(workspaceId, policyId, status: 2);
+        await ExecAsync("""
+            INSERT INTO dbo.ClientReadings (ClientId, Name, SentAt, ReceivedAt, NumberValue, IsLate)
+            VALUES (@p0, 't', '2026-08-01', '2026-08-01', 1, 0);
+            """, clientId);
+
+        Assert.DoesNotContain(workspaceId, await Provider().GetPurgeableAsync(batchSize: 100_000));
+        Assert.Equal(0, await Provider().PurgeAsync(workspaceId, batchSize: 100));
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Clients WHERE Id = @p0", clientId));
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.RegistrationPolicies WHERE Id = @p0", policyId));
+
+        await ExecAsync("DELETE FROM dbo.ClientReadings WHERE ClientId = @p0", clientId);
+
+        Assert.Contains(workspaceId, await Provider().GetPurgeableAsync(batchSize: 100_000));
+        Assert.Equal(2, await Provider().PurgeAsync(workspaceId, batchSize: 100));
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private sealed record SeededWorkspace(

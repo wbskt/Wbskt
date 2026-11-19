@@ -3,10 +3,11 @@
 -- deleted workspace's policies keep accepting their PIN, its clients keep connecting, and its
 -- schedules and webhooks keep starting runs.
 --
--- Rows are disabled or revoked rather than deleted, so the history (clients, definitions, runs)
--- stays readable for audit. Only the trigger and schedule registrations are deleted, exactly as
--- deprecating a single workflow does, and the workspace's integrations with their credentials. The
--- clients' readings are queued for clearing.
+-- Rows are disabled or revoked here rather than deleted: runs still in progress are cancelled, and
+-- runs and readings have to go before what they point at. Only the trigger and schedule registrations
+-- are deleted, exactly as deprecating a single workflow does, and the workspace's integrations with
+-- their credentials. The clients' readings are queued for clearing, and dbo.Workspace_Purge removes the
+-- clients, policies, templates, workflows and definitions once nothing needs them.
 --
 -- Idempotent: the event that drives it can be delivered more than once. A client already revoked is
 -- not reported again, so the caller does not re-announce it.

@@ -16,7 +16,8 @@ namespace Wbskt.Management.Host.Services;
 /// (<c>wbskt_management_workspaces_retired_by_sweep_total</c>): an event that was lost, before the
 /// outbox existed, or whose handler ran out of retries. Then it deletes the account copies of deleted
 /// workspaces that nothing reads any more (<c>dbo.WorkspaceAccount_DeleteRetired</c>), whether or not
-/// the auth host answered.
+/// the auth host answered, after purging what those workspaces left here once nothing needs it
+/// (<c>dbo.Workspace_Purge</c>).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -62,6 +63,8 @@ public sealed class DeletedWorkspaceSweeper : PeriodicWorker
     }
 
     internal const int PruneBatchSize = 500;
+    internal const int PurgeBatchSize = 500;
+    internal const int PurgeWorkspaceBatchSize = 100;
 
     protected override string Name => "Deleted workspace sweep";
 
@@ -84,6 +87,17 @@ public sealed class DeletedWorkspaceSweeper : PeriodicWorker
         ct.ThrowIfCancellationRequested();
         try
         {
+            // Before the prune: the purge finds a deleted workspace by its account copy.
+            await PurgeAsync(services, ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            Logger.LogError(ex, "Purging what deleted workspaces left behind failed; the next sweep tries again.");
+        }
+
+        ct.ThrowIfCancellationRequested();
+        try
+        {
             await PruneAccountsAsync(services, ct);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested && sweepFailure is not null)
@@ -95,6 +109,34 @@ public sealed class DeletedWorkspaceSweeper : PeriodicWorker
         {
             ExceptionDispatchInfo.Throw(sweepFailure);
         }
+    }
+
+    /// <summary>
+    /// Deletes the clients, policies, templates, workflows and definitions of deleted workspaces once
+    /// their readings and runs are gone (<c>dbo.Workspace_Purge</c>), <see cref="PurgeBatchSize"/>
+    /// clients a call. Returns how many rows went.
+    /// </summary>
+    internal async Task<int> PurgeAsync(IServiceProvider services, CancellationToken cancellationToken)
+    {
+        var provider = services.GetRequiredService<IWorkspaceRetirementProvider>();
+        int purged = 0;
+        foreach (int workspaceId in await provider.GetPurgeableAsync(PurgeWorkspaceBatchSize, cancellationToken))
+        {
+            int batch;
+            do
+            {
+                batch = await provider.PurgeAsync(workspaceId, PurgeBatchSize, cancellationToken);
+                purged += batch;
+            }
+            while (batch > 0);
+        }
+
+        if (purged > 0)
+        {
+            Logger.LogInformation("Purged {Count} row(s) that deleted workspaces left behind.", purged);
+        }
+
+        return purged;
     }
 
     /// <summary>
