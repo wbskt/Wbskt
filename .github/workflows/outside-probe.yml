@@ -2,10 +2,13 @@
 # run on the VM they watch, so an outage of the whole machine (stopped, offline, out of disk) sends
 # nothing; this, and the Watchdog alert's dead man's switch, are what notice it.
 #
-# Set the repository variable PROBE_DOMAIN to the stack's DOMAIN (example.com, not a URL) to turn it
-# on; without it the run does nothing. A failed probe opens the issue "Outside probe failing", which
-# notifies the repository's watchers; the next good probe closes it. GitHub can start a scheduled run
-# several minutes late, so expect to hear in 10 to 30 minutes, not at once.
+# Set the repository variable PROBE_DOMAIN to the stack's DOMAIN (example.com, not a URL). On
+# wbskt/Wbskt a run without it fails, and so opens the issue, rather than skipping: it went unset for
+# a week of skipped runs that looked like nothing was wrong. Forks skip it. A failed probe opens the
+# issue "Outside probe failing", which notifies the repository's watchers; the next good probe closes
+# it. GitHub runs a '*/10' schedule only a few times a day on this repository, so this is a backup:
+# the uptime monitor and dead man's switch in deploy/README.md ("Alerts from outside") are what notice
+# a dead VM in minutes.
 name: Outside probe
 
 on:
@@ -21,7 +24,7 @@ concurrency:
 
 jobs:
   probe:
-    if: ${{ vars.PROBE_DOMAIN != '' }}
+    if: ${{ vars.PROBE_DOMAIN != '' || github.repository == 'wbskt/Wbskt' }}
     runs-on: ubuntu-latest
     # Well above the slowest probe: a host that drops packets costs each URL about 5 minutes of
     # connect timeouts and retries, and the URLs are probed side by side.
@@ -35,6 +38,11 @@ jobs:
           DOMAIN: ${{ vars.PROBE_DOMAIN }}
         run: |
           set -uo pipefail
+          if [[ -z "$DOMAIN" ]]; then
+            echo "::error::the repository variable PROBE_DOMAIN is not set, so nothing outside the VM is probing it"
+            echo "failed=nothing: the repository variable PROBE_DOMAIN is not set" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
           # Readiness, so a host that is up but cannot reach SQL or the broker counts as down. Nine
           # tries over about three minutes, any error included (--fail makes Traefik's 404 for a host
           # with no healthy replica one), so a deploy's restart of a single replica (30s stop grace,
@@ -50,8 +58,26 @@ jobs:
             curl -sS --fail -o /dev/null -w '%{http_code}' --connect-timeout 10 --max-time 15 \
               --retry 8 --retry-delay 20 --retry-all-errors "${urls[$i]}" > "$dir/$i" 2>/dev/null &
           done
+          # MQTT is not HTTP: a TLS handshake with the broker's own name is what a device does first.
+          mqtt="mqtt.$DOMAIN:8883"
+          (
+            for attempt in 1 2 3 4 5 6 7 8 9; do
+              if timeout 15 openssl s_client -connect "$mqtt" -servername "mqtt.$DOMAIN" -verify_return_error </dev/null >/dev/null 2>&1; then
+                echo ok > "$dir/mqtt"
+                exit 0
+              fi
+              [[ "$attempt" -lt 9 ]] && sleep 20
+            done
+            echo failed > "$dir/mqtt"
+          ) &
           wait
           failed=()
+          if [[ "$(cat "$dir/mqtt")" == ok ]]; then
+            echo "ok    tls mqtts://$mqtt"
+          else
+            echo "::error::mqtts://$mqtt did not complete a TLS handshake"
+            failed+=("mqtts://$mqtt (no TLS handshake)")
+          fi
           for i in "${!urls[@]}"; do
             code=$(cat "$dir/$i")
             if [[ "$code" == 2* ]]; then
