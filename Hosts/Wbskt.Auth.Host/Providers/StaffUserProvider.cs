@@ -30,6 +30,15 @@ internal sealed class StaffUserProvider(IConfiguration configuration) : BaseSqlP
         }, cancellationToken);
     }
 
+    public Task<Guid> RepairAdministratorAsync(int tenantId, int userId, CancellationToken cancellationToken)
+    {
+        return ExecuteScalarAsync<Guid>("dbo.TenantMember_StaffRepairAdministrator", p =>
+        {
+            p.AddWithValue("@TenantId", tenantId);
+            p.AddWithValue("@UserId", userId);
+        }, cancellationToken);
+    }
+
     public Task<int> FindTenantIdByRefIdAsync(Guid tenantRef, CancellationToken cancellationToken)
     {
         return ExecuteScalarAsync<int>("dbo.Tenant_FindBy_RefId", p => p.AddWithValue("@RefId", tenantRef), cancellationToken);

@@ -123,6 +123,9 @@ public static class InternalRoutes
     /// <summary>Auth host: <c>POST</c> removes a member from a tenant.</summary>
     public const string AdminTenantMemberRemove = AdminPrefix + "/tenants/{tenantRef:guid}/members/{userRef:guid}/remove";
 
+    /// <summary>Auth host: <c>POST</c> makes a member an administrator of a tenant nobody can administer.</summary>
+    public const string AdminTenantMemberRepairAdministrator = AdminPrefix + "/tenants/{tenantRef:guid}/members/{userRef:guid}/repair-administrator";
+
     /// <summary>Management host: <c>PUT</c> sets or clears a workspace's monthly credit cap, for the admin host.</summary>
     public const string AdminWorkspaceCreditCap = AdminPrefix + "/workspaces/{workspaceRef:guid}/credit-cap";
 

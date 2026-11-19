@@ -137,6 +137,44 @@ public sealed class AdminMemberServiceTests
     }
 
     [Fact]
+    public async Task Repairing_an_administrator_assigns_the_admin_role_and_announces_it_as_support()
+    {
+        var adminRoleRef = Guid.NewGuid();
+        _staff.Setup(s => s.RepairAdministratorAsync(TenantId, 42, It.IsAny<CancellationToken>())).ReturnsAsync(adminRoleRef);
+        _runner.Inspect = () =>
+        {
+            _bus.VerifyNoOtherCalls();
+            Assert.Equal(0, _accessChanges.Announced);
+        };
+
+        var result = await Service().RepairAdministratorAsync(TenantRef, _user.RefId, new AdminRepairAdministratorRequest(Staff), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(new StaffAction(AdminMemberService.RepairAdministratorAction, AdminMemberService.TargetKind, TenantRef, $"Member bob ({_user.RefId})"), _runner.Action);
+        Assert.Equal(1, _accessChanges.Announced);
+        _bus.Verify(b => b.PublishAsync(It.Is<TenantActorEvent>(e => e is MemberRoleAssignedEvent
+            && ((MemberRoleAssignedEvent)e).MemberRefId == _user.RefId
+            && ((MemberRoleAssignedEvent)e).RoleRefId == adminRoleRef
+            && ((MemberRoleAssignedEvent)e).WorkspaceRefId == null
+            && e.ActorSource == EventSource.Support), It.IsAny<CancellationToken>()));
+        _bus.Verify(b => b.PublishAsync(It.Is<SecurityAlertEvent>(e => e.AlertType == "AdministratorRepaired"), It.IsAny<CancellationToken>()));
+    }
+
+    [Theory]
+    [InlineData(50016, "MEMBER_NOT_FOUND")]
+    [InlineData(50048, "MEMBER_CANNOT_ACT")]
+    public async Task A_member_who_could_not_administer_is_refused(int number, string code)
+    {
+        _staff.Setup(s => s.RepairAdministratorAsync(TenantId, 42, It.IsAny<CancellationToken>())).ThrowsAsync(SqlExceptions.WithNumber(number, "guard"));
+
+        var result = await Service().RepairAdministratorAsync(TenantRef, _user.RefId, new AdminRepairAdministratorRequest(Staff), CancellationToken.None);
+
+        Assert.Equal(code, result.Error.Code);
+        Assert.Equal(0, _accessChanges.Announced);
+        _bus.VerifyNoOtherCalls();
+    }
+
+    [Fact]
     public async Task A_replayed_removal_announces_nothing()
     {
         _runner.Replay = true;
