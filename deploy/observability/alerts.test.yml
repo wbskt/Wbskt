@@ -107,9 +107,58 @@ tests:
               job: wbskt-auth
             exp_annotations:
               action: "Check whether it is running and read its recent logs. A service deliberately scaled to 0 replicas fires this too."
-              command: "docker compose ps auth && docker compose logs --tail 200 auth"
+              command: "docker compose --profile admin ps auth && docker compose --profile admin logs --tail 200 auth"
               impact: "Either that service is down, so what it does (sign-in for auth, the console's API for management, device connections for client-auth and the gateways) is failing, or it is running but its monitoring is broken."
               summary: "The auth service has been silent for about 10 minutes"
+
+  # The platform admin counts only where its container runs: silent with a container, it fires;
+  # with none (the admin profile not deployed), the same silence is quiet.
+  - interval: 1m
+    input_series:
+      - series: 'target_info{job="wbskt-auth", instance="auth-1"}'
+        values: '1x40'
+      - series: 'target_info{job="wbskt-management", instance="management-1"}'
+        values: '1x40'
+      - series: 'target_info{job="wbskt-client-auth", instance="client-auth-1"}'
+        values: '1x40'
+      - series: 'target_info{job="wbskt-gateway-ws", instance="gateway-ws-1"}'
+        values: '1x40'
+      - series: 'target_info{job="wbskt-gateway-mqtt", instance="gateway-mqtt-1"}'
+        values: '1x40'
+      - series: 'up{job="otel-collector", instance="otel-collector:8888"}'
+        values: '1x40'
+      - series: 'container_memory_working_set_bytes{job="cadvisor", name="wbskt-admin", container_label_com_docker_compose_service="admin"}'
+        values: '100000000x40'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: HostNotReporting
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              job: wbskt-admin
+            exp_annotations:
+              action: "Check whether it is running and read its recent logs. A service deliberately scaled to 0 replicas fires this too."
+              command: "docker compose --profile admin ps admin && docker compose --profile admin logs --tail 200 admin"
+              impact: "Either that service is down, so what it does (sign-in for auth, the console's API for management, device connections for client-auth and the gateways) is failing, or it is running but its monitoring is broken."
+              summary: "The admin service has been silent for about 10 minutes"
+  - interval: 1m
+    input_series:
+      - series: 'target_info{job="wbskt-auth", instance="auth-1"}'
+        values: '1x40'
+      - series: 'target_info{job="wbskt-management", instance="management-1"}'
+        values: '1x40'
+      - series: 'target_info{job="wbskt-client-auth", instance="client-auth-1"}'
+        values: '1x40'
+      - series: 'target_info{job="wbskt-gateway-ws", instance="gateway-ws-1"}'
+        values: '1x40'
+      - series: 'target_info{job="wbskt-gateway-mqtt", instance="gateway-mqtt-1"}'
+        values: '1x40'
+      - series: 'up{job="otel-collector", instance="otel-collector:8888"}'
+        values: '1x40'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: HostNotReporting
+        exp_alerts: []
 
   # With the collector down every host goes silent at once; that is OtelCollectorDown's alert, so
   # HostNotReporting holds back.

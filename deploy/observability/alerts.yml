@@ -499,6 +499,12 @@ groups:
             or absent({__name__=~"target_info|dotnet_process_cpu_count", job="wbskt-client-auth"})
             or absent({__name__=~"target_info|dotnet_process_cpu_count", job="wbskt-gateway-ws"})
             or absent({__name__=~"target_info|dotnet_process_cpu_count", job="wbskt-gateway-mqtt"})
+            # The platform admin runs only where its profile was deployed, so it counts only while
+            # cAdvisor sees its container.
+            or (
+              absent({__name__=~"target_info|dotnet_process_cpu_count", job="wbskt-admin"})
+              and on () count(container_memory_working_set_bytes{container_label_com_docker_compose_service="admin"}) > 0
+            )
           )
           unless on () absent(up{job="otel-collector"} == 1)
         for: 5m
@@ -513,7 +519,7 @@ groups:
           action: >-
             Check whether it is running and read its recent logs. A service deliberately scaled to 0
             replicas fires this too.
-          command: "docker compose ps {{ $labels.job | reReplaceAll \"^wbskt-\" \"\" }} && docker compose logs --tail 200 {{ $labels.job | reReplaceAll \"^wbskt-\" \"\" }}"
+          command: "docker compose --profile admin ps {{ $labels.job | reReplaceAll \"^wbskt-\" \"\" }} && docker compose --profile admin logs --tail 200 {{ $labels.job | reReplaceAll \"^wbskt-\" \"\" }}"
 
       - alert: PeriodicJobFailing
         # A periodic job (credit posting, reconciles, retention, the deleted-workspace sweep, the
@@ -784,8 +790,8 @@ groups:
         # Prometheus, Loki and Tempo sit near their caps on reclaimable page cache, which this counts.
         expr: |
           max by (container_label_com_docker_compose_service, name) (
-            container_memory_working_set_bytes{container_label_com_docker_compose_service=~"auth|management|client-auth|engine|gateway-ws|gateway-mqtt"}
-            / (container_spec_memory_limit_bytes{container_label_com_docker_compose_service=~"auth|management|client-auth|engine|gateway-ws|gateway-mqtt"} > 0)
+            container_memory_working_set_bytes{container_label_com_docker_compose_service=~"auth|management|client-auth|engine|gateway-ws|gateway-mqtt|admin"}
+            / (container_spec_memory_limit_bytes{container_label_com_docker_compose_service=~"auth|management|client-auth|engine|gateway-ws|gateway-mqtt|admin"} > 0)
           ) > 0.9
         for: 10m
         labels:

@@ -582,6 +582,7 @@ reconcile_services() {
     for svc in "${lagging[@]}"; do
         echo "::warning::$svc was not part of this deploy and does not match the compose file at $TAG"
     done
+    report_admin_drift
     if (( ${#lagging[@]} > 0 )); then
         echo "    hosts: deploy.sh --tag $TAG --services $(IFS=,; echo "${lagging[*]}")"
     fi
@@ -592,6 +593,21 @@ reconcile_services() {
         echo "    apply in a quiet minute, in deploy/compose: docker compose up -d --no-build --no-deps --force-recreate ${held[*]}"
     else
         echo "==> every running service matches the compose file"
+    fi
+}
+
+# The platform admin sits in the admin profile, which the hash listing above leaves out, and is
+# deployed on its own (deploy.sh --admin-tag), so a backend deploy never recreates it. Where it runs,
+# a change to its definition here (an env var, a limit) is reported, as a lagging host is.
+report_admin_drift() {
+    local cid want have
+    cid="$(docker ps -aq --filter 'name=^wbskt-admin$')"
+    [[ -n "$cid" ]] || return 0
+    want="$(COMPOSE_PROFILES=admin docker compose config --hash admin | awk '{ print $2 }')"
+    have="$(docker inspect -f '{{index .Config.Labels "com.docker.compose.config-hash"}}' "$cid")"
+    if [[ -n "$want" && "$have" != "$want" ]]; then
+        echo "::warning::admin was not part of this deploy and does not match the compose file at $TAG"
+        echo "    admin: deploy.sh --admin-tag $(grep -E '^ADMIN_IMAGE_TAG=' "$ENV_FILE" | cut -d= -f2- || true)"
     fi
 }
 

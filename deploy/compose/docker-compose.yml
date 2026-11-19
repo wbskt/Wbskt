@@ -914,6 +914,10 @@ services:
       Platform__AuthUrl: http://auth:8080
       Platform__ManagementUrl: http://management:8080
       Platform__AdminApiKey: ${ADMIN_API_KEY:-}
+      # Traces and metrics to the collector, as the other hosts send theirs, for HostNotReporting and
+      # the memory alerts.
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: wbskt-admin
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
       interval: 10s

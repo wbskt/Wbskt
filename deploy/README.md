@@ -598,7 +598,7 @@ dashboard otherwise). The template and the zone are read at start, so after chan
 | `AlertNotificationsFailing` | Alertmanager failed to deliver alerts by email or webhook in 30 minutes; while it fires, Watchdog is held back so the dead man's switch reports it too (page) |
 | `RabbitMQMemoryAlarm` | RabbitMQ's memory alarm is on, so it blocks every publish (page) |
 | `EngineNotReporting` | no engine has reported metrics for about 10 minutes (held back while the collector is down) |
-| `HostNotReporting` | every replica of auth, management, client-auth or a gateway has gone quiet for about 10 minutes (one alert per service, held back while the collector is down) |
+| `HostNotReporting` | every replica of auth, management, client-auth or a gateway, or the platform admin where it runs, has gone quiet for about 10 minutes (one alert per service, held back while the collector is down) |
 | `PeriodicJobFailing` | a periodic job on a running container has failed every tick since it started, failed most of its ticks (more than 2) over 30 minutes, or failed without once succeeding in 6 hours (49 for a daily job); it fires after holding 10 minutes (warn) |
 | `DeletedWorkspaceRetiredBySweep` | management's daily deleted workspace sweep retired a workspace its delete event had missed |
 | `MailRelayDown` | the auth host failed to send, or gave up on, mail two or more times (including mail the relay refused) and sent none in 15 minutes, so nobody new can confirm an address (pages; it is mailed through that relay, so it needs `ALERT_WEBHOOK_URL` to reach anyone) |
