@@ -78,29 +78,38 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
     {
         return await ExecuteCollectionAsync(
             "dbo.EventLog_GetBy_Workspace",
-            p =>
-            {
-                p.AddWithValue("@WorkspaceId", workspaceId);
-                p.AddWithValue("@EventName", (object?)filter.EventName ?? DBNull.Value);
-                p.Add("@EventNames", SqlDbType.NVarChar, -1).Value = Names(filter.EventNames);
-                p.Add("@ExcludeEventNames", SqlDbType.NVarChar, -1).Value = Names(filter.ExcludeEventNames);
-                p.AddWithValue("@Criticality", (object?)filter.Criticality ?? DBNull.Value);
-                p.AddWithValue("@MinCriticality", (object?)filter.MinCriticality ?? DBNull.Value);
-                p.Add("@Sources", SqlDbType.NVarChar, 100).Value = filter.Sources is null ? DBNull.Value : string.Join(',', filter.Sources.Select(s => (byte)s));
-                p.AddWithValue("@SinceId", (object?)filter.SinceId ?? DBNull.Value);
-                p.AddWithValue("@PolicyId", (object?)filter.PolicyId ?? DBNull.Value);
-                p.AddWithValue("@ClientId", (object?)filter.ClientId ?? DBNull.Value);
-                p.AddWithValue("@WorkflowRefId", (object?)filter.WorkflowRefId ?? DBNull.Value);
-                p.AddWithValue("@UserRefId", (object?)filter.UserRefId ?? DBNull.Value);
-                p.Add("@FromUtc", SqlDbType.DateTime2).Value = (object?)filter.FromUtc ?? DBNull.Value;
-                p.Add("@ToUtc", SqlDbType.DateTime2).Value = (object?)filter.ToUtc ?? DBNull.Value;
-                p.Add("@Search", SqlDbType.NVarChar, 200).Value = filter.Search is null ? DBNull.Value : EscapeLike(filter.Search);
-                p.AddWithValue("@CursorId", (object?)cursorId ?? DBNull.Value);
-                p.AddWithValue("@Take", take);
-                p.AddWithValue("@IncludeClientTraffic", filter.IncludeClientTraffic);
-            },
+            p => AddLogFilter(p, workspaceId, filter, cursorId, take),
             MapEventLogRow,
             cancellationToken);
+    }
+
+    public IAsyncEnumerable<EventLogRow> StreamLogsAsync(int workspaceId, EventLogFilter filter, int take, CancellationToken cancellationToken = default) =>
+        ExecuteStreamAsync(
+            "dbo.EventLog_GetBy_Workspace",
+            p => AddLogFilter(p, workspaceId, filter, null, take),
+            MapEventLogRow,
+            cancellationToken);
+
+    private static void AddLogFilter(SqlParameterCollection p, int workspaceId, EventLogFilter filter, long? cursorId, int take)
+    {
+        p.AddWithValue("@WorkspaceId", workspaceId);
+        p.AddWithValue("@EventName", (object?)filter.EventName ?? DBNull.Value);
+        p.Add("@EventNames", SqlDbType.NVarChar, -1).Value = Names(filter.EventNames);
+        p.Add("@ExcludeEventNames", SqlDbType.NVarChar, -1).Value = Names(filter.ExcludeEventNames);
+        p.AddWithValue("@Criticality", (object?)filter.Criticality ?? DBNull.Value);
+        p.AddWithValue("@MinCriticality", (object?)filter.MinCriticality ?? DBNull.Value);
+        p.Add("@Sources", SqlDbType.NVarChar, 100).Value = filter.Sources is null ? DBNull.Value : string.Join(',', filter.Sources.Select(s => (byte)s));
+        p.AddWithValue("@SinceId", (object?)filter.SinceId ?? DBNull.Value);
+        p.AddWithValue("@PolicyId", (object?)filter.PolicyId ?? DBNull.Value);
+        p.AddWithValue("@ClientId", (object?)filter.ClientId ?? DBNull.Value);
+        p.AddWithValue("@WorkflowRefId", (object?)filter.WorkflowRefId ?? DBNull.Value);
+        p.AddWithValue("@UserRefId", (object?)filter.UserRefId ?? DBNull.Value);
+        p.Add("@FromUtc", SqlDbType.DateTime2).Value = (object?)filter.FromUtc ?? DBNull.Value;
+        p.Add("@ToUtc", SqlDbType.DateTime2).Value = (object?)filter.ToUtc ?? DBNull.Value;
+        p.Add("@Search", SqlDbType.NVarChar, 200).Value = filter.Search is null ? DBNull.Value : EscapeLike(filter.Search);
+        p.AddWithValue("@CursorId", (object?)cursorId ?? DBNull.Value);
+        p.AddWithValue("@Take", take);
+        p.AddWithValue("@IncludeClientTraffic", filter.IncludeClientTraffic);
     }
 
     public async Task<IReadOnlyCollection<EventLogCount>> CountAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, bool includeClientTraffic = true, CancellationToken cancellationToken = default)

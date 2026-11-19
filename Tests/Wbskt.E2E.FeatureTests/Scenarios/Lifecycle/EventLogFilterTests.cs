@@ -106,7 +106,9 @@ public sealed class EventLogFilterTests(ServicesFixture fixture)
         csv.StatusCode.Should().Be(HttpStatusCode.OK);
         csv.Content.Headers.ContentType!.MediaType.Should().Be("text/csv");
         var lines = (await csv.Content.ReadAsStringAsync()).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
-        lines[0].Should().Be("id,createdAt,event,criticality,userRefId,clientRefId,policyRefId,workflowRefId,data");
+        csv.Content.Headers.ContentDisposition!.FileNameStar.Should().Be($"event-log-{workspace}.csv");
+        lines[0].Should().Be("id,createdAt,event,criticality,userRefId,clientRefId,policyRefId,workflowRefId,data,source,clientAddress,userAgent");
+        lines.Should().NotContain(l => l.StartsWith("# truncated"));
         lines.Should().Contain(l => l.Contains(",ClientRenamedEvent,"));
     }
 

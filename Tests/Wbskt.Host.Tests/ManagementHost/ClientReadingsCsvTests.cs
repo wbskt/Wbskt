@@ -10,16 +10,8 @@ public sealed class ClientReadingsCsvTests
     {
         var at = new DateTime(2026, 10, 4, 6, 7, 8, 9, DateTimeKind.Utc);
 
-        var csv = ClientReadingsCsv.Write([
-            new ClientReading("temp", at, at.AddMinutes(20), 4.25, true),
-            new ClientReading("battery", at, at, 87, false)
-        ]);
-
-        Assert.Equal(
-            "name,sentAt,receivedAt,value,late\r\n" +
-            "temp,2026-10-04T06:07:08.009Z,2026-10-04T06:27:08.009Z,4.25,true\r\n" +
-            "battery,2026-10-04T06:07:08.009Z,2026-10-04T06:07:08.009Z,87,false\r\n",
-            csv);
+        Assert.Equal("temp,2026-10-04T06:07:08.009Z,2026-10-04T06:27:08.009Z,4.25,true", ClientReadingsCsv.Row(new ClientReading("temp", at, at.AddMinutes(20), 4.25, true)));
+        Assert.Equal("battery,2026-10-04T06:07:08.009Z,2026-10-04T06:07:08.009Z,87,false", ClientReadingsCsv.Row(new ClientReading("battery", at, at, 87, false)));
     }
 
     [Theory]

@@ -31,6 +31,9 @@ public sealed class EventLogQueryTests
         _provider.Setup(p => p.GetLogsAsync(WorkspaceId, It.IsAny<EventLogFilter>(), It.IsAny<long?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .Callback<int, EventLogFilter, long?, int, CancellationToken>((_, filter, _, take, _) => (_asked, _askedTake) = (filter, take))
             .ReturnsAsync([]);
+        _provider.Setup(p => p.StreamLogsAsync(WorkspaceId, It.IsAny<EventLogFilter>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Callback<int, EventLogFilter, int, CancellationToken>((_, filter, take, _) => (_asked, _askedTake) = (filter, take))
+            .Returns(AsyncEnumerable.Empty<EventLogRow>());
         return new EventLogService(_provider.Object, Mock.Of<IRegistrationPolicyService>(), Mock.Of<IClientQueryService>(), new FixedTime(Now), NullLogger<EventLogService>.Instance);
     }
 
@@ -171,21 +174,22 @@ public sealed class EventLogQueryTests
     {
         var csv = await CreateService().GetCsvAsync(WorkspaceId, new EventLogQuery());
 
-        csv.Value.Should().StartWith(EventLogCsv.Header);
+        csv.Value.Header.Should().Be(EventLogCsv.Header);
+        csv.Value.MaxRows.Should().Be(EventLogService.MaxExportRows);
         _asked!.FromUtc.Should().Be(Now.UtcDateTime.AddDays(-7));
         _asked.ToUtc.Should().Be(Now.UtcDateTime);
-        _askedTake.Should().Be(EventLogService.MaxExportRows);
+
+        // One more than is written, so the file can say it was cut.
+        _askedTake.Should().Be(EventLogService.MaxExportRows + 1);
     }
 
     [Fact]
     public void Csv_rows_carry_the_id_and_guard_their_text()
     {
         var entry = new EventLogResponse("ClientRenamedEvent", "{\"newName\":\"=porch, east\"}", EventCriticality.Info, null, Guid.Parse("22222222-2222-2222-2222-222222222222"), null,
-            new DateTime(2026, 10, 9, 8, 30, 0, DateTimeKind.Utc), null, 42);
+            new DateTime(2026, 10, 9, 8, 30, 0, DateTimeKind.Utc), null, 42, "Api", "203.0.113.9", "=cmd|x");
 
-        var lines = EventLogCsv.Write([entry]).Split("\r\n");
-
-        lines[1].Should().Be("42,2026-10-09T08:30:00.000Z,ClientRenamedEvent,Info,,22222222-2222-2222-2222-222222222222,,,\"{\"\"newName\"\":\"\"=porch, east\"\"}\"");
+        EventLogCsv.Row(entry).Should().Be("42,2026-10-09T08:30:00.000Z,ClientRenamedEvent,Info,,22222222-2222-2222-2222-222222222222,,,\"{\"\"newName\"\":\"\"=porch, east\"\"}\",Api,203.0.113.9,'=cmd|x");
     }
 
     [Fact]

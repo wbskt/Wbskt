@@ -294,6 +294,14 @@ public static class Program
                     // each raw spelling would otherwise get a window of its own.
                     partitionKey: Guid.TryParse(httpContext.GetRouteValue("workspaceRef")?.ToString(), out var workspaceRef) ? workspaceRef.ToString("N") : "unknown",
                     factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = testPermitLimit, Window = testWindow, QueueLimit = 0 }));
+
+            // CSV exports, per workspace: enough for someone clicking through filters, a wall for a loop.
+            int exportPermitLimit = builder.Configuration.GetValue("RateLimiting:Export:PermitLimit", 10);
+            var exportWindow = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:Export:WindowMinutes", 1));
+            options.AddPolicy(RateLimitPolicies.Export, httpContext =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: Guid.TryParse(httpContext.GetRouteValue("workspaceRef")?.ToString(), out var workspaceRef) ? workspaceRef.ToString("N") : "unknown",
+                    factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = exportPermitLimit, Window = exportWindow, QueueLimit = 0 }));
         });
 
         // Signed-in callers: a budget per user (see UserRateLimiter), after authentication.
