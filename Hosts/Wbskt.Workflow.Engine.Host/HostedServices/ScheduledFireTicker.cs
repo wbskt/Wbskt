@@ -44,7 +44,7 @@ public sealed class ScheduledFireTicker(
                 if (occurrence.NextFireAt != fire.NextFireAt)
                 {
                     Logger.LogInformation(
-                        "Scheduled fire {FireId} missed the occurrences from {Missed} to before {Latest} while no leader ran; firing {Latest} once instead.",
+                        "Scheduled fire {FireId} missed the occurrences from {Missed} to before {Latest} while no leader ran; firing that one once instead.",
                         fire.Id,
                         fire.NextFireAt,
                         occurrence.NextFireAt);
