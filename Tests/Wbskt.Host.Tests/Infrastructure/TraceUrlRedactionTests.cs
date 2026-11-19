@@ -74,7 +74,8 @@ public sealed class TraceUrlRedactionTests
             tracing.ForceFlush();
         }
 
-        return spans;
+        // The instrumentation sees every HttpClient in the process, so keep only this test's own request.
+        return spans.Where(s => s.GetTagItem("server.port") is int p && p == port).ToList();
     }
 
     private static int FreePort()
