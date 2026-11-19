@@ -2,6 +2,7 @@ using Wbskt.Protocol;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Wbskt.Events.Billing;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure.Security;
@@ -177,6 +178,24 @@ public sealed class ClientLifecycleTests
         harness.Provider.Verify(p => p.UpdateStatusesAsync(WorkspaceId, It.IsAny<IReadOnlyList<Guid>>(), ClientStatus.Registered, new PlanCeiling(25, 3), It.IsAny<CancellationToken>()), Times.Once);
         harness.Cutoffs.VerifyNoOtherCalls();
         harness.Bus.Verify(b => b.PublishAsync(It.IsAny<ClientStatusChangedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.Bus.Verify(b => b.PublishAsync(
+            It.Is<PlanClientLimitReachedEvent>(e => e.ClientRefId == client.RefId && e.WorkspaceId == WorkspaceId && e.PlanCode == "Maker" && e.Limit == 25),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_batch_announces_the_plan_limit_once_however_many_it_refuses()
+    {
+        var harness = new Harness();
+        var first = harness.AddClient(status: ClientStatus.Pending);
+        var second = harness.AddClient(status: ClientStatus.Pending);
+        harness.WorkspaceFull.Add(first.RefId);
+        harness.WorkspaceFull.Add(second.RefId);
+
+        await harness.Service.UpdateStatusesAsync(WorkspaceId, [first.RefId, second.RefId], ClientStatus.Registered);
+
+        harness.Bus.Verify(b => b.PublishAsync(It.IsAny<PlanClientLimitReachedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        harness.Bus.Verify(b => b.PublishAsync(It.Is<PlanClientLimitReachedEvent>(e => e.ClientRefId == first.RefId), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -191,6 +210,7 @@ public sealed class ClientLifecycleTests
 
         result.Value.Updated.Should().Equal(first.RefId);
         result.Value.Failed.Select(f => (f.ClientRefId, f.Code)).Should().Equal((refused.RefId, "PLAN_CLIENT_LIMIT_REACHED"));
+        harness.Bus.Verify(b => b.PublishAsync(It.Is<PlanClientLimitReachedEvent>(e => e.ClientRefId == refused.RefId), It.IsAny<CancellationToken>()), Times.Once);
         // A workspace whose account has not been copied yet is held to Free, counted on its own.
         harness.Provider.Verify(p => p.UpdateStatusesAsync(WorkspaceId, It.IsAny<IReadOnlyList<Guid>>(), ClientStatus.Registered,
             new PlanCeiling(PlanCatalog.BuiltIn[PlanCode.Free].Clients, null), It.IsAny<CancellationToken>()), Times.Once);

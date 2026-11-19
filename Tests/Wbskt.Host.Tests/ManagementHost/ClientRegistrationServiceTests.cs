@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Billing;
 using Wbskt.Events.Management;
 using Wbskt.Management.Host.Controllers;
 using Wbskt.Management.Host.Models;
@@ -54,6 +55,12 @@ public sealed class ClientRegistrationServiceTests
         problem.Extensions["limit"].Should().Be(25L);
         problem.Extensions["current"].Should().Be(140L);
         bus.Verify(b => b.PublishAsync(It.IsAny<ClientRegistrationInitiatedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        // #988: the refusal shows in the policy's activity and on the console, not only to the board.
+        bus.Verify(b => b.PublishAsync(
+            It.Is<PlanClientLimitReachedEvent>(e => e.PolicyRefId == policy.RefId && e.PolicyId == policy.Id && e.WorkspaceId == WorkspaceId
+                && e.PlanCode == "Maker" && e.Limit == 25 && e.Current == 140 && e.ClientRefId == Guid.Empty && e.ClientName == "sensor"),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]

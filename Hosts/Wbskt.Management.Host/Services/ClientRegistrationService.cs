@@ -1,6 +1,7 @@
 using Wbskt.Protocol;
 using Microsoft.Data.SqlClient;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Billing;
 using Wbskt.Events.Management;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Billing;
@@ -125,6 +126,7 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
         {
             _logger.LogWarning("Client registration failed: WorkspaceId {WorkspaceId} is at its plan's limit of {MaxClients} clients", policy.WorkspaceId, ceiling.Limit);
             int current = await _clientProvider.GetRegisteredCountByAccountAsync(policy.WorkspaceId, plan.TenantId, cancellationToken);
+            await _eventBus.PublishAsync(new PlanClientLimitReachedEvent(policy.RefId, policy.Id, policy.WorkspaceId, plan.PlanCode.ToString(), plan.Limits.Clients, current, Guid.Empty, request.Name), cancellationToken);
             return Result<ClientRegistrationResponse>.Failure(PlanLimitReached(plan, current));
         }
         catch (SqlException ex) when (ex.Number == PolicyLimitReachedError && policy.MaxClients.HasValue)

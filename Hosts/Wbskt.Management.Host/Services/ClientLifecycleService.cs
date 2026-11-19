@@ -1,6 +1,7 @@
 using Wbskt.Protocol;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Abstractions;
+using Wbskt.Events.Billing;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Billing;
@@ -57,6 +58,7 @@ internal sealed class ClientLifecycleService : IClientLifecycleService
             case ClientStatusOutcome.PlanLimitReached:
                 _logger.LogWarning("Client approval failed: WorkspaceId {WorkspaceId} is at its plan's limit of {MaxClients} clients", workspaceId, ceiling.Limit);
                 int current = await _clientProvider.GetRegisteredCountByAccountAsync(workspaceId, plan.TenantId, cancellationToken);
+                await AnnouncePlanFullAsync(workspaceId, change, plan, current, cancellationToken);
                 return Result.Failure(ClientRegistrationService.PlanLimitReached(plan, current));
             case ClientStatusOutcome.Updated:
                 await AnnounceStatusChangeAsync(workspaceId, change, status, cancellationToken);
@@ -77,9 +79,14 @@ internal sealed class ClientLifecycleService : IClientLifecycleService
         PlanCeiling ceiling = plan.ClientCeiling;
         IReadOnlyList<ClientStatusChange> changes = await _clientProvider.UpdateStatusesAsync(workspaceId, clientRefIds.Distinct().ToList(), status, ceiling, cancellationToken);
 
-        Error? planFull = changes.Any(c => c.Outcome == ClientStatusOutcome.PlanLimitReached)
-            ? ClientRegistrationService.PlanLimitReached(plan, await _clientProvider.GetRegisteredCountByAccountAsync(workspaceId, plan.TenantId, cancellationToken))
-            : null;
+        Error? planFull = null;
+        if (changes.FirstOrDefault(c => c.Outcome == ClientStatusOutcome.PlanLimitReached) is { } firstRefused)
+        {
+            // Announced once for the call, not once per refused client: the limit and the count are the same for all of them.
+            int current = await _clientProvider.GetRegisteredCountByAccountAsync(workspaceId, plan.TenantId, cancellationToken);
+            await AnnouncePlanFullAsync(workspaceId, firstRefused, plan, current, cancellationToken);
+            planFull = ClientRegistrationService.PlanLimitReached(plan, current);
+        }
         var updated = new List<Guid>();
         var failed = new List<BulkClientStatusFailure>();
         foreach (var change in changes)
@@ -119,6 +126,9 @@ internal sealed class ClientLifecycleService : IClientLifecycleService
 
         return Result<BulkClientStatusResponse>.Success(new BulkClientStatusResponse(updated, failed));
     }
+
+    private Task AnnouncePlanFullAsync(int workspaceId, ClientStatusChange refused, WorkspacePlan plan, int current, CancellationToken cancellationToken) =>
+        _eventBus.PublishAsync(new PlanClientLimitReachedEvent(refused.PolicyRefId, refused.PolicyId, workspaceId, plan.PlanCode.ToString(), plan.Limits.Clients, current, refused.RefId, ClientName: null), cancellationToken);
 
     private async Task AnnounceStatusChangeAsync(int workspaceId, ClientStatusChange change, ClientStatus status, CancellationToken cancellationToken)
     {

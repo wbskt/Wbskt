@@ -676,6 +676,13 @@ It is pushed to every workspace of the account still in use, since the credits a
 runs draw on credit packs, and are refused once there is nothing left to draw on (Business carries on and
 is invoiced).
 
+A client refused because the account already has as many registered clients as its plan allows (a
+board registering through an auto-approve policy, or someone approving a client) is **409**
+`PLAN_CLIENT_LIMIT_REACHED` and raises `PlanClientLimitReachedEvent` (Warning, in the policy's activity,
+`OnPlanClientLimitReachedEvent { policyRefId, planCode, limit, current, clientRefId, clientName, createdAtUtc }`).
+`clientRefId` is empty for a registration, which creates no client; `clientName` is the name it registered
+with, and null for an approval. A bulk approval announces it once, for the first client refused.
+
 An account found over its monthly messages raises `WorkspaceMessageLimitReachedEvent` once per workspace
 and month (Warning, `OnWorkspaceMessageLimitReachedEvent { messagesPerMonth, messagesUsed, throttled, createdAtUtc }`),
 within about a minute of the crossing. `throttled` is true on Free; on a paid plan nothing is slowed.
