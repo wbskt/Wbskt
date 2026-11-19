@@ -423,6 +423,20 @@ async def test_sends_a_message_just_under_64_kb(api, socket_server, client):
     assert not socket_server.close_codes
 
 
+async def test_sends_non_ascii_text_as_utf8_not_escapes(api, socket_server, client):
+    harness = await client()
+    await harness.expect("connected")
+    await socket_server.next_of("capabilities")
+
+    # 60,000 bytes as UTF-8, under the limit; as \u00e9 escapes it would be three times that, and refused.
+    text = "é" * 15000
+    await harness.command("send", type="note", payload={"a": text, "b": text})
+    frame = await socket_server.next_of("note")
+
+    assert frame["payload"]["a"] == text
+    assert not socket_server.close_codes
+
+
 @pytest.mark.parametrize("message_type", ["sys.custom", "SYS.ping", "capabilities", "State.Report"])
 async def test_refuses_to_send_a_reserved_type(api, socket_server, client, message_type):
     harness = await client()
