@@ -609,8 +609,6 @@ public sealed class RetryExecutorTests
         var executor = new RecordingExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
 
         var idempotencyMock = new Mock<IIdempotencyKeyProvider>();
-        idempotencyMock.Setup(p => p.GetByKeyAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new KeyNotFoundException());
         idempotencyMock.Setup(p => p.UpsertPendingAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string key, int runId, Guid claimToken, Guid nodeId, int attempt, CancellationToken _) => new IdempotencyKeyRow
             {
@@ -653,8 +651,6 @@ public sealed class RetryExecutorTests
         });
 
         var idempotencyMock = new Mock<IIdempotencyKeyProvider>();
-        idempotencyMock.Setup(p => p.GetByKeyAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new KeyNotFoundException());
         idempotencyMock.Setup(p => p.UpsertPendingAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string key, int runId, Guid claimToken, Guid nodeId, int attempt, CancellationToken _) => new IdempotencyKeyRow
             {
@@ -693,10 +689,8 @@ public sealed class RetryExecutorTests
 
         var keys = new List<string>();
         var idempotencyMock = new Mock<IIdempotencyKeyProvider>();
-        idempotencyMock.Setup(p => p.GetByKeyAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Callback((string key, CancellationToken _) => keys.Add(key))
-            .ThrowsAsync(new KeyNotFoundException());
         idempotencyMock.Setup(p => p.UpsertPendingAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Callback((string key, int _, Guid _, Guid _, int _, CancellationToken _) => keys.Add(key))
             .ReturnsAsync((string key, int runId, Guid claimToken, Guid nodeId, int attempt, CancellationToken _) => new IdempotencyKeyRow
             {
                 Id = 1, KeyValue = key, RunId = runId, BranchRefId = claimToken, NodeId = nodeId, Attempt = attempt, Status = "Pending", CreatedAt = DateTime.UtcNow, ResultJson = null, ErrorJson = null, CompletedAt = null
@@ -729,8 +723,6 @@ public sealed class RetryExecutorTests
         var executor = new RecordingExecutor(new NodeExecutionResult.WaitForBookmark(new TimerWakeCondition(DateTime.UtcNow), new Dictionary<string, JsonElement>()));
 
         var idempotencyMock = new Mock<IIdempotencyKeyProvider>();
-        idempotencyMock.Setup(p => p.GetByKeyAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new KeyNotFoundException());
         idempotencyMock.Setup(p => p.UpsertPendingAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string key, int runId, Guid claimToken, Guid nodeId, int attempt, CancellationToken _) => new IdempotencyKeyRow
             {
@@ -765,7 +757,7 @@ public sealed class RetryExecutorTests
         var cachedResultJson = JsonSerializer.Serialize<NodeExecutionResult>(expectedResult, options);
 
         var idempotencyMock = new Mock<IIdempotencyKeyProvider>();
-        idempotencyMock.Setup(p => p.GetByKeyAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        idempotencyMock.Setup(p => p.UpsertPendingAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new IdempotencyKeyRow
             {
                 Id = 1, KeyValue = "key", RunId = 42, BranchRefId = Guid.NewGuid(), NodeId = node.NodeId, Attempt = 1, Status = "Succeeded", ResultJson = cachedResultJson, CreatedAt = DateTime.UtcNow, ErrorJson = null, CompletedAt = null
@@ -800,8 +792,6 @@ public sealed class RetryExecutorTests
             .ReturnsAsync(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
 
         var idempotencyMock = new Mock<IIdempotencyKeyProvider>();
-        idempotencyMock.Setup(p => p.GetByKeyAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new KeyNotFoundException());
         idempotencyMock.Setup(p => p.UpsertPendingAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string key, int runId, Guid claimToken, Guid nodeId, int attempt, CancellationToken _) => new IdempotencyKeyRow
             {
@@ -895,8 +885,8 @@ public sealed class RetryExecutorTests
         var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] });
         var executor = new RecordingExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
         var keys = new Mock<IIdempotencyKeyProvider>();
-        keys.Setup(p => p.GetByKeyAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string key, CancellationToken _) => new IdempotencyKeyRow
+        keys.Setup(p => p.UpsertPendingAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string key, int _, Guid _, Guid _, int _, CancellationToken _) => new IdempotencyKeyRow
             {
                 Id = 1, KeyValue = key, RunId = 42, BranchRefId = Guid.NewGuid(), NodeId = node.NodeId, Attempt = 1, Status = "Pending", CreatedAt = DateTime.UtcNow, ResultJson = null, ErrorJson = null, CompletedAt = null
             });
