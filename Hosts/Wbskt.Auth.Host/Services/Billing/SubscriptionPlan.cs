@@ -8,6 +8,12 @@ namespace Wbskt.Auth.Host.Services.Billing;
 /// period, or cancelled but not yet at the end of the period paid for, keeps its paid plan; one that has
 /// failed, expired or been paused, or whose payment was refunded, puts the tenant on Free. A pending one
 /// (checkout started, not paid) changes nothing.
+/// <para>
+/// The admin host (wbskt/Wbskt.Admin, <c>AuthReader.PastDueFilter</c>) repeats the past-due part in SQL
+/// over <c>[admin].Subscriptions</c>: an account is past due when a subscription of its is past due or on
+/// hold, is not a duplicate (<c>DuplicateAt</c> null) and the account is not on a running staff plan,
+/// which billing leaves alone. A change to that rule here is a change there.
+/// </para>
 /// </summary>
 public static class SubscriptionPlan
 {
