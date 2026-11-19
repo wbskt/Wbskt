@@ -11,7 +11,8 @@ an item on one of those two checklists:
 | Firmware updates (optional) | listing `ota`, rejecting while off, an expired update, plain `http`, accepted → downloading → installed |
 | WebSocket binding | the subprotocol and bearer token, renewing after a 401 on the upgrade, keeping the token while the gateway is down or the client is revoked (403 `CLIENT_REVOKED`), reconnecting after each close code (1000, 1001, 1008, 1009, 4001–4003), noticing a link that died without a close, a second connection superseding the first |
 
-A future binding (MQTT, HTTPS) adds its own checklist and its own scenarios.
+The MQTT binding has its checklist (`Docs/Client.Protocol.MQTT.md` §5); its scenarios are #655. A
+future binding (HTTPS) adds its own checklist and its own scenarios.
 
 The suite fakes the two HTTP endpoints and the WebSocket gateway (`fake_wbskt.py`), so nothing else
 has to run, and each scenario takes a few seconds. The fake can misbehave on cue: refuse a token,
