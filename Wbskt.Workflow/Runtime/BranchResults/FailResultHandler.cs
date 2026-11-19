@@ -169,7 +169,7 @@ internal sealed class FailResultHandler(
             patch["joinContributed"] = JsonSerializer.SerializeToElement(contribution.ContributedCount);
             patch["joinSucceeded"] = JsonSerializer.SerializeToElement(contribution.SucceededCount);
             patch["joinFailed"] = JsonSerializer.SerializeToElement(contribution.FailedCount);
-            string continuationLocalJson = BranchLocalState.Serialize(BranchLocalState.Merge(branchRow.LocalJson, patch, removeKeys));
+            string continuationLocalJson = BranchLocalState.Serialize(BranchLocalState.Merge(localState, patch, removeKeys));
 
             // Count the continuation BEFORE creating it, so the caller's own decrement cannot drive
             // the run to zero active branches and finalize it out from under the new branch.

@@ -145,10 +145,11 @@ internal sealed class BranchLoop : IBranchLoop
             // The attempt a retry park left is taken off the branch before the node sees it. Every
             // result is then written from a row without it - a retry park puts it back with the next
             // number - so it goes whichever way the node leaves: on, failed, forked or parked for real.
-            (branchRow, int? parkedAttempt) = TakeParkedAttempt(branchRow);
-            BranchContext branchContext = BuildBranchContext(branchRow, runRow, definition.WorkspaceId);
+            (branchRow, int? parkedAttempt, IReadOnlyDictionary<string, JsonElement> localState) = TakeParkedAttempt(branchRow);
+            BranchContext branchContext = BuildBranchContext(branchRow, runRow, definition.WorkspaceId, localState);
 
             NodeExecutionResult? result;
+            string? mergedLocalJson = null;
 
             // PendingTakePort is a pre-decided exit: a port recorded on the branch row for the loop to
             // take on re-entry without re-running the node. It is how a branch resumes "already past"
@@ -162,8 +163,9 @@ internal sealed class BranchLoop : IBranchLoop
             }
             else
             {
-                result = await ExecuteNodeAsync(runId, branchId, runRow, branchRow, definition, node, branchContext, parkedAttempt, recovering, heldEntries, linkedToken, ct);
+                (NodeExecutionResult Result, string? MergedLocalJson)? executed = await ExecuteNodeAsync(runId, branchId, runRow, branchRow, definition, node, branchContext, parkedAttempt, recovering, heldEntries, linkedToken, ct);
                 recovering = false;
+                (result, mergedLocalJson) = (executed?.Result, executed?.MergedLocalJson);
                 if (result is null)
                 {
                     // Host shutdown interrupted the executor; the branch stays Active for recovery.
@@ -187,7 +189,11 @@ internal sealed class BranchLoop : IBranchLoop
                 }
             }
 
-            BranchResultContext resultContext = new(runId, branchId, runRow, branchRow, definition, node, branchContext);
+            // A cancel turns the node's result into another, so the state merged for the old one is not written.
+            BranchResultContext resultContext = new(runId, branchId, runRow, branchRow, definition, node, branchContext)
+            {
+                MergedLocalJson = result is NodeExecutionResult.Continue or NodeExecutionResult.WaitForBookmark ? mergedLocalJson : null
+            };
             BranchResultOutcome outcome = await _resultDispatcher.DispatchAsync(result, resultContext, ct);
             if (outcome.Branch is not { } advanced)
             {
@@ -237,7 +243,7 @@ internal sealed class BranchLoop : IBranchLoop
     /// failure, a crash or a run cancellation comes back as a result; null means host shutdown
     /// interrupted the executor and the branch must be left Active, untouched, for recovery.
     /// </summary>
-    private async Task<NodeExecutionResult?> ExecuteNodeAsync(
+    private async Task<(NodeExecutionResult Result, string? MergedLocalJson)?> ExecuteNodeAsync(
         long runId,
         long branchId,
         RunRow runRow,
@@ -350,7 +356,7 @@ internal sealed class BranchLoop : IBranchLoop
             return null;
         }
 
-        result = GuardLocalStateSize(result, branchRow);
+        (result, string? mergedLocalJson) = GuardLocalStateSize(result, branchContext.LocalState, branchRow);
 
         // The node's warnings and its outcome go in one write.
         foreach (NodeWarning warning in result.Warnings)
@@ -374,7 +380,7 @@ internal sealed class BranchLoop : IBranchLoop
         heldEntries.Add(BranchEntry(runRow.Id, branchRow.RefId, node.NodeId, result is NodeExecutionResult.Fail ? HistoryEventKind.NodeFailed : HistoryEventKind.NodeCompleted, eventPayload));
         await FlushAsync(heldEntries, ct);
 
-        return result;
+        return (result, mergedLocalJson);
     }
 
     private static RunJournalEntry BranchEntry(int runId, Guid branchRefId, Guid? nodeId, string eventKind, object? payload) =>
@@ -398,32 +404,35 @@ internal sealed class BranchLoop : IBranchLoop
     /// on every later step, so one oversized payload made each step after it slower and every row it
     /// was copied into (a fork child, a join continuation) larger.
     /// </summary>
-    private NodeExecutionResult GuardLocalStateSize(NodeExecutionResult result, BranchRow branchRow)
+    private (NodeExecutionResult Result, string? MergedLocalJson) GuardLocalStateSize(NodeExecutionResult result, IReadOnlyDictionary<string, JsonElement> localState, BranchRow branchRow)
     {
         IReadOnlyDictionary<string, JsonElement>? merged = result switch
         {
-            NodeExecutionResult.Continue cont => BranchLocalState.Merge(branchRow.LocalJson, cont.LocalStatePatch, cont.RemoveKeys),
-            NodeExecutionResult.WaitForBookmark wait => BranchLocalState.Merge(branchRow.LocalJson, wait.LocalStatePatch, wait.RemoveKeys),
+            NodeExecutionResult.Continue cont => BranchLocalState.Merge(localState, cont.LocalStatePatch, cont.RemoveKeys),
+            NodeExecutionResult.WaitForBookmark wait => BranchLocalState.Merge(localState, wait.LocalStatePatch, wait.RemoveKeys),
             _ => null
         };
 
+        // Serialized once: this is also the JSON the handler writes to the branch row.
+        string? mergedJson = merged is null ? null : BranchLocalState.Serialize(merged);
+
         long bytes = result switch
         {
-            _ when merged is not null => SizeOf(merged),
+            _ when mergedJson is not null => System.Text.Encoding.UTF8.GetByteCount(mergedJson),
             // Each child gets the shared state plus its own; base plus the largest child is an upper
             // bound on any child's row without serializing the shared state once per child.
-            NodeExecutionResult.Fork fork => SizeOf(BranchLocalState.Merge(branchRow.LocalJson, fork.LocalStatePatch))
+            NodeExecutionResult.Fork fork => SizeOf(BranchLocalState.Merge(localState, fork.LocalStatePatch))
                 + (fork.Children.Count == 0 ? 0 : fork.Children.Max(child => SizeOf(child.LocalState))),
             _ => 0
         };
 
         if (bytes > _maxBranchLocalStateBytes)
         {
-            return new NodeExecutionResult.Fail(
+            return (new NodeExecutionResult.Fail(
                 "BRANCH_STATE_TOO_LARGE",
                 $"The node's output would grow the branch's local state to {bytes} bytes, over the limit of {_maxBranchLocalStateBytes} bytes.",
                 false,
-                null) { Warnings = result.Warnings };
+                null) { Warnings = result.Warnings }, null);
         }
 
         // Warned once, on the step that crosses the line, so a branch that stays large does not repeat it
@@ -436,13 +445,13 @@ internal sealed class BranchLoop : IBranchLoop
                 .Take(3)
                 .Select(entry => entry.Key)
                 .ToArray();
-            return result with
+            return (result with
             {
                 Warnings = [.. result.Warnings, new NodeWarning(HistoryEventKind.BranchStateLarge, new { bytes, limit = _maxBranchLocalStateBytes, largestKeys })]
-            };
+            }, mergedJson);
         }
 
-        return result;
+        return (result, mergedJson);
     }
 
     private const double BranchStateWarnRatio = 0.8;
@@ -471,12 +480,12 @@ internal sealed class BranchLoop : IBranchLoop
         }
     }
 
-    private static (BranchRow Branch, int? ParkedAttempt) TakeParkedAttempt(BranchRow branchRow)
+    private static (BranchRow Branch, int? ParkedAttempt, IReadOnlyDictionary<string, JsonElement> LocalState) TakeParkedAttempt(BranchRow branchRow)
     {
         IReadOnlyDictionary<string, JsonElement> localState = BranchLocalState.Deserialize(branchRow.LocalJson);
         if (!localState.ContainsKey(RetryExecutor.RetryAttemptKey))
         {
-            return (branchRow, null);
+            return (branchRow, null, localState);
         }
 
         // Only a Waiting branch is on a retry park's wake. On any other the marker is left over from a
@@ -484,13 +493,16 @@ internal sealed class BranchLoop : IBranchLoop
         int? attempt = string.Equals(branchRow.Status, BranchStatus.Waiting, StringComparison.Ordinal)
             ? RetryExecutor.ReadParkedAttempt(localState)
             : null;
-        string localJson = BranchLocalState.Serialize(BranchLocalState.Merge(branchRow.LocalJson, new Dictionary<string, JsonElement>(), [RetryExecutor.RetryAttemptKey]));
-        return (branchRow with { LocalJson = localJson }, attempt);
+        IReadOnlyDictionary<string, JsonElement> withoutMarker = BranchLocalState.Merge(localState, new Dictionary<string, JsonElement>(), [RetryExecutor.RetryAttemptKey]);
+        return (branchRow with { LocalJson = BranchLocalState.Serialize(withoutMarker) }, attempt, withoutMarker);
     }
 
-    internal static BranchContext BuildBranchContext(BranchRow branchRow, RunRow runRow, int workspaceId)
+    internal static BranchContext BuildBranchContext(BranchRow branchRow, RunRow runRow, int workspaceId) =>
+        BuildBranchContext(branchRow, runRow, workspaceId, BranchLocalState.Deserialize(branchRow.LocalJson));
+
+    /// <summary>The same, over the branch's local state already parsed from <paramref name="branchRow"/>.</summary>
+    private static BranchContext BuildBranchContext(BranchRow branchRow, RunRow runRow, int workspaceId, IReadOnlyDictionary<string, JsonElement> localState)
     {
-        IReadOnlyDictionary<string, JsonElement> localState = BranchLocalState.Deserialize(branchRow.LocalJson);
 
         IReadOnlyDictionary<string, JsonElement> triggerPayload;
         if (localState.TryGetValue("trigger", out JsonElement triggerElement)

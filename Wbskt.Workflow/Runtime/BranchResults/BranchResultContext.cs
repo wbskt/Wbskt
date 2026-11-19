@@ -23,7 +23,19 @@ internal sealed record BranchResultContext(
     BranchRow Branch,
     WorkflowDefinition Definition,
     BaseNode Node,
-    BranchContext NodeContext);
+    BranchContext NodeContext)
+{
+    /// <summary>
+    /// The branch's local state with the node's patch merged, as the size guard serialized it, or null
+    /// when the guard did not merge it (a fork, a failure, a take-port). A handler writes this rather
+    /// than merging and serializing the same state again.
+    /// </summary>
+    public string? MergedLocalJson { get; init; }
+
+    /// <summary>The merged local state to write: <see cref="MergedLocalJson"/> when the guard made it.</summary>
+    public string MergedLocalJsonOr(IReadOnlyDictionary<string, System.Text.Json.JsonElement> patch, IReadOnlyCollection<string>? removeKeys) =>
+        MergedLocalJson ?? BranchLocalState.Serialize(BranchLocalState.Merge(NodeContext.LocalState, patch, removeKeys));
+}
 
 /// <summary>
 /// What the loop does after a handler: carry on with the branch at its new position, or stop because
