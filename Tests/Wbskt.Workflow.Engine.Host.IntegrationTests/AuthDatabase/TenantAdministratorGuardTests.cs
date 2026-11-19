@@ -315,6 +315,8 @@ public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
         await ExecAsync("dbo.User_Delete", ("@UserId", ownerId), ("@DeletedWorkspaces", workspaces));
 
         Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Tenants WHERE Id = @p0 AND ClosedAt IS NOT NULL AND Name = N'Closed account' AND Description IS NULL", tenantId));
+        Assert.True(await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.DeletedWorkspaces WHERE TenantId = @p0", tenantId) > 0);
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.DeletedWorkspaces WHERE TenantId = @p0 AND Name <> N'Deleted workspace'", tenantId));
         Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.TenantMembers WHERE TenantId = @p0", tenantId));
         Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.TenantSubscriptions WHERE TenantId = @p0", tenantId));
         Assert.Equal(2, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.TenantCreditPurchases WHERE TenantId = @p0", tenantId));

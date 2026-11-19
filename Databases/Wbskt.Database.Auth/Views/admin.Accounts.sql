@@ -16,9 +16,6 @@ SELECT
     T.ClosedAt,
     T.FrozenAt,
     (SELECT COUNT(*) FROM dbo.TenantMembers TM WHERE TM.TenantId = T.Id) AS MemberCount,
-    (SELECT COUNT(*)
-     FROM dbo.Workspaces W
-     WHERE W.TenantId = T.Id
-       AND NOT EXISTS (SELECT 1 FROM dbo.DeletedWorkspaces DW WHERE DW.WorkspaceId = W.Id)) AS WorkspaceCount
+    (SELECT COUNT(*) FROM dbo.Workspaces W WHERE W.TenantId = T.Id) AS WorkspaceCount
 FROM dbo.Tenants T;
 GO

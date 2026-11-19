@@ -168,6 +168,11 @@ BEGIN
               WHERE E.Provider = C.Provider AND E.CustomerId = C.CustomerId)
     GROUP BY C.Provider, C.CustomerId;
 
+    -- The workspaces' tombstones keep their ids, but not the names the person gave them.
+    UPDATE dbo.DeletedWorkspaces
+    SET Name = N'Deleted workspace'
+    WHERE TenantId IN (SELECT TenantId FROM @Sole);
+
     UPDATE dbo.Tenants
     SET Name = N'Closed account',
         Description = NULL,

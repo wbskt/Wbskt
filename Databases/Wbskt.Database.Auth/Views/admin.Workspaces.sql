@@ -1,5 +1,7 @@
--- Every workspace, deleted ones too (DeletedAt set). Id is also the WorkspaceId the main database's
--- admin views carry.
+-- Every workspace, deleted ones too (DeletedAt set). A live workspace comes from dbo.Workspaces and a
+-- deleted one from its tombstone in dbo.DeletedWorkspaces, which has no description or members; a
+-- workspace deleted before the tombstone kept its details has only its id and DeletedAt. Id is also
+-- the WorkspaceId the main database's admin views carry.
 CREATE VIEW [admin].Workspaces
 AS
 SELECT
@@ -10,8 +12,21 @@ SELECT
     W.Description,
     W.OwnerUserId,
     W.CreatedAt,
-    DW.DeletedAt,
+    CAST(NULL AS DATETIME2(3)) AS DeletedAt,
     (SELECT COUNT(*) FROM dbo.WorkspaceMembers WM WHERE WM.WorkspaceId = W.Id) AS MemberCount
 FROM dbo.Workspaces W
-LEFT JOIN dbo.DeletedWorkspaces DW ON DW.WorkspaceId = W.Id;
+
+UNION ALL
+
+SELECT
+    DW.WorkspaceId,
+    DW.RefId,
+    DW.TenantId,
+    DW.Name,
+    CAST(NULL AS NVARCHAR(500)),
+    DW.OwnerUserId,
+    DW.CreatedAt,
+    DW.DeletedAt,
+    0
+FROM dbo.DeletedWorkspaces DW;
 GO
