@@ -91,9 +91,11 @@ internal sealed class AccountCredentials(
 
     /// <summary>
     /// The password entered again by someone signed in as the account, before a change a stolen access
-    /// token must not be enough for. A wrong one counts towards the lock like a failed sign-in.
+    /// token must not be enough for. A wrong one counts towards the lock like a failed sign-in. As on
+    /// sign-in, a lock a stranger's guesses set does not stop it from a browser the account signed in
+    /// from before (<paramref name="deviceToken"/>), so the owner can still change the password.
     /// </summary>
-    public async Task<Result<User>> ConfirmPasswordAsync(int userId, string password, string ipAddress, CancellationToken cancellationToken)
+    public async Task<Result<User>> ConfirmPasswordAsync(int userId, string password, string ipAddress, string? deviceToken, CancellationToken cancellationToken)
     {
         var user = await accounts.FindByIdAsync(userId, cancellationToken);
         if (user is null)
@@ -101,14 +103,14 @@ internal sealed class AccountCredentials(
             return Result<User>.Failure(UserNotFound);
         }
 
-        var confirmed = await ConfirmPasswordAsync(user, password, ipAddress, cancellationToken);
+        var confirmed = await ConfirmPasswordAsync(user, password, ipAddress, deviceToken, cancellationToken);
         return confirmed.IsSuccess ? Result<User>.Success(user) : Result<User>.Failure(confirmed.Error);
     }
 
-    /// <inheritdoc cref="ConfirmPasswordAsync(int, string, string, CancellationToken)"/>
-    public async Task<Result> ConfirmPasswordAsync(User user, string password, string ipAddress, CancellationToken cancellationToken)
+    /// <inheritdoc cref="ConfirmPasswordAsync(int, string, string, string?, CancellationToken)"/>
+    public async Task<Result> ConfirmPasswordAsync(User user, string password, string ipAddress, string? deviceToken, CancellationToken cancellationToken)
     {
-        switch (await CheckAsync(user, password, ipAddress, deviceToken: null, cancellationToken))
+        switch (await CheckAsync(user, password, ipAddress, deviceToken, cancellationToken))
         {
             case PasswordCheck.Locked:
                 logger.LogWarning("Password confirmation refused: account {UserId} is locked. IP: {IpAddress}", user.Id, ipAddress);

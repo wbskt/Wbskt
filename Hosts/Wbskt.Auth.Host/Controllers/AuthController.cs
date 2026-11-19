@@ -203,7 +203,8 @@ public class AuthController : ApiControllerBase
     /// <remarks>
     /// A wrong current password answers 400 <c>AUTH_CURRENT_PASSWORD_INVALID</c> rather than 401, so a
     /// client does not read it as an expired session, and counts towards the account lockout like a
-    /// failed sign-in. A locked account answers 403 <c>AUTH_ACCOUNT_LOCKED</c>.
+    /// failed sign-in. A locked account answers 403 <c>AUTH_ACCOUNT_LOCKED</c>, unless the request comes
+    /// from a browser the account signed in from before, as on sign-in.
     /// </remarks>
     [Authorize]
     [EnableRateLimiting(RateLimitPolicies.Authentication)]
@@ -217,7 +218,7 @@ public class AuthController : ApiControllerBase
             return MapError(userIdResult.Error);
         }
 
-        var result = await _passwords.ChangePasswordAsync(userIdResult.Value, request.CurrentPassword, request.NewPassword, CallerIpAddress(), cancellationToken);
+        var result = await _passwords.ChangePasswordAsync(userIdResult.Value, request.CurrentPassword, request.NewPassword, CallerIpAddress(), _refreshCookie.ReadDevice(Request), cancellationToken);
         return MapSession(result);
     }
 

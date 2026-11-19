@@ -11,7 +11,7 @@ public interface IAccountDeletionService
     /// administrator, which refuses the whole deletion. Every session ends, and the account's name and
     /// address are anonymised. See <c>dbo.User_Delete</c>.
     /// </summary>
-    Task<Result> DeleteAccountAsync(int userId, string password, string ipAddress, CancellationToken cancellationToken = default);
+    Task<Result> DeleteAccountAsync(int userId, string password, string ipAddress, string? deviceToken, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Deletes an account whose email was never confirmed, the same way, if it still was not, was

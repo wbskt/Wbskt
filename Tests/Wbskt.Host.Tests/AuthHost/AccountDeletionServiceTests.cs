@@ -55,7 +55,7 @@ public sealed class AccountDeletionServiceTests
             .Callback(() => order.Add("delete"))
             .ReturnsAsync(new List<int>());
 
-        var result = await Service().DeleteAccountAsync(42, Password, Ip);
+        var result = await Service().DeleteAccountAsync(42, Password, Ip, null);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(["cancel", "delete"], order);
@@ -71,7 +71,7 @@ public sealed class AccountDeletionServiceTests
         _billing.Setup(b => b.GetLiveSubscriptionsOfSoleTenantsAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync([Subscription("sub_1")]);
         _accounts.Setup(p => p.GetDeletionBlockersAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(["Acme", "Globex"]);
 
-        var result = await Service().DeleteAccountAsync(42, Password, Ip);
+        var result = await Service().DeleteAccountAsync(42, Password, Ip, null);
 
         Assert.Equal("ACCOUNT_SOLE_ADMINISTRATOR", result.Error.Code);
         Assert.Equal(Wbskt.Infrastructure.ErrorType.Conflict, result.Error.Type);
@@ -86,11 +86,11 @@ public sealed class AccountDeletionServiceTests
         _billing.Setup(b => b.GetLiveSubscriptionsOfSoleTenantsAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync([Subscription("sub_1")]);
         _gateway.Setup(g => g.CancelSubscriptionAsync("sub_1", It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("down"));
 
-        var down = await Service().DeleteAccountAsync(42, Password, Ip);
+        var down = await Service().DeleteAccountAsync(42, Password, Ip, null);
         _gateway.Setup(g => g.CancelSubscriptionAsync("sub_1", It.IsAny<CancellationToken>())).ThrowsAsync(new TaskCanceledException("timed out"));
-        var timedOut = await Service().DeleteAccountAsync(42, Password, Ip);
+        var timedOut = await Service().DeleteAccountAsync(42, Password, Ip, null);
         _gateway.SetupGet(g => g.IsConfigured).Returns(false);
-        var unconfigured = await Service().DeleteAccountAsync(42, Password, Ip);
+        var unconfigured = await Service().DeleteAccountAsync(42, Password, Ip, null);
 
         Assert.Equal("BILLING_SUBSCRIPTION_NOT_CANCELLED", down.Error.Code);
         Assert.Equal(Wbskt.Infrastructure.ErrorType.Unavailable, down.Error.Type);
@@ -109,7 +109,7 @@ public sealed class AccountDeletionServiceTests
             .Callback<int, IReadOnlyDictionary<int, OutboxMessage>, DateTime?, CancellationToken>((_, w, _, _) => planned = w)
             .ReturnsAsync(new List<int> { 3 });
 
-        var result = await Service().DeleteAccountAsync(42, Password, Ip);
+        var result = await Service().DeleteAccountAsync(42, Password, Ip, null);
 
         Assert.True(result.IsSuccess);
         Assert.NotNull(planned);
@@ -130,7 +130,7 @@ public sealed class AccountDeletionServiceTests
         _accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(inactive);
         _accounts.Setup(p => p.FindByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(inactive);
 
-        var result = await Service().DeleteAccountAsync(42, Password, Ip);
+        var result = await Service().DeleteAccountAsync(42, Password, Ip, null);
 
         Assert.Equal("AUTH_USER_NOT_FOUND", result.Error.Code);
         _accounts.Verify(p => p.EndPasswordCheckAsync(It.IsAny<int>(), false, It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -140,7 +140,7 @@ public sealed class AccountDeletionServiceTests
     [Fact]
     public async Task A_wrong_password_deletes_nothing_and_counts_towards_the_lock()
     {
-        var result = await Service().DeleteAccountAsync(42, "not the password", Ip);
+        var result = await Service().DeleteAccountAsync(42, "not the password", Ip, null);
 
         Assert.Equal("AUTH_CURRENT_PASSWORD_INVALID", result.Error.Code);
         _accounts.Verify(p => p.EndPasswordCheckAsync(42, false, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, It.IsAny<CancellationToken>()), Times.Once);
@@ -156,7 +156,7 @@ public sealed class AccountDeletionServiceTests
         _accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(locked);
         _accounts.Setup(p => p.FindByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(locked);
 
-        var result = await Service().DeleteAccountAsync(42, Password, Ip);
+        var result = await Service().DeleteAccountAsync(42, Password, Ip, null);
 
         Assert.Equal("AUTH_ACCOUNT_LOCKED", result.Error.Code);
         _accounts.Verify(p => p.DeleteUserAsync(It.IsAny<int>(), It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -169,7 +169,7 @@ public sealed class AccountDeletionServiceTests
         _accounts.Setup(p => p.DeleteUserAsync(42, It.IsAny<IReadOnlyDictionary<int, OutboxMessage>>(), null, It.IsAny<CancellationToken>()))
             .ThrowsAsync(SqlExceptions.WithNumber(50018, "Nobody else administers Acme."));
 
-        var result = await Service().DeleteAccountAsync(42, Password, Ip);
+        var result = await Service().DeleteAccountAsync(42, Password, Ip, null);
 
         Assert.Equal("ACCOUNT_SOLE_ADMINISTRATOR", result.Error.Code);
         Assert.Contains("Acme", result.Error.Message);

@@ -135,7 +135,7 @@ public sealed class BreachedPasswordTests
             IsActive = true
         });
 
-        var result = await harness.Passwords.ChangePasswordAsync(42, Fresh, Leaked, "10.0.0.1");
+        var result = await harness.Passwords.ChangePasswordAsync(42, Fresh, Leaked, "10.0.0.1", null);
 
         Assert.Equal("PASSWORD_BREACHED", result.Error.Code);
         harness.Accounts.Verify(p => p.ChangePasswordAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);

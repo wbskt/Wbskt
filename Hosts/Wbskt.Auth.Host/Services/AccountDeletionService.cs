@@ -45,7 +45,7 @@ internal sealed class AccountDeletionService : IAccountDeletionService
         _tenantAnnouncer = tenantAnnouncer;
     }
 
-    public async Task<Result> DeleteAccountAsync(int userId, string password, string ipAddress, CancellationToken cancellationToken = default)
+    public async Task<Result> DeleteAccountAsync(int userId, string password, string ipAddress, string? deviceToken, CancellationToken cancellationToken = default)
     {
         var user = await _accounts.FindByIdAsync(userId, cancellationToken);
         if (user is null)
@@ -62,7 +62,7 @@ internal sealed class AccountDeletionService : IAccountDeletionService
 
         // Same rules as changing the password: a locked account is not asked, and a wrong password
         // counts towards the lock, so a stolen access token cannot guess its way to deleting anything.
-        var confirmed = await _credentials.ConfirmPasswordAsync(user, password, ipAddress, cancellationToken);
+        var confirmed = await _credentials.ConfirmPasswordAsync(user, password, ipAddress, deviceToken, cancellationToken);
         if (confirmed.IsFailure)
         {
             return confirmed;

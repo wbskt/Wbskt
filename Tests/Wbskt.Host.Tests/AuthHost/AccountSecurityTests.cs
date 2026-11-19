@@ -89,7 +89,7 @@ public sealed class AccountSecurityTests
         var harness = new Harness();
         harness.WithUser(AUser());
 
-        var result = await harness.Passwords.ChangePasswordAsync(42, Password, "a brand new passphrase", "10.0.0.1");
+        var result = await harness.Passwords.ChangePasswordAsync(42, Password, "a brand new passphrase", "10.0.0.1", null);
 
         Assert.True(result.IsSuccess);
         harness.Accounts.Verify(p => p.BeginPasswordCheckAsync(42, AccountLockout.MaxFailedLogins, false, AccountLockout.LoginLockout, It.IsAny<CancellationToken>()), Times.Once);
@@ -107,7 +107,7 @@ public sealed class AccountSecurityTests
         await abandoned.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            harness.Passwords.ChangePasswordAsync(42, "not the password", "a brand new passphrase", "10.0.0.1", abandoned.Token));
+            harness.Passwords.ChangePasswordAsync(42, "not the password", "a brand new passphrase", "10.0.0.1", null, abandoned.Token));
 
         harness.Accounts.Verify(p => p.EndPasswordCheckAsync(42, true, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, CancellationToken.None), Times.Once);
         harness.Accounts.Verify(p => p.EndPasswordCheckAsync(It.IsAny<int>(), false, It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -124,7 +124,7 @@ public sealed class AccountSecurityTests
             .Callback(leaving.Cancel)
             .ReturnsAsync((DateTime?)null);
 
-        await harness.Passwords.ChangePasswordAsync(42, "not the password", "a brand new passphrase", "10.0.0.1", leaving.Token);
+        await harness.Passwords.ChangePasswordAsync(42, "not the password", "a brand new passphrase", "10.0.0.1", null, leaving.Token);
 
         // Settled once, as a failure, and with a token the caller cannot cancel.
         harness.Accounts.Verify(p => p.EndPasswordCheckAsync(42, false, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, CancellationToken.None), Times.Once);
@@ -213,7 +213,7 @@ public sealed class AccountSecurityTests
             .Callback<int, string, string?, CancellationToken>((_, hash, _, _) => storedHash = hash)
             .Returns(Task.CompletedTask);
 
-        var result = await harness.Passwords.ChangePasswordAsync(42, Password, "a brand new passphrase", "10.0.0.1");
+        var result = await harness.Passwords.ChangePasswordAsync(42, Password, "a brand new passphrase", "10.0.0.1", null);
 
         Assert.True(result.IsSuccess);
         Assert.False(string.IsNullOrEmpty(result.Value.RefreshToken));
@@ -231,7 +231,7 @@ public sealed class AccountSecurityTests
         var harness = new Harness();
         harness.WithUser(AUser());
 
-        var result = await harness.Passwords.ChangePasswordAsync(42, "not the password", "a brand new passphrase", "10.0.0.1");
+        var result = await harness.Passwords.ChangePasswordAsync(42, "not the password", "a brand new passphrase", "10.0.0.1", null);
 
         Assert.True(result.IsFailure);
         Assert.Equal("AUTH_CURRENT_PASSWORD_INVALID", result.Error.Code);
@@ -242,16 +242,31 @@ public sealed class AccountSecurityTests
     }
 
     [Fact]
-    public async Task A_locked_account_cannot_change_its_password()
+    public async Task A_locked_account_cannot_change_its_password_from_an_unknown_browser()
     {
         var harness = new Harness();
         harness.WithUser(AUser(lockedUntil: DateTime.UtcNow.AddMinutes(5)));
 
-        var result = await harness.Passwords.ChangePasswordAsync(42, Password, "a brand new passphrase", "10.0.0.1");
+        var result = await harness.Passwords.ChangePasswordAsync(42, Password, "a brand new passphrase", "10.0.0.1", null);
 
         Assert.Equal("AUTH_ACCOUNT_LOCKED", result.Error.Code);
         Assert.Equal(ErrorType.Forbidden, result.Error.Type);
         harness.Accounts.Verify(p => p.ChangePasswordAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task The_owner_changes_the_password_through_a_strangers_lock_from_a_known_browser()
+    {
+        // Someone keeps the account locked with wrong guesses; the owner, signed in from their usual
+        // browser, must still be able to change the password rather than wait the attack out.
+        var harness = new Harness();
+        harness.WithUser(AUser(lockedUntil: DateTime.UtcNow.AddMinutes(5)));
+        harness.Sessions.Setup(p => p.IsKnownDeviceAsync(42, "owner-device", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var result = await harness.Passwords.ChangePasswordAsync(42, Password, "a brand new passphrase", "10.0.0.1", "owner-device");
+
+        Assert.True(result.IsSuccess);
+        harness.Accounts.Verify(p => p.BeginPasswordCheckAsync(42, AccountLockout.MaxFailedLogins, true, AccountLockout.LoginLockout, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ---------------------------------------------------------------- sessions

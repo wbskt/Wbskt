@@ -17,7 +17,7 @@ public interface IAccountProfileService
     /// After checking the password, mails a confirm link to <paramref name="newEmail"/>. Nothing
     /// changes until it is followed; a new request replaces one still pending.
     /// </summary>
-    Task<Result> RequestEmailChangeAsync(int userId, string password, string newEmail, string ipAddress, CancellationToken cancellationToken = default);
+    Task<Result> RequestEmailChangeAsync(int userId, string password, string newEmail, string ipAddress, string? deviceToken, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Follows a confirm link: switches the address, ends every session, and mails the old address a

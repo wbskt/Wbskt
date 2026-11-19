@@ -77,7 +77,7 @@ public class AccountController : ApiControllerBase
             return MapError(userIdResult.Error);
         }
 
-        var result = await _profile.RequestEmailChangeAsync(userIdResult.Value, request.Password, request.NewEmail, CallerIpAddress(), cancellationToken);
+        var result = await _profile.RequestEmailChangeAsync(userIdResult.Value, request.Password, request.NewEmail, CallerIpAddress(), _refreshCookie.ReadDevice(Request), cancellationToken);
         return MapResult(result);
     }
 
@@ -160,7 +160,7 @@ public class AccountController : ApiControllerBase
             return MapError(userIdResult.Error);
         }
 
-        var result = await _deletion.DeleteAccountAsync(userIdResult.Value, request.Password, CallerIpAddress(), cancellationToken);
+        var result = await _deletion.DeleteAccountAsync(userIdResult.Value, request.Password, CallerIpAddress(), _refreshCookie.ReadDevice(Request), cancellationToken);
         if (result.IsSuccess)
         {
             _refreshCookie.ClearIfRequested(HttpContext);

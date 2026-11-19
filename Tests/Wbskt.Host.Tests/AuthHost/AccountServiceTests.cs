@@ -186,7 +186,7 @@ public sealed class AccountServiceTests
         var harness = new Harness();
         harness.Accounts.Setup(p => p.FindByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync((User?)null);
 
-        var result = await harness.Passwords.ChangePasswordAsync(42, Password, "a brand new passphrase", Ip);
+        var result = await harness.Passwords.ChangePasswordAsync(42, Password, "a brand new passphrase", Ip, null);
 
         Assert.Equal("AUTH_USER_NOT_FOUND", result.Error.Code);
         Assert.Equal(ErrorType.Unauthorized, result.Error.Type);
@@ -203,7 +203,7 @@ public sealed class AccountServiceTests
             .Callback<RefreshToken, string, CancellationToken>((t, _, _) => inserted = t)
             .Returns(Task.CompletedTask);
 
-        var result = await harness.Passwords.ChangePasswordAsync(42, Password, "a brand new passphrase", Ip);
+        var result = await harness.Passwords.ChangePasswordAsync(42, Password, "a brand new passphrase", Ip, null);
 
         Assert.True(result.IsSuccess);
         harness.Accounts.Verify(p => p.ChangePasswordAsync(42, It.IsAny<string>(), Ip, It.IsAny<CancellationToken>()), Times.Once);

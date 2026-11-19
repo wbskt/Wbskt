@@ -222,7 +222,7 @@ public sealed class AccountRecoveryTests
     {
         var harness = new Harness();
 
-        var result = await harness.Passwords.ChangePasswordAsync(42, Password, "a new long password", "10.0.0.1");
+        var result = await harness.Passwords.ChangePasswordAsync(42, Password, "a new long password", "10.0.0.1", null);
 
         Assert.True(result.IsSuccess);
         Assert.Equal("password-changed:someone@example.test", Assert.Single(harness.Mailer.Sent));
@@ -233,7 +233,7 @@ public sealed class AccountRecoveryTests
     {
         var harness = new Harness();
 
-        await harness.Passwords.ChangePasswordAsync(42, "not the password", "a new long password", "10.0.0.1");
+        await harness.Passwords.ChangePasswordAsync(42, "not the password", "a new long password", "10.0.0.1", null);
 
         Assert.Empty(harness.Mailer.Sent);
     }

@@ -91,7 +91,7 @@ public sealed class AccountAuditEventTests
     [Fact]
     public async Task Changing_a_password_is_logged_with_where_it_came_from()
     {
-        var result = await _passwords.ChangePasswordAsync(42, Password, "a brand new password", "10.0.0.1");
+        var result = await _passwords.ChangePasswordAsync(42, Password, "a brand new password", "10.0.0.1", null);
 
         Assert.True(result.IsSuccess);
         var changed = Assert.IsType<PasswordChangedEvent>(Assert.Single(_published));

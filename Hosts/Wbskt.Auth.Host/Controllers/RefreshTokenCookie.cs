@@ -100,7 +100,7 @@ public sealed class RefreshTokenCookie
     /// <summary>
     /// The sign-in device token from its cookie, under the same rules as the refresh token. It is not
     /// cleared on sign-out: it only proves this browser signed in to the account before, and is no use
-    /// without the password.
+    /// without the password. One per browser: signing in to another account there replaces it.
     /// </summary>
     public string? ReadDevice(HttpRequest request) =>
         IsRequested(request) && IsOriginAllowed(request) && request.Cookies.TryGetValue(_options.DeviceName, out var token) && !string.IsNullOrEmpty(token)

@@ -119,7 +119,7 @@ public sealed class AccountProfileServiceTests
         var harness = new Harness();
         harness.WithUser();
 
-        var result = await harness.Profile.RequestEmailChangeAsync(42, Password, NewEmail, "10.0.0.1");
+        var result = await harness.Profile.RequestEmailChangeAsync(42, Password, NewEmail, "10.0.0.1", null);
 
         Assert.True(result.IsSuccess);
         Assert.Equal([$"change:{NewEmail}"], harness.Mailer.Sent);
@@ -134,7 +134,7 @@ public sealed class AccountProfileServiceTests
         var harness = new Harness();
         harness.WithUser();
 
-        var result = await harness.Profile.RequestEmailChangeAsync(42, "not the password", NewEmail, "10.0.0.1");
+        var result = await harness.Profile.RequestEmailChangeAsync(42, "not the password", NewEmail, "10.0.0.1", null);
 
         Assert.Equal("AUTH_CURRENT_PASSWORD_INVALID", result.Error.Code);
         harness.Accounts.Verify(p => p.EndPasswordCheckAsync(42, false, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, It.IsAny<CancellationToken>()), Times.Once);
@@ -147,7 +147,7 @@ public sealed class AccountProfileServiceTests
         var harness = new Harness();
         harness.WithUser(lockedUntil: DateTime.UtcNow.AddMinutes(5));
 
-        var result = await harness.Profile.RequestEmailChangeAsync(42, Password, NewEmail, "10.0.0.1");
+        var result = await harness.Profile.RequestEmailChangeAsync(42, Password, NewEmail, "10.0.0.1", null);
 
         Assert.Equal("AUTH_ACCOUNT_LOCKED", result.Error.Code);
         Assert.Empty(harness.Mailer.Sent);
@@ -160,7 +160,7 @@ public sealed class AccountProfileServiceTests
         harness.WithUser();
         harness.Accounts.Setup(p => p.FindByEmailAsync(NewEmail, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = 7, Username = "owner", Email = NewEmail });
 
-        var result = await harness.Profile.RequestEmailChangeAsync(42, Password, NewEmail, "10.0.0.1");
+        var result = await harness.Profile.RequestEmailChangeAsync(42, Password, NewEmail, "10.0.0.1", null);
 
         Assert.True(result.IsSuccess);
         Assert.Equal($"conflict:{NewEmail}:owner", Assert.Single(harness.Mailer.Sent));
@@ -173,7 +173,7 @@ public sealed class AccountProfileServiceTests
         var harness = new Harness();
         harness.WithUser();
 
-        var result = await harness.Profile.RequestEmailChangeAsync(42, Password, Email.ToUpperInvariant(), "10.0.0.1");
+        var result = await harness.Profile.RequestEmailChangeAsync(42, Password, Email.ToUpperInvariant(), "10.0.0.1", null);
 
         Assert.Equal("EMAIL_UNCHANGED", result.Error.Code);
     }
@@ -184,8 +184,8 @@ public sealed class AccountProfileServiceTests
         var harness = new Harness();
         harness.WithUser();
 
-        await harness.Profile.RequestEmailChangeAsync(42, Password, NewEmail, "10.0.0.1");
-        var again = await harness.Profile.RequestEmailChangeAsync(42, Password, NewEmail, "10.0.0.1");
+        await harness.Profile.RequestEmailChangeAsync(42, Password, NewEmail, "10.0.0.1", null);
+        var again = await harness.Profile.RequestEmailChangeAsync(42, Password, NewEmail, "10.0.0.1", null);
 
         Assert.True(again.IsSuccess);
         Assert.Single(harness.Mailer.Sent);
