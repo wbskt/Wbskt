@@ -138,7 +138,7 @@ public sealed class WorkspaceAccessProcedureTests(AuthSqlFixture fixture)
     }
 
     [SkippableFact]
-    public async Task A_new_tenants_User_role_can_read_a_workspaces_resources()
+    public async Task A_new_tenants_User_role_can_read_a_workspaces_resources_and_follow_it_live()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
         var (tenantId, _) = await CreateTenantAsync();
@@ -151,7 +151,7 @@ public sealed class WorkspaceAccessProcedureTests(AuthSqlFixture fixture)
             WHERE R.TenantId = @p0 AND R.Name = 'User' AND RP.IsDeny = 0
             """, tenantId);
 
-        Assert.Equal("billing.read,clients.read,integrations.read,logs.read,policies.read,templates.read,workflows.read", granted);
+        Assert.Equal("billing.read,clients.read,integrations.read,logs.read,policies.read,templates.read,workflows.read,workspace.join", granted);
     }
 
     // ---------------------------------------------------------------- helpers
