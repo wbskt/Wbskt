@@ -6,9 +6,15 @@
 -- Returns one row. Outcome is one of:
 --   Rotated       the presented token is retired and @NewTokenHash is live; the user columns are set
 --   Unknown       no such token
---   Replayed      the token was already retired by rotation before this call looked at it, so its
---                 holder had moved on to the replacement. Treated as theft: every live token the
---                 user holds is revoked here, in the same call
+--   Replayed      the token was already retired by rotation before this call looked at it, and its
+--                 holder had moved on: the replacement has been used since, or the token was retired
+--                 more than @SupersededGraceSeconds ago. Treated as theft: every live token the user
+--                 holds is revoked here, in the same call
+--   Superseded    the token was retired by rotation less than @SupersededGraceSeconds ago and its
+--                 replacement has not been used. Most likely the answer carrying that replacement
+--                 was lost (a closed tab, a dropped connection), so the client still holds this one.
+--                 Refused, and nothing is changed: the caller gets no token, so a thief gains
+--                 nothing, and the owner's other sessions carry on (#943)
 --   Revoked       the token was retired deliberately (sign-out, a revoked session, a password
 --                 change), not by rotation. A device still holding it is not evidence of theft, so
 --                 nothing is changed
@@ -30,7 +36,8 @@ CREATE PROCEDURE dbo.RefreshToken_Rotate
     @NewTokenHash VARBINARY(32),
     @NewExpires DATETIME2(3),
     @SessionLifetimeSeconds INT,
-    @Ip NVARCHAR(50) = NULL
+    @Ip NVARCHAR(50) = NULL,
+    @SupersededGraceSeconds INT = 60
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -54,6 +61,15 @@ BEGIN
     ELSE IF @Revoked IS NOT NULL AND @ReplacedByTokenHash IS NULL
     BEGIN
         SET @Outcome = 'Revoked';
+    END
+    ELSE IF @Revoked > DATEADD(SECOND, -@SupersededGraceSeconds, @Now)
+        AND EXISTS (
+            SELECT 1
+            FROM dbo.RefreshTokens
+            WHERE TokenHash = @ReplacedByTokenHash
+              AND Revoked IS NULL)
+    BEGIN
+        SET @Outcome = 'Superseded';
     END
     ELSE IF @Revoked IS NOT NULL
     BEGIN

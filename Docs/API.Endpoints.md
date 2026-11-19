@@ -208,6 +208,11 @@ management hosts alike. Logout and ending one session do the same for that sessi
 through its `sid` claim. Revoking access tokens is best effort: with Redis unreachable they live out
 their 15 minutes.
 
+A refresh token presented again within 60 seconds of its rotation, while its replacement has not
+been used, is refused (401 `AUTH_TOKEN_INACTIVE`) but is not treated as a replay: the answer that
+carried the replacement was most likely lost, so no session ends and no alert is raised. Once the
+replacement has been used, or the minute has passed, presenting the old token is a replay.
+
 Each account is locked for 15 minutes after 10 wrong passwords, counted across sign-in and
 `change-password` and wherever they come from — the per-IP limiter cannot see a guesser spread over
 many addresses. While locked, sign-in answers exactly as for a wrong password, so a lock does not

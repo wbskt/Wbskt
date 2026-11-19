@@ -131,15 +131,38 @@ public sealed class TokenRotationTests(ServicesFixture fixture)
 
         var rotatedResponse = await fixture.RefreshAsync(session.RefreshToken);
         var rotated = await ServicesFixture.ReadSessionAsync(rotatedResponse);
+        var currentResponse = await fixture.RefreshAsync(rotated.RefreshToken);
+        var current = await ServicesFixture.ReadSessionAsync(currentResponse);
 
-        // Replaying the retired token means someone kept a copy. The legitimate client's *current*
-        // token has to die too, or a thief simply keeps rotating alongside the real session.
+        // Replaying a token whose replacement has since been used means someone kept a copy. The
+        // legitimate client's *current* token has to die too, or a thief simply keeps rotating
+        // alongside the real session.
         await fixture.RefreshAsync(session.RefreshToken);
 
-        var survivor = await fixture.RefreshAsync(rotated.RefreshToken);
+        var survivor = await fixture.RefreshAsync(current.RefreshToken);
 
         survivor.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
             "a replay condemns the family, not just the token that was replayed");
+    }
+
+    [SkippableFact]
+    public async Task AUTH_RT_19_ALostRefreshAnswer_DoesNotEndTheSession()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var user = await fixture.CreateUserAsync();
+        var session = await fixture.LoginAsync(user.Email, user.Password);
+        var elsewhere = await fixture.LoginAsync(user.Email, user.Password);
+
+        // The client never received this answer, so it presents the token it still holds.
+        var lost = await ServicesFixture.ReadSessionAsync(await fixture.RefreshAsync(session.RefreshToken));
+        var retried = await fixture.RefreshAsync(session.RefreshToken);
+
+        retried.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await ServicesFixture.ReadErrorCodeAsync(retried)).Should().Be("AUTH_TOKEN_INACTIVE");
+        (await fixture.RefreshAsync(elsewhere.RefreshToken)).StatusCode.Should().Be(HttpStatusCode.OK,
+            "a lost answer is not theft, so the user's other devices stay signed in");
+        (await fixture.RefreshAsync(lost.RefreshToken)).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [SkippableFact]
@@ -150,7 +173,8 @@ public sealed class TokenRotationTests(ServicesFixture fixture)
         var user = await fixture.CreateUserAsync();
         var session = await fixture.LoginAsync(user.Email, user.Password);
 
-        await fixture.RefreshAsync(session.RefreshToken);
+        var rotated = await ServicesFixture.ReadSessionAsync(await fixture.RefreshAsync(session.RefreshToken));
+        await fixture.RefreshAsync(rotated.RefreshToken);
         await fixture.RefreshAsync(session.RefreshToken);
 
         // Revocation ends sessions; it must not lock the account.

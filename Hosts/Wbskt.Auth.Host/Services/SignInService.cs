@@ -261,6 +261,16 @@ internal sealed class SignInService : ISignInService
                     _metrics.RecordRefresh("user_inactive");
                     return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_USER_INACTIVE", "User is inactive."));
 
+                case RefreshRotationOutcome.Superseded:
+                    // Rotated moments ago into a replacement nobody has used: the answer that carried
+                    // it never reached the client (a closed tab, a dropped connection). Ending every
+                    // session and raising an alert over that signed people out of every device. The
+                    // caller gets nothing, so a thief presenting a copied token gains nothing either;
+                    // once the replacement is used or the grace period passes, this is a replay again.
+                    _logger.LogWarning("Token refresh refused: the token for user ID {UserId} was rotated moments ago and its replacement is unused. IP: {IpAddress}", rotation.UserId, ipAddress);
+                    _metrics.RecordRefresh("token_superseded");
+                    return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_TOKEN_INACTIVE", "Token is no longer active."));
+
                 case RefreshRotationOutcome.Raced:
                     // Another exchange retired this token in the moment between the procedure's read
                     // and its write. Losing that race is not evidence of theft - the token was used
