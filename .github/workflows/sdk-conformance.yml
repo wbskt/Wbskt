@@ -38,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sdk: [python, dotnet, arduino]
+        sdk: [python, dotnet, arduino, arduino-real]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
@@ -57,7 +57,7 @@ jobs:
           case "$SDK" in
             python) REPO=wbskt/Wbskt.Python ;;
             dotnet) REPO=wbskt/Wbskt.DotNet ;;
-            arduino) REPO=wbskt/Wbskt.Arduino ;;
+            arduino|arduino-real) REPO=wbskt/Wbskt.Arduino ;;
             *) echo "::error::no repository for SDK '$SDK'" && exit 1 ;;
           esac
           ref=master
@@ -98,5 +98,18 @@ jobs:
           make -C "$GITHUB_WORKSPACE/sdk/test/conformance"
           cp "$GITHUB_WORKSPACE/sdk/test/conformance/test_esp32.py" .
           echo "WBSKT_HARNESS=$GITHUB_WORKSPACE/sdk/test/conformance/wbskt-harness" >> "$GITHUB_ENV"
+
+      # The same library over the real links2004/arduinoWebSockets, at the version its stand-in
+      # copies, as the library's conformance-real job builds it: a suite or protocol change the stand-in
+      # satisfies but the real library does not fails here, before it merges, rather than later in
+      # Wbskt.Arduino's CI.
+      - name: Arduino harness over the real WebSockets library
+        if: matrix.sdk == 'arduino-real'
+        run: |
+          git clone --depth 1 --branch v7.4.2 https://github.com/bblanchon/ArduinoJson "$GITHUB_WORKSPACE/sdk/test/host/ArduinoJson"
+          git clone --depth 1 --branch 2.7.2 https://github.com/Links2004/arduinoWebSockets "$GITHUB_WORKSPACE/sdk/test/conformance/arduinoWebSockets"
+          make -C "$GITHUB_WORKSPACE/sdk/test/conformance" real
+          cp "$GITHUB_WORKSPACE/sdk/test/conformance/test_esp32.py" .
+          echo "WBSKT_HARNESS=$GITHUB_WORKSPACE/sdk/test/conformance/wbskt-harness-real" >> "$GITHUB_ENV"
 
       - run: python -m pytest -v
