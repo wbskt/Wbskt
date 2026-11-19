@@ -178,7 +178,7 @@ internal sealed class ClientQueryService : IClientQueryService
 
     public async Task<Result<int>> EnsureClientInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
     {
-        var clientResult = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+        var clientResult = await WorkspaceOwnership.LoadAsync(workspaceId, () => _clientProvider.FindOwnerByRefIdAsync(clientRefId, cancellationToken), WorkspaceOwnership.ClientNotFound);
         return clientResult.IsSuccess
             ? Result<int>.Success(clientResult.Value.Id)
             : Result<int>.Failure(clientResult.Error);

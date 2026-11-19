@@ -295,6 +295,15 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         );
     }
 
+    public Task<ClientOwner?> FindOwnerByRefIdAsync(Guid refId, CancellationToken cancellationToken = default)
+    {
+        return ExecuteFindAsync(
+            "dbo.Client_FindOwnerBy_RefId",
+            p => p.AddWithValue("@RefId", refId),
+            reader => new ClientOwner(reader.GetInt32(reader.GetOrdinal("Id")), reader.GetInt32(reader.GetOrdinal("WorkspaceId"))),
+            cancellationToken);
+    }
+
     public async Task UpdateNameAsync(int id, string name, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.Client_UpdateName", p =>

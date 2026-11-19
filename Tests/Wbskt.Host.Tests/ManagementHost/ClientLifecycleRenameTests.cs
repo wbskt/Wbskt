@@ -141,7 +141,8 @@ public sealed class ClientLifecycleRenameTests
     private static ClientQueryService CreateQueries(ClientDetail? detail)
     {
         var provider = new Mock<IClientProvider>();
-        provider.Setup(x => x.FindDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>())).ReturnsAsync(detail);
+        provider.Setup(x => x.FindOwnerByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(detail is null ? null : new ClientOwner(detail.Id, detail.WorkspaceId));
         return new ClientQueryService(provider.Object, Mock.Of<IClientMessageTypeProvider>(), Mock.Of<IRegistrationPolicyProvider>(), NullLogger<ClientQueryService>.Instance);
     }
 
