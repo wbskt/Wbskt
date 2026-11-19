@@ -12,9 +12,9 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
 {
     public WorkspaceProvider(IConfiguration configuration) : base(configuration, "AuthDBConnection") { }
 
-    public async Task<int> FindIdByRefIdAsync(Guid referenceId, CancellationToken cancellationToken = default)
+    public async Task<int?> FindIdByRefIdAsync(Guid referenceId, CancellationToken cancellationToken = default)
     {
-        return await ExecuteScalarAsync<int>("dbo.Workspace_FindBy_RefId", p =>
+        return await ExecuteScalarAsync<int?>("dbo.Workspace_FindBy_RefId", p =>
         {
             p.AddWithValue("@RefId", referenceId);
         }, cancellationToken);
