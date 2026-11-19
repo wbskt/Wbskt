@@ -41,8 +41,10 @@ public partial class GlobalExceptionMiddleware
             LogAnUnhandledExceptionOccurredMessage(LogLevel.Error, ex.Message, ex);
             if (context.Response.HasStarted)
             {
-                // Too late for a status or a body: the caller has part of a response already.
+                // Too late for a status or a body: the caller has part of a response already (a streamed
+                // CSV export). Cutting the connection is what tells it the body is incomplete.
                 _logger.LogWarning("The response had started, so the fault above could not be answered with an error.");
+                context.Abort();
                 return;
             }
 

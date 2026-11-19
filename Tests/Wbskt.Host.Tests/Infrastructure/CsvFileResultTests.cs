@@ -1,5 +1,14 @@
 using System.Text;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Abstractions;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
+using Wbskt.EventBus.Abstractions;
 using Wbskt.Infrastructure.Csv;
+using Wbskt.Infrastructure.Middlewares;
 
 namespace Wbskt.Host.Tests.Infrastructure;
 
@@ -52,6 +61,40 @@ public sealed class CsvFileResultTests
         Assert.Equal(6, read);
     }
 
+    [Fact]
+    public async Task A_caller_who_stops_the_download_is_not_a_fault()
+    {
+        using var aborted = new CancellationTokenSource();
+        async IAsyncEnumerable<string> StopsMidway()
+        {
+            yield return "1";
+            await aborted.CancelAsync();
+            yield return "2";
+        }
+
+        var context = new DefaultHttpContext { Response = { Body = new MemoryStream() }, RequestAborted = aborted.Token };
+
+        await new CsvFileResult("x.csv", new CsvExport("a", StopsMidway(), MaxRows: 10))
+            .ExecuteResultAsync(new ActionContext(context, new RouteData(), new ActionDescriptor()));
+
+        Assert.Equal("text/csv; charset=utf-8", context.Response.ContentType);
+    }
+
+    /// <summary>A fault once rows went out can't become a 500, so the connection is cut instead of the file looking complete.</summary>
+    [Fact]
+    public async Task A_fault_after_the_response_started_cuts_the_connection()
+    {
+        var lifetime = new Mock<IHttpRequestLifetimeFeature>();
+        var context = new DefaultHttpContext();
+        context.Features.Set<IHttpResponseFeature>(new StartedResponse());
+        context.Features.Set(lifetime.Object);
+        var middleware = new GlobalExceptionMiddleware(_ => throw new TimeoutException("db"), NullLogger<GlobalExceptionMiddleware>.Instance);
+
+        await middleware.InvokeAsync(context, Mock.Of<IEventBus>());
+
+        lifetime.Verify(l => l.Abort(), Times.Once);
+    }
+
     private static async Task<string> WriteAsync(CsvExport export)
     {
         using var body = new MemoryStream();
@@ -60,4 +103,9 @@ public sealed class CsvFileResultTests
     }
 
     private static IAsyncEnumerable<string> Rows(params string[] rows) => rows.ToAsyncEnumerable();
+
+    private sealed class StartedResponse : HttpResponseFeature
+    {
+        public override bool HasStarted => true;
+    }
 }
