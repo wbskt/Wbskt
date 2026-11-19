@@ -12,7 +12,9 @@ using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Primitives.Constants;
 using Wbskt.Primitives.Models;
+using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
+using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Host.Tests.ManagementHost;
 
@@ -29,7 +31,7 @@ public sealed class WorkflowsControllerTests
         var request = new WorkflowPublishRequest(Guid.NewGuid(), "Greenhouse", "desc", null!, Enable: true);
         var expected = new WorkflowPublishResponse(request.RefId, 1, WorkflowState.Enabled, 1);
         service.Setup(x => x.PublishAsync(WorkspaceId, WorkspaceRef, request, It.IsAny<CancellationToken>())).ReturnsAsync(Result<WorkflowPublishResponse>.Success(expected));
-        var controller = new WorkflowsController(Mock.Of<IWorkflowQueryService>(), service.Object, new WorkflowRunService(Mock.Of<IWorkflowQueryService>(), Mock.Of<IWorkflowRunQueryService>(), engineClient.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunService>>()));
+        var controller = new WorkflowsController(Mock.Of<IWorkflowQueryService>(), service.Object, new WorkflowRunService(Mock.Of<IWorkflowStateProvider>(), Mock.Of<IWorkflowRunQueryService>(), engineClient.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunService>>()));
 
         var actual = await controller.Publish(WorkspaceRef, WorkspaceId, request, CancellationToken.None);
 
@@ -46,7 +48,7 @@ public sealed class WorkflowsControllerTests
         var refId = Guid.NewGuid();
         var expected = new WorkflowDefinitionDto(refId, 2, WorkflowState.Enabled, 2, "Workflow", "desc", null!, DateTime.UtcNow);
         service.Setup(x => x.GetCurrentAsync(WorkspaceId, refId, It.IsAny<CancellationToken>())).ReturnsAsync(Result<WorkflowDefinitionDto>.Success(expected));
-        var controller = new WorkflowsController(service.Object, Mock.Of<IWorkflowLifecycleService>(), new WorkflowRunService(service.Object, Mock.Of<IWorkflowRunQueryService>(), engineClient.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunService>>()));
+        var controller = new WorkflowsController(service.Object, Mock.Of<IWorkflowLifecycleService>(), new WorkflowRunService(Mock.Of<IWorkflowStateProvider>(), Mock.Of<IWorkflowRunQueryService>(), engineClient.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunService>>()));
 
         var actual = await controller.GetCurrent(WorkspaceId, refId, CancellationToken.None);
 
@@ -63,7 +65,7 @@ public sealed class WorkflowsControllerTests
         var refId = Guid.NewGuid();
         var expected = new WorkflowDefinitionDto(refId, 3, WorkflowState.Enabled, 3, "Workflow", null, null!, DateTime.UtcNow);
         service.Setup(x => x.GetVersionAsync(WorkspaceId, refId, 3, It.IsAny<CancellationToken>())).ReturnsAsync(Result<WorkflowDefinitionDto>.Success(expected));
-        var controller = new WorkflowsController(service.Object, Mock.Of<IWorkflowLifecycleService>(), new WorkflowRunService(service.Object, Mock.Of<IWorkflowRunQueryService>(), engineClient.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunService>>()));
+        var controller = new WorkflowsController(service.Object, Mock.Of<IWorkflowLifecycleService>(), new WorkflowRunService(Mock.Of<IWorkflowStateProvider>(), Mock.Of<IWorkflowRunQueryService>(), engineClient.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunService>>()));
 
         var actual = await controller.GetVersion(WorkspaceId, refId, 3, CancellationToken.None);
 
@@ -131,13 +133,14 @@ public sealed class WorkflowsControllerTests
         var engineClient = new Mock<IWorkflowEngineGateway>();
         var workflowRefId = Guid.NewGuid();
         var runRefId = Guid.NewGuid();
-        service.Setup(x => x.GetCurrentAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<WorkflowDefinitionDto>.Success(new WorkflowDefinitionDto(workflowRefId, 1, WorkflowState.Enabled, 1, "Workflow", null, null!, DateTime.UtcNow)));
+        var states = new Mock<IWorkflowStateProvider>();
+        states.Setup(x => x.FindAsync(workflowRefId, WorkspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowStateRow(workflowRefId, WorkspaceId, WorkflowState.Enabled, 1, 1, 1));
         var expected = new StartRunResponse(runRefId);
         engineClient.Setup(x => x.StartManualRunAsync(workflowRefId, It.IsAny<StartRunRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expected);
         var bus = new Mock<IEventBus>();
-        var controller = new WorkflowsController(service.Object, Mock.Of<IWorkflowLifecycleService>(), new WorkflowRunService(service.Object, Mock.Of<IWorkflowRunQueryService>(), engineClient.Object, bus.Object, Mock.Of<ILogger<WorkflowRunService>>()));
+        var controller = new WorkflowsController(service.Object, Mock.Of<IWorkflowLifecycleService>(), new WorkflowRunService(states.Object, Mock.Of<IWorkflowRunQueryService>(), engineClient.Object, bus.Object, Mock.Of<ILogger<WorkflowRunService>>()));
         var request = new StartRunRequest(Guid.NewGuid(), null);
 
         var response = await controller.StartManualRun(WorkspaceId, workflowRefId, request, CancellationToken.None);
@@ -145,7 +148,7 @@ public sealed class WorkflowsControllerTests
         var okResult = Assert.IsType<OkObjectResult>(response.Result);
         var startRunResponse = Assert.IsType<StartRunResponse>(okResult.Value);
         Assert.Equal(runRefId, startRunResponse.RunRefId);
-        service.Verify(x => x.GetCurrentAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()), Times.Once);
+        states.Verify(x => x.FindAsync(workflowRefId, WorkspaceId, It.IsAny<CancellationToken>()), Times.Once);
         engineClient.Verify(x => x.StartManualRunAsync(workflowRefId, request, It.IsAny<CancellationToken>()), Times.Once);
         bus.Verify(x => x.PublishAsync(
             It.Is<WorkflowRunRequestedEvent>(e => e.WorkflowRefId == workflowRefId && e.WorkspaceId == WorkspaceId && e.RunRefId == runRefId && e.Outcome == "Started"),
@@ -158,12 +161,13 @@ public sealed class WorkflowsControllerTests
         var service = new Mock<IWorkflowQueryService>();
         var engineClient = new Mock<IWorkflowEngineGateway>();
         var workflowRefId = Guid.NewGuid();
-        service.Setup(x => x.GetCurrentAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<WorkflowDefinitionDto>.Success(new WorkflowDefinitionDto(workflowRefId, 1, WorkflowState.Enabled, 1, "Workflow", null, null!, DateTime.UtcNow)));
+        var states = new Mock<IWorkflowStateProvider>();
+        states.Setup(x => x.FindAsync(workflowRefId, WorkspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowStateRow(workflowRefId, WorkspaceId, WorkflowState.Enabled, 1, 1, 1));
         engineClient.Setup(x => x.StartManualRunAsync(workflowRefId, It.IsAny<StartRunRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new StartRunResponse(Guid.Empty, StartRunOutcome.Dropped));
         var bus = new Mock<IEventBus>();
-        var controller = new WorkflowsController(service.Object, Mock.Of<IWorkflowLifecycleService>(), new WorkflowRunService(service.Object, Mock.Of<IWorkflowRunQueryService>(), engineClient.Object, bus.Object, Mock.Of<ILogger<WorkflowRunService>>()));
+        var controller = new WorkflowsController(service.Object, Mock.Of<IWorkflowLifecycleService>(), new WorkflowRunService(states.Object, Mock.Of<IWorkflowRunQueryService>(), engineClient.Object, bus.Object, Mock.Of<ILogger<WorkflowRunService>>()));
 
         await controller.StartManualRun(WorkspaceId, workflowRefId, new StartRunRequest(Guid.NewGuid(), null), CancellationToken.None);
 
@@ -171,5 +175,5 @@ public sealed class WorkflowsControllerTests
     }
 
     private static WorkflowsController Controller(Mock<IWorkflowLifecycleService> lifecycle) =>
-        new(Mock.Of<IWorkflowQueryService>(), lifecycle.Object, new WorkflowRunService(Mock.Of<IWorkflowQueryService>(), Mock.Of<IWorkflowRunQueryService>(), Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunService>>()));
+        new(Mock.Of<IWorkflowQueryService>(), lifecycle.Object, new WorkflowRunService(Mock.Of<IWorkflowStateProvider>(), Mock.Of<IWorkflowRunQueryService>(), Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunService>>()));
 }

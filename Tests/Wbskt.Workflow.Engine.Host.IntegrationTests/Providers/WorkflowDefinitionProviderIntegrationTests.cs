@@ -56,6 +56,23 @@ public sealed class WorkflowDefinitionProviderIntegrationTests(SqlEdgeFixture fi
     }
 
     [SkippableFact]
+    public async Task GetByIds_reads_every_row_asked_for_in_one_call_and_FindWorkspaceId_reads_the_workspace()
+    {
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
+
+        var provider = ProviderFactory.WorkflowDefinition(fixture.ConnectionString);
+        WorkflowDefinitionRow a = await provider.InsertAsync(BuildRow(Guid.NewGuid()), CancellationToken.None);
+        WorkflowDefinitionRow b = await provider.InsertAsync(BuildRow(Guid.NewGuid()), CancellationToken.None);
+
+        IReadOnlyCollection<WorkflowDefinitionRow> rows = await provider.GetByIdsAsync([a.Id, b.Id, int.MaxValue], CancellationToken.None);
+
+        rows.Select(r => r.Id).Should().BeEquivalentTo([a.Id, b.Id]);
+        rows.Single(r => r.Id == b.Id).Name.Should().Be(b.Name);
+        (await provider.FindWorkspaceIdAsync(a.Id, CancellationToken.None)).Should().Be(1);
+        (await provider.FindWorkspaceIdAsync(int.MaxValue, CancellationToken.None)).Should().BeNull();
+    }
+
+    [SkippableFact]
     public async Task Publish_then_GetCurrent_returns_published_row()
     {
         Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");

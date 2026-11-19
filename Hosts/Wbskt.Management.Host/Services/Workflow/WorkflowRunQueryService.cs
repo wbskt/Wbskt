@@ -1,5 +1,6 @@
 using Wbskt.Models;
 using System.Text.Json;
+using Microsoft.Extensions.Caching.Memory;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Workflow.Abstraction.Entities;
@@ -39,12 +40,15 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
 
     private static readonly JsonSerializerOptions DefinitionJson = new(JsonSerializerDefaults.Web);
 
+    private static readonly MemoryCacheEntryOptions ListedVersionLifetime = new() { SlidingExpiration = TimeSpan.FromMinutes(30) };
+
     private readonly IRunProvider _runProvider;
     private readonly IBranchProvider _branchProvider;
     private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
     private readonly IWorkflowStateProvider _states;
     private readonly ILogger<WorkflowRunQueryService> _logger;
     private readonly IWorkflowDraftProvider? _draftProvider;
+    private readonly IMemoryCache _listedVersions;
 
     public WorkflowRunQueryService(
         IRunProvider runProvider,
@@ -52,9 +56,11 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
         IWorkflowDefinitionProvider workflowDefinitionProvider,
         IWorkflowStateProvider states,
         ILogger<WorkflowRunQueryService> logger,
-        IWorkflowDraftProvider? draftProvider = null)
+        IWorkflowDraftProvider? draftProvider = null,
+        IMemoryCache? cache = null)
     {
         _draftProvider = draftProvider;
+        _listedVersions = cache ?? new MemoryCache(new MemoryCacheOptions());
         _runProvider = runProvider;
         _branchProvider = branchProvider;
         _workflowDefinitionProvider = workflowDefinitionProvider;
@@ -113,18 +119,32 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
         return new RunListResponse { Items = items, NextCursor = PageRequest.KeyCursor(nextKey) };
     }
 
-    // Definition rows never change once published, so a page reads each version it spans once.
+    // Definition rows never change once published, so each one is read and parsed once per process,
+    // and a page reads the versions it has not seen yet in one call.
     private async Task<Dictionary<int, ListedVersion>> LoadVersionsAsync(IEnumerable<int> definitionIds, CancellationToken ct)
     {
         var versions = new Dictionary<int, ListedVersion>();
+        List<int> missing = [];
         foreach (int id in definitionIds)
         {
-            WorkflowDefinitionRow? row = await _workflowDefinitionProvider.GetByIdAsync(id, ct);
-            if (row is null)
+            if (_listedVersions.TryGetValue(ListedVersionKey(id), out ListedVersion? cached) && cached is not null)
             {
-                continue;
+                versions[id] = cached;
             }
+            else
+            {
+                missing.Add(id);
+            }
+        }
 
+        if (missing.Count == 0)
+        {
+            return versions;
+        }
+
+        foreach (WorkflowDefinitionRow row in await _workflowDefinitionProvider.GetByIdsAsync(missing, ct))
+        {
+            int id = row.Id;
             IReadOnlyDictionary<Guid, BaseNode> nodes;
             try
             {
@@ -138,11 +158,15 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
                 nodes = new Dictionary<Guid, BaseNode>();
             }
 
-            versions[id] = new ListedVersion(row.Name, nodes);
+            var version = new ListedVersion(row.Name, nodes);
+            _listedVersions.Set(ListedVersionKey(id), version, ListedVersionLifetime);
+            versions[id] = version;
         }
 
         return versions;
     }
+
+    private static string ListedVersionKey(int definitionId) => $"run-list-version:{definitionId}";
 
     private static RunSummaryDto MapListedRun(RunRow row, RunListDetailRow? detail, ListedVersion? version)
     {
@@ -402,8 +426,20 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
     /// </summary>
     private async Task<Result<RunRow>> LoadRunAsync(int workspaceId, Guid runRefId, CancellationToken ct)
     {
-        var loaded = await LoadRunAndDefinitionAsync(workspaceId, runRefId, ct);
-        return loaded.IsFailure ? Result<RunRow>.Failure(loaded.Error) : Result<RunRow>.Success(loaded.Value.Run);
+        RunRow? run = await _runProvider.FindRowByRefIdAsync(runRefId, ct);
+        if (run is null)
+        {
+            return Result<RunRow>.Failure(WorkspaceOwnership.RunNotFound);
+        }
+
+        // Only the workspace is needed here; the definition's JSON is read when the definition is asked for.
+        if (await _workflowDefinitionProvider.FindWorkspaceIdAsync(run.WorkflowDefinitionId, ct) != workspaceId)
+        {
+            _logger.LogWarning("Run '{RunRefId}' is not in WorkspaceId: {WorkspaceId}", runRefId, workspaceId);
+            return Result<RunRow>.Failure(WorkspaceOwnership.RunNotFound);
+        }
+
+        return Result<RunRow>.Success(run);
     }
 
     private async Task<Result<(RunRow Run, WorkflowDefinitionRow Definition)>> LoadRunAndDefinitionAsync(int workspaceId, Guid runRefId, CancellationToken ct)

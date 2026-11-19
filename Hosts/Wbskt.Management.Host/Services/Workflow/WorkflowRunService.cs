@@ -3,7 +3,9 @@ using Wbskt.Events.Workflow;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Models.Workflow;
+using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
+using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Management.Host.Services.Workflow;
 
@@ -11,20 +13,20 @@ public sealed class WorkflowRunService : IWorkflowRunService
 {
     public static readonly Error BrokerUnavailable = Error.Unavailable("EVENT_BUS_UNAVAILABLE", "The run could not be cancelled right now. Try again shortly.");
 
-    private readonly IWorkflowQueryService _definitions;
+    private readonly IWorkflowStateProvider _states;
     private readonly IWorkflowRunQueryService _runs;
     private readonly IWorkflowEngineGateway _engine;
     private readonly IEventBus _eventBus;
     private readonly ILogger<WorkflowRunService> _logger;
 
     public WorkflowRunService(
-        IWorkflowQueryService definitions,
+        IWorkflowStateProvider states,
         IWorkflowRunQueryService runs,
         IWorkflowEngineGateway engine,
         IEventBus eventBus,
         ILogger<WorkflowRunService> logger)
     {
-        _definitions = definitions;
+        _states = states;
         _runs = runs;
         _engine = engine;
         _eventBus = eventBus;
@@ -33,15 +35,12 @@ public sealed class WorkflowRunService : IWorkflowRunService
 
     public async Task<Result<StartRunResponse>> StartManualAsync(int workspaceId, Guid workflowRefId, StartRunRequest request, CancellationToken ct)
     {
-        var workflowResult = await _definitions.GetCurrentAsync(workspaceId, workflowRefId, ct);
-        if (workflowResult.IsFailure)
-        {
-            return Result<StartRunResponse>.Failure(workflowResult.Error);
-        }
+        // Only the state decides whether a manual run may start, so the definition itself is not read.
+        WorkflowStateRow? workflow = await _states.FindAsync(workflowRefId, workspaceId, ct);
 
         // Only a live version has a manual trigger registered, so the engine would find nothing for a
         // workflow out of service and the caller would get an opaque failure. Say so plainly instead.
-        switch (workflowResult.Value.State)
+        switch (workflow?.State)
         {
             case WorkflowState.Disabled:
                 _logger.LogInformation("Rejected manual run for disabled workflow '{RefId}'", workflowRefId);
