@@ -3,6 +3,7 @@ using MailKit;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.Extensions.Options;
+using Wbskt.Infrastructure.Email;
 using MimeKit;
 using Wbskt.Workflow.Abstraction.Integrations;
 using Wbskt.Workflow.Engine.Contracts;
@@ -58,7 +59,7 @@ internal sealed class SmtpChannel(IOutboundAddressGuard addressGuard, IOptions<I
     private static (MimeMessage? Message, ChannelFailure? Failure) Build(ResolvedIntegration integration, string to, string subject, string body)
     {
         var settings = (SmtpSettings)integration.Settings;
-        if (!InternetAddressList.TryParse(to, out var recipients) || recipients.Count == 0 || recipients.Mailboxes.Any(m => !m.Address.Contains('@')))
+        if (!SmtpTransport.TryParseRecipients(to, out var recipients))
         {
             return (null, new ChannelFailure(ChannelFailureKind.AddressInvalid, $"'{to}' is not an email address.", false));
         }
@@ -84,9 +85,8 @@ internal sealed class SmtpChannel(IOutboundAddressGuard addressGuard, IOptions<I
             return new ChannelFailure(ChannelFailureKind.BlockedTarget, $"The mail relay is at an address this engine may not call ({decision.Reason}).", false);
         }
 
-        var socketOptions = settings.Tls == SmtpSettings.Implicit
-            ? SecureSocketOptions.SslOnConnect
-            : options.Value.AllowInsecureTransport ? SecureSocketOptions.StartTlsWhenAvailable : SecureSocketOptions.StartTls;
+        var socketOptions = SmtpTransport.SocketOptions(
+            settings.Tls == SmtpSettings.Implicit, !options.Value.AllowInsecureTransport, SecureSocketOptions.StartTlsWhenAvailable);
 
         using var client = new SmtpClient { Timeout = (int)Timeout.TotalMilliseconds };
         try

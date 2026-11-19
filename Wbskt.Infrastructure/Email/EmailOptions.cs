@@ -16,7 +16,10 @@ public sealed class EmailOptions
     public string? Host { get; init; }
     public int Port { get; init; } = 587;
 
-    /// <summary>Upgrade the connection with STARTTLS. Off only makes sense against a local relay.</summary>
+    /// <summary>
+    /// Upgrade the connection with STARTTLS. Off only makes sense against a local relay. A relay on
+    /// port 465 speaks TLS from the start whatever this says.
+    /// </summary>
     public bool UseStartTls { get; init; } = true;
 
     public string? UserName { get; init; }

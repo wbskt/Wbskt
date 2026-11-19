@@ -1,5 +1,7 @@
-using System.Net.Mail;
 using System.Net.Sockets;
+using MailKit.Net.Smtp;
+using MailKit.Security;
+using Wbskt.Infrastructure.Email;
 
 namespace Wbskt.Auth.Host.Services.Email;
 
@@ -7,21 +9,26 @@ namespace Wbskt.Auth.Host.Services.Email;
 internal static class MailFailure
 {
     /// <summary>
-    /// The exception's type, with the relay's status code for an SMTP error, then the type of each
-    /// exception inside it. Never an SMTP error's message: a relay's reply usually repeats the address
-    /// (<c>5.1.1 &lt;user@example.com&gt;: Recipient address rejected</c>), and what this returns is
-    /// logged and stored.
+    /// The exception's type, with the relay's status and MailKit's reading of it for an SMTP error,
+    /// then the type of each exception inside it. Never a relay's reply: it usually repeats the address
+    /// (<c>5.1.1 &lt;user@example.com&gt;: Recipient address rejected</c>) or the user name, and what this
+    /// returns is logged and stored.
     /// </summary>
     /// <remarks>
-    /// A relay that cannot be reached at all (refused, TLS, DNS) is an <see cref="SmtpException"/> with
-    /// <c>GeneralFailure</c>, and the cause is only in its inner exceptions, so they are named too: by
-    /// type, and by socket error for a <see cref="SocketException"/>, neither of which holds an address.
+    /// A relay that cannot be reached at all (refused, DNS) is a <see cref="SocketException"/>, possibly
+    /// inside another exception, so inner exceptions are named too: by type, and by socket error for a
+    /// <see cref="SocketException"/>, neither of which holds an address.
     /// </remarks>
     public static string Describe(Exception ex)
     {
-        string described = ex is SmtpException smtp
-            ? $"{ex.GetType().Name} ({(int)smtp.StatusCode} {smtp.StatusCode})"
-            : $"{ex.GetType().Name}: {ex.Message}";
+        string described = ex switch
+        {
+            SmtpCommandException smtp => $"{nameof(SmtpCommandException)} ({(int)smtp.StatusCode} {smtp.StatusCode}, {smtp.ErrorCode})",
+            AuthenticationException => $"{nameof(AuthenticationException)}; the relay refused the login (check Auth:Email UserName and Password)",
+            SocketException socket => $"{nameof(SocketException)} ({socket.SocketErrorCode})",
+            _ => $"{ex.GetType().Name}: {ex.Message}"
+        };
+
         for (Exception? inner = ex.InnerException; inner is not null; inner = inner.InnerException)
         {
             described += inner is SocketException socket
@@ -29,28 +36,19 @@ internal static class MailFailure
                 : $" <- {inner.GetType().Name}";
         }
 
-        if (IsSenderRefusal(ex))
+        if (ex is SmtpCommandException { ErrorCode: SmtpErrorCode.SenderNotAccepted })
         {
-            described += "; the relay refused the sender, as it does when the login was refused (check Auth:Email UserName, Password and FromAddress)";
+            described += "; the relay refused the sender (check Auth:Email FromAddress, and that the relay lets this login send as it)";
         }
 
         return described;
     }
 
-    /// <summary>
-    /// Whether the relay refused the sender rather than a recipient. SmtpClient does not throw when the
-    /// relay rejects its password: it carries on unauthenticated, and the relay then refuses the
-    /// from-address with a 553 (or a 530), which reads as an address problem rather than a bad login.
-    /// </summary>
-    private static bool IsSenderRefusal(Exception ex) =>
-        ex is SmtpException { StatusCode: SmtpStatusCode.MailboxNameNotAllowed or SmtpStatusCode.MustIssueStartTlsFirst }
-        and not SmtpFailedRecipientException;
-
     /// <summary>Whether the relay refused this recipient for good, so trying again cannot help.</summary>
     public static bool IsPermanentRecipientRefusal(Exception ex) =>
-        ex is SmtpFailedRecipientException recipient && (int)recipient.StatusCode >= 500;
+        ex is SmtpCommandException { ErrorCode: SmtpErrorCode.RecipientNotAccepted } recipient && (int)recipient.StatusCode >= 500;
 
     /// <summary>Whether <paramref name="ex"/> is about the recipient's address being malformed, not the sender's.</summary>
     public static bool IsMalformedRecipient(Exception ex, string to) =>
-        ex is FormatException && !MailAddress.TryCreate(to, out _);
+        ex is FormatException && !SmtpTransport.TryParseRecipients(to, out _);
 }

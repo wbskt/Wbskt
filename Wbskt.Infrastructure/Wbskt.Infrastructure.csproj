@@ -24,6 +24,7 @@
          AspNetCore.Http.Abstractions are all supplied by the framework reference above, so they are
          deliberately not listed here. -->
     <ItemGroup>
+        <PackageReference Include="MailKit" />
         <PackageReference Include="Microsoft.Data.SqlClient" />
         <PackageReference Include="System.Security.Cryptography.Pkcs" />
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
