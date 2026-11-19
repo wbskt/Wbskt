@@ -172,6 +172,7 @@ public static class Program
         if (role == HostRole.All)
         {
             builder.Services.AddHostedService<WorkspaceMessageRateBroadcaster>();
+            builder.Services.AddHostedService<ClientFeedSkipReporter>();
         }
         builder.Services.AddHostedService(sp => sp.GetRequiredService<WorkspaceAccessCache>());
         builder.Services.AddHttpClient<IAuthServiceClient, AuthServiceClient>(client =>

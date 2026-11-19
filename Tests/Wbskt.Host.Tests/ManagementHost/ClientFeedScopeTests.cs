@@ -129,7 +129,10 @@ public sealed class ClientFeedScopeTests
     {
         var hub = new FakeHub();
         var time = new FixedTimeProvider(Now);
-        var handler = new SignalRForwardingHandler<ClientMessageReceivedEvent>(hub.Context, new ClientFeedThrottle(time), new WorkspaceMessageCounter(), Mock.Of<ITenantWorkspaceProvider>());
+        var throttle = new ClientFeedThrottle(time);
+        var handler = new SignalRForwardingHandler<ClientMessageReceivedEvent>(hub.Context, throttle, new WorkspaceMessageCounter(), Mock.Of<ITenantWorkspaceProvider>());
+        await using var services = new ServiceCollection().BuildServiceProvider();
+        var reporter = new ClientFeedSkipReporter(throttle, hub.Context, services.GetRequiredService<IServiceScopeFactory>(), NullLogger<ClientFeedSkipReporter>.Instance, time);
 
         for (var i = 0; i < ClientFeedThrottle.MaxPerSecond + 5; i++)
         {
@@ -138,12 +141,12 @@ public sealed class ClientFeedScopeTests
 
         hub.Sent.Should().HaveCount(ClientFeedThrottle.MaxPerSecond);
 
+        // The client sends nothing more; the report goes out anyway.
         time.Now = Now.AddSeconds(1);
-        await handler.Consume(Context(Message()));
+        await reporter.TickAsync(CancellationToken.None);
 
-        hub.Sent.Skip(ClientFeedThrottle.MaxPerSecond).Select(s => s.Method).Should()
-            .Equal(NotificationHub.ClientFeedSkippedMethod, "OnClientMessageReceivedEvent");
-        hub.Payloads.OfType<ClientFeedSkipped>().Should().ContainSingle().Which.Skipped.Should().Be(5);
+        hub.Sent.Last().Should().Be((NotificationHub.ClientGroupName(ClientId), NotificationHub.ClientFeedSkippedMethod));
+        hub.Payloads.OfType<ClientFeedSkipped>().Should().ContainSingle().Which.Should().Match<ClientFeedSkipped>(s => s.Skipped == 5 && s.CreatedAtUtc == Now.AddSeconds(1).UtcDateTime);
     }
 
     [Fact]
@@ -189,11 +192,45 @@ public sealed class ClientFeedScopeTests
 
         for (var i = 0; i < ClientFeedThrottle.MaxPerSecond; i++)
         {
-            throttle.TryAcquire(1, out _).Should().BeTrue();
+            throttle.TryAcquire(1, Guid.Empty).Should().BeTrue();
         }
 
-        throttle.TryAcquire(1, out _).Should().BeFalse();
-        throttle.TryAcquire(2, out _).Should().BeTrue();
+        throttle.TryAcquire(1, Guid.Empty).Should().BeFalse();
+        throttle.TryAcquire(2, Guid.Empty).Should().BeTrue();
+    }
+
+    [Fact]
+    public void What_was_dropped_is_reported_once_even_when_the_client_goes_quiet()
+    {
+        var time = new FixedTimeProvider(Now);
+        var throttle = new ClientFeedThrottle(time);
+        var clientRef = Guid.NewGuid();
+        for (var i = 0; i < ClientFeedThrottle.MaxPerSecond + 3; i++)
+        {
+            throttle.TryAcquire(1, clientRef);
+        }
+
+        var reported = throttle.TakeSkipped().Should().ContainSingle().Subject;
+        reported.ClientId.Should().Be(1);
+        reported.Skipped.Should().Be(new ClientFeedSkipped(clientRef, 3, Now.UtcDateTime));
+        throttle.TakeSkipped().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void A_client_quiet_for_a_minute_is_forgotten()
+    {
+        var time = new FixedTimeProvider(Now);
+        var throttle = new ClientFeedThrottle(time);
+        throttle.TryAcquire(1, Guid.NewGuid());
+
+        time.Now = Now.AddSeconds(30);
+        throttle.TakeSkipped();
+        throttle.Count.Should().Be(1);
+
+        time.Now = Now.AddSeconds(30) + ClientFeedThrottle.IdleAfter;
+        throttle.TakeSkipped();
+        throttle.Count.Should().Be(0);
+        throttle.TryAcquire(1, Guid.NewGuid()).Should().BeTrue();
     }
 
     private static ClientMessageReceivedEvent Message() => new(Guid.NewGuid(), ClientId, WorkspaceId, "temp", "{}");
