@@ -58,6 +58,11 @@ public sealed class WorkflowTestRunService : IWorkflowTestRunService
 
     public async Task<Result<StartTestRunResponse>> StartAsync(int workspaceId, Guid workflowRefId, StartTestRunRequest request, CancellationToken ct)
     {
+        if (!_identityService.TryGetUserIdentity(out UserIdentity? caller))
+        {
+            return IdentityService.NoCaller;
+        }
+
         Result<TestRunSubject> subject = await LoadAsync(workspaceId, workflowRefId, request.Source, ct);
         if (subject.IsFailure)
         {
@@ -90,7 +95,7 @@ public sealed class WorkflowTestRunService : IWorkflowTestRunService
                 Name = subject.Value.Name,
                 Description = subject.Value.Description,
                 DefinitionJson = JsonSerializer.Serialize(definition, SerializerOptions),
-                PublishedBy = _identityService.GetUserIdentity().UserId,
+                PublishedBy = caller.UserId,
                 CreatedAt = DateTime.UtcNow
             }, ct);
         }

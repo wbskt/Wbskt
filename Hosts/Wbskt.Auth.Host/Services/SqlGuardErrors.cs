@@ -43,9 +43,6 @@ internal static class SqlGuardErrors
         {
             SqlException { Number: 2601 or 2627 } when conflictError is not null => conflictError,
 
-            // A record the caller named does not exist (or is not theirs to see).
-            SecurityException => Error.NotFound("AUTH_NOT_FOUND", "The requested record was not found."),
-
             // Redemption lost a race, or the token stopped being valid between the read-back and the
             // procedure. Reported identically to the pre-check path, so which of the two rejected it
             // is not observable from outside.

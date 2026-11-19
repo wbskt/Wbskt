@@ -18,6 +18,7 @@ internal interface IAccountProvider : IReferenceProvider
     Task<int?> FindIdByUsernameAsync(string username, CancellationToken cancellationToken = default);
     /// <summary>The account, or null when it has been deleted; for a caller whose id may be stale.</summary>
     Task<User?> FindByIdAsync(int id, CancellationToken cancellationToken = default);
+    /// <summary>The account, for an id that must name one; a missing row is a fault.</summary>
     Task<User> GetByIdAsync(int id, CancellationToken cancellationToken = default);
 
     /// <summary>Creates the account and sets <paramref name="user"/>'s id and reference. Returns the id.</summary>

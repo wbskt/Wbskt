@@ -41,7 +41,7 @@ public sealed class TenantPermissionFilter : ScopedPermissionFilter<RequiresTena
         var identity = httpContext.RequestServices.GetRequiredService<IIdentityService>();
         if (!identity.TryGetUserIdentity(out var caller))
         {
-            return Result<PermissionScope>.Failure(Error.Unauthorized("AUTH_UNAUTHORIZED", "Unauthorized access."));
+            return Result<PermissionScope>.Failure(IdentityService.NoCaller);
         }
 
         var tenants = httpContext.RequestServices.GetRequiredService<ITenantProvider>();

@@ -7,7 +7,6 @@ using Wbskt.Models.Billing;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Models;
 using Wbskt.Models;
-using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Management.Host.Providers;
 
@@ -393,8 +392,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             "dbo.Client_GetBy_RefId",
             p => p.AddWithValue("@RefId", refId),
             MapClient,
-            new NotFoundException($"Client with RefId {refId} not found."),
-            cancellationToken
+            cancellationToken: cancellationToken
         );
     }
 

@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.System;
-using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Infrastructure.Middlewares;
 
@@ -54,56 +53,29 @@ public partial class GlobalExceptionMiddleware
     private const int StatusCodeClientClosedRequest = 499;
 
     // Safety net only. Expected failures travel as Result/Error and are given their status code by
-    // ApiControllerBase; anything reaching here is either a deliberate throw from a non-controller
-    // path or a genuine bug.
+    // ApiControllerBase, so anything reaching here is a fault: a 500, whatever its type.
     private static async Task HandleExceptionAsync(HttpContext context, Exception exception, IEventBus eventBus, ILogger logger)
     {
-        var (statusCode, code) = exception switch
+        try
         {
-            // Providers throw this for "record not found" as well as access denial, deliberately, so
-            // that a bad reference cannot be told apart from an inaccessible one. 403 rather than 401:
-            // the caller is authenticated, they just cannot have this.
-            SecurityException => (StatusCodes.Status403Forbidden, "AUTH_FORBIDDEN"),
-            // Not ArgumentException: one that escapes is a bug, a 500 like any other, and bad input
-            // already travels as Error.Validation.
-            ValidationException => (StatusCodes.Status400BadRequest, Problems.ValidationFailed),
-            NotFoundException => (StatusCodes.Status404NotFound, "NOT_FOUND"),
-            OptimisticConcurrencyException => (StatusCodes.Status409Conflict, "CONFLICT"),
-            UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, "AUTH_UNAUTHORIZED"),
-            _ => (StatusCodes.Status500InternalServerError, "INTERNAL_ERROR")
-        };
-
-        var isServerFault = statusCode == StatusCodes.Status500InternalServerError;
-
-        if (isServerFault)
+            // The type, the path and the trace id only: the event log is readable by tenant admins,
+            // and an exception's message and stack can quote SQL, addresses or file paths. The log
+            // line above holds them, found by the trace id.
+            await eventBus.PublishAsync(new SystemErrorEvent(
+                exception.GetType().Name,
+                context.Request.Path,
+                context.TraceIdentifier
+            ));
+        }
+        catch (Exception publishFailure)
         {
-            try
-            {
-                // The type, the path and the trace id only: the event log is readable by tenant admins,
-                // and an exception's message and stack can quote SQL, addresses or file paths. The log
-                // line above holds them, found by the trace id.
-                await eventBus.PublishAsync(new SystemErrorEvent(
-                    exception.GetType().Name,
-                    context.Request.Path,
-                    context.TraceIdentifier
-                ));
-            }
-            catch (Exception publishFailure)
-            {
-                // The caller still gets their 500 when the broker is down too.
-                logger.LogWarning("Could not announce the unhandled exception: {Message}", publishFailure.Message);
-            }
+            // The caller still gets their 500 when the broker is down too.
+            logger.LogWarning("Could not announce the unhandled exception: {Message}", publishFailure.Message);
         }
 
-        // The mapped types carry messages an author wrote for the caller, so those pass through.
-        // An unmapped exception's message is arbitrary runtime text — SQL statements, file paths,
-        // connection strings — and these hosts are publicly routed, so it is logged, not returned.
-        // The trace ID is the handle for correlating the response with the logged detail.
-        var message = isServerFault
-            ? "An unexpected error occurred while processing the request."
-            : exception.Message;
-
-        await Problems.WriteAsync(context, statusCode, code, message);
+        // The message is arbitrary runtime text (SQL, file paths, connection strings) and these hosts
+        // are publicly routed, so it is logged, not returned. The trace id ties the two together.
+        await Problems.WriteAsync(context, StatusCodes.Status500InternalServerError, "INTERNAL_ERROR", "An unexpected error occurred while processing the request.");
     }
 
     [LoggerMessage(LogLevel.Debug, "The caller cancelled the request to {Path}.")]

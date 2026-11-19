@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Security;
 
 namespace Wbskt.Infrastructure.Security;
 
@@ -7,11 +6,8 @@ public class IdentityService : IIdentityService
 {
     private static readonly AsyncLocal<UserIdentity?> CurrentIdentity = new();
 
-    // [RJ]: TODO: remove usages of this and switch to the TryGetUserIdentity
-    public UserIdentity GetUserIdentity()
-    {
-        return CurrentIdentity.Value ?? throw new SecurityException($"{nameof(IdentityService)}.{nameof(GetUserIdentity)}() returned null");
-    }
+    /// <summary>The answer for a request with no caller: a 401, so a client signs in again.</summary>
+    public static readonly Error NoCaller = Error.Unauthorized("AUTH_UNAUTHORIZED", "Unauthorized access.");
 
     public bool TryGetUserIdentity([NotNullWhen(true)] out UserIdentity? identity)
     {

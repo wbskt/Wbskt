@@ -65,12 +65,24 @@ public sealed class WorkflowDeletionTests
         harness.Engine.VerifyNoOtherCalls();
     }
 
+    [Fact]
+    public async Task A_delete_with_no_caller_is_unauthorized_and_deletes_nothing()
+    {
+        var harness = new Harness(signedIn: false);
+
+        var result = await harness.Service.DeleteAsync(WorkspaceId, RefId, CancellationToken.None);
+
+        Assert.Equal(ErrorType.Unauthorized, result.Error.Type);
+        harness.Provider.VerifyNoOtherCalls();
+    }
+
     private sealed class Harness
     {
-        public Harness()
+        public Harness(bool signedIn = true)
         {
             var identity = new Mock<IIdentityService>();
-            identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
+            UserIdentity? caller = new UserIdentity(7);
+            identity.Setup(i => i.TryGetUserIdentity(out caller)).Returns(signedIn);
             Service = new WorkflowLifecycleService(
                 Provider.Object, Mock.Of<IWorkflowStateProvider>(), new TriggerPlanner(TriggerChannelRegistry.Default, TimeProvider.System),
                 new WorkflowValidator(), new IntegrationReferenceCheck(Mock.Of<IIntegrationProvider>()), identity.Object, Engine.Object, Bus.Object, Mock.Of<ILogger<WorkflowLifecycleService>>());

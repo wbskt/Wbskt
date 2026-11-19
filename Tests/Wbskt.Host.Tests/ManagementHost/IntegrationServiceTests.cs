@@ -599,7 +599,8 @@ public sealed class IntegrationServiceTests
         public Harness(int? maxPerWorkspace = null)
         {
             var identity = new Mock<IIdentityService>();
-            identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(42));
+            UserIdentity? signedIn = new UserIdentity(42);
+            identity.Setup(i => i.TryGetUserIdentity(out signedIn)).Returns(true);
             Provider.Setup(p => p.UpdateAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<byte[]?>(), It.IsAny<byte?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(true);
             var settings = new Dictionary<string, string?>();

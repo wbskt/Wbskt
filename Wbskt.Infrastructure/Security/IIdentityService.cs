@@ -4,11 +4,9 @@ namespace Wbskt.Infrastructure.Security;
 
 public interface IIdentityService
 {
-    UserIdentity GetUserIdentity();
-
     /// <summary>
-    /// Non-throwing counterpart to <see cref="GetUserIdentity"/>, for callers that treat an
-    /// unauthenticated request as an expected outcome rather than an exceptional one.
+    /// The request's caller, or false when there is none; a service answers that with
+    /// <see cref="IdentityService.NoCaller"/>.
     /// </summary>
     bool TryGetUserIdentity([NotNullWhen(true)] out UserIdentity? identity);
 

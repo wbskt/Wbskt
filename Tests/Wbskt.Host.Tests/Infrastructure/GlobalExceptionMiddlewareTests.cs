@@ -32,14 +32,22 @@ public sealed class GlobalExceptionMiddlewareTests
 
     private static string Body(HttpContext context) => Encoding.UTF8.GetString(((MemoryStream)context.Response.Body).ToArray());
 
-    [Fact]
-    public async Task An_argument_exception_that_escapes_is_a_500_not_a_400_with_its_text()
+    // Each of these once had an arm of its own (400, 401, 403) that answered with the exception's text.
+    [Theory]
+    [InlineData(typeof(ArgumentException))]
+    [InlineData(typeof(Wbskt.Primitives.Exceptions.SecurityException))]
+    [InlineData(typeof(UnauthorizedAccessException))]
+    [InlineData(typeof(KeyNotFoundException))]
+    public async Task Any_exception_that_escapes_is_a_500_without_its_text(Type type)
     {
-        var context = await RunAsync(_ => throw new ArgumentException("Value cannot be null. (Parameter 'connectionString')"));
+        var fault = (Exception)Activator.CreateInstance(type, "Value cannot be null. (Parameter 'connectionString')")!;
+
+        var context = await RunAsync(_ => throw fault);
 
         Assert.Equal(StatusCodes.Status500InternalServerError, context.Response.StatusCode);
+        Assert.Contains("INTERNAL_ERROR", Body(context));
         Assert.DoesNotContain("connectionString", Body(context));
-        _bus.Verify(b => b.PublishAsync(It.Is<SystemErrorEvent>(e => e.ErrorType == nameof(ArgumentException)), It.IsAny<CancellationToken>()), Times.Once);
+        _bus.Verify(b => b.PublishAsync(It.Is<SystemErrorEvent>(e => e.ErrorType == type.Name), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
