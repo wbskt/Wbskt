@@ -27,6 +27,7 @@ public sealed class AccountDeletionServiceTests
 
     private readonly Mock<IAccountProvider> _accounts = new();
     private readonly Mock<IEventBus> _bus = new();
+    private readonly RecordingAccessChanges _accessChanges = new();
     private readonly Mock<IAccessTokenRevocation> _accessTokens = new();
     private readonly Mock<ITenantBillingProvider> _billing = new();
     private readonly Mock<IPaymentGateway> _gateway = new();
@@ -113,7 +114,7 @@ public sealed class AccountDeletionServiceTests
         Assert.All(planned.Values, m => Assert.Contains(nameof(WorkspaceDeletedEvent), m.MessageType));
         _accessTokens.Verify(a => a.RevokeUserAsync(UserRef, It.IsAny<CancellationToken>()), Times.Once);
         // Leaving tenant 3 is announced as the members endpoint would, and the deletion itself.
-        _bus.Verify(b => b.PublishAsync(It.Is<UserPermissionsChangedEvent>(e => e.UserId == 42), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(1, _accessChanges.Announced);
         _bus.Verify(b => b.PublishAsync(It.Is<TenantActorEvent>(e => e is MemberRemovedEvent && ((MemberRemovedEvent)e).MemberRefId == UserRef), It.IsAny<CancellationToken>()), Times.Once);
         _bus.Verify(b => b.PublishAsync(It.Is<AccountDeletedEvent>(e => e.UserRefId == UserRef && e.ClientAddress == Ip), It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -172,7 +173,7 @@ public sealed class AccountDeletionServiceTests
 
     private AccountDeletionService Service() =>
         new(_accounts.Object, _billing.Object, _gateway.Object, _bus.Object, _accessTokens.Object, NullLogger<AccountDeletionService>.Instance,
-            AuditWorkspaces.None, new TenantAnnouncer(_accounts.Object, _bus.Object, AuditWorkspaces.None, NullLogger<TenantAnnouncer>.Instance));
+            AuditWorkspaces.None, new TenantAnnouncer(_accounts.Object, _bus.Object, AuditWorkspaces.None, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance));
 
     private static TenantSubscription Subscription(string id) =>
         new(5, "dodo", id, "cus_1", "prod_maker_m", PlanCode.Maker, BillingInterval.Monthly, SubscriptionStatus.Active, DateTime.UtcNow.AddDays(20), false, null, null);

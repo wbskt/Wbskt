@@ -11,7 +11,9 @@ namespace Wbskt.Auth.Host.Controllers;
 /// <remarks>
 /// Marking whole controllers rather than each action means a new role, group, grant or membership
 /// endpoint is covered without anyone remembering to add it. An action that turns out not to change
-/// access only costs the management host a few cache misses.
+/// access only costs the management host a few cache misses. Services also announce through
+/// <c>TenantAnnouncer.AccessChanged</c>, which is what covers paths with no marked controller (staff
+/// actions, account deletion); announcing twice is harmless.
 /// </remarks>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
 public sealed class AnnouncesWorkspaceAccessChangeAttribute : Attribute, IAsyncResultFilter

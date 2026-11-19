@@ -25,6 +25,7 @@ public sealed class PeopleAuditEventTests
     private readonly Mock<IAccessControlProvider> _accessControl = new();
     private readonly Mock<IAuditWorkspaces> _audit = new();
     private readonly List<IEvent> _published = [];
+    private readonly RecordingAccessChanges _accessChanges = new();
     private readonly TenantService _tenantService;
     private readonly AccessControlService _accessControlService;
 
@@ -38,11 +39,8 @@ public sealed class PeopleAuditEventTests
         bus.Setup(b => b.PublishAsync(It.IsAny<TenantActorEvent>(), It.IsAny<CancellationToken>()))
             .Callback<IEvent, CancellationToken>((e, _) => _published.Add(e))
             .Returns(Task.CompletedTask);
-        bus.Setup(b => b.PublishAsync(It.IsAny<RolePermissionsChangedEvent>(), It.IsAny<CancellationToken>()))
-            .Callback<IEvent, CancellationToken>((e, _) => _published.Add(e))
-            .Returns(Task.CompletedTask);
 
-        var announcer = new TenantAnnouncer(Mock.Of<IAccountProvider>(), bus.Object, _audit.Object, NullLogger<TenantAnnouncer>.Instance);
+        var announcer = new TenantAnnouncer(Mock.Of<IAccountProvider>(), bus.Object, _audit.Object, _accessChanges.Changes, NullLogger<TenantAnnouncer>.Instance);
         _tenantService = new TenantService(
             _tenants.Object, _accessControl.Object, Mock.Of<IWorkspaceProvider>(), bus.Object, Mock.Of<IAuthMailer>(),
             NullLogger<TenantService>.Instance, new FixedTenantLimits(), announcer);
@@ -92,7 +90,7 @@ public sealed class PeopleAuditEventTests
         await _accessControlService.GrantRolePermissionAsync(TenantId, roleRef, new GrantRolePermissionRequest("users.manage", true), CancellationToken.None);
 
         // The permission caches hear of it as before; the audit log gets the before and after.
-        Assert.Contains(_published, e => e is RolePermissionsChangedEvent { RoleId: 42 });
+        Assert.Equal(1, _accessChanges.Announced);
         var updated = Assert.Single(_published.OfType<RolePermissionsUpdatedEvent>());
         Assert.Equal(roleRef, updated.RoleRefId);
         Assert.Equal([new FieldChange("permissions", "clients.read", "!users.manage,clients.read")], updated.Changes);
