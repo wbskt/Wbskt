@@ -120,9 +120,10 @@ CREATE INDEX IX_Runs_WorkflowRefId_CreatedAt
     INCLUDE (Status, StartedAt, CompletedAt, IsTest);
 GO
 
+-- WorkflowRefId is carried for the per-workflow breakdown (dbo.RunsInWindow), so it needs no key lookup per run.
 CREATE INDEX IX_Runs_WorkspaceId_CreatedAt
     ON dbo.Runs (WorkspaceId, CreatedAt)
-    INCLUDE (Status, StartedAt, CompletedAt, IsTest);
+    INCLUDE (Status, StartedAt, CompletedAt, IsTest, WorkflowRefId);
 GO
 
 -- Run_Start's one-test-run-at-a-time check, and finding the test run that is going.
