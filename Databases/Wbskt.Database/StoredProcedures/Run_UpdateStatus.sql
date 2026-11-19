@@ -8,7 +8,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Guard against overwriting a terminal run (e.g. Faulted) with a stale status transition.
+    -- Guard against overwriting a terminal run (e.g. Cancelled) with a stale status transition.
     UPDATE dbo.Runs WITH (ROWLOCK)
     SET Status                  = @Status,
         CompletedAt             = COALESCE(@CompletedAt, CompletedAt),

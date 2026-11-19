@@ -11,8 +11,6 @@ public static class HistoryEventKind
     // Run lifecycle
     public const string RunStarted = "RunStarted";
     public const string RunFinalized = "RunFinalized";
-    // Not written any more; kept so a history row of this kind still reads with its severity.
-    public const string RunFaulted = "RunFaulted";
     public const string RunCancellationRequested = "RunCancellationRequested";
     public const string RunFailureRequested = "RunFailureRequested";
 
@@ -60,9 +58,6 @@ public static class HistoryEventKind
     {
         return eventKind switch
         {
-            // A run that faulted is the engine failing, not the workflow.
-            RunFaulted => SeverityError,
-
             NodeFailed
                 or TemplateValueMissing
                 or CounterStepTruncated

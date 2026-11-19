@@ -7,7 +7,7 @@ BEGIN
     SET NOCOUNT ON;
 
     -- Only a non-terminal run can be transitioned. This makes finalization idempotent:
-    -- a run already Faulted (or finalized by a concurrent caller) is left untouched, and
+    -- a run already finalized (by a concurrent caller) is left untouched, and
     -- the caller learns via @Transitioned whether it actually performed the transition.
     UPDATE dbo.Runs WITH (ROWLOCK)
     SET Status = @Status,
