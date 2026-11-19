@@ -200,7 +200,7 @@ public sealed class AdminUserServiceTests
         var result = await Service().CorrectEmailAsync(_user.RefId, new AdminCorrectUserEmailRequest(Staff, " alice@gmail.test "), CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(new StaffAction(AdminUserService.CorrectEmailAction, AdminUserService.TargetKind, _user.RefId, "From alice@gmial.test to alice@gmail.test"), _runner.Action);
+        Assert.Equal(new StaffAction(AdminUserService.CorrectEmailAction, AdminUserService.TargetKind, _user.RefId), _runner.Action);
         _staffUsers.Verify(s => s.CorrectUnverifiedEmailAsync(42, "alice@gmail.test", It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()));
         _mailer.Verify(m => m.QueueEmailVerificationAsync("alice@gmail.test", "alice", It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()));
         _bus.VerifyNoOtherCalls();

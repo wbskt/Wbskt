@@ -24,13 +24,13 @@ internal sealed class RecordingStaffActionRunner : IStaffActionRunner
     public List<string> FailedAfterCommit { get; } = [];
 
     public async Task<Result<StaffActionResponse>> RunAsync(
-        StaffChange staff,
+        IStaffRequest request,
         StaffAction action,
         Func<CancellationToken, Task<Result>> change,
         IReadOnlyList<AfterCommit> afterCommit,
         CancellationToken cancellationToken)
     {
-        Staff = staff;
+        Staff = request.Staff;
         Action = action;
         if (Replay)
         {

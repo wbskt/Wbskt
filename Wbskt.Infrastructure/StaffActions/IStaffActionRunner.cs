@@ -21,16 +21,16 @@ public interface IStaffActionRunner
     /// failing; the steps after it still run.
     /// </param>
     Task<Result<StaffActionResponse>> RunAsync(
-        StaffChange staff,
+        IStaffRequest request,
         StaffAction action,
         Func<CancellationToken, Task<Result>> change,
         IReadOnlyList<AfterCommit> afterCommit,
         CancellationToken cancellationToken);
 
     Task<Result<StaffActionResponse>> RunAsync(
-        StaffChange staff,
+        IStaffRequest request,
         StaffAction action,
         Func<CancellationToken, Task<Result>> change,
         CancellationToken cancellationToken) =>
-        RunAsync(staff, action, change, [], cancellationToken);
+        RunAsync(request, action, change, [], cancellationToken);
 }

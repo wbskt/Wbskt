@@ -51,7 +51,7 @@ internal sealed class AdminWorkspaceService(
         var held = new DeferredEventBus();
         var caps = new WorkspaceCreditCapService(capProvider, held, clock);
         return await runner.RunAsync(
-            request.Staff,
+            request,
             new StaffAction(SetCreditCapAction, TargetKind, workspaceRef),
             async ct =>
             {

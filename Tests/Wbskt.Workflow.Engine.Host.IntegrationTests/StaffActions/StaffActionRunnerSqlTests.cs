@@ -26,7 +26,9 @@ public sealed class StaffActionRunnerSqlTests(SqlEdgeFixture main)
         return new StaffActionRunner(new StaffAuditProvider(configuration, "Main"), NullLogger<StaffActionRunner>.Instance);
     }
 
-    private static StaffChange Staff(Guid key) => new(Guid.NewGuid(), "pika", "Integration test of the staff runner", key);
+    private static readonly Guid StaffRef = Guid.NewGuid();
+
+    private static ProbeRequest Staff(Guid key) => new(new StaffChange(StaffRef, "pika", "Integration test of the staff runner", key));
 
     private static StaffAction Probe(Guid target) => new("ProbeChange", "Account", target);
 
@@ -91,6 +93,50 @@ public sealed class StaffActionRunnerSqlTests(SqlEdgeFixture main)
         Assert.Equal([false, true], results.Select(r => r.Value.Replayed).Order());
         Assert.Equal(1, await CountAsync("SELECT COUNT(*) FROM dbo.StaffActionProbe WHERE Target = @Id;", target));
     }
+
+    [SkippableFact]
+    public async Task Only_rows_past_the_retention_can_be_deleted_and_none_can_be_changed()
+    {
+        Skip.IfNot(main.IsAvailable, Skipped);
+        var oldKey = Guid.NewGuid();
+        var newKey = Guid.NewGuid();
+        await ExecuteAsync(
+            """
+            INSERT INTO dbo.StaffAudit (StaffRefId, StaffName, Action, TargetKind, Reason, Outcome, IdempotencyKey, CreatedAt)
+            VALUES (NEWID(), N'pika', N'ProbeChange', N'Account', N'Retention integration test', N'Succeeded', @Old, DATEADD(YEAR, -8, SYSUTCDATETIME())),
+                   (NEWID(), N'pika', N'ProbeChange', N'Account', N'Retention integration test', N'Succeeded', @New, SYSUTCDATETIME());
+            """, oldKey, newKey);
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:Main"] = main.ConnectionString })
+            .Build();
+        var audit = new StaffAuditProvider(configuration, "Main");
+
+        var young = await Assert.ThrowsAsync<SqlException>(() => ExecuteAsync("DELETE FROM dbo.StaffAudit WHERE IdempotencyKey = @Old OR IdempotencyKey = @New;", oldKey, newKey));
+        var change = await Assert.ThrowsAsync<SqlException>(() => ExecuteAsync("UPDATE dbo.StaffAudit SET Reason = N'changed afterwards' WHERE IdempotencyKey = @Old OR IdempotencyKey = @New;", oldKey, newKey));
+        int deleted = 0;
+        while (await audit.DeleteExpiredAsync(DateTime.UtcNow.AddYears(-StaffAuditRetention.Years), 1000, CancellationToken.None) is var batch and > 0)
+        {
+            deleted += batch;
+        }
+
+        Assert.Equal(50090, young.Number);
+        Assert.Equal(50090, change.Number);
+        Assert.True(deleted >= 1);
+        Assert.Equal(0, await CountAsync("SELECT COUNT(*) FROM dbo.StaffAudit WHERE IdempotencyKey = @Id;", oldKey));
+        Assert.Equal(1, await CountAsync("SELECT COUNT(*) FROM dbo.StaffAudit WHERE IdempotencyKey = @Id;", newKey));
+    }
+
+    private async Task ExecuteAsync(string sql, Guid old, Guid young)
+    {
+        await using var conn = new SqlConnection(main.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@Old", old);
+        cmd.Parameters.AddWithValue("@New", young);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private sealed record ProbeRequest(StaffChange Staff) : IStaffRequest;
 
     private async Task<Result> WriteProbeAsync(Guid target, Result outcome, CancellationToken ct)
     {

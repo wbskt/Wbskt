@@ -38,7 +38,9 @@ public sealed class AdminWorkspaceCapSqlTests(SqlEdgeFixture main)
             runner, NullLogger<AdminWorkspaceService>.Instance);
     }
 
-    private static StaffChange Staff(Guid key) => new(Guid.NewGuid(), "pika", "Integration test of a workspace cap", key);
+    private static readonly Guid StaffRef = Guid.NewGuid();
+
+    private static StaffChange Staff(Guid key) => new(StaffRef, "pika", "Integration test of a workspace cap", key);
 
     [SkippableFact]
     public async Task A_cap_commits_with_its_audit_row_and_a_retry_changes_nothing()

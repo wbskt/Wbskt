@@ -20,8 +20,10 @@ public sealed class StaffActionRunnerTests
         _runner = new StaffActionRunner(_audit, NullLogger<StaffActionRunner>.Instance);
     }
 
-    private static StaffChange Staff(string reason = "Customer asked on ticket 4411", Guid? key = null) =>
-        new(Guid.NewGuid(), "pika", reason, key ?? Guid.NewGuid());
+    private static readonly Guid StaffRef = Guid.NewGuid();
+
+    private static ProbeRequest Staff(string reason = "Customer asked on ticket 4411", Guid? key = null, int value = 1) =>
+        new(new StaffChange(StaffRef, "pika", reason, key ?? Guid.NewGuid()), value);
 
     [Theory]
     [InlineData("too short")]
@@ -125,7 +127,7 @@ public sealed class StaffActionRunnerTests
     public async Task Losing_a_race_on_the_key_answers_with_the_winners_row()
     {
         var staff = Staff();
-        _audit.RaceWinner = new StaffAuditRow(42, SetLimits.Name, TenantRef, StaffOutcome.Succeeded, null);
+        _audit.RaceWinner = new StaffAuditRow(42, SetLimits.Name, TenantRef, null, StaffOutcome.Succeeded, null, null);
         var runs = 0;
 
         var result = await _runner.RunAsync(staff, SetLimits, _ => { runs++; return Task.FromResult(Result.Success()); }, CancellationToken.None);
@@ -170,6 +172,47 @@ public sealed class StaffActionRunnerTests
         Assert.Equal(0, runs);
     }
 
+    [Fact]
+    public async Task A_key_sent_again_with_an_edited_body_is_refused_rather_than_replayed()
+    {
+        var first = Staff();
+        await _runner.RunAsync(first, SetLimits, _ => Task.FromResult(Result.Success()), CancellationToken.None);
+        var runs = 0;
+
+        var edited = await _runner.RunAsync(first with { Value = 2 }, SetLimits, _ => { runs++; return Task.FromResult(Result.Success()); }, CancellationToken.None);
+        var same = await _runner.RunAsync(first, SetLimits, _ => { runs++; return Task.FromResult(Result.Success()); }, CancellationToken.None);
+
+        Assert.Equal("IDEMPOTENCY_KEY_REUSED", edited.Error.Code);
+        Assert.True(same.Value.Replayed);
+        Assert.Equal(0, runs);
+    }
+
+    [Fact]
+    public async Task A_key_sent_again_about_another_member_is_refused()
+    {
+        var staff = Staff();
+        var suspend = new StaffAction("SuspendMember", "Account", TenantRef, SubjectRefId: Guid.NewGuid());
+        await _runner.RunAsync(staff, suspend, _ => Task.FromResult(Result.Success()), CancellationToken.None);
+
+        var other = await _runner.RunAsync(staff, suspend with { SubjectRefId = Guid.NewGuid() }, _ => Task.FromResult(Result.Success()), CancellationToken.None);
+
+        Assert.Equal("IDEMPOTENCY_KEY_REUSED", other.Error.Code);
+    }
+
+    [Fact]
+    public async Task A_refused_row_keeps_what_the_change_was_about_after_the_code()
+    {
+        var revoke = new StaffAction("RevokeCreditGrant", "Account", TenantRef, "Grant 12", Guid.NewGuid());
+
+        await _runner.RunAsync(Staff(), revoke, _ => Task.FromResult(Result.Failure(Error.NotFound("GRANT_NOT_FOUND", "no"))), CancellationToken.None);
+
+        var refused = _audit.Rows.Single(r => r.Entry.Outcome == StaffOutcome.Refused);
+        Assert.Equal("GRANT_NOT_FOUND: Grant 12", refused.Entry.Detail);
+        Assert.Equal(revoke.SubjectRefId, refused.Entry.Action.SubjectRefId);
+    }
+
+    private sealed record ProbeRequest(StaffChange Staff, int Value) : IStaffRequest;
+
     private sealed record WrittenRow(long Id, StaffAuditEntry Entry, string? TransactionId)
     {
         public TransactionStatus? Status { get; set; }
@@ -192,8 +235,10 @@ public sealed class StaffActionRunnerTests
             }
 
             var e = row.Entry;
-            return Task.FromResult<StaffAuditRow?>(new StaffAuditRow(row.Id, e.Action.Name, e.Action.TargetRefId, e.Outcome, e.Detail));
+            return Task.FromResult<StaffAuditRow?>(new StaffAuditRow(row.Id, e.Action.Name, e.Action.TargetRefId, e.Action.SubjectRefId, e.Outcome, e.Detail, e.BodyHash));
         }
+
+        public Task<int> DeleteExpiredAsync(DateTime beforeUtc, int take, CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public Task<long> InsertAsync(StaffAuditEntry entry, CancellationToken cancellationToken)
         {

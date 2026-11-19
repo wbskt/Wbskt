@@ -43,7 +43,9 @@ public sealed class AdminTenantPlanSqlTests(AuthSqlFixture auth)
             new TenantAnnouncer(new DiscardingBus(), audit, new WorkspaceAccessChanges(null, NullLogger<WorkspaceAccessChanges>.Instance), NullLogger<TenantAnnouncer>.Instance));
     }
 
-    private static StaffChange Staff(Guid key) => new(Guid.NewGuid(), "pika", "Integration test of a staff plan", key);
+    private static readonly Guid StaffRef = Guid.NewGuid();
+
+    private static StaffChange Staff(Guid key) => new(StaffRef, "pika", "Integration test of a staff plan", key);
 
     [SkippableFact]
     public async Task A_staff_plan_commits_with_its_event_and_its_audit_row()

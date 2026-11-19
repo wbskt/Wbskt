@@ -63,7 +63,7 @@ internal sealed class AdminTenantService(
 
         var set = new SetTenantPlanRequest(request.PlanCode, request.LimitOverrides, request.ExpectedRevision, request.EndsAt, request.ContractClients, request.KeepSubscription);
         return await runner.RunAsync(
-            request.Staff,
+            request,
             new StaffAction(SetPlanAction, TargetKind, tenantRef),
             async ct => await plans.SetAsync(tenantRef, set, PlanSource.Operator, ct),
             [Announce(SetPlanAction, tenantRef)],
@@ -83,7 +83,7 @@ internal sealed class AdminTenantService(
         var plan = current.Value;
         var set = new SetTenantPlanRequest(plan.PlanCode, request.LimitOverrides, request.ExpectedRevision, plan.EndsAt);
         return await runner.RunAsync(
-            request.Staff,
+            request,
             new StaffAction(SetLimitsAction, TargetKind, tenantRef),
             async ct => await plans.SetAsync(tenantRef, set, plan.Source, ct),
             [Announce(SetLimitsAction, tenantRef)],
@@ -94,7 +94,7 @@ internal sealed class AdminTenantService(
     {
         int? tenantId = null;
         return await runner.RunAsync(
-            request.Staff,
+            request,
             new StaffAction(EndPlanAction, TargetKind, tenantRef),
             async ct =>
             {
@@ -133,7 +133,7 @@ internal sealed class AdminTenantService(
         }
 
         return await runner.RunAsync(
-            request.Staff,
+            request,
             new StaffAction(GrantCreditsAction, TargetKind, tenantRef),
             async ct =>
             {
@@ -159,8 +159,8 @@ internal sealed class AdminTenantService(
     public async Task<Result<StaffActionResponse>> RevokeCreditGrantAsync(Guid tenantRef, Guid grantRef, AdminRevokeCreditGrantRequest request, CancellationToken cancellationToken)
     {
         return await runner.RunAsync(
-            request.Staff,
-            new StaffAction(RevokeCreditsAction, TargetKind, tenantRef),
+            request,
+            new StaffAction(RevokeCreditsAction, TargetKind, tenantRef, SubjectRefId: grantRef),
             async ct =>
             {
                 TenantPlan? tenant = await tenants.FindByRefIdAsync(tenantRef, ct);

@@ -36,7 +36,7 @@ internal sealed class AdminFreezeService(
         }
 
         var action = new StaffAction(request.Frozen ? FreezeAction : UnfreezeAction, TargetKind, tenantRef);
-        return await runner.RunAsync(request.Staff, action, async ct =>
+        return await runner.RunAsync(request, action, async ct =>
         {
             try
             {
