@@ -448,7 +448,7 @@ approval is automatic or manual.
 | `GET /` | `policies.read` | Lists policies, filterable by `autoApproval` and `name`, each enriched with its registered and connected client counts. |
 | `GET {policyRef}` | `policies.read` | One policy, after verifying it belongs to the workspace. |
 | `POST /` | `policies.manage` | Creates a policy. The enrolment PIN is generated server-side, not supplied by the caller. |
-| `PATCH {policyRef}` | `policies.manage` | Updates name, client limit, auto-approval and enabled state: a full replace, so send every field. Disabling stops the policy accepting new registrations and leaves registered clients as they are; `isEnabled: true` turns it back on. |
+| `PATCH {policyRef}` | `policies.manage` | Changes any of `name`, `maxClients`, `autoApproval` and `isEnabled`; a field left out keeps its value, and a request naming none is `400 POLICY_UPDATE_EMPTY`. `removeMaxClients: true` makes the policy unlimited (a `null` `maxClients` means "leave it"), and sending it with `maxClients` is `400 POLICY_LIMIT_AMBIGUOUS`. A limit below the clients already registered is `400 POLICY_LIMIT_CONFLICT`. Disabling stops the policy accepting new registrations and leaves registered clients as they are; `isEnabled: true` turns it back on. |
 | `POST {policyRef}/rotate-pin` | `policies.manage` | Replaces the PIN and returns the policy with the new one. The old PIN stops registering clients; already-registered clients are unaffected. |
 | `DELETE {policyRef}` | `policies.manage` | Deletes a policy no client is enrolled through, in any status; otherwise `409 POLICY_HAS_CLIENTS` with the count. Templates pinned to it are unpinned and stay in the workspace; its event-log history is kept. Raises `PolicyDeletedEvent`. |
 
