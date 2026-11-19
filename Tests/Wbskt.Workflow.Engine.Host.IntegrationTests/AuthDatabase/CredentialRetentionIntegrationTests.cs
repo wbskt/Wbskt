@@ -52,6 +52,60 @@ public sealed class CredentialRetentionIntegrationTests(AuthSqlFixture fixture)
     }
 
     /// <summary>
+    /// <c>dbo.TenantInvitation_AnnounceExpired</c> marks an expired invitation and queues its event in the
+    /// same transaction, so the audit entry survives a broker outage; a second call returns it no more.
+    /// </summary>
+    [SkippableFact]
+    public async Task An_expired_invitation_is_marked_and_its_event_queued_once()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int userId = await ScalarAsync<int>("""
+            DECLARE @u NVARCHAR(40) = CONCAT('expiry-', LEFT(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 20));
+            INSERT INTO dbo.Users (Username, Email, PasswordHash, IsActive) OUTPUT INSERTED.Id
+            VALUES (@u, CONCAT(@u, '@example.test'), 'hash', 1);
+            """);
+        int tenantId = await ScalarAsync<int>("INSERT INTO dbo.Tenants (RefId, Name) OUTPUT INSERTED.Id VALUES (NEWID(), N'expiry');");
+        int workspaceId = await ScalarAsync<int>(
+            "INSERT INTO dbo.Workspaces (RefId, TenantId, Name, OwnerUserId) OUTPUT INSERTED.Id VALUES (NEWID(), @p0, N'expiry', @p1);", tenantId, userId);
+        Guid invitationRef = await ScalarAsync<Guid>("""
+            INSERT INTO dbo.TenantInvitations (TenantId, Email, TokenHash, ExpiresAt, InvitedByUserId) OUTPUT INSERTED.RefId
+            VALUES (@p0, N'lapsed@example.test', CRYPT_GEN_RANDOM(32), '2000-01-01T10:00:00', @p1);
+            """, tenantId, userId);
+
+        await AnnounceExpiredAsync();
+        await AnnounceExpiredAsync();
+
+        string payload = await ScalarAsync<string>("""
+            SELECT Payload FROM dbo.OutboxMessages
+            WHERE MessageType = N'Wbskt.Events.Auth.InvitationExpiredEvent'
+              AND JSON_VALUE(Payload, '$.invitationRefId') = CONVERT(NVARCHAR(36), @p0);
+            """, invitationRef);
+        using var json = System.Text.Json.JsonDocument.Parse(payload);
+        Assert.Equal("lapsed@example.test", json.RootElement.GetProperty("email").GetString());
+        Assert.Equal([workspaceId], json.RootElement.GetProperty("workspaceIds").EnumerateArray().Select(e => e.GetInt32()));
+        Assert.Equal(new DateTime(2000, 1, 1, 10, 0, 0, DateTimeKind.Utc), json.RootElement.GetProperty("createdAtUtc").GetDateTime().ToUniversalTime());
+        Assert.NotNull(await ScalarAsync<DateTime?>("SELECT ExpiryAnnouncedAt FROM dbo.TenantInvitations WHERE RefId = @p0", invitationRef));
+        Assert.Equal(1, await ScalarAsync<int>("""
+            SELECT COUNT(*) FROM dbo.OutboxMessages
+            WHERE MessageType = N'Wbskt.Events.Auth.InvitationExpiredEvent'
+              AND JSON_VALUE(Payload, '$.invitationRefId') = CONVERT(NVARCHAR(36), @p0);
+            """, invitationRef));
+    }
+
+    private async Task AnnounceExpiredAsync()
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = new SqlCommand("dbo.TenantInvitation_AnnounceExpired", conn) { CommandType = CommandType.StoredProcedure };
+        cmd.Parameters.Add("@NowUtc", SqlDbType.DateTime2).Value = DateTime.UtcNow;
+        cmd.Parameters.AddWithValue("@BatchSize", 5000);
+        cmd.Parameters.AddWithValue("@QueueEvents", true);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+        }
+    }
+
+    /// <summary>
     /// <c>dbo.User_GetUnconfirmed</c> and <c>dbo.User_Delete</c> with <c>@UnconfirmedBefore</c>: only an
     /// account never confirmed, never signed in and alone in its tenant is found and deleted.
     /// </summary>
