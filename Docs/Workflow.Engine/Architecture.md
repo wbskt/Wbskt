@@ -18,7 +18,7 @@ see [Features.md](Features.md); for the patterns behind the code, see
 
 ## 2. Where the engine sits
 
-* The **Socket host** holds client connections. It publishes `ClientMessageReceivedEvent`,
+* The **gateway hosts** (WebSocket and MQTT) hold client connections. It publishes `ClientMessageReceivedEvent`,
   `ClientConnectedEvent`, `ClientDisconnectedEvent` and command acks or failures on RabbitMQ.
 * The **Management host** is the only HTTP caller of the engine. It calls the engine's inbound API
   for manual runs, signals and integration seal/test (`WorkflowEngineClient`, with the shared API key
@@ -316,7 +316,8 @@ uses the same mechanism (see [Design.Patterns.md](Design.Patterns.md#the-parking
 `RunRecoveryService.RecoverAsync` runs once each time an instance becomes leader, before any
 inbound event is dispatched:
 
-* re-dispatches every `Active` branch with reason `Recovered`;
+* re-dispatches every `Active` branch with reason `Recovered`, and every `Waiting` branch whose wake
+  the previous leader claimed and stored (`WokenAt`) but may not have dispatched;
 * re-applies cancellation or failure for runs left in `Cancelling` or `Failing`, including runs
   whose only remaining branches are `Waiting`;
 * finalizes, from their branches, the runs with no bookmark and no `Active` or `Waiting` branch:
@@ -324,8 +325,9 @@ inbound event is dispatched:
   (`SettledRunSweeper`);
 * marks the engine Ready, which opens `InboundHub`.
 
-Waiting branches need nothing: their bookmarks are in SQL and the scheduler picks up any that fell
-due while no leader was running.
+Other Waiting branches need nothing: their bookmarks are in SQL and the scheduler picks up any that
+fell due while no leader was running. A wake lost while the same leader keeps running is dispatched
+again by `BookmarkOrphanGc`.
 
 ## 8. Background workers
 
@@ -353,11 +355,11 @@ providers in `Wbskt.Workflow/Providers`.
 | Table | Holds |
 |---|---|
 | `WorkflowDefinitions` | Every published version, as JSON. |
-| `TriggerRegistrations` | Match key → definition, with filter and secret hash. |
+| `TriggerRegistrations` | Match key → definition, with filter and secret hash (and, for one release, the secret). |
 | `ScheduledFires` | Next fire time per schedule trigger. |
 | `ClientPresenceChecks`, `ClientHoldStates` | Pending presence and hold evaluations. |
 | `Runs`, `RunCounters` | Run row (status, correlation, `TriggerStartKey`, parent, output) and its counters (active branches, credits). |
-| `Branches` | Current node, status, local state JSON, `PendingTakePort`, `RowVersion`. |
+| `Branches` | Current node, status, local state JSON, `PendingTakePort`, `RowVersion`, `WokenAt` (a claimed wake not yet run), and the error a Failed branch ended with (`ErrorJson`). |
 | `Bookmarks` | Waiting branches: match key, `ExpiresAt`, TTL port. |
 | `JoinAggregators`, `JoinContributions` | Join state per cohort. |
 | `IdempotencyKeys` | Inbound-event claims and per-attempt action outcomes. |
@@ -416,8 +418,9 @@ run was made from a path that doesn't exist.
 `wbskt_workflow_inbound_events_total{channel, outcome}` counts every event `InboundHub` handles,
 by dispatch outcome, `Busy` (a start whose workspace lock stayed taken: the event is redelivered, or
 the manual endpoint's caller told to send it again) or `Failed`. It counts attempts: a message the bus
-retries counts once per attempt, typically `Failed` or `Busy` then its final outcome. It replaces the per-event log line, which is Debug: at client
-message rates a line each would fill Loki, so "how many messages matched nothing" is
+retries counts once per attempt, typically `Failed` or `Busy` then its final outcome. It replaces a per-event log line: the
+per-event lines are Debug, and only a busy workspace (Warning) or a failed event (Error) logs one at a
+higher level, because at client message rates a line each would fill Loki, so "how many messages matched nothing" is
 `sum by (outcome) (rate(wbskt_workflow_inbound_events_total[5m]))`, not a log search.
 
 ## 12. Configuration
