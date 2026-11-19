@@ -1,0 +1,126 @@
+# Unit tests for alerts.yml, run in CI by promtool (test rules). Each alert that guards the stack's
+# own monitoring is tested both ways: it fires on the failure it is for, and stays quiet otherwise.
+# promtool compares annotations exactly, so rewording one in alerts.yml means rewording it here; the
+# failure prints the text it got. A rule that names a metric the code no longer emits still passes
+# these; AlertMetricNamesTests in Tests/Wbskt.Host.Tests catches that.
+rule_files:
+  - alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  # Watchdog fires from the first evaluation, with nothing else running.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: Watchdog
+        exp_alerts:
+          - exp_labels:
+              severity: none
+            exp_annotations:
+              action: "Nothing to do. Never silence it, or the outside service decides the VM is down."
+              impact: "None. It is never emailed: it goes only to the dead man's switch (ALERT_DEADMANS_URL), so a service outside the VM notices when alerts stop being sent."
+              summary: "The alerting pipeline is working; this alert always fires"
+
+  # Mail keeps failing and none is sent: MailRelayDown. Failures with mail still going out: quiet.
+  - interval: 1m
+    input_series:
+      - series: 'wbskt_auth_mail_total{job="wbskt-auth", outcome="retried"}'
+        values: '0+1x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: MailRelayDown
+        exp_alerts:
+          - exp_labels:
+              severity: page
+            exp_annotations:
+              action: "The mail relay is refusing everything or cannot be reached: often an expired password, a sending limit, or the provider being down. The auth host's \"failed on attempt\", \"was not sent\" and \"was refused by the relay\" log lines carry the relay's error code. Mail that failed is tried again for about eight hours, so fixing the relay soon still delivers it. If the SMTP_* settings in .env changed, fix them and restart auth. This alert is mailed through that same relay, so it reaches anyone only when ALERT_WEBHOOK_URL is set too."
+              command: "docker compose logs --since 1h auth | grep -E \"failed on attempt|was not sent|refused by the relay\""
+              impact: "Sign-up confirmations, invitations and password resets are not being delivered. New users cannot confirm their address, so they cannot sign in."
+              summary: "Outgoing email has stopped: none sent in 15 minutes, 15 given up on"
+  - interval: 1m
+    input_series:
+      - series: 'wbskt_auth_mail_total{job="wbskt-auth", outcome="retried"}'
+        values: '0+1x30'
+      - series: 'wbskt_auth_mail_total{job="wbskt-auth", outcome="sent"}'
+        values: '0+1x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: MailRelayDown
+        exp_alerts: []
+
+  # The auth host stops pushing after 10 minutes. Its series goes stale 5 minutes later, and the
+  # alert fires 5 minutes after that. The others keep pushing and are not named.
+  - interval: 1m
+    input_series:
+      - series: 'target_info{job="wbskt-auth", instance="auth-1"}'
+        values: '1x10'
+      - series: 'target_info{job="wbskt-management", instance="management-1"}'
+        values: '1x40'
+      - series: 'dotnet_process_cpu_count{job="wbskt-client-auth", instance="client-auth-1"}'
+        values: '2x40'
+      - series: 'target_info{job="wbskt-gateway-ws", instance="gateway-ws-1"}'
+        values: '1x40'
+      - series: 'target_info{job="wbskt-gateway-mqtt", instance="gateway-mqtt-1"}'
+        values: '1x40'
+      - series: 'up{job="otel-collector", instance="otel-collector:8888"}'
+        values: '1x40'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: HostNotReporting
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: HostNotReporting
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              job: wbskt-auth
+            exp_annotations:
+              action: "Check whether it is running and read its recent logs. A service deliberately scaled to 0 replicas fires this too."
+              command: "docker compose ps auth && docker compose logs --tail 200 auth"
+              impact: "Either that service is down, so what it does (sign-in for auth, the console's API for management, device connections for client-auth and the gateways) is failing, or it is running but its monitoring is broken."
+              summary: "The auth service has been silent for about 10 minutes"
+
+  # With the collector down every host goes silent at once; that is OtelCollectorDown's alert, so
+  # HostNotReporting holds back.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="otel-collector", instance="otel-collector:8888"}'
+        values: '0x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: HostNotReporting
+        exp_alerts: []
+
+  # A job that has failed every tick since its container started fires; one that also succeeds, or
+  # whose container stopped pushing, does not.
+  - interval: 1m
+    input_series:
+      - series: 'wbskt_management_worker_ticks_total{job="wbskt-management", instance="management-1", worker="CreditPosting", outcome="failed"}'
+        values: '1+1x30'
+      - series: 'wbskt_management_worker_ticks_total{job="wbskt-management", instance="management-1", worker="Retention", outcome="failed"}'
+        values: '1+1x30'
+      - series: 'wbskt_management_worker_ticks_total{job="wbskt-management", instance="management-1", worker="Retention", outcome="ok"}'
+        values: '1+1x30'
+      - series: 'wbskt_auth_worker_ticks_total{job="wbskt-auth", instance="auth-1", worker="BillingReconcile", outcome="failed"}'
+        values: '1+1x30'
+      - series: 'target_info{job="wbskt-management", instance="management-1"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PeriodicJobFailing
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: PeriodicJobFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warn
+              job: wbskt-management
+              instance: management-1
+              worker: CreditPosting
+            exp_annotations:
+              action: "Its error lines name the failure: the service's logs, or Loki in Grafana with {service_name=\"wbskt-management\"} |= \"CreditPosting\". It runs again on its own once the cause is fixed."
+              command: "docker compose logs --since 1h management | grep \"CreditPosting\""
+              impact: "A scheduled job (credit posting, billing checks, data retention, the deleted-workspace cleanup, or device access re-checks) is not doing its work. What breaks depends on the job, and usually builds up slowly."
+              summary: "The background job CreditPosting on management keeps failing"

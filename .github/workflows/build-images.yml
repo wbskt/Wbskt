@@ -654,6 +654,54 @@ jobs:
           Tests/Wbskt.E2E.FeatureTests/e2e-up.sh ps -a
           Tests/Wbskt.E2E.FeatureTests/e2e-up.sh logs --tail 100
 
+  # The monitoring and compose files are only read by the VM, so a typo in one first showed when a
+  # deploy restarted Prometheus or Alertmanager, which then stopped alerting without a word (#987).
+  # The tools come from the images compose runs, at the tags it names, so they cannot drift apart.
+  deploy-config:
+    needs: changes
+    if: needs.changes.outputs.hosts == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Prometheus config, rules and rule tests
+        run: |
+          set -euo pipefail
+          image=$(grep -oE 'prom/prometheus:[^[:space:]]+' deploy/compose/docker-compose.yml)
+          promtool() {
+            docker run --rm --entrypoint /bin/promtool -v "$PWD/deploy/observability:/etc/prometheus:ro" \
+              -w /etc/prometheus "$image" "$@"
+          }
+          promtool check config prometheus.yml
+          promtool test rules alerts.test.yml
+
+      # Every receiver the entrypoint can write: email, webhook and dead man's switch, then none of
+      # them. A password with a quote and a backslash checks its YAML quoting.
+      - name: Alertmanager config from the entrypoint
+        run: |
+          set -euo pipefail
+          image=$(grep -oE 'prom/alertmanager:[^[:space:]]+' deploy/compose/docker-compose.yml)
+          check() {
+            docker run --rm --entrypoint /bin/sh "$@" \
+              -v "$PWD/deploy/observability/alertmanager-entrypoint.sh:/etc/alertmanager/entrypoint.sh:ro" \
+              -v "$PWD/deploy/observability/alert-email.tmpl:/etc/alertmanager/alert-email.tmpl:ro" \
+              "$image" -c 'sed "/^exec \/bin\/alertmanager/,\$d" /etc/alertmanager/entrypoint.sh > /tmp/build.sh \
+                && sh /tmp/build.sh && /bin/amtool check-config /tmp/alertmanager.yml'
+          }
+          check -e ALERT_EMAIL_TO=ops@example.com -e SMTP_HOST=smtp.example.com -e SMTP_PORT=587 \
+            -e SMTP_FROM_ADDRESS=alerts@example.com -e SMTP_USERNAME=alerts -e "SMTP_PASSWORD=it's\\n" \
+            -e ALERT_WEBHOOK_URL=https://hooks.example.com/alerts -e ALERT_DEADMANS_URL=https://ping.example.com/x
+          check
+
+      # .env.example leaves the secrets empty, and compose refuses a required one that is; any value
+      # will do for reading the file.
+      - name: Compose file
+        run: |
+          set -euo pipefail
+          sed -E 's/^([A-Z0-9_]+)=$/\1=ci-placeholder/' deploy/compose/.env.example > "$RUNNER_TEMP/ci.env"
+          docker compose -f deploy/compose/docker-compose.yml --env-file "$RUNNER_TEMP/ci.env" config -q
+
   meta:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
@@ -671,7 +719,7 @@ jobs:
           echo "prefix=ghcr.io/$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')/wbskt" >> "$GITHUB_OUTPUT"
 
   hosts:
-    needs: [meta, test, integration, scan, e2e, e2e-shards, migration-rehearsal, image-start]
+    needs: [meta, test, integration, scan, e2e, e2e-shards, migration-rehearsal, image-start, deploy-config]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
@@ -725,7 +773,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
   migrator:
-    needs: [meta, test, integration, scan, e2e, e2e-shards, migration-rehearsal, image-start]
+    needs: [meta, test, integration, scan, e2e, e2e-shards, migration-rehearsal, image-start, deploy-config]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
