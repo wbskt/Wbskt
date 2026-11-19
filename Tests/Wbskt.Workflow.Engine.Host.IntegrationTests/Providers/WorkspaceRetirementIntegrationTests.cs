@@ -199,6 +199,10 @@ public sealed class WorkspaceRetirementIntegrationTests(SqlEdgeFixture fixture)
             VALUES (@p0, 't', '2026-08-01', 1, 1, 1, 1);
             """, hourlyClient);
 
+        // #965: a copy stays while the purge still has rows to remove, since it finds them by the copy.
+        int notPurged = await CreateAccountAsync(longAgo);
+        await CreatePolicyAsync(notPurged);
+
         Assert.Equal(1, await Provider().DeleteRetiredAccountsAsync(now, batchSize: 1));
         while (await Provider().DeleteRetiredAccountsAsync(now, batchSize: 1000) > 0)
         {
@@ -217,6 +221,7 @@ public sealed class WorkspaceRetirementIntegrationTests(SqlEdgeFixture fixture)
         Assert.True(await AccountExistsAsync(withRun));
         Assert.True(await AccountExistsAsync(withReadings));
         Assert.True(await AccountExistsAsync(withHourly));
+        Assert.True(await AccountExistsAsync(notPurged));
     }
 
     /// <summary>
