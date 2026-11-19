@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using MimeKit;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Email;
 using Wbskt.Workflow.Abstraction.Integrations;
 
 namespace Wbskt.Workflow.Integrations;
@@ -275,7 +276,7 @@ internal static partial class IntegrationShape
             return Fail<IntegrationSettings>(ConfigInvalid, $"port must be one of {string.Join(", ", options.EffectiveSmtpPorts)}.");
         }
 
-        string tls = smtp.Tls ?? (port == 465 ? SmtpSettings.Implicit : SmtpSettings.StartTls);
+        string tls = smtp.Tls ?? (SmtpTransport.ImpliesImplicitTls(port) ? SmtpSettings.Implicit : SmtpSettings.StartTls);
         if (tls is not (SmtpSettings.StartTls or SmtpSettings.Implicit))
         {
             return Fail<IntegrationSettings>(ConfigInvalid, $"tls must be '{SmtpSettings.StartTls}' or '{SmtpSettings.Implicit}'.");

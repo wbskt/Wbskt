@@ -2,7 +2,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using System.Diagnostics.Metrics;
-using System.Net.Mail;
+using MailKit.Net.Smtp;
+using MailKit.Security;
+using MimeKit;
 using System.Net.Sockets;
 using Wbskt.Auth.Host.Services.Email;
 using Wbskt.Auth.Host.Telemetry;
@@ -212,7 +214,7 @@ public sealed class OutboundMailPipelineTests
     [Fact]
     public async Task A_recipient_the_relay_refuses_for_good_is_counted_as_rejected_and_not_retried()
     {
-        var sender = new ScriptedSender(failures: int.MaxValue, () => new SmtpFailedRecipientException(SmtpStatusCode.MailboxUnavailable, "<gone@example.test>"));
+        var sender = new ScriptedSender(failures: int.MaxValue, () => new SmtpCommandException(SmtpErrorCode.RecipientNotAccepted, SmtpStatusCode.MailboxUnavailable, new MailboxAddress("", "gone@example.test"), "5.1.1 <gone@example.test>: Recipient address rejected"));
         var logger = new RecordingLogger();
         await using var harness = new DispatcherHarness(sender, logger);
         using var outcomes = new MailOutcomes(harness.Metrics);
@@ -258,28 +260,40 @@ public sealed class OutboundMailPipelineTests
     }
 
     [Fact]
-    public void A_relay_that_cannot_be_reached_is_described_by_the_socket_error_under_it()
+    public void A_relay_that_cannot_be_reached_is_described_by_the_socket_error()
     {
-        var ex = new SmtpException("Failure sending mail.", new IOException("Unable to connect", new SocketException((int)SocketError.ConnectionRefused)));
+        var ex = new SocketException((int)SocketError.ConnectionRefused);
 
-        Assert.Equal("SmtpException (-1 GeneralFailure) <- IOException <- SocketException (ConnectionRefused)", MailFailure.Describe(ex));
+        Assert.Equal("SocketException (ConnectionRefused)", MailFailure.Describe(ex));
     }
 
     [Fact]
-    public void A_refused_sender_is_described_as_a_likely_login_failure()
+    public void A_refused_login_is_described_without_the_relay_reply()
     {
-        var ex = new SmtpException(SmtpStatusCode.MailboxNameNotAllowed, "5.7.1 <no-reply@example.com>: Sender address rejected: not logged in");
+        var ex = new AuthenticationException("535: 5.7.8 Username and Password not accepted for no-reply@example.com");
 
         string described = MailFailure.Describe(ex);
 
-        Assert.StartsWith("SmtpException (553 MailboxNameNotAllowed); the relay refused the sender", described);
-        Assert.Contains("Password", described);
+        Assert.StartsWith("AuthenticationException; the relay refused the login", described);
+        Assert.DoesNotContain("no-reply", described);
     }
 
     [Fact]
-    public void A_recipient_refused_with_553_is_not_described_as_a_login_failure()
+    public void A_refused_sender_is_described_as_such()
     {
-        var ex = new SmtpFailedRecipientException(SmtpStatusCode.MailboxNameNotAllowed, "<someone@example.com>", "5.1.3 Bad recipient address syntax");
+        var ex = new SmtpCommandException(SmtpErrorCode.SenderNotAccepted, SmtpStatusCode.MailboxNameNotAllowed, new MailboxAddress("", "no-reply@example.com"), "5.7.1 <no-reply@example.com>: Sender address rejected: not logged in");
+
+        string described = MailFailure.Describe(ex);
+
+        Assert.StartsWith("SmtpCommandException (553 MailboxNameNotAllowed, SenderNotAccepted); the relay refused the sender", described);
+        Assert.Contains("FromAddress", described);
+        Assert.DoesNotContain("no-reply", described);
+    }
+
+    [Fact]
+    public void A_recipient_refused_with_553_is_not_described_as_a_refused_sender()
+    {
+        var ex = new SmtpCommandException(SmtpErrorCode.RecipientNotAccepted, SmtpStatusCode.MailboxNameNotAllowed, new MailboxAddress("", "someone@example.com"), "5.1.3 Bad recipient address syntax");
 
         Assert.DoesNotContain("refused the sender", MailFailure.Describe(ex));
     }
@@ -287,12 +301,21 @@ public sealed class OutboundMailPipelineTests
     [Fact]
     public void A_refused_recipient_is_described_without_the_relay_reply_that_names_it()
     {
-        var ex = new SmtpFailedRecipientException(SmtpStatusCode.MailboxUnavailable, "<someone@example.com>", "5.1.1 <someone@example.com>: Recipient address rejected");
+        var ex = new SmtpCommandException(SmtpErrorCode.RecipientNotAccepted, SmtpStatusCode.MailboxUnavailable, new MailboxAddress("", "someone@example.com"), "5.1.1 <someone@example.com>: Recipient address rejected");
 
         string described = MailFailure.Describe(ex);
 
         Assert.DoesNotContain("someone", described);
-        Assert.StartsWith("SmtpFailedRecipientException (550 MailboxUnavailable)", described);
+        Assert.StartsWith("SmtpCommandException (550 MailboxUnavailable, RecipientNotAccepted)", described);
+        Assert.True(MailFailure.IsPermanentRecipientRefusal(ex));
+    }
+
+    [Fact]
+    public void A_recipient_refused_for_now_is_tried_again()
+    {
+        var ex = new SmtpCommandException(SmtpErrorCode.RecipientNotAccepted, SmtpStatusCode.MailboxBusy, new MailboxAddress("", "someone@example.com"), "4.2.1 try later");
+
+        Assert.False(MailFailure.IsPermanentRecipientRefusal(ex));
     }
 
     [Fact]

@@ -1,13 +1,14 @@
-using System.Net;
-using System.Net.Mail;
-using System.Net.Mime;
-using System.Text;
+using MailKit;
+using MailKit.Net.Smtp;
+using MailKit.Security;
 using Microsoft.Extensions.Options;
+using MimeKit;
 
 namespace Wbskt.Infrastructure.Email;
 
 /// <summary>
-/// Sends through a plain SMTP relay configured on the host.
+/// Sends through a plain SMTP relay configured on the host, over MailKit as the workflow email step
+/// does, so a relay that needs TLS from the start (port 465) works as well as one using STARTTLS.
 /// </summary>
 public sealed class SmtpEmailSender : IEmailSender
 {
@@ -22,72 +23,68 @@ public sealed class SmtpEmailSender : IEmailSender
 
     public async Task SendAsync(string to, string subject, string body, EmailBodyFormat format, CancellationToken ct)
     {
-        using var message = CreateMessage(to, subject);
-        message.Body = body;
-        message.IsBodyHtml = format == EmailBodyFormat.Html;
+        var message = CreateMessage(to, subject);
+        message.Body = new TextPart(format == EmailBodyFormat.Html ? "html" : "plain") { Text = body };
 
         await DeliverAsync(message, ct);
     }
 
     public async Task SendMultipartAsync(string to, string subject, string textBody, string htmlBody, CancellationToken ct)
     {
-        using var message = CreateMessage(to, subject);
+        var message = CreateMessage(to, subject);
 
-        // The body goes first in the multipart/alternative and the HTML view after it; clients show
-        // the last part they can render, so HTML wins wherever it is allowed.
-        message.Body = textBody;
-        message.IsBodyHtml = false;
-        message.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(htmlBody, Encoding.UTF8, MediaTypeNames.Text.Html));
+        // multipart/alternative with the text first and the HTML after it; clients show the last part
+        // they can render, so HTML wins wherever it is allowed.
+        message.Body = new BodyBuilder { TextBody = textBody, HtmlBody = htmlBody }.ToMessageBody();
 
         await DeliverAsync(message, ct);
     }
 
-    private MailMessage CreateMessage(string to, string subject)
+    private MimeMessage CreateMessage(string to, string subject)
     {
         if (!IsConfigured)
         {
             throw new InvalidOperationException("No SMTP host or from-address is configured for this host's email section.");
         }
 
-        var message = new MailMessage
+        if (!SmtpTransport.TryParseRecipients(to, out var recipients))
         {
-            From = string.IsNullOrWhiteSpace(_options.FromDisplayName)
-                ? new MailAddress(_options.FromAddress!)
-                : new MailAddress(_options.FromAddress!, _options.FromDisplayName),
-            Subject = subject,
-            SubjectEncoding = Encoding.UTF8,
-            BodyEncoding = Encoding.UTF8
-        };
+            // Never the address itself: this message reaches the logs.
+            throw new FormatException("The recipient is not an email address.");
+        }
 
-        // Multiple recipients are ordinary; MailAddressCollection parses a comma-separated list.
-        message.To.Add(to);
+        var message = new MimeMessage();
+        message.From.Add(new MailboxAddress(_options.FromDisplayName ?? string.Empty, _options.FromAddress!));
+        message.To.AddRange(recipients);
+        message.Subject = subject;
         return message;
     }
 
-    private async Task DeliverAsync(MailMessage message, CancellationToken ct)
+    private async Task DeliverAsync(MimeMessage message, CancellationToken ct)
     {
-        using var client = new SmtpClient(_options.Host, _options.Port)
-        {
-            EnableSsl = _options.UseStartTls
-        };
+        // Off only against a local relay, which then gets no TLS at all, as before.
+        var socketOptions = SmtpTransport.SocketOptions(
+            SmtpTransport.ImpliesImplicitTls(_options.Port), _options.UseStartTls, SecureSocketOptions.None);
 
-        // Anonymous relays are legitimate on an internal network, so credentials are optional; sending
-        // the machine's own Windows credentials to an external relay, which is what UseDefaultCredentials
-        // would do, is not.
-        client.UseDefaultCredentials = false;
-        if (!string.IsNullOrWhiteSpace(_options.UserName))
-        {
-            client.Credentials = new NetworkCredential(_options.UserName, _options.Password);
-        }
-
-        // SmtpClient.Timeout covers only the synchronous Send, so the bound is a token.
+        // The client's own timeout bounds each step; the token bounds the whole send, so a relay that
+        // answers slowly at every step still costs one timeout and not one per step.
+        using var client = new SmtpClient { Timeout = (int)_options.SendTimeout.TotalMilliseconds };
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(_options.SendTimeout);
         try
         {
-            await client.SendMailAsync(message, timeout.Token);
+            await client.ConnectAsync(_options.Host, _options.Port, socketOptions, timeout.Token);
+
+            // Anonymous relays are legitimate on an internal network, so credentials are optional.
+            if (!string.IsNullOrWhiteSpace(_options.UserName))
+            {
+                await client.AuthenticateAsync(_options.UserName, _options.Password ?? string.Empty, timeout.Token);
+            }
+
+            await client.SendAsync(message, timeout.Token);
+            await client.DisconnectAsync(true, timeout.Token);
         }
-        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        catch (Exception ex) when (ex is OperationCanceledException or TimeoutException && !ct.IsCancellationRequested)
         {
             throw new TimeoutException($"The SMTP relay {_options.Host}:{_options.Port} did not take the message within {_options.SendTimeout}.", ex);
         }

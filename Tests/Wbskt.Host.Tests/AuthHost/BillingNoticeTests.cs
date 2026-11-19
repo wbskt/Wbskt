@@ -295,7 +295,7 @@ public sealed class BillingNoticeTests
         };
         _billing.Setup(b => b.TakeBillingNoticeMailsAsync(Now, Now + BillingNoticeMailSender.Lease, BillingNoticeMailSender.BatchSize, It.IsAny<CancellationToken>())).ReturnsAsync(taken);
         _mailer.Setup(m => m.SendMultipartAsync("gone@example.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new System.Net.Mail.SmtpFailedRecipientException(System.Net.Mail.SmtpStatusCode.MailboxUnavailable, "<gone@example.com>", "5.1.1 <gone@example.com>: Recipient address rejected"));
+            .ThrowsAsync(new MailKit.Net.Smtp.SmtpCommandException(MailKit.Net.Smtp.SmtpErrorCode.RecipientNotAccepted, MailKit.Net.Smtp.SmtpStatusCode.MailboxUnavailable, new MimeKit.MailboxAddress("", "gone@example.com"), "5.1.1 <gone@example.com>: Recipient address rejected"));
 
         // The recipient is well formed, so this is about the sender's address and may be fixed by a restart.
         _mailer.Setup(m => m.SendMultipartAsync("ok@example.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new FormatException("bad from"));
