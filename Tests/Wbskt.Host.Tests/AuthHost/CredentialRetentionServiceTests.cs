@@ -65,7 +65,7 @@ public sealed class CredentialRetentionServiceTests
     }
 
     [Fact]
-    public async Task Accounts_never_confirmed_for_30_days_are_deleted_page_by_page_past_one_that_is_skipped()
+    public async Task Accounts_never_confirmed_for_30_days_are_deleted_page_by_page_past_one_that_is_skipped_or_fails()
     {
         var createdBefore = Now.UtcDateTime - TimeSpan.FromDays(30);
         var firstPage = Enumerable.Range(1, CredentialRetentionService.UnconfirmedBatchSize).ToList();
@@ -80,6 +80,9 @@ public sealed class CredentialRetentionServiceTests
 
         // Confirmed between the read and the delete: skipped, and the pages after it still go.
         deletion.Setup(d => d.DeleteUnconfirmedAsync(3, createdBefore, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        // A fault on one account is logged, and the rest still go.
+        deletion.Setup(d => d.DeleteUnconfirmedAsync(4, createdBefore, It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("deadlock"));
         var services = new ServiceCollection().AddSingleton(provider.Object).AddSingleton(Mock.Of<IEventBus>()).AddSingleton(deletion.Object).BuildServiceProvider();
         var service = new CredentialRetentionService(
             services.GetRequiredService<IServiceScopeFactory>(), new FixedTimeProvider(Now), NullLogger<CredentialRetentionService>.Instance);
