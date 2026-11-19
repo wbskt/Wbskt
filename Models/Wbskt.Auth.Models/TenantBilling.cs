@@ -16,13 +16,20 @@ public sealed record BillingPortalResponse(string Url);
 
 /// <summary>
 /// The tenant's plan, its subscription if it has one, and what can be bought: the paid plans and
-/// intervals and the credit packs this deployment offers.
+/// intervals and the credit packs this deployment offers. No plan is offered while Wbskt has set the
+/// plan (<c>Source</c> Operator, until <c>EndsAt</c>): a subscription would charge beside it and change nothing.
 /// </summary>
+/// <param name="Source">Who set the plan: Default, the tenant's Subscription, or Operator (a Business contract or a plan Wbskt set).</param>
+/// <param name="EndsAt">When a plan Wbskt set ends; null when it has no end, or for any other source.</param>
+/// <param name="Limits">What the plan allows the tenant, with its own overrides applied.</param>
 public sealed record TenantBillingResponse(
     PlanCode Plan,
     TenantSubscriptionResponse? Subscription,
     IReadOnlyCollection<PlanOffer> Plans,
-    IReadOnlyCollection<CreditPackOffer> CreditPacks);
+    IReadOnlyCollection<CreditPackOffer> CreditPacks,
+    PlanSource Source,
+    DateTimeOffset? EndsAt,
+    PlanLimits Limits);
 
 /// <param name="PeriodEnd">The end of the period paid for: when it renews, or when a cancelled subscription ends.</param>
 /// <param name="CancelAtPeriodEnd">True when it has been cancelled and stops at <c>PeriodEnd</c>.</param>
@@ -49,8 +56,8 @@ public sealed record TenantSubscriptionResponse(
 /// </summary>
 public sealed record ChangePlanRequest(PlanCode Plan, BillingInterval Interval);
 
-/// <summary>A plan on sale, with what it costs for the interval in USD.</summary>
-public sealed record PlanOffer(PlanCode Plan, BillingInterval Interval, decimal AmountUsd);
+/// <summary>A plan on sale, with what it costs for the interval in USD and what it allows.</summary>
+public sealed record PlanOffer(PlanCode Plan, BillingInterval Interval, decimal AmountUsd, PlanLimits Limits);
 
 /// <summary>A credit pack on sale, with what it costs in USD.</summary>
 public sealed record CreditPackOffer(string Name, decimal Credits, decimal AmountUsd);
