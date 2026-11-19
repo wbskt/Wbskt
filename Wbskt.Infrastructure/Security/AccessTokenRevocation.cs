@@ -156,9 +156,10 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
     /// Raised when this host learns of a revocation it did not hold yet: a user's watermark moved on, or
     /// a session ended, here or announced by another host. Something holding a token past its check (a
     /// live connection that validated only when it opened) listens to drop what that token reaches.
-    /// Raised on the thread that applied it, so a handler only schedules its work.
+    /// Raised with the user or session revoked, on the thread that applied it, so a handler only
+    /// schedules its work.
     /// </summary>
-    public event Action? Revoked;
+    public event Action<AccessChange>? Revoked;
 
     public bool IsRevoked(Guid userRef, DateTimeOffset issuedAt)
     {
@@ -326,7 +327,7 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
 
         if (moved)
         {
-            RaiseRevoked();
+            RaiseRevoked(AccessChange.ForUsers(userRef));
         }
     }
 
@@ -334,18 +335,18 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
     {
         if (_sessions.TryAdd(sessionId, expiresAt))
         {
-            RaiseRevoked();
+            RaiseRevoked(AccessChange.ForSession(sessionId));
             return;
         }
 
         _sessions.AddOrUpdate(sessionId, expiresAt, (_, existing) => Math.Max(existing, expiresAt));
     }
 
-    private void RaiseRevoked()
+    private void RaiseRevoked(AccessChange revoked)
     {
         try
         {
-            Revoked?.Invoke();
+            Revoked?.Invoke(revoked);
         }
         catch (Exception ex)
         {

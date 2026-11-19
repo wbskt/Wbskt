@@ -9,8 +9,9 @@ namespace Wbskt.Infrastructure.Security;
 /// access can drop what they hold instead of serving it until it expires.
 /// </summary>
 /// <remarks>
-/// The message carries nothing: changes are rare administrative actions, so a listener simply forgets
-/// everything, which is never wrong. Pub/sub delivery is best effort, so every change also bumps a
+/// The message names whose access changed (<see cref="AccessChange"/>): users, every member of some
+/// workspaces, or everyone when a change can't be narrowed. A cache may still simply forget everything,
+/// which is never wrong; what the scope saves is re-checking every open connection on every change. Pub/sub delivery is best effort, so every change also bumps a
 /// counter that stays in Redis (<see cref="ReadVersionAsync"/>). A listener that reads it every few
 /// seconds catches a change whose message it missed, which lets it keep entries for longer while
 /// those reads succeed. Its short lifetime remains the bound when Redis is not configured or down.
@@ -29,8 +30,11 @@ public sealed class WorkspaceAccessChanges
         _logger = logger;
     }
 
-    /// <summary>Announces a change. Never throws and never waits on Redis.</summary>
-    public void Publish()
+    /// <summary>Announces a change that may reach anyone. Never throws and never waits on Redis.</summary>
+    public void Publish() => Publish(AccessChange.All);
+
+    /// <summary>Announces a change to whom <paramref name="change"/> names. Never throws and never waits on Redis.</summary>
+    public void Publish(AccessChange change)
     {
         if (_redis is null)
         {
@@ -41,7 +45,7 @@ public sealed class WorkspaceAccessChanges
         {
             // The counter first, so a listener woken by the message already reads the new version.
             _redis.GetDatabase().StringIncrement(VersionKey, flags: CommandFlags.FireAndForget);
-            _redis.GetSubscriber().Publish(RedisChannel.Literal(Channel), "1", CommandFlags.FireAndForget);
+            _redis.GetSubscriber().Publish(RedisChannel.Literal(Channel), change.ToMessage(), CommandFlags.FireAndForget);
         }
         catch (Exception ex) when (ex is RedisException or TimeoutException)
         {
@@ -74,22 +78,22 @@ public sealed class WorkspaceAccessChanges
     }
 
     /// <summary>
-    /// Calls <paramref name="onChange"/> for every announced change, and whenever the Redis connection
-    /// is restored (announcements made while it was down are lost). Returns false when Redis is not
-    /// configured or the subscription failed.
+    /// Calls <paramref name="onChange"/> for every announced change, and with <see cref="AccessChange.All"/>
+    /// whenever the Redis connection is restored (announcements made while it was down are lost).
+    /// Returns false when Redis is not configured or the subscription failed.
     /// </summary>
-    public async Task<bool> SubscribeAsync(Action onChange)
+    public async Task<bool> SubscribeAsync(Action<AccessChange> onChange)
     {
         if (_redis is null)
         {
             return false;
         }
 
-        _redis.ConnectionRestored += (_, _) => onChange();
+        _redis.ConnectionRestored += (_, _) => onChange(AccessChange.All);
 
         try
         {
-            await _redis.GetSubscriber().SubscribeAsync(RedisChannel.Literal(Channel), (_, _) => onChange());
+            await _redis.GetSubscriber().SubscribeAsync(RedisChannel.Literal(Channel), (_, message) => onChange(AccessChange.Parse(message)));
             return true;
         }
         catch (Exception ex) when (ex is RedisException or TimeoutException)

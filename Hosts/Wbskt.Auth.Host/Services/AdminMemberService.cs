@@ -1,3 +1,4 @@
+using Wbskt.Infrastructure.Security;
 using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
@@ -70,7 +71,7 @@ internal sealed class AdminMemberService(
 
         await AfterCommitAsync(result, async () =>
         {
-            _announcer.AccessChanged();
+            _announcer.AccessChanged(AccessChange.ForUsers(userRef));
             await _announcer.ToTenantAsync(request.Suspended
                 ? new MemberSuspendedEvent(userRef) { ActorSource = EventSource.Support }
                 : new MemberUnsuspendedEvent(userRef) { ActorSource = EventSource.Support },
@@ -152,7 +153,7 @@ internal sealed class AdminMemberService(
 
         await AfterCommitAsync(result, async () =>
         {
-            _announcer.AccessChanged();
+            _announcer.AccessChanged(AccessChange.ForUsers(userRef));
             await _announcer.ToTenantAsync(new MemberRemovedEvent(userRef) { ActorSource = EventSource.Support }, tenantId, CancellationToken.None);
         });
         return result;

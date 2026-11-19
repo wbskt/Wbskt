@@ -125,26 +125,28 @@ public sealed class AccessTokenRevocationTests
     public async Task Revoked_is_raised_for_a_new_revocation_and_not_for_one_already_held()
     {
         var (revocation, time) = Create(TimeSpan.FromMinutes(5));
-        int raised = 0;
-        revocation.Revoked += () => raised++;
+        var raised = new List<AccessChange>();
+        revocation.Revoked += raised.Add;
         long revokedAt = Now.ToUnixTimeSeconds();
 
         revocation.OnMessage($"{Ada:N}:{revokedAt}:{revokedAt + 600}");
         revocation.OnMessage($"{Ada:N}:{revokedAt}:{revokedAt + 600}");
         revocation.OnMessage($"s:{Bob:N}:{revokedAt + 600}");
         revocation.OnMessage($"s:{Bob:N}:{revokedAt + 900}");
-        Assert.Equal(2, raised);
+        Assert.Equal(2, raised.Count);
+        Assert.Equal([Ada], raised[0].Users);
+        Assert.Equal([Bob], raised[1].Sessions);
 
         time.Advance(TimeSpan.FromMinutes(1));
         await revocation.RevokeUserAsync(Ada);
-        Assert.Equal(3, raised);
+        Assert.Equal(3, raised.Count);
     }
 
     [Fact]
     public async Task A_listener_that_throws_does_not_stop_the_revocation()
     {
         var (revocation, _) = Create();
-        revocation.Revoked += () => throw new InvalidOperationException("listener failed");
+        revocation.Revoked += _ => throw new InvalidOperationException("listener failed");
 
         await revocation.RevokeUserAsync(Ada);
 

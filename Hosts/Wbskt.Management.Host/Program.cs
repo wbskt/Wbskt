@@ -317,8 +317,14 @@ public static class Program
             manager.FeatureProviders.Add(new HostRoleControllerFeatureProvider(role));
         });
         builder.Services.AddWbsktJson();
-        builder.Services.AddSingleton<LiveFeedConnections>();
-        builder.Services.AddHostedService<LiveFeedAccessRecheck>();
+        // The console's live feed is mapped only on an instance serving every role; a client-auth instance
+        // has no hub, so nothing there to re-check when access changes.
+        if (role == HostRole.All)
+        {
+            builder.Services.AddSingleton<LiveFeedConnections>();
+            builder.Services.AddHostedService<LiveFeedAccessRecheck>();
+        }
+
         var signalRBuilder = builder.Services.AddSignalR().AddJsonProtocol(options => SignalRPayloadPrivacy.Apply(options.PayloadSerializerOptions));
 
         var redisConnectionString = builder.Configuration.GetConnectionString("Redis");

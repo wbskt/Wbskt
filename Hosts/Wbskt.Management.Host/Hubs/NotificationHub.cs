@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Primitives.Constants;
@@ -33,7 +34,12 @@ public class NotificationHub : Hub
     public override Task OnConnectedAsync()
     {
         var httpContext = Context.GetHttpContext();
-        _connections.Open(Context.ConnectionId, httpContext is null ? null : AuthenticationForwardingHandler.TokenOf(httpContext));
+        Guid? userRef = Context.User is { } user && WbsktClaims.TryReadUser(user, out var reference) ? reference : null;
+        _connections.Open(
+            Context.ConnectionId,
+            httpContext is null ? null : AuthenticationForwardingHandler.TokenOf(httpContext),
+            userRef,
+            Context.User is null ? null : WbsktClaims.SessionOf(Context.User));
         return base.OnConnectedAsync();
     }
 

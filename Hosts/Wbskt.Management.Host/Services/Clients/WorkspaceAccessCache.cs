@@ -89,16 +89,22 @@ internal sealed class WorkspaceAccessCache : IHostedService, IDisposable
     public long Generation => Interlocked.Read(ref _generation);
 
     /// <summary>
-    /// Raised after every <see cref="Clear"/>: someone's access may have changed. Raised on whichever
-    /// thread noticed, so a handler hands the work off rather than doing it there.
+    /// Raised after every clear, with whose access may have changed. Raised on whichever thread
+    /// noticed, so a handler hands the work off rather than doing it there.
     /// </summary>
-    public event Action? Cleared;
+    public event Action<AccessChange>? Cleared;
 
-    public void Clear()
+    public void Clear() => Clear(AccessChange.All);
+
+    /// <summary>
+    /// Drops every entry, whoever <paramref name="change"/> names: it refills in one call per user and
+    /// workspace, so narrowing it isn't worth the bookkeeping. The scope is passed on to <see cref="Cleared"/>.
+    /// </summary>
+    public void Clear(AccessChange change)
     {
         Interlocked.Increment(ref _generation);
         _cache.Clear();
-        Cleared?.Invoke();
+        Cleared?.Invoke(change);
     }
 
     public bool TryGet(int userId, Guid workspaceRef, out WorkspaceAccess? access)

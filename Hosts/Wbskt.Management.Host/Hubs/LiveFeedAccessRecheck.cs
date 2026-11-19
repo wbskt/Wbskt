@@ -12,15 +12,19 @@ namespace Wbskt.Management.Host.Hubs;
 /// connection joins a workspace or client feed; without this, someone removed from the workspace or
 /// suspended in its tenant kept receiving its events until their token expired, while every HTTP call
 /// of theirs was already refused. Whenever access may have changed (the auth host's announcement, which
-/// also empties <see cref="WorkspaceAccessCache"/>), each joined feed is resolved again with the token
-/// its connection opened with, and a feed the connection is now refused is left for it. A revoked token
-/// (sign out everywhere, a password change or reset, a deleted account) counts too: the auth host
-/// answers 401 for it, so a console left open on a lost laptop stops receiving the feed (#959).
+/// also empties <see cref="WorkspaceAccessCache"/>), each joined feed the change can reach is resolved
+/// again with the token its connection opened with, and a feed the connection is now refused is left
+/// for it. A revoked token (sign out everywhere, a password change or reset, a deleted account) counts
+/// too: the auth host answers 401 for it, so a console left open on a lost laptop stops receiving the
+/// feed (#959).
 /// </summary>
 /// <remarks>
-/// Changes are rare administrative actions, so every feed is checked rather than working out whose
-/// access moved. Announcements that arrive during a pass are folded into one more pass. An auth host
-/// that does not answer leaves the feeds as they are: the token's expiry still bounds them.
+/// An announcement names the users or workspaces it touches (<see cref="AccessChange"/>), a revocation
+/// its user or session, so a change to one member re-checks only that member's connections and those
+/// joined to the workspace named; a change that can't be narrowed (a role's permissions, a frozen
+/// tenant, an announcement from an auth host before #1001) still re-checks every one. Announcements that
+/// arrive during a pass are folded into one more pass over everything they touched. An auth host that
+/// does not answer leaves the feeds as they are: the token's expiry still bounds them.
 /// </remarks>
 internal sealed class LiveFeedAccessRecheck : IHostedService
 {
@@ -33,7 +37,9 @@ internal sealed class LiveFeedAccessRecheck : IHostedService
     private readonly IServiceScopeFactory _scopes;
     private readonly ILogger<LiveFeedAccessRecheck> _logger;
     private readonly CancellationTokenSource _stopping = new();
-    private int _requested;
+    private readonly Lock _gate = new();
+    private AccessChange? _pending;
+    private bool _running;
     private Task _pass = Task.CompletedTask;
 
     public LiveFeedAccessRecheck(
@@ -64,42 +70,76 @@ internal sealed class LiveFeedAccessRecheck : IHostedService
         _cache.Cleared -= Request;
         _revocation.Revoked -= Request;
         await _stopping.CancelAsync();
-        await _pass.WaitAsync(cancellationToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        await Pass.WaitAsync(cancellationToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
     }
 
-    /// <summary>Asks for a pass; one already running takes the request as one more pass after it.</summary>
-    internal void Request()
+    /// <summary>Asks for a pass over what <paramref name="change"/> touches; one already running takes it as one more pass after it.</summary>
+    internal void Request(AccessChange change)
     {
-        if (Interlocked.Increment(ref _requested) == 1)
+        lock (_gate)
         {
+            _pending = _pending is null ? change : _pending.Union(change);
+            if (_running)
+            {
+                return;
+            }
+
+            _running = true;
             _pass = Task.Run(RunAsync);
         }
     }
 
     /// <summary>The pass in flight, for a test to wait on.</summary>
-    internal Task Pass => _pass;
+    internal Task Pass
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _pass;
+            }
+        }
+    }
 
     private async Task RunAsync()
     {
-        do
+        while (true)
         {
-            Volatile.Write(ref _requested, 1);
+            AccessChange change;
+            lock (_gate)
+            {
+                if (_pending is null || _stopping.IsCancellationRequested)
+                {
+                    _pending = null;
+                    _running = false;
+                    return;
+                }
+
+                change = _pending;
+                _pending = null;
+            }
+
             try
             {
-                await RecheckAllAsync(_stopping.Token);
+                await RecheckAsync(change, _stopping.Token);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogError(ex, "Checking the live feeds' access again failed; the next access change tries again.");
             }
+            catch (OperationCanceledException)
+            {
+                // Stopping; the loop sees it and ends.
+            }
         }
-        while (Interlocked.CompareExchange(ref _requested, 0, 1) != 1 && !_stopping.IsCancellationRequested);
     }
 
-    internal async Task RecheckAllAsync(CancellationToken cancellationToken)
+    internal Task RecheckAllAsync(CancellationToken cancellationToken) => RecheckAsync(AccessChange.All, cancellationToken);
+
+    internal async Task RecheckAsync(AccessChange change, CancellationToken cancellationToken)
     {
         await Parallel.ForEachAsync(
-            _connections.Joined(),
+            _connections.Joined().Where(c => c.IsTouchedBy(change)),
             new ParallelOptions { MaxDegreeOfParallelism = Parallelism, CancellationToken = cancellationToken },
             async (connection, ct) =>
             {
