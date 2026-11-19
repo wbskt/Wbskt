@@ -21,6 +21,7 @@ internal sealed class AccountDeletionService : IAccountDeletionService
     private readonly IAuditWorkspaces _audit;
     private readonly ILogger<AccountDeletionService> _logger;
     private readonly TenantAnnouncer _tenantAnnouncer;
+    private readonly SecurityNotices _notices;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
     private static readonly Error SubscriptionNotCancelled = Error.Unavailable(
@@ -35,8 +36,10 @@ internal sealed class AccountDeletionService : IAccountDeletionService
         IAccessTokenRevocation accessTokens,
         ILogger<AccountDeletionService> logger,
         IAuditWorkspaces audit,
-        TenantAnnouncer tenantAnnouncer)
+        TenantAnnouncer tenantAnnouncer,
+        SecurityNotices notices)
     {
+        _notices = notices;
         _accounts = accounts;
         _billing = billing;
         _gateway = gateway;
@@ -77,7 +80,7 @@ internal sealed class AccountDeletionService : IAccountDeletionService
         if (_passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password) == PasswordVerificationResult.Failed)
         {
             _logger.LogWarning("Account deletion refused: password did not match for user {UserId}. IP: {IpAddress}", userId, ipAddress);
-            await AccountLockout.RecordFailedPasswordAsync(_accounts, _eventBus, _logger, user, ipAddress, cancellationToken);
+            await AccountLockout.RecordFailedPasswordAsync(_accounts, _eventBus, _notices, _logger, user, ipAddress, cancellationToken);
             return Result.Failure(Error.Validation("AUTH_CURRENT_PASSWORD_INVALID", "The password is not correct."));
         }
 

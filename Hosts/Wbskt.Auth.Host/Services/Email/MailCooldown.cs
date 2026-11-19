@@ -14,7 +14,8 @@ internal enum MailKind
     EmailVerification,
     PasswordReset,
     AccountAlreadyExists,
-    EmailChange
+    EmailChange,
+    AccountLocked
 }
 
 /// <summary>Bound from <c>Auth:MailCooldown</c>.</summary>
@@ -49,6 +50,11 @@ internal sealed class MailCooldown
 {
     private const string KeyPrefix = "wbskt:mail-cooldown";
     private static readonly TimeSpan Window = TimeSpan.FromHours(1);
+
+    // A notice the owner did not ask for and whose rate a stranger sets (a lock every 15 minutes) goes
+    // at most once an hour and stays out of the hourly limit, so it never uses up the owner's own
+    // reset or verification mail.
+    private static readonly TimeSpan NoticeCooldown = TimeSpan.FromHours(1);
 
     // Both checks and both writes in one round trip, so two concurrent requests cannot both pass.
     private const string AcquireScript = """
@@ -97,6 +103,8 @@ internal sealed class MailCooldown
             return true;
         }
 
+        var (cooldown, hourlyLimit) = kind == MailKind.AccountLocked ? (NoticeCooldown, 0) : (_cooldown, _hourlyLimit);
+
         var id = AddressId(address);
 
         // Checked first so a Redis that is down costs nothing: commands against a disconnected
@@ -108,7 +116,7 @@ internal sealed class MailCooldown
                 var allowed = await _redis.GetDatabase().ScriptEvaluateAsync(
                     AcquireScript,
                     [$"{KeyPrefix}:{kind}:{id}", $"{KeyPrefix}:hour:{id}"],
-                    [(int)_cooldown.TotalSeconds, _hourlyLimit, (int)Window.TotalSeconds]);
+                    [(int)cooldown.TotalSeconds, hourlyLimit, (int)Window.TotalSeconds]);
                 return (int)allowed == 1;
             }
             catch (Exception ex) when (ex is RedisException or TimeoutException)
@@ -117,10 +125,10 @@ internal sealed class MailCooldown
             }
         }
 
-        return TryAcquireInProcess(id, kind);
+        return TryAcquireInProcess(id, kind, cooldown, hourlyLimit);
     }
 
-    private bool TryAcquireInProcess(string id, MailKind kind)
+    private bool TryAcquireInProcess(string id, MailKind kind, TimeSpan cooldown, int hourlyLimit)
     {
         var now = _time.GetUtcNow();
         var cooldownKey = $"{kind}:{id}";
@@ -132,15 +140,15 @@ internal sealed class MailCooldown
                 Prune(now);
             }
 
-            if (_cooldown > TimeSpan.Zero && _cooldowns.TryGetValue(cooldownKey, out var until) && until > now)
+            if (cooldown > TimeSpan.Zero && _cooldowns.TryGetValue(cooldownKey, out var until) && until > now)
             {
                 return false;
             }
 
-            if (_hourlyLimit > 0)
+            if (hourlyLimit > 0)
             {
                 var hour = _hourly.TryGetValue(id, out var h) && h.Until > now ? h : (Count: 0, Until: now + Window);
-                if (hour.Count >= _hourlyLimit)
+                if (hour.Count >= hourlyLimit)
                 {
                     return false;
                 }
@@ -148,9 +156,9 @@ internal sealed class MailCooldown
                 _hourly[id] = (hour.Count + 1, hour.Until);
             }
 
-            if (_cooldown > TimeSpan.Zero)
+            if (cooldown > TimeSpan.Zero)
             {
-                _cooldowns[cooldownKey] = now + _cooldown;
+                _cooldowns[cooldownKey] = now + cooldown;
             }
 
             return true;

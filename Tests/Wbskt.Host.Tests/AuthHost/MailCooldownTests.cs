@@ -31,6 +31,24 @@ public sealed class MailCooldownTests
         Assert.True(await cooldown.TryAcquireAsync(Address, MailKind.PasswordReset));
     }
 
+    /// <summary>
+    /// Whoever guesses passwords decides how often an account locks, so its notice goes once an hour
+    /// and never spends the owner's hourly allowance for the reset mail that gets them back in.
+    /// </summary>
+    [Fact]
+    public async Task A_lock_notice_goes_once_an_hour_and_leaves_the_hourly_limit_alone()
+    {
+        var clock = new ManualClock();
+        var cooldown = InProcess(new MailCooldownOptions { CooldownSeconds = 120, HourlyLimit = 1 }, clock);
+
+        Assert.True(await cooldown.TryAcquireAsync(Address, MailKind.AccountLocked));
+        clock.Advance(TimeSpan.FromMinutes(15));
+        Assert.False(await cooldown.TryAcquireAsync(Address, MailKind.AccountLocked));
+        Assert.True(await cooldown.TryAcquireAsync(Address, MailKind.PasswordReset));
+        clock.Advance(TimeSpan.FromMinutes(45));
+        Assert.True(await cooldown.TryAcquireAsync(Address, MailKind.AccountLocked));
+    }
+
     [Fact]
     public async Task Kinds_and_addresses_are_counted_apart()
     {

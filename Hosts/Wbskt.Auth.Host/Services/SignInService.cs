@@ -28,6 +28,7 @@ internal sealed class SignInService : ISignInService
     private readonly AccountAnnouncer _announcer;
     private readonly bool _requireVerifiedEmail;
     private readonly IAuditWorkspaces _audit;
+    private readonly SecurityNotices _notices;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
     /// <summary>
@@ -49,8 +50,10 @@ internal sealed class SignInService : ISignInService
         AuthMetrics metrics,
         IAccessTokenRevocation accessTokens,
         IOptions<AccessTokenOptions> accessTokenOptions,
+        SecurityNotices notices,
         IAuditWorkspaces? audit = null)
     {
+        _notices = notices;
         _audit = audit ?? AuditWorkspaces.None;
         _accounts = accounts;
         _sessions = sessions;
@@ -120,7 +123,7 @@ internal sealed class SignInService : ISignInService
             {
                 _logger.LogWarning("Login failed: Invalid password for user {UserId}. IP: {IpAddress}", user.Id, ipAddress);
                 _metrics.RecordLogin("invalid_credentials");
-                await AccountLockout.RecordFailedPasswordAsync(_accounts, _eventBus, _logger, user, ipAddress, cancellationToken);
+                await AccountLockout.RecordFailedPasswordAsync(_accounts, _eventBus, _notices, _logger, user, ipAddress, cancellationToken);
                 await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "Invalid password") { WorkspaceIds = await _audit.OfUserAsync(user.Id, cancellationToken) }, cancellationToken);
                 return Result<BrowserSignIn>.Failure(Error.Unauthorized("AUTH_INVALID_CREDENTIALS", "Invalid credentials."));
             }

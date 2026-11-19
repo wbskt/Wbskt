@@ -171,6 +171,7 @@ public sealed class RefreshRotationTests
             NullLogger<SignInService>.Instance,
             new AuthMetrics(),
             AccessTokens.Object,
-            Options.Create(new AccessTokenOptions()));
+            Options.Create(new AccessTokenOptions()),
+            new SecurityNotices(Mock.Of<IAuthMailer>(), MailCooldownTests.InProcess(), new AuthMetrics(), TimeProvider.System));
     }
 }

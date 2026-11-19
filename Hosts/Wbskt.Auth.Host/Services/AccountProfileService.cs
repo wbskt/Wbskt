@@ -47,6 +47,7 @@ internal sealed class AccountProfileService : IAccountProfileService
     private readonly IEventBus _eventBus;
     private readonly IAuthMailer _mailer;
     private readonly MailCooldown _mailCooldown;
+    private readonly SecurityNotices _notices;
     private readonly IAccessTokenRevocation _accessTokens;
     private readonly ILogger<AccountProfileService> _logger;
     private readonly AuthMetrics _metrics;
@@ -61,6 +62,7 @@ internal sealed class AccountProfileService : IAccountProfileService
         IEventBus eventBus,
         IAuthMailer mailer,
         MailCooldown mailCooldown,
+        SecurityNotices notices,
         IAccessTokenRevocation accessTokens,
         IOptions<AccessTokenOptions> accessTokenOptions,
         ILogger<AccountProfileService> logger,
@@ -72,6 +74,7 @@ internal sealed class AccountProfileService : IAccountProfileService
         _eventBus = eventBus;
         _mailer = mailer;
         _mailCooldown = mailCooldown;
+        _notices = notices;
         _accessTokens = accessTokens;
         _logger = logger;
         _metrics = metrics;
@@ -140,7 +143,7 @@ internal sealed class AccountProfileService : IAccountProfileService
         if (_passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password) == PasswordVerificationResult.Failed)
         {
             _logger.LogWarning("Email change refused: the password did not match for user {UserId}. IP: {IpAddress}", userId, ipAddress);
-            await AccountLockout.RecordFailedPasswordAsync(_accounts, _eventBus, _logger, user, ipAddress, cancellationToken);
+            await AccountLockout.RecordFailedPasswordAsync(_accounts, _eventBus, _notices, _logger, user, ipAddress, cancellationToken);
             return Result.Failure(Error.Validation("AUTH_CURRENT_PASSWORD_INVALID", "The current password is not correct."));
         }
 

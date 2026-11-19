@@ -40,6 +40,7 @@ internal sealed class PasswordService : IPasswordService
     private readonly SessionTokens _tokens;
     private readonly AccountAnnouncer _announcer;
     private readonly IBreachedPasswords _breachedPasswords;
+    private readonly SecurityNotices _notices;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
     public PasswordService(
@@ -53,9 +54,11 @@ internal sealed class PasswordService : IPasswordService
         IAccessTokenRevocation accessTokens,
         IOptions<AccessTokenOptions> accessTokenOptions,
         MailCooldown mailCooldown,
+        SecurityNotices notices,
         IAuditWorkspaces? audit = null,
         IBreachedPasswords? breachedPasswords = null)
     {
+        _notices = notices;
         _breachedPasswords = breachedPasswords ?? BreachedPasswords.None;
         _accounts = accounts;
         _sessions = sessions;
@@ -88,7 +91,7 @@ internal sealed class PasswordService : IPasswordService
                 // Counted like a failed sign-in: a stolen access token must not become an unthrottled
                 // way to guess the password behind it.
                 _logger.LogWarning("Password change refused: current password did not match for user {UserId}. IP: {IpAddress}", userId, ipAddress);
-                await AccountLockout.RecordFailedPasswordAsync(_accounts, _eventBus, _logger, user, ipAddress, cancellationToken);
+                await AccountLockout.RecordFailedPasswordAsync(_accounts, _eventBus, _notices, _logger, user, ipAddress, cancellationToken);
                 // 400, not 401: the session is fine, and a 401 would make a client sign the user out.
                 return Result<LoginResponse>.Failure(Error.Validation("AUTH_CURRENT_PASSWORD_INVALID", "The current password is not correct."));
             }
@@ -109,6 +112,7 @@ internal sealed class PasswordService : IPasswordService
 
             _logger.LogInformation("Password changed for user {UserId}; all other sessions revoked. IP: {IpAddress}", userId, ipAddress);
             await _announcer.AnnounceAsync(new PasswordChangedEvent(userId, user.RefId, "changed"), ipAddress, cancellationToken);
+            await _notices.PasswordChangedAsync(user, "changed", ipAddress, cancellationToken);
             return Result<LoginResponse>.Success(new LoginResponse(_tokens.AccessToken(user, refreshToken.SessionId), refreshToken.Token));
         }
         catch (SecurityException)
@@ -208,9 +212,11 @@ internal sealed class PasswordService : IPasswordService
         // Outside the transaction above, and best effort: the password and the refresh tokens are what
         // the reset is for, and they are already done. This only shortens the life of access tokens
         // that were already issued.
-        await RevokeAccessTokensAsync(userId, cancellationToken);
+        var user = await _accounts.GetByIdAsync(userId, cancellationToken);
+        await _accessTokens.RevokeUserAsync(user.RefId, cancellationToken);
         _logger.LogInformation("Password reset completed for user {UserId}; all sessions revoked. IP: {IpAddress}", userId, ipAddress);
-        await _announcer.AnnounceAsync(new PasswordChangedEvent(userId, await _announcer.RefOfAsync(userId, cancellationToken), "reset"), ipAddress, cancellationToken);
+        await _announcer.AnnounceAsync(new PasswordChangedEvent(userId, user.RefId, "reset"), ipAddress, cancellationToken);
+        await _notices.PasswordChangedAsync(user, "reset", ipAddress, cancellationToken);
         return Result.Success();
     }
 

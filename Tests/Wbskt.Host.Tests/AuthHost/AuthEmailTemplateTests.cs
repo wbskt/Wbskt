@@ -96,6 +96,17 @@ public sealed class AuthEmailTemplateTests
         var conflict = AuthEmailTemplates.EmailChangeConflict(Options, "a@example.test", "a");
         Assert.DoesNotContain("token=", conflict.HtmlBody);
         Assert.DoesNotContain("token=", conflict.TextBody);
+
+        // Nor the notices after a password change or a lock: both point at the reset page, which mails its own link.
+        var changed = AuthEmailTemplates.PasswordChanged(Options, "a@example.test", "a", "reset", Expiry, "10.0.0.1");
+        var locked = AuthEmailTemplates.AccountLocked(Options, "a@example.test", "a", Expiry, "10.0.0.1");
+        Assert.All([changed, locked], mail =>
+        {
+            Assert.Contains("forgot-password", mail.HtmlBody);
+            Assert.DoesNotContain("token=", mail.HtmlBody);
+            Assert.Contains("10.0.0.1", mail.TextBody);
+        });
+        Assert.Contains("was reset", changed.Subject);
     }
     /// <summary>
     /// The plain-text body is what text-only clients and anyone blocking HTML read, so it carries the

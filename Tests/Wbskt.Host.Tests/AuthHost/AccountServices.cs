@@ -41,6 +41,7 @@ internal class AccountServices
         mailer ??= Mock.Of<IAuthMailer>();
         var cooldown = MailCooldownTests.InProcess();
         var metrics = new AuthMetrics();
+        Notices = new SecurityNotices(mailer, cooldown, metrics, TimeProvider.System);
 
         SignIn = new SignInService(
             Accounts.Object,
@@ -52,6 +53,7 @@ internal class AccountServices
             metrics,
             AccessTokens.Object,
             Options.Create(new AccessTokenOptions()),
+            Notices,
             audit);
 
         Passwords = new PasswordService(
@@ -65,6 +67,7 @@ internal class AccountServices
             AccessTokens.Object,
             Options.Create(new AccessTokenOptions()),
             cooldown,
+            Notices,
             audit,
             breachedPasswords);
 
@@ -75,6 +78,7 @@ internal class AccountServices
             bus,
             mailer,
             cooldown,
+            Notices,
             AccessTokens.Object,
             Options.Create(new AccessTokenOptions()),
             NullLogger<AccountProfileService>.Instance,
@@ -101,6 +105,8 @@ internal class AccountServices
     public Mock<ITenantProvider> Tenants { get; } = new();
 
     public Mock<IAccessTokenRevocation> AccessTokens { get; } = new();
+
+    public SecurityNotices Notices { get; }
 
     public SignInService SignIn { get; }
 

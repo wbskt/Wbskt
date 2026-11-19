@@ -113,6 +113,10 @@ public sealed class InvitationMailTests
 
         public ValueTask QueueEmailChangeConflictAsync(string to, string username, CancellationToken ct) => ValueTask.CompletedTask;
 
+        public ValueTask QueuePasswordChangedAsync(string to, string username, string how, DateTime atUtc, string ipAddress, CancellationToken ct) => ValueTask.CompletedTask;
+
+        public ValueTask QueueAccountLockedAsync(string to, string username, DateTime lockedUntilUtc, string ipAddress, CancellationToken ct) => ValueTask.CompletedTask;
+
         public ValueTask QueueEmailChangedAsync(string to, string username, string newEmail, string revertToken, DateTime expiresAtUtc, CancellationToken ct) => ValueTask.CompletedTask;
     }
 }
