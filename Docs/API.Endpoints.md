@@ -535,11 +535,13 @@ Workflow-scoped state that outlives any single run, used to coordinate between t
 
 The hub accepts its JWT in the `access_token` query parameter as well as the header, since browser
 WebSocket clients cannot set headers. The server closes a connection when its token expires
-(`CloseOnAuthenticationExpiration`), so a sign-out or a revoked session ends on the live feed within
-one token lifetime. Access to a workspace that ends sooner (removal from it or from its tenant, a
-suspension, a role or permission taken away) ends on the feed within seconds: whenever the auth host
-announces an access change, each joined workspace and client feed is resolved again with the token its
-connection opened with, and a feed now refused is left for that connection (`LiveFeedAccessRecheck`).
+(`CloseOnAuthenticationExpiration`). A revoked token (sign out everywhere, an ended session, a password
+change or reset, a deleted account) and access to a workspace that ends (removal from it or from its
+tenant, a suspension, a role or permission taken away) end on the feed within seconds: whenever the
+auth host announces an access change, or this host hears of a token revocation, each joined workspace
+and client feed is resolved again with the token its connection opened with, and a feed now refused
+(the auth host answers 401 for a revoked token) is left for that connection (`LiveFeedAccessRecheck`).
+Without Redis neither announcement reaches this host, and the token's lifetime is the bound.
 The connection stays open, with no message; a later join is refused as usual. Clients reconnect with a
 fresh token and join their workspaces again; a group joined on the old connection does not carry over.
 

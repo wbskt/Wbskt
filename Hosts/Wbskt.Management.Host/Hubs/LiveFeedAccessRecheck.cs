@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Primitives.Constants;
 using Wbskt.Primitives.Models;
@@ -12,7 +13,9 @@ namespace Wbskt.Management.Host.Hubs;
 /// suspended in its tenant kept receiving its events until their token expired, while every HTTP call
 /// of theirs was already refused. Whenever access may have changed (the auth host's announcement, which
 /// also empties <see cref="WorkspaceAccessCache"/>), each joined feed is resolved again with the token
-/// its connection opened with, and a feed the connection is now refused is left for it.
+/// its connection opened with, and a feed the connection is now refused is left for it. A revoked token
+/// (sign out everywhere, a password change or reset, a deleted account) counts too: the auth host
+/// answers 401 for it, so a console left open on a lost laptop stops receiving the feed (#959).
 /// </summary>
 /// <remarks>
 /// Changes are rare administrative actions, so every feed is checked rather than working out whose
@@ -24,6 +27,7 @@ internal sealed class LiveFeedAccessRecheck : IHostedService
     private const int Parallelism = 8;
 
     private readonly WorkspaceAccessCache _cache;
+    private readonly AccessTokenRevocation _revocation;
     private readonly LiveFeedConnections _connections;
     private readonly IHubContext<NotificationHub> _hub;
     private readonly IServiceScopeFactory _scopes;
@@ -34,12 +38,14 @@ internal sealed class LiveFeedAccessRecheck : IHostedService
 
     public LiveFeedAccessRecheck(
         WorkspaceAccessCache cache,
+        AccessTokenRevocation revocation,
         LiveFeedConnections connections,
         IHubContext<NotificationHub> hub,
         IServiceScopeFactory scopes,
         ILogger<LiveFeedAccessRecheck> logger)
     {
         _cache = cache;
+        _revocation = revocation;
         _connections = connections;
         _hub = hub;
         _scopes = scopes;
@@ -49,12 +55,14 @@ internal sealed class LiveFeedAccessRecheck : IHostedService
     public Task StartAsync(CancellationToken cancellationToken)
     {
         _cache.Cleared += Request;
+        _revocation.Revoked += Request;
         return Task.CompletedTask;
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         _cache.Cleared -= Request;
+        _revocation.Revoked -= Request;
         await _stopping.CancelAsync();
         await _pass.WaitAsync(cancellationToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
     }

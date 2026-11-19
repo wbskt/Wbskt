@@ -117,6 +117,40 @@ public sealed class AccessTokenRevocationTests
         Assert.True(revocation.IsRevoked(Ada, Now.AddMinutes(-1)));
     }
 
+    /// <summary>
+    /// A live connection that validated its token only when it opened listens for this (#959), so it
+    /// fires for news only: a revocation applied again, as every resync does, is not one.
+    /// </summary>
+    [Fact]
+    public async Task Revoked_is_raised_for_a_new_revocation_and_not_for_one_already_held()
+    {
+        var (revocation, time) = Create(TimeSpan.FromMinutes(5));
+        int raised = 0;
+        revocation.Revoked += () => raised++;
+        long revokedAt = Now.ToUnixTimeSeconds();
+
+        revocation.OnMessage($"{Ada:N}:{revokedAt}:{revokedAt + 600}");
+        revocation.OnMessage($"{Ada:N}:{revokedAt}:{revokedAt + 600}");
+        revocation.OnMessage($"s:{Bob:N}:{revokedAt + 600}");
+        revocation.OnMessage($"s:{Bob:N}:{revokedAt + 900}");
+        Assert.Equal(2, raised);
+
+        time.Advance(TimeSpan.FromMinutes(1));
+        await revocation.RevokeUserAsync(Ada);
+        Assert.Equal(3, raised);
+    }
+
+    [Fact]
+    public async Task A_listener_that_throws_does_not_stop_the_revocation()
+    {
+        var (revocation, _) = Create();
+        revocation.Revoked += () => throw new InvalidOperationException("listener failed");
+
+        await revocation.RevokeUserAsync(Ada);
+
+        Assert.True(revocation.IsRevoked(Ada, Now.AddMinutes(-1)));
+    }
+
     [Fact]
     public void A_malformed_message_is_ignored()
     {
