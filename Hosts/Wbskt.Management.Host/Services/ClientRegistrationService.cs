@@ -90,9 +90,10 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
             return Result<ClientRegistrationResponse>.Failure(Error.Forbidden("POLICY_DISABLED", "This registration policy is currently disabled."));
         }
 
+        // An early refusal on the count the PIN lookup read; Client_Create checks it again under the policy's lock.
         if (policy.MaxClients.HasValue)
         {
-            var currentCount = await _clientProvider.GetRegisteredCountByPolicyIdAsync(policy.Id, cancellationToken);
+            var currentCount = policy.RegisteredClientCount;
             if (currentCount >= policy.MaxClients.Value)
             {
                 _logger.LogWarning("Client registration failed: Limit reached for policy '{PolicyName}' ({Current}/{Max})", policy.Name, currentCount, policy.MaxClients.Value);

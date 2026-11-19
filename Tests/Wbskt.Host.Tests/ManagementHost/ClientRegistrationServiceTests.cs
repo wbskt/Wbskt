@@ -87,4 +87,21 @@ public sealed class ClientRegistrationServiceTests
         clients.Verify(p => p.InsertClientAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<ClientStatus>(), It.IsAny<PlanCeiling>(), It.IsAny<CancellationToken>()), seenFirst ? Times.Never() : Times.Once());
         bus.Verify(b => b.PublishAsync(It.IsAny<ClientRegistrationInitiatedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    [Fact]
+    public async Task A_policy_at_its_limit_refuses_on_the_count_its_lookup_read_without_counting_again()
+    {
+        var clients = new Mock<IClientProvider>(MockBehavior.Strict);
+        var policies = new Mock<IRegistrationPolicyProvider>();
+        var bus = new Mock<IEventBus>();
+        var policy = new RegistrationPolicy { Id = 5, RefId = Guid.NewGuid(), WorkspaceId = WorkspaceId, Name = "lab", IsEnabled = true, AutoApproval = true, MaxClients = 3, RegisteredClientCount = 3 };
+        policies.Setup(p => p.FindByPinAsync("PIN", It.IsAny<CancellationToken>())).ReturnsAsync(policy);
+        using var metrics = new ManagementMetrics();
+        var service = new ClientRegistrationService(clients.Object, policies.Object, bus.Object, NullLogger<ClientRegistrationService>.Instance, metrics, new FixedWorkspacePlans());
+
+        var result = await service.InitiateRegistrationAsync(new ClientRegistrationRequest("PIN", "sensor"), CancellationToken.None);
+
+        result.Error.Code.Should().Be("POLICY_LIMIT_REACHED");
+        clients.VerifyNoOtherCalls();
+    }
 }

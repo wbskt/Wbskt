@@ -25,16 +25,6 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         return result;
     }
 
-    public async Task<int> GetRegisteredCountByPolicyIdAsync(int policyId, CancellationToken cancellationToken = default)
-    {
-        var result = await ExecuteScalarAsync<int>("dbo.Client_GetCountBy_PolicyId", p =>
-        {
-            p.AddWithValue("@PolicyId", policyId);
-        }, cancellationToken);
-
-        return result;
-    }
-
     public async Task<int> GetRegisteredCountByAccountAsync(int workspaceId, int? tenantId, CancellationToken cancellationToken = default)
     {
         return await ExecuteScalarAsync<int>("dbo.Client_GetCountBy_Account", p =>

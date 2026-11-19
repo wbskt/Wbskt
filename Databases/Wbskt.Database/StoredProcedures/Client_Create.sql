@@ -40,7 +40,7 @@ BEGIN
     FROM dbo.RegistrationPolicies WITH (UPDLOCK, ROWLOCK)
     WHERE Id = @PolicyId;
 
-    -- Same rule as Client_GetCountBy_PolicyId: only registered clients count against the limit.
+    -- Only registered clients count against the limit, as in Client_UpdateStatuses.
     IF @MaxClients IS NOT NULL
        AND (SELECT COUNT(*) FROM dbo.Clients WHERE PolicyId = @PolicyId AND Status = 1) >= @MaxClients
     BEGIN

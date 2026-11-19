@@ -112,7 +112,7 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
 
         if (request.MaxClients.HasValue)
         {
-            var currentCount = await _clientProvider.GetRegisteredCountByPolicyIdAsync(policyId, cancellationToken);
+            var currentCount = policy.RegisteredClientCount;
             if (currentCount > request.MaxClients.Value)
             {
                 _logger.LogWarning("Policy update failed: Current registered clients ({Current}) exceeds new limit ({Max}) for Policy ID {PolicyId}", currentCount, request.MaxClients.Value, policyId);

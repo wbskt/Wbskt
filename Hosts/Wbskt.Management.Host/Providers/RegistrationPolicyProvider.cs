@@ -166,7 +166,21 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
             IsEnabled = reader.GetBoolean(reader.GetOrdinal("IsEnabled")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
             RegisteredClientCount = reader.GetInt32(reader.GetOrdinal("RegisteredClientCount")),
-            ConnectedClientCount = reader.GetInt32(reader.GetOrdinal("ConnectedClientCount"))
+            ConnectedClientCount = ConnectedCountOf(reader)
         };
+    }
+
+    // RegistrationPolicy_GetBy_Pin leaves the connected count out: the registration path does not read it.
+    private static int ConnectedCountOf(SqlDataReader reader)
+    {
+        for (int i = 0; i < reader.FieldCount; i++)
+        {
+            if (reader.GetName(i) == "ConnectedClientCount")
+            {
+                return reader.GetInt32(i);
+            }
+        }
+
+        return 0;
     }
 }
