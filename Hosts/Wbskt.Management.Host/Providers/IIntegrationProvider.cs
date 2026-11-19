@@ -24,6 +24,10 @@ public interface IIntegrationProvider
 
     Task<IReadOnlyCollection<IntegrationUse>> GetUsageAsync(int id, CancellationToken ct);
 
-    /// <summary>Deletes the integration unless a published current version uses it; returns those uses (empty when deleted).</summary>
-    Task<IReadOnlyCollection<IntegrationUse>> DeleteAsync(int workspaceId, int id, CancellationToken ct);
+    /// <summary>
+    /// Deletes the integration unless a published current version uses it, or (without
+    /// <paramref name="allowActiveRuns"/>) a run still in flight is on a version that does; returns those
+    /// uses (empty when deleted).
+    /// </summary>
+    Task<IReadOnlyCollection<IntegrationUse>> DeleteAsync(int workspaceId, int id, bool allowActiveRuns, CancellationToken ct);
 }

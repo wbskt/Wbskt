@@ -69,13 +69,15 @@ public sealed class IntegrationsController(IIntegrationService integrations) : A
 
     /// <summary>
     /// Deletes it: 204, or 409 <c>INTEGRATION_IN_USE</c> carrying <c>usedBy</c>, the published steps
-    /// that send through it. Deprecated workflows do not block a delete.
+    /// that send through it. Deprecated workflows do not block a delete. Runs still in flight on a
+    /// version that uses it are 409 <c>INTEGRATION_RUNS_IN_FLIGHT</c>, with <c>usedBy</c> counting them
+    /// in <c>activeRuns</c>, unless <paramref name="confirm"/> is set.
     /// </summary>
     [HttpDelete("{integrationRef:guid}")]
     [RequiresPermission(PermissionNames.IntegrationsManage)]
-    public async Task<IActionResult> Delete([FromWorkspace] int workspaceId, Guid integrationRef, CancellationToken ct)
+    public async Task<IActionResult> Delete([FromWorkspace] int workspaceId, Guid integrationRef, CancellationToken ct, [FromQuery] bool confirm = false)
     {
-        var outcome = await integrations.DeleteAsync(workspaceId, integrationRef, ct);
+        var outcome = await integrations.DeleteAsync(workspaceId, integrationRef, confirm, ct);
         if (outcome.Result.IsSuccess)
         {
             return NoContent();

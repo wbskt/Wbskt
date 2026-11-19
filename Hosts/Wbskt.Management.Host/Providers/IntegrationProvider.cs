@@ -76,12 +76,13 @@ internal sealed class IntegrationProvider(IConfiguration configuration) : BaseSq
     public Task<IReadOnlyCollection<IntegrationUse>> GetUsageAsync(int id, CancellationToken ct) =>
         ExecuteCollectionAsync("dbo.Integration_GetUsage", p => p.AddWithValue("@IntegrationId", id), MapUse, ct);
 
-    public Task<IReadOnlyCollection<IntegrationUse>> DeleteAsync(int workspaceId, int id, CancellationToken ct) =>
+    public Task<IReadOnlyCollection<IntegrationUse>> DeleteAsync(int workspaceId, int id, bool allowActiveRuns, CancellationToken ct) =>
         ExecuteCollectionAsync("dbo.Integration_Delete", p =>
         {
             p.AddWithValue("@Id", id);
             p.AddWithValue("@WorkspaceId", workspaceId);
-        }, MapUse, ct);
+            p.AddWithValue("@AllowActiveRuns", allowActiveRuns);
+        }, reader => MapUse(reader) with { ActiveRuns = reader.GetInt32(reader.GetOrdinal("ActiveRuns")) }, ct);
 
     private static IntegrationUse MapUse(SqlDataReader reader) => new(
         reader.GetGuid(reader.GetOrdinal("WorkflowRefId")),

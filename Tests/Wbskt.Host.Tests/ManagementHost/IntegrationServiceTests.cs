@@ -316,10 +316,10 @@ public sealed class IntegrationServiceTests
         var harness = new Harness();
         var saved = harness.Save(Saved());
         Guid workflow = Guid.NewGuid(), step1 = Guid.NewGuid(), step2 = Guid.NewGuid();
-        harness.Provider.Setup(p => p.DeleteAsync(WorkspaceId, saved.Id, It.IsAny<CancellationToken>()))
+        harness.Provider.Setup(p => p.DeleteAsync(WorkspaceId, saved.Id, false, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new IntegrationUse(workflow, "Pumps", step1, "notify", true), new IntegrationUse(workflow, "Pumps", step2, "notify again", true)]);
 
-        var result = await harness.Service.DeleteAsync(WorkspaceId, saved.RefId, CancellationToken.None);
+        var result = await harness.Service.DeleteAsync(WorkspaceId, saved.RefId, false, CancellationToken.None);
 
         Assert.Equal("INTEGRATION_IN_USE", result.Result.Error.Code);
         Assert.Equal(ErrorType.Conflict, result.Result.Error.Type);
@@ -334,13 +334,37 @@ public sealed class IntegrationServiceTests
     {
         var harness = new Harness();
         var saved = harness.Save(Saved());
-        harness.Provider.Setup(p => p.DeleteAsync(WorkspaceId, saved.Id, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        harness.Provider.Setup(p => p.DeleteAsync(WorkspaceId, saved.Id, false, It.IsAny<CancellationToken>())).ReturnsAsync([]);
 
-        var result = await harness.Service.DeleteAsync(WorkspaceId, saved.RefId, CancellationToken.None);
+        var result = await harness.Service.DeleteAsync(WorkspaceId, saved.RefId, false, CancellationToken.None);
 
         Assert.True(result.Result.IsSuccess);
         Assert.Empty(result.UsedBy);
         harness.Bus.Verify(b => b.PublishAsync(It.Is<IntegrationDeletedEvent>(e => e.IntegrationRefId == saved.RefId && e.Type == "ntfy"), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Deleting_one_runs_in_flight_still_use_is_refused_until_confirmed()
+    {
+        var harness = new Harness();
+        var saved = harness.Save(Saved());
+        Guid workflow = Guid.NewGuid(), step = Guid.NewGuid();
+        harness.Provider.Setup(p => p.DeleteAsync(WorkspaceId, saved.Id, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new IntegrationUse(workflow, "Pumps", step, "notify", false, ActiveRuns: 3)]);
+        harness.Provider.Setup(p => p.DeleteAsync(WorkspaceId, saved.Id, true, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+
+        var refused = await harness.Service.DeleteAsync(WorkspaceId, saved.RefId, false, CancellationToken.None);
+
+        Assert.Equal("INTEGRATION_RUNS_IN_FLIGHT", refused.Result.Error.Code);
+        Assert.Equal(ErrorType.Conflict, refused.Result.Error.Type);
+        Assert.Contains("3 runs still in flight", refused.Result.Error.Message);
+        Assert.Equal(3, Assert.Single(refused.UsedBy).ActiveRuns);
+        harness.Bus.VerifyNoOtherCalls();
+
+        var confirmed = await harness.Service.DeleteAsync(WorkspaceId, saved.RefId, true, CancellationToken.None);
+
+        Assert.True(confirmed.Result.IsSuccess);
+        harness.Bus.Verify(b => b.PublishAsync(It.IsAny<IntegrationDeletedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -349,10 +373,10 @@ public sealed class IntegrationServiceTests
         var harness = new Harness();
         var saved = harness.Save(Saved(workspaceId: WorkspaceId + 1));
 
-        var result = await harness.Service.DeleteAsync(WorkspaceId, saved.RefId, CancellationToken.None);
+        var result = await harness.Service.DeleteAsync(WorkspaceId, saved.RefId, false, CancellationToken.None);
 
         Assert.Equal("INTEGRATION_NOT_FOUND", result.Result.Error.Code);
-        harness.Provider.Verify(p => p.DeleteAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.Provider.Verify(p => p.DeleteAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
