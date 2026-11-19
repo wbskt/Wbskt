@@ -124,6 +124,27 @@ public sealed class ClientReadingServiceTests
     }
 
     [Fact]
+    public async Task The_hourly_export_is_one_row_per_variable_and_hour()
+    {
+        var hour = new DateTime(2026, 9, 1, 3, 0, 0, DateTimeKind.Utc);
+        _provider.Setup(p => p.GetHourlyRangeAsync(ClientId, null, It.IsAny<DateTime>(), It.IsAny<DateTime>(), ClientReadingService.MaxExportRows + 1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new ClientReadingHour("temp", hour, 4, 1.5, 2, 3)]);
+
+        var result = await Service().ExportCsvAsync(WorkspaceId, ClientRef, null, null, null, "Hourly");
+
+        Assert.Equal("name,hourStart,count,min,avg,max\r\ntemp,2026-09-01T03:00:00.000Z,4,1.5,2,3\r\n", result.Value);
+    }
+
+    [Fact]
+    public async Task An_unknown_resolution_is_refused()
+    {
+        var result = await Service().ExportCsvAsync(WorkspaceId, ClientRef, null, null, null, "daily");
+
+        Assert.Equal("READINGS_RESOLUTION_INVALID", result.Error.Code);
+        _provider.VerifyNoOtherCalls();
+    }
+
+    [Fact]
     public async Task Another_workspaces_client_is_not_found_and_nothing_is_read()
     {
         var clients = new Mock<IClientQueryService>();

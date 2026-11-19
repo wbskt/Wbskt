@@ -17,8 +17,13 @@ public interface IClientReadingService
     /// </summary>
     Task<Result<ClientReadingsResponse>> GetBucketsAsync(int workspaceId, Guid clientRef, string? name, DateTimeOffset? from, DateTimeOffset? to, string? bucket, CancellationToken cancellationToken = default);
 
-    /// <summary>The raw readings over [from, to), for export: one variable, or all of them when <paramref name="name"/> is null.</summary>
-    Task<Result<IReadOnlyCollection<ClientReading>>> GetRangeAsync(int workspaceId, Guid clientRef, string? name, DateTimeOffset? from, DateTimeOffset? to, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// The readings over [from, to) as CSV, for one variable or all of them when <paramref name="name"/>
+    /// is null. <paramref name="resolution"/> "raw" (the default) gives every reading, which reaches
+    /// back only the plan's raw days; "hourly" gives one row per variable and hour, raw and rolled-up
+    /// alike, as far back as the chart.
+    /// </summary>
+    Task<Result<string>> ExportCsvAsync(int workspaceId, Guid clientRef, string? name, DateTimeOffset? from, DateTimeOffset? to, string? resolution, CancellationToken cancellationToken = default);
 }
 
 public sealed class ClientReadingService : IClientReadingService
@@ -30,6 +35,8 @@ public sealed class ClientReadingService : IClientReadingService
     internal const int MaxBuckets = 2000;
     internal const int MaxExportRows = 100_000;
     private const int MaxNameLength = 100;
+    private static readonly Error NameInvalid = Error.Validation("READINGS_NAME_INVALID", "'name' must be a state variable name, or left out for every variable.");
+    private static readonly Error RangeTooLarge = Error.Validation("READINGS_RANGE_TOO_LARGE", $"That range holds more than {MaxExportRows} rows; export a shorter range, a single variable or resolution=hourly.");
 
     // Sizes picked when the caller names none: round numbers a chart's axis reads well in.
     private static readonly int[] BucketLadder =
@@ -91,7 +98,50 @@ public sealed class ClientReadingService : IClientReadingService
         return Result<ClientReadingsResponse>.Success(new ClientReadingsResponse(name, fromUtc.ToUtcOffset(), toUtc.ToUtcOffset(), bucketSeconds, buckets));
     }
 
-    public async Task<Result<IReadOnlyCollection<ClientReading>>> GetRangeAsync(int workspaceId, Guid clientRef, string? name, DateTimeOffset? from, DateTimeOffset? to, CancellationToken cancellationToken = default)
+    public async Task<Result<string>> ExportCsvAsync(int workspaceId, Guid clientRef, string? name, DateTimeOffset? from, DateTimeOffset? to, string? resolution, CancellationToken cancellationToken = default)
+    {
+        switch (resolution?.ToLowerInvariant())
+        {
+            case null or "raw":
+                var readings = await GetRangeAsync(workspaceId, clientRef, name, from, to, cancellationToken);
+                return readings.IsSuccess ? Result<string>.Success(ClientReadingsCsv.Write(readings.Value)) : Result<string>.Failure(readings.Error);
+            case "hourly":
+                var hours = await GetHourlyRangeAsync(workspaceId, clientRef, name, from, to, cancellationToken);
+                return hours.IsSuccess ? Result<string>.Success(ClientReadingsCsv.WriteHourly(hours.Value)) : Result<string>.Failure(hours.Error);
+            default:
+                return Result<string>.Failure(Error.Validation("READINGS_RESOLUTION_INVALID", "'resolution' must be 'raw' or 'hourly'."));
+        }
+    }
+
+    internal async Task<Result<IReadOnlyCollection<ClientReadingHour>>> GetHourlyRangeAsync(int workspaceId, Guid clientRef, string? name, DateTimeOffset? from, DateTimeOffset? to, CancellationToken cancellationToken = default)
+    {
+        var client = await _clients.EnsureClientInWorkspaceAsync(workspaceId, clientRef, cancellationToken);
+        if (client.IsFailure)
+        {
+            return Result<IReadOnlyCollection<ClientReadingHour>>.Failure(client.Error);
+        }
+
+        if (name is { Length: 0 or > MaxNameLength })
+        {
+            return Result<IReadOnlyCollection<ClientReadingHour>>.Failure(NameInvalid);
+        }
+
+        var range = ResolveRange(from, to);
+        if (range.IsFailure)
+        {
+            return Result<IReadOnlyCollection<ClientReadingHour>>.Failure(range.Error);
+        }
+
+        var hours = await _provider.GetHourlyRangeAsync(client.Value, name, range.Value.FromUtc, range.Value.ToUtc, MaxExportRows + 1, cancellationToken);
+        if (hours.Count > MaxExportRows)
+        {
+            return Result<IReadOnlyCollection<ClientReadingHour>>.Failure(RangeTooLarge);
+        }
+
+        return Result<IReadOnlyCollection<ClientReadingHour>>.Success(hours);
+    }
+
+    internal async Task<Result<IReadOnlyCollection<ClientReading>>> GetRangeAsync(int workspaceId, Guid clientRef, string? name, DateTimeOffset? from, DateTimeOffset? to, CancellationToken cancellationToken = default)
     {
         var client = await _clients.EnsureClientInWorkspaceAsync(workspaceId, clientRef, cancellationToken);
         if (client.IsFailure)
@@ -102,7 +152,7 @@ public sealed class ClientReadingService : IClientReadingService
         var clientId = client.Value;
         if (name is { Length: 0 or > MaxNameLength })
         {
-            return Result<IReadOnlyCollection<ClientReading>>.Failure(Error.Validation("READINGS_NAME_INVALID", "'name' must be a state variable name, or left out for every variable."));
+            return Result<IReadOnlyCollection<ClientReading>>.Failure(NameInvalid);
         }
 
         var range = ResolveRange(from, to);
@@ -115,7 +165,7 @@ public sealed class ClientReadingService : IClientReadingService
         var readings = await _provider.GetRangeAsync(clientId, name, range.Value.FromUtc, range.Value.ToUtc, MaxExportRows + 1, cancellationToken);
         if (readings.Count > MaxExportRows)
         {
-            return Result<IReadOnlyCollection<ClientReading>>.Failure(Error.Validation("READINGS_RANGE_TOO_LARGE", $"That range holds more than {MaxExportRows} readings; export a shorter range or a single variable."));
+            return Result<IReadOnlyCollection<ClientReading>>.Failure(RangeTooLarge);
         }
 
         return Result<IReadOnlyCollection<ClientReading>>.Success(readings);

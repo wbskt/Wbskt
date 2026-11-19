@@ -14,6 +14,9 @@ public interface IClientReadingProvider
     /// <summary>Up to <paramref name="maxRows"/> readings in [from, to), oldest first; every variable when <paramref name="name"/> is null.</summary>
     Task<IReadOnlyCollection<ClientReading>> GetRangeAsync(int clientId, string? name, DateTime fromUtc, DateTime toUtc, int maxRows, CancellationToken cancellationToken = default);
 
+    /// <summary>The readings per variable and hour over [from, to), raw and rolled-up alike, at most <paramref name="maxRows"/>.</summary>
+    Task<IReadOnlyCollection<ClientReadingHour>> GetHourlyRangeAsync(int clientId, string? name, DateTime fromUtc, DateTime toUtc, int maxRows, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Up to <paramref name="batches"/> batches of retention by each client's plan, on cutoffs worked out
     /// once: rolls raw readings past the plan's raw days into the hourly roll-up, deletes hourly rows past

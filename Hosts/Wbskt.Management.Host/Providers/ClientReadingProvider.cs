@@ -70,6 +70,26 @@ internal sealed class ClientReadingProvider : BaseSqlProvider, IClientReadingPro
             cancellationToken);
     }
 
+    public async Task<IReadOnlyCollection<ClientReadingHour>> GetHourlyRangeAsync(int clientId, string? name, DateTime fromUtc, DateTime toUtc, int maxRows, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteCollectionAsync("dbo.ClientReadings_GetHourlyRange", p =>
+            {
+                p.AddWithValue("@ClientId", clientId);
+                p.AddWithValue("@Name", (object?)name ?? DBNull.Value);
+                p.Add("@FromUtc", SqlDbType.DateTime2).Value = fromUtc;
+                p.Add("@ToUtc", SqlDbType.DateTime2).Value = toUtc;
+                p.AddWithValue("@MaxRows", maxRows);
+            },
+            reader => new ClientReadingHour(
+                reader.GetString(reader.GetOrdinal("Name")),
+                DateTime.SpecifyKind(reader.GetDateTime(reader.GetOrdinal("HourStart")), DateTimeKind.Utc),
+                reader.GetInt64(reader.GetOrdinal("ReadingCount")),
+                reader.GetDouble(reader.GetOrdinal("MinValue")),
+                reader.GetDouble(reader.GetOrdinal("AvgValue")),
+                reader.GetDouble(reader.GetOrdinal("MaxValue"))),
+            cancellationToken);
+    }
+
     public Task<ReadingCompaction> CompactAsync(DateTime nowUtc, IReadOnlyCollection<ReadingRetention> retention, int batchSize, int batches, CancellationToken cancellationToken = default)
     {
         var table = new DataTable();

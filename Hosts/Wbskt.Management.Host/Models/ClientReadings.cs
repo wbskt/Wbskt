@@ -27,3 +27,6 @@ public sealed record ClientReadingValue(string Name, double Value);
 
 /// <summary>One stored reading, for export.</summary>
 public sealed record ClientReading(string Name, DateTime SentAt, DateTime ReceivedAt, double Value, bool IsLate);
+
+/// <summary>One variable's readings in one hour, raw and rolled-up together, for export.</summary>
+public sealed record ClientReadingHour(string Name, DateTime HourStart, long Count, double Min, double Avg, double Max);

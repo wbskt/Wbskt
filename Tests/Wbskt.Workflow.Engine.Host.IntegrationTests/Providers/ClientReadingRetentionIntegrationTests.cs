@@ -50,6 +50,28 @@ public sealed class ClientReadingRetentionIntegrationTests(SqlEdgeFixture fixtur
     }
 
     [SkippableFact]
+    public async Task The_hourly_export_reaches_past_the_raw_days_and_counts_each_reading_once()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int client = await CreateClientAsync(plan: "Free");
+        DateTime old = Now.AddDays(-5).AddMinutes(5);
+        DateTime oldHour = old.Date.AddHours(old.Hour);
+        await ReadAsync(client, old, 10);
+        await ReadAsync(client, old.AddMinutes(10), 20);
+        await ReadAsync(client, Now.AddDays(-1).AddMinutes(5), 7);
+        await ReadAsync(client, Now.AddDays(-1).AddMinutes(6), 9);
+        await CompactAsync();
+
+        var hours = await Provider().GetHourlyRangeAsync(client, null, Now.AddDays(-6), Now, 100);
+        var raw = await Provider().GetRangeAsync(client, null, Now.AddDays(-6), Now, 100);
+
+        Assert.Equal(
+            [new ClientReadingHour("temp", oldHour, 2, 10, 15, 20), new ClientReadingHour("temp", Now.AddDays(-1), 2, 7, 8, 9)],
+            hours);
+        Assert.Equal(2, raw.Count);
+    }
+
+    [SkippableFact]
     public async Task Each_plan_keeps_raw_readings_for_its_own_days_and_a_tenants_override_wins()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);

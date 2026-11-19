@@ -5211,6 +5211,13 @@
             }
           },
           {
+            "in": "query",
+            "name": "resolution",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "in": "path",
             "name": "workspaceRef",
             "required": true,
