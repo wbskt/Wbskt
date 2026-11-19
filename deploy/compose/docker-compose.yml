@@ -340,6 +340,8 @@ services:
     mem_limit: ${HOST_MEM_LIMIT:-384m}
     memswap_limit: ${HOST_MEM_LIMIT:-384m}
     logging: *default-logging
+    # More than one replica splits the status bar's message rate (WorkspaceMessageCounter counts each
+    # replica's own share, #591): keep 1 until the tallies are shared.
     deploy:
       replicas: ${MANAGEMENT_REPLICAS:-1}
     labels:
@@ -422,7 +424,9 @@ services:
       OTEL_SERVICE_NAME: wbskt-gateway-ws
     # Declared rather than left to `--scale`, because `docker compose up -d gateway-ws` converges to
     # whatever is declared here - a deploy that omitted --scale would silently drop a 3-replica
-    # tier back to 1.
+    # tier back to 1. More than one replica loosens a throttled account's one message a minute per
+    # client to one per replica the client reaches (MessageThrottle keeps each client's minute in
+    # memory, #994): keep 1 until it is shared.
     deploy:
       replicas: ${GATEWAY_WS_REPLICAS:-1}
     labels:
@@ -453,6 +457,7 @@ services:
     environment:
       <<: *gateway-env
       OTEL_SERVICE_NAME: wbskt-gateway-mqtt
+    # As for gateway-ws: more than one replica loosens the message throttle (#994).
     deploy:
       replicas: ${GATEWAY_MQTT_REPLICAS:-1}
     labels:
