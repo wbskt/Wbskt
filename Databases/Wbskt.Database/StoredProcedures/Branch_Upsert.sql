@@ -7,7 +7,9 @@ CREATE PROCEDURE dbo.Branch_Upsert
     @Status                NVARCHAR(32),
     @PendingTakePort       NVARCHAR(128),
     @LocalJson             NVARCHAR(MAX),
-    @LastOutputJson        NVARCHAR(MAX)
+    -- Ignored. Accepted for one release so an engine on the previous image, which still passes it,
+    -- keeps working while the hosts restart after the migration; dropped in the release after.
+    @LastOutputJson        NVARCHAR(MAX) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -22,7 +24,6 @@ BEGIN
         PendingTakePort       = @PendingTakePort,
         WokenAt               = NULL,
         LocalJson             = @LocalJson,
-        LastOutputJson        = @LastOutputJson,
         UpdatedAt             = SYSUTCDATETIME()
     WHERE RefId = @RefId;
 
@@ -31,10 +32,10 @@ BEGIN
     BEGIN
         INSERT INTO dbo.Branches
             (RefId, RunId, ParentBranchId, ForkCohortId, NodeId,
-             Status, PendingTakePort, LocalJson, LastOutputJson)
+             Status, PendingTakePort, LocalJson)
         VALUES
             (@RefId, @RunId, @ParentBranchId, @ForkCohortId, @NodeId,
-             @Status, @PendingTakePort, @LocalJson, @LastOutputJson);
+             @Status, @PendingTakePort, @LocalJson);
     END
 
     SELECT
@@ -47,7 +48,8 @@ BEGIN
         Status,
         PendingTakePort,
         LocalJson,
-        LastOutputJson,
+        -- Always NULL: the previous image's engine still maps it during the rollout. Dropped next release.
+        CAST(NULL AS NVARCHAR(MAX)) AS LastOutputJson,
         CreatedAt,
         UpdatedAt,
         RowVersion

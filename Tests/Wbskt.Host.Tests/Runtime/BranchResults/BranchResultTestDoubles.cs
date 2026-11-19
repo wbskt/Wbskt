@@ -64,7 +64,6 @@ internal static class BranchResultTestData
         Status = BranchStatus.Active,
         PendingTakePort = null,
         LocalJson = localJson,
-        LastOutputJson = "\"last\"",
         CreatedAt = Now,
         UpdatedAt = Now,
         RowVersion = [1]
@@ -119,17 +118,17 @@ internal sealed class RecordingBranchProvider(List<string> log, BranchRow curren
     // Settable so a test can put the branch back where a crash left it and replay a handler.
     public BranchRow Current { get; set; } = current;
 
-    public List<(long BranchId, Guid NodeId, string Status, string LocalJson, string? LastOutputJson)> Updates { get; } = [];
+    public List<(long BranchId, Guid NodeId, string Status, string LocalJson)> Updates { get; } = [];
 
     public List<BranchRow> Created { get; } = [];
 
     public List<(long BranchId, string? ErrorJson)> Failed { get; } = [];
 
-    public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct)
+    public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, CancellationToken ct)
     {
         log.Add($"update:{status}:{currentNodeId}");
-        Updates.Add((branchId, currentNodeId, status, localJson, lastOutputJson));
-        Current = Current with { NodeId = currentNodeId, Status = status, LocalJson = localJson, LastOutputJson = lastOutputJson, RowVersion = [(byte)(Updates.Count + 1)] };
+        Updates.Add((branchId, currentNodeId, status, localJson));
+        Current = Current with { NodeId = currentNodeId, Status = status, LocalJson = localJson, RowVersion = [(byte)(Updates.Count + 1)] };
         return Task.FromResult(Current);
     }
 
@@ -151,7 +150,7 @@ internal sealed class RecordingBranchProvider(List<string> log, BranchRow curren
     /// refused and nothing is written. The writes it does make go through the
     /// unguarded recorders, so the log reads as it did before the guard.
     /// </summary>
-    public async Task<bool> EndIfLiveAsync(long branchId, string toStatus, string? lastOutputJson, CancellationToken ct)
+    public async Task<bool> EndIfLiveAsync(long branchId, string toStatus, string? errorJson, CancellationToken ct)
     {
         if (!BranchStatus.IsLive(Current.Status))
         {
@@ -163,8 +162,8 @@ internal sealed class RecordingBranchProvider(List<string> log, BranchRow curren
         _ = toStatus switch
         {
             BranchStatus.Completed => await SetCompletedAsync(branchId, ct),
-            BranchStatus.Failed => await SetFailedAsync(branchId, lastOutputJson, ct),
-            _ => await UpdatePointerAsync(branchId, Current.NodeId, toStatus, Current.LocalJson, lastOutputJson, ct)
+            BranchStatus.Failed => await SetFailedAsync(branchId, errorJson, ct),
+            _ => await UpdatePointerAsync(branchId, Current.NodeId, toStatus, Current.LocalJson, ct)
         };
         return true;
     }
@@ -192,11 +191,11 @@ internal sealed class RecordingBranchProvider(List<string> log, BranchRow curren
         return Task.FromResult(Current);
     }
 
-    public Task<BranchRow> SetFailedAsync(long branchId, string? lastOutputJson, CancellationToken ct)
+    public Task<BranchRow> SetFailedAsync(long branchId, string? errorJson, CancellationToken ct)
     {
         log.Add("failed");
-        Failed.Add((branchId, lastOutputJson));
-        Current = Current with { Status = BranchStatus.Failed, LastOutputJson = lastOutputJson };
+        Failed.Add((branchId, errorJson));
+        Current = Current with { Status = BranchStatus.Failed };
         return Task.FromResult(Current);
     }
 

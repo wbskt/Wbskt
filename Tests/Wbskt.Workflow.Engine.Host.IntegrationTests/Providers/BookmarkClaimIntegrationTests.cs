@@ -159,7 +159,7 @@ public sealed class BookmarkClaimIntegrationTests(SqlEdgeFixture fixture)
         {
             Id = 0, RefId = Guid.NewGuid(), RunId = runId, ParentBranchId = null, ForkCohortId = null,
             NodeId = Guid.NewGuid(), Status = "Waiting", PendingTakePort = null, LocalJson = "{}",
-            LastOutputJson = null, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow, RowVersion = []
+            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow, RowVersion = []
         }, CancellationToken.None);
     }
 
@@ -210,7 +210,7 @@ public sealed class BookmarkClaimIntegrationTests(SqlEdgeFixture fixture)
         (await WokenIdsAsync()).Should().Contain([signalWait.Id, timerWait.Id]);
 
         // The next write that moves the branch clears the mark, so a later park is not taken for a wake.
-        await branchProvider.UpdatePointerAsync(timerWait.Id, timerWait.NodeId, "Active", "{}", null, CancellationToken.None);
+        await branchProvider.UpdatePointerAsync(timerWait.Id, timerWait.NodeId, "Active", "{}", CancellationToken.None);
         (await WokenIdsAsync()).Should().NotContain(timerWait.Id);
     }
 

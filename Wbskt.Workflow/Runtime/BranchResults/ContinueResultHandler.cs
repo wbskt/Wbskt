@@ -30,7 +30,7 @@ internal sealed class ContinueResultHandler(
         }
 
         string localJson = context.MergedLocalJsonOr(result.LocalStatePatch, result.RemoveKeys);
-        BranchRow moved = await branchProvider.UpdatePointerAsync(context.BranchId, nextNodeId.Value, BranchStatus.Active, localJson, context.Branch.LastOutputJson, ct);
+        BranchRow moved = await branchProvider.UpdatePointerAsync(context.BranchId, nextNodeId.Value, BranchStatus.Active, localJson, ct);
         return BranchResultOutcome.Advanced(moved);
     }
 }

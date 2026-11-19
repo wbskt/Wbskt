@@ -41,7 +41,6 @@ public sealed class TerminalResultHandlerTests
         Assert.Equal(new[] { $"update:{BranchStatus.Cancelled}:{NodeA}", $"journal:{HistoryEventKind.BranchCancelled}", $"release:{RunId}:1" }, _log);
         var update = Assert.Single(branches.Updates);
         Assert.Equal("""{"keep":1}""", update.LocalJson);
-        Assert.Equal("\"last\"", update.LastOutputJson);
         Assert.Equal(BranchRefId, Assert.Single(journal.Entries).BranchRefId);
     }
 

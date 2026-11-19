@@ -22,7 +22,6 @@ public class BranchProviderTests
                 ["Status"] = "Active",
                 ["PendingTakePort"] = "success",
                 ["LocalJson"] = "{\"x\":1}",
-                ["LastOutputJson"] = "{\"y\":2}",
                 ["CreatedAt"] = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
                 ["UpdatedAt"] = new DateTime(2026, 5, 26, 12, 1, 0, DateTimeKind.Utc),
                 ["RowVersion"] = new byte[] { 1, 2, 3, 4 }
@@ -41,7 +40,6 @@ public class BranchProviderTests
         row.Status.Should().Be("Active");
         row.PendingTakePort.Should().Be("success");
         row.LocalJson.Should().Be("{\"x\":1}");
-        row.LastOutputJson.Should().Be("{\"y\":2}");
         row.CreatedAt.Should().Be(new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
         row.UpdatedAt.Should().Be(new DateTime(2026, 5, 26, 12, 1, 0, DateTimeKind.Utc));
         row.RowVersion.Should().Equal(new byte[] { 1, 2, 3, 4 });

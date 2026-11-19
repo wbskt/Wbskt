@@ -138,17 +138,17 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
         );
     }
 
-    public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct)
+    public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, CancellationToken ct)
     {
-        return UpdateBranchAsync(branchId, currentNodeId, status, localJson, lastOutputJson, ct);
+        return UpdateBranchAsync(branchId, currentNodeId, status, localJson, ct);
     }
 
     public Task<BranchRow> SetCompletedAsync(long branchId, CancellationToken ct)
     {
-        return UpdateBranchAsync(branchId, null, BranchStatus.Completed, null, null, ct);
+        return UpdateBranchAsync(branchId, null, BranchStatus.Completed, null, ct);
     }
 
-    public async Task<bool> EndIfLiveAsync(long branchId, string toStatus, string? lastOutputJson, CancellationToken ct)
+    public async Task<bool> EndIfLiveAsync(long branchId, string toStatus, string? errorJson, CancellationToken ct)
     {
         var result = await ExecuteScalarAsync<object>(
             "dbo.Branch_EndIfLive",
@@ -156,14 +156,14 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
             {
                 p.AddWithValue("@Id", branchId);
                 p.AddWithValue("@ToStatus", toStatus);
-                p.AddWithValue("@LastOutputJson", (object?)lastOutputJson ?? DBNull.Value);
+                p.AddWithValue("@ErrorJson", (object?)errorJson ?? DBNull.Value);
             },
             ct
         );
         return result is int rowsAffected && rowsAffected > 0;
     }
 
-    private async Task<BranchRow> UpdateBranchAsync(long branchId, Guid? currentNodeId, string status, string? localJson, string? lastOutputJson, CancellationToken ct)
+    private async Task<BranchRow> UpdateBranchAsync(long branchId, Guid? currentNodeId, string status, string? localJson, CancellationToken ct)
     {
         return await ExecuteSingleAsync(
             "dbo.Branch_Update",
@@ -173,7 +173,6 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
                 p.AddWithValue("@NodeId", (object?)currentNodeId ?? DBNull.Value);
                 p.AddWithValue("@Status", status);
                 p.AddWithValue("@LocalJson", (object?)localJson ?? DBNull.Value);
-                p.AddWithValue("@LastOutputJson", (object?)lastOutputJson ?? DBNull.Value);
             },
             Map,
             new KeyNotFoundException($"Branch with Id={branchId} not found."),
@@ -200,7 +199,6 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
         p.AddWithValue("@Status", row.Status);
         p.AddWithValue("@PendingTakePort", (object?)row.PendingTakePort ?? DBNull.Value);
         p.AddWithValue("@LocalJson", row.LocalJson);
-        p.AddWithValue("@LastOutputJson", (object?)row.LastOutputJson ?? DBNull.Value);
     }
 
     internal static BranchRow Map(DbDataReader reader)
@@ -216,7 +214,6 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
             Status = reader.GetString(reader.GetOrdinal("Status")),
             PendingTakePort = reader.IsDBNull(reader.GetOrdinal("PendingTakePort")) ? null : reader.GetString(reader.GetOrdinal("PendingTakePort")),
             LocalJson = reader.GetString(reader.GetOrdinal("LocalJson")),
-            LastOutputJson = reader.IsDBNull(reader.GetOrdinal("LastOutputJson")) ? null : reader.GetString(reader.GetOrdinal("LastOutputJson")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
             UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
             RowVersion = (byte[])reader.GetValue(reader.GetOrdinal("RowVersion"))

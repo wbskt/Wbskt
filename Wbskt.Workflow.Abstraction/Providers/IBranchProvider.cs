@@ -50,7 +50,7 @@ public interface IBranchProvider
     Task<IReadOnlyCollection<WokenBranch>> GetWokenNotWrittenSinceAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
         => Task.FromResult<IReadOnlyCollection<WokenBranch>>(Array.Empty<WokenBranch>());
 
-    Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct);
+    Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, CancellationToken ct);
     Task<BranchRow> SetCompletedAsync(long branchId, CancellationToken ct);
     Task<int> CancelWaitingBranchesAsync(int runId, CancellationToken ct) => Task.FromResult(0);
 
@@ -69,14 +69,14 @@ public interface IBranchProvider
     /// and says whether it did. Two loops can reach the end of one branch - a cancel
     /// racing a bookmark wake, a recovery requeue racing a slow node on the old leader - and only the
     /// one that actually ended it may release it; a second release lets the run's active-branch count
-    /// reach zero while another branch is still running. <paramref name="lastOutputJson"/> replaces the
-    /// branch's last output, as the unguarded updates do.
+    /// reach zero while another branch is still running. <paramref name="errorJson"/> is the error a
+    /// Failed end records; null keeps what the branch had.
     /// </summary>
     /// <remarks>
-    /// The default reads then writes, which is enough for a single-threaded fake; the SQL provider does
-    /// it as one compare-and-set.
+    /// The default reads then writes, and records no error, which is enough for a single-threaded fake;
+    /// the SQL provider does it as one compare-and-set.
     /// </remarks>
-    async Task<bool> EndIfLiveAsync(long branchId, string toStatus, string? lastOutputJson, CancellationToken ct)
+    async Task<bool> EndIfLiveAsync(long branchId, string toStatus, string? errorJson, CancellationToken ct)
     {
         BranchRow row = await GetByIdAsync(branchId, ct);
         if (!BranchStatus.IsLive(row.Status))
@@ -84,7 +84,7 @@ public interface IBranchProvider
             return false;
         }
 
-        await UpdatePointerAsync(branchId, row.NodeId, toStatus, row.LocalJson, lastOutputJson, ct);
+        await UpdatePointerAsync(branchId, row.NodeId, toStatus, row.LocalJson, ct);
         return true;
     }
 }

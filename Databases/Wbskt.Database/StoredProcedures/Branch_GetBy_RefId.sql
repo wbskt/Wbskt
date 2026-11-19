@@ -14,7 +14,8 @@ BEGIN
         Status,
         PendingTakePort,
         LocalJson,
-        LastOutputJson,
+        -- Always NULL: the previous image's engine still maps it during the rollout. Dropped next release.
+        CAST(NULL AS NVARCHAR(MAX)) AS LastOutputJson,
         CreatedAt,
         UpdatedAt,
         RowVersion

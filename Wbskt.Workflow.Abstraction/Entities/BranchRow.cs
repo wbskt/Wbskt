@@ -13,14 +13,12 @@ public record BranchRow
     public required string Status { get; init; }
     public required string? PendingTakePort { get; init; }
     public required string LocalJson { get; init; }
-    public required string? LastOutputJson { get; init; }
     public required DateTime CreatedAt { get; init; }
     public required DateTime UpdatedAt { get; init; }
     public required byte[] RowVersion { get; init; }
 
     /// <summary>
-    /// A branch about to be inserted: Active at <paramref name="nodeId"/>, with no pending port and no
-    /// output yet. The columns the database assigns (Id, RowVersion) are left empty here, so every
+    /// A branch about to be inserted: Active at <paramref name="nodeId"/>, with no pending port. The columns the database assigns (Id, RowVersion) are left empty here, so every
     /// place that starts a branch - a run's root branch, a fork child, a join continuation - fills
     /// them in the same way.
     /// </summary>
@@ -44,7 +42,6 @@ public record BranchRow
             Status = BranchStatus.Active,
             PendingTakePort = null,
             LocalJson = localJson,
-            LastOutputJson = null,
             CreatedAt = nowUtc,
             UpdatedAt = nowUtc,
             // Branches.RowVersion is a SQL Server ROWVERSION: the database assigns it.

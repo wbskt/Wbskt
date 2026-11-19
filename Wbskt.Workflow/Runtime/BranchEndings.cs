@@ -34,7 +34,7 @@ internal sealed class BranchEndings(IBranchProvider branchProvider, IRunJournal 
 
     public async Task CancelAsync(int runId, long branchId, BranchRow branchRow, CancellationToken ct)
     {
-        if (!await branchProvider.EndIfLiveAsync(branchId, BranchStatus.Cancelled, branchRow.LastOutputJson, ct))
+        if (!await branchProvider.EndIfLiveAsync(branchId, BranchStatus.Cancelled, null, ct))
         {
             LogAlreadyEnded(runId, branchId, BranchStatus.Cancelled);
             return;

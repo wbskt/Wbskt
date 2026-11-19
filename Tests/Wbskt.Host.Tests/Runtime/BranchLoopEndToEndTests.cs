@@ -152,7 +152,6 @@ public sealed class BranchLoopEndToEndTests
                 Status = "Active",
                 PendingTakePort = null,
                 LocalJson = "{}",
-                LastOutputJson = null,
                 CreatedAt = definition.CreatedAt,
                 UpdatedAt = definition.CreatedAt,
                 RowVersion = [1]
@@ -171,9 +170,9 @@ public sealed class BranchLoopEndToEndTests
         Task<BranchRow> IBranchProvider.GetByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult(Branches.Values.Single(row => row.RefId == refId));
         Task<IReadOnlyCollection<BranchRow>> IBranchProvider.GetAllByRunIdAsync(int runId, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BranchRow>>(Branches.Values.ToArray());
 
-        public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct)
+        public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, CancellationToken ct)
         {
-            BranchRow updated = Branches[branchId] with { NodeId = currentNodeId, Status = status, LocalJson = localJson, LastOutputJson = lastOutputJson };
+            BranchRow updated = Branches[branchId] with { NodeId = currentNodeId, Status = status, LocalJson = localJson };
             Branches[branchId] = updated;
             return Task.FromResult(updated);
         }

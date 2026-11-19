@@ -112,7 +112,6 @@ public sealed class CrashRecoveryIntegrationTests(SqlEdgeFixture fixture)
             Status = "Active",
             PendingTakePort = null,
             LocalJson = "{}",
-            LastOutputJson = null,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
             RowVersion = Array.Empty<byte>()
