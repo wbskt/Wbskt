@@ -10,6 +10,8 @@ using Wbskt.Events.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Management.Host.Handlers;
 using Wbskt.Management.Host.Hubs;
+using Wbskt.Management.Host.Providers;
+using Wbskt.Events.Billing;
 using Wbskt.Management.Models;
 
 namespace Wbskt.Host.Tests.ManagementHost;
@@ -65,7 +67,7 @@ public sealed class ClientFeedScopeTests
     public async Task A_client_message_goes_to_its_watchers_not_the_workspace()
     {
         var hub = new FakeHub();
-        var handler = new SignalRForwardingHandler<ClientMessageReceivedEvent>(hub.Context, new ClientFeedThrottle(new FixedTimeProvider(Now)), new WorkspaceMessageCounter());
+        var handler = new SignalRForwardingHandler<ClientMessageReceivedEvent>(hub.Context, new ClientFeedThrottle(new FixedTimeProvider(Now)), new WorkspaceMessageCounter(), Mock.Of<ITenantWorkspaceProvider>());
 
         await handler.Consume(Context(Message()));
 
@@ -76,7 +78,7 @@ public sealed class ClientFeedScopeTests
     public async Task A_workspace_event_still_goes_to_the_workspace()
     {
         var hub = new FakeHub();
-        var handler = new SignalRForwardingHandler<ClientRenamedEvent>(hub.Context, new ClientFeedThrottle(new FixedTimeProvider(Now)), new WorkspaceMessageCounter());
+        var handler = new SignalRForwardingHandler<ClientRenamedEvent>(hub.Context, new ClientFeedThrottle(new FixedTimeProvider(Now)), new WorkspaceMessageCounter(), Mock.Of<ITenantWorkspaceProvider>());
         var renamed = new ClientRenamedEvent(Guid.NewGuid(), ClientId, WorkspaceId, "old", "new");
 
         await handler.Consume(Context(renamed));
@@ -85,11 +87,49 @@ public sealed class ClientFeedScopeTests
     }
 
     [Fact]
+    public async Task The_account_credit_notice_goes_to_every_workspace_of_the_tenant()
+    {
+        // #955: the credits are pooled across the account, so each workspace's console has to hear it.
+        var hub = new FakeHub();
+        var tenantWorkspaces = new Mock<ITenantWorkspaceProvider>();
+        tenantWorkspaces.Setup(p => p.GetWorkspaceIdsAsync(40, It.IsAny<CancellationToken>())).ReturnsAsync([WorkspaceId, 11]);
+        var handler = new SignalRForwardingHandler<TenantCreditAllowanceReachedEvent>(hub.Context, new ClientFeedThrottle(new FixedTimeProvider(Now)), new WorkspaceMessageCounter(), tenantWorkspaces.Object);
+
+        await handler.Consume(Context(new TenantCreditAllowanceReachedEvent(WorkspaceId, 40, 80, 2000m, 1600m)));
+
+        hub.Sent.Should().BeEquivalentTo([
+            (NotificationHub.GroupName(WorkspaceId), "OnTenantCreditAllowanceReachedEvent"),
+            (NotificationHub.GroupName(11), "OnTenantCreditAllowanceReachedEvent")]);
+    }
+
+    [Fact]
+    public async Task The_account_credit_notice_reaches_its_own_workspace_without_an_account_copy()
+    {
+        var hub = new FakeHub();
+        var tenantWorkspaces = new Mock<ITenantWorkspaceProvider>();
+        tenantWorkspaces.Setup(p => p.GetWorkspaceIdsAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        var handler = new SignalRForwardingHandler<TenantCreditAllowanceReachedEvent>(hub.Context, new ClientFeedThrottle(new FixedTimeProvider(Now)), new WorkspaceMessageCounter(), tenantWorkspaces.Object);
+
+        await handler.Consume(Context(new TenantCreditAllowanceReachedEvent(WorkspaceId, 40, 100, 2000m, 2000m)));
+
+        hub.Sent.Should().ContainSingle().Which.Should().Be((NotificationHub.GroupName(WorkspaceId), "OnTenantCreditAllowanceReachedEvent"));
+    }
+
+    [Fact]
+    public void Every_tenant_scoped_event_names_its_tenant()
+    {
+        var scoped = ForwardedEvents().Where(t => Notify(t).Scope == NotifyScope.Tenant).ToList();
+
+        scoped.Should().Contain(typeof(TenantCreditAllowanceReachedEvent));
+        scoped.Should().AllSatisfy(t => typeof(ITenantContext).IsAssignableFrom(t).Should().BeTrue(t.Name));
+    }
+
+    [Fact]
     public async Task A_fast_client_is_capped_and_the_watchers_are_told_how_many_were_skipped()
     {
         var hub = new FakeHub();
         var time = new FixedTimeProvider(Now);
-        var handler = new SignalRForwardingHandler<ClientMessageReceivedEvent>(hub.Context, new ClientFeedThrottle(time), new WorkspaceMessageCounter());
+        var handler = new SignalRForwardingHandler<ClientMessageReceivedEvent>(hub.Context, new ClientFeedThrottle(time), new WorkspaceMessageCounter(), Mock.Of<ITenantWorkspaceProvider>());
 
         for (var i = 0; i < ClientFeedThrottle.MaxPerSecond + 5; i++)
         {
@@ -112,7 +152,7 @@ public sealed class ClientFeedScopeTests
         var hub = new FakeHub();
         var time = new FixedTimeProvider(Now);
         var counter = new WorkspaceMessageCounter(time);
-        var handler = new SignalRForwardingHandler<ClientMessageReceivedEvent>(hub.Context, new ClientFeedThrottle(time), counter);
+        var handler = new SignalRForwardingHandler<ClientMessageReceivedEvent>(hub.Context, new ClientFeedThrottle(time), counter, Mock.Of<ITenantWorkspaceProvider>());
 
         for (var i = 0; i < ClientFeedThrottle.MaxPerSecond * 2; i++)
         {
@@ -186,6 +226,19 @@ public sealed class ClientFeedScopeTests
                     .Callback((string method, object?[] args, CancellationToken _) =>
                     {
                         Sent.Add((group, method));
+                        Payloads.AddRange(args);
+                    })
+                    .Returns(Task.CompletedTask);
+                return proxy.Object;
+            });
+
+            clients.Setup(c => c.Groups(It.IsAny<IReadOnlyList<string>>())).Returns((IReadOnlyList<string> groups) =>
+            {
+                var proxy = new Mock<IClientProxy>();
+                proxy.Setup(p => p.SendCoreAsync(It.IsAny<string>(), It.IsAny<object?[]>(), It.IsAny<CancellationToken>()))
+                    .Callback((string method, object?[] args, CancellationToken _) =>
+                    {
+                        Sent.AddRange(groups.Select(g => (g, method)));
                         Payloads.AddRange(args);
                     })
                     .Returns(Task.CompletedTask);
