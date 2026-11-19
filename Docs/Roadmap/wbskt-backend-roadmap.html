@@ -314,8 +314,8 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "short": "Post",
    "due": null,
    "start": "2027-01-01",
-   "open": 86,
-   "closed": 14
+   "open": 79,
+   "closed": 21
   }
  ],
  "asks": [
@@ -341,6 +341,21 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   }
  ],
  "work": {
+  "1003": {
+   "state": "progress",
+   "why": "Eleven of the fifteen items are fixed (PR #1066, 19 Nov): escaped faults are 500s and stay off the bus, the exception path beside Result is gone, UTC readers, one clock, one shared-key check, the API client's plan limits and Retry-After, and the command line wins over shared config. Left: events as DateTimeOffset (149, with #333), the host wiring helper (153) and the management outbox (157); enums as strings (155) is deferred by decision.",
+   "prs": [1066]
+  },
+  "999": {
+   "state": "progress",
+   "why": "Backend done (PR #1063, 19 Nov): an invitee confirms their address once, a command is checked once in the sender, and the publish body carries only what the author owns. Left: the console sending the flat publish body (Amal); the nested body is a shim until then (#1059).",
+   "prs": [1063]
+  },
+  "994": {
+   "state": "progress",
+   "why": "Five of the eight items are fixed (PR #1061, 19 Nov): a sub-workflow step pays a run's start cost only when the child starts, the usage endpoint reads the SQL refusal sum, one ledger writer, one message notice per account, one out-of-credits code. Left: RunsRefusedAt on the plan copy (107), the console's link to billing (110, Amal) and a Redis-backed throttle and rate for more than one replica (111).",
+   "prs": [1061]
+  },
   "955": {
    "state": "progress",
    "why": "The account's 80% and 100% credit notice now reaches the console of every workspace in the account, as OnTenantCreditAllowanceReachedEvent (PR #1030, 19 Nov). Left: the console banner, and listeners for the message, cap and throttle events already on the wire (Amal).",
@@ -598,22 +613,22 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
  "issues": [
   {"n":1006,"t":"Workflow runtime small items from the 18 Nov review","s":"o","m":"Post","p":938,"a":["engine"],"pr":"P3"},
   {"n":1005,"t":"Workflow nodes small items from the 18 Nov review","s":"o","m":"Post","p":938,"a":["engine"],"pr":"P3"},
-  {"n":1004,"t":"Tenants and access small items from the 18 Nov review","s":"o","m":"Post","p":938,"a":["auth"],"pr":"P3"},
+  {"n":1004,"t":"Tenants and access small items from the 18 Nov review","s":"c","m":"Post","p":938,"a":["auth"],"pr":"P3","x":"2026-11-19"},
   {"n":1003,"t":"Shared infrastructure small items from the 18 Nov review","s":"o","m":"Post","p":938,"a":["management"],"pr":"P3"},
-  {"n":1002,"t":"Python library small items from the 18 Nov review","s":"o","m":"Post","p":938,"a":["sdk"],"pr":"P3"},
+  {"n":1002,"t":"Python library small items from the 18 Nov review","s":"c","m":"Post","p":938,"a":["sdk"],"pr":"P3","x":"2026-11-19"},
   {"n":1001,"t":"Platform services small items from the 18 Nov review","s":"o","m":"Post","p":938,"a":["management"],"pr":"P3"},
   {"n":1000,"t":"Main database small items from the 18 Nov review","s":"o","m":"Post","p":938,"a":["db"],"pr":"P3"},
   {"n":999,"t":"Journeys small items from the 18 Nov review","s":"o","m":"Post","p":938,"a":["management"],"pr":"P3"},
   {"n":998,"t":"Infra and CI small items from the 18 Nov review","s":"o","m":"Post","p":938,"a":["ops"],"pr":"P3"},
-  {"n":997,"t":"Identity small items from the 18 Nov review","s":"o","m":"Post","p":938,"a":["auth"],"pr":"P3"},
+  {"n":997,"t":"Identity small items from the 18 Nov review","s":"c","m":"Post","p":938,"a":["auth"],"pr":"P3","x":"2026-11-19"},
   {"n":996,"t":"Gateways small items from the 18 Nov review","s":"o","m":"Post","p":938,"a":["socket"],"pr":"P3"},
   {"n":995,"t":"Devices small items from the 18 Nov review","s":"o","m":"Post","p":938,"a":["management"],"pr":"P3"},
   {"n":994,"t":"Credits and metering small items from the 18 Nov review","s":"o","m":"Post","p":938,"a":["engine"],"pr":"P3"},
-  {"n":993,"t":"Billing and pricing small items from the 18 Nov review","s":"o","m":"Post","p":938,"a":["auth"],"pr":"P3"},
-  {"n":992,"t":"Auth database small items from the 18 Nov review","s":"o","m":"Post","p":938,"a":["db"],"pr":"P3"},
-  {"n":991,"t":"Arduino library small items from the 18 Nov review","s":"o","m":"Post","p":938,"a":["sdk"],"pr":"P3"},
+  {"n":993,"t":"Billing and pricing small items from the 18 Nov review","s":"c","m":"Post","p":938,"a":["auth"],"pr":"P3","x":"2026-11-19"},
+  {"n":992,"t":"Auth database small items from the 18 Nov review","s":"c","m":"Post","p":938,"a":["db"],"pr":"P3","x":"2026-11-19"},
+  {"n":991,"t":"Arduino library small items from the 18 Nov review","s":"c","m":"Post","p":938,"a":["sdk"],"pr":"P3","x":"2026-11-19"},
   {"n":990,"t":"Admin small items from the 18 Nov review","s":"o","m":"Post","p":938,"a":["auth"],"pr":"P3"},
-  {"n":989,"t":".NET library small items from the 18 Nov review","s":"o","m":"Post","p":938,"a":["sdk"],"pr":"P3"},
+  {"n":989,"t":".NET library small items from the 18 Nov review","s":"c","m":"Post","p":938,"a":["sdk"],"pr":"P3","x":"2026-11-19"},
   {"n":988,"t":"A board refused for the plan's client limit leaves no trace in the console","s":"o","m":"M3","p":938,"a":["management"],"pr":"P2"},
   {"n":987,"t":"No CI check validates alert rules, Prometheus and Alertmanager config or the prod compose file","s":"c","m":"M3","p":938,"a":["ops"],"pr":"P2","x":"2026-11-19"},
   {"n":986,"t":"A failed image pull fails the deploy and leaves .env on a release that is not running","s":"c","m":"M3","p":938,"a":["ops"],"pr":"P2","x":"2026-11-19"},
@@ -665,7 +680,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":941,"t":"On a real ESP32 the library never connects and leaks a TLS session on every attempt","s":"c","m":"M2","p":938,"a":["sdk"],"pr":"P1","x":"2026-11-19"},
   {"n":940,"t":"A 'Run workflow' step can start a workflow in another tenant's workspace","s":"c","m":"M2","p":938,"a":["engine"],"pr":"P1","x":"2026-11-19"},
   {"n":939,"t":"Commands reach devices as a JSON string, so the documented device code cannot read them","s":"c","m":"M2","p":938,"a":["socket"],"pr":"P1","x":"2026-11-19"},
-  {"n":938,"t":"Architecture review (18 Nov): follow-ups","s":"o","m":"M3","p":null,"a":[],"epic":1,"sub":{"completed":54,"total":96}},
+  {"n":938,"t":"Architecture review (18 Nov): follow-ups","s":"o","m":"M3","p":null,"a":[],"epic":1,"sub":{"completed":61,"total":96}},
   {"n":936,"t":"Review brief: component lanes, three angles and a whole-area read","s":"o","m":"M2","p":623,"a":["ops"]},
   {"n":931,"t":"Move MailKit to 5.0 and decide on .NET 11","s":"c","m":"Post","p":789,"a":["ops","engine"],"x":"2026-11-18"},
   {"n":929,"t":"Bump dependencies by hand and stop Dependabot version-update PRs","s":"c","m":"Post","p":789,"a":["ops"],"x":"2026-11-18"},
@@ -1004,6 +1019,14 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":127,"t":"Reject breached passwords using the Have I Been Pwned range API","s":"c","m":"M2","p":175,"a":["auth"],"pr":"P2","sz":"S","x":"2026-11-03"}
  ],
  "merged": [
+  {"n":1067,"t":"fix: platform halves of the SDK items from the 18 Nov review","d":"2026-11-19"},
+  {"n":1066,"t":"refactor: shared infrastructure items from the 18 Nov review","d":"2026-11-19"},
+  {"n":1063,"t":"fix(management): journeys review fixes","d":"2026-11-19"},
+  {"n":1061,"t":"fix(engine): credits and metering review fixes","d":"2026-11-19"},
+  {"n":1058,"t":"fix(auth): billing and pricing review fixes","d":"2026-11-19"},
+  {"n":1057,"t":"fix(db): close the auth database items from the 18 Nov review","d":"2026-11-19"},
+  {"n":1055,"t":"fix(auth): tenants and access items from the 18 Nov review","d":"2026-11-19"},
+  {"n":1051,"t":"fix(auth): identity clean-up from the 18 Nov review","d":"2026-11-19"},
   {"n":1041,"t":"fix(deploy): run deploys detached, one at a time, and pull with retries","d":"2026-11-19"},
   {"n":1039,"t":"test(conformance): check that an sdk notices a link that died without a close","d":"2026-11-19"},
   {"n":1037,"t":"feat(auth): let staff freeze an account so its workspaces only read","d":"2026-11-19"},
