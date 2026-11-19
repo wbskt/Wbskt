@@ -14,7 +14,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Insert-only, unlike Branch_Upsert: a Fork replayed after a crash asks for the same children
+    -- Insert-only, never an update: a Fork replayed after a crash asks for the same children
     -- again (their RefIds are derived from the parent's visit), and an existing child must be left
     -- exactly as it is - it may already be several nodes on. The caller learns from Inserted whether
     -- the row is new, so it counts and dispatches only the children this call created. The unique

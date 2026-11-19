@@ -64,7 +64,9 @@ removes the duplicates.
 
 - **Unused stored procedures.** List every `CREATE PROCEDURE` under `Databases/`. Search the C# for
   each name (providers call them by string). A procedure with no caller is a finding; the fix drops
-  it in the project and in the pre-deployment script, as #573 did.
+  it in the project and in the pre-deployment script, as #573 did. A provider calling it is not
+  enough: follow the provider method to a caller outside `Tests/`. One that only tests and test
+  fakes reach is unused too, and goes with its interface method (#1000 found nine).
 - **Indexes.** For each table, list its indexes and the queries that touch it. Flag indexes no query
   can use, duplicates and left-prefix overlaps, foreign keys with no supporting index, and hot
   queries that scan. Read the actual predicate, not the index name.

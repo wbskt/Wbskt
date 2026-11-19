@@ -32,7 +32,7 @@ public sealed class TestRunIntegrationTests(SqlEdgeFixture fixture)
         Assert.NotEqual(v1.Id, copy.Id);
         Assert.Equal(1, copy.Version);
         Assert.Equal(v1.Id, (await definitions.FindCurrentByRefIdAsync(refId, CancellationToken.None))!.Id);
-        Assert.Equal(v1.Id, await definitions.FindByRefIdVersionAsync(refId, 1, CancellationToken.None));
+        Assert.Equal(v1.Id, (await definitions.FindRowByRefIdVersionAsync(refId, 1, CancellationToken.None))!.Id);
         Assert.Single(await definitions.GetVersionsAsync(refId, workspaceId, CancellationToken.None));
         Assert.Single(await definitions.GetAllSummariesAsync(workspaceId, 0, 10, CancellationToken.None));
         Assert.Equal(2, (await definitions.InsertAsync(Row(refId, workspaceId), CancellationToken.None)).Version);

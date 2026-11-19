@@ -119,31 +119,4 @@ public sealed class WorkflowDefinitionProviderIntegrationTests(SqlEdgeFixture fi
 
         v2.Version.Should().Be(v1.Version + 1);
     }
-
-    [SkippableFact]
-    public async Task FindByRefIdVersionAsync_returns_id_for_existing_row()
-    {
-        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
-
-        var provider = ProviderFactory.WorkflowDefinition(fixture.ConnectionString);
-        Guid refId = Guid.NewGuid();
-
-        WorkflowDefinitionRow inserted = await provider.InsertAsync(BuildRow(refId), CancellationToken.None);
-
-        int? id = await provider.FindByRefIdVersionAsync(refId, inserted.Version, CancellationToken.None);
-
-        id.Should().Be(inserted.Id);
-    }
-
-    [SkippableFact]
-    public async Task FindByRefIdVersionAsync_returns_null_for_missing_row()
-    {
-        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
-
-        var provider = ProviderFactory.WorkflowDefinition(fixture.ConnectionString);
-
-        int? id = await provider.FindByRefIdVersionAsync(Guid.NewGuid(), 999, CancellationToken.None);
-
-        id.Should().BeNull();
-    }
 }

@@ -77,9 +77,8 @@ public sealed class CrashRecoveryIntegrationTests(SqlEdgeFixture fixture)
             CreatedAt = DateTime.UtcNow
         }, CancellationToken.None).LiveAsync(fixture.ConnectionString);
         
-        // 2. Insert a Run and an Orphaned Active Branch manually
+        // 2. Start a run whose root branch nothing runs: an orphaned Active branch
         Guid runRefId = Guid.NewGuid();
-        Guid branchRefId = Guid.NewGuid();
         
         var run = new RunRow
         {
@@ -99,25 +98,9 @@ public sealed class CrashRecoveryIntegrationTests(SqlEdgeFixture fixture)
             CreatedAt = DateTime.UtcNow
         };
         
-        var createdRun = await runProvider.CreateAsync(run, CancellationToken.None);
-        
-        var branch = new BranchRow
-        {
-            Id = 0,
-            RefId = branchRefId,
-            RunId = createdRun.Id,
-            ParentBranchId = null,
-            ForkCohortId = null,
-            NodeId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
-            Status = "Active",
-            PendingTakePort = null,
-            LocalJson = "{}",
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-            RowVersion = Array.Empty<byte>()
-        };
-        
-        var createdBranch = await branchProvider.CreateAsync(branch, CancellationToken.None);
+        // Run_Start writes the run and its root branch Active; nothing then runs it, which is the orphan.
+        RunStartRow started = await ActiveRunSeeder.StartAsync(fixture.ConnectionString, run);
+        RunRow createdRun = started.Run;
         
         // 3. Run Recovery Service with a Mock Dispatcher
         var mockDispatcher = new RecordingRunDispatcher();
@@ -137,7 +120,7 @@ public sealed class CrashRecoveryIntegrationTests(SqlEdgeFixture fixture)
         // about is that its own orphaned branch was among them, with the right reason.
         mockDispatcher.DispatchedBranches.Should().Contain(dispatched =>
             dispatched.RunId == createdRun.Id
-            && dispatched.BranchId == createdBranch.Id
+            && dispatched.BranchId == started.RootBranchId
             && dispatched.Reason == Wbskt.Workflow.Abstraction.Runtime.BranchExecutionReason.Recovered);
     }
 }

@@ -422,8 +422,6 @@ public sealed class RunCancellationServiceTests
 
         public RunRow UpdatedRun { get; private set; } = CreateRun(status);
 
-        public Task<RunRow> CreateAsync(RunRow row, CancellationToken ct) => throw new NotSupportedException();
-        public Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<RunRow> GetByIdAsync(long runId, CancellationToken ct) => Task.FromResult(UpdatedRun);
         public Task<RunRow?> FindRowByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct) => throw new NotSupportedException();
@@ -514,8 +512,6 @@ public sealed class RunCancellationServiceTests
 
     private sealed class BranchLoopRunProvider : IRunProvider
     {
-        public Task<RunRow> CreateAsync(RunRow row, CancellationToken ct) => throw new NotSupportedException();
-        public Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<RunRow> GetByIdAsync(long runId, CancellationToken ct) => Task.FromResult(new RunRow
         {
             Id = 42,
@@ -575,7 +571,6 @@ public sealed class RunCancellationServiceTests
         public BranchRow CurrentBranch => _rows[1001];
 
         public Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct) => throw new NotSupportedException();
-        public Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct) => throw new NotSupportedException();
         public Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct) => Task.FromResult(_rows[branchId]);
         public Task<BranchRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BranchRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BranchRow>>(_rows.Values.ToArray());
@@ -596,17 +591,6 @@ public sealed class RunCancellationServiceTests
 
         public List<int> DecrementCalls { get; } = [];
 
-        public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct)
-        {
-            return Task.FromResult(new RunCountersRow
-            {
-                RunId = runId,
-                ActiveBranchCount = 1,
-                CreditsConsumed = 0m,
-                UpdatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc)
-            });
-        }
-
         public Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct)
         {
             IncrementCalls.Add(delta);
@@ -626,13 +610,9 @@ public sealed class RunCancellationServiceTests
     private sealed class RecordingBookmarkProvider : IBookmarkProvider
     {
         public Task<BookmarkRow> CreateAsync(BookmarkRow row, CancellationToken ct) => throw new NotSupportedException();
-        public Task<BookmarkRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<BookmarkRow> GetByIdAsync(long bookmarkId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
         public Task<bool> TryClaimAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(DateTime nowUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
-        public Task DeleteAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<long> CountAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task<int> DeleteOrphansAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
     }
@@ -675,7 +655,6 @@ public sealed class RunCancellationServiceTests
         }
 
         public Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct) => throw new NotImplementedException();
-        public Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct) => throw new NotImplementedException();
         public Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct) => throw new NotImplementedException();
         public Task<BranchRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotImplementedException();
         public Task<IReadOnlyCollection<BranchRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotImplementedException();
@@ -693,14 +672,10 @@ public sealed class RunCancellationServiceTests
         }
 
         public Task<BookmarkRow> CreateAsync(BookmarkRow row, CancellationToken ct) => throw new NotImplementedException();
-        public Task<BookmarkRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotImplementedException();
-        public Task<BookmarkRow> GetByIdAsync(long bookmarkId, CancellationToken ct) => throw new NotImplementedException();
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeysAsync(IReadOnlyCollection<string> matchKeys, CancellationToken ct) => throw new NotImplementedException();
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotImplementedException();
         public Task<bool> TryClaimAsync(Guid refId, CancellationToken ct) => throw new NotImplementedException();
         public Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(DateTime nowUtc, int batchSize, CancellationToken ct) => throw new NotImplementedException();
-        public Task DeleteAsync(Guid refId, CancellationToken ct) => throw new NotImplementedException();
-        public Task<long> CountAsync(CancellationToken ct) => throw new NotImplementedException();
         public Task<int> DeleteOrphansAsync(CancellationToken ct) => throw new NotImplementedException();
     }
 
@@ -729,13 +704,6 @@ public sealed class RunCancellationServiceTests
     // whatever this returns - zero meaning "nothing left running".
     private sealed class IdleRunCountersProvider(int remainingAfterDecrement = 0) : IRunCountersProvider
     {
-        public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct) => Task.FromResult(new RunCountersRow
-        {
-            RunId = runId,
-            ActiveBranchCount = remainingAfterDecrement,
-            CreditsConsumed = 0m,
-            UpdatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc)
-        });
 
         public Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => throw new NotSupportedException();
         public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => Task.FromResult(remainingAfterDecrement);

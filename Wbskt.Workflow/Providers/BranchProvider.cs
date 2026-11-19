@@ -13,20 +13,9 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
 {
     public BranchProvider(IConfiguration configuration) : base(configuration) { }
 
-    public Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct)
+    public async Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct)
     {
-        return UpsertAsync(row, ct);
-    }
-
-    public async Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct)
-    {
-        return await ExecuteSingleAsync(
-            "dbo.Branch_Upsert",
-            p => AddRowParameters(p, row),
-            Map,
-            new InvalidOperationException("Branch_Upsert did not return a row."),
-            ct
-        );
+        return (await CreateIfAbsentAsync(row, ct)).Row;
     }
 
     public async Task<(BranchRow Row, bool Created)> CreateIfAbsentAsync(BranchRow row, CancellationToken ct)

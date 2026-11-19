@@ -310,7 +310,6 @@ public sealed class RunRecoveryServiceTests
         }
 
         public Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct) => throw new NotSupportedException();
-        public Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct) => throw new NotSupportedException();
         public Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct) => throw new NotSupportedException();
         public Task<BranchRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BranchRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
@@ -351,8 +350,6 @@ public sealed class RunRecoveryServiceTests
             _runs[run.Id] = run;
         }
 
-        public Task<RunRow> CreateAsync(RunRow row, CancellationToken ct) => throw new NotSupportedException();
-        public Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<RunRow> GetByIdAsync(long runId, CancellationToken ct) => Task.FromResult(_runs[runId]);
         public Task<IReadOnlyCollection<RunRow>> GetAllByStatusAsync(string status, CancellationToken ct) =>
             Task.FromResult<IReadOnlyCollection<RunRow>>(_runs.Values.Where(run => run.Status == status).ToArray());

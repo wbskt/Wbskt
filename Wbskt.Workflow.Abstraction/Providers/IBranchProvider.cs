@@ -6,7 +6,6 @@ namespace Wbskt.Workflow.Abstraction.Providers;
 public interface IBranchProvider
 {
     Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct);
-    Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct);
     Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct);
     Task<BranchRow> GetByRefIdAsync(Guid refId, CancellationToken ct);
     Task<IReadOnlyCollection<BranchRow>> GetAllByRunIdAsync(int runId, CancellationToken ct);

@@ -165,13 +165,13 @@ public sealed class AbandonedClaimIntegrationTests(SqlEdgeFixture fixture)
             DefinitionJson = """{"nodes":[],"edges":[]}""", PublishedBy = 1, CreatedAt = DateTime.UtcNow
         }, CancellationToken.None).LiveAsync(fixture.ConnectionString);
 
-        return await ProviderFactory.Run(fixture.ConnectionString).CreateAsync(new RunRow
+        return (await ActiveRunSeeder.StartAsync(fixture.ConnectionString, new RunRow
         {
             Id = 0, RefId = Guid.NewGuid(),
             WorkflowDefinitionId = wd.Id, WorkflowRefId = wd.RefId, WorkflowVersion = wd.Version,
             TriggerNodeId = Guid.NewGuid(), CorrelationKey = null, Status = "Running",
             StartedAt = DateTime.UtcNow, CompletedAt = null, CancellationRequestedAt = null,
             CancellationReason = null, CreditBudget = 0m, CreatedAt = DateTime.UtcNow
-        }, CancellationToken.None);
+        })).Run;
     }
 }

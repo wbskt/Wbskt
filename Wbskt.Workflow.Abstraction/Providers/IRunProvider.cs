@@ -6,7 +6,6 @@ namespace Wbskt.Workflow.Abstraction.Providers;
 
 public interface IRunProvider
 {
-    Task<RunRow> CreateAsync(RunRow row, CancellationToken ct);
 
     /// <summary>
     /// Creates a triggered run together with its counters and root branch, in one transaction. When
@@ -50,7 +49,6 @@ public interface IRunProvider
     /// <summary>The run <see cref="StartAsync"/> created under this key, if there is one.</summary>
     Task<RunStartRow?> FindByTriggerStartKeyAsync(string triggerStartKey, CancellationToken ct)
         => Task.FromResult<RunStartRow?>(null);
-    Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct);
     Task<RunRow> GetByIdAsync(long runId, CancellationToken ct);
     Task<RunRow?> FindRowByRefIdAsync(Guid refId, CancellationToken ct);
     Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct);

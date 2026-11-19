@@ -6,7 +6,6 @@ namespace Wbskt.Workflow.Abstraction.Providers;
 
 public interface IWorkflowDefinitionProvider
 {
-    Task<int?> FindByRefIdVersionAsync(Guid refId, int version, CancellationToken ct);
     Task<WorkflowDefinitionRow> GetByIdAsync(int id, CancellationToken ct);
 
     /// <summary>The workspace of definition <paramref name="id"/>, without reading its JSON. Null when there is no such row.</summary>

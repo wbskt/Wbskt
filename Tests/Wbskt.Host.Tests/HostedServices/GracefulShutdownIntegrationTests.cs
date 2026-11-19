@@ -66,8 +66,6 @@ public sealed class GracefulShutdownIntegrationTests
             .ReturnsAsync(Array.Empty<BookmarkRow>());
         mock.Setup(x => x.DeleteOrphansAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(0);
-        mock.Setup(x => x.CountAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(0L);
         return mock.Object;
     }
 

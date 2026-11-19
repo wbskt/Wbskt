@@ -45,27 +45,7 @@ internal sealed class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
         return result;
     }
 
-    public async Task<BookmarkRow> GetByRefIdAsync(Guid refId, CancellationToken ct)
-    {
-        return await ExecuteSingleAsync(
-            "dbo.Bookmark_GetBy_RefId",
-            p => p.AddWithValue("@RefId", refId),
-            Map,
-            new KeyNotFoundException($"Bookmark with RefId={refId} not found."),
-            ct
-        );
-    }
 
-    public async Task<BookmarkRow> GetByIdAsync(long bookmarkId, CancellationToken ct)
-    {
-        return await ExecuteSingleAsync(
-            "dbo.Bookmark_GetBy_Id",
-            p => p.AddWithValue("@Id", bookmarkId),
-            Map,
-            new KeyNotFoundException($"Bookmark with Id={bookmarkId} not found."),
-            ct
-        );
-    }
 
     public async Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeysAsync(IReadOnlyCollection<string> matchKeys, CancellationToken ct)
     {
@@ -132,24 +112,7 @@ internal sealed class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
         );
     }
 
-    public async Task DeleteAsync(Guid refId, CancellationToken ct)
-    {
-        await ExecuteNonQueryAsync(
-            "dbo.Bookmark_Delete",
-            p => p.AddWithValue("@RefId", refId),
-            ct
-        );
-    }
 
-    public async Task<long> CountAsync(CancellationToken ct)
-    {
-        var result = await ExecuteScalarAsync<object>(
-            "dbo.Bookmark_Count",
-            null,
-            ct
-        );
-        return result is long count ? count : Convert.ToInt64(result ?? 0L);
-    }
 
     public async Task<long> CountOverdueAsync(DateTime cutoffUtc, CancellationToken ct)
     {

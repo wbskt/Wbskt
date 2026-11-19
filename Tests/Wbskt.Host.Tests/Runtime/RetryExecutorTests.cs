@@ -433,8 +433,6 @@ public sealed class RetryExecutorTests
     {
         public int Calls { get; private set; }
 
-        public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct) => new UnlimitedRunCountersProvider().GetByRunIdAsync(runId, ct);
-
         public Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => Task.FromResult(0);
 
         public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => Task.FromResult(0);
@@ -991,7 +989,7 @@ public sealed class RetryExecutorTests
         Assert.IsType<NodeExecutionResult.Terminal>(result);
         Assert.Equal(1, executor.AttemptCount);
         countersMock.Verify(p => p.TryChargeAsync(42, It.IsAny<decimal>(), It.IsAny<CancellationToken>()), Times.Once);
-        countersMock.Verify(p => p.GetByRunIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        countersMock.VerifyNoOtherCalls();
     }
 
     [Theory]

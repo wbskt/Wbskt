@@ -14,27 +14,6 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
 {
     public RunProvider(IConfiguration configuration) : base(configuration) { }
 
-    public async Task<RunRow> CreateAsync(RunRow row, CancellationToken ct)
-    {
-        return await ExecuteSingleAsync(
-            "dbo.Run_Create",
-            p =>
-            {
-                p.AddWithValue("@RefId", row.RefId);
-                p.AddWithValue("@WorkflowDefinitionId", row.WorkflowDefinitionId);
-                p.AddWithValue("@WorkflowRefId", row.WorkflowRefId);
-                p.AddWithValue("@WorkflowVersion", row.WorkflowVersion);
-                p.AddWithValue("@TriggerNodeId", row.TriggerNodeId);
-                p.AddWithValue("@CorrelationKey", (object?)row.CorrelationKey ?? DBNull.Value);
-                p.AddWithValue("@StartedAt", row.StartedAt);
-                p.AddWithValue("@CreditBudget", row.CreditBudget);
-                p.AddWithValue("@ParentRunRefId", (object?)row.ParentRunRefId ?? DBNull.Value);
-            },
-            Map,
-            new InvalidOperationException("Run_Create did not return a row."),
-            ct
-        );
-    }
 
     public Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, CancellationToken ct)
         => StartAsync(run, rootBranch, triggerStartKey, 0, null, ct);
@@ -125,15 +104,6 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
         );
     }
 
-    public async Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct)
-    {
-        var result = await ExecuteScalarAsync<object>(
-            "dbo.Run_FindBy_RefId",
-            p => p.AddWithValue("@RefId", refId),
-            ct
-        );
-        return result is int id ? id : (result == null ? null : Convert.ToInt32(result));
-    }
 
     public async Task<RunRow> GetByIdAsync(long runId, CancellationToken ct)
     {

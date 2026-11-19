@@ -325,3 +325,28 @@ EventLog_GetBy_* procedures. DropObjectsNotInSource is off, so it is dropped her
 */
 DROP VIEW IF EXISTS dbo.ViewEvents;
 GO
+/*
+These nine were reached only by tests once Run_Start took over creating a run with its counters and
+root branch (Run_Create, RunCounters_GetBy_RunId, Branch_Upsert) and the engine read bookmarks by
+claim and match key (Bookmark_Delete, Bookmark_Count, Bookmark_GetBy_Id, Bookmark_GetBy_RefId).
+Run_FindBy_RefId and WorkflowDefinition_FindBy_RefId_Version had no caller. DropObjectsNotInSource is
+off, so they are dropped here.
+*/
+DROP PROCEDURE IF EXISTS dbo.Run_Create;
+GO
+DROP PROCEDURE IF EXISTS dbo.Run_FindBy_RefId;
+GO
+DROP PROCEDURE IF EXISTS dbo.RunCounters_GetBy_RunId;
+GO
+DROP PROCEDURE IF EXISTS dbo.Branch_Upsert;
+GO
+DROP PROCEDURE IF EXISTS dbo.Bookmark_Delete;
+GO
+DROP PROCEDURE IF EXISTS dbo.Bookmark_Count;
+GO
+DROP PROCEDURE IF EXISTS dbo.Bookmark_GetBy_Id;
+GO
+DROP PROCEDURE IF EXISTS dbo.Bookmark_GetBy_RefId;
+GO
+DROP PROCEDURE IF EXISTS dbo.WorkflowDefinition_FindBy_RefId_Version;
+GO

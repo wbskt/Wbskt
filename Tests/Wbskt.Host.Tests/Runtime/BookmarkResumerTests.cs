@@ -384,15 +384,6 @@ public sealed class BookmarkResumerTests
         public List<Guid> ClaimedRefIds { get; } = [];
 
         public Task<BookmarkRow> CreateAsync(BookmarkRow row, CancellationToken ct) => throw new NotSupportedException();
-        public Task<BookmarkRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<BookmarkRow> GetByIdAsync(long bookmarkId, CancellationToken ct)
-        {
-            if (bookmark is not null && bookmark.Id == bookmarkId)
-            {
-                return Task.FromResult(bookmark);
-            }
-            return Task.FromException<BookmarkRow>(new KeyNotFoundException());
-        }
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeysAsync(IReadOnlyCollection<string> matchKeys, CancellationToken ct)
         {
             LastMatchKey = matchKeys.FirstOrDefault();
@@ -428,8 +419,6 @@ public sealed class BookmarkResumerTests
         }
 
         public Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(DateTime nowUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
-        public Task DeleteAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<long> CountAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task<int> DeleteOrphansAsync(CancellationToken ct) => Task.FromResult(0);
         public Task DeleteAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
     }
@@ -613,7 +602,6 @@ public sealed class BookmarkResumerTests
             });
 
         public Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct) => throw new NotSupportedException();
-        public Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct) => throw new NotSupportedException();
         public Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct) => throw new NotSupportedException();
         public Task<BranchRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult(_branches[refId]);
         public List<(long BranchId, string LocalJson)> PointerUpdates { get; } = [];

@@ -24,14 +24,14 @@ public sealed class HistoryEventTvpIntegrationTests(SqlEdgeFixture fixture)
         }, CancellationToken.None).LiveAsync(fixture.ConnectionString);
 
         var runProvider = ProviderFactory.Run(fixture.ConnectionString);
-        RunRow run = await runProvider.CreateAsync(new RunRow
+        RunRow run = (await ActiveRunSeeder.StartAsync(fixture.ConnectionString, new RunRow
         {
             Id = 0, RefId = Guid.NewGuid(),
             WorkflowDefinitionId = wd.Id, WorkflowRefId = wd.RefId, WorkflowVersion = wd.Version,
             TriggerNodeId = Guid.NewGuid(), CorrelationKey = null, Status = "Running",
             StartedAt = DateTime.UtcNow, CompletedAt = null, CancellationRequestedAt = null,
             CancellationReason = null, CreditBudget = 0m, CreatedAt = DateTime.UtcNow
-        }, CancellationToken.None);
+        })).Run;
 
         return run.Id;
     }

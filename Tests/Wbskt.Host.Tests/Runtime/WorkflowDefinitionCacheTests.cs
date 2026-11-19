@@ -107,11 +107,6 @@ public sealed class WorkflowDefinitionCacheTests
 
         public List<int> RequestedIds { get; } = [];
 
-        public Task<int?> FindByRefIdVersionAsync(Guid refId, int version, CancellationToken ct)
-        {
-            throw new NotSupportedException();
-        }
-
         public Task<WorkflowDefinitionRow> GetByIdAsync(int id, CancellationToken ct)
         {
             RequestedIds.Add(id);

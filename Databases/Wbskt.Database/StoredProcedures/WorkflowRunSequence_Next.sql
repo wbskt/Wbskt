@@ -1,4 +1,4 @@
--- The next run number for a workflow. Called inside the caller's transaction (Run_Start, Run_Create)
+-- The next run number for a workflow. Called inside the caller's transaction (Run_Start)
 -- so the row lock it takes is held until the run is inserted: concurrent starts of one workflow take
 -- turns for that short tail only, and a start that rolls back hands its number back.
 CREATE PROCEDURE dbo.WorkflowRunSequence_Next
