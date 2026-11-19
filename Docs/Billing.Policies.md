@@ -21,6 +21,11 @@ customer-facing parts of it, so a change here goes there too.
   - The operator issues the refund in the provider's dashboard, for the whole payment, and cancels the
     subscription. The refund withholds the paid plan until the subscription is paid past the refunded
     period, so the tenant drops to Free at once.
+  - Refunding an upgrade's proration charge (made mid-period) withholds the paid plan to the end of
+    the period in force, not for a month from the charge: the tenant is on Free for the rest of that
+    period and back on its plan at the next renewal it pays for. The plan it had before the upgrade
+    is not restored for the rest of the period, so refund a proration only with the whole payment it
+    went with, or not at all.
   - A billing mistake (a wrong charge, a duplicate the code did not catch) is refunded in full whenever
     it is found.
   - A second subscription paid by mistake at the same time is cancelled and refunded automatically.

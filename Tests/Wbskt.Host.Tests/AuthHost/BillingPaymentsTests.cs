@@ -134,13 +134,27 @@ public sealed class BillingPaymentsTests
     public void A_refunded_period_withholds_the_plan_until_the_subscription_is_paid_past_it()
     {
         DateTime now = Now.UtcDateTime;
-        DateTime refundedThrough = SubscriptionPlan.RefundedThrough(now.AddDays(-2), BillingInterval.Monthly);
+        DateTime refundedThrough = SubscriptionPlan.RefundedThrough(now.AddDays(-2), BillingInterval.Monthly, now.AddDays(28));
 
         var refunded = Subscription(SubscriptionStatus.Active, periodEnd: now.AddDays(28)) with { RefundedThrough = refundedThrough };
         var renewed = refunded with { CurrentPeriodEnd = now.AddDays(58) };
 
         Assert.Equal(PlanCode.Free, SubscriptionPlan.Decide(refunded, now, TimeSpan.FromDays(7)));
         Assert.Equal(PlanCode.Pro, SubscriptionPlan.Decide(renewed, now, TimeSpan.FromDays(7)));
+    }
+
+    /// <summary>
+    /// An upgrade's proration charge is made mid-period. Refunding it withholds the plan to the end of the
+    /// period in force, not a whole month from the charge, so the next period the tenant pays for has it.
+    /// A refund of an old period's charge read later is not moved forward to the period now in force.
+    /// </summary>
+    [Fact]
+    public void A_refunded_charge_withholds_the_plan_no_further_than_the_period_in_force()
+    {
+        DateTime now = Now.UtcDateTime;
+
+        Assert.Equal(now.AddDays(10), SubscriptionPlan.RefundedThrough(now.AddDays(-1), BillingInterval.Monthly, now.AddDays(10)));
+        Assert.Equal(now.AddDays(-40).AddMonths(1).AddDays(1), SubscriptionPlan.RefundedThrough(now.AddDays(-40), BillingInterval.Monthly, now.AddDays(20)));
     }
 
     // ----- Sync --------------------------------------------------------------------------------------
@@ -507,7 +521,7 @@ public sealed class BillingPaymentsTests
 
         await Sync().SyncPaymentAsync("pay_2", CancellationToken.None);
 
-        DateTime expected = SubscriptionPlan.RefundedThrough(Now.UtcDateTime.AddDays(-3), BillingInterval.Monthly);
+        DateTime expected = SubscriptionPlan.RefundedThrough(Now.UtcDateTime.AddDays(-3), BillingInterval.Monthly, Now.UtcDateTime.AddDays(27));
         _billing.Verify(b => b.UpsertSubscriptionAsync(It.IsAny<TenantSubscription>(), It.IsAny<DateTime>(), expected, It.IsAny<CancellationToken>()));
         _planService.Verify(p => p.SetAsync(TenantRef, It.Is<SetTenantPlanRequest>(r => r.PlanCode == PlanCode.Free), It.IsAny<PlanSource>(), It.IsAny<CancellationToken>()));
     }
@@ -525,7 +539,7 @@ public sealed class BillingPaymentsTests
 
         await Sync().SyncPaymentAsync("pay_3", CancellationToken.None);
 
-        DateTime expected = SubscriptionPlan.RefundedThrough(Now.UtcDateTime.AddDays(-3), BillingInterval.Yearly);
+        DateTime expected = SubscriptionPlan.RefundedThrough(Now.UtcDateTime.AddDays(-3), BillingInterval.Yearly, Now.UtcDateTime.AddDays(360));
         _billing.Verify(b => b.UpsertSubscriptionAsync(It.IsAny<TenantSubscription>(), It.IsAny<DateTime>(), expected, It.IsAny<CancellationToken>()));
         _planService.Verify(p => p.SetAsync(TenantRef, It.Is<SetTenantPlanRequest>(r => r.PlanCode == PlanCode.Free), It.IsAny<PlanSource>(), It.IsAny<CancellationToken>()));
     }
@@ -543,7 +557,8 @@ public sealed class BillingPaymentsTests
 
         await Sync().SyncPaymentAsync("pay_4", CancellationToken.None);
 
-        DateTime expected = SubscriptionPlan.RefundedThrough(Now.UtcDateTime.AddDays(-3), BillingInterval.Monthly);
+        DateTime expected = SubscriptionPlan.RefundedThrough(Now.UtcDateTime.AddDays(-3), BillingInterval.Monthly, Now.UtcDateTime.AddDays(360));
+        Assert.Equal(Now.UtcDateTime.AddDays(-3).AddMonths(1).AddDays(1), expected);
         _billing.Verify(b => b.UpsertSubscriptionAsync(It.IsAny<TenantSubscription>(), It.IsAny<DateTime>(), expected, It.IsAny<CancellationToken>()));
     }
 

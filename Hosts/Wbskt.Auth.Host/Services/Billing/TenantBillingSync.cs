@@ -169,7 +169,7 @@ internal sealed class TenantBillingSync(
                 ScheduledAt = scheduled is null ? null : subscription.Scheduled!.EffectiveAt.UtcDateTime
             },
             now,
-            reversed is { } payment ? SubscriptionPlan.RefundedThrough(payment.PaidAt, payment.Interval ?? offer.Interval) : null,
+            reversed is { } payment ? SubscriptionPlan.RefundedThrough(payment.PaidAt, payment.Interval ?? offer.Interval, subscription.PeriodEnd.UtcDateTime) : null,
             ct);
 
         await TellPaymentFailedAsync(saved, ct);
