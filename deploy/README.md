@@ -444,8 +444,29 @@ has no container at all.
 - A **host** left out of a `--services` deploy is reported with the `deploy.sh` command that brings it up to date.
 
 A failed or timed-out deploy opens one issue, labelled `deploy-failed`; each later failure comments on
-it and the next successful deploy closes it. The job is bounded at 30 minutes, and the ssh session
+it and the next successful deploy closes it. The job is bounded at 75 minutes, and the ssh session
 ends within a minute of the VM going silent.
+
+**A deploy runs detached on the VM.** `deploy.sh` starts itself again in a session of its own
+(`setsid`, `nohup`) and only follows that copy's log, so a job timeout, a dropped connection or
+Ctrl-C on a hand-run deploy stops the watching, never the deploy: it can no longer be cut off between
+a migration and the hosts that need it. Each deploy's log and exit status are kept on the VM, the
+last 20 of them:
+
+```bash
+ls -t ~/.local/state/wbskt-deploy/ | head                 # newest first
+tail -f "$(ls -t ~/.local/state/wbskt-deploy/*.log | head -1)"
+```
+
+**One deploy at a time, from every repo.** Backend, console (`--console-tag`) and admin
+(`--admin-tag`) deploys take the same lock on the VM (`/run/lock/wbskt-deploy.lock`) and wait up to
+an hour for one already running. Each repo's workflow only queues its own deploys, and two at once
+rewrote the same `.env` and pruned the images the other had just pulled.
+
+**`.env` names what is running.** An image pull is tried three times, and the new tag is written to
+`.env` only once the images are pulled (and, for the backend, migrated for), just before the first
+container is started on them. A deploy that stops before then leaves `.env` naming the release still
+running.
 
 ## Network changes
 
@@ -1024,7 +1045,7 @@ Both decisions, written down so the next person does not have to guess:
 
 Every deploy pulls a fresh `sha-<short>` tag of each host and the migrator. `deploy.sh` now runs
 `docker image prune -af` before pulling, which removes every image no container is using (the
-running stack keeps its own), then refuses to continue if less than 3 GB is free on the image
+running stack keeps its own; it is safe because no other deploy can be pulling at the same time), then refuses to continue if less than 3 GB is free on the image
 store. That check runs before anything is stopped, so a failure there leaves production as it was.
 Rolling back to an older tag simply pulls it from GHCR again.
 

@@ -46,9 +46,12 @@ jobs:
       cancel-in-progress: false
     # Gate on a GitHub Environment so production deploys can require a reviewer's approval.
     environment: production
-    # A deploy takes a few minutes. Without a bound, an ssh session to a VM that stopped answering
-    # mid-deploy hangs for GitHub's default of 6 hours, holding the deploy queue the whole time.
-    timeout-minutes: 30
+    # Bounds only the watching: deploy.sh runs detached on the VM, so a timeout here (or a dropped
+    # session) leaves the deploy to finish there, never stops it between a migration and the hosts.
+    # Long enough for a pull, a migration statement at MIGRATE_COMMAND_TIMEOUT (30 minutes) and the
+    # health waits, plus a wait for a console or admin deploy holding the VM's deploy lock. Without a
+    # bound, an ssh session to a VM that stopped answering would hold the queue for 6 hours.
+    timeout-minutes: 75
     permissions:
       contents: read
       # The last step opens an issue when a deploy fails, so a failure is not left to be noticed.
@@ -130,7 +133,8 @@ jobs:
           fi
           echo "deploy.sh ${args[*]}"
           # The keepalives end the session within a minute of the VM going silent, rather than
-          # leaving it to the job's timeout.
+          # leaving it to the job's timeout. Either way only the watching ends: deploy.sh carries on
+          # detached and keeps its log on the VM (~/.local/state/wbskt-deploy).
           ssh -i "$RUNNER_TEMP/id_deploy" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 \
             -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
             -o UserKnownHostsFile="$RUNNER_TEMP/known_hosts" \
@@ -206,6 +210,10 @@ jobs:
             .github/scripts/sync-labelled-issue.sh close deploy-failed "$title" \
               "The deploy of \`$TAG\` succeeded: $RUN_URL"
           else
+            note=""
+            if [[ "$RESULT" == cancelled ]]; then
+              note=" A cancelled or timed-out job stops only the watching: the deploy may still be running, or have finished, on the VM. Its log is under ~/.local/state/wbskt-deploy there."
+            fi
             COMMENT_IF_OPEN=true .github/scripts/sync-labelled-issue.sh open deploy-failed "$title" \
-              "The deploy of \`$TAG\` ended in $RESULT: $RUN_URL"
+              "The deploy of \`$TAG\` ended in $RESULT: $RUN_URL$note"
           fi
