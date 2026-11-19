@@ -157,6 +157,10 @@ public sealed class EventLogStorageIntegrationTests(SqlEdgeFixture fixture)
         var older = await provider.GetLogsAsync(workspaceId, new EventLogFilter(), cursorId: trafficId, take: 10);
         Assert.Single(older);
 
+        // The export streams the same rows, and stops at its take.
+        Assert.Equal(all.Select(r => r.Id), await provider.StreamLogsAsync(workspaceId, new EventLogFilter(), take: 10).Select(r => r.Id).ToListAsync());
+        Assert.Equal(2, await provider.StreamLogsAsync(workspaceId, new EventLogFilter(), take: 2).CountAsync());
+
         var auditOnly = await provider.GetLogsAsync(workspaceId, new EventLogFilter(IncludeClientTraffic: false), cursorId: null, take: 10);
         Assert.Equal(2, auditOnly.Count);
         Assert.All(auditOnly, r => Assert.Equal("ClientConnectedEvent", r.Entry.EventName));

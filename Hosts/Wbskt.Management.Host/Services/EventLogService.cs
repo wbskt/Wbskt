@@ -1,9 +1,10 @@
 using Wbskt.Events;
 using Wbskt.Events.Abstractions;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Csv;
 using Wbskt.Management.Host.Models;
-using Wbskt.Management.Models;
 using Wbskt.Management.Host.Providers;
+using Wbskt.Management.Models;
 using Wbskt.Models;
 
 namespace Wbskt.Management.Host.Services;
@@ -82,26 +83,27 @@ internal sealed class EventLogService : IEventLogService
         return Result<Page<EventLogResponse>>.Success(ToPage(rows, take));
     }
 
-    public async Task<Result<string>> GetCsvAsync(int workspaceId, EventLogQuery query, CancellationToken cancellationToken = default)
+    public async Task<Result<CsvExport>> GetCsvAsync(int workspaceId, EventLogQuery query, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Exporting event logs for WorkspaceId: {WorkspaceId}", workspaceId);
 
         var range = TimeRange.Resolve(query.From, query.To, _timeProvider.GetUtcNow(), DefaultRange, MaxRange);
         if (range.IsFailure)
         {
-            return Result<string>.Failure(range.Error);
+            return Result<CsvExport>.Failure(range.Error);
         }
 
         var filter = await ResolveFilterAsync(workspaceId, query, range.Value, cancellationToken);
         if (filter.IsFailure)
         {
-            return Result<string>.Failure(filter.Error);
+            return Result<CsvExport>.Failure(filter.Error);
         }
 
-        IReadOnlyCollection<EventLogRow> rows = filter.Value is null
-            ? []
-            : await _eventProvider.GetLogsAsync(workspaceId, filter.Value, null, MaxExportRows, cancellationToken);
-        return Result<string>.Success(EventLogCsv.Write(rows.Select(r => r.Entry)));
+        // One more than is written, so a file cut at the limit says so in its last line.
+        var rows = filter.Value is null
+            ? AsyncEnumerable.Empty<EventLogRow>()
+            : _eventProvider.StreamLogsAsync(workspaceId, filter.Value, MaxExportRows + 1, cancellationToken);
+        return Result<CsvExport>.Success(new CsvExport(EventLogCsv.Header, rows.Select(r => EventLogCsv.Row(r.Entry)), MaxExportRows));
     }
 
     public async Task<Result<EventLogSummaryResponse>> GetSummaryAsync(int workspaceId, DateTimeOffset? from, DateTimeOffset? to, EventLogTraffic traffic, CancellationToken cancellationToken = default)

@@ -1,12 +1,13 @@
-using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Authorization;
+using Wbskt.Infrastructure.Csv;
 using Wbskt.Management.Host.Authorization;
 using Wbskt.Management.Host.Models;
-using Wbskt.Management.Models;
 using Wbskt.Management.Host.Services;
+using Wbskt.Management.Models;
 using Wbskt.Models;
 using Wbskt.Primitives.Constants;
 
@@ -70,6 +71,7 @@ public sealed class EventLogsController : ApiControllerBase
     /// first. The range defaults to the last 7 days, and the file holds at most 100,000 rows.
     /// </summary>
     [HttpGet("csv")]
+    [EnableRateLimiting(RateLimitPolicies.Export)]
     [Produces("text/csv")]
     [RequiresPermission(PermissionNames.LogsRead)]
     public async Task<IActionResult> GetCsv(
@@ -84,6 +86,6 @@ public sealed class EventLogsController : ApiControllerBase
             return MapError(csv.Error);
         }
 
-        return File(Encoding.UTF8.GetBytes(csv.Value), "text/csv; charset=utf-8", $"event-log-{workspaceRef}.csv");
+        return new CsvFileResult($"event-log-{workspaceRef}.csv", csv.Value);
     }
 }

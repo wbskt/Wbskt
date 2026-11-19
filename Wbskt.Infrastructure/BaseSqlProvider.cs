@@ -1,4 +1,5 @@
 using System.Data;
+using System.Runtime.CompilerServices;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Wbskt.Models;
@@ -85,6 +86,32 @@ public abstract class BaseSqlProvider
         }
 
         return result.AsReadOnly();
+    }
+
+    /// <summary>
+    /// The rows mapped one at a time as they are read, for a result too large to hold (an export). The
+    /// connection stays open until the caller stops enumerating, so it must not wait on anything slow
+    /// between rows except writing them out.
+    /// </summary>
+    protected async IAsyncEnumerable<T> ExecuteStreamAsync<T>(
+        string procedureName,
+        Action<SqlParameterCollection>? addParameters,
+        Func<SqlDataReader, T> map,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand(procedureName, connection);
+        command.CommandType = CommandType.StoredProcedure;
+
+        addParameters?.Invoke(command.Parameters);
+
+        await connection.OpenAsync(cancellationToken);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            yield return map(reader);
+        }
     }
 
     protected async Task<IPagedList<T>> ExecutePagedCollectionAsync<T>(

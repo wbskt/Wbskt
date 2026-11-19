@@ -1,4 +1,5 @@
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Csv;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Models;
 using Wbskt.Models;
@@ -25,7 +26,7 @@ public interface IEventLogService
     /// <see cref="EventLogService.MaxExportRows"/>. The range defaults to the last
     /// <see cref="EventLogService.DefaultRange"/>.
     /// </summary>
-    Task<Result<string>> GetCsvAsync(int workspaceId, EventLogQuery query, CancellationToken cancellationToken = default);
+    Task<Result<CsvExport>> GetCsvAsync(int workspaceId, EventLogQuery query, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// How many entries each group has over [from, to), which defaults to the last

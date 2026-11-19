@@ -1,9 +1,10 @@
-using Wbskt.Models;
 using System.Globalization;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Csv;
 using Wbskt.Management.Host.Models;
-using Wbskt.Management.Models;
 using Wbskt.Management.Host.Providers;
+using Wbskt.Management.Models;
+using Wbskt.Models;
 
 namespace Wbskt.Management.Host.Services.Readings;
 
@@ -23,7 +24,7 @@ public interface IClientReadingService
     /// back only the plan's raw days; "hourly" gives one row per variable and hour, raw and rolled-up
     /// alike, as far back as the chart.
     /// </summary>
-    Task<Result<string>> ExportCsvAsync(int workspaceId, Guid clientRef, string? name, DateTimeOffset? from, DateTimeOffset? to, string? resolution, CancellationToken cancellationToken = default);
+    Task<Result<CsvExport>> ExportCsvAsync(int workspaceId, Guid clientRef, string? name, DateTimeOffset? from, DateTimeOffset? to, string? resolution, CancellationToken cancellationToken = default);
 }
 
 public sealed class ClientReadingService : IClientReadingService
@@ -98,18 +99,24 @@ public sealed class ClientReadingService : IClientReadingService
         return Result<ClientReadingsResponse>.Success(new ClientReadingsResponse(name, fromUtc.ToUtcOffset(), toUtc.ToUtcOffset(), bucketSeconds, buckets));
     }
 
-    public async Task<Result<string>> ExportCsvAsync(int workspaceId, Guid clientRef, string? name, DateTimeOffset? from, DateTimeOffset? to, string? resolution, CancellationToken cancellationToken = default)
+    public async Task<Result<CsvExport>> ExportCsvAsync(int workspaceId, Guid clientRef, string? name, DateTimeOffset? from, DateTimeOffset? to, string? resolution, CancellationToken cancellationToken = default)
     {
+        // A range over the limit is refused before anything is written (READINGS_RANGE_TOO_LARGE), so
+        // these rows are already in hand; the file is still written a row at a time.
         switch (resolution?.ToLowerInvariant())
         {
             case null or "raw":
                 var readings = await GetRangeAsync(workspaceId, clientRef, name, from, to, cancellationToken);
-                return readings.IsSuccess ? Result<string>.Success(ClientReadingsCsv.Write(readings.Value)) : Result<string>.Failure(readings.Error);
+                return readings.IsSuccess
+                    ? Result<CsvExport>.Success(new CsvExport(ClientReadingsCsv.Header, readings.Value.Select(ClientReadingsCsv.Row).ToAsyncEnumerable(), MaxExportRows))
+                    : Result<CsvExport>.Failure(readings.Error);
             case "hourly":
                 var hours = await GetHourlyRangeAsync(workspaceId, clientRef, name, from, to, cancellationToken);
-                return hours.IsSuccess ? Result<string>.Success(ClientReadingsCsv.WriteHourly(hours.Value)) : Result<string>.Failure(hours.Error);
+                return hours.IsSuccess
+                    ? Result<CsvExport>.Success(new CsvExport(ClientReadingsCsv.HourlyHeader, hours.Value.Select(ClientReadingsCsv.HourlyRow).ToAsyncEnumerable(), MaxExportRows))
+                    : Result<CsvExport>.Failure(hours.Error);
             default:
-                return Result<string>.Failure(Error.Validation("READINGS_RESOLUTION_INVALID", "'resolution' must be 'raw' or 'hourly'."));
+                return Result<CsvExport>.Failure(Error.Validation("READINGS_RESOLUTION_INVALID", "'resolution' must be 'raw' or 'hourly'."));
         }
     }
 

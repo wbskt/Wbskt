@@ -13,38 +13,24 @@ public static class ClientReadingsCsv
     public const string Header = "name,sentAt,receivedAt,value,late";
     public const string HourlyHeader = "name,hourStart,count,min,avg,max";
 
-    public static string Write(IEnumerable<ClientReading> readings)
-    {
-        var csv = new StringBuilder(Header).Append("\r\n");
-        foreach (var reading in readings)
-        {
-            csv.Append(Field(reading.Name)).Append(',')
-                .Append(Time(reading.SentAt)).Append(',')
-                .Append(Time(reading.ReceivedAt)).Append(',')
-                .Append(reading.Value.ToString("R", CultureInfo.InvariantCulture)).Append(',')
-                .Append(reading.IsLate ? "true" : "false")
-                .Append("\r\n");
-        }
+    public static string Row(ClientReading reading) =>
+        new StringBuilder()
+            .Append(Field(reading.Name)).Append(',')
+            .Append(Time(reading.SentAt)).Append(',')
+            .Append(Time(reading.ReceivedAt)).Append(',')
+            .Append(reading.Value.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+            .Append(reading.IsLate ? "true" : "false")
+            .ToString();
 
-        return csv.ToString();
-    }
-
-    public static string WriteHourly(IEnumerable<ClientReadingHour> hours)
-    {
-        var csv = new StringBuilder(HourlyHeader).Append("\r\n");
-        foreach (var hour in hours)
-        {
-            csv.Append(Field(hour.Name)).Append(',')
-                .Append(Time(hour.HourStart)).Append(',')
-                .Append(hour.Count.ToString(CultureInfo.InvariantCulture)).Append(',')
-                .Append(hour.Min.ToString("R", CultureInfo.InvariantCulture)).Append(',')
-                .Append(hour.Avg.ToString("R", CultureInfo.InvariantCulture)).Append(',')
-                .Append(hour.Max.ToString("R", CultureInfo.InvariantCulture))
-                .Append("\r\n");
-        }
-
-        return csv.ToString();
-    }
+    public static string HourlyRow(ClientReadingHour hour) =>
+        new StringBuilder()
+            .Append(Field(hour.Name)).Append(',')
+            .Append(Time(hour.HourStart)).Append(',')
+            .Append(hour.Count.ToString(CultureInfo.InvariantCulture)).Append(',')
+            .Append(hour.Min.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+            .Append(hour.Avg.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+            .Append(hour.Max.ToString("R", CultureInfo.InvariantCulture))
+            .ToString();
 
     private static string Time(DateTime utc) => utc.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
 

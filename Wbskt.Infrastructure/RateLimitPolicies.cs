@@ -54,4 +54,11 @@ public static class RateLimitPolicies
     /// into a flood against it. Partitioned per workspace.
     /// </summary>
     public const string IntegrationTest = "integration-test";
+
+    /// <summary>
+    /// CSV exports (the event log, a client's readings). Each one reads up to 100,000 rows and holds a
+    /// database connection while it streams them, so a script fetching one in a loop is held to a few
+    /// a minute. Partitioned per workspace.
+    /// </summary>
+    public const string Export = "export";
 }

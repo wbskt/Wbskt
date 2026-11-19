@@ -132,7 +132,8 @@ public sealed class ClientReadingServiceTests
 
         var result = await Service().ExportCsvAsync(WorkspaceId, ClientRef, null, null, null, "Hourly");
 
-        Assert.Equal("name,hourStart,count,min,avg,max\r\ntemp,2026-09-01T03:00:00.000Z,4,1.5,2,3\r\n", result.Value);
+        Assert.Equal("name,hourStart,count,min,avg,max", result.Value.Header);
+        Assert.Equal(["temp,2026-09-01T03:00:00.000Z,4,1.5,2,3"], await result.Value.Rows.ToListAsync());
     }
 
     [Fact]

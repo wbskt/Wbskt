@@ -29,6 +29,9 @@ public interface IEventProvider
         int take,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Up to <paramref name="take"/> entries matching <paramref name="filter"/>, newest first, read as the caller enumerates them.</summary>
+    IAsyncEnumerable<EventLogRow> StreamLogsAsync(int workspaceId, EventLogFilter filter, int take, CancellationToken cancellationToken = default);
+
     /// <summary>How many entries the workspace logged in [<paramref name="fromUtc"/>, <paramref name="toUtc"/>), by event, user and source.</summary>
     Task<IReadOnlyCollection<EventLogCount>> CountAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, bool includeClientTraffic = true, CancellationToken cancellationToken = default);
 
