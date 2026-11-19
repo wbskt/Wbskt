@@ -150,8 +150,9 @@ When a trigger matches while a run with the same workflow and correlation key is
 * An event delivered twice starts at most one run per registration (the trigger-start key is
   unique on the run).
 * An event delivered twice wakes a waiting branch at most once (the inbound-event idempotency key).
-* Schedule occurrences missed while no leader was running are fired, one after another, when a
-  leader returns.
+* Schedule occurrences missed while no leader was running are not fired one by one when a leader
+  returns. The schedule fires once, for the latest occurrence that came due (its `fireAt`), and goes on
+  from the next one after now. An every-minute schedule down for two hours starts one run, not 120.
 
 ## 5. Waiting
 

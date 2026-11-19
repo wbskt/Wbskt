@@ -32,7 +32,7 @@ public sealed class ScheduledFireTickerTests
     public async Task Tick_leases_due_and_dispatches_inbound()
     {
         // Arrange
-        var fire = CreateFire(41, "0 */5 * * * *", new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
+        var fire = CreateFire(41, "0 */5 * * * *", new DateTime(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc));
         var leadership = new FixedLeadershipGate(true);
         var provider = new RecordingScheduledFireProvider([fire]);
         var inboundHub = new RecordingInboundHub();
@@ -80,7 +80,7 @@ public sealed class ScheduledFireTickerTests
     public async Task Tick_advances_recurring_fire()
     {
         // Arrange
-        var fire = CreateFire(42, "0 */5 * * * *", new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
+        var fire = CreateFire(42, "0 */5 * * * *", new DateTime(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc));
         var leadership = new FixedLeadershipGate(true);
         var provider = new RecordingScheduledFireProvider([fire]);
         var inboundHub = new RecordingInboundHub();
@@ -90,7 +90,7 @@ public sealed class ScheduledFireTickerTests
         await ticker.TickAsync(CancellationToken.None);
 
         // Assert
-        Assert.Equal([(42, new DateTime(2026, 5, 26, 12, 5, 0, DateTimeKind.Utc))], provider.AdvancedFires);
+        Assert.Equal([(42, new DateTime(2026, 5, 26, 12, 35, 0, DateTimeKind.Utc))], provider.AdvancedFires);
         Assert.Empty(provider.DeletedFireIds);
     }
 
@@ -99,13 +99,13 @@ public sealed class ScheduledFireTickerTests
     {
         // SQL hands DATETIME2 back as Unspecified; Cronos throws on anything but Utc, which used to
         // stop a recurring schedule after its first fire.
-        var fire = CreateFire(46, "0 */5 * * * *", new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Unspecified));
+        var fire = CreateFire(46, "0 */5 * * * *", new DateTime(2026, 5, 26, 12, 30, 0, DateTimeKind.Unspecified));
         var provider = new RecordingScheduledFireProvider([fire]);
         var ticker = new ScheduledFireTicker(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(provider, new RecordingInboundHub()), NullLogger<ScheduledFireTicker>.Instance, WorkerTestServices.Options());
 
         await ticker.TickAsync(CancellationToken.None);
 
-        Assert.Equal([(46, new DateTime(2026, 5, 26, 12, 5, 0, DateTimeKind.Utc))], provider.AdvancedFires);
+        Assert.Equal([(46, new DateTime(2026, 5, 26, 12, 35, 0, DateTimeKind.Utc))], provider.AdvancedFires);
     }
 
     [Fact]
@@ -113,7 +113,7 @@ public sealed class ScheduledFireTickerTests
     {
         // Arrange: a standard 5-field cron (no seconds) must keep firing after the first tick,
         // not be treated as unparseable and deleted.
-        var fire = CreateFire(44, "*/5 * * * *", new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
+        var fire = CreateFire(44, "*/5 * * * *", new DateTime(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc));
         var leadership = new FixedLeadershipGate(true);
         var provider = new RecordingScheduledFireProvider([fire]);
         var inboundHub = new RecordingInboundHub();
@@ -123,7 +123,7 @@ public sealed class ScheduledFireTickerTests
         await ticker.TickAsync(CancellationToken.None);
 
         // Assert
-        Assert.Equal([(44, new DateTime(2026, 5, 26, 12, 5, 0, DateTimeKind.Utc))], provider.AdvancedFires);
+        Assert.Equal([(44, new DateTime(2026, 5, 26, 12, 35, 0, DateTimeKind.Utc))], provider.AdvancedFires);
         Assert.Empty(provider.DeletedFireIds);
     }
 
@@ -162,6 +162,42 @@ public sealed class ScheduledFireTickerTests
         // Assert
         Assert.Equal([43L], provider.DeletedFireIds);
         Assert.Empty(provider.AdvancedFires);
+    }
+
+    [Fact]
+    public async Task Tick_fires_only_the_latest_missed_occurrence_after_an_outage()
+    {
+        // Arrange: every five minutes, last fired for 12:00, and the engine is back at 12:30.
+        var fire = CreateFire(47, "*/5 * * * *", new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
+        var provider = new RecordingScheduledFireProvider([fire]);
+        var inboundHub = new RecordingInboundHub();
+        var ticker = new ScheduledFireTicker(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(provider, inboundHub), NullLogger<ScheduledFireTicker>.Instance, WorkerTestServices.Options());
+
+        // Act
+        await ticker.TickAsync(CancellationToken.None);
+
+        // Assert: one run, for 12:30, and the schedule goes on at 12:35 rather than 12:05.
+        InboundEvent evt = Assert.Single(inboundHub.Events);
+        Assert.Equal(new DateTime(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc), evt.Payload["fireAt"].GetDateTime());
+        Assert.Equal(ScheduleChannel.OccurrenceEventId(fire with { NextFireAt = new DateTime(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc) }), evt.InboundEventId);
+        Assert.Equal([(47, new DateTime(2026, 5, 26, 12, 35, 0, DateTimeKind.Utc))], provider.AdvancedFires);
+    }
+
+    [Fact]
+    public async Task Tick_fires_a_row_due_for_one_occurrence_as_it_is()
+    {
+        // Arrange: due at 12:28, next at 12:33, so nothing was missed.
+        var fire = CreateFire(48, "3-58/5 * * * *", new DateTime(2026, 5, 26, 12, 28, 0, DateTimeKind.Utc));
+        var provider = new RecordingScheduledFireProvider([fire]);
+        var inboundHub = new RecordingInboundHub();
+        var ticker = new ScheduledFireTicker(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(provider, inboundHub), NullLogger<ScheduledFireTicker>.Instance, WorkerTestServices.Options());
+
+        // Act
+        await ticker.TickAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(fire.NextFireAt, Assert.Single(inboundHub.Events).Payload["fireAt"].GetDateTime());
+        Assert.Equal([(48, new DateTime(2026, 5, 26, 12, 33, 0, DateTimeKind.Utc))], provider.AdvancedFires);
     }
 
     private static ScheduledFireRow CreateFire(int id, string cronOrInterval, DateTime nextFireAt)

@@ -39,12 +39,22 @@ public sealed class ScheduledFireTicker(
         {
             try
             {
-                InboundEvent inboundEvent = ScheduleChannel.Event(fire, now);
+                ScheduledFireRow occurrence = LatestMissed(fire, now);
+                if (occurrence.NextFireAt != fire.NextFireAt)
+                {
+                    Logger.LogInformation(
+                        "Scheduled fire {FireId} missed the occurrences from {Missed} to before {Latest} while no leader ran; firing {Latest} once instead.",
+                        fire.Id,
+                        fire.NextFireAt,
+                        occurrence.NextFireAt);
+                }
+
+                InboundEvent inboundEvent = ScheduleChannel.Event(occurrence, now);
 
                 Logger.LogInformation("Dispatching scheduled fire {FireId} for workflow {WorkflowRefId}", fire.Id, fire.WorkflowRefId);
                 await inboundHub.HandleAsync(inboundEvent, ct);
 
-                (bool parseFailed, DateTime? nextOccurrence) = ComputeNextOccurrence(fire);
+                (bool parseFailed, DateTime? nextOccurrence) = ComputeNextOccurrence(occurrence);
                 if (parseFailed)
                 {
                     Logger.LogError("Scheduled fire {FireId} has an unparseable cron expression '{Cron}'; leaving it in place for investigation.", fire.Id, fire.CronOrInterval);
@@ -66,6 +76,36 @@ public sealed class ScheduledFireTicker(
                 Logger.LogError(ex, "Failed to process scheduled fire {FireId}", fire.Id);
             }
         }
+    }
+
+    /// <summary>
+    /// The occurrence to fire for a due row. When the engine was down for more than one interval the row
+    /// is behind by several occurrences; firing each one would start a backlog of stale runs (an
+    /// every-minute schedule down for two hours: 120 runs, each charged), so only the latest one that has
+    /// come due is fired, and the schedule then goes on from after it. A row due for one occurrence is
+    /// returned as it is.
+    /// </summary>
+    private static ScheduledFireRow LatestMissed(ScheduledFireRow fire, DateTime now)
+    {
+        if (string.IsNullOrWhiteSpace(fire.CronOrInterval) || !CronParser.TryParse(fire.CronOrInterval, out CronExpression? cron))
+        {
+            return fire;
+        }
+
+        DateTime from = DateTime.SpecifyKind(fire.NextFireAt, DateTimeKind.Utc);
+        DateTime to = DateTime.SpecifyKind(now, DateTimeKind.Utc);
+        if (to <= from)
+        {
+            return fire;
+        }
+
+        DateTime? latest = null;
+        foreach (DateTime missed in cron!.GetOccurrences(from, to, TimeZoneInfo.Utc, fromInclusive: false, toInclusive: true))
+        {
+            latest = missed;
+        }
+
+        return latest is { } occurrence ? fire with { NextFireAt = occurrence } : fire;
     }
 
     /// <summary>
