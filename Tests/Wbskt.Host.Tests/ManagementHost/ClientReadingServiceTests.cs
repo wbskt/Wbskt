@@ -25,7 +25,7 @@ public sealed class ClientReadingServiceTests
     [InlineData("90", 90)]
     public void Bucket_sizes_parse(string text, int seconds)
     {
-        Assert.True(ClientReadingService.TryParseBucket(text, out var parsed));
+        Assert.True(ChartBuckets.TryParse(text, ClientReadingService.MaxRange, out var parsed));
         Assert.Equal(seconds, parsed);
     }
 
@@ -39,7 +39,7 @@ public sealed class ClientReadingServiceTests
     [InlineData("99999999999999999999")]
     public void Bad_bucket_sizes_are_refused(string text)
     {
-        Assert.False(ClientReadingService.TryParseBucket(text, out _));
+        Assert.False(ChartBuckets.TryParse(text, ClientReadingService.MaxRange, out _));
     }
 
     [Theory]

@@ -1,5 +1,7 @@
 using FluentAssertions;
+using Microsoft.Extensions.Options;
 using Moq;
+using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services.Stats;
 using Wbskt.Management.Models;
@@ -14,7 +16,7 @@ public sealed class WorkspaceMessageHistoryServiceTests
 
     private readonly Mock<IWorkspaceUsageProvider> _usage = new();
 
-    private WorkspaceMessageHistoryService Service() => new(_usage.Object, new StoppedClock());
+    private WorkspaceMessageHistoryService Service() => new(_usage.Object, new StoppedClock(), Options.Create(new EventLoggingOptions { RetentionDays = 90 }));
 
     [Fact]
     public async Task The_default_is_the_last_day_by_hour_with_empty_hours_as_zero()
@@ -61,6 +63,39 @@ public sealed class WorkspaceMessageHistoryServiceTests
         var result = await Service().GetAsync(WorkspaceId, null, null, "5m", default);
 
         result.Error.Code.Should().Be("MESSAGES_BUCKET_INVALID");
+    }
+
+    [Theory]
+    [InlineData("60m")]
+    [InlineData("3600")]
+    [InlineData("1H")]
+    public async Task An_hour_is_read_in_the_grammar_every_chart_takes(string bucket)
+    {
+        _usage.Setup(u => u.GetHourlyMessagesAsync(WorkspaceId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+
+        var history = (await Service().GetAsync(WorkspaceId, null, null, bucket, default)).Value;
+
+        history.BucketSeconds.Should().Be(3600);
+    }
+
+    [Fact]
+    public async Task A_short_range_older_than_the_hourly_counts_is_counted_by_day()
+    {
+        // #1081: it used to answer 24 zero hours for a day that held traffic.
+        _usage.Setup(u => u.GetDailyMessagesAsync(WorkspaceId, It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+
+        var history = (await Service().GetAsync(WorkspaceId, Now.AddDays(-120), Now.AddDays(-119), null, default)).Value;
+
+        history.BucketSeconds.Should().Be(86400);
+        _usage.Verify(u => u.GetHourlyMessagesAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Hours_asked_for_past_their_retention_are_refused()
+    {
+        var result = await Service().GetAsync(WorkspaceId, Now.AddDays(-120), Now.AddDays(-119), WorkspaceMessageHistoryService.Hour, default);
+
+        result.Error.Code.Should().Be("MESSAGES_HOURLY_EXPIRED");
     }
 
     private sealed class StoppedClock : TimeProvider

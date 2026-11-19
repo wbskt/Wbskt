@@ -1,4 +1,6 @@
+using Microsoft.Extensions.Options;
 using Wbskt.Infrastructure;
+using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Models;
 
@@ -6,16 +8,21 @@ namespace Wbskt.Management.Host.Services.Stats;
 
 /// <summary>
 /// Message counts for the Overview chart, from the per-hour and per-day ledgers dbo.ClientTraffic_InsertBatch
-/// keeps, so a chart reads at most a few hundred rows however much traffic the range held.
+/// keeps, so a chart reads at most a few hundred rows however much traffic the range held. Takes the
+/// <c>bucket</c> grammar of every chart endpoint (<see cref="ChartBuckets"/>), and the ledgers hold only
+/// hours and days.
 /// </summary>
-internal sealed class WorkspaceMessageHistoryService(IWorkspaceUsageProvider usage, TimeProvider clock) : IWorkspaceMessageHistoryService
+internal sealed class WorkspaceMessageHistoryService(IWorkspaceUsageProvider usage, TimeProvider clock, IOptions<EventLoggingOptions> retention) : IWorkspaceMessageHistoryService
 {
+    private const int HourSeconds = 3600;
+    private const int DaySeconds = 86400;
+
     internal const string Hour = "1h";
     internal const string Day = "1d";
 
     private static readonly TimeSpan DefaultRange = TimeSpan.FromDays(1);
 
-    // Hourly counts are kept as long as the audit log (90 days); a month of hours is 744 buckets.
+    // Hourly counts are kept as long as the audit log (EventLogging:RetentionDays); a month of hours is 744 buckets.
     private static readonly TimeSpan MaxHourlyRange = TimeSpan.FromDays(31);
     private static readonly TimeSpan MaxDailyRange = TimeSpan.FromDays(366);
 
@@ -24,21 +31,38 @@ internal sealed class WorkspaceMessageHistoryService(IWorkspaceUsageProvider usa
 
     public async Task<Result<WorkspaceMessageHistory>> GetAsync(int workspaceId, DateTimeOffset? from, DateTimeOffset? to, string? bucket, CancellationToken ct)
     {
-        if (bucket is not null && bucket != Hour && bucket != Day)
+        int? asked = null;
+        if (bucket is not null)
         {
-            return Result<WorkspaceMessageHistory>.Failure(Error.Validation("MESSAGES_BUCKET_INVALID", "'bucket' must be 1h or 1d."));
+            if (!ChartBuckets.TryParse(bucket, MaxDailyRange, out int seconds) || (seconds != HourSeconds && seconds != DaySeconds))
+            {
+                return Result<WorkspaceMessageHistory>.Failure(Error.Validation("MESSAGES_BUCKET_INVALID", "'bucket' must be an hour or a day: 1h or 1d (3600 or 86400)."));
+            }
+
+            asked = seconds;
         }
 
-        Result<TimeRange> requested = TimeRange.Resolve(from, to, clock.GetUtcNow(), DefaultRange, MaxDailyRange);
+        DateTimeOffset now = clock.GetUtcNow();
+        Result<TimeRange> requested = TimeRange.Resolve(from, to, now, DefaultRange, MaxDailyRange);
         if (requested.IsFailure)
         {
             return Result<WorkspaceMessageHistory>.Failure(requested.Error);
         }
 
-        bool hourly = bucket is null ? requested.Value.ToUtc - requested.Value.FromUtc <= HourlyUpTo : bucket == Hour;
-        TimeSpan size = hourly ? TimeSpan.FromHours(1) : TimeSpan.FromDays(1);
-        DateTime fromUtc = Floor(requested.Value.FromUtc, size);
-        DateTime toUtc = Floor(requested.Value.ToUtc.AddTicks(-1), size) + size;
+        // Hours older than the hourly ledger's retention are gone; a range reaching back past it is
+        // counted by day when no bucket was asked for, and refused when hours were, rather than
+        // answering zeros for hours that held traffic.
+        DateTime hoursKeptFrom = ChartBuckets.AlignDown(now.UtcDateTime - TimeSpan.FromDays(retention.Value.RetentionDays), HourSeconds) + TimeSpan.FromHours(1);
+        bool hoursKept = requested.Value.FromUtc >= hoursKeptFrom;
+        bool hourly = asked is { } size ? size == HourSeconds : hoursKept && requested.Value.ToUtc - requested.Value.FromUtc <= HourlyUpTo;
+        if (hourly && !hoursKept)
+        {
+            return Result<WorkspaceMessageHistory>.Failure(Error.Validation("MESSAGES_HOURLY_EXPIRED", $"Hourly counts are kept for {retention.Value.RetentionDays} days; ask for days (bucket=1d) further back."));
+        }
+
+        int bucketSeconds = hourly ? HourSeconds : DaySeconds;
+        DateTime fromUtc = ChartBuckets.AlignDown(requested.Value.FromUtc, bucketSeconds);
+        DateTime toUtc = ChartBuckets.AlignDown(requested.Value.ToUtc.AddTicks(-1), bucketSeconds).AddSeconds(bucketSeconds);
 
         if (hourly && toUtc - fromUtc > MaxHourlyRange)
         {
@@ -52,12 +76,9 @@ internal sealed class WorkspaceMessageHistoryService(IWorkspaceUsageProvider usa
         return Result<WorkspaceMessageHistory>.Success(new WorkspaceMessageHistory(
             new DateTimeOffset(fromUtc, TimeSpan.Zero),
             new DateTimeOffset(toUtc, TimeSpan.Zero),
-            (int)size.TotalSeconds,
-            Fill(counted, fromUtc, toUtc, size)));
+            bucketSeconds,
+            Fill(counted, fromUtc, toUtc, TimeSpan.FromSeconds(bucketSeconds))));
     }
-
-    private static DateTime Floor(DateTime utc, TimeSpan size) =>
-        new(utc.Ticks - utc.Ticks % size.Ticks, DateTimeKind.Utc);
 
     // Every bucket in the range, so a chart needs no gap filling of its own.
     private static List<MessageCountBucket> Fill(IReadOnlyCollection<MessageCountBucket> counted, DateTime fromUtc, DateTime toUtc, TimeSpan size)

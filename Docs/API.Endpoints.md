@@ -435,7 +435,7 @@ that is empty or backwards is 400 `TIME_RANGE_INVALID`, and one longer than 400 
 | `GET {clientRef}/commands?status=queued` | `clients.read` | The commands waiting for an offline client, oldest first, as one page (`items`, `totalCount`): `commandId`, `type`, `payload`, `queuedAt`, `expiresAt`. `status` must be `queued` (400 `COMMAND_STATUS_INVALID` otherwise); sent commands are in the comms feed. |
 | `DELETE {clientRef}/commands/{commandId}` | `clients.command` | Cancels a waiting command (204, raising `ClientCommandCancelledEvent`); 404 `COMMAND_NOT_QUEUED` once it was delivered, expired or cancelled. |
 | `POST {clientRef}/ping` | `clients.ping` | Triggers a round-trip latency measurement. 409 `CLIENT_OFFLINE` when the client has no connection: a ping is not queued. |
-| `GET {clientRef}/readings` | `clients.read` | One numeric state variable's history (`name`, required) over `from`/`to` (default the last day, at most 740 days), as `{ start, count, min, avg, max }` per `bucket` (seconds, or `30s`, `5m`, `1h`, `1d`; picked for about 500 buckets when left out). Readings older than the plan's raw days are kept as hourly roll-ups (Docs/Billing.md, Readings), so an older range has an hour's resolution at best; the counts and averages stay exact. |
+| `GET {clientRef}/readings` | `clients.read` | One numeric state variable's history (`name`, required) over `from`/`to` (default the last day, at most 740 days), as `{ start, count, min, avg, max }` per `bucket` (seconds, or `30s`, `5m`, `1h`, `1d`, the grammar every chart endpoint takes; picked for about 500 buckets when left out). Only buckets holding a reading are listed: an absent bucket means no reading, which a zero count could not tell from a reading of 0. Readings older than the plan's raw days are kept as hourly roll-ups (Docs/Billing.md, Readings), so an older range has an hour's resolution at best; the counts and averages stay exact. |
 | `GET {clientRef}/readings/csv` | `clients.read` | The readings over `from`/`to` as CSV, for one `name` or all. `resolution=raw` (the default) gives every reading (`name,sentAt,receivedAt,value,late`), which reaches back only the plan's raw days. `resolution=hourly` gives one row per variable and hour (`name,hourStart,count,min,avg,max`), raw and rolled-up alike, so it reaches as far back as the chart. Any other value is 400 `READINGS_RESOLUTION_INVALID`. At most 100,000 rows (else 400 `READINGS_RANGE_TOO_LARGE`). Limited to 10 exports a minute per workspace, shared with the event log CSV (429 `RATE_LIMITED`); only a request that passed sign-in and the permission check counts. |
 | `GET {clientRef}/comms` | `logs.read` | Recent in/out message history, filterable by `direction=in\|out`. Backfills the Live Comms panel before the realtime stream attaches. Uses `logs.read` rather than `clients.read` because it is a projection of the event log — so the client detail page needs both grants to render fully. Paged like the event log. |
 
@@ -606,8 +606,12 @@ it is counted per management instance: with more than one, each reports its shar
 For a chart, `GET /api/v1/workspaces/{workspaceRef}/stats/messages/history?from=&to=&bucket=` (`clients.read`)
 returns `{ from, to, bucketSeconds, buckets: [{ start, inbound, outbound }] }`: messages clients sent and
 commands delivered to them per UTC hour (`bucket=1h`, a range of at most 31 days) or day (`1d`, at most
-366). Left out, the bucket is hours up to two days and days beyond, and the range is the last 24 hours.
-The range is widened to whole buckets and every bucket in it is listed, zero where nothing was carried.
+366). `bucket` takes the readings chart's grammar (`60m` and `3600` are an hour too), and any size but an hour
+or a day is 400 `MESSAGES_BUCKET_INVALID`. Left out, the bucket is hours up to two days and days beyond, and
+the range is the last 24 hours. Hours are kept `EventLogging:RetentionDays`: a range reaching back further is
+counted by day when no bucket was given, and 400 `MESSAGES_HOURLY_EXPIRED` when hours were asked for, never a
+row of zeros for hours that held traffic. The range is widened to whole buckets and every bucket in it is
+listed, zero where nothing was carried: a count of messages has no reading to be absent.
 The counts come from the message meter (`dbo.WorkspaceMessageUsage` by day, kept as long as the
 workspace, and `dbo.WorkspaceMessageUsageHourly`, kept `EventLogging:RetentionDays`), not from the
 two-day traffic table, so they are exact and cheap at any range, and unlike the rate they are not split
