@@ -851,7 +851,37 @@ public sealed class RetryExecutorTests
             new DefaultCreditCostCalculator());
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(result);
-        Assert.Equal("OUT_OF_CREDITS", fail.ErrorCode);
+        Assert.Equal(OutOfCredits.RunBudgetCode, fail.ErrorCode);
+        Assert.Equal(0, executor.AttemptCount);
+    }
+
+    /// <summary>#954: each budget a charge can run into fails the node with its own code and says what to raise.</summary>
+    [Theory]
+    [InlineData(CreditRefusal.RunBudget, "OUT_OF_CREDITS_RUN_BUDGET", "workflow's credit budget")]
+    [InlineData(CreditRefusal.PlanCredits, "PLAN_CREDIT_LIMIT_REACHED", "credit pack")]
+    [InlineData(CreditRefusal.WorkspaceCap, "WORKSPACE_CREDIT_CAP_REACHED", "cap")]
+    public async Task RunWithRetryAsync_names_the_budget_a_refused_charge_ran_into(CreditRefusal refusal, string code, string advice)
+    {
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] });
+        var executor = new RecordingExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+        var countersMock = new Mock<IRunCountersProvider>();
+        countersMock.Setup(p => p.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>())).ReturnsAsync(CreditCharge.Refused(refusal));
+
+        NodeExecutionResult result = await RetryExecutor.RunWithRetryAsync(
+            node,
+            CreateContext(),
+            executor,
+            new TestNodeExecutionServices(),
+            new FixedClock(),
+            CancellationToken.None,
+            countersMock.Object,
+            new DefaultCreditCostCalculator());
+
+        var fail = Assert.IsType<NodeExecutionResult.Fail>(result);
+        Assert.Equal(code, fail.ErrorCode);
+        Assert.Contains(advice, fail.Message);
+        Assert.False(fail.Retryable);
+        Assert.True(OutOfCredits.Is(fail.ErrorCode));
         Assert.Equal(0, executor.AttemptCount);
     }
 

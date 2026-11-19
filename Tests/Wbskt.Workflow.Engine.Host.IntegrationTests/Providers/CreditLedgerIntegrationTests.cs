@@ -224,7 +224,7 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         RunRow run = await ProviderFactory.Run(fixture.ConnectionString).GetByIdAsync(second, CancellationToken.None);
         run.CreditBudget.Should().Be(0.15m, "late in the month a run leases a twentieth of what is left");
         (await counters.TryChargeAsync((int)second, 3m, CancellationToken.None)).Should().Be(new CreditCharge(3m, 3m), "the lease grows up to the 3 that were left");
-        (await counters.TryChargeAsync((int)second, 0.01m, CancellationToken.None)).Should().BeNull();
+        (await counters.TryChargeAsync((int)second, 0.01m, CancellationToken.None))!.Refusal.Should().Be(CreditRefusal.PlanCredits);
     }
 
     [SkippableFact]
@@ -269,10 +269,25 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         var counters = ProviderFactory.RunCounters(fixture.ConnectionString);
         (await runs.GetByIdAsync(capped, CancellationToken.None)).CreditBudget.Should().Be(0.2m, "a capped run leases a twentieth of the cap at a time");
         (await counters.TryChargeAsync((int)capped, 3m, CancellationToken.None)).Should().Be(new CreditCharge(3m, 3m), "the lease grows up to what the cap left");
-        (await counters.TryChargeAsync((int)capped, 0.01m, CancellationToken.None)).Should().BeNull();
+        (await counters.TryChargeAsync((int)capped, 0.01m, CancellationToken.None))!.Refusal.Should().Be(CreditRefusal.WorkspaceCap);
         (await runs.GetByIdAsync(uncapped, CancellationToken.None)).CreditBudget.Should().Be(49.94m, "without the cap it leases a twentieth of the 998.8 the plan has left: less the first run's start and the capped run's 0.2 lease");
         (await counters.TryChargeAsync((int)uncapped, 0m, CancellationToken.None)).Should().Be(new CreditCharge(0m, 100m), "and may grow to its whole budget");
         first.Should().BePositive();
+    }
+
+    /// <summary>#954: a run stopped by its own budget says so, rather than the account's month or a cap.</summary>
+    [SkippableFact]
+    public async Task A_charge_past_the_runs_own_budget_is_refused_for_the_run_budget()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(NewId());
+        long run = await StartAsync(wd, budget: 2m);
+        await ChargeAsync(run, 2m);
+
+        CreditCharge? refused = await ProviderFactory.RunCounters(fixture.ConnectionString).TryChargeAsync((int)run, 1m, CancellationToken.None);
+
+        refused!.Refusal.Should().Be(CreditRefusal.RunBudget);
     }
 
     [SkippableFact]
@@ -291,8 +306,8 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
         var counters = ProviderFactory.RunCounters(fixture.ConnectionString);
         (await ProviderFactory.Run(fixture.ConnectionString).GetByIdAsync(looping, CancellationToken.None)).CreditBudget.Should().Be(5m, "its budget is cut to what it has spent");
         next.Should().BePositive("the unspent budget it held is no longer reserved against the cap");
-        (await counters.TryChargeAsync((int)looping, 4m, CancellationToken.None)).Should().NotBeNull("the cap still has room after the next run's lease");
-        (await counters.TryChargeAsync((int)looping, 1m, CancellationToken.None)).Should().BeNull("the cap is spent or held, not the run's own 100");
+        (await counters.TryChargeAsync((int)looping, 4m, CancellationToken.None))!.Refusal.Should().BeNull("the cap still has room after the next run's lease");
+        (await counters.TryChargeAsync((int)looping, 1m, CancellationToken.None))!.Refusal.Should().Be(CreditRefusal.WorkspaceCap, "the cap is spent or held, not the run's own 100");
     }
 
     [SkippableFact]
@@ -566,6 +581,7 @@ public sealed class CreditLedgerIntegrationTests(SqlEdgeFixture fixture)
     {
         CreditCharge? charge = await ProviderFactory.RunCounters(fixture.ConnectionString).TryChargeAsync((int)runId, cost, CancellationToken.None);
         charge.Should().NotBeNull();
+        charge!.Refusal.Should().BeNull();
     }
 
     private Task<IReadOnlyCollection<WorkspaceCreditPost>> PostAsync() =>

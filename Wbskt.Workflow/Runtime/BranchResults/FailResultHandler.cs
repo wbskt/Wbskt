@@ -53,7 +53,7 @@ internal sealed class FailResultHandler(
         // take one run-level path rather than the node failing only its own branch - otherwise its
         // siblings kept running and the run could end PartiallyFailed.
         bool failsRun = outcome == ErrorOutcome.FailRun || context.Node is FailRunNode;
-        bool outOfCredits = string.Equals(result.ErrorCode, "OUT_OF_CREDITS", StringComparison.Ordinal);
+        bool outOfCredits = OutOfCredits.Is(result.ErrorCode);
 
         // Failing the branch is a compare-and-set, as every branch end is: if another loop already
         // ended it (a recovery requeue racing a slow node on the old leader), that loop recorded the
@@ -74,7 +74,7 @@ internal sealed class FailResultHandler(
             // cancel, and replaces failing the run rather than following it: the finalizer maps a
             // cancel with this reason to OutOfCredits, and failing the run first would stop the
             // same work twice and journal a failure and a cancel for one event.
-            await runCancellationService.RequestCancellationAsync(runRow.Id, "OUT_OF_CREDITS", ct);
+            await runCancellationService.RequestCancellationAsync(runRow.Id, OutOfCredits.CancellationReason, ct);
         }
         else if (failsRun)
         {

@@ -241,8 +241,11 @@ Every executor runs inside `RetryExecutor.RunWithRetryAsync`:
   visit token is the branch row's `RowVersion`, so a loop that visits the same node twice gets two
   keys, while a replay of the same visit after a crash gets the cached outcome.
 * **Credits** are charged per attempt (`TryChargeAsync` on the run counters). A resume visit (the
-  branch coming back from a bookmark) is free; a retry is not. An empty budget fails the node with
-  `OUT_OF_CREDITS`.
+  branch coming back from a bookmark) is free; a retry is not. A refused charge fails the node with a
+  code naming the budget that ran short, which `dbo.RunCounters_TryCharge` returns in `@Refusal`:
+  `OUT_OF_CREDITS_RUN_BUDGET` (the workflow's credit budget), `PLAN_CREDIT_LIMIT_REACHED` (the
+  account's month and packs) or `WORKSPACE_CREDIT_CAP_REACHED` (the workspace's cap). Each cancels
+  the run with `OUT_OF_CREDITS` (`OutOfCredits` in `Wbskt.Workflow.Runtime`).
 * **Retry decision.** One `Decide()` handles both a retryable `Fail` and a thrown
   `TransientNodeException`, using the node's `retry` policy, and journals `NodeRetrying`.
   A delay shorter than `RetryParkThreshold` (5 s) waits in memory; a longer one parks the branch on a
