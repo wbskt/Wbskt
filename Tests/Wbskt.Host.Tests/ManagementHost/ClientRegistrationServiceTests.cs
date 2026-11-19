@@ -104,4 +104,40 @@ public sealed class ClientRegistrationServiceTests
         result.Error.Code.Should().Be("POLICY_LIMIT_REACHED");
         clients.VerifyNoOtherCalls();
     }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public async Task A_blank_name_or_one_over_100_characters_is_refused_before_the_pin_is_looked_up(string? name)
+    {
+        name ??= new string('a', 101);
+        var clients = new Mock<IClientProvider>();
+        var policies = new Mock<IRegistrationPolicyProvider>();
+        using var metrics = new ManagementMetrics();
+        var service = new ClientRegistrationService(clients.Object, policies.Object, Mock.Of<IEventBus>(), NullLogger<ClientRegistrationService>.Instance, metrics, new FixedWorkspacePlans());
+
+        var result = await service.InitiateRegistrationAsync(new ClientRegistrationRequest("PIN", name));
+
+        result.Error.Code.Should().Be("CLIENT_NAME_INVALID");
+        policies.VerifyNoOtherCalls();
+        clients.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task A_device_name_is_stored_trimmed()
+    {
+        var clients = new Mock<IClientProvider>();
+        var policies = new Mock<IRegistrationPolicyProvider>();
+        var policy = new RegistrationPolicy { Id = 5, RefId = Guid.NewGuid(), WorkspaceId = WorkspaceId, Name = "lab", IsEnabled = true, AutoApproval = true };
+        policies.Setup(p => p.FindByPinAsync("PIN", It.IsAny<CancellationToken>())).ReturnsAsync(policy);
+        clients.Setup(p => p.InsertClientAsync(WorkspaceId, policy.Id, "sensor", It.IsAny<byte[]>(), ClientStatus.Registered, It.IsAny<PlanCeiling>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Client { Id = 9, RefId = Guid.NewGuid(), WorkspaceId = WorkspaceId, Name = "sensor", Status = ClientStatus.Registered });
+        using var metrics = new ManagementMetrics();
+        var service = new ClientRegistrationService(clients.Object, policies.Object, Mock.Of<IEventBus>(), NullLogger<ClientRegistrationService>.Instance, metrics, new FixedWorkspacePlans());
+
+        var result = await service.InitiateRegistrationAsync(new ClientRegistrationRequest("PIN", "  sensor  "));
+
+        result.IsSuccess.Should().BeTrue();
+    }
 }

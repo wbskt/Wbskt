@@ -63,13 +63,14 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
     {
         _logger.LogInformation("Creating registration policy '{PolicyName}' in WorkspaceId: {WorkspaceId}", request.Name, workspaceId);
 
-        if (string.IsNullOrWhiteSpace(request.Name))
+        var invalid = CheckName(request.Name) ?? CheckLimit(request.MaxClients);
+        if (invalid is not null)
         {
-            _logger.LogWarning("Registration policy creation failed: Name is empty");
-            return Result<RegistrationPolicyResponse>.Failure(Error.Validation("POLICY_NAME_REQUIRED", "Policy name is required."));
+            _logger.LogWarning("Registration policy creation failed: {Code}", invalid.Code);
+            return Result<RegistrationPolicyResponse>.Failure(invalid);
         }
 
-        var policy = await _provider.InsertAsync(workspaceId, request, cancellationToken);
+        var policy = await _provider.InsertAsync(workspaceId, request with { Name = request.Name.Trim() }, cancellationToken);
         _logger.LogInformation("Registration policy '{PolicyName}' created successfully with RefId: {RefId}", request.Name, policy.RefId);
         
         await _eventBus.PublishAsync(new PolicyCreatedEvent(policy.RefId, policy.Id, workspaceId, policy.Name), cancellationToken);
@@ -91,11 +92,14 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
             return Result.Failure(Error.Validation("POLICY_LIMIT_AMBIGUOUS", "Send either 'maxClients' or 'removeMaxClients', not both."));
         }
 
-        if (request.Name is not null && string.IsNullOrWhiteSpace(request.Name))
+        var invalid = (request.Name is null ? null : CheckName(request.Name)) ?? CheckLimit(request.MaxClients);
+        if (invalid is not null)
         {
-            _logger.LogWarning("Registration policy update failed: Name is empty");
-            return Result.Failure(Error.Validation("POLICY_NAME_REQUIRED", "Policy name is required."));
+            _logger.LogWarning("Registration policy update failed: {Code}", invalid.Code);
+            return Result.Failure(invalid);
         }
+
+        request = request with { Name = request.Name?.Trim() };
 
         var lookup = await WorkspaceOwnership.LoadAsync(workspaceId, () => _provider.FindByRefIdAsync(policyRefId, cancellationToken), WorkspaceOwnership.PolicyNotFound);
         if (lookup.IsFailure)
@@ -220,4 +224,22 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
     /// <summary>The event for disabling <paramref name="before"/>, the policy as it was until now.</summary>
     private static PolicyDisabledEvent Disabled(RegistrationPolicy before, int workspaceId) =>
         new(before.RefId, before.Id, workspaceId) { Changes = [new FieldChange("enabled", before.IsEnabled ? "true" : "false", "false")] };
+
+    /// <summary>A blank name, or one longer than its column, which SQL would cut without a word.</summary>
+    private static Error? CheckName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return NameRequired;
+        }
+
+        return EntityNames.Normalize(name) is null ? NameTooLong : null;
+    }
+
+    /// <summary>A limit below one would refuse every device; no limit is null.</summary>
+    private static Error? CheckLimit(int? maxClients) => maxClients is < 1 ? LimitInvalid : null;
+
+    private static readonly Error NameRequired = Error.Validation("POLICY_NAME_REQUIRED", "Policy name is required.");
+    private static readonly Error NameTooLong = Error.Validation("POLICY_NAME_TOO_LONG", "Policy name must be at most 100 characters.");
+    private static readonly Error LimitInvalid = Error.Validation("POLICY_LIMIT_INVALID", "'maxClients' must be at least 1, or left out for no limit.");
 }

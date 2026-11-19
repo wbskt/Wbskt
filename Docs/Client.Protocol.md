@@ -35,7 +35,8 @@ Content-Type: application/json
 ```
 
 `pin` is a registration policy's enrollment PIN (console: Policies). `name` is how the client shows
-in the console. The answer:
+in the console: 1 to 100 characters once trimmed, or registration answers 400 `CLIENT_NAME_INVALID`.
+The answer:
 
 ```json
 { "clientRefId": "3fa85f64-…", "secret": "…", "status": 1 }
