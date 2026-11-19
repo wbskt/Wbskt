@@ -7,7 +7,7 @@ The three SDKs ship separately, each from a tag. They are on 0.9 betas until the
 |---|---|---|---|---|
 | .NET | `Wbskt` (NuGet) | `SdkPackageVersion` in `Directory.Build.props` in wbskt/Wbskt.DotNet | `v<version>` there | `release.yml` there |
 | Python | `wbskt` (PyPI) | `src/wbskt/version.py` in wbskt/Wbskt.Python | `v<version>` there | `release.yml` there |
-| ESP32 | `Wbskt` (Arduino Library Manager) | `library.properties`, `library.json`, `src/wbskt/Version.h` in wbskt/Wbskt.Arduino | `v<version>` there | none: the registry polls tags |
+| ESP32 | `Wbskt` (Arduino Library Manager and PlatformIO) | `library.properties`, `library.json`, `src/wbskt/Version.h` in wbskt/Wbskt.Arduino | `v<version>` there | `release.yml` there publishes to PlatformIO (`PLATFORMIO_AUTH_TOKEN` in the `platformio` environment); the Library Manager polls tags |
 
 Each workflow refuses a tag that does not match the version in the files, so bump the version in a
 PR first, merge it, then tag `master`.
@@ -26,6 +26,9 @@ PR first, merge it, then tag `master`.
   adding `https://github.com/wbskt/Wbskt.Arduino.git` to `registry.txt`, after the first `v` tag
   exists. Its review takes a few days. Once it is listed, switch `library-manager` in that repository's
   CI lint job from `submit` to `update`.
+- **PlatformIO:** run `pio account token` as the account that owns the `wbskt` organisation in the
+  PlatformIO registry, create the `platformio` environment in wbskt/Wbskt.Arduino and save the token
+  there as the `PLATFORMIO_AUTH_TOKEN` secret.
 
 ## Each release
 
