@@ -109,12 +109,14 @@ public static class Program
         // other hosted service starts checking ILeadershipGate.IsActive. RunRecoveryService is
         // deliberately NOT a hosted service here - EngineLeadershipCoordinator calls its
         // RecoverAsync directly, only once this instance becomes leader.
-        // Hosted services stop in reverse order, so the coordinator stops the bus (no new work arrives),
-        // then the pump drains the branches it is running, and only then is the lease released, so the
-        // standby cannot recover a branch this process is still finishing.
+        // Hosted services stop in reverse order. The pump stops first and drains the branches it is
+        // running while the bus is still up, so a step finishing during a deploy can still send its
+        // command or notification (it stopped taking new work when the host began stopping). Then the
+        // coordinator stops the bus, and only then is the lease released, so the standby cannot recover
+        // a branch this process is still finishing.
         services.AddHostedService<LeaderElectionService>();
-        services.AddHostedService<BranchExecutionPump>();
         services.AddHostedService<EngineLeadershipCoordinator>();
+        services.AddHostedService<BranchExecutionPump>();
         services.AddHostedService<BookmarkScheduler>();
         services.AddHostedService<BookmarkOrphanGc>();
         services.AddHostedService<ScheduledFireTicker>();
