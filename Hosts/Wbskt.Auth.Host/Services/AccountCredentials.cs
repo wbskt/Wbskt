@@ -70,7 +70,9 @@ internal sealed class AccountCredentials(
             {
                 var lockedUntil = await EndAsync(user.Id, succeeded: false);
                 settled = true;
-                await ReportLockAsync(user, lockedUntil, ipAddress, cancellationToken);
+
+                // The owner is told even when the guess that locked the account was dropped.
+                await ReportLockAsync(user, lockedUntil, ipAddress, CancellationToken.None);
                 return PasswordCheck.Wrong;
             }
 
