@@ -3,7 +3,12 @@ CREATE PROCEDURE dbo.RunCounters_TryCharge
     @Cost   DECIMAL(18,4),
     -- The engine's clock (TimeProvider), which decides the month a lease is extended in, as it decides
     -- the month Run_Start reads. NULL, from an engine still on the earlier build, reads the SQL clock.
-    @NowUtc DATETIME2(3) = NULL
+    @NowUtc DATETIME2(3) = NULL,
+    -- Why a charge was refused, when it was (#954): RunBudget (the run's own budget, its ceiling for a
+    -- leased one), PlanCredits (the account's month, with its packs) or WorkspaceCap (the workspace's
+    -- monthly cap). NULL when the charge went through. Optional, so an engine on an earlier build that
+    -- does not ask still reads the result as before.
+    @Refusal NVARCHAR(20) = NULL OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -14,6 +19,8 @@ BEGIN
     -- No row returned means the run is out of credits; otherwise the row is what was spent of the budget
     -- the charge was held to, and that budget (its ceiling, for a leased one).
     DECLARE @Charged TABLE (Spent DECIMAL(18,4) NOT NULL, Budget DECIMAL(18,4) NOT NULL);
+    DECLARE @Reason NVARCHAR(20) = N'RunBudget';
+    SET @Refusal = NULL;
 
     -- A run with its own budget and room in it: one statement, as on every charge before sub-workflow
     -- budgets and leases.
@@ -149,11 +156,19 @@ BEGIN
                     SET @Extend = @TenantLeft;
 
                 -- Only an extension that lets the charge through is taken, so a refused charge leaves
-                -- nothing held by a run that cannot use it.
+                -- nothing held by a run that cannot use it. A refusal names what ran short, in the order
+                -- that raising it would help: the run's own ceiling, then the account (raising the cap does
+                -- nothing while its month is spent), then the cap.
                 IF @Extend >= @Need
                     UPDATE dbo.Runs
                     SET CreditBudget = @Budget + @Extend
                     WHERE Id = @Root;
+                ELSE IF @Ceiling - @Budget < @Need
+                    SET @Reason = N'RunBudget';
+                ELSE IF @TenantLeft < @Need
+                    SET @Reason = N'PlanCredits';
+                ELSE IF @CapLeft < @Need
+                    SET @Reason = N'WorkspaceCap';
             END
         END
 
@@ -179,6 +194,9 @@ BEGIN
 
         COMMIT TRANSACTION;
     END
+
+    IF NOT EXISTS (SELECT 1 FROM @Charged)
+        SET @Refusal = @Reason;
 
     SELECT Spent, Budget FROM @Charged;
 END;

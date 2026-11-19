@@ -277,7 +277,11 @@ Every run has a budget (definition `creditBudget`, else 10 000). Creating a run 
 charge counts against the budget. Each node attempt is charged its
 kind's price before it runs; triggers are free and resuming a parked node is free. Prices are in the
 tables above and can be overridden per kind in configuration (`WorkflowEngine:CreditCosts`). When the
-budget runs out the node fails with `OUT_OF_CREDITS`, the run is cancelled and ends `OutOfCredits`.
+budget runs out the run is cancelled and ends `OutOfCredits`, and the node fails with a code that says
+which budget it was and its message what to raise: `OUT_OF_CREDITS_RUN_BUDGET` (the workflow's credit
+budget), `PLAN_CREDIT_LIMIT_REACHED` (the account's month, with its credit packs) or
+`WORKSPACE_CREDIT_CAP_REACHED` (the workspace's monthly cap). Runs stopped before this change carry
+`OUT_OF_CREDITS`.
 
 ## 12. Expressions
 

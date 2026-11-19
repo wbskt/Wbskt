@@ -179,6 +179,7 @@ public sealed class BusinessOverageIntegrationTests(SqlEdgeFixture fixture)
     {
         CreditCharge? charge = await ProviderFactory.RunCounters(fixture.ConnectionString).TryChargeAsync((int)runId, cost, CancellationToken.None);
         charge.Should().NotBeNull();
+        charge!.Refusal.Should().BeNull();
     }
 
     private Task PostAsync() =>

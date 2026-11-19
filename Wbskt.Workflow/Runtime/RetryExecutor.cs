@@ -203,9 +203,9 @@ internal static class RetryExecutor
                 // same row lock as the increment, so this is a single round-trip with no
                 // check-then-act race between concurrent branches on the same run.
                 CreditCharge? charge = await ChargeAsync(runCountersProvider, (int)context.RunId, cost, clock, ct);
-                if (charge is null)
+                if (charge is null || charge.Refusal is not null)
                 {
-                    var outOfCreditsResult = new NodeExecutionResult.Fail("OUT_OF_CREDITS", "Credit budget exhausted.", false, null) { Warnings = chargeWarnings.ToArray() };
+                    var outOfCreditsResult = OutOfCredits.Fail(charge?.Refusal ?? CreditRefusal.RunBudget) with { Warnings = chargeWarnings.ToArray() };
                     string errorJson = JsonSerializer.Serialize(outOfCreditsResult, EngineJson.Options);
 
                     await RecordOutcomeAsync(false, errorJson);

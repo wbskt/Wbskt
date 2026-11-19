@@ -625,6 +625,7 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
     {
         CreditCharge? charge = await ProviderFactory.RunCounters(fixture.ConnectionString).TryChargeAsync((int)runId, cost, CancellationToken.None);
         charge.Should().NotBeNull();
+        charge!.Refusal.Should().BeNull();
     }
 
     private async Task<decimal> DrawnAsync(string sourceRef)
@@ -664,7 +665,7 @@ public sealed class CreditGrantIntegrationTests(SqlEdgeFixture fixture)
     private sealed class ChargeCounter(Wbskt.Workflow.Providers.RunCountersProvider counters)
     {
         public async Task<(decimal Spent, decimal Budget)?> TryAsync(long runId, decimal cost) =>
-            await counters.TryChargeAsync((int)runId, cost, CancellationToken.None) is { } charge ? (charge.Spent, charge.Budget) : null;
+            await counters.TryChargeAsync((int)runId, cost, CancellationToken.None) is { Refusal: null } charge ? (charge.Spent, charge.Budget) : null;
     }
 
     private async Task ExecAsync(string sql, int one, int two)

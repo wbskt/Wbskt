@@ -60,17 +60,28 @@ internal sealed class RunCountersProvider : BaseSqlProvider, IRunCountersProvide
 
     public async Task<CreditCharge?> TryChargeAsync(int runId, decimal cost, CancellationToken ct)
     {
-        return await ExecuteFindAsync(
+        SqlParameter? refusal = null;
+        CreditCharge? charge = await ExecuteFindAsync(
             "dbo.RunCounters_TryCharge",
             p =>
             {
                 p.AddWithValue("@RunId", runId);
                 p.AddWithValue("@Cost", cost);
                 p.Add("@NowUtc", SqlDbType.DateTime2).Value = _clock.GetUtcNow().UtcDateTime;
+                refusal = p.Add("@Refusal", SqlDbType.NVarChar, 20);
+                refusal.Direction = ParameterDirection.Output;
             },
             r => new CreditCharge(r.GetDecimal(0), r.GetDecimal(1)),
             ct
         );
+
+        // The output is set once the reader is closed, which ExecuteFindAsync has done by now.
+        if (charge is not null)
+        {
+            return charge;
+        }
+
+        return CreditCharge.Refused(refusal?.Value is string reason && Enum.TryParse(reason, out CreditRefusal parsed) ? parsed : CreditRefusal.RunBudget);
     }
 
     public async Task<long> SumActiveBranchesAsync(CancellationToken ct)

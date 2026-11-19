@@ -216,6 +216,21 @@ public sealed class FailResultHandlerTests
             _log);
     }
 
+    /// <summary>#954: whichever budget ran out, the run is cancelled with the one reason that ends it OutOfCredits.</summary>
+    [Theory]
+    [InlineData("OUT_OF_CREDITS_RUN_BUDGET")]
+    [InlineData("PLAN_CREDIT_LIMIT_REACHED")]
+    [InlineData("WORKSPACE_CREDIT_CAP_REACHED")]
+    public async Task Each_credit_refusal_cancels_the_run_as_out_of_credits(string code)
+    {
+        var node = ActionNode(ErrorOutcome.FailBranch);
+        var branches = new RecordingBranchProvider(_log, Branch(FailingNode));
+
+        await CreateHandler(branches).HandleAsync(new NodeExecutionResult.Fail(code, "spent", false, null), Context(node, Definition([node], []), branches.Current), CancellationToken.None);
+
+        Assert.Contains("cancel-run:OUT_OF_CREDITS", _log);
+    }
+
     /// <summary>
     /// A failed cohort branch never reaches its Join, so it contributes "failed" itself; when that
     /// arrival meets the quorum, the work after the Join goes on in a fresh, counted branch.
