@@ -15,11 +15,18 @@ public sealed class ClientConnection : ClientConnectionBase, IDisposable
     // How long a client has to answer our Close before its connection is cut.
     internal static readonly TimeSpan CloseGrace = TimeSpan.FromSeconds(5);
 
+    // How long one message may take to go out, waiting for the send lock included. A client that stops
+    // reading fills its buffers and a send to it never finishes; no caller may wait on one client.
+    internal static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(10);
+
     private readonly SemaphoreSlim _sendLock = new(1, 1);
     private readonly CancellationTokenSource _closing = new();
 
+    private readonly TimeProvider _time;
+
     public ClientConnection(TimeProvider time) : base(time)
     {
+        _time = time;
     }
 
     // Qualified: inside Wbskt.Gateway, a bare WebSocket names this host's own namespace.
@@ -41,15 +48,26 @@ public sealed class ClientConnection : ClientConnectionBase, IDisposable
     {
         var bytes = Encoding.UTF8.GetBytes(text);
 
-        // WebSocket allows only one outstanding send; commands, pings and samplers can race here.
-        await _sendLock.WaitAsync(cancellationToken);
+        using var timeout = new CancellationTokenSource(SendTimeout, _time);
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
         try
         {
-            await Socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cancellationToken);
+            // WebSocket allows only one outstanding send; commands, pings and samplers can race here.
+            await _sendLock.WaitAsync(bounded.Token);
+            try
+            {
+                await Socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, bounded.Token);
+            }
+            finally
+            {
+                _sendLock.Release();
+            }
         }
-        finally
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
-            _sendLock.Release();
+            // A cancelled send aborts the socket; the close is asked for so the session ends as an error.
+            _ = RequestCloseAsync(DisconnectReason.Error, "The client stopped reading.");
+            throw new TimeoutException($"A send to the client took longer than {SendTimeout.TotalSeconds:0} s.");
         }
     }
 

@@ -1,59 +1,55 @@
 using Microsoft.Extensions.Options;
 using Wbskt.Gateway.Core.Infrastructure;
+using Wbskt.Infrastructure.Hosting;
 
 namespace Wbskt.Gateway.Core.HostedServices;
 
-// Pings every connected client once per PingSamplerOptions.Interval (PingSampler:Interval, five
-// minutes by default) so the console's latency readings never go entirely stale. It runs whether or
-// not anyone is looking, so the interval is long; on-demand pings (the console's Ping button) go
-// through the bus via ClientPingHandler. This sampler sends directly since it already runs in-process.
-internal sealed class PingSampler : BackgroundService
+/// <summary>
+/// Pings every connected client once per <see cref="PingSamplerOptions.Interval"/> (PingSampler:Interval,
+/// five minutes by default) so the console's latency readings never go entirely stale. It runs whether or
+/// not anyone is looking, so the interval is long; on-demand pings (the console's Ping button) go
+/// through the bus via ClientPingHandler. This sampler sends directly since it already runs in-process.
+/// A few connections are pinged at a time, and each send is bounded by the connection itself, so a client
+/// that stops reading costs its own connection and never holds up the round.
+/// </summary>
+internal sealed class PingSampler(
+    IConnectionManager connectionManager,
+    IOptions<PingSamplerOptions> options,
+    IServiceScopeFactory scopeFactory,
+    ILogger<PingSampler> logger)
+    : PeriodicWorker(AlwaysOpenWorkGate.Instance, scopeFactory, logger)
 {
-    private readonly IConnectionManager _connectionManager;
-    private readonly ILogger<PingSampler> _logger;
-    private readonly TimeSpan _interval;
+    internal const int Parallelism = 16;
 
-    public PingSampler(IConnectionManager connectionManager, IOptions<PingSamplerOptions> options, ILogger<PingSampler> logger)
+    protected override string Name => "Ping sampler";
+
+    protected override TimeSpan Interval { get; } =
+        options.Value.Interval > TimeSpan.Zero ? options.Value.Interval : PingSamplerOptions.DefaultInterval;
+
+    // Nothing is connected yet when the host starts.
+    protected override bool RunOnStart => false;
+
+    protected override async Task RunOnceAsync(IServiceProvider services, CancellationToken ct)
     {
-        _connectionManager = connectionManager;
-        _logger = logger;
-        var interval = options.Value.Interval;
-        _interval = interval > TimeSpan.Zero ? interval : PingSamplerOptions.DefaultInterval;
-    }
+        var open = connectionManager.GetConnections().Where(c => c.Value.IsOpen).ToList();
+        var failed = 0;
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        using var timer = new PeriodicTimer(_interval);
-
-        try
+        await Parallel.ForEachAsync(open, new ParallelOptions { MaxDegreeOfParallelism = Parallelism, CancellationToken = ct }, async (entry, token) =>
         {
-            while (await timer.WaitForNextTickAsync(stoppingToken))
+            try
             {
-                foreach (var (clientRefId, connection) in _connectionManager.GetConnections())
-                {
-                    if (!connection.IsOpen)
-                    {
-                        continue;
-                    }
-
-                    try
-                    {
-                        await connection.SendPingAsync(stoppingToken);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        throw;
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogDebug("Sampler ping to client {ClientRefId} failed: {Message}", clientRefId, ex.Message);
-                    }
-                }
+                await entry.Value.SendPingAsync(token);
             }
-        }
-        catch (OperationCanceledException)
+            catch (Exception ex) when (ex is not OperationCanceledException || !token.IsCancellationRequested)
+            {
+                Interlocked.Increment(ref failed);
+                Logger.LogDebug("Sampler ping to client {ClientRefId} failed: {Message}", entry.Key, ex.Message);
+            }
+        });
+
+        if (failed > 0)
         {
-            // Host is shutting down.
+            Logger.LogInformation("Sampler pings failed for {Failed} of {Total} connections.", failed, open.Count);
         }
     }
 }
