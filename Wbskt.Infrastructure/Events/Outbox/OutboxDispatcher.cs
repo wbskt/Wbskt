@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.Metrics;
 using System.Reflection;
 using System.Text.Json;
 using Microsoft.Extensions.Hosting;
@@ -20,12 +21,18 @@ namespace Wbskt.Infrastructure.Events.Outbox;
 /// <para>
 /// A failed publish ends the pass and the next one waits longer, up to <see cref="MaxBackoff"/>, so a
 /// broker outage delays events without spinning; they stay in the table meanwhile. A row whose type
-/// this host does not know (written by a newer version, then rolled back) is left in place and logged
-/// once, rather than blocking the rows after it.
+/// this host does not know (written by a newer version, then rolled back) or cannot read is left in
+/// place and logged once, rather than blocking the rows after it. Each batch is read after the last id
+/// the pass saw, so however many such rows pile up at the head of the table, the rows behind them are
+/// still sent. How many are left behind is the <c>wbskt_outbox_unreadable_rows</c> gauge, which alerts
+/// as <c>OutboxRowsUnreadable</c>.
 /// </para>
 /// </remarks>
 public sealed class OutboxDispatcher : BackgroundService
 {
+    /// <summary>The rows left in the outbox because this host cannot read them, for a host that exports this meter.</summary>
+    public const string MeterName = "Wbskt.Events.Outbox";
+
     internal const int BatchSize = 50;
     internal static readonly TimeSpan DefaultPollInterval = TimeSpan.FromSeconds(2);
     internal static readonly TimeSpan MaxBackoff = TimeSpan.FromSeconds(30);
@@ -40,8 +47,10 @@ public sealed class OutboxDispatcher : BackgroundService
     private readonly IEventBus _bus;
     private readonly ILogger<OutboxDispatcher> _logger;
     private readonly TimeSpan _pollInterval;
-    private readonly ConcurrentDictionary<long, byte> _unknownRows = new();
+    private readonly HashSet<long> _unknownRows = [];
     private readonly ConcurrentDictionary<Type, MethodInfo> _publishers = new();
+    private readonly Meter _meter = new(MeterName);
+    private int _unreadableRows;
 
     public OutboxDispatcher(IOutboxStore store, IEventBus bus, ILogger<OutboxDispatcher> logger)
         : this(store, bus, logger, DefaultPollInterval)
@@ -54,7 +63,11 @@ public sealed class OutboxDispatcher : BackgroundService
         _bus = bus;
         _logger = logger;
         _pollInterval = pollInterval;
+        _meter.CreateObservableGauge("wbskt_outbox_unreadable_rows", () => Volatile.Read(ref _unreadableRows));
     }
+
+    /// <summary>Rows the last complete pass left in the outbox because it could not read them.</summary>
+    internal int UnreadableRows => Volatile.Read(ref _unreadableRows);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -93,21 +106,25 @@ public sealed class OutboxDispatcher : BackgroundService
     /// <summary>One pass over the pending rows. False when a publish failed and the pass stopped early.</summary>
     internal async Task<bool> DispatchPendingAsync(CancellationToken ct)
     {
+        long? afterId = null;
+        var unreadable = new HashSet<long>();
         IReadOnlyCollection<PendingOutboxMessage> pending;
         do
         {
-            pending = await _store.GetPendingAsync(BatchSize, ct);
-            int handled = 0;
+            pending = await _store.GetPendingAsync(BatchSize, afterId, ct);
             foreach (var row in pending)
             {
-                if (_unknownRows.ContainsKey(row.Id))
+                afterId = row.Id;
+                if (_unknownRows.Contains(row.Id))
                 {
+                    unreadable.Add(row.Id);
                     continue;
                 }
 
                 if (!TryRead(row, out var @event, out var type))
                 {
-                    _unknownRows.TryAdd(row.Id, 0);
+                    _unknownRows.Add(row.Id);
+                    unreadable.Add(row.Id);
                     continue;
                 }
 
@@ -122,17 +139,13 @@ public sealed class OutboxDispatcher : BackgroundService
                 }
 
                 await _store.DeleteAsync(row.Id, ct);
-                handled++;
-            }
-
-            // A full batch made of nothing but rows this host cannot read would loop forever.
-            if (handled == 0)
-            {
-                return true;
             }
         }
         while (pending.Count == BatchSize);
 
+        // Forget rows someone has since removed by hand, so the gauge falls back to zero.
+        _unknownRows.IntersectWith(unreadable);
+        Volatile.Write(ref _unreadableRows, unreadable.Count);
         return true;
     }
 
@@ -163,5 +176,11 @@ public sealed class OutboxDispatcher : BackgroundService
         // published as its own type, not as IEvent.
         var publish = _publishers.GetOrAdd(type, t => PublishMethod.MakeGenericMethod(t));
         return (Task)publish.Invoke(_bus, [@event, ct])!;
+    }
+
+    public override void Dispose()
+    {
+        _meter.Dispose();
+        base.Dispose();
     }
 }

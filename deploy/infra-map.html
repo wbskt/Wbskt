@@ -673,6 +673,7 @@ const ALERTS = [
  ['CallbackQueueBytesBacklog','Bus','Bytes of public callbacks waiting for the engine (5 min)'],
  ['SocketDisconnectRateHigh','Clients','Abnormal disconnects exceed half the connected clients in 10 minutes'],
  ['RevokeMissedByGateway','Clients','A gateway missed a client revoke event; its access re-check closed the connection'],
+ ['OutboxRowsUnreadable','Data','The auth host left events in its outbox that it cannot read (unknown type or bad payload) for 10 minutes; later events still go out (warn)'],
  ['DeletedWorkspaceRetiredBySweep','Data','The daily sweep retired a workspace whose delete event was missed'],
  ['BackupMissing','Backups','No successful backup for 26 hours'],
  ['BackupNeverReported','Backups','No backup has ever reported success'],

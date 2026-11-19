@@ -368,6 +368,26 @@ groups:
             queue is the usual cause.
           command: "docker compose logs --since 25h management | grep \"still had live content\""
 
+      - alert: OutboxRowsUnreadable
+        # The auth host's outbox dispatcher left rows in dbo.OutboxMessages that it cannot read: a type
+        # it does not know (written by a newer version, then rolled back) or a payload that does not
+        # parse. They no longer hold up the rows behind them, but their events were never sent. max:
+        # every auth replica reads the same table.
+        expr: max(wbskt_outbox_unreadable_rows) > 0
+        for: 10m
+        labels:
+          severity: warn
+        annotations:
+          summary: "{{ $value }} auth event(s) are stuck in the outbox because the auth host cannot read them"
+          impact: >-
+            Something the auth host recorded, such as a deleted workspace, was never announced to the other
+            hosts, so they still act as if it had not happened. Later events are still sent.
+          action: >-
+            The auth log's "has a type this host does not know" or "could not be read" error names each row.
+            After a rollback, deploying the newer version again sends them. Otherwise read the row in
+            dbo.OutboxMessages, do by hand what its event would have done, and delete it.
+          command: "docker compose logs --since 1h auth | grep -E \"does not know|could not be read\""
+
       - alert: BackupMissing
         # backup.sh pushes this timestamp only after a verified backup has been uploaded.
         expr: time() - max(wbskt_backup_last_success_timestamp_seconds) > 26 * 3600

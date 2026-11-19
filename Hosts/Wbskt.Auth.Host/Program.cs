@@ -167,7 +167,7 @@ public static class Program
         builder.Services.AddSingleton(Options.Create(builder.Configuration.GetSection("Auth:RefreshCookie").Get<RefreshCookieOptions>() ?? new RefreshCookieOptions()));
         builder.Services.AddSingleton<RefreshTokenCookie>();
 
-        builder.AddWbsktTelemetry(AuthMetrics.MeterName, QueuedEventBus.MeterName);
+        builder.AddWbsktTelemetry(AuthMetrics.MeterName, QueuedEventBus.MeterName, OutboxDispatcher.MeterName);
 
         // Event Bus
         builder.Services.AddRabbitMqEventBus(builder.Configuration, consumerAssemblies: [typeof(Program).Assembly]);
