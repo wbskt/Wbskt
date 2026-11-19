@@ -35,7 +35,7 @@ tests:
           - exp_labels:
               severity: page
             exp_annotations:
-              action: "The mail relay is refusing everything or cannot be reached: often an expired password, a sending limit, or the provider being down. The auth host's \"failed on attempt\", \"was not sent\" and \"was refused by the relay\" log lines carry the relay's error code. Mail that failed is tried again for about eight hours, so fixing the relay soon still delivers it. If the SMTP_* settings in .env changed, fix them and restart auth. This alert is mailed through that same relay, so it reaches anyone only when ALERT_WEBHOOK_URL is set too."
+              action: "The mail relay is refusing everything or cannot be reached: often an expired password, a sending limit, or the provider being down. The auth host's \"failed on attempt\", \"was not sent\" and \"was refused by the relay\" log lines carry the relay's error code. Mail that failed is tried again for about eight hours (a link that expires sooner, such as a password reset, only until then), so fixing the relay soon still delivers it. If the SMTP_* settings in .env changed, fix them and restart auth. This alert is mailed through that same relay, so it reaches anyone only when ALERT_WEBHOOK_URL is set too."
               command: "docker compose logs --since 1h auth | grep -E \"failed on attempt|was not sent|refused by the relay\""
               impact: "Sign-up confirmations, invitations and password resets are not being delivered. New users cannot confirm their address, so they cannot sign in."
               summary: "Outgoing email has stopped: none sent in 15 minutes, 15 given up on"
