@@ -79,7 +79,7 @@ public sealed class SignInServiceTests
     {
         var harness = new Harness();
         harness.WithUser(AUser());
-        harness.Accounts.Setup(p => p.RecordLoginFailureAsync(42, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, It.IsAny<CancellationToken>()))
+        harness.Accounts.Setup(p => p.EndPasswordCheckAsync(42, false, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, It.IsAny<CancellationToken>()))
             .ReturnsAsync(DateTime.UtcNow.Add(AccountLockout.LoginLockout));
 
         var result = await harness.SignIn.LoginAsync(Email, "not the password", Ip);
@@ -94,7 +94,7 @@ public sealed class SignInServiceTests
     {
         var harness = new Harness();
         harness.WithUser(AUser());
-        harness.Accounts.Setup(p => p.RecordLoginFailureAsync(42, It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+        harness.Accounts.Setup(p => p.EndPasswordCheckAsync(42, false, It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((DateTime?)null);
 
         await harness.SignIn.LoginAsync(Email, "not the password", Ip);
@@ -143,7 +143,7 @@ public sealed class SignInServiceTests
         var result = await harness.SignIn.LoginFromBrowserAsync(Email, "not the password", Ip, "owner-device");
 
         Assert.Equal("AUTH_INVALID_CREDENTIALS", result.Error.Code);
-        harness.Accounts.Verify(p => p.RecordLoginFailureAsync(42, It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Once);
+        harness.Accounts.Verify(p => p.EndPasswordCheckAsync(42, false, It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Once);
         harness.Sessions.Verify(p => p.InsertDeviceAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 

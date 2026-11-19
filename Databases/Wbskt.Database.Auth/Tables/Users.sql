@@ -16,7 +16,8 @@ CREATE TABLE dbo.Users (
     CreatedAt    DATETIME2(3)     NOT NULL           DEFAULT SYSUTCDATETIME(),
 
     -- Per-account sign-in lockout. Wrong passwords count up to the service's limit, which locks the
-    -- account until LockedUntil and starts the count again. A successful sign-in, a password change
+    -- account until LockedUntil and starts the count again. An attempt being checked counts until it
+    -- is settled (User_BeginPasswordCheck, User_EndPasswordCheck). A successful sign-in, a password change
     -- or a reset clears both. The per-IP rate limiter cannot do this: a guesser spread across many
     -- addresses never trips it.
     FailedLoginCount  INT          NOT NULL           CONSTRAINT DF_Users_FailedLoginCount DEFAULT 0,

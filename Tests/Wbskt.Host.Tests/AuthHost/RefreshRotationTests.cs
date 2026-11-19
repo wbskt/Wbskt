@@ -165,13 +165,16 @@ public sealed class RefreshRotationTests
         private SignInService Create(IJwtService jwt, IEventBus bus) => new(
             Accounts.Object,
             Sessions.Object,
-            jwt,
             bus,
             Options.Create(new AuthEmailOptions()),
             NullLogger<SignInService>.Instance,
             new AuthMetrics(),
             AccessTokens.Object,
-            Options.Create(new AccessTokenOptions()),
-            new SecurityNotices(Mock.Of<IAuthMailer>(), MailCooldownTests.InProcess(), new AuthMetrics(), TimeProvider.System));
+            new SessionTokens(jwt, Options.Create(new AccessTokenOptions()), TimeProvider.System),
+            CredentialFakes.Credentials(Accounts, Sessions.Object, bus,
+                new SecurityNotices(Mock.Of<IAuthMailer>(), MailCooldownTests.InProcess(), new AuthMetrics(), TimeProvider.System), AccessTokens.Object),
+            CredentialFakes.Hashing(),
+            new AccountAnnouncer(Accounts.Object, bus, AuditWorkspaces.None, NullLogger<AccountAnnouncer>.Instance),
+            TimeProvider.System);
     }
 }

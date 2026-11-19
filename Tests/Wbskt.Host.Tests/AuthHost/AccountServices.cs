@@ -43,47 +43,53 @@ internal class AccountServices
         var metrics = new AuthMetrics();
         Notices = new SecurityNotices(mailer, cooldown, metrics, TimeProvider.System);
 
+        var time = TimeProvider.System;
+        var hashing = CredentialFakes.Hashing();
+        var tokens = new SessionTokens(jwt, Options.Create(new AccessTokenOptions()), time);
+        var announcer = new AccountAnnouncer(Accounts.Object, bus, audit ?? AuditWorkspaces.None, NullLogger<AccountAnnouncer>.Instance);
+        var credentials = CredentialFakes.Credentials(Accounts, Sessions.Object, bus, Notices, AccessTokens.Object, hashing);
+
         SignIn = new SignInService(
             Accounts.Object,
             Sessions.Object,
-            jwt,
             bus,
             Options.Create(new AuthEmailOptions { RequireVerifiedEmailForSignIn = requireVerifiedEmail }),
             signInLogger ?? NullLogger<SignInService>.Instance,
             metrics,
             AccessTokens.Object,
-            Options.Create(new AccessTokenOptions()),
-            Notices,
+            tokens,
+            credentials,
+            hashing,
+            announcer,
+            time,
             audit);
 
         Passwords = new PasswordService(
             Accounts.Object,
             Sessions.Object,
-            jwt,
-            bus,
             mailer,
             NullLogger<PasswordService>.Instance,
             metrics,
-            AccessTokens.Object,
-            Options.Create(new AccessTokenOptions()),
+            tokens,
             cooldown,
             Notices,
-            audit,
+            credentials,
+            hashing,
+            announcer,
+            time,
             breachedPasswords);
 
         Profile = new AccountProfileService(
             Accounts.Object,
             Sessions.Object,
-            jwt,
-            bus,
             mailer,
             cooldown,
-            Notices,
-            AccessTokens.Object,
-            Options.Create(new AccessTokenOptions()),
+            tokens,
             NullLogger<AccountProfileService>.Instance,
             metrics,
-            audit);
+            credentials,
+            announcer,
+            time);
 
         Registration = new RegistrationService(
             Accounts.Object,
@@ -94,6 +100,9 @@ internal class AccountServices
             metrics,
             cooldown,
             limits ?? new FixedTenantLimits(),
+            hashing,
+            announcer,
+            time,
             audit,
             breachedPasswords);
     }

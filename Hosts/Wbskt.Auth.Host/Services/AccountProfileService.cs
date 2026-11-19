@@ -44,42 +44,37 @@ internal sealed class AccountProfileService : IAccountProfileService
 
     private readonly IAccountProvider _accounts;
     private readonly ISessionProvider _sessions;
-    private readonly IEventBus _eventBus;
     private readonly IAuthMailer _mailer;
     private readonly MailCooldown _mailCooldown;
-    private readonly SecurityNotices _notices;
-    private readonly IAccessTokenRevocation _accessTokens;
     private readonly ILogger<AccountProfileService> _logger;
     private readonly AuthMetrics _metrics;
     private readonly SessionTokens _tokens;
     private readonly AccountAnnouncer _announcer;
-    private readonly PasswordHasher<User> _passwordHasher = new();
+    private readonly AccountCredentials _credentials;
+    private readonly TimeProvider _time;
 
     public AccountProfileService(
         IAccountProvider accounts,
         ISessionProvider sessions,
-        IJwtService jwtService,
-        IEventBus eventBus,
         IAuthMailer mailer,
         MailCooldown mailCooldown,
-        SecurityNotices notices,
-        IAccessTokenRevocation accessTokens,
-        IOptions<AccessTokenOptions> accessTokenOptions,
+        SessionTokens tokens,
         ILogger<AccountProfileService> logger,
         AuthMetrics metrics,
-        IAuditWorkspaces? audit = null)
+        AccountCredentials credentials,
+        AccountAnnouncer announcer,
+        TimeProvider time)
     {
         _accounts = accounts;
         _sessions = sessions;
-        _eventBus = eventBus;
         _mailer = mailer;
         _mailCooldown = mailCooldown;
-        _notices = notices;
-        _accessTokens = accessTokens;
         _logger = logger;
         _metrics = metrics;
-        _tokens = new SessionTokens(jwtService, accessTokenOptions.Value);
-        _announcer = new AccountAnnouncer(accounts, eventBus, audit ?? AuditWorkspaces.None, logger);
+        _tokens = tokens;
+        _credentials = credentials;
+        _announcer = announcer;
+        _time = time;
     }
 
     public async Task<Result<LoginResponse>> ChangeUsernameAsync(int userId, Guid? sessionId, string username, string ipAddress, CancellationToken cancellationToken = default)
@@ -97,7 +92,7 @@ internal sealed class AccountProfileService : IAccountProfileService
         }
         catch (SecurityException)
         {
-            return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_USER_NOT_FOUND", "User not found."));
+            return Result<LoginResponse>.Failure(AccountCredentials.UserNotFound);
         }
         catch (SqlException ex) when (ex.Number is 2601 or 2627)
         {
@@ -123,30 +118,15 @@ internal sealed class AccountProfileService : IAccountProfileService
 
     public async Task<Result> RequestEmailChangeAsync(int userId, string password, string newEmail, string ipAddress, CancellationToken cancellationToken = default)
     {
-        User user;
-        try
-        {
-            user = await _accounts.GetByIdAsync(userId, cancellationToken);
-        }
-        catch (SecurityException)
-        {
-            return Result.Failure(Error.Unauthorized("AUTH_USER_NOT_FOUND", "User not found."));
-        }
-
         // Same rules as changing the password: a stolen access token must not be enough to point the
         // account at another mailbox, nor an unthrottled way to guess the password behind it.
-        if (user.LockedUntil > DateTime.UtcNow)
+        var confirmed = await _credentials.ConfirmPasswordAsync(userId, password, ipAddress, cancellationToken);
+        if (confirmed.IsFailure)
         {
-            return Result.Failure(Error.Forbidden("AUTH_ACCOUNT_LOCKED", "Too many wrong passwords. Try again later, or reset your password."));
+            return Result.Failure(confirmed.Error);
         }
 
-        if (_passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password) == PasswordVerificationResult.Failed)
-        {
-            _logger.LogWarning("Email change refused: the password did not match for user {UserId}. IP: {IpAddress}", userId, ipAddress);
-            await AccountLockout.RecordFailedPasswordAsync(_accounts, _eventBus, _notices, _logger, user, ipAddress, cancellationToken);
-            return Result.Failure(Error.Validation("AUTH_CURRENT_PASSWORD_INVALID", "The current password is not correct."));
-        }
-
+        var user = confirmed.Value;
         if (string.Equals(user.Email, newEmail, StringComparison.OrdinalIgnoreCase))
         {
             return Result.Failure(EmailUnchanged);
@@ -173,7 +153,7 @@ internal sealed class AccountProfileService : IAccountProfileService
         }
 
         var token = SecurityTokens.Generate();
-        var expiresAt = DateTime.UtcNow.Add(EmailChangeLifetime);
+        var expiresAt = _time.GetUtcNow().UtcDateTime.Add(EmailChangeLifetime);
         await _accounts.CreateEmailChangeTokenAsync(userId, newEmail, SecurityTokens.Hash(token), expiresAt, ipAddress, cancellationToken);
         await _mailer.QueueEmailChangeAsync(newEmail, user.Username, token, expiresAt, cancellationToken);
 
@@ -184,7 +164,7 @@ internal sealed class AccountProfileService : IAccountProfileService
     public async Task<Result<LoginResponse?>> ConfirmEmailChangeAsync(string token, int? callerUserId, string ipAddress, CancellationToken cancellationToken = default)
     {
         var revertToken = SecurityTokens.Generate();
-        var revertExpiresAt = DateTime.UtcNow.Add(EmailRevertLifetime);
+        var revertExpiresAt = _time.GetUtcNow().UtcDateTime.Add(EmailRevertLifetime);
 
         EmailChange change;
         try
@@ -202,7 +182,7 @@ internal sealed class AccountProfileService : IAccountProfileService
         }
 
         var user = await _accounts.GetByIdAsync(change.UserId, cancellationToken);
-        await _accessTokens.RevokeUserAsync(user.RefId, cancellationToken);
+        await _credentials.RevokeAccessTokensAsync(user.RefId, cancellationToken);
         await _mailer.QueueEmailChangedAsync(change.From, user.Username, change.To, revertToken, revertExpiresAt, cancellationToken);
 
         _logger.LogInformation("Email changed for user {UserId}; all sessions revoked. IP: {IpAddress}", change.UserId, ipAddress);
@@ -237,7 +217,7 @@ internal sealed class AccountProfileService : IAccountProfileService
 
         // Not RefOfAsync: a revocation that silently named nobody would leave the tokens working.
         var userRef = (await _accounts.GetByIdAsync(change.UserId, cancellationToken)).RefId;
-        await _accessTokens.RevokeUserAsync(userRef, cancellationToken);
+        await _credentials.RevokeAccessTokensAsync(userRef, cancellationToken);
 
         _logger.LogWarning("Email change reverted for user {UserId}; all sessions revoked. IP: {IpAddress}", change.UserId, ipAddress);
         await _announcer.AnnounceAsync(new UserProfileChangedEvent(change.UserId, userRef, "email", change.From, change.To, "reverted"), ipAddress, cancellationToken);

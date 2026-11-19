@@ -39,7 +39,7 @@ public sealed class AccountSecurityTests
         // The ordinary answer, so a lock says nothing about whether the address has an account.
         Assert.Equal("AUTH_INVALID_CREDENTIALS", result.Error.Code);
         harness.Accounts.Verify(p => p.RecordLoginSuccessAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
-        harness.Accounts.Verify(p => p.RecordLoginFailureAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.Accounts.Verify(p => p.EndPasswordCheckAsync(It.IsAny<int>(), false, It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -63,8 +63,37 @@ public sealed class AccountSecurityTests
         var result = await harness.SignIn.LoginAsync(Email, "not the password", "10.0.0.1");
 
         Assert.Equal("AUTH_INVALID_CREDENTIALS", result.Error.Code);
-        harness.Accounts.Verify(p => p.RecordLoginFailureAsync(42, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, It.IsAny<CancellationToken>()), Times.Once);
+        harness.Accounts.Verify(p => p.EndPasswordCheckAsync(42, false, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, It.IsAny<CancellationToken>()), Times.Once);
         harness.Accounts.Verify(p => p.RecordLoginSuccessAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task An_attempt_that_finds_the_limit_in_flight_is_not_checked()
+    {
+        // Ten guesses already counted or still being checked: the database refuses the eleventh its
+        // slot, so a burst cannot get more tries than the lock allows by racing the count.
+        var harness = new Harness();
+        harness.WithUser(AUser());
+        harness.Accounts.Setup(p => p.BeginPasswordCheckAsync(42, AccountLockout.MaxFailedLogins, false, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await harness.SignIn.LoginAsync(Email, Password, "10.0.0.1");
+
+        Assert.Equal("AUTH_INVALID_CREDENTIALS", result.Error.Code);
+        harness.Accounts.Verify(p => p.EndPasswordCheckAsync(It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.Accounts.Verify(p => p.RecordLoginSuccessAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_right_password_gives_its_reserved_attempt_back()
+    {
+        var harness = new Harness();
+        harness.WithUser(AUser());
+
+        var result = await harness.Passwords.ChangePasswordAsync(42, Password, "a brand new passphrase", "10.0.0.1");
+
+        Assert.True(result.IsSuccess);
+        harness.Accounts.Verify(p => p.BeginPasswordCheckAsync(42, AccountLockout.MaxFailedLogins, false, It.IsAny<CancellationToken>()), Times.Once);
+        harness.Accounts.Verify(p => p.EndPasswordCheckAsync(42, true, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]
@@ -174,7 +203,7 @@ public sealed class AccountSecurityTests
         // Not 401: the session is fine, and a client would sign the user out on one.
         Assert.Equal(ErrorType.Validation, result.Error.Type);
         harness.Accounts.Verify(p => p.ChangePasswordAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
-        harness.Accounts.Verify(p => p.RecordLoginFailureAsync(42, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, It.IsAny<CancellationToken>()), Times.Once);
+        harness.Accounts.Verify(p => p.EndPasswordCheckAsync(42, false, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

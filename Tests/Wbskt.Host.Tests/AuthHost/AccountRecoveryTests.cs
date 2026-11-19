@@ -247,7 +247,7 @@ public sealed class AccountRecoveryTests
     {
         var harness = new Harness();
         harness.WithUser(Verified(true));
-        harness.Accounts.Setup(p => p.RecordLoginFailureAsync(42, It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+        harness.Accounts.Setup(p => p.EndPasswordCheckAsync(42, false, It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(DateTime.UtcNow.AddMinutes(15));
 
         await harness.SignIn.LoginAsync("someone@example.test", "not the password", "10.0.0.1");
@@ -261,7 +261,7 @@ public sealed class AccountRecoveryTests
     {
         var harness = new Harness();
         harness.WithUser(Verified(true));
-        harness.Accounts.Setup(p => p.RecordLoginFailureAsync(42, It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+        harness.Accounts.Setup(p => p.EndPasswordCheckAsync(42, false, It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((DateTime?)null);
 
         await harness.SignIn.LoginAsync("someone@example.test", "not the password", "10.0.0.1");

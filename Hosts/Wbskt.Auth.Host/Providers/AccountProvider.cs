@@ -64,11 +64,22 @@ internal sealed class AccountProvider : BaseSqlProvider, IAccountProvider
         return (int)parameters["@Id"].Value;
     }
 
-    public async Task<DateTime?> RecordLoginFailureAsync(int userId, int maxFailures, TimeSpan lockout, CancellationToken cancellationToken = default)
+    public async Task<bool> BeginPasswordCheckAsync(int userId, int maxFailures, bool throughLock, CancellationToken cancellationToken = default)
     {
-        return await ExecuteScalarAsync<DateTime?>("dbo.User_RecordLoginFailure", p =>
+        return await ExecuteScalarAsync<bool>("dbo.User_BeginPasswordCheck", p =>
         {
             p.AddWithValue("@UserId", userId);
+            p.AddWithValue("@MaxFailures", maxFailures);
+            p.AddWithValue("@ThroughLock", throughLock);
+        }, cancellationToken);
+    }
+
+    public async Task<DateTime?> EndPasswordCheckAsync(int userId, bool succeeded, int maxFailures, TimeSpan lockout, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteScalarAsync<DateTime?>("dbo.User_EndPasswordCheck", p =>
+        {
+            p.AddWithValue("@UserId", userId);
+            p.AddWithValue("@Succeeded", succeeded);
             p.AddWithValue("@MaxFailures", maxFailures);
             p.AddWithValue("@LockoutSeconds", (int)lockout.TotalSeconds);
         }, cancellationToken);

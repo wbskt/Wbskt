@@ -29,14 +29,39 @@ public sealed class AccountSecurityProcedureTests(AuthSqlFixture fixture)
     }
 
     [SkippableFact]
-    public async Task Concurrent_failures_are_each_counted()
+    public async Task A_locked_account_is_refused_a_check_unless_it_goes_through_the_lock()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int userId = await CreateUserAsync();
+        await ExecAsync("UPDATE dbo.Users SET LockedUntil = DATEADD(minute, 15, SYSUTCDATETIME()) WHERE Id = @p0", userId);
+
+        Assert.False(await BeginAsync(userId, maxFailures: 3));
+        Assert.True(await BeginAsync(userId, maxFailures: 3, throughLock: true));
+    }
+
+    [SkippableFact]
+    public async Task Concurrent_checks_get_no_more_slots_than_the_limit()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
         int userId = await CreateUserAsync();
 
-        await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => RecordFailureAsync(userId, maxFailures: 100)));
+        bool[] reserved = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => BeginAsync(userId, maxFailures: 5)));
 
-        Assert.Equal(8, await ScalarAsync<int>("SELECT FailedLoginCount FROM dbo.Users WHERE Id = @p0", userId));
+        Assert.Equal(5, reserved.Count(r => r));
+        Assert.Equal(5, await ScalarAsync<int>("SELECT FailedLoginCount FROM dbo.Users WHERE Id = @p0", userId));
+    }
+
+    [SkippableFact]
+    public async Task A_right_password_gives_its_slot_back()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int userId = await CreateUserAsync();
+        await RecordFailureAsync(userId, maxFailures: 10);
+        Assert.True(await BeginAsync(userId, maxFailures: 10));
+
+        Assert.Null(await EndAsync(userId, succeeded: true, maxFailures: 10));
+
+        Assert.Equal(1, await ScalarAsync<int>("SELECT FailedLoginCount FROM dbo.Users WHERE Id = @p0", userId));
     }
 
     [SkippableFact]
@@ -157,11 +182,29 @@ public sealed class AccountSecurityProcedureTests(AuthSqlFixture fixture)
             VALUES (@p0, CRYPT_GEN_RANDOM(32), CONVERT(DATETIME2(3), @p1), N'10.0.0.1');
             """, userId, expires);
 
+    /// <summary>A wrong password, as the service records one: reserved, then settled as a failure.</summary>
     private async Task<DateTime?> RecordFailureAsync(int userId, int maxFailures)
     {
+        Assert.True(await BeginAsync(userId, maxFailures));
+        return await EndAsync(userId, succeeded: false, maxFailures);
+    }
+
+    private async Task<bool> BeginAsync(int userId, int maxFailures, bool throughLock = false)
+    {
         await using var conn = await OpenAsync();
-        await using var cmd = new SqlCommand("dbo.User_RecordLoginFailure", conn) { CommandType = CommandType.StoredProcedure };
+        await using var cmd = new SqlCommand("dbo.User_BeginPasswordCheck", conn) { CommandType = CommandType.StoredProcedure };
         cmd.Parameters.AddWithValue("@UserId", userId);
+        cmd.Parameters.AddWithValue("@MaxFailures", maxFailures);
+        cmd.Parameters.AddWithValue("@ThroughLock", throughLock);
+        return (bool)(await cmd.ExecuteScalarAsync())!;
+    }
+
+    private async Task<DateTime?> EndAsync(int userId, bool succeeded, int maxFailures)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = new SqlCommand("dbo.User_EndPasswordCheck", conn) { CommandType = CommandType.StoredProcedure };
+        cmd.Parameters.AddWithValue("@UserId", userId);
+        cmd.Parameters.AddWithValue("@Succeeded", succeeded);
         cmd.Parameters.AddWithValue("@MaxFailures", maxFailures);
         cmd.Parameters.AddWithValue("@LockoutSeconds", 900);
         object? result = await cmd.ExecuteScalarAsync();
