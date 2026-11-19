@@ -63,12 +63,12 @@ internal sealed class TriggerDispatchOutcomeProvider : BaseSqlProvider, ITrigger
             {
                 WorkflowRefId = workflowRefId,
                 TriggerNodeId = triggerNodeId,
-                OccurredAt = reader.GetDateTime(reader.GetOrdinal("OccurredAt")),
+                OccurredAt = reader.GetUtcDateTime("OccurredAt"),
                 ChannelKind = reader.GetString(reader.GetOrdinal("ChannelKind")),
                 MessageType = NullableString(reader, "MessageType"),
                 Outcome = reader.GetString(reader.GetOrdinal("Outcome")),
                 CorrelationKey = NullableString(reader, "CorrelationKey"),
-                RunRefId = reader.IsDBNull(reader.GetOrdinal("RunRefId")) ? null : reader.GetGuid(reader.GetOrdinal("RunRefId"))
+                RunRefId = reader.GetNullableGuid("RunRefId")
             },
             ct
         );
@@ -88,7 +88,7 @@ internal sealed class TriggerDispatchOutcomeProvider : BaseSqlProvider, ITrigger
                 State = reader.GetString(reader.GetOrdinal("State")),
                 SinceAt = NullableDateTime(reader, "SinceAt"),
                 DueAt = NullableDateTime(reader, "DueAt"),
-                LastEventAt = reader.GetDateTime(reader.GetOrdinal("LastEventAt"))
+                LastEventAt = reader.GetUtcDateTime("LastEventAt")
             },
             ct
         );

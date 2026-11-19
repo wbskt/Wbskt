@@ -118,8 +118,8 @@ internal sealed class IntegrationProvider(IConfiguration configuration) : BaseSq
             LastUsedAt = Nullable<DateTime>("LastUsedAt"),
             CreatedBy = reader.GetInt32(reader.GetOrdinal("CreatedBy")),
             CreatedByRefId = Nullable<Guid>("CreatedByRefId"),
-            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
-            UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
+            CreatedAt = reader.GetUtcDateTime("CreatedAt"),
+            UpdatedAt = reader.GetUtcDateTime("UpdatedAt"),
             SecretRotatedAt = Nullable<DateTime>("SecretRotatedAt"),
             UsageWorkflows = reader.GetInt32(reader.GetOrdinal("UsageWorkflows")),
             UsageSteps = reader.GetInt32(reader.GetOrdinal("UsageSteps"))

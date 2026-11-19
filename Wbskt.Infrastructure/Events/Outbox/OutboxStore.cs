@@ -27,7 +27,7 @@ internal sealed class SqlOutboxStore(IConfiguration configuration, string connec
                 r.GetInt64(r.GetOrdinal("Id")),
                 r.GetString(r.GetOrdinal("MessageType")),
                 r.GetString(r.GetOrdinal("Payload")),
-                r.GetDateTime(r.GetOrdinal("CreatedAt"))),
+                r.GetUtcDateTime("CreatedAt")),
             cancellationToken);
     }
 

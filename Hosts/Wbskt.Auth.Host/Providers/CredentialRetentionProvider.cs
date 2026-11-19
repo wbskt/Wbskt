@@ -27,7 +27,7 @@ internal sealed class CredentialRetentionProvider : BaseSqlProvider, ICredential
             r.GetGuid(r.GetOrdinal("RefId")),
             r.GetInt32(r.GetOrdinal("TenantId")),
             r.GetString(r.GetOrdinal("Email")),
-            DateTime.SpecifyKind(r.GetDateTime(r.GetOrdinal("ExpiresAt")), DateTimeKind.Utc)), cancellationToken);
+            r.GetUtcDateTime("ExpiresAt")), cancellationToken);
     }
 
     public async Task<IReadOnlyCollection<int>> GetUnconfirmedAccountsAsync(DateTime createdBeforeUtc, DateTime nowUtc, int afterId, int batchSize, CancellationToken cancellationToken = default)

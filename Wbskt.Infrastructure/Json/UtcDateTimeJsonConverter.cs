@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Wbskt.Models;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -19,17 +20,10 @@ namespace Wbskt.Infrastructure.Json;
 public sealed class UtcDateTimeJsonConverter : JsonConverter<DateTime>
 {
     public override DateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-        AsUtc(reader.GetDateTime());
+        reader.GetDateTime().AsUtc();
 
     public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options) =>
-        writer.WriteStringValue(AsUtc(value));
-
-    internal static DateTime AsUtc(DateTime value) => value.Kind switch
-    {
-        DateTimeKind.Utc => value,
-        DateTimeKind.Local => value.ToUniversalTime(),
-        _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
-    };
+        writer.WriteStringValue(value.AsUtc());
 }
 
 /// <summary>
@@ -40,7 +34,7 @@ public sealed class UtcDateTimeOffsetJsonConverter : JsonConverter<DateTimeOffse
 {
     // GetDateTimeOffset would give an offset-less timestamp this server's zone; read it as UTC, as the DateTime converter does.
     public override DateTimeOffset Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-        new(UtcDateTimeJsonConverter.AsUtc(reader.GetDateTime()));
+        reader.GetDateTime().ToUtcOffset();
 
     public override void Write(Utf8JsonWriter writer, DateTimeOffset value, JsonSerializerOptions options) =>
         writer.WriteStringValue(value.UtcDateTime);

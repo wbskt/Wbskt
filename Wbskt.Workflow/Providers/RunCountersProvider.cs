@@ -91,7 +91,7 @@ internal sealed class RunCountersProvider : BaseSqlProvider, IRunCountersProvide
             RunId = reader.GetInt32(reader.GetOrdinal("RunId")),
             ActiveBranchCount = reader.GetInt32(reader.GetOrdinal("ActiveBranchCount")),
             CreditsConsumed = reader.GetDecimal(reader.GetOrdinal("CreditsConsumed")),
-            UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))
+            UpdatedAt = reader.GetUtcDateTime("UpdatedAt")
         };
     }
 }

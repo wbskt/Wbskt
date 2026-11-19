@@ -69,12 +69,12 @@ internal sealed class HistoryEventProvider : BaseSqlProvider, IHistoryEventProvi
         {
             HistoryEventId = reader.GetInt64(reader.GetOrdinal("HistoryEventId")),
             RunId = reader.GetInt32(reader.GetOrdinal("RunId")),
-            BranchRefId = reader.IsDBNull(reader.GetOrdinal("BranchRefId")) ? null : reader.GetGuid(reader.GetOrdinal("BranchRefId")),
-            NodeId = reader.IsDBNull(reader.GetOrdinal("NodeId")) ? null : reader.GetGuid(reader.GetOrdinal("NodeId")),
+            BranchRefId = reader.GetNullableGuid("BranchRefId"),
+            NodeId = reader.GetNullableGuid("NodeId"),
             EventKind = reader.GetString(reader.GetOrdinal("EventKind")),
             Severity = reader.GetString(reader.GetOrdinal("Severity")),
-            PayloadJson = reader.IsDBNull(reader.GetOrdinal("PayloadJson")) ? null : reader.GetString(reader.GetOrdinal("PayloadJson")),
-            Timestamp = reader.GetDateTime(reader.GetOrdinal("Timestamp"))
+            PayloadJson = reader.GetNullableString("PayloadJson"),
+            Timestamp = reader.GetUtcDateTime("Timestamp")
         };
     }
 }

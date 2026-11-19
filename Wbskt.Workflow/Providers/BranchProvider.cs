@@ -79,9 +79,9 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
             reader => new RunningBranch(
                 reader.GetInt64(reader.GetOrdinal("Id")),
                 reader.GetInt32(reader.GetOrdinal("RunId")),
-                reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
+                reader.GetUtcDateTime("UpdatedAt"),
                 reader.GetString(reader.GetOrdinal("RunStatus")),
-                reader.IsDBNull(reader.GetOrdinal("RunCancellationReason")) ? null : reader.GetString(reader.GetOrdinal("RunCancellationReason"))),
+                reader.GetNullableString("RunCancellationReason")),
             ct);
 
     public async Task<IReadOnlyCollection<BranchRow>> GetWaitingWithoutBookmarkAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
@@ -197,14 +197,14 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
             Id = reader.GetInt64(reader.GetOrdinal("Id")),
             RefId = reader.GetGuid(reader.GetOrdinal("RefId")),
             RunId = reader.GetInt32(reader.GetOrdinal("RunId")),
-            ParentBranchId = reader.IsDBNull(reader.GetOrdinal("ParentBranchId")) ? null : reader.GetGuid(reader.GetOrdinal("ParentBranchId")),
-            ForkCohortId = reader.IsDBNull(reader.GetOrdinal("ForkCohortId")) ? null : reader.GetGuid(reader.GetOrdinal("ForkCohortId")),
+            ParentBranchId = reader.GetNullableGuid("ParentBranchId"),
+            ForkCohortId = reader.GetNullableGuid("ForkCohortId"),
             NodeId = reader.GetGuid(reader.GetOrdinal("NodeId")),
             Status = reader.GetString(reader.GetOrdinal("Status")),
-            PendingTakePort = reader.IsDBNull(reader.GetOrdinal("PendingTakePort")) ? null : reader.GetString(reader.GetOrdinal("PendingTakePort")),
+            PendingTakePort = reader.GetNullableString("PendingTakePort"),
             LocalJson = reader.GetString(reader.GetOrdinal("LocalJson")),
-            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
-            UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
+            CreatedAt = reader.GetUtcDateTime("CreatedAt"),
+            UpdatedAt = reader.GetUtcDateTime("UpdatedAt"),
             RowVersion = (byte[])reader.GetValue(reader.GetOrdinal("RowVersion"))
         };
     }

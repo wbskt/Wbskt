@@ -1,3 +1,4 @@
+using Wbskt.Models;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Workflow.Abstraction.Entities;
@@ -30,12 +31,7 @@ public sealed class TriggerActivityService : ITriggerActivityService
         TriggerHoldStateRow? hold = await _outcomeProvider.FindHoldStateAsync(workflowRefId, triggerNodeId, ct);
 
         return Result<TriggerActivityResponse>.Success(new TriggerActivityResponse(
-            outcomes.Select(o => new TriggerOutcomeDto(Utc(o.OccurredAt), o.ChannelKind, o.MessageType, o.Outcome, o.CorrelationKey, o.RunRefId)).ToArray(),
-            hold is null ? null : new TriggerHoldStateDto(hold.State, Utc(hold.SinceAt), Utc(hold.DueAt), Utc(hold.LastEventAt))));
+            outcomes.Select(o => new TriggerOutcomeDto(o.OccurredAt.ToUtcOffset(), o.ChannelKind, o.MessageType, o.Outcome, o.CorrelationKey, o.RunRefId)).ToArray(),
+            hold is null ? null : new TriggerHoldStateDto(hold.State, hold.SinceAt.ToUtcOffset(), hold.DueAt.ToUtcOffset(), hold.LastEventAt.ToUtcOffset())));
     }
-
-    // The columns are DATETIME2 holding UTC.
-    private static DateTimeOffset Utc(DateTime value) => new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
-
-    private static DateTimeOffset? Utc(DateTime? value) => value is { } v ? Utc(v) : null;
 }

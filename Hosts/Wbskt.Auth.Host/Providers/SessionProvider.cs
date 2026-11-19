@@ -35,7 +35,7 @@ internal sealed class SessionProvider : BaseSqlProvider, ISessionProvider
                 p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = SecurityTokens.Hash(token);
                 p.AddWithValue("@RevokedByIp", ipAddress ?? (object)DBNull.Value);
             },
-            reader => reader.IsDBNull(reader.GetOrdinal("SessionId")) ? null : reader.GetGuid(reader.GetOrdinal("SessionId")),
+            reader => reader.GetNullableGuid("SessionId"),
             cancellationToken: cancellationToken);
     }
 
@@ -94,10 +94,10 @@ internal sealed class SessionProvider : BaseSqlProvider, ISessionProvider
             p => p.AddWithValue("@UserId", userId),
             r => new SessionResponse(
                 r.GetGuid(r.GetOrdinal("SessionId")),
-                r.GetDateTime(r.GetOrdinal("SessionStarted")).ToUtcOffset(),
-                r.GetDateTime(r.GetOrdinal("Created")).ToUtcOffset(),
-                r.GetDateTime(r.GetOrdinal("Expires")).ToUtcOffset(),
-                r.IsDBNull(r.GetOrdinal("CreatedByIp")) ? null : r.GetString(r.GetOrdinal("CreatedByIp"))),
+                r.GetUtcDateTimeOffset("SessionStarted"),
+                r.GetUtcDateTimeOffset("Created"),
+                r.GetUtcDateTimeOffset("Expires"),
+                r.GetNullableString("CreatedByIp")),
             cancellationToken);
     }
 

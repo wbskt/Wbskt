@@ -192,17 +192,17 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
             {
                 RunId = r.GetInt32(r.GetOrdinal("RunId")),
                 CreditsConsumed = r.IsDBNull(r.GetOrdinal("CreditsConsumed")) ? null : r.GetDecimal(r.GetOrdinal("CreditsConsumed")),
-                FailedNodeId = r.IsDBNull(r.GetOrdinal("FailedNodeId")) ? null : r.GetGuid(r.GetOrdinal("FailedNodeId")),
-                FailedErrorCode = r.IsDBNull(r.GetOrdinal("FailedErrorCode")) ? null : r.GetString(r.GetOrdinal("FailedErrorCode")),
-                EndedNodeId = r.IsDBNull(r.GetOrdinal("EndedNodeId")) ? null : r.GetGuid(r.GetOrdinal("EndedNodeId")),
-                CurrentNodeId = r.IsDBNull(r.GetOrdinal("CurrentNodeId")) ? null : r.GetGuid(r.GetOrdinal("CurrentNodeId")),
-                CurrentAttempt = r.IsDBNull(r.GetOrdinal("CurrentAttempt")) ? null : r.GetInt32(r.GetOrdinal("CurrentAttempt")),
-                CurrentMaxAttempts = r.IsDBNull(r.GetOrdinal("CurrentMaxAttempts")) ? null : r.GetInt32(r.GetOrdinal("CurrentMaxAttempts")),
+                FailedNodeId = r.GetNullableGuid("FailedNodeId"),
+                FailedErrorCode = r.GetNullableString("FailedErrorCode"),
+                EndedNodeId = r.GetNullableGuid("EndedNodeId"),
+                CurrentNodeId = r.GetNullableGuid("CurrentNodeId"),
+                CurrentAttempt = r.GetNullableInt32("CurrentAttempt"),
+                CurrentMaxAttempts = r.GetNullableInt32("CurrentMaxAttempts"),
                 IsWaiting = r.GetBoolean(r.GetOrdinal("IsWaiting")),
-                WaitingKind = r.IsDBNull(r.GetOrdinal("WaitingKind")) ? null : r.GetString(r.GetOrdinal("WaitingKind")),
-                WaitingNodeId = r.IsDBNull(r.GetOrdinal("WaitingNodeId")) ? null : r.GetGuid(r.GetOrdinal("WaitingNodeId")),
-                WaitingExpiresAt = r.IsDBNull(r.GetOrdinal("WaitingExpiresAt")) ? null : r.GetDateTime(r.GetOrdinal("WaitingExpiresAt")),
-                WaitingSignalName = r.IsDBNull(r.GetOrdinal("WaitingSignalName")) ? null : r.GetString(r.GetOrdinal("WaitingSignalName"))
+                WaitingKind = r.GetNullableString("WaitingKind"),
+                WaitingNodeId = r.GetNullableGuid("WaitingNodeId"),
+                WaitingExpiresAt = r.GetNullableUtcDateTime("WaitingExpiresAt"),
+                WaitingSignalName = r.GetNullableString("WaitingSignalName")
             },
             ct
         );
@@ -291,7 +291,7 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
         return new RunDailyStatsRow
         {
             WorkflowRefId = reader.GetGuid(reader.GetOrdinal("WorkflowRefId")),
-            Day = DateOnly.FromDateTime(reader.GetDateTime(reader.GetOrdinal("Day"))),
+            Day = DateOnly.FromDateTime(reader.GetUtcDateTime("Day")),
             TotalRuns = reader.GetInt32(reader.GetOrdinal("TotalRuns")),
             SucceededCount = reader.GetInt32(reader.GetOrdinal("SucceededCount")),
             FailedCount = reader.GetInt32(reader.GetOrdinal("FailedCount")),
@@ -374,7 +374,7 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
             ErrorCode = reader.GetString(reader.GetOrdinal("ErrorCode")),
             NodeId = reader.IsDBNull(nodeOrdinal) ? null : reader.GetGuid(nodeOrdinal),
             Occurrences = reader.GetInt32(reader.GetOrdinal("Occurrences")),
-            LastSeenAt = reader.GetDateTime(reader.GetOrdinal("LastSeenAt"))
+            LastSeenAt = reader.GetUtcDateTime("LastSeenAt")
         };
     }
 
@@ -546,14 +546,14 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
             WorkflowRefId = reader.GetGuid(reader.GetOrdinal("WorkflowRefId")),
             WorkflowVersion = reader.GetInt32(reader.GetOrdinal("WorkflowVersion")),
             TriggerNodeId = reader.GetGuid(reader.GetOrdinal("TriggerNodeId")),
-            CorrelationKey = reader.IsDBNull(reader.GetOrdinal("CorrelationKey")) ? null : reader.GetString(reader.GetOrdinal("CorrelationKey")),
+            CorrelationKey = reader.GetNullableString("CorrelationKey"),
             Status = reader.GetString(reader.GetOrdinal("Status")),
-            StartedAt = reader.GetDateTime(reader.GetOrdinal("StartedAt")),
-            CompletedAt = reader.IsDBNull(reader.GetOrdinal("CompletedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("CompletedAt")),
-            CancellationRequestedAt = reader.IsDBNull(reader.GetOrdinal("CancellationRequestedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("CancellationRequestedAt")),
-            CancellationReason = reader.IsDBNull(reader.GetOrdinal("CancellationReason")) ? null : reader.GetString(reader.GetOrdinal("CancellationReason")),
+            StartedAt = reader.GetUtcDateTime("StartedAt"),
+            CompletedAt = reader.GetNullableUtcDateTime("CompletedAt"),
+            CancellationRequestedAt = reader.GetNullableUtcDateTime("CancellationRequestedAt"),
+            CancellationReason = reader.GetNullableString("CancellationReason"),
             CreditBudget = reader.GetDecimal(reader.GetOrdinal("CreditBudget")),
-            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+            CreatedAt = reader.GetUtcDateTime("CreatedAt"),
             ParentRunRefId = TryGetOrdinal(reader, "ParentRunRefId") is { } parentOrdinal && !reader.IsDBNull(parentOrdinal) ? reader.GetGuid(parentOrdinal) : null,
             OutputJson = TryGetOrdinal(reader, "OutputJson") is { } outputOrdinal && !reader.IsDBNull(outputOrdinal) ? reader.GetString(outputOrdinal) : null,
             Number = TryGetOrdinal(reader, "Number") is { } numberOrdinal ? reader.GetInt32(numberOrdinal) : 0,

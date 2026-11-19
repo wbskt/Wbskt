@@ -156,10 +156,10 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
             WorkspaceId = reader.GetInt32(reader.GetOrdinal("WorkspaceId")),
             Pin = reader.GetString(reader.GetOrdinal("Pin")),
             Name = reader.GetString(reader.GetOrdinal("Name")),
-            MaxClients = reader.IsDBNull(reader.GetOrdinal("MaxClients")) ? null : reader.GetInt32(reader.GetOrdinal("MaxClients")),
+            MaxClients = reader.GetNullableInt32("MaxClients"),
             AutoApproval = reader.GetBoolean(reader.GetOrdinal("AutoApproval")),
             IsEnabled = reader.GetBoolean(reader.GetOrdinal("IsEnabled")),
-            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+            CreatedAt = reader.GetUtcDateTime("CreatedAt"),
             RegisteredClientCount = reader.GetInt32(reader.GetOrdinal("RegisteredClientCount")),
             ConnectedClientCount = ConnectedCountOf(reader)
         };

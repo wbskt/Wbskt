@@ -1,3 +1,4 @@
+using Wbskt.Models;
 using System.Text.Json;
 using MassTransit;
 using Wbskt.Protocol;
@@ -132,7 +133,7 @@ public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
         // a reason) one that arrives past expiresAt.
         var message = new ProtocolMessage(command.Type, PayloadFor(command), command.CommandId?.ToString())
         {
-            ExpiresAt = command.ExpiresAtUtc is { } expiresAt ? new DateTimeOffset(DateTime.SpecifyKind(expiresAt, DateTimeKind.Utc)) : null
+            ExpiresAt = command.ExpiresAtUtc is { } expiresAt ? expiresAt.ToUtcOffset() : null
         };
         await connection.SendAsync(message, ct);
     }

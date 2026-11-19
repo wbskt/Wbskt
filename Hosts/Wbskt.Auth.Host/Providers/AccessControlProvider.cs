@@ -64,7 +64,7 @@ internal sealed class AccessControlProvider : BaseSqlProvider, IAccessControlPro
             },
             r => new PermissionResponse(
                 r.GetString(r.GetOrdinal("Slug")),
-                r.IsDBNull(r.GetOrdinal("Description")) ? null : r.GetString(r.GetOrdinal("Description"))
+                r.GetNullableString("Description")
             ),
             cancellationToken
         );
@@ -84,7 +84,7 @@ internal sealed class AccessControlProvider : BaseSqlProvider, IAccessControlPro
             r => new RoleResponse(
                 r.GetGuid(r.GetOrdinal("RefId")),
                 r.GetString(r.GetOrdinal("Name")),
-                r.IsDBNull(r.GetOrdinal("Description")) ? null : r.GetString(r.GetOrdinal("Description"))
+                r.GetNullableString("Description")
             ),
             cancellationToken
         );
@@ -104,7 +104,7 @@ internal sealed class AccessControlProvider : BaseSqlProvider, IAccessControlPro
             r => new GroupResponse(
                 r.GetGuid(r.GetOrdinal("RefId")),
                 r.GetString(r.GetOrdinal("Name")),
-                r.IsDBNull(r.GetOrdinal("ParentGroupRefId")) ? null : r.GetGuid(r.GetOrdinal("ParentGroupRefId"))
+                r.GetNullableGuid("ParentGroupRefId")
             ),
             cancellationToken
         );
@@ -309,7 +309,7 @@ internal sealed class AccessControlProvider : BaseSqlProvider, IAccessControlPro
             r => new UserPermissionAssignmentResponse(
                 r.GetString(r.GetOrdinal("Slug")),
                 r.GetBoolean(r.GetOrdinal("IsDeny")),
-                r.IsDBNull(r.GetOrdinal("WorkspaceRefId")) ? null : r.GetGuid(r.GetOrdinal("WorkspaceRefId"))
+                r.GetNullableGuid("WorkspaceRefId")
             ),
             cancellationToken
         );
@@ -373,7 +373,7 @@ internal sealed class AccessControlProvider : BaseSqlProvider, IAccessControlPro
         return new RoleAssignmentResponse(
             reader.GetGuid(reader.GetOrdinal("RoleRefId")),
             reader.GetString(reader.GetOrdinal("RoleName")),
-            reader.IsDBNull(reader.GetOrdinal("WorkspaceRefId")) ? null : reader.GetGuid(reader.GetOrdinal("WorkspaceRefId"))
+            reader.GetNullableGuid("WorkspaceRefId")
         );
     }
 }

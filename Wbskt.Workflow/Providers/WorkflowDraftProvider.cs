@@ -89,10 +89,10 @@ internal sealed class WorkflowDraftProvider : BaseSqlProvider, IWorkflowDraftPro
             Description = reader.IsDBNull(description) ? null : reader.GetString(description),
             DefinitionJson = reader.GetString(reader.GetOrdinal("DefinitionJson")),
             CreatedBy = reader.GetInt32(reader.GetOrdinal("CreatedBy")),
-            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+            CreatedAt = reader.GetUtcDateTime("CreatedAt"),
             UpdatedBy = reader.GetInt32(reader.GetOrdinal("UpdatedBy")),
             UpdatedByRefId = reader.IsDBNull(updatedByRefId) ? null : reader.GetGuid(updatedByRefId),
-            UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
+            UpdatedAt = reader.GetUtcDateTime("UpdatedAt"),
             CurrentVersion = reader.IsDBNull(currentVersion) ? null : reader.GetInt32(currentVersion)
         };
     }

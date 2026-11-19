@@ -1,3 +1,4 @@
+using Wbskt.Models;
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
@@ -30,7 +31,7 @@ public sealed class PresenceChannel : TriggerChannel
         {
             ["clientRefId"] = Json(clientRefId),
             ["state"] = Json(state),
-            ["changedAt"] = Json(DateTime.SpecifyKind(changedAt, DateTimeKind.Utc)),
+            ["changedAt"] = Json(changedAt.AsUtc()),
             ["forSeconds"] = Json(forSeconds)
         },
         now);

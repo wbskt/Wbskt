@@ -69,7 +69,7 @@ internal sealed class TenantPlanProvider(IConfiguration configuration) : BaseSql
         ReadPlanCode(r),
         ReadOverrides(r),
         r.GetInt32(r.GetOrdinal("PlanRevision")),
-        r.IsDBNull(r.GetOrdinal("FrozenAt")) ? null : r.GetDateTime(r.GetOrdinal("FrozenAt")).ToUtcOffset());
+        r.GetNullableUtcDateTimeOffset("FrozenAt"));
 
     private static TenantPlan MapPlan(SqlDataReader r)
     {

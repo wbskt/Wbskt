@@ -59,9 +59,9 @@ internal sealed class ScheduledFireProvider : BaseSqlProvider, IScheduledFirePro
             WorkflowDefinitionId = reader.GetInt32(reader.GetOrdinal("WorkflowDefinitionId")),
             WorkflowRefId = reader.GetGuid(reader.GetOrdinal("WorkflowRefId")),
             CronOrInterval = reader.GetString(reader.GetOrdinal("CronOrInterval")),
-            NextFireAt = DateTime.SpecifyKind(reader.GetDateTime(reader.GetOrdinal("NextFireAt")), DateTimeKind.Utc),
-            LeasedUntil = reader.IsDBNull(reader.GetOrdinal("LeasedUntil")) ? null : reader.GetDateTime(reader.GetOrdinal("LeasedUntil")),
-            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
+            NextFireAt = reader.GetUtcDateTime("NextFireAt"),
+            LeasedUntil = reader.GetNullableUtcDateTime("LeasedUntil"),
+            CreatedAt = reader.GetUtcDateTime("CreatedAt")
         };
     }
 }

@@ -56,8 +56,8 @@ internal sealed class ClientHoldStateProvider : BaseSqlProvider, IClientHoldStat
             {
                 Id = reader.GetInt32(reader.GetOrdinal("Id")),
                 TriggerKey = reader.GetString(reader.GetOrdinal("TriggerKey")),
-                SinceAt = reader.GetDateTime(reader.GetOrdinal("SinceAt")),
-                DueAt = reader.GetDateTime(reader.GetOrdinal("DueAt")),
+                SinceAt = reader.GetUtcDateTime("SinceAt"),
+                DueAt = reader.GetUtcDateTime("DueAt"),
                 Payload = reader.GetString(reader.GetOrdinal("Payload"))
             },
             ct
@@ -100,7 +100,7 @@ internal sealed class ClientHoldStateProvider : BaseSqlProvider, IClientHoldStat
             CorrelationExpression = NullableString(reader, "CorrelationExpression"),
             ConcurrencyPolicy = reader.GetString(reader.GetOrdinal("ConcurrencyPolicy")),
             FilterExpression = NullableString(reader, "FilterExpression"),
-            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
+            CreatedAt = reader.GetUtcDateTime("CreatedAt")
         };
     }
 
