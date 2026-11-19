@@ -20,7 +20,7 @@ public sealed class ClientPresenceTicker(
     ILeadershipGate leadership,
     IServiceScopeFactory scopeFactory,
     ILogger<ClientPresenceTicker> logger,
-    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger)
+    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger, clock)
 {
     // Short on purpose: a check whose client presence has not caught up yet is simply left leased,
     // and is looked at again once this lease runs out.

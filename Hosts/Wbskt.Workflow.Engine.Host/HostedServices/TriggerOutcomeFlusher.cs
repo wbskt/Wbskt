@@ -10,8 +10,8 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 /// what it buffered. Best effort: a failed write drops that batch, as a failover drops what was not
 /// yet written; these are diagnostics.
 /// </summary>
-public sealed class TriggerOutcomeFlusher(TriggerOutcomeBuffer buffer, IServiceScopeFactory scopeFactory, ILogger<TriggerOutcomeFlusher> logger)
-    : PeriodicWorker(AlwaysOpenWorkGate.Instance, scopeFactory, logger)
+public sealed class TriggerOutcomeFlusher(TriggerOutcomeBuffer buffer, IServiceScopeFactory scopeFactory, TimeProvider clock, ILogger<TriggerOutcomeFlusher> logger)
+    : PeriodicWorker(AlwaysOpenWorkGate.Instance, scopeFactory, logger, clock)
 {
     protected override string Name => "Trigger outcome flush";
 

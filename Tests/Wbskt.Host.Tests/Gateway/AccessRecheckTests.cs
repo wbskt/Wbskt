@@ -145,5 +145,6 @@ public sealed class AccessRecheckTests
         new GatewayMetrics(GatewayTransport.WebSocket),
         Options.Create(new AccessRecheckOptions()),
         new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
+        TimeProvider.System,
         NullLogger<AccessRecheck>.Instance);
 }

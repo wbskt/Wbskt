@@ -16,8 +16,9 @@ internal sealed class PingSampler(
     IConnectionManager connectionManager,
     IOptions<PingSamplerOptions> options,
     IServiceScopeFactory scopeFactory,
-    ILogger<PingSampler> logger)
-    : PeriodicWorker(AlwaysOpenWorkGate.Instance, scopeFactory, logger)
+    ILogger<PingSampler> logger,
+    TimeProvider clock)
+    : PeriodicWorker(AlwaysOpenWorkGate.Instance, scopeFactory, logger, clock)
 {
     internal const int Parallelism = 16;
 

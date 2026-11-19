@@ -17,7 +17,7 @@ public sealed class PendingTriggerEventBacklogReaper(
     ILeadershipGate leadership,
     IServiceScopeFactory scopeFactory,
     ILogger<PendingTriggerEventBacklogReaper> logger,
-    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger)
+    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger, clock)
 {
     private readonly int _batchSize = 1000;
     private readonly int _idleKeyBatchSize = 100;

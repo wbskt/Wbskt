@@ -28,6 +28,7 @@ public sealed class ManagementHostDiTests
         var services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(configuration);
         services.AddLogging();
+        services.AddSingleton(TimeProvider.System);
         services.AddHttpClient();
         services.AddWorkflowManagementServices(configuration);
         services.AddSingleton<IIdentityService, IdentityService>();

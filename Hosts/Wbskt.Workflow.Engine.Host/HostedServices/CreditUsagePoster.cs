@@ -26,7 +26,7 @@ public sealed class CreditUsagePoster(
     ILeadershipGate leadership,
     IServiceScopeFactory scopeFactory,
     ILogger<CreditUsagePoster> logger,
-    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger)
+    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger, clock)
 {
     internal const int BatchSize = 500;
 

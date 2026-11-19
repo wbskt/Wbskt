@@ -24,8 +24,8 @@ public sealed class StalePresenceSweeper : PeriodicWorker
 
     private readonly TimeSpan _staleAfter;
 
-    public StalePresenceSweeper(IServiceScopeFactory scopeFactory, IOptions<PresenceOptions> options, ILogger<StalePresenceSweeper> logger)
-        : base(AlwaysOpenWorkGate.Instance, scopeFactory, logger)
+    public StalePresenceSweeper(IServiceScopeFactory scopeFactory, IOptions<PresenceOptions> options, TimeProvider clock, ILogger<StalePresenceSweeper> logger)
+        : base(AlwaysOpenWorkGate.Instance, scopeFactory, logger, clock)
     {
         _staleAfter = TimeSpan.FromSeconds(Math.Max(30, options.Value.HostStaleAfterSeconds));
         Interval = TimeSpan.FromSeconds(Math.Max(5, options.Value.SweepIntervalSeconds));

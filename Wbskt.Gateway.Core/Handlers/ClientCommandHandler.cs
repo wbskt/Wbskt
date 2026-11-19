@@ -21,14 +21,14 @@ public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
     private readonly BusInstanceId _hostId;
     private readonly TimeProvider _timeProvider;
 
-    public ClientCommandHandler(IConnectionManager connectionManager, ILogger<ClientCommandHandler> logger, IEventBus eventBus, ICommandSender commandSender, BusInstanceId hostId, TimeProvider? timeProvider = null)
+    public ClientCommandHandler(IConnectionManager connectionManager, ILogger<ClientCommandHandler> logger, IEventBus eventBus, ICommandSender commandSender, BusInstanceId hostId, TimeProvider timeProvider)
     {
         _connectionManager = connectionManager;
         _logger = logger;
         _eventBus = eventBus;
         _commandSender = commandSender;
         _hostId = hostId;
-        _timeProvider = timeProvider ?? TimeProvider.System;
+        _timeProvider = timeProvider;
     }
 
     public async Task Consume(ConsumeContext<ClientCommandEvent> context)

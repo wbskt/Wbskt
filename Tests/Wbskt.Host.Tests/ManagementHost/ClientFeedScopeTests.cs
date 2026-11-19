@@ -173,7 +173,7 @@ public sealed class ClientFeedScopeTests
         var counter = new WorkspaceMessageCounter(time);
         counter.Count(Message() with { CreatedAtUtc = Now.UtcDateTime });
         await using var services = new ServiceCollection().BuildServiceProvider();
-        var broadcaster = new WorkspaceMessageRateBroadcaster(counter, hub.Context, services.GetRequiredService<IServiceScopeFactory>(), NullLogger<WorkspaceMessageRateBroadcaster>.Instance);
+        var broadcaster = new WorkspaceMessageRateBroadcaster(counter, hub.Context, services.GetRequiredService<IServiceScopeFactory>(), time, NullLogger<WorkspaceMessageRateBroadcaster>.Instance);
 
         time.Now = Now.AddSeconds(5);
         await broadcaster.TickAsync(CancellationToken.None);

@@ -44,7 +44,6 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<IHistoryEventProvider, HistoryEventProvider>();
         services.AddScoped<ISharedVariableProvider, SharedVariableProvider>();
         services.AddScoped<ITriggerDispatchOutcomeProvider, TriggerDispatchOutcomeProvider>();
-        services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<ITriggerChannelRegistry>(TriggerChannelRegistry.Default);
         services.AddSingleton<ITriggerPlanner, TriggerPlanner>();
 
@@ -105,7 +104,6 @@ public static class WorkflowServiceCollectionExtensions
     public static IServiceCollection AddWorkflowRuntime(this IServiceCollection services)
     {
         services.AddMemoryCache();
-        services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<IIdGenerator, GuidIdGenerator>();
         services.AddSingleton<ICreditCostCalculator, DefaultCreditCostCalculator>();
         services.AddSingleton<IHostIdentity, HostIdentity>();

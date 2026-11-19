@@ -12,8 +12,8 @@ public sealed class QueuedCommandExpirySweeper : PeriodicWorker
 {
     private const int BatchSize = 200;
 
-    public QueuedCommandExpirySweeper(IServiceScopeFactory scopeFactory, ILogger<QueuedCommandExpirySweeper> logger)
-        : base(AlwaysOpenWorkGate.Instance, scopeFactory, logger)
+    public QueuedCommandExpirySweeper(IServiceScopeFactory scopeFactory, TimeProvider clock, ILogger<QueuedCommandExpirySweeper> logger)
+        : base(AlwaysOpenWorkGate.Instance, scopeFactory, logger, clock)
     {
     }
 

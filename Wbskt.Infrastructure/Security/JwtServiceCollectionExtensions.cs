@@ -42,7 +42,6 @@ public static class JwtServiceCollectionExtensions
     public static IServiceCollection AddAccessTokenRevocation(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<AccessTokenOptions>(configuration.GetSection("Jwt"));
-        services.TryAddSingleton(TimeProvider.System);
 
         TryAddRedis(services, configuration);
 

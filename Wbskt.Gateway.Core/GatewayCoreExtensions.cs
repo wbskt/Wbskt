@@ -22,7 +22,6 @@ public static class GatewayCoreExtensions
     public static IServiceCollection AddGatewayCore(this IServiceCollection services, IConfiguration configuration, GatewayTransport transport)
     {
         services.AddSingleton(transport);
-        services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<GatewayMetrics>();
         services.AddSingleton<IWorkerTickMetrics>(sp => sp.GetRequiredService<GatewayMetrics>());
 

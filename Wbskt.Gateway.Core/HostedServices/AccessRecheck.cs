@@ -20,8 +20,9 @@ internal sealed class AccessRecheck(
     GatewayMetrics metrics,
     IOptions<AccessRecheckOptions> options,
     IServiceScopeFactory scopeFactory,
+    TimeProvider clock,
     ILogger<AccessRecheck> logger)
-    : PeriodicWorker(AlwaysOpenWorkGate.Instance, scopeFactory, logger)
+    : PeriodicWorker(AlwaysOpenWorkGate.Instance, scopeFactory, logger, clock)
 {
     // Warned once when the cutoffs become unreadable, not on every tick of an outage.
     private bool _cutoffsUnreadable;

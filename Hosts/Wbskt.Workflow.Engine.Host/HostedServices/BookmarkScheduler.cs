@@ -13,7 +13,7 @@ public sealed class BookmarkScheduler(
     IServiceScopeFactory scopeFactory,
     IRunDispatcher runDispatcher,
     ILogger<BookmarkScheduler> logger,
-    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger)
+    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger, clock)
 {
     private readonly int _batchSize = options.Value.BookmarkLeaseBatchSize;
 

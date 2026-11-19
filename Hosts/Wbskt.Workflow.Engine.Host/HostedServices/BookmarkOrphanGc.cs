@@ -17,7 +17,7 @@ public sealed class BookmarkOrphanGc(
     ILeadershipGate leadership,
     IServiceScopeFactory scopeFactory,
     ILogger<BookmarkOrphanGc> logger,
-    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger)
+    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger, clock)
 {
     private const int StrandedBatchSize = 100;
     private const int RedispatchAgainAfterThresholds = 6;

@@ -27,6 +27,7 @@ public sealed class GracefulShutdownIntegrationTests
             .ConfigureServices((context, services) =>
             {
                 services.AddLogging();
+                services.AddSingleton(TimeProvider.System);
                 services.AddWorkflowRuntime(context.Configuration);
                 services.AddSingleton<ILeadershipGate, AlwaysActiveLeadershipGate>();
                 services.AddSingleton<WorkflowMetrics>();

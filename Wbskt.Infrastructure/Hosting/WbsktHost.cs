@@ -42,7 +42,7 @@ public static class WbsktHost
 
     /// <summary>
     /// The builder every host starts from: log location and name, the shared configuration files
-    /// named, and Serilog.
+    /// named, Serilog and the host's <see cref="TimeProvider"/>.
     /// </summary>
     /// <param name="program">The host's <c>Program</c>; its namespace names the log.</param>
     public static WebApplicationBuilder CreateBuilder(Type program, string[] args, params string[] configurationFiles)
@@ -58,6 +58,9 @@ public static class WbsktHost
 
         builder.AddSharedConfiguration(configurationFiles);
         builder.Host.UseSerilog(builder.CreateSerilog());
+
+        // The one clock of the host; everything that reads the time takes it, so a test can fix it.
+        builder.Services.AddSingleton(TimeProvider.System);
         return builder;
     }
 

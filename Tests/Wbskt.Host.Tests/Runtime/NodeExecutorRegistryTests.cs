@@ -99,6 +99,7 @@ public sealed class NodeExecutorRegistryTests
         var services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(configuration);
         services.AddLogging();
+        services.AddSingleton(TimeProvider.System);
         services.AddHttpClient();
         services.AddWorkflowProviders();
         services.AddWorkspacePlans(configuration);

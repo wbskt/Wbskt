@@ -55,7 +55,7 @@ public sealed class MqttGatewayTests : IAsyncLifetime
         var lifetime = new Mock<IHostApplicationLifetime>();
         lifetime.SetupGet(x => x.ApplicationStopping).Returns(_stopping.Token);
         var sessions = new ClientSessions(_connections, _gate.Object, _bus.Object, new BusInstanceId("gateway-mqtt"), metrics, dispatcher,
-            Options.Create(new MessageBudgetOptions()), lifetime.Object, NullLogger<ClientSessions>.Instance, NullLogger<ClientInbox>.Instance);
+            Options.Create(new MessageBudgetOptions()), lifetime.Object, NullLogger<ClientSessions>.Instance, NullLogger<ClientInbox>.Instance, TimeProvider.System);
         var trust = JwtTrust.Local(JwtIssuers.Management, JwtAudiences.Socket, _keys.PublishedKeys);
 
         var authenticator = new MqttConnectAuthenticator(sessions, trust, NullLogger<MqttConnectAuthenticator>.Instance);

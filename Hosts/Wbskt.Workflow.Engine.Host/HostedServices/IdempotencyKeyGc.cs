@@ -17,7 +17,7 @@ public sealed class IdempotencyKeyGc(
     ILeadershipGate leadership,
     IServiceScopeFactory scopeFactory,
     ILogger<IdempotencyKeyGc> logger,
-    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger)
+    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger, clock)
 {
     private const int BatchSize = 5000;
     private readonly TimeSpan _retentionWindow = options.Value.IdempotencyRetentionWindow;

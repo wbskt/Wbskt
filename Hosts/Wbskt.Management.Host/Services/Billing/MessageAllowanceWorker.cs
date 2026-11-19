@@ -9,8 +9,8 @@ namespace Wbskt.Management.Host.Services.Billing;
 /// Each management replica runs it: the socket hosts take the latest list from whichever sends it, and
 /// the limit's event is recorded once per workspace and month in the database.
 /// </summary>
-public sealed class MessageAllowanceWorker(IServiceScopeFactory scopeFactory, IOptions<BillingOptions> options, ILogger<MessageAllowanceWorker> logger)
-    : PeriodicWorker(AlwaysOpenWorkGate.Instance, scopeFactory, logger)
+public sealed class MessageAllowanceWorker(IServiceScopeFactory scopeFactory, IOptions<BillingOptions> options, TimeProvider clock, ILogger<MessageAllowanceWorker> logger)
+    : PeriodicWorker(AlwaysOpenWorkGate.Instance, scopeFactory, logger, clock)
 {
     protected override string Name => "Message allowance";
 

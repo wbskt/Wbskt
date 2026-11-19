@@ -15,9 +15,9 @@ public sealed class SupersedeMonitor
     private readonly TimeProvider _time;
     private long _records;
 
-    public SupersedeMonitor(TimeProvider? time = null)
+    public SupersedeMonitor(TimeProvider time)
     {
-        _time = time ?? TimeProvider.System;
+        _time = time;
     }
 
     /// <summary>

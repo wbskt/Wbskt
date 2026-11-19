@@ -20,6 +20,7 @@ public sealed class WorkflowManagementServicesTests
         var services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(configuration);
         services.AddLogging();
+        services.AddSingleton(TimeProvider.System);
         services.AddWorkflowManagementServices(configuration);
         return services;
     }

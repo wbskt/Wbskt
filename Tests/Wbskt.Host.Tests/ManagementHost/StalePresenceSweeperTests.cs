@@ -76,6 +76,6 @@ public sealed class StalePresenceSweeperTests
     private static StalePresenceSweeper CreateSweeper(IClientProvider provider, IEventBus bus, PresenceOptions options)
     {
         var services = new ServiceCollection().AddSingleton(provider).AddSingleton(bus).BuildServiceProvider();
-        return new StalePresenceSweeper(services.GetRequiredService<IServiceScopeFactory>(), Options.Create(options), NullLogger<StalePresenceSweeper>.Instance);
+        return new StalePresenceSweeper(services.GetRequiredService<IServiceScopeFactory>(), Options.Create(options), TimeProvider.System, NullLogger<StalePresenceSweeper>.Instance);
     }
 }

@@ -34,6 +34,7 @@ internal static class EngineTestHost
         services.AddSingleton(configuration);
         services.AddWorkflowEngine(configuration);
         services.AddLogging();
+        services.AddSingleton(TimeProvider.System);
 
         // Named clients are not configured here: CreateClient(name) falls back to a default-configured
         // client for an unregistered name, and the host's handler tuning (no auto-redirect on
