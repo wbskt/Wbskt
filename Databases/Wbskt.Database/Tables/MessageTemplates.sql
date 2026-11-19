@@ -14,6 +14,8 @@ CREATE TABLE dbo.MessageTemplates (
     -- Constraints
     CONSTRAINT PK_MessageTemplates                      PRIMARY KEY (Id),
     CONSTRAINT UQ_MessageTemplates_RefId                UNIQUE (RefId),
+    -- A name picks a template in the send panel, so two alike would be told apart only by trying them.
+    CONSTRAINT UQ_MessageTemplates_WorkspaceId_Name     UNIQUE (WorkspaceId, Name),
     CONSTRAINT FK_MessageTemplates_RegistrationPolicies FOREIGN KEY (PolicyId)
         REFERENCES dbo.RegistrationPolicies (Id)
 );

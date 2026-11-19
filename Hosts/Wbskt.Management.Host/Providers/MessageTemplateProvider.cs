@@ -40,7 +40,7 @@ internal sealed class MessageTemplateProvider : BaseSqlProvider, IMessageTemplat
     }
 
     public async Task<MessageTemplate> InsertAsync(int workspaceId, int? policyId, string name, string messageType,
-        string payloadJson, CancellationToken cancellationToken = default)
+        string payloadJson, int maxPerWorkspace, CancellationToken cancellationToken = default)
     {
         var parameters = await ExecuteNonQueryAsync("dbo.MessageTemplate_Create", p =>
         {
@@ -49,6 +49,7 @@ internal sealed class MessageTemplateProvider : BaseSqlProvider, IMessageTemplat
             p.AddWithValue("@Name", name);
             p.AddWithValue("@MessageType", messageType);
             p.AddWithValue("@PayloadJson", payloadJson);
+            p.AddWithValue("@MaxPerWorkspace", maxPerWorkspace);
 
             p.Add("@Id", SqlDbType.Int).Direction = ParameterDirection.Output;
             p.Add("@RefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;

@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Wbskt.EventBus.Abstractions;
@@ -79,7 +80,7 @@ public sealed class WorkspaceOwnershipTests
         var policies = new Mock<IRegistrationPolicyProvider>();
         policies.Setup(p => p.FindByRefIdAsync(foreignPolicy.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(foreignPolicy);
         var templates = new Mock<IMessageTemplateProvider>();
-        var service = new MessageTemplateService(templates.Object, policies.Object, NullLogger<MessageTemplateService>.Instance);
+        var service = new MessageTemplateService(templates.Object, policies.Object, Mock.Of<IEventBus>(), new ConfigurationBuilder().Build(), NullLogger<MessageTemplateService>.Instance);
 
         var result = await service.GetAllAsync(WorkspaceId, foreignPolicy.RefId, 0, 50);
 
@@ -93,7 +94,7 @@ public sealed class WorkspaceOwnershipTests
         var template = new MessageTemplate { Id = 3, RefId = Guid.NewGuid(), WorkspaceId = OtherWorkspaceId, Name = "reboot", MessageType = "reboot", PayloadJson = "{}" };
         var templates = new Mock<IMessageTemplateProvider>();
         templates.Setup(p => p.FindByRefIdAsync(template.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(template);
-        var service = new MessageTemplateService(templates.Object, Mock.Of<IRegistrationPolicyProvider>(), NullLogger<MessageTemplateService>.Instance);
+        var service = new MessageTemplateService(templates.Object, Mock.Of<IRegistrationPolicyProvider>(), Mock.Of<IEventBus>(), new ConfigurationBuilder().Build(), NullLogger<MessageTemplateService>.Instance);
 
         var result = await service.DeleteAsync(WorkspaceId, template.RefId);
 

@@ -375,3 +375,20 @@ DROP PROCEDURE IF EXISTS dbo.Client_FindBy_RefId;
 GO
 DROP PROCEDURE IF EXISTS dbo.RegistrationPolicy_FindBy_RefId;
 GO
+/*
+UQ_MessageTemplates_WorkspaceId_Name (#1001 item 137) makes a template's name unique in its
+workspace. Templates saved before could share one, so every one but the oldest of a name gets its
+id added ("Lamp on (42)") and the constraint can be created.
+*/
+IF OBJECT_ID('dbo.MessageTemplates', 'U') IS NOT NULL AND OBJECT_ID('dbo.UQ_MessageTemplates_WorkspaceId_Name', 'UQ') IS NULL
+BEGIN
+    EXEC sp_executesql N'
+        WITH Named AS (
+            SELECT Name, Id, ROW_NUMBER() OVER (PARTITION BY WorkspaceId, Name ORDER BY Id) AS Nth
+            FROM dbo.MessageTemplates
+        )
+        UPDATE Named
+        SET Name = LEFT(Name, 85) + N'' ('' + CAST(Id AS NVARCHAR(12)) + N'')''
+        WHERE Nth > 1;';
+END
+GO

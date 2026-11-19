@@ -469,9 +469,11 @@ Saved send-panel payloads, optionally pinned to a policy.
 | Endpoint | Permission | What it does |
 |---|---|---|
 | `GET /` | `templates.read` | Lists templates, optionally filtered by `policyRefId`. |
-| `POST /` | `templates.manage` | Creates one. Validates that the payload is JSON under 32 KiB and that the message type is not reserved for the platform protocol. |
-| `PUT {templateRef}` | `templates.manage` | Replaces a template. |
+| `POST /` | `templates.manage` | Creates one. Validates that the payload is JSON under 32 KiB and that the message type is not reserved for the platform protocol. A name another template in the workspace has is **409** `TEMPLATE_NAME_TAKEN` (names compare without case); a workspace holds at most 200 (`Templates:MaxPerWorkspace`), then **409** `TEMPLATE_LIMIT_REACHED`. |
+| `PUT {templateRef}` | `templates.manage` | Replaces a template and returns it as saved. **409** `TEMPLATE_NAME_TAKEN` as above. |
 | `DELETE {templateRef}` | `templates.manage` | Deletes one. |
+
+Saving, changing (with `changes`) and deleting a template is logged as `MessageTemplateCreatedEvent`, `MessageTemplateUpdatedEvent` and `MessageTemplateDeletedEvent`, and sent to the workspace's live feed under the same names with `On` in front.
 
 ### 2.4 Event logs — `…/event-logs`
 

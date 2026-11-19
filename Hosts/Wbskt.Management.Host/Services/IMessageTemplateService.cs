@@ -10,7 +10,7 @@ public interface IMessageTemplateService
         CancellationToken cancellationToken = default);
     Task<Result<MessageTemplateResponse>> CreateAsync(int workspaceId, MessageTemplateRequest request,
         CancellationToken cancellationToken = default);
-    Task<Result> UpdateAsync(int workspaceId, Guid refId, MessageTemplateRequest request,
+    Task<Result<MessageTemplateResponse>> UpdateAsync(int workspaceId, Guid refId, MessageTemplateRequest request,
         CancellationToken cancellationToken = default);
     Task<Result> DeleteAsync(int workspaceId, Guid refId, CancellationToken cancellationToken = default);
 }
