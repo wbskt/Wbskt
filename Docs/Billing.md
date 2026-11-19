@@ -410,6 +410,12 @@ and `current`, read when the refusal is made. After a downgrade `current` can be
 already registered keep working, and only new ones are refused, so "You have 140 clients; Maker allows
 100" is the whole explanation.
 
+A client refused for the plan's limit also raises `PlanClientLimitReachedEvent` (Warning, in the policy's
+activity, and `OnPlanClientLimitReachedEvent { policyRefId, planCode, limit, current, clientRefId,
+clientName, createdAtUtc }` on the workspace's console), so a board that registers and is refused leaves a
+trace beyond its own log. A registration names the board (`clientName`, with an empty `clientRefId`); an
+approval names the client, and a bulk approval raises it once for the first client it refused.
+
 The split follows where the data lives: seats are counted in the auth database, everything else in the
 main one, and neither host calls the other to answer. Messages are on the management read, from the
 message meter (see Messages).
