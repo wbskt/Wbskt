@@ -56,6 +56,32 @@ public sealed class OutboundWebhookExecutorTests
     }
 
     [Fact]
+    public async Task A_text_body_goes_as_the_text_typed_with_a_plain_text_type()
+    {
+        var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        JsonElement body = JsonSerializer.SerializeToElement("temperature is 31");
+
+        await CreateExecutor(handler).ExecuteAsync(BuildContext("https://example.test/webhook", "POST", body), CancellationToken.None);
+
+        Assert.Equal("temperature is 31", handler.LastBody);
+        Assert.StartsWith("text/plain", handler.LastHeaders!["Content-Type"]);
+    }
+
+    [Fact]
+    public async Task A_content_type_header_overrides_a_text_body_s_type()
+    {
+        var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        JsonElement body = JsonSerializer.SerializeToElement("a=1&b=2");
+
+        await CreateExecutor(handler).ExecuteAsync(
+            BuildContext("https://example.test/webhook", "POST", body, headers: new Dictionary<string, string> { ["Content-Type"] = "application/x-www-form-urlencoded" }),
+            CancellationToken.None);
+
+        Assert.Equal("a=1&b=2", handler.LastBody);
+        Assert.Equal("application/x-www-form-urlencoded", handler.LastHeaders!["Content-Type"]);
+    }
+
+    [Fact]
     public async Task Returns_continue_on_2xx_response()
     {
         var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
