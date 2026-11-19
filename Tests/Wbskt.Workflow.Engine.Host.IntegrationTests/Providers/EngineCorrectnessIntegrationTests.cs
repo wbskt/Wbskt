@@ -230,7 +230,7 @@ public sealed class EngineCorrectnessIntegrationTests(SqlEdgeFixture fixture)
 
     /// <summary>
     /// A finished run goes once its workspace's plan stops keeping it: a tenant's <c>runHistoryDays</c>
-    /// override wins over its plan, a retention held after a downgrade wins while it runs, and a workspace
+    /// override wins over its plan, the days the account copy stores win over both, a retention held after a downgrade wins while it runs, and a workspace
     /// with no copy of its account loses nothing. "Now" is 2001-01-01 and the runs finished 12 days
     /// before, so the shared database's other runs are never swept here.
     /// </summary>
@@ -245,6 +245,7 @@ public sealed class EngineCorrectnessIntegrationTests(SqlEdgeFixture fixture)
         int overridden = await RunInWorkspaceAsync(plan: "Pro", overrides: """{"runHistoryDays":10}""");
         int held = await RunInWorkspaceAsync(plan: "Free", overrides: null, heldDays: 30, heldUntil: now.AddDays(1));
         int lapsed = await RunInWorkspaceAsync(plan: "Free", overrides: null, heldDays: 30, heldUntil: now.AddDays(-1));
+        int stored = await RunInWorkspaceAsync(plan: "Pro", overrides: """{"runHistoryDays":30}""", storedDays: 10);
 
         await ProviderFactory.RunRetention(fixture.ConnectionString).DeleteRetiredRunsAsync(
             now,
@@ -259,6 +260,7 @@ public sealed class EngineCorrectnessIntegrationTests(SqlEdgeFixture fixture)
         Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Runs WHERE Id = @p0", noCopy));
         Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Runs WHERE Id = @p0", held));
         Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Runs WHERE Id = @p0", lapsed));
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Runs WHERE Id = @p0", stored));
     }
 
     /// <summary>
@@ -287,15 +289,15 @@ public sealed class EngineCorrectnessIntegrationTests(SqlEdgeFixture fixture)
         Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.HistoryEvents WHERE RunId = @p0 AND Severity = N'Info'", business));
     }
 
-    private async Task<int> RunInWorkspaceAsync(string? plan, string? overrides, int? heldDays = null, DateTime? heldUntil = null)
+    private async Task<int> RunInWorkspaceAsync(string? plan, string? overrides, int? heldDays = null, DateTime? heldUntil = null, int? storedDays = null)
     {
         int workspaceId = Random.Shared.Next(1_000_000, int.MaxValue);
         if (plan is not null)
         {
             await ExecAsync("""
-                INSERT INTO dbo.WorkspaceAccounts (WorkspaceId, TenantId, TenantRefId, PlanCode, LimitOverrides, PlanRevision, HeldRunHistoryDays, RetentionHeldUntil)
-                VALUES (@p0, @p0, NEWID(), @p1, @p2, 1, @p3, @p4);
-                """, workspaceId, plan, (object?)overrides ?? DBNull.Value, (object?)heldDays ?? DBNull.Value, (object?)heldUntil ?? DBNull.Value);
+                INSERT INTO dbo.WorkspaceAccounts (WorkspaceId, TenantId, TenantRefId, PlanCode, LimitOverrides, PlanRevision, HeldRunHistoryDays, RetentionHeldUntil, RunHistoryDays)
+                VALUES (@p0, @p0, NEWID(), @p1, @p2, 1, @p3, @p4, @p5);
+                """, workspaceId, plan, (object?)overrides ?? DBNull.Value, (object?)heldDays ?? DBNull.Value, (object?)heldUntil ?? DBNull.Value, (object?)storedDays ?? DBNull.Value);
         }
 
         var workflowRefId = Guid.NewGuid();

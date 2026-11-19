@@ -11,11 +11,15 @@ namespace Wbskt.Management.Host.Services.Readings;
 /// Keeps readings for as long as each client's plan says, on <see cref="ReadingsOptions.RetentionInterval"/>:
 /// raw readings past the plan's <see cref="PlanLimits.RawReadingsDays"/> are rolled up per hour, hourly
 /// rows past its <see cref="PlanLimits.HourlyReadingsDays"/> are deleted, and a deleted client's readings
-/// are cleared (<c>dbo.ClientReadings_Compact</c>), in batches until one comes back short.
+/// are cleared (<c>dbo.ClientReadings_Compact</c>), in batches until one comes back short (several to a call).
 /// </summary>
 public sealed class ClientReadingRetentionService : PeriodicWorker
 {
     internal const int BatchSize = 5000;
+
+    // Batches per call: the cutoffs are worked out once per call, and four batches stay well inside the
+    // command timeout.
+    internal const int BatchesPerCall = 4;
 
     private readonly TimeProvider _timeProvider;
     private readonly PlanCatalog _catalog;
@@ -63,9 +67,9 @@ public sealed class ClientReadingRetentionService : PeriodicWorker
         var total = new ReadingCompaction(0, 0, 0);
         while (true)
         {
-            ReadingCompaction batch = await provider.CompactAsync(nowUtc, retention, BatchSize, cancellationToken);
+            ReadingCompaction batch = await provider.CompactAsync(nowUtc, retention, BatchSize, BatchesPerCall, cancellationToken);
             total = new ReadingCompaction(total.RolledUp + batch.RolledUp, total.HourlyDeleted + batch.HourlyDeleted, total.Cleared + batch.Cleared);
-            if (batch.RolledUp < BatchSize && batch.HourlyDeleted < BatchSize && batch.Cleared < BatchSize)
+            if (!batch.More)
             {
                 break;
             }

@@ -13,8 +13,11 @@ public sealed class ReadingsOptions
 /// <summary>How long one plan keeps readings: raw, and rolled up per hour.</summary>
 public sealed record ReadingRetention(PlanCode PlanCode, int RawDays, int HourlyDays);
 
-/// <summary>What one batch of the readings retention sweep did: raw rows rolled up, hourly rows deleted, deleted clients' rows cleared.</summary>
-public sealed record ReadingCompaction(int RolledUp, int HourlyDeleted, int Cleared)
+/// <summary>
+/// What the readings retention sweep did: raw rows rolled up, hourly rows deleted, deleted clients' rows
+/// cleared. <see cref="More"/> when the last batch still came back full, so there is more to do.
+/// </summary>
+public sealed record ReadingCompaction(int RolledUp, int HourlyDeleted, int Cleared, bool More = false)
 {
     public int Total => RolledUp + HourlyDeleted + Cleared;
 }

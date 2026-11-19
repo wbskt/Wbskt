@@ -69,6 +69,38 @@ public sealed class ClientReadingRetentionIntegrationTests(SqlEdgeFixture fixtur
     }
 
     [SkippableFact]
+    public async Task The_days_the_account_copy_stores_win_over_the_plan_list_and_the_overrides()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int workspaceId = Random.Shared.Next(1_000_000, int.MaxValue - 1);
+        int client = await CreateClientAsync(plan: "Pro", workspaceId, overrides: """{"rawReadingsDays":30}""");
+        await ScalarAsync<int>("UPDATE dbo.WorkspaceAccounts SET RawReadingsDays = 1, HourlyReadingsDays = 2 WHERE WorkspaceId = @p0; SELECT 0;", workspaceId);
+        await ReadAsync(client, Now.AddDays(-4), 1);
+
+        await CompactAsync();
+
+        Assert.Equal(0, await CountAsync("dbo.ClientReadings", client));
+        Assert.Equal(0, await CountAsync("dbo.ClientReadingsHourly", client));
+    }
+
+    [SkippableFact]
+    public async Task Several_batches_in_one_call_roll_each_reading_up_once()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int client = await CreateClientAsync(plan: "Free");
+        DateTime hour = Now.AddDays(-5).AddMinutes(5);
+        await ReadAsync(client, hour, 1);
+        await ReadAsync(client, hour.AddMinutes(1), 2);
+        await ReadAsync(client, hour.AddMinutes(2), 3);
+
+        ReadingCompaction result = await Provider().CompactAsync(Now, Retention, batchSize: 1, batches: 1_000_000);
+
+        Assert.False(result.More);
+        Assert.Equal((3, 1d, 3d, 6d), await ScalarRowAsync(
+            "SELECT ReadingCount, MinValue, MaxValue, SumValue FROM dbo.ClientReadingsHourly WHERE ClientId = @p0", client));
+    }
+
+    [SkippableFact]
     public async Task Hours_past_the_plans_hourly_days_go_and_a_late_reading_adds_to_its_hour()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
@@ -176,7 +208,7 @@ public sealed class ClientReadingRetentionIntegrationTests(SqlEdgeFixture fixtur
         Assert.Equal(0, await CountAsync("dbo.ClientReadings", client));
     }
 
-    private Task<ReadingCompaction> CompactAsync() => Provider().CompactAsync(Now, Retention, BatchSize);
+    private Task<ReadingCompaction> CompactAsync() => Provider().CompactAsync(Now, Retention, BatchSize, batches: 1);
 
     private Task ReadAsync(int clientId, DateTime sentAt, double value, DateTime? receivedAt = null) =>
         Provider().InsertAsync(clientId, sentAt, receivedAt ?? sentAt, isLate: receivedAt is not null, [new ClientReadingValue("temp", value)]);

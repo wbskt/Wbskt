@@ -15,9 +15,10 @@ public interface IClientReadingProvider
     Task<IReadOnlyCollection<ClientReading>> GetRangeAsync(int clientId, string? name, DateTime fromUtc, DateTime toUtc, int maxRows, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// One batch of retention by each client's plan: rolls raw readings past <paramref name="retention"/>'s
-    /// raw days into the hourly roll-up, deletes hourly rows past its hourly days, and clears deleted
-    /// clients' readings; up to <paramref name="batchSize"/> rows each.
+    /// Up to <paramref name="batches"/> batches of retention by each client's plan, on cutoffs worked out
+    /// once: rolls raw readings past the plan's raw days into the hourly roll-up, deletes hourly rows past
+    /// its hourly days, and clears deleted clients' readings; up to <paramref name="batchSize"/> rows each.
+    /// <paramref name="retention"/> covers only account copies written before they stored their days.
     /// </summary>
-    Task<ReadingCompaction> CompactAsync(DateTime nowUtc, IReadOnlyCollection<ReadingRetention> retention, int batchSize, CancellationToken cancellationToken = default);
+    Task<ReadingCompaction> CompactAsync(DateTime nowUtc, IReadOnlyCollection<ReadingRetention> retention, int batchSize, int batches, CancellationToken cancellationToken = default);
 }
