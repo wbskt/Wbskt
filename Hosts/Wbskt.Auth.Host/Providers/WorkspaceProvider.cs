@@ -124,15 +124,6 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
         }, cancellationToken);
     }
 
-    public async Task<bool> VerifyWorkspaceMembershipAsync(int userId, int workspaceId, CancellationToken cancellationToken = default)
-    {
-        return await ExecuteScalarAsync<bool>("dbo.WorkspaceMember_Verify", p =>
-        {
-            p.AddWithValue("@UserId", userId);
-            p.AddWithValue("@WorkspaceId", workspaceId);
-        }, cancellationToken);
-    }
-
     public async Task<WorkspaceAccessResolution?> ResolveAccessAsync(int userId, Guid workspaceRef, CancellationToken cancellationToken = default)
     {
         var rows = await ExecuteCollectionAsync(

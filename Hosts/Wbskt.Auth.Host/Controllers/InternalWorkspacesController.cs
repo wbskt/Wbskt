@@ -52,17 +52,12 @@ public class InternalWorkspacesController : ApiControllerBase
             return Ok(new ResolvedWorkspaceResponse(result.Value.WorkspaceId, result.Value.Permissions.ToArray(), result.Value.IsFrozen));
         }
 
-        if (result.Error.Code == "WORKSPACE_NOT_FOUND")
+        _metrics.RecordWorkspaceResolution(result.Error.Code switch
         {
-            _metrics.RecordWorkspaceResolution("not_found");
-
-            // Forbidden, not NotFound: "no such workspace" must read like "not yours", and the
-            // management host treats anything but 401 and 403 from here as a fault. A stale reference
-            // (normal after a workspace is deleted) is a permission answer, not a 500.
-            return MapError(Error.Forbidden("WORKSPACE_NOT_FOUND", "Workspace not found."));
-        }
-
-        _metrics.RecordWorkspaceResolution(result.Error.Type == ErrorType.Forbidden ? "forbidden" : "error");
+            "WORKSPACE_NOT_FOUND" => "not_found",
+            _ when result.Error.Type == ErrorType.Forbidden => "forbidden",
+            _ => "error"
+        });
 
         return MapError(result.Error);
     }
