@@ -115,7 +115,7 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
             },
             reader => new EventLogCount(
                 reader.GetString(reader.GetOrdinal("EventName")),
-                reader.IsDBNull(reader.GetOrdinal("UserRefId")) ? null : reader.GetGuid(reader.GetOrdinal("UserRefId")),
+                reader.GetNullableGuid("UserRefId"),
                 reader.IsDBNull(reader.GetOrdinal("Source")) ? null : (EventSource)reader.GetByte(reader.GetOrdinal("Source")),
                 reader.GetInt64(reader.GetOrdinal("EntryCount"))),
             cancellationToken);
@@ -155,15 +155,15 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
             reader.GetString(reader.GetOrdinal("EventName")),
             reader.GetString(reader.GetOrdinal("EventData")),
             (EventCriticality)reader.GetByte(reader.GetOrdinal("EventCriticality")),
-            reader.IsDBNull(reader.GetOrdinal("PolicyRefId")) ? null : reader.GetGuid(reader.GetOrdinal("PolicyRefId")),
-            reader.IsDBNull(reader.GetOrdinal("ClientRefId")) ? null : reader.GetGuid(reader.GetOrdinal("ClientRefId")),
-            reader.IsDBNull(reader.GetOrdinal("WorkflowRefId")) ? null : reader.GetGuid(reader.GetOrdinal("WorkflowRefId")),
-            reader.GetDateTime(reader.GetOrdinal("CreatedAt")).ToUtcOffset(),
-            reader.IsDBNull(reader.GetOrdinal("UserRefId")) ? null : reader.GetGuid(reader.GetOrdinal("UserRefId")),
+            reader.GetNullableGuid("PolicyRefId"),
+            reader.GetNullableGuid("ClientRefId"),
+            reader.GetNullableGuid("WorkflowRefId"),
+            reader.GetUtcDateTimeOffset("CreatedAt"),
+            reader.GetNullableGuid("UserRefId"),
             reader.GetInt64(reader.GetOrdinal("Id")),
             reader.IsDBNull(reader.GetOrdinal("Source")) ? null : ((EventSource)reader.GetByte(reader.GetOrdinal("Source"))).ToString(),
-            reader.IsDBNull(reader.GetOrdinal("ClientAddress")) ? null : reader.GetString(reader.GetOrdinal("ClientAddress")),
-            reader.IsDBNull(reader.GetOrdinal("UserAgent")) ? null : reader.GetString(reader.GetOrdinal("UserAgent"))
+            reader.GetNullableString("ClientAddress"),
+            reader.GetNullableString("UserAgent")
         );
     }
 }

@@ -1,3 +1,4 @@
+using Wbskt.Models;
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
@@ -31,7 +32,7 @@ public sealed class ClientHoldChannel : TriggerChannel
     {
         var payload = new Dictionary<string, JsonElement>(heldPayload, StringComparer.Ordinal)
         {
-            ["heldSince"] = Json(DateTime.SpecifyKind(sinceAt, DateTimeKind.Utc)),
+            ["heldSince"] = Json(sinceAt.AsUtc()),
             ["holdSeconds"] = Json(holdSeconds)
         };
 

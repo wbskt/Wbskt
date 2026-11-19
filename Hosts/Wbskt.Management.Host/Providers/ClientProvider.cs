@@ -233,8 +233,8 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
                 reader.GetInt32(reader.GetOrdinal("Id")),
                 reader.GetGuid(reader.GetOrdinal("RefId")),
                 reader.GetInt32(reader.GetOrdinal("WorkspaceId")),
-                reader.IsDBNull(reader.GetOrdinal("ConnectedHostId")) ? null : reader.GetString(reader.GetOrdinal("ConnectedHostId")),
-                DateTime.SpecifyKind(reader.GetDateTime(reader.GetOrdinal("ChangedAt")), DateTimeKind.Utc)),
+                reader.GetNullableString("ConnectedHostId"),
+                reader.GetUtcDateTime("ChangedAt")),
             cancellationToken);
     }
 
@@ -251,7 +251,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
                 reader.GetInt32(reader.GetOrdinal("Id")),
                 reader.GetGuid(reader.GetOrdinal("RefId")),
                 reader.GetInt32(reader.GetOrdinal("WorkspaceId")),
-                reader.IsDBNull(reader.GetOrdinal("ConnectedHostId")) ? null : reader.GetString(reader.GetOrdinal("ConnectedHostId"))),
+                reader.GetNullableString("ConnectedHostId")),
             cancellationToken);
     }
 
@@ -280,7 +280,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
                 reader.GetGuid(reader.GetOrdinal("RefId")),
                 reader.GetInt32(reader.GetOrdinal("WorkspaceId")),
                 reader.GetBoolean(reader.GetOrdinal("Connected")),
-                DateTime.SpecifyKind(reader.GetDateTime(reader.GetOrdinal("ChangedAt")), DateTimeKind.Utc)),
+                reader.GetUtcDateTime("ChangedAt")),
             cancellationToken);
     }
 
@@ -370,7 +370,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             reader => new StateVariableUpsert(
                 reader.GetString(reader.GetOrdinal("Name")),
                 reader.GetBoolean(reader.GetOrdinal("Stored")),
-                reader.IsDBNull(reader.GetOrdinal("OldValueJson")) ? null : reader.GetString(reader.GetOrdinal("OldValueJson")),
+                reader.GetNullableString("OldValueJson"),
                 reader.GetBoolean(reader.GetOrdinal("Stale"))),
             cancellationToken);
         return outcomes.ToList();
@@ -408,13 +408,13 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             Name = reader.GetString(reader.GetOrdinal("Name")),
             Status = (ClientStatus)reader.GetByte(reader.GetOrdinal("Status")),
             IsConnected = reader.GetBoolean(reader.GetOrdinal("IsConnected")),
-            ConnectedAt = reader.IsDBNull(reader.GetOrdinal("ConnectedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("ConnectedAt")),
-            UpdatingUntil = reader.IsDBNull(reader.GetOrdinal("UpdatingUntil")) ? null : reader.GetDateTime(reader.GetOrdinal("UpdatingUntil")),
-            LastActivityAt = reader.IsDBNull(reader.GetOrdinal("LastActivityAt")) ? null : reader.GetDateTime(reader.GetOrdinal("LastActivityAt")),
-            LastSeenAt = reader.IsDBNull(reader.GetOrdinal("LastSeenAt")) ? null : reader.GetDateTime(reader.GetOrdinal("LastSeenAt")),
-            LastRttMs = reader.IsDBNull(reader.GetOrdinal("LastRttMs")) ? null : reader.GetInt32(reader.GetOrdinal("LastRttMs")),
-            RttMeasuredAt = reader.IsDBNull(reader.GetOrdinal("RttMeasuredAt")) ? null : reader.GetDateTime(reader.GetOrdinal("RttMeasuredAt")),
-            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
+            ConnectedAt = reader.GetNullableUtcDateTime("ConnectedAt"),
+            UpdatingUntil = reader.GetNullableUtcDateTime("UpdatingUntil"),
+            LastActivityAt = reader.GetNullableUtcDateTime("LastActivityAt"),
+            LastSeenAt = reader.GetNullableUtcDateTime("LastSeenAt"),
+            LastRttMs = reader.GetNullableInt32("LastRttMs"),
+            RttMeasuredAt = reader.GetNullableUtcDateTime("RttMeasuredAt"),
+            CreatedAt = reader.GetUtcDateTime("CreatedAt")
         };
     }
 
@@ -448,7 +448,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             Name = reader.GetString(reader.GetOrdinal("Name")),
             DataType = reader.GetString(reader.GetOrdinal("DataType")),
             ValueJson = reader.GetString(reader.GetOrdinal("ValueJson")),
-            UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))
+            UpdatedAt = reader.GetUtcDateTime("UpdatedAt")
         };
     }
 
@@ -465,21 +465,21 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             Name = reader.GetString(reader.GetOrdinal("Name")),
             Status = (ClientStatus)reader.GetByte(reader.GetOrdinal("Status")),
             IsConnected = reader.GetBoolean(reader.GetOrdinal("IsConnected")),
-            ConnectedAt = reader.IsDBNull(reader.GetOrdinal("ConnectedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("ConnectedAt")),
-            UpdatingUntil = reader.IsDBNull(reader.GetOrdinal("UpdatingUntil")) ? null : reader.GetDateTime(reader.GetOrdinal("UpdatingUntil")),
-            LastActivityAt = reader.IsDBNull(reader.GetOrdinal("LastActivityAt")) ? null : reader.GetDateTime(reader.GetOrdinal("LastActivityAt")),
-            LastSeenAt = reader.IsDBNull(reader.GetOrdinal("LastSeenAt")) ? null : reader.GetDateTime(reader.GetOrdinal("LastSeenAt")),
-            LastRttMs = reader.IsDBNull(reader.GetOrdinal("LastRttMs")) ? null : reader.GetInt32(reader.GetOrdinal("LastRttMs")),
-            RttMeasuredAt = reader.IsDBNull(reader.GetOrdinal("RttMeasuredAt")) ? null : reader.GetDateTime(reader.GetOrdinal("RttMeasuredAt")),
-            ConnectedHostId = reader.IsDBNull(reader.GetOrdinal("ConnectedHostId")) ? null : reader.GetString(reader.GetOrdinal("ConnectedHostId")),
-            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
-            AgentName = reader.IsDBNull(reader.GetOrdinal("AgentName")) ? null : reader.GetString(reader.GetOrdinal("AgentName")),
-            AgentVersion = reader.IsDBNull(reader.GetOrdinal("AgentVersion")) ? null : reader.GetString(reader.GetOrdinal("AgentVersion")),
-            Platform = reader.IsDBNull(reader.GetOrdinal("Platform")) ? null : reader.GetString(reader.GetOrdinal("Platform")),
-            CapabilitiesJson = reader.IsDBNull(reader.GetOrdinal("CapabilitiesJson")) ? null : reader.GetString(reader.GetOrdinal("CapabilitiesJson")),
-            SystemJson = reader.IsDBNull(reader.GetOrdinal("SystemJson")) ? null : reader.GetString(reader.GetOrdinal("SystemJson")),
-            FirmwareVersion = reader.IsDBNull(reader.GetOrdinal("FirmwareVersion")) ? null : reader.GetString(reader.GetOrdinal("FirmwareVersion")),
-            CapabilitiesUpdatedAt = reader.IsDBNull(reader.GetOrdinal("CapabilitiesUpdatedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("CapabilitiesUpdatedAt")),
+            ConnectedAt = reader.GetNullableUtcDateTime("ConnectedAt"),
+            UpdatingUntil = reader.GetNullableUtcDateTime("UpdatingUntil"),
+            LastActivityAt = reader.GetNullableUtcDateTime("LastActivityAt"),
+            LastSeenAt = reader.GetNullableUtcDateTime("LastSeenAt"),
+            LastRttMs = reader.GetNullableInt32("LastRttMs"),
+            RttMeasuredAt = reader.GetNullableUtcDateTime("RttMeasuredAt"),
+            ConnectedHostId = reader.GetNullableString("ConnectedHostId"),
+            CreatedAt = reader.GetUtcDateTime("CreatedAt"),
+            AgentName = reader.GetNullableString("AgentName"),
+            AgentVersion = reader.GetNullableString("AgentVersion"),
+            Platform = reader.GetNullableString("Platform"),
+            CapabilitiesJson = reader.GetNullableString("CapabilitiesJson"),
+            SystemJson = reader.GetNullableString("SystemJson"),
+            FirmwareVersion = reader.GetNullableString("FirmwareVersion"),
+            CapabilitiesUpdatedAt = reader.GetNullableUtcDateTime("CapabilitiesUpdatedAt"),
             Tags = ReadTags(reader)
         };
     }

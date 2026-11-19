@@ -1,3 +1,4 @@
+using Wbskt.Models;
 using System.Globalization;
 using Wbskt.Auth.Models;
 using Wbskt.Infrastructure;
@@ -30,5 +31,5 @@ internal sealed class DeletedWorkspacesClient : IDeletedWorkspacesClient
     }
 
     private static string Format(DateTime utc) =>
-        Uri.EscapeDataString(DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToString("O", CultureInfo.InvariantCulture));
+        Uri.EscapeDataString(utc.AsUtc().ToString("O", CultureInfo.InvariantCulture));
 }

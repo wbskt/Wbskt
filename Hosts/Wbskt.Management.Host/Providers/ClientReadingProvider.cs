@@ -43,7 +43,7 @@ internal sealed class ClientReadingProvider : BaseSqlProvider, IClientReadingPro
                 p.AddWithValue("@BucketSeconds", bucketSeconds);
             },
             reader => new ClientReadingBucket(
-                reader.GetDateTime(reader.GetOrdinal("BucketStart")).ToUtcOffset(),
+                reader.GetUtcDateTimeOffset("BucketStart"),
                 reader.GetInt64(reader.GetOrdinal("ReadingCount")),
                 reader.GetDouble(reader.GetOrdinal("MinValue")),
                 reader.GetDouble(reader.GetOrdinal("AvgValue")),
@@ -63,8 +63,8 @@ internal sealed class ClientReadingProvider : BaseSqlProvider, IClientReadingPro
             },
             reader => new ClientReading(
                 reader.GetString(reader.GetOrdinal("Name")),
-                DateTime.SpecifyKind(reader.GetDateTime(reader.GetOrdinal("SentAt")), DateTimeKind.Utc),
-                DateTime.SpecifyKind(reader.GetDateTime(reader.GetOrdinal("ReceivedAt")), DateTimeKind.Utc),
+                reader.GetUtcDateTime("SentAt"),
+                reader.GetUtcDateTime("ReceivedAt"),
                 reader.GetDouble(reader.GetOrdinal("NumberValue")),
                 reader.GetBoolean(reader.GetOrdinal("IsLate"))),
             cancellationToken);
@@ -82,7 +82,7 @@ internal sealed class ClientReadingProvider : BaseSqlProvider, IClientReadingPro
             },
             reader => new ClientReadingHour(
                 reader.GetString(reader.GetOrdinal("Name")),
-                DateTime.SpecifyKind(reader.GetDateTime(reader.GetOrdinal("HourStart")), DateTimeKind.Utc),
+                reader.GetUtcDateTime("HourStart"),
                 reader.GetInt64(reader.GetOrdinal("ReadingCount")),
                 reader.GetDouble(reader.GetOrdinal("MinValue")),
                 reader.GetDouble(reader.GetOrdinal("AvgValue")),

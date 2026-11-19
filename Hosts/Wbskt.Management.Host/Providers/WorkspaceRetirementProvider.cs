@@ -16,9 +16,9 @@ internal sealed class WorkspaceRetirementProvider : BaseSqlProvider, IWorkspaceR
             reader => (
                 Kind: reader.GetString(reader.GetOrdinal("Kind")),
                 Id: reader.GetInt64(reader.GetOrdinal("Id")),
-                RefId: reader.IsDBNull(reader.GetOrdinal("RefId")) ? (Guid?)null : reader.GetGuid(reader.GetOrdinal("RefId")),
-                PolicyId: reader.IsDBNull(reader.GetOrdinal("PolicyId")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("PolicyId")),
-                PolicyRefId: reader.IsDBNull(reader.GetOrdinal("PolicyRefId")) ? (Guid?)null : reader.GetGuid(reader.GetOrdinal("PolicyRefId"))),
+                RefId: reader.GetNullableGuid("RefId"),
+                PolicyId: reader.GetNullableInt32("PolicyId"),
+                PolicyRefId: reader.GetNullableGuid("PolicyRefId")),
             cancellationToken);
 
         return new WorkspaceRetirement(

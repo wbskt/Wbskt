@@ -183,8 +183,8 @@ internal sealed class SharedVariableProvider : BaseSqlProvider, ISharedVariableP
             VarName = reader.GetString(reader.GetOrdinal("VarName")),
             VarType = reader.GetString(reader.GetOrdinal("VarType")),
             ValueJson = reader.GetString(reader.GetOrdinal("ValueJson")),
-            UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
-            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
+            UpdatedAt = reader.GetUtcDateTime("UpdatedAt"),
+            CreatedAt = reader.GetUtcDateTime("CreatedAt")
         };
     }
 }

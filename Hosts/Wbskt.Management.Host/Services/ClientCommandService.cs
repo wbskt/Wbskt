@@ -144,7 +144,7 @@ public sealed class ClientCommandService : IClientCommandService
         return result.Outcome switch
         {
             ClientCommandOutcome.Sent => Result<ClientCommandResponse>.Success(new ClientCommandResponse(commandId, ClientCommandStatus.Sent, expiresAt)),
-            ClientCommandOutcome.Queued => Result<ClientCommandResponse>.Success(new ClientCommandResponse(commandId, ClientCommandStatus.Queued, Utc(result.ExpiresAtUtc!.Value))),
+            ClientCommandOutcome.Queued => Result<ClientCommandResponse>.Success(new ClientCommandResponse(commandId, ClientCommandStatus.Queued, result.ExpiresAtUtc!.Value.ToUtcOffset())),
             ClientCommandOutcome.QueueFull => Result<ClientCommandResponse>.Failure(Error.Conflict(
                 "COMMAND_QUEUE_FULL",
                 $"The client is offline and already has {_maxQueuedPerClient} commands waiting. Cancel some, or wait for it to come back.")),
@@ -167,7 +167,7 @@ public sealed class ClientCommandService : IClientCommandService
 
         var queued = await _queue.GetAsync(clientResult.Value, cancellationToken);
         return Result<IReadOnlyList<QueuedClientCommandResponse>>.Success(
-            [.. queued.Select(c => new QueuedClientCommandResponse(c.CommandId, c.Type, c.Payload, Utc(c.QueuedAtUtc), Utc(c.ExpiresAtUtc)))]);
+            [.. queued.Select(c => new QueuedClientCommandResponse(c.CommandId, c.Type, c.Payload, c.QueuedAtUtc.ToUtcOffset(), c.ExpiresAtUtc.ToUtcOffset()))]);
     }
 
     public async Task<Result> CancelAsync(int workspaceId, Guid clientRefId, Guid commandId, CancellationToken cancellationToken = default)
@@ -213,8 +213,6 @@ public sealed class ClientCommandService : IClientCommandService
             ActorStampingEventBus.Stamp(@event, _identity, _requestOrigin);
         }
     }
-
-    private static DateTimeOffset Utc(DateTime value) => new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
 
     public async Task<Result> PingAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
     {

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Wbskt.Models;
 using Microsoft.Extensions.Configuration;
 using Wbskt.Protocol;
 
@@ -43,7 +44,7 @@ internal sealed class ClientCommandTargetProvider : BaseSqlProvider, IClientComm
                     reader.GetBoolean(reader.GetOrdinal("IsConnected")),
                     reader.IsDBNull(hostOrdinal) ? null : reader.GetString(hostOrdinal),
                     (ClientStatus)reader.GetByte(reader.GetOrdinal("Status")),
-                    reader.IsDBNull(connectedAtOrdinal) ? null : DateTime.SpecifyKind(reader.GetDateTime(connectedAtOrdinal), DateTimeKind.Utc),
+                    reader.IsDBNull(connectedAtOrdinal) ? null : reader.GetDateTime(connectedAtOrdinal).AsUtc(),
                     reader.IsDBNull(silentOrdinal) ? null : reader.GetInt32(silentOrdinal),
                     reader.IsDBNull(systemOrdinal) ? [] : ReadSystem(reader.GetString(systemOrdinal)));
             },

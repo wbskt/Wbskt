@@ -1,3 +1,4 @@
+using Wbskt.Models;
 using System.Text.Json;
 using Cronos;
 using Microsoft.Extensions.Options;
@@ -92,8 +93,8 @@ public sealed class ScheduledFireTicker(
             return fire;
         }
 
-        DateTime from = DateTime.SpecifyKind(fire.NextFireAt, DateTimeKind.Utc);
-        DateTime to = DateTime.SpecifyKind(now, DateTimeKind.Utc);
+        DateTime from = fire.NextFireAt.AsUtc();
+        DateTime to = now.AsUtc();
         if (to <= from)
         {
             return fire;
@@ -127,6 +128,6 @@ public sealed class ScheduledFireTicker(
         }
 
         // Cronos insists on a Utc-kind DateTime; a value read back from SQL is Unspecified.
-        return (false, cron!.GetNextOccurrence(DateTime.SpecifyKind(fire.NextFireAt, DateTimeKind.Utc), TimeZoneInfo.Utc));
+        return (false, cron!.GetNextOccurrence(fire.NextFireAt.AsUtc(), TimeZoneInfo.Utc));
     }
 }

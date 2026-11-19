@@ -53,7 +53,7 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
             Description = description,
             OwnerUserId = ownerId,
             TenantId = tenantId,
-            CreatedAt = DateTime.SpecifyKind((DateTime)parameters["@CreatedAt"].Value, DateTimeKind.Utc)
+            CreatedAt = ((DateTime)parameters["@CreatedAt"].Value).AsUtc()
         };
     }
 
@@ -153,7 +153,7 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
                 WorkspaceId: r.GetInt32(r.GetOrdinal("WorkspaceId")),
                 IsMember: r.GetBoolean(r.GetOrdinal("IsMember")),
                 IsFrozen: r.GetBoolean(r.GetOrdinal("IsFrozen")),
-                Slug: r.IsDBNull(r.GetOrdinal("Slug")) ? null : r.GetString(r.GetOrdinal("Slug"))),
+                Slug: r.GetNullableString("Slug")),
             cancellationToken);
 
         if (rows.Count == 0)
@@ -203,11 +203,11 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
             Id = reader.GetInt32(reader.GetOrdinal("Id")),
             RefId = reader.GetGuid(reader.GetOrdinal("RefId")),
             Name = reader.GetString(reader.GetOrdinal("Name")),
-            Description = reader.IsDBNull(reader.GetOrdinal("Description")) ? null : reader.GetString(reader.GetOrdinal("Description")),
+            Description = reader.GetNullableString("Description"),
             OwnerUserId = reader.GetInt32(reader.GetOrdinal("OwnerUserId")),
             TenantId = reader.GetInt32(reader.GetOrdinal("TenantId")),
             TenantRefId = reader.GetGuid(reader.GetOrdinal("TenantRefId")),
-            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
+            CreatedAt = reader.GetUtcDateTime("CreatedAt")
         };
     }
 }

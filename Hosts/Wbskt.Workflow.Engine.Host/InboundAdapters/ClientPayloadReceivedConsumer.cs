@@ -1,3 +1,4 @@
+using Wbskt.Models;
 using System.Text.Json;
 using MassTransit;
 using Wbskt.Events.Client;
@@ -14,8 +15,8 @@ public sealed class ClientPayloadReceivedConsumer(IInboundHub hub, ClientHoldRec
     public async Task Consume(ConsumeContext<ClientMessageReceivedEvent> context)
     {
         ClientMessageReceivedEvent evt = context.Message;
-        DateTime receivedAt = DateTime.SpecifyKind(evt.CreatedAtUtc, DateTimeKind.Utc);
-        DateTime sentAt = evt.SentAtUtc is { } reported ? DateTime.SpecifyKind(reported, DateTimeKind.Utc) : receivedAt;
+        DateTime receivedAt = evt.CreatedAtUtc.AsUtc();
+        DateTime sentAt = evt.SentAtUtc is { } reported ? reported.AsUtc() : receivedAt;
         bool late = receivedAt - sentAt > LateThreshold;
 
         InboundEvent inboundEvent = ClientChannel.Event(

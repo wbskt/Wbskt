@@ -175,9 +175,9 @@ internal sealed class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
             WakeConditionKind = reader.GetString(reader.GetOrdinal("WakeConditionKind")),
             MatchKey = reader.GetString(reader.GetOrdinal("MatchKey")),
             WakeConditionJson = reader.GetString(reader.GetOrdinal("WakeConditionJson")),
-            ExpiresAt = reader.IsDBNull(reader.GetOrdinal("ExpiresAt")) ? null : reader.GetDateTime(reader.GetOrdinal("ExpiresAt")),
-            TtlPort = reader.IsDBNull(reader.GetOrdinal("TtlPort")) ? null : reader.GetString(reader.GetOrdinal("TtlPort")),
-            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
+            ExpiresAt = reader.GetNullableUtcDateTime("ExpiresAt"),
+            TtlPort = reader.GetNullableString("TtlPort"),
+            CreatedAt = reader.GetUtcDateTime("CreatedAt")
         };
     }
 

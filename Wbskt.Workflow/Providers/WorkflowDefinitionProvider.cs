@@ -169,7 +169,7 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
                     : reader.GetString(reader.GetOrdinal("TriggerKinds")).Split(',', StringSplitOptions.RemoveEmptyEntries),
                 Draft = MapDraftSummary(reader),
                 State = (WorkflowState)reader.GetByte(reader.GetOrdinal("State")),
-                LiveVersion = reader.IsDBNull(reader.GetOrdinal("LiveVersion")) ? null : reader.GetInt32(reader.GetOrdinal("LiveVersion"))
+                LiveVersion = reader.GetNullableInt32("LiveVersion")
             },
             ct
         );
@@ -199,10 +199,10 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
             {
                 Version = reader.GetInt32(reader.GetOrdinal("Version")),
                 Name = reader.GetString(reader.GetOrdinal("Name")),
-                Description = reader.IsDBNull(reader.GetOrdinal("Description")) ? null : reader.GetString(reader.GetOrdinal("Description")),
+                Description = reader.GetNullableString("Description"),
                 IsLive = reader.GetBoolean(reader.GetOrdinal("IsLive")),
                 PublishedBy = reader.GetInt32(reader.GetOrdinal("PublishedBy")),
-                CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+                CreatedAt = reader.GetUtcDateTime("CreatedAt"),
                 RunCount = reader.GetInt64(reader.GetOrdinal("RunCount"))
             },
             ct
@@ -248,7 +248,7 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
             reader.GetInt32(revision),
             reader.IsDBNull(baseVersion) ? null : reader.GetInt32(baseVersion),
             reader.IsDBNull(updatedBy) ? null : reader.GetGuid(updatedBy),
-            reader.GetDateTime(reader.GetOrdinal("DraftUpdatedAt")));
+            reader.GetUtcDateTime("DraftUpdatedAt"));
     }
 
     internal static WorkflowDefinitionRow Map(DbDataReader reader)
@@ -260,10 +260,10 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
             Version = reader.GetInt32(reader.GetOrdinal("Version")),
             WorkspaceId = reader.GetInt32(reader.GetOrdinal("WorkspaceId")),
             Name = reader.GetString(reader.GetOrdinal("Name")),
-            Description = reader.IsDBNull(reader.GetOrdinal("Description")) ? null : reader.GetString(reader.GetOrdinal("Description")),
+            Description = reader.GetNullableString("Description"),
             DefinitionJson = reader.GetString(reader.GetOrdinal("DefinitionJson")),
             PublishedBy = reader.GetInt32(reader.GetOrdinal("PublishedBy")),
-            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+            CreatedAt = reader.GetUtcDateTime("CreatedAt"),
             IsTestCopy = HasColumn(reader, "Kind") && reader.GetString(reader.GetOrdinal("Kind")) == TestCopyKind
         };
     }

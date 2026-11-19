@@ -89,13 +89,13 @@ internal sealed class MessageTemplateProvider : BaseSqlProvider, IMessageTemplat
             Id = reader.GetInt32(reader.GetOrdinal("Id")),
             RefId = reader.GetGuid(reader.GetOrdinal("RefId")),
             WorkspaceId = reader.GetInt32(reader.GetOrdinal("WorkspaceId")),
-            PolicyId = reader.IsDBNull(reader.GetOrdinal("PolicyId")) ? null : reader.GetInt32(reader.GetOrdinal("PolicyId")),
-            PolicyRefId = reader.IsDBNull(reader.GetOrdinal("PolicyRefId")) ? null : reader.GetGuid(reader.GetOrdinal("PolicyRefId")),
+            PolicyId = reader.GetNullableInt32("PolicyId"),
+            PolicyRefId = reader.GetNullableGuid("PolicyRefId"),
             Name = reader.GetString(reader.GetOrdinal("Name")),
             MessageType = reader.GetString(reader.GetOrdinal("MessageType")),
             PayloadJson = reader.GetString(reader.GetOrdinal("PayloadJson")),
-            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
-            UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))
+            CreatedAt = reader.GetUtcDateTime("CreatedAt"),
+            UpdatedAt = reader.GetUtcDateTime("UpdatedAt")
         };
     }
 }

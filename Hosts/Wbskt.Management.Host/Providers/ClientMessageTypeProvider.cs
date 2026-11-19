@@ -36,9 +36,9 @@ internal sealed class ClientMessageTypeProvider : BaseSqlProvider, IClientMessag
             reader => new ClientMessageType(
                 reader.GetString(reader.GetOrdinal("Type")),
                 reader.GetInt64(reader.GetOrdinal("MessageCount")),
-                DateTime.SpecifyKind(reader.GetDateTime(reader.GetOrdinal("FirstSeenAt")), DateTimeKind.Utc),
-                DateTime.SpecifyKind(reader.GetDateTime(reader.GetOrdinal("LastSeenAt")), DateTimeKind.Utc),
-                reader.IsDBNull(reader.GetOrdinal("SamplePayload")) ? null : reader.GetString(reader.GetOrdinal("SamplePayload"))),
+                reader.GetUtcDateTime("FirstSeenAt"),
+                reader.GetUtcDateTime("LastSeenAt"),
+                reader.GetNullableString("SamplePayload")),
             cancellationToken);
     }
 }

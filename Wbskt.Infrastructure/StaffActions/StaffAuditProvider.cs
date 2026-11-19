@@ -14,9 +14,9 @@ public sealed class StaffAuditProvider(IConfiguration configuration, string conn
             r => new StaffAuditRow(
                 r.GetInt64(r.GetOrdinal("Id")),
                 r.GetString(r.GetOrdinal("Action")),
-                r.IsDBNull(r.GetOrdinal("TargetRefId")) ? null : r.GetGuid(r.GetOrdinal("TargetRefId")),
+                r.GetNullableGuid("TargetRefId"),
                 Enum.Parse<StaffOutcome>(r.GetString(r.GetOrdinal("Outcome"))),
-                r.IsDBNull(r.GetOrdinal("Detail")) ? null : r.GetString(r.GetOrdinal("Detail"))),
+                r.GetNullableString("Detail")),
             cancellationToken);
     }
 

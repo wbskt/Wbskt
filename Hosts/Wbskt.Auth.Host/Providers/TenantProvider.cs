@@ -41,8 +41,8 @@ internal sealed class TenantProvider : BaseSqlProvider, ITenantProvider
                 Id = r.GetInt32(r.GetOrdinal("Id")),
                 RefId = r.GetGuid(r.GetOrdinal("RefId")),
                 Name = r.GetString(r.GetOrdinal("Name")),
-                Description = r.IsDBNull(r.GetOrdinal("Description")) ? null : r.GetString(r.GetOrdinal("Description")),
-                CreatedAt = r.GetDateTime(r.GetOrdinal("CreatedAt"))
+                Description = r.GetNullableString("Description"),
+                CreatedAt = r.GetUtcDateTime("CreatedAt")
             },
             cancellationToken
         );
@@ -153,7 +153,7 @@ internal sealed class TenantProvider : BaseSqlProvider, ITenantProvider
                 r.GetGuid(r.GetOrdinal("TenantRefId")),
                 r.GetString(r.GetOrdinal("TenantName")),
                 r.GetString(r.GetOrdinal("Email")),
-                r.GetDateTime(r.GetOrdinal("ExpiresAt")),
+                r.GetUtcDateTime("ExpiresAt"),
                 r.GetBoolean(r.GetOrdinal("IsLive"))),
             cancellationToken
         );
@@ -202,10 +202,10 @@ internal sealed class TenantProvider : BaseSqlProvider, ITenantProvider
         return new InvitationResponse(
             reader.GetGuid(reader.GetOrdinal("RefId")),
             reader.GetString(reader.GetOrdinal("Email")),
-            reader.IsDBNull(reader.GetOrdinal("RoleRefId")) ? null : reader.GetGuid(reader.GetOrdinal("RoleRefId")),
-            reader.IsDBNull(reader.GetOrdinal("RoleName")) ? null : reader.GetString(reader.GetOrdinal("RoleName")),
-            reader.GetDateTime(reader.GetOrdinal("ExpiresAt")).ToUtcOffset(),
-            reader.GetDateTime(reader.GetOrdinal("CreatedAt")).ToUtcOffset(),
+            reader.GetNullableGuid("RoleRefId"),
+            reader.GetNullableString("RoleName"),
+            reader.GetUtcDateTimeOffset("ExpiresAt"),
+            reader.GetUtcDateTimeOffset("CreatedAt"),
             reader.IsDBNull(reader.GetOrdinal("WorkspaceRefIds"))
                 ? []
                 : reader.GetString(reader.GetOrdinal("WorkspaceRefIds")).Split(',').Select(Guid.Parse).ToArray()

@@ -81,6 +81,7 @@ A service resolves a public `RefId` to its internal `Id` itself, through a provi
 *   **Base Provider Pattern:** Do not repeat `SqlConnection` or `SqlCommand` boilerplate in every method. Inherit from a `BaseSqlProvider` (or equivalent) that encapsulates connection lifecycle, command execution, and mapping.
 *   **No Cross-Provider Dependencies:** A Provider must never depend on or inject another Provider. If an operation requires data from multiple sources, it should be orchestrated in the Service layer.
 *   **DRY Mappings:** Extract repeated entity mapping logic (e.g., `SqlDataReader` to `User`) into reusable private methods.
+*   **Column reads:** Read a column by name through `DataReaderExtensions` (`GetUtcDateTime`, `GetUtcDateTimeOffset`, `GetNullableString`, `GetNullableInt32`, `GetNullableGuid`, and their nullable time forms). A `DATETIME2` comes back with no kind but holds UTC, and these mark it so; never call `DateTime.SpecifyKind` in a provider.
 
 ---
 

@@ -315,7 +315,7 @@ internal sealed class AccountProvider : BaseSqlProvider, IAccountProvider
             PasswordHash = reader.GetString(reader.GetOrdinal("PasswordHash")),
             IsActive = reader.GetBoolean(reader.GetOrdinal("IsActive")),
             IsEmailVerified = reader.GetBoolean(reader.GetOrdinal("IsEmailVerified")),
-            LockedUntil = reader.IsDBNull(reader.GetOrdinal("LockedUntil")) ? null : reader.GetDateTime(reader.GetOrdinal("LockedUntil"))
+            LockedUntil = reader.GetNullableUtcDateTime("LockedUntil")
         };
     }
 }

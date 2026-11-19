@@ -167,10 +167,10 @@ internal sealed class IdempotencyKeyProvider : BaseSqlProvider, IIdempotencyKeyP
             NodeId = reader.GetGuid(reader.GetOrdinal("NodeId")),
             Attempt = reader.GetInt32(reader.GetOrdinal("Attempt")),
             Status = reader.GetString(reader.GetOrdinal("Status")),
-            ResultJson = reader.IsDBNull(reader.GetOrdinal("ResultJson")) ? null : reader.GetString(reader.GetOrdinal("ResultJson")),
-            ErrorJson = reader.IsDBNull(reader.GetOrdinal("ErrorJson")) ? null : reader.GetString(reader.GetOrdinal("ErrorJson")),
-            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
-            CompletedAt = reader.IsDBNull(reader.GetOrdinal("CompletedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("CompletedAt"))
+            ResultJson = reader.GetNullableString("ResultJson"),
+            ErrorJson = reader.GetNullableString("ErrorJson"),
+            CreatedAt = reader.GetUtcDateTime("CreatedAt"),
+            CompletedAt = reader.GetNullableUtcDateTime("CompletedAt")
         };
     }
 }

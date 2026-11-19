@@ -16,7 +16,7 @@ internal sealed class BusinessUsageProvider : BaseSqlProvider, IBusinessUsagePro
             p => p.Add("@MonthStart", SqlDbType.Date).Value = monthStart.ToDateTime(TimeOnly.MinValue),
             r => new BusinessUsage(
                 r.GetGuid(r.GetOrdinal("TenantRefId")),
-                PlanLimitOverridesJson.Read(r.IsDBNull(r.GetOrdinal("LimitOverrides")) ? null : r.GetString(r.GetOrdinal("LimitOverrides"))),
+                PlanLimitOverridesJson.Read(r.GetNullableString("LimitOverrides")),
                 r.GetInt64(r.GetOrdinal("MessagesUsed")),
                 r.GetDecimal(r.GetOrdinal("CreditsPosted")),
                 r.GetDecimal(r.GetOrdinal("CreditsDrawn"))),

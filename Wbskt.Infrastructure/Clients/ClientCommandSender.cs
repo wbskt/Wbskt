@@ -118,7 +118,7 @@ public sealed class ClientCommandSender(
         }
 
         // The lifetime is promised to every sender, so it is held here rather than by each caller.
-        if (command.ExpiresAtUtc is { } expiresAt && !CommandLifetime.IsValidExpiry(new DateTimeOffset(DateTime.SpecifyKind(expiresAt, DateTimeKind.Utc)), clock.GetUtcNow()))
+        if (command.ExpiresAtUtc is { } expiresAt && !CommandLifetime.IsValidExpiry(expiresAt.ToUtcOffset(), clock.GetUtcNow()))
         {
             logger.LogInformation("Command '{Type}' to client '{ClientRefId}' refused: it expires at {ExpiresAt:O}.", command.Type, command.ClientRefId, expiresAt);
             return new ClientCommandResult(ClientCommandOutcome.ExpiryInvalid, target.ClientId);

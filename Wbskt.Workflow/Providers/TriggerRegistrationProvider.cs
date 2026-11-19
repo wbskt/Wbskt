@@ -46,12 +46,12 @@ internal sealed class TriggerRegistrationProvider : BaseSqlProvider, ITriggerReg
             TriggerNodeId = reader.GetGuid(reader.GetOrdinal("TriggerNodeId")),
             TriggerKind = reader.GetString(reader.GetOrdinal("TriggerKind")),
             TriggerKey = reader.GetString(reader.GetOrdinal("TriggerKey")),
-            CorrelationExpression = reader.IsDBNull(reader.GetOrdinal("CorrelationExpression")) ? null : reader.GetString(reader.GetOrdinal("CorrelationExpression")),
-            ConcurrencyPolicy = reader.IsDBNull(reader.GetOrdinal("ConcurrencyPolicy")) ? null : reader.GetString(reader.GetOrdinal("ConcurrencyPolicy")),
-            FilterExpression = reader.IsDBNull(reader.GetOrdinal("FilterExpression")) ? null : reader.GetString(reader.GetOrdinal("FilterExpression")),
-            WebhookSecret = reader.IsDBNull(reader.GetOrdinal("WebhookSecret")) ? null : reader.GetString(reader.GetOrdinal("WebhookSecret")),
-            WebhookSecretHash = reader.IsDBNull(reader.GetOrdinal("WebhookSecretHash")) ? null : reader.GetString(reader.GetOrdinal("WebhookSecretHash")),
-            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
+            CorrelationExpression = reader.GetNullableString("CorrelationExpression"),
+            ConcurrencyPolicy = reader.GetNullableString("ConcurrencyPolicy"),
+            FilterExpression = reader.GetNullableString("FilterExpression"),
+            WebhookSecret = reader.GetNullableString("WebhookSecret"),
+            WebhookSecretHash = reader.GetNullableString("WebhookSecretHash"),
+            CreatedAt = reader.GetUtcDateTime("CreatedAt")
         };
     }
 }

@@ -32,7 +32,7 @@ internal sealed class CreditUsageProvider : BaseSqlProvider, ICreditUsageProvide
         }, r => new CreditNotice(
             Enum.Parse<CreditNoticeKind>(r.GetString(r.GetOrdinal("Kind"))),
             r.GetInt32(r.GetOrdinal("WorkspaceId")),
-            r.IsDBNull(r.GetOrdinal("TenantId")) ? null : r.GetInt32(r.GetOrdinal("TenantId")),
+            r.GetNullableInt32("TenantId"),
             r.GetDecimal(r.GetOrdinal("Limit")),
             r.GetDecimal(r.GetOrdinal("Spent")),
             r.GetInt32(r.GetOrdinal("Level")),

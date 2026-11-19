@@ -167,8 +167,8 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
                 r.GetString(r.GetOrdinal("Provider")),
                 r.GetString(r.GetOrdinal("PaymentId")),
                 r.GetDecimal(r.GetOrdinal("Credits")),
-                r.GetDateTime(r.GetOrdinal("PurchasedAt")).ToUtcOffset(),
-                r.GetDateTime(r.GetOrdinal("ExpiresAt")).ToUtcOffset(),
+                r.GetUtcDateTimeOffset("PurchasedAt"),
+                r.GetUtcDateTimeOffset("ExpiresAt"),
                 r.IsDBNull(refundedAt) ? null : r.GetDateTime(refundedAt).ToUtcOffset(),
                 !r.IsDBNull(r.GetOrdinal("HeldAt")),
                 r.GetInt32(r.GetOrdinal("HoldRevision")));
@@ -276,7 +276,7 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
             Enum.Parse<BillingNoticeKind>(r.GetString(r.GetOrdinal("Kind"))),
             r.GetString(r.GetOrdinal("ToAddress")),
             r.GetString(r.GetOrdinal("Subject")),
-            r.IsDBNull(r.GetOrdinal("TextBody")) ? null : r.GetString(r.GetOrdinal("TextBody")),
+            r.GetNullableString("TextBody"),
             r.GetString(r.GetOrdinal("HtmlBody")),
             r.GetInt32(r.GetOrdinal("Attempts"))), cancellationToken);
     }
@@ -326,7 +326,7 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
             r.GetInt32(r.GetOrdinal("TenantId")),
             r.GetString(r.GetOrdinal("SubscriptionId")),
             Enum.Parse<PlanCode>(r.GetString(r.GetOrdinal("PlanCode"))),
-            r.GetDateTime(r.GetOrdinal("PastDueSince"))), cancellationToken);
+            r.GetUtcDateTime("PastDueSince")), cancellationToken);
     }
 
     private static TenantSubscription MapSubscription(SqlDataReader r)
@@ -348,13 +348,13 @@ internal sealed class TenantBillingProvider(IConfiguration configuration) : Base
             Enum.Parse<PlanCode>(r.GetString(r.GetOrdinal("PlanCode"))),
             Enum.Parse<BillingInterval>(r.GetString(r.GetOrdinal("BillingInterval"))),
             status,
-            r.GetDateTime(r.GetOrdinal("CurrentPeriodEnd")),
+            r.GetUtcDateTime("CurrentPeriodEnd"),
             r.GetBoolean(r.GetOrdinal("CancelAtPeriodEnd")),
             r.IsDBNull(pastDueSince) ? null : r.GetDateTime(pastDueSince),
             r.IsDBNull(refundedThrough) ? null : r.GetDateTime(refundedThrough),
             r.IsDBNull(duplicateAt) ? null : r.GetDateTime(duplicateAt),
             r.IsDBNull(duplicateRefund) ? null : r.GetString(duplicateRefund),
-            r.GetDateTime(r.GetOrdinal("CreatedAt")),
+            r.GetUtcDateTime("CreatedAt"),
             r.IsDBNull(scheduledPlan) ? null : Enum.Parse<PlanCode>(r.GetString(scheduledPlan)),
             r.IsDBNull(scheduledInterval) ? null : Enum.Parse<BillingInterval>(r.GetString(scheduledInterval)),
             r.IsDBNull(scheduledAt) ? null : r.GetDateTime(scheduledAt));

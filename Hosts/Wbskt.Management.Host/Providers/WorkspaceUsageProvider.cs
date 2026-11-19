@@ -38,7 +38,7 @@ internal sealed class WorkspaceUsageProvider : BaseSqlProvider, IWorkspaceUsageP
                 r.IsDBNull(r.GetOrdinal("MonthlyCreditCap")) ? null : r.GetDecimal(r.GetOrdinal("MonthlyCreditCap")),
                 r.GetDecimal(r.GetOrdinal("CreditGrantBalance")),
                 r.GetDecimal(r.GetOrdinal("WorkspaceCreditsReserved")),
-                r.IsDBNull(r.GetOrdinal("CreditGrantNextExpiresAt")) ? null : DateTime.SpecifyKind(r.GetDateTime(r.GetOrdinal("CreditGrantNextExpiresAt")), DateTimeKind.Utc),
+                r.IsDBNull(r.GetOrdinal("CreditGrantNextExpiresAt")) ? null : r.GetUtcDateTime("CreditGrantNextExpiresAt"),
                 r.GetDecimal(r.GetOrdinal("CreditGrantNextExpiring")),
                 r.GetDecimal(r.GetOrdinal("RemainingCredits"))),
             new InvalidOperationException("WorkspaceUsage_GetSummary did not return a row."),
@@ -55,7 +55,7 @@ internal sealed class WorkspaceUsageProvider : BaseSqlProvider, IWorkspaceUsageP
                 p.Add("@From", SqlDbType.Date).Value = from.ToDateTime(TimeOnly.MinValue);
                 p.Add("@To", SqlDbType.Date).Value = to.ToDateTime(TimeOnly.MinValue);
             },
-            r => new DailyCreditUsage(DateOnly.FromDateTime(r.GetDateTime(r.GetOrdinal("Day"))), r.GetDecimal(r.GetOrdinal("Credits"))),
+            r => new DailyCreditUsage(DateOnly.FromDateTime(r.GetUtcDateTime("Day")), r.GetDecimal(r.GetOrdinal("Credits"))),
             ct);
     }
 

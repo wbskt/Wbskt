@@ -76,7 +76,7 @@ internal sealed class CreditGrantProvider : BaseSqlProvider, ICreditGrantProvide
                 r.GetString(r.GetOrdinal("Source")),
                 r.GetString(r.GetOrdinal("SourceRef")),
                 r.GetDecimal(r.GetOrdinal("Remaining")),
-                r.GetDateTime(r.GetOrdinal("ExpiresAt")),
+                r.GetUtcDateTime("ExpiresAt"),
                 r.IsDBNull(workspaces) ? [] : r.GetString(workspaces).Split(',').Select(int.Parse).ToArray());
         }, ct);
     }

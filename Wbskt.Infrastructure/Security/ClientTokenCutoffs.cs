@@ -1,3 +1,4 @@
+using Wbskt.Models;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 
@@ -175,7 +176,7 @@ public sealed class ClientTokenCutoffs : IClientTokenCutoffs
     internal static string Key(Guid clientRefId) => $"{KeyPrefix}{clientRefId}";
 
     private static long ToUnixSeconds(DateTime utc) =>
-        utc == DateTime.MinValue ? long.MinValue : new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc)).ToUnixTimeSeconds();
+        utc == DateTime.MinValue ? long.MinValue : utc.ToUtcOffset().ToUnixTimeSeconds();
 
     private async Task WriteAsync(Guid clientRefId, string what, Func<IDatabase, Task> write)
     {
