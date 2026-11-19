@@ -74,7 +74,7 @@ public sealed class ClientTokenCutoffs : IClientTokenCutoffs
     internal const long Forever = long.MaxValue;
 
     // A token issued before the cutoff is alive for at most its lifetime plus clock skew.
-    internal static readonly TimeSpan Retention = TokenLifetime + JwtTrust.ClockSkew + TimeSpan.FromMinutes(1);
+    public static readonly TimeSpan Retention = TokenLifetime + JwtTrust.ClockSkew + TimeSpan.FromMinutes(1);
 
     // Rotation only ever raises the cutoff: a rotation landing after a revocation must not undo it.
     private const string RaiseScript = """

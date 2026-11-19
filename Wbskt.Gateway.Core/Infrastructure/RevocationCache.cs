@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Wbskt.Infrastructure.Security;
 
 namespace Wbskt.Gateway.Core.Infrastructure;
 
@@ -17,8 +18,8 @@ namespace Wbskt.Gateway.Core.Infrastructure;
 // client revoked and never seen again does not stay in memory for the life of the host.
 internal sealed class RevocationCache : IRevocationCache
 {
-    // Client JWT lifetime (60 min) + margin.
-    private static readonly TimeSpan RetentionPeriod = TimeSpan.FromMinutes(70);
+    // As long as the Redis cutoff it mirrors: a token's lifetime, the clock skew it is accepted with, and a margin.
+    internal static readonly TimeSpan RetentionPeriod = ClientTokenCutoffs.Retention;
     private static readonly TimeSpan PruneInterval = TimeSpan.FromMinutes(5);
 
     private readonly ConcurrentDictionary<Guid, Entry> _entries = new();
@@ -65,7 +66,8 @@ internal sealed class RevocationCache : IRevocationCache
 
         if (entry.KeepUntil <= Now())
         {
-            _entries.TryRemove(clientRefId, out _);
+            // Only the entry read: a revoke written since replaced it and must stay.
+            _entries.TryRemove(KeyValuePair.Create(clientRefId, entry));
             return false;
         }
 
