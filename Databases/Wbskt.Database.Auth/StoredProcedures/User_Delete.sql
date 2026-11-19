@@ -22,9 +22,14 @@
 -- @DeletedWorkspaces is a JSON array of { workspaceId, messageType, payload }, one per workspace
 -- dbo.User_GetSoleTenantWorkspaces returned. If membership changed since then, so that the list no
 -- longer matches, nothing is deleted (THROW 50019) and the caller can try again.
+--
+-- @UnconfirmedBefore is set by the sweep of accounts never confirmed (dbo.User_GetUnconfirmed). The
+-- account must then, under the locks, still be unverified, active, never signed in, created before it
+-- and alone in its tenants; otherwise nothing is deleted (THROW 50029) and the sweep moves on.
 CREATE PROCEDURE dbo.User_Delete
     @UserId INT,
-    @DeletedWorkspaces NVARCHAR(MAX)
+    @DeletedWorkspaces NVARCHAR(MAX),
+    @UnconfirmedBefore DATETIME2(3) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -48,6 +53,20 @@ BEGIN
            IIF(EXISTS (SELECT 1 FROM dbo.TenantMembers O WITH (HOLDLOCK) WHERE O.TenantId = TM.TenantId AND O.UserId <> @UserId), 0, 1)
     FROM dbo.TenantMembers TM WITH (HOLDLOCK)
     WHERE TM.UserId = @UserId;
+
+    IF @UnconfirmedBefore IS NOT NULL
+        AND (EXISTS (SELECT 1 FROM @Tenants WHERE IsSole = 0)
+             OR NOT EXISTS (
+                    SELECT 1
+                    FROM dbo.Users WITH (UPDLOCK, HOLDLOCK)
+                    WHERE Id = @UserId
+                      AND IsEmailVerified = 0
+                      AND IsActive = 1
+                      AND LastLoginAt IS NULL
+                      AND CreatedAt < @UnconfirmedBefore))
+    BEGIN
+        THROW 50029, 'The account was confirmed or used while it was being deleted as unconfirmed.', 1;
+    END
 
     -- Read under the locks above, so it is the same answer dbo.User_GetDeletionBlockers gave unless a
     -- member joined or an administrator left in between.

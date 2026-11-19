@@ -284,7 +284,7 @@ internal sealed class AccountProvider : BaseSqlProvider, IAccountProvider
             cancellationToken);
     }
 
-    public async Task<IReadOnlyCollection<int>> DeleteUserAsync(int userId, IReadOnlyDictionary<int, OutboxMessage> deletedWorkspaces, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyCollection<int>> DeleteUserAsync(int userId, IReadOnlyDictionary<int, OutboxMessage> deletedWorkspaces, DateTime? unconfirmedBefore, CancellationToken cancellationToken = default)
     {
         // The property names are what the procedure's OPENJSON reads.
         var planned = JsonSerializer.Serialize(deletedWorkspaces.Select(w => new Dictionary<string, object>
@@ -300,6 +300,7 @@ internal sealed class AccountProvider : BaseSqlProvider, IAccountProvider
             {
                 p.AddWithValue("@UserId", userId);
                 p.Add("@DeletedWorkspaces", SqlDbType.NVarChar, -1).Value = planned;
+                p.Add("@UnconfirmedBefore", SqlDbType.DateTime2).Value = (object?)unconfirmedBefore ?? DBNull.Value;
             },
             reader => reader.GetInt32(0),
             cancellationToken);

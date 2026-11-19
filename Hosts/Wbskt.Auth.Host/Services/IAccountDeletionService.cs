@@ -2,7 +2,7 @@ using Wbskt.Infrastructure;
 
 namespace Wbskt.Auth.Host.Services;
 
-/// <summary>A person deleting their own account.</summary>
+/// <summary>A person deleting their own account, and the sweep of accounts never confirmed.</summary>
 public interface IAccountDeletionService
 {
     /// <summary>
@@ -12,4 +12,11 @@ public interface IAccountDeletionService
     /// address are anonymised. See <c>dbo.User_Delete</c>.
     /// </summary>
     Task<Result> DeleteAccountAsync(int userId, string password, string ipAddress, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes an account whose email was never confirmed, the same way, if it still was not, was
+    /// created before <paramref name="createdBeforeUtc"/>, never signed in and shares no tenant.
+    /// Returns false, deleting nothing, when that no longer holds.
+    /// </summary>
+    Task<bool> DeleteUnconfirmedAsync(int userId, DateTime createdBeforeUtc, CancellationToken cancellationToken = default);
 }

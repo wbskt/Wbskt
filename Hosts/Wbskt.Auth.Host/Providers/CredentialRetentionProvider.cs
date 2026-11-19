@@ -28,4 +28,15 @@ internal sealed class CredentialRetentionProvider : BaseSqlProvider, ICredential
             r.GetString(r.GetOrdinal("Email")),
             DateTime.SpecifyKind(r.GetDateTime(r.GetOrdinal("ExpiresAt")), DateTimeKind.Utc)), cancellationToken);
     }
+
+    public async Task<IReadOnlyCollection<int>> GetUnconfirmedAccountsAsync(DateTime createdBeforeUtc, DateTime nowUtc, int afterId, int batchSize, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteCollectionAsync("dbo.User_GetUnconfirmed", p =>
+        {
+            p.Add("@CreatedBeforeUtc", SqlDbType.DateTime2).Value = createdBeforeUtc;
+            p.Add("@NowUtc", SqlDbType.DateTime2).Value = nowUtc;
+            p.AddWithValue("@AfterId", afterId);
+            p.AddWithValue("@BatchSize", batchSize);
+        }, r => r.GetInt32(0), cancellationToken);
+    }
 }

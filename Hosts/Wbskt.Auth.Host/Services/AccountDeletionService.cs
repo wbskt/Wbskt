@@ -88,13 +88,7 @@ internal sealed class AccountDeletionService : IAccountDeletionService
             return cancelled;
         }
 
-        var workspaceIds = await _accounts.GetSoleTenantWorkspaceIdsAsync(userId, cancellationToken);
-        var deletedWorkspaces = workspaceIds.ToDictionary(id => id, id => OutboxMessage.Create(new WorkspaceDeletedEvent(id, userId)));
-
-        // Read before the memberships go; the shared tenants' workspaces are where the deletion is logged.
-        var auditWorkspaces = await _audit.OfUserAsync(userId, cancellationToken);
-
-        var deleted = await SqlGuardErrors.GuardAsync(_logger, "Delete account", () => _accounts.DeleteUserAsync(userId, deletedWorkspaces, cancellationToken));
+        var deleted = await DeleteAsync(userId, unconfirmedBefore: null, cancellationToken);
         if (deleted.IsFailure)
         {
             return Result.Failure(deleted.Error);
@@ -104,10 +98,63 @@ internal sealed class AccountDeletionService : IAccountDeletionService
         // every host. RefId is untouched by the anonymisation, so it still names them.
         await _credentials.RevokeAccessTokensAsync(user.RefId, cancellationToken);
 
-        await AnnounceAsync(user, deleted.Value, auditWorkspaces.Except(workspaceIds).ToList(), ipAddress, cancellationToken);
+        var (leftTenantIds, workspaceIds, auditWorkspaces) = deleted.Value;
+        await AnnounceAsync(user, leftTenantIds, auditWorkspaces, ipAddress, cancellationToken);
 
         _logger.LogInformation("Account {UserId} deleted by its owner, with {WorkspaceCount} workspaces. IP: {IpAddress}", userId, workspaceIds.Count, ipAddress);
         return Result.Success();
+    }
+
+    public async Task<bool> DeleteUnconfirmedAsync(int userId, DateTime createdBeforeUtc, CancellationToken cancellationToken = default)
+    {
+        User user;
+        try
+        {
+            user = await _accounts.GetByIdAsync(userId, cancellationToken);
+        }
+        catch (SecurityException)
+        {
+            return false;
+        }
+
+        // User_Delete checks under its locks that the account is still unconfirmed and alone in its
+        // tenants, which never paid (dbo.User_GetUnconfirmed), so there is no subscription to cancel and
+        // nobody else to tell. It never signed in, so no access token was issued.
+        var deleted = await DeleteAsync(userId, createdBeforeUtc, cancellationToken);
+        if (deleted.IsFailure)
+        {
+            return false;
+        }
+
+        var (leftTenantIds, workspaceIds, auditWorkspaces) = deleted.Value;
+        await AnnounceAsync(user, leftTenantIds, auditWorkspaces, ipAddress: null, cancellationToken);
+
+        _logger.LogInformation("Account {UserId} deleted: its email was never confirmed. {WorkspaceCount} workspaces went with it.", userId, workspaceIds.Count);
+        return true;
+    }
+
+    /// <summary>
+    /// Deletes the account through <c>dbo.User_Delete</c>, with the event of each workspace it takes.
+    /// Returns the shared tenants it left, the workspaces deleted and the workspaces that outlive it,
+    /// where the deletion is logged.
+    /// </summary>
+    private async Task<Result<(IReadOnlyCollection<int> LeftTenantIds, IReadOnlyCollection<int> WorkspaceIds, IReadOnlyList<int> AuditWorkspaces)>> DeleteAsync(
+        int userId, DateTime? unconfirmedBefore, CancellationToken cancellationToken)
+    {
+        var workspaceIds = await _accounts.GetSoleTenantWorkspaceIdsAsync(userId, cancellationToken);
+        var deletedWorkspaces = workspaceIds.ToDictionary(id => id, id => OutboxMessage.Create(new WorkspaceDeletedEvent(id, userId)));
+
+        // Read before the memberships go; the shared tenants' workspaces are where the deletion is logged.
+        var auditWorkspaces = await _audit.OfUserAsync(userId, cancellationToken);
+
+        var deleted = await SqlGuardErrors.GuardAsync(_logger, "Delete account", () => _accounts.DeleteUserAsync(userId, deletedWorkspaces, unconfirmedBefore, cancellationToken));
+        if (deleted.IsFailure)
+        {
+            return Result<(IReadOnlyCollection<int>, IReadOnlyCollection<int>, IReadOnlyList<int>)>.Failure(deleted.Error);
+        }
+
+        return Result<(IReadOnlyCollection<int>, IReadOnlyCollection<int>, IReadOnlyList<int>)>.Success(
+            (deleted.Value, workspaceIds, auditWorkspaces.Except(workspaceIds).ToList()));
     }
 
     /// <summary>
@@ -146,7 +193,7 @@ internal sealed class AccountDeletionService : IAccountDeletionService
     /// What leaving each shared tenant would have announced through the members endpoint, and the
     /// deletion itself. Best effort: the account is gone, and a failure here must not say otherwise.
     /// </summary>
-    private async Task AnnounceAsync(User user, IReadOnlyCollection<int> leftTenantIds, IReadOnlyList<int> auditWorkspaces, string ipAddress, CancellationToken cancellationToken)
+    private async Task AnnounceAsync(User user, IReadOnlyCollection<int> leftTenantIds, IReadOnlyList<int> auditWorkspaces, string? ipAddress, CancellationToken cancellationToken)
     {
         try
         {
