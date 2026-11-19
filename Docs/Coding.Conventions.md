@@ -101,6 +101,7 @@ A service resolves a public `RefId` to its internal `Id` itself, through a provi
 *   **Precision:** Use `DATETIME2(3)` for all standard timestamps (e.g., `CreatedAt`, `ModifiedAt`) unless sub-second precision is specifically required.
 *   **Audit Columns:** Every new table must include a `CreatedAt DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME()` column.
 *   **Formatting:** List columns explicitly (no `SELECT *`) with one column per line for better git diffs.
+*   **Rollout shims name their issue:** a parameter, column or branch kept for one release so the previous image keeps working while the migrator runs ahead of it says so in its comment and names a tracking issue (`dropped in the release after (#1059)`). The next release finds them by that number, not by reading every procedure.
 
 ---
 

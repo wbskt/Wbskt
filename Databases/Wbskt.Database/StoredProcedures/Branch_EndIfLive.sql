@@ -4,7 +4,7 @@ CREATE PROCEDURE dbo.Branch_EndIfLive
     -- The error a Failed end records; NULL keeps what the branch had.
     @ErrorJson      NVARCHAR(MAX) = NULL,
     -- The previous image's name for @ErrorJson, accepted for one release so an engine still on it
-    -- keeps working while the hosts restart after the migration; dropped in the release after.
+    -- keeps working while the hosts restart after the migration; dropped in the release after (#1059).
     @LastOutputJson NVARCHAR(MAX) = NULL
 AS
 BEGIN

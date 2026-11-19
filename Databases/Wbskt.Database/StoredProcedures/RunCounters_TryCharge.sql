@@ -2,12 +2,11 @@ CREATE PROCEDURE dbo.RunCounters_TryCharge
     @RunId  INT,
     @Cost   DECIMAL(18,4),
     -- The engine's clock (TimeProvider), which decides the month a lease is extended in, as it decides
-    -- the month Run_Start reads. NULL, from an engine still on the earlier build, reads the SQL clock.
-    @NowUtc DATETIME2(3) = NULL,
+    -- the month Run_Start reads.
+    @NowUtc DATETIME2(3),
     -- Why a charge was refused, when it was (#954): RunBudget (the run's own budget, its ceiling for a
     -- leased one), PlanCredits (the account's month, with its packs) or WorkspaceCap (the workspace's
-    -- monthly cap). NULL when the charge went through. Optional, so an engine on an earlier build that
-    -- does not ask still reads the result as before.
+    -- monthly cap). NULL when the charge went through.
     @Refusal NVARCHAR(20) = NULL OUTPUT
 AS
 BEGIN
@@ -100,7 +99,7 @@ BEGIN
             -- RunCredits_Post locks counter rows in its own order, and reading the others' counters while
             -- holding the root's could meet it the other way round. The root's spent and reserved parts
             -- add up to the same whether a charge lands on it meanwhile or not, so the figures hold.
-            DECLARE @Now DATETIME2(3) = COALESCE(@NowUtc, SYSUTCDATETIME());
+            DECLARE @Now DATETIME2(3) = @NowUtc;
             DECLARE @TenantLeft DECIMAL(18,4);
             IF @Allowance IS NOT NULL
                 SET @TenantLeft = (SELECT Credits FROM dbo.TenantCreditsLeft(@WorkspaceId, @TenantId, @Allowance, @Now));
@@ -194,7 +193,7 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM @Charged)
     BEGIN
         DECLARE @Short DECIMAL(18,4) = CASE WHEN @Need > 0 THEN @Need ELSE @Cost END;
-        DECLARE @ReadAt DATETIME2(3) = COALESCE(@NowUtc, SYSUTCDATETIME());
+        DECLARE @ReadAt DATETIME2(3) = @NowUtc;
         IF @Allowance IS NOT NULL AND @TenantLeft IS NULL
             SET @TenantLeft = (SELECT Credits FROM dbo.TenantCreditsLeft(@WorkspaceId, @TenantId, @Allowance, @ReadAt));
         IF @CapLeft IS NULL

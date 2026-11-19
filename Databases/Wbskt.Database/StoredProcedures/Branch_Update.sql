@@ -4,7 +4,7 @@ CREATE PROCEDURE dbo.Branch_Update
     @Status         NVARCHAR(32),
     @LocalJson      NVARCHAR(MAX),
     -- Ignored. Accepted for one release so an engine on the previous image, which still passes it,
-    -- keeps working while the hosts restart after the migration; dropped in the release after.
+    -- keeps working while the hosts restart after the migration; dropped in the release after (#1059).
     @LastOutputJson NVARCHAR(MAX) = NULL
 AS
 BEGIN

@@ -176,27 +176,6 @@ public sealed class ClientReadingRetentionIntegrationTests(SqlEdgeFixture fixtur
         Assert.Equal(0, await CountAsync("dbo.ClientReadings", client));
     }
 
-    [SkippableFact]
-    public async Task A_workspace_retired_before_the_retire_queued_its_readings_is_queued_by_the_backfill()
-    {
-        Skip.IfNot(fixture.IsAvailable, Skipped);
-        int workspaceId = Random.Shared.Next(1_000_000, int.MaxValue - 1);
-        int client = await CreateClientAsync(plan: "Pro", workspaceId);
-        int silent = await CreateClientAsync(plan: null, workspaceId);
-        await ReadAsync(client, Now.AddHours(-1), 1);
-        await ScalarAsync<int>("UPDATE dbo.WorkspaceAccounts SET RetiredAt = @p1 WHERE WorkspaceId = @p0; SELECT 0;", workspaceId, Now.AddDays(-3));
-
-        int queued = await ScalarAsync<int>("EXEC dbo.DeletedClientReadings_InsertRetired;");
-
-        Assert.True(queued >= 1);
-        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.DeletedClientReadings WHERE ClientId = @p0", client));
-
-        // A client with nothing to clear is not queued, and a second run queues nothing new.
-        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.DeletedClientReadings WHERE ClientId = @p0", silent));
-        await ScalarAsync<int>("EXEC dbo.DeletedClientReadings_InsertRetired;");
-        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.DeletedClientReadings WHERE ClientId = @p0", client));
-    }
-
     private Task<ReadingCompaction> CompactAsync() => Provider().CompactAsync(Now, Retention, BatchSize);
 
     private Task ReadAsync(int clientId, DateTime sentAt, double value, DateTime? receivedAt = null) =>

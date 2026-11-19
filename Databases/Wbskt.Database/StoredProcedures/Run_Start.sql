@@ -243,9 +243,8 @@ BEGIN
             -- parent was checked against the plan when it started, so a parent never fails halfway
             -- because its child was refused. Its own CreditBudget shows the budget it shares. Its start
             -- is paid by the parent's sub-workflow step, through the budget check every charge takes, so
-            -- the engine passes it no @StartCost. One from an engine on the earlier build still goes on
-            -- the root whether or not the root has room. The root's counter row is locked here, before
-            -- the child's is written, the order RunCounters_TryCharge takes them in.
+            -- the engine passes it no @StartCost and the update below adds nothing: it is there to lock the
+            -- root's counter row before the child's is written, the order RunCounters_TryCharge takes them in.
             DECLARE @BudgetRunId INT;
             IF @ParentRunRefId IS NOT NULL
             BEGIN
