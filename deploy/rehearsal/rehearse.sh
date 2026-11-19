@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Rehearses the production upgrade: the previous release's migrator builds both databases, every
 # table gets a row, then this commit's migrator upgrades them. Fails when the upgrade would lose
-# data (sqlpackage's BlockOnPossibleDataLoss, or a table with fewer rows afterwards) or leaves the
-# schema short of this commit's DACPAC (a non-empty DeployReport). See "Upgrade rehearsal" in
-# deploy/README.md.
+# data (sqlpackage's BlockOnPossibleDataLoss, or a table with fewer rows afterwards), leaves the
+# schema short of this commit's DACPAC (a non-empty DeployReport), cannot run a second time, or
+# leaves behind objects the DACPAC no longer defines. See "Upgrade rehearsal" in deploy/README.md.
 #
 #   PREVIOUS_IMAGE   the migrator production last ran, e.g. ghcr.io/wbskt/wbskt-migrator:latest
 #   CURRENT_IMAGE    this commit's migrator, built locally
@@ -87,28 +87,72 @@ for db in "$auth_db" "$core_db"; do
 done
 
 # The upgraded databases against this commit's DACPACs: anything left to do means the migrator
-# stopped short, e.g. a change it skipped.
+# stopped short, e.g. a change it skipped. Run after the first upgrade and again after a second one,
+# which must find nothing left either: deploy.sh reruns the migrator on every deploy, so a migration
+# that only works once (a post-deployment step that is not idempotent, a pre-deployment guard that
+# assumes the old shape) would fail the next one.
 report() {
-  local db=$1 dacpac=$2
-  shift 2
+  local db=$1 dacpac=$2 name=$3
+  shift 3
   docker run --rm --network host -v "$out:/out" --entrypoint sqlpackage "$CURRENT_IMAGE" \
     /Action:DeployReport \
     /SourceFile:"/app/$dacpac" \
     /TargetConnectionString:"$(conn "$db")" \
-    /OutputPath:"/out/deploy-report-$db.xml" \
+    /OutputPath:"/out/$name-$db.xml" \
     /OverwriteFiles:True \
     "$@"
-  if grep -q '<Operation ' "$out/deploy-report-$db.xml"; then
-    echo "::error::$db still differs from this commit's DACPAC after the upgrade:"
-    grep -o '<Operation Name="[^"]*">\|<Item Value="[^"]*"' "$out/deploy-report-$db.xml" | sed 's/^/  /'
+}
+
+operations() {
+  grep -o '<Operation Name="[^"]*">\|<Item Value="[^"]*"' "$1" | sed 's/^/  /'
+}
+
+check_converged() {
+  local pass=$1
+  report "$auth_db" Wbskt.Database.Auth.dacpac "deploy-report-$pass" /v:AuthHostPassword="$host_password"
+  report "$core_db" Wbskt.Database.dacpac "deploy-report-$pass" /v:ManagementHostPassword="$host_password" /v:EngineHostPassword="$host_password"
+  for db in "$auth_db" "$core_db"; do
+    if grep -q '<Operation ' "$out/deploy-report-$pass-$db.xml"; then
+      echo "::error::$db still differs from this commit's DACPAC after the $pass upgrade:"
+      operations "$out/deploy-report-$pass-$db.xml"
+      status=1
+    fi
+  done
+}
+
+check_converged first
+
+echo "::group::This commit again: $CURRENT_IMAGE"
+if ! migrate "$CURRENT_IMAGE" false; then
+  echo "::error::This commit's migrator failed the second time it ran against the same databases. deploy.sh runs it on every deploy, so the next deploy would fail."
+  status=1
+fi
+echo "::endgroup::"
+check_converged second
+
+# Objects the previous release had that this commit's DACPACs no longer define. sqlpackage leaves
+# them in place (the migrator never drops what is not in the source), so a procedure removed from
+# the project would otherwise stay in production, callable, for good. This report only lists them;
+# remove one on purpose with a guarded DROP in a pre-deployment script. The logins, users, role
+# memberships and grants the post-deployment scripts create are not in the model and are excluded.
+left_behind() {
+  local db=$1 dacpac=$2
+  shift 2
+  report "$db" "$dacpac" left-behind \
+    /p:DropObjectsNotInSource=True \
+    "/p:DoNotDropObjectTypes=Users;Logins;RoleMembership;Permissions" \
+    "$@"
+  if grep -q '<Operation Name="Drop">' "$out/left-behind-$db.xml"; then
+    echo "::error::$db keeps objects this commit's DACPAC no longer defines. Drop them in a pre-deployment script, or keep them in the project:"
+    sed -n '/<Operation Name="Drop">/,/<\/Operation>/p' "$out/left-behind-$db.xml" | grep -o '<Item Value="[^"]*"' | sed 's/^/  /'
     status=1
   fi
 }
 
-report "$auth_db" Wbskt.Database.Auth.dacpac /v:AuthHostPassword="$host_password"
-report "$core_db" Wbskt.Database.dacpac /v:ManagementHostPassword="$host_password" /v:EngineHostPassword="$host_password"
+left_behind "$auth_db" Wbskt.Database.Auth.dacpac /v:AuthHostPassword="$host_password"
+left_behind "$core_db" Wbskt.Database.dacpac /v:ManagementHostPassword="$host_password" /v:EngineHostPassword="$host_password"
 
 if [[ $status -eq 0 ]]; then
-  echo "Upgrade from $PREVIOUS_IMAGE rehearsed: no data lost, schema matches this commit."
+  echo "Upgrade from $PREVIOUS_IMAGE rehearsed: no data lost, schema matches this commit, reruns cleanly, nothing left behind."
 fi
 exit $status

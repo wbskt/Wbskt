@@ -724,13 +724,21 @@ skip it, since they get no token to pull the image, so their first rehearsal is 
    take a row from the table they reference, and a table whose constraints refuse it is left empty
    with a warning in the run.
 3. This commit's migrator upgrades them, incrementally and with `BlockOnPossibleDataLoss` on, as
-   `deploy.sh` runs it.
+   `deploy.sh` runs it, and then runs a second time against the same databases, as the next deploy
+   will.
 
 It fails when sqlpackage refuses the upgrade for possible data loss, when a table comes out with
-fewer rows than it went in with, or when `sqlpackage /Action:DeployReport` still finds a difference
-between the upgraded databases and this commit's DACPACs. A table that disappears is a warning,
-since a refactorlog rename looks the same. The output (row counts, seed log, deploy reports) is
-uploaded as the `migration-rehearsal` artifact.
+fewer rows than it went in with, when the second run fails, or when `sqlpackage /Action:DeployReport`
+still finds a difference between the upgraded databases and this commit's DACPACs after either run.
+A table that disappears is a warning, since a refactorlog rename looks the same.
+
+It also fails when the previous release left an object this commit's DACPACs no longer define: a
+report-only DeployReport with `DropObjectsNotInSource` (logins, users, role memberships and grants
+excluded) must list no Drop. The migrator itself never drops such an object, so a procedure removed
+from the project would otherwise stay callable in production. Remove one on purpose with a guarded
+`DROP PROCEDURE IF EXISTS` in the pre-deployment script, in the release after the one that stopped
+calling it. The output (row counts, seed log, deploy reports) is uploaded as the
+`migration-rehearsal` artifact.
 
 A refused upgrade here means the deploy would be refused too: `deploy.sh` never sets
 `MIGRATE_ALLOW_DATA_LOSS`. sqlpackage blocks on any table that has rows, not on whether the column
