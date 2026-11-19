@@ -150,6 +150,8 @@ class FakeSocket:
         self.connections: List[ServerConnection] = []
         self.frames: "asyncio.Queue[Tuple[int, Dict[str, Any], float]]" = asyncio.Queue()
         self.upgrade_tokens: List[str] = []
+        # When each upgrade was asked for, on time.monotonic().
+        self.upgrade_times: List[float] = []
         self.subprotocols: List[Optional[str]] = []
         self.rejected_tokens: set = set()
         self.revoked_tokens: set = set()
@@ -173,6 +175,7 @@ class FakeSocket:
         token = request.headers.get("Authorization", "")
         token = token[7:] if token.startswith("Bearer ") else token
         self.upgrade_tokens.append(token)
+        self.upgrade_times.append(time.monotonic())
         if self.down:
             return connection.respond(HTTPStatus.SERVICE_UNAVAILABLE, "down\n")
         if token in self.rejected_tokens:
