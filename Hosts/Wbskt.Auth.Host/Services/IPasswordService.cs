@@ -10,7 +10,7 @@ public interface IPasswordService
     /// Changes a signed-in user's password after checking the current one, ends every session the
     /// account has, and returns a fresh session for the caller.
     /// </summary>
-    Task<Result<LoginResponse>> ChangePasswordAsync(int userId, string currentPassword, string newPassword, string ipAddress, CancellationToken cancellationToken = default);
+    Task<Result<LoginResponse>> ChangePasswordAsync(int userId, string currentPassword, string newPassword, string ipAddress, string? deviceToken, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Issues a password-reset link if the address has a usable account. Succeeds either way — whether

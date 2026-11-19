@@ -73,11 +73,11 @@ internal sealed class PasswordService : IPasswordService
         _time = time;
     }
 
-    public async Task<Result<LoginResponse>> ChangePasswordAsync(int userId, string currentPassword, string newPassword, string ipAddress, CancellationToken cancellationToken = default)
+    public async Task<Result<LoginResponse>> ChangePasswordAsync(int userId, string currentPassword, string newPassword, string ipAddress, string? deviceToken, CancellationToken cancellationToken = default)
     {
         // Counted like a failed sign-in: a stolen access token must not become an unthrottled way to
         // guess the password behind it.
-        var confirmed = await _credentials.ConfirmPasswordAsync(userId, currentPassword, ipAddress, cancellationToken);
+        var confirmed = await _credentials.ConfirmPasswordAsync(userId, currentPassword, ipAddress, deviceToken, cancellationToken);
         if (confirmed.IsFailure)
         {
             return Result<LoginResponse>.Failure(confirmed.Error);

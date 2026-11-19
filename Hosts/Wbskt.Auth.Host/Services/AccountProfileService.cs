@@ -117,11 +117,11 @@ internal sealed class AccountProfileService : IAccountProfileService
         return Result<LoginResponse>.Success(new LoginResponse(_tokens.AccessToken(renamed, sessionId ?? Guid.Empty), null));
     }
 
-    public async Task<Result> RequestEmailChangeAsync(int userId, string password, string newEmail, string ipAddress, CancellationToken cancellationToken = default)
+    public async Task<Result> RequestEmailChangeAsync(int userId, string password, string newEmail, string ipAddress, string? deviceToken, CancellationToken cancellationToken = default)
     {
         // Same rules as changing the password: a stolen access token must not be enough to point the
         // account at another mailbox, nor an unthrottled way to guess the password behind it.
-        var confirmed = await _credentials.ConfirmPasswordAsync(userId, password, ipAddress, cancellationToken);
+        var confirmed = await _credentials.ConfirmPasswordAsync(userId, password, ipAddress, deviceToken, cancellationToken);
         if (confirmed.IsFailure)
         {
             return Result.Failure(confirmed.Error);
