@@ -45,7 +45,7 @@ public sealed class PendingTriggerEventDrainerTests
         Assert.Equal("evt-1:drain:1", inboundHub.Events.Single().InboundEventId);
         // ...and goes only to the trigger that queued it (#316).
         Assert.Equal(
-            new QueuedTrigger(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")),
+            new QueuedTrigger(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), PendingEventId: 1),
             inboundHub.Events.Single().ReplayFor);
         Assert.Equal(1, provider.DequeueCalls);
         // ...and the row goes only once the replay was handed over.
@@ -142,7 +142,7 @@ public sealed class PendingTriggerEventDrainerTests
         public int DequeueCalls { get; private set; }
         public List<long> Deleted { get; } = [];
 
-        public Task<PendingTriggerEventRow?> EnqueueBehindActiveRunAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, CancellationToken ct) => throw new NotSupportedException();
+        public Task<PendingTriggerEventRow?> EnqueueBehindAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, long? exceptPendingEventId, CancellationToken ct) => throw new NotSupportedException();
         public Task<PendingTriggerEventRow?> LeaseNextAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, int leaseSeconds, CancellationToken ct)
         {
             DequeueCalls++;

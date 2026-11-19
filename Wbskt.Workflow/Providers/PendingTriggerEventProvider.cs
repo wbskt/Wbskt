@@ -12,7 +12,7 @@ internal sealed class PendingTriggerEventProvider : BaseSqlProvider, IPendingTri
 {
     public PendingTriggerEventProvider(IConfiguration configuration) : base(configuration) { }
 
-    public async Task<PendingTriggerEventRow?> EnqueueBehindActiveRunAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, CancellationToken ct)
+    public async Task<PendingTriggerEventRow?> EnqueueBehindAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, long? exceptPendingEventId, CancellationToken ct)
     {
         return await ExecuteFindAsync(
             "dbo.PendingTriggerEvent_Enqueue",
@@ -22,6 +22,7 @@ internal sealed class PendingTriggerEventProvider : BaseSqlProvider, IPendingTri
                 p.AddWithValue("@TriggerNodeId", triggerNodeId);
                 p.AddWithValue("@CorrelationKey", correlationKey);
                 p.AddWithValue("@InboundEventJson", inboundEventJson);
+                p.AddWithValue("@ExceptId", (object?)exceptPendingEventId ?? DBNull.Value);
             },
             Map,
             ct

@@ -373,7 +373,7 @@ public sealed class ErrorModelE2ETests
 
     private sealed class NoOpPendingTriggerEventProvider : IPendingTriggerEventProvider
     {
-        public Task<PendingTriggerEventRow?> EnqueueBehindActiveRunAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, CancellationToken ct) => throw new NotSupportedException();
+        public Task<PendingTriggerEventRow?> EnqueueBehindAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, long? exceptPendingEventId, CancellationToken ct) => throw new NotSupportedException();
         public Task<PendingTriggerEventRow?> LeaseNextAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, int leaseSeconds, CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteByIdAsync(long id, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<PendingTriggerEventKey>> GetIdleKeysAsync(int batchSize, CancellationToken ct) => throw new NotSupportedException();

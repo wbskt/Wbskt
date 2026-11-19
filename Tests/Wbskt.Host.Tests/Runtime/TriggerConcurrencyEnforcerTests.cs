@@ -47,7 +47,7 @@ public sealed class TriggerConcurrencyEnforcerTests
         // #470: the run was active when the policy read it, and gone by the time the event reached the
         // queue. The enqueue reports that, and the event starts a run instead of waiting for no one.
         var registration = CreateRegistration(WorkflowConcurrencyPolicy.Queue);
-        var pendingProvider = new RecordingPendingTriggerEventProvider { RunFinishedBeforeEnqueue = true };
+        var pendingProvider = new RecordingPendingTriggerEventProvider { NothingToQueueBehind = true };
         var enforcer = CreateEnforcer(activeRuns: [CreateRun(55)], pendingTriggerEventProvider: pendingProvider);
 
         TriggerConcurrencyDecision decision = await enforcer.EvaluateAsync(registration, CreateInboundEvent(), CancellationToken.None);
@@ -103,11 +103,11 @@ public sealed class TriggerConcurrencyEnforcerTests
     }
 
     [Fact]
-    public async Task Evaluate_returns_Proceed_when_no_active_run_exists()
+    public async Task Evaluate_returns_Proceed_when_no_active_run_exists_and_nothing_is_queued()
     {
         // Arrange
         var registration = CreateRegistration(WorkflowConcurrencyPolicy.Queue);
-        var enforcer = CreateEnforcer();
+        var enforcer = CreateEnforcer(pendingTriggerEventProvider: new RecordingPendingTriggerEventProvider { NothingToQueueBehind = true });
 
         // Act
         TriggerConcurrencyDecision decision = await enforcer.EvaluateAsync(registration, CreateInboundEvent(), CancellationToken.None);
@@ -115,6 +115,48 @@ public sealed class TriggerConcurrencyEnforcerTests
         // Assert
         Assert.Equal(TriggerConcurrencyOutcome.Proceed, decision.Outcome);
         Assert.Empty(decision.RunIdsToCancel);
+    }
+
+    [Fact]
+    public async Task A_new_event_queues_behind_waiting_events_even_with_no_run_active()
+    {
+        // #1080: B's replay failed and holds its lease, C waits behind it, and no run is going. D must
+        // wait behind them rather than start first.
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.Queue);
+        var pendingProvider = new RecordingPendingTriggerEventProvider();
+        var enforcer = CreateEnforcer(pendingTriggerEventProvider: pendingProvider);
+
+        TriggerConcurrencyDecision decision = await enforcer.EvaluateAsync(registration, CreateInboundEvent(), CancellationToken.None);
+
+        Assert.Equal(TriggerConcurrencyOutcome.Queued, decision.Outcome);
+        Assert.Single(pendingProvider.EnqueueCalls);
+    }
+
+    [Fact]
+    public async Task A_replay_with_no_run_active_starts_rather_than_queueing_behind_its_own_row()
+    {
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.Queue);
+        var pendingProvider = new RecordingPendingTriggerEventProvider();
+        var enforcer = CreateEnforcer(pendingTriggerEventProvider: pendingProvider);
+        InboundEvent replay = CreateInboundEvent() with { ReplayFor = new QueuedTrigger(registration.WorkflowRefId, registration.TriggerNodeId) };
+
+        TriggerConcurrencyDecision decision = await enforcer.EvaluateAsync(registration, replay, CancellationToken.None);
+
+        Assert.Equal(TriggerConcurrencyOutcome.Proceed, decision.Outcome);
+        Assert.Empty(pendingProvider.EnqueueCalls);
+    }
+
+    [Fact]
+    public async Task A_replay_behind_an_active_run_names_its_own_row_so_it_is_not_queued_behind_it()
+    {
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.Queue);
+        var pendingProvider = new RecordingPendingTriggerEventProvider();
+        var enforcer = CreateEnforcer(activeRuns: [CreateRun(55)], pendingTriggerEventProvider: pendingProvider);
+        InboundEvent replay = CreateInboundEvent() with { ReplayFor = new QueuedTrigger(registration.WorkflowRefId, registration.TriggerNodeId, PendingEventId: 9) };
+
+        await enforcer.EvaluateAsync(registration, replay, CancellationToken.None);
+
+        Assert.Equal(9, pendingProvider.EnqueueCalls.Single().ExceptPendingEventId);
     }
 
     [Theory]
@@ -257,15 +299,15 @@ public sealed class TriggerConcurrencyEnforcerTests
 
     private sealed class RecordingPendingTriggerEventProvider : IPendingTriggerEventProvider
     {
-        public List<(Guid WorkflowRefId, Guid TriggerNodeId, string CorrelationKey, string InboundEventJson)> EnqueueCalls { get; } = [];
+        public List<(Guid WorkflowRefId, Guid TriggerNodeId, string CorrelationKey, string InboundEventJson, long? ExceptPendingEventId)> EnqueueCalls { get; } = [];
 
         /// <summary>Answers as PendingTriggerEvent_Enqueue does once the run it would wait for has ended.</summary>
-        public bool RunFinishedBeforeEnqueue { get; init; }
+        public bool NothingToQueueBehind { get; init; }
 
-        public Task<PendingTriggerEventRow?> EnqueueBehindActiveRunAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, CancellationToken ct)
+        public Task<PendingTriggerEventRow?> EnqueueBehindAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, long? exceptPendingEventId, CancellationToken ct)
         {
-            EnqueueCalls.Add((workflowRefId, triggerNodeId, correlationKey, inboundEventJson));
-            if (RunFinishedBeforeEnqueue)
+            EnqueueCalls.Add((workflowRefId, triggerNodeId, correlationKey, inboundEventJson, exceptPendingEventId));
+            if (NothingToQueueBehind)
             {
                 return Task.FromResult<PendingTriggerEventRow?>(null);
             }

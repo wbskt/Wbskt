@@ -369,7 +369,7 @@ public sealed class WorkflowStateIntegrationTests(SqlEdgeFixture fixture)
     {
         string correlationKey = $"it-state-{Guid.NewGuid():N}";
         RunRow run = await ActiveRunSeeder.StartAsync(fixture.ConnectionString, definitionId, refId, triggerNodeId, correlationKey);
-        await ProviderFactory.PendingTriggerEvent(fixture.ConnectionString).EnqueueBehindActiveRunAsync(refId, triggerNodeId, correlationKey, "{}", CancellationToken.None);
+        await ProviderFactory.PendingTriggerEvent(fixture.ConnectionString).EnqueueBehindAsync(refId, triggerNodeId, correlationKey, "{}", null, CancellationToken.None);
         return run;
     }
 

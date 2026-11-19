@@ -59,7 +59,7 @@ internal sealed class PendingTriggerEventDrainer : IPendingTriggerEventDrainer
         evt = evt with
         {
             InboundEventId = $"{evt.InboundEventId}:drain:{row.Id}",
-            ReplayFor = new QueuedTrigger(row.WorkflowRefId, row.TriggerNodeId)
+            ReplayFor = new QueuedTrigger(row.WorkflowRefId, row.TriggerNodeId, row.Id)
         };
 
         // A throw leaves the row leased: once the lease runs out the next finalizer on the key, or the

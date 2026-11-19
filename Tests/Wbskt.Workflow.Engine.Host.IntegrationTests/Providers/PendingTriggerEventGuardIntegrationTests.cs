@@ -24,7 +24,7 @@ public sealed class PendingTriggerEventGuardIntegrationTests(SqlEdgeFixture fixt
         await FinishAsync(run);
         var provider = ProviderFactory.PendingTriggerEvent(fixture.ConnectionString);
 
-        PendingTriggerEventRow? queued = await provider.EnqueueBehindActiveRunAsync(run.WorkflowRefId, run.TriggerNodeId, run.CorrelationKey!, "{}", CancellationToken.None);
+        PendingTriggerEventRow? queued = await provider.EnqueueBehindAsync(run.WorkflowRefId, run.TriggerNodeId, run.CorrelationKey!, "{}", null, CancellationToken.None);
 
         queued.Should().BeNull();
         (await provider.LeaseNextAsync(run.WorkflowRefId, run.TriggerNodeId, run.CorrelationKey!, 60, CancellationToken.None)).Should().BeNull();
@@ -38,10 +38,48 @@ public sealed class PendingTriggerEventGuardIntegrationTests(SqlEdgeFixture fixt
         RunRow run = await StartRunAsync();
         var provider = ProviderFactory.PendingTriggerEvent(fixture.ConnectionString);
 
-        PendingTriggerEventRow? queued = await provider.EnqueueBehindActiveRunAsync(run.WorkflowRefId, run.TriggerNodeId, run.CorrelationKey!, """{"n":1}""", CancellationToken.None);
+        PendingTriggerEventRow? queued = await provider.EnqueueBehindAsync(run.WorkflowRefId, run.TriggerNodeId, run.CorrelationKey!, """{"n":1}""", null, CancellationToken.None);
 
         queued.Should().NotBeNull();
         (await provider.LeaseNextAsync(run.WorkflowRefId, run.TriggerNodeId, run.CorrelationKey!, 60, CancellationToken.None))!.Id.Should().Be(queued!.Id);
+    }
+
+    [SkippableFact]
+    public async Task Enqueueing_with_no_run_active_still_queues_behind_waiting_events()
+    {
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
+
+        RunRow run = await StartRunAsync();
+        var provider = ProviderFactory.PendingTriggerEvent(fixture.ConnectionString);
+        PendingTriggerEventRow waiting = (await provider.EnqueueBehindAsync(run.WorkflowRefId, run.TriggerNodeId, run.CorrelationKey!, """{"n":1}""", null, CancellationToken.None))!;
+
+        // The run ends and the head's replay fails, leaving it leased with no run going (#1080).
+        await FinishAsync(run);
+        (await provider.LeaseNextAsync(run.WorkflowRefId, run.TriggerNodeId, run.CorrelationKey!, 120, CancellationToken.None))!.Id.Should().Be(waiting.Id);
+
+        PendingTriggerEventRow? queued = await provider.EnqueueBehindAsync(run.WorkflowRefId, run.TriggerNodeId, run.CorrelationKey!, """{"n":2}""", null, CancellationToken.None);
+
+        queued.Should().NotBeNull();
+        queued!.Id.Should().BeGreaterThan(waiting.Id);
+    }
+
+    [SkippableFact]
+    public async Task A_replay_does_not_queue_behind_its_own_row()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        RunRow run = await StartRunAsync();
+        var provider = ProviderFactory.PendingTriggerEvent(fixture.ConnectionString);
+        PendingTriggerEventRow head = (await provider.EnqueueBehindAsync(run.WorkflowRefId, run.TriggerNodeId, run.CorrelationKey!, """{"n":1}""", null, CancellationToken.None))!;
+
+        // The replay saw the run active, and the run ended before it got the lock: its own leased row
+        // is all that is left, so it starts rather than going to the tail behind itself.
+        await FinishAsync(run);
+        (await provider.LeaseNextAsync(run.WorkflowRefId, run.TriggerNodeId, run.CorrelationKey!, 120, CancellationToken.None))!.Id.Should().Be(head.Id);
+
+        PendingTriggerEventRow? queued = await provider.EnqueueBehindAsync(run.WorkflowRefId, run.TriggerNodeId, run.CorrelationKey!, """{"n":1}""", head.Id, CancellationToken.None);
+
+        queued.Should().BeNull();
     }
 
     [SkippableFact]

@@ -50,5 +50,5 @@ public sealed record InboundEvent(
     public bool StartsChildRun { get; init; }
 }
 
-/// <summary>The workflow trigger a queued event is waiting for.</summary>
-public sealed record QueuedTrigger(Guid WorkflowRefId, Guid TriggerNodeId);
+/// <summary>The workflow trigger a queued event is waiting for, and the queued row it is replayed from.</summary>
+public sealed record QueuedTrigger(Guid WorkflowRefId, Guid TriggerNodeId, long? PendingEventId = null);
