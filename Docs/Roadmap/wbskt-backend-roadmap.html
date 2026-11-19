@@ -283,7 +283,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
 <script type="application/json" id="roadmap-data">
 {
  "asOf": "2026-11-19",
- "headline": "The 18 Nov architecture, product and senior-developer review (#938, 20 lanes) found 4 P1s, all cheap: console publish has failed since enable became required (Console#196), commands reach devices as a JSON string (#939), a sub-workflow step can start another tenant's workflow (#940), and the Arduino library never connects on a real ESP32 (#941); 63 P2s and 27 small-items issues are filed under it. By 19 Nov, 27 of its 94 follow-ups are closed: the three backend P1s (#939 to #941), the access, sign-in, privacy and data fixes (#942 to #951, #957 to #959 and #966, PR #1007 to #1028), and the engine, metering and data fixes (#952 to #954, #956, #960 to #965, PR #1017 to #1036): no step re-sent after an engine stop, schedules not replayed after an outage, runs finishing when credits run out, a credit stop naming which budget ran out, partial policy edits, a deleted workspace purged, and raw readings kept 7 days on paid self-serve plans (pricing page copy to follow). The account credit notice and the plan client limit event are on the console's wire for Amal (#955, #988). M2 backend has 6 pieces of real work left: two wait on you (the SDK release keys and the deleted-client call), the never-ending-runs epic (#594), and the housekeeping epic (#618), now down to one M3 item. The 11 Nov architecture review (#730) is 50 of 73 done: all 5 backend P1s and every backend and library P2 except two are merged (12 Nov), the last ones being the alerting and nightly fixes (#776 to #780, PR #842 to #849). Team now throttles at 1.5x its messages, with a platform traffic alert in place of more headroom (#751, PR #902, 17 Nov). The Arduino library is on PlatformIO as 0.9.0-beta.2, published by its release workflow, and the README installs from the registry (#767, Arduino PR #17, 17 Nov). The Post-launch small items (#781 to #789) are merged (PR #908 to #913, and Python #8, .NET #7 and Arduino #18, 18 Nov); the library fixes reach users with each library's next beta, and #786 and #789 keep two items open: the archived Client.SDK notice and the PlatformIO token. Dependabot is off in the backend: its eleven PRs are closed and the minor and patch bumps are merged by hand in one PR, with MassTransit and FluentAssertions held below their paid majors (#929, PR #930, 18 Nov); it is off in the three libraries too (Python #12, .NET #16, Arduino #23, merged). MailKit is on 5.0 (PR #932), and the backend stays on .NET 10 LTS rather than the .NET 11 STS image (#931). Left from it: the console items (Amal). A second review on 15 Nov found eight more backend issues: all eight are fixed (#868 to #881, PR #869 to #883), the last being credit notices for a limit reached just before a month ends, now sent late (#876, PR #901, 17 Nov). Deploys reach production again, and now restart changed monitoring services themselves. On 16 Nov signup verification mail failed with SMTP 553: the relay refused the sender because SMTP_FROM_ADDRESS on the VM was still the no-reply@example.com placeholder (set it to no-reply@wbskt.com in compose/.env); the auth log now points at the sender settings (#888, PR #889).",
+ "headline": "The 18 Nov architecture, product and senior-developer review (#938, 20 lanes) found 4 P1s, all cheap: console publish has failed since enable became required (Console#196), commands reach devices as a JSON string (#939), a sub-workflow step can start another tenant's workflow (#940), and the Arduino library never connects on a real ESP32 (#941); 63 P2s and 27 small-items issues are filed under it. By 19 Nov, 43 of its 95 follow-ups are closed: the three backend P1s (#939 to #941), the access, sign-in, privacy and data fixes (#942 to #951, #957 to #959 and #966, PR #1007 to #1028), and the engine, metering and data fixes (#952 to #954, #956, #960 to #965, PR #1017 to #1036): no step re-sent after an engine stop, schedules not replayed after an outage, runs finishing when credits run out, a credit stop naming which budget ran out, partial policy edits, a deleted workspace purged, and raw readings kept 7 days on paid self-serve plans (pricing page copy to follow). The admin and infra fixes are merged too (#978 to #987): staff plans and their overrides, staff changes shown to customers as 'Wbskt support', and a mistyped email corrected by staff; repairing an admin and freezing an account close #854 (PR #1037, Admin PR #19); deploys that run detached on the VM, one at a time, with pulls retried (PR #1041); an outside probe that fails loudly until PROBE_DOMAIN is set; and a CI check of the alert rules, monitoring config and compose file. The account credit notice and the plan client limit event are on the console's wire for Amal (#955, #988). M2 backend has 6 pieces of real work left: two wait on you (the SDK release keys and the deleted-client call), the never-ending-runs epic (#594), and the housekeeping epic (#618), now down to one M3 item. The 11 Nov architecture review (#730) is 50 of 73 done: all 5 backend P1s and every backend and library P2 except two are merged (12 Nov), the last ones being the alerting and nightly fixes (#776 to #780, PR #842 to #849). Team now throttles at 1.5x its messages, with a platform traffic alert in place of more headroom (#751, PR #902, 17 Nov). The Arduino library is on PlatformIO as 0.9.0-beta.2, published by its release workflow, and the README installs from the registry (#767, Arduino PR #17, 17 Nov). The Post-launch small items (#781 to #789) are merged (PR #908 to #913, and Python #8, .NET #7 and Arduino #18, 18 Nov); the library fixes reach users with each library's next beta, and #786 and #789 keep two items open: the archived Client.SDK notice and the PlatformIO token. Dependabot is off in the backend: its eleven PRs are closed and the minor and patch bumps are merged by hand in one PR, with MassTransit and FluentAssertions held below their paid majors (#929, PR #930, 18 Nov); it is off in the three libraries too (Python #12, .NET #16, Arduino #23, merged). MailKit is on 5.0 (PR #932), and the backend stays on .NET 10 LTS rather than the .NET 11 STS image (#931). Left from it: the console items (Amal). A second review on 15 Nov found eight more backend issues: all eight are fixed (#868 to #881, PR #869 to #883), the last being credit notices for a limit reached just before a month ends, now sent late (#876, PR #901, 17 Nov). Deploys reach production again, and now restart changed monitoring services themselves. On 16 Nov signup verification mail failed with SMTP 553: the relay refused the sender because SMTP_FROM_ADDRESS on the VM was still the no-reply@example.com placeholder (set it to no-reply@wbskt.com in compose/.env); the auth log now points at the sender settings (#888, PR #889).",
  "milestones": [
   {
    "name": "M1 Hardening",
@@ -298,16 +298,16 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
    "short": "M2",
    "due": "2026-11-30",
    "start": "2026-11-01",
-   "open": 30,
-   "closed": 190
+   "open": 28,
+   "closed": 192
   },
   {
    "name": "M3 Go public",
    "short": "M3",
    "due": "2026-12-31",
    "start": "2026-12-01",
-   "open": 7,
-   "closed": 65
+   "open": 18,
+   "closed": 104
   },
   {
    "name": "Post-launch",
@@ -366,8 +366,8 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   },
   "851": {
    "state": "progress",
-   "why": "The read-only admin is live in wbskt/Wbskt.Admin: overview, search, tenant, user and workspace lists and pages, and the staff audit (#852). Changes come next, phase by phase (#853): the admin key and the staff action runner (PR #860, merged), staff plans and limits (PR #861, merged), credits and ending a staff plan early (PR #862, merged), the workspace credit cap on the management host (PR #863, merged), people actions on the auth host (PR #864, merged), member suspend, restore and remove (PR #865, merged), each with its form in the admin, and end-to-end scenarios for every staff action with the overview's credits staff gave this month (PR #866, merged). #853 is done; repairing an admin and freezing an account (#854) is next.",
-   "prs": [860, 861, 862, 863, 864, 865, 866]
+   "why": "The read-only admin is live in wbskt/Wbskt.Admin: overview, search, tenant, user and workspace lists and pages, and the staff audit (#852). Changes come next, phase by phase (#853): the admin key and the staff action runner (PR #860, merged), staff plans and limits (PR #861, merged), credits and ending a staff plan early (PR #862, merged), the workspace credit cap on the management host (PR #863, merged), people actions on the auth host (PR #864, merged), member suspend, restore and remove (PR #865, merged), each with its form in the admin, and end-to-end scenarios for every staff action with the overview's credits staff gave this month (PR #866, merged). #853 is done, and so is #854 (19 Nov): staff can repair an orphaned tenant's administrator, freeze an account so its workspaces only read and its runs and clients stop (PR #1037), correct a mistyped unverified email, and export the staff audit as CSV (Admin PR #19). Left: the admin host's own first issue, wbskt/Wbskt.Admin#1.",
+   "prs": [860, 861, 862, 863, 864, 865, 866, 1037]
   },
   "519": {
    "state": "progress",
@@ -615,16 +615,16 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":990,"t":"Admin small items from the 18 Nov review","s":"o","m":"Post","p":938,"a":["auth"],"pr":"P3"},
   {"n":989,"t":".NET library small items from the 18 Nov review","s":"o","m":"Post","p":938,"a":["sdk"],"pr":"P3"},
   {"n":988,"t":"A board refused for the plan's client limit leaves no trace in the console","s":"o","m":"M3","p":938,"a":["management"],"pr":"P2"},
-  {"n":987,"t":"No CI check validates alert rules, Prometheus and Alertmanager config or the prod compose file","s":"o","m":"M3","p":938,"a":["ops"],"pr":"P2"},
-  {"n":986,"t":"A failed image pull fails the deploy and leaves .env on a release that is not running","s":"o","m":"M3","p":938,"a":["ops"],"pr":"P2"},
-  {"n":985,"t":"The deploy job is cut off at 30 minutes and can leave the VM mid-migration","s":"o","m":"M3","p":938,"a":["ops"],"pr":"P2"},
-  {"n":984,"t":"Backend, console and admin deploys can run on the VM at once and delete each other's images","s":"o","m":"M3","p":938,"a":["ops"],"pr":"P2"},
-  {"n":983,"t":"The outside probe meant to notice a dead VM has never run","s":"o","m":"M3","p":938,"a":["ops"],"pr":"P2"},
-  {"n":982,"t":"Staff can only resend the sign-up link to the same mistyped email address","s":"o","m":"M3","p":938,"a":["auth"],"pr":"P2"},
-  {"n":981,"t":"Staff changes never show in the customer's audit log as 'Wbskt support'","s":"o","m":"M3","p":938,"a":["auth"],"pr":"P2"},
-  {"n":980,"t":"The admin's hand-made copies of the internal admin contracts have drifted from Wbskt","s":"o","m":"M3","p":938,"a":["auth"],"pr":"P2"},
-  {"n":979,"t":"The 'End staff plan now' form promises limit overrides stay, but ending the plan drops them","s":"o","m":"M3","p":938,"a":["auth"],"pr":"P2"},
-  {"n":978,"t":"Staff cannot put a paying account on a staff plan: the admin never sends keepSubscription","s":"o","m":"M3","p":938,"a":["auth"],"pr":"P2"},
+  {"n":987,"t":"No CI check validates alert rules, Prometheus and Alertmanager config or the prod compose file","s":"c","m":"M3","p":938,"a":["ops"],"pr":"P2","x":"2026-11-19"},
+  {"n":986,"t":"A failed image pull fails the deploy and leaves .env on a release that is not running","s":"c","m":"M3","p":938,"a":["ops"],"pr":"P2","x":"2026-11-19"},
+  {"n":985,"t":"The deploy job is cut off at 30 minutes and can leave the VM mid-migration","s":"c","m":"M3","p":938,"a":["ops"],"pr":"P2","x":"2026-11-19"},
+  {"n":984,"t":"Backend, console and admin deploys can run on the VM at once and delete each other's images","s":"c","m":"M3","p":938,"a":["ops"],"pr":"P2","x":"2026-11-19"},
+  {"n":983,"t":"The outside probe meant to notice a dead VM has never run","s":"c","m":"M3","p":938,"a":["ops"],"pr":"P2","x":"2026-11-19"},
+  {"n":982,"t":"Staff can only resend the sign-up link to the same mistyped email address","s":"c","m":"M3","p":938,"a":["auth"],"pr":"P2","x":"2026-11-19"},
+  {"n":981,"t":"Staff changes never show in the customer's audit log as 'Wbskt support'","s":"c","m":"M3","p":938,"a":["auth"],"pr":"P2","x":"2026-11-19"},
+  {"n":980,"t":"The admin's hand-made copies of the internal admin contracts have drifted from Wbskt","s":"c","m":"M3","p":938,"a":["auth"],"pr":"P2","x":"2026-11-19"},
+  {"n":979,"t":"The 'End staff plan now' form promises limit overrides stay, but ending the plan drops them","s":"c","m":"M3","p":938,"a":["auth"],"pr":"P2","x":"2026-11-19"},
+  {"n":978,"t":"Staff cannot put a paying account on a staff plan: the admin never sends keepSubscription","s":"c","m":"M3","p":938,"a":["auth"],"pr":"P2","x":"2026-11-19"},
   {"n":977,"t":"The Arduino library is tested only against a hand-written WebSockets fake, never on a board","s":"o","m":"M3","p":938,"a":["sdk"],"pr":"P2"},
   {"n":976,"t":"The .NET quick start exits as soon as the client starts, so its command handler never runs","s":"o","m":"M3","p":938,"a":["sdk"],"pr":"P2"},
   {"n":975,"t":".NET payloads go out PascalCase and Deserialize<T>() reads command parameters as defaults","s":"o","m":"M3","p":938,"a":["sdk"],"pr":"P2"},
@@ -664,7 +664,7 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":941,"t":"On a real ESP32 the library never connects and leaks a TLS session on every attempt","s":"c","m":"M2","p":938,"a":["sdk"],"pr":"P1","x":"2026-11-19"},
   {"n":940,"t":"A 'Run workflow' step can start a workflow in another tenant's workspace","s":"c","m":"M2","p":938,"a":["engine"],"pr":"P1","x":"2026-11-19"},
   {"n":939,"t":"Commands reach devices as a JSON string, so the documented device code cannot read them","s":"c","m":"M2","p":938,"a":["socket"],"pr":"P1","x":"2026-11-19"},
-  {"n":938,"t":"Architecture review (18 Nov): follow-ups","s":"o","m":"M3","p":null,"a":[],"epic":1,"sub":{"completed":27,"total":94}},
+  {"n":938,"t":"Architecture review (18 Nov): follow-ups","s":"o","m":"M3","p":null,"a":[],"epic":1,"sub":{"completed":43,"total":95}},
   {"n":936,"t":"Review brief: component lanes, three angles and a whole-area read","s":"o","m":"M2","p":623,"a":["ops"]},
   {"n":931,"t":"Move MailKit to 5.0 and decide on .NET 11","s":"c","m":"Post","p":789,"a":["ops","engine"],"x":"2026-11-18"},
   {"n":929,"t":"Bump dependencies by hand and stop Dependabot version-update PRs","s":"c","m":"Post","p":789,"a":["ops"],"x":"2026-11-18"},
@@ -681,10 +681,10 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":872,"t":"A woken branch whose dispatch is lost is still failed as BOOKMARK_LOST","s":"c","m":"M2","p":null,"a":["engine"],"x":"2026-11-15"},
   {"n":870,"t":"A busy credit charge times out instead of being retried","s":"c","m":"M2","p":null,"a":["db"],"x":"2026-11-15"},
   {"n":868,"t":"Deploys leave changed supporting services running their old definition","s":"c","m":"M2","p":null,"a":["ops"],"x":"2026-11-15"},
-  {"n":854,"t":"Platform admin: repair admin and freeze an account","s":"o","m":"M2","p":851,"a":["auth"]},
+  {"n":854,"t":"Platform admin: repair admin and freeze an account","s":"c","m":"M2","p":851,"a":["auth"],"x":"2026-11-19"},
   {"n":853,"t":"Platform admin: internal admin endpoints that write the staff audit","s":"c","m":"M2","p":851,"a":["auth","management"],"x":"2026-11-14"},
-  {"n":852,"t":"Read-only admin views and staff audit tables for the platform admin","s":"o","m":"M2","p":851,"a":["db"]},
-  {"n":851,"t":"Platform admin: a private service for staff to look after people and accounts","s":"o","m":"M2","p":null,"a":[],"epic":1,"sub":{"completed":1,"total":3}},
+  {"n":852,"t":"Read-only admin views and staff audit tables for the platform admin","s":"c","m":"M2","p":851,"a":["db"],"x":"2026-11-13"},
+  {"n":851,"t":"Platform admin: a private service for staff to look after people and accounts","s":"o","m":"M2","p":null,"a":[],"epic":1,"sub":{"completed":6,"total":7}},
   {"n":839,"t":"Clear the readings of workspaces deleted before their account copy was kept","s":"o","m":null,"p":null,"a":[]},
   {"n":836,"t":"Handle a busy workspace in the tickers and sub-workflow starts","s":"o","m":null,"p":null,"a":[]},
   {"n":835,"t":"Replay a manual run's first answer to a retry with the same idempotency key","s":"o","m":null,"p":null,"a":[]},
@@ -1003,6 +1003,8 @@ footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line)
   {"n":127,"t":"Reject breached passwords using the Have I Been Pwned range API","s":"c","m":"M2","p":175,"a":["auth"],"pr":"P2","sz":"S","x":"2026-11-03"}
  ],
  "merged": [
+  {"n":1041,"t":"fix(deploy): run deploys detached, one at a time, and pull with retries","d":"2026-11-19"},
+  {"n":1037,"t":"feat(auth): let staff freeze an account so its workspaces only read","d":"2026-11-19"},
   {"n":932,"t":"build(engine): move mailkit to 5.0 and mark #930 merged on the roadmap","d":"2026-11-18"},
   {"n":930,"t":"build: bump packages by hand and stop dependabot version updates","d":"2026-11-18"},
   {"n":913,"t":"ci(deploy): fix the deploy, backup and image findings from the infra review","d":"2026-11-18"},
