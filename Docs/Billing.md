@@ -29,7 +29,11 @@ The table is `PlanCatalog.BuiltIn` (`Wbskt.Infrastructure/Billing`). Two layers 
 release, each replacing only the fields it sets:
 
 1. **Configuration**, for every tenant on a plan: `Billing:Plans:{Plan}:{Limit}`, for example
-   `Billing:Plans:Free:Clients = 25`. A negative value stops the host at start.
+   `Billing:Plans:Free:Clients = 25`. A negative value stops the host at start. Each host reads it
+   itself, so set it alike on all of them. The month's workflow credits are the exception: the
+   management host writes them onto each workspace's plan copy (`dbo.WorkspaceAccounts.CreditsPerMonth`),
+   and both `dbo.Run_Start` and `dbo.RunCounters_TryCharge` read them from there, so a run is held to
+   one allowance from start to end whatever the engine's own configuration says.
 2. **A tenant's overrides**, for a negotiated Business contract: `limitOverrides` on the tenant's plan.
    The operator action takes the contract's client count (`contractClients`, at least 2,000) and
    derives its clients, messages and credits from it (`BusinessContract`), so a contract cannot be
