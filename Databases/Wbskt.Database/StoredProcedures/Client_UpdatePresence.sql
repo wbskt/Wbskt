@@ -18,6 +18,7 @@ BEGIN
         SET
             IsConnected = 1,
             LastActivityAt = @LastActivityAt,
+            LastSeenAt = @LastActivityAt,
             -- ConnectedAt anchors uptime: set on connect, cleared on disconnect
             ConnectedAt = @LastActivityAt,
             ConnectedHostId = @HostId,
@@ -34,6 +35,7 @@ BEGIN
         SET
             IsConnected = 0,
             LastActivityAt = @LastActivityAt,
+            LastSeenAt = @LastActivityAt,
             ConnectedAt = NULL,
             ConnectedHostId = NULL,
             UpdatingUntil = @UpdatingUntil

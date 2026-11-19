@@ -8,7 +8,8 @@ CREATE TABLE dbo.Clients (
     Status         TINYINT          NOT NULL           DEFAULT 0, -- 0: Pending, 1: Registered, 2: Revoked, 3: Rejected (ClientStatus)
     IsConnected    BIT              NOT NULL           DEFAULT 0,
     ConnectedAt    DATETIME2(3)     NULL, -- set on connect, cleared on disconnect; uptime = now - ConnectedAt
-    LastActivityAt DATETIME2(3)     NULL,
+    LastActivityAt DATETIME2(3)     NULL, -- when the last presence change a host saw happened; orders connects and disconnects, never shown
+    LastSeenAt     DATETIME2(3)     NULL, -- when the client was last known present: every presence change, an expiry included; shown, never compared
     LastRttMs      INT              NULL, -- last measured socket round-trip
     RttMeasuredAt  DATETIME2(3)     NULL,
     ConnectedHostId NVARCHAR(100)   NULL, -- socket-host instance currently holding this connection

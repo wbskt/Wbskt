@@ -282,6 +282,7 @@
               "string"
             ]
           },
+          "lastSeenAt": {},
           "name": {
             "type": "string"
           },
@@ -522,6 +523,7 @@
               "string"
             ]
           },
+          "lastSeenAt": {},
           "name": {
             "type": "string"
           },

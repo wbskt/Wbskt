@@ -52,6 +52,10 @@ public sealed class SocketHostPresenceIntegrationTests(SqlEdgeFixture fixture)
         // The last change a host saw stays recorded: an inferred expiry does not outrank one still on its way.
         Assert.Equal(lastSeenConnect, await LastActivityAsync(deadClient), TimeSpan.FromMilliseconds(1));
         Assert.False(await IsConnectedAsync(deadClient));
+
+        // What "last seen" shows is the expiry, not the connect ten minutes before it.
+        var shown = await clients.FindDetailByRefIdAsync(deadRef);
+        Assert.Equal(only.ChangedAt!.Value, shown!.LastSeenAt!.Value, TimeSpan.FromMilliseconds(1));
         Assert.True(await IsConnectedAsync(liveClient));
         Assert.True(await IsConnectedAsync(newClient));
 

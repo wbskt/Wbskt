@@ -34,6 +34,8 @@ BEGIN
         c.ConnectedAt,
         c.UpdatingUntil,
         c.LastActivityAt,
+        -- A client whose presence has not changed since the column was added was last seen at its last change.
+        ISNULL(c.LastSeenAt, c.LastActivityAt) AS LastSeenAt,
         c.LastRttMs,
         c.RttMeasuredAt,
         c.CreatedAt,

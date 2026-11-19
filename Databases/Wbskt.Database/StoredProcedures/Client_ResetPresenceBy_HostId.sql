@@ -6,7 +6,8 @@
 -- actually online reconnect within their retry window and flip back through Client_UpdatePresence.
 -- @StartedAt is when the host started, by its own clock: a client that already reconnected to it
 -- (ConnectedAt at or after the start) is left alone, however late this repair runs. NULL clears all,
--- for a caller from before the parameter existed.
+-- for a caller from before the parameter existed. LastSeenAt takes the host's start: the connection
+-- was alive until at most then.
 CREATE PROCEDURE dbo.Client_ResetPresenceBy_HostId
     @HostId NVARCHAR(100),
     @StartedAt DATETIME2(3) = NULL
@@ -18,7 +19,8 @@ BEGIN
     SET
         IsConnected = 0,
         ConnectedAt = NULL,
-        ConnectedHostId = NULL
+        ConnectedHostId = NULL,
+        LastSeenAt = ISNULL(@StartedAt, SYSUTCDATETIME())
     OUTPUT deleted.Id, deleted.RefId, deleted.WorkspaceId, deleted.ConnectedHostId
     WHERE IsConnected = 1
         AND ConnectedHostId = @HostId

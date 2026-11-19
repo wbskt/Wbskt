@@ -404,6 +404,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             ConnectedAt = reader.IsDBNull(reader.GetOrdinal("ConnectedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("ConnectedAt")),
             UpdatingUntil = reader.IsDBNull(reader.GetOrdinal("UpdatingUntil")) ? null : reader.GetDateTime(reader.GetOrdinal("UpdatingUntil")),
             LastActivityAt = reader.IsDBNull(reader.GetOrdinal("LastActivityAt")) ? null : reader.GetDateTime(reader.GetOrdinal("LastActivityAt")),
+            LastSeenAt = reader.IsDBNull(reader.GetOrdinal("LastSeenAt")) ? null : reader.GetDateTime(reader.GetOrdinal("LastSeenAt")),
             LastRttMs = reader.IsDBNull(reader.GetOrdinal("LastRttMs")) ? null : reader.GetInt32(reader.GetOrdinal("LastRttMs")),
             RttMeasuredAt = reader.IsDBNull(reader.GetOrdinal("RttMeasuredAt")) ? null : reader.GetDateTime(reader.GetOrdinal("RttMeasuredAt")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
@@ -460,6 +461,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             ConnectedAt = reader.IsDBNull(reader.GetOrdinal("ConnectedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("ConnectedAt")),
             UpdatingUntil = reader.IsDBNull(reader.GetOrdinal("UpdatingUntil")) ? null : reader.GetDateTime(reader.GetOrdinal("UpdatingUntil")),
             LastActivityAt = reader.IsDBNull(reader.GetOrdinal("LastActivityAt")) ? null : reader.GetDateTime(reader.GetOrdinal("LastActivityAt")),
+            LastSeenAt = reader.IsDBNull(reader.GetOrdinal("LastSeenAt")) ? null : reader.GetDateTime(reader.GetOrdinal("LastSeenAt")),
             LastRttMs = reader.IsDBNull(reader.GetOrdinal("LastRttMs")) ? null : reader.GetInt32(reader.GetOrdinal("LastRttMs")),
             RttMeasuredAt = reader.IsDBNull(reader.GetOrdinal("RttMeasuredAt")) ? null : reader.GetDateTime(reader.GetOrdinal("RttMeasuredAt")),
             ConnectedHostId = reader.IsDBNull(reader.GetOrdinal("ConnectedHostId")) ? null : reader.GetString(reader.GetOrdinal("ConnectedHostId")),

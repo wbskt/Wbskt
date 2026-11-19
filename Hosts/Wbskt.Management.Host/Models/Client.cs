@@ -15,6 +15,7 @@ public class Client : IWorkspaceOwned
     public DateTime? ConnectedAt { get; set; }
     public DateTime? UpdatingUntil { get; set; }
     public DateTime? LastActivityAt { get; set; }
+    public DateTime? LastSeenAt { get; set; }
     public int? LastRttMs { get; set; }
     public DateTime? RttMeasuredAt { get; set; }
     public DateTime CreatedAt { get; set; }
