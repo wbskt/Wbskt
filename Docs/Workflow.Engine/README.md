@@ -18,15 +18,17 @@ this folder replaces them.
 ## The engine in one page
 
 ```
-clients ───────────► Socket host ──────┐
+clients ───────────► Gateway hosts ────┐
                                         ├──► RabbitMQ ──► Workflow Engine host ──┬──► SQL Server (all state, leader lease)
 users, HTTP callers ─► Management host ─┘                  (never public)       └──► clients, webhooks, email, chat
 ```
 
-* **Four hosts.** Auth, Management, Socket and the Workflow Engine. The engine is backend-only:
-  everything the outside world sends reaches it through the management host or the message bus.
-* **Publishing** happens in the management host. It validates the definition, stores it as a new
-  version and writes the trigger registrations the engine matches events against.
+* **Five hosts.** Auth, Management, the two client gateways (WebSocket and MQTT) and the Workflow
+  Engine. The engine is backend-only: everything the outside world sends reaches it through the
+  management host or the message bus.
+* **Publishing** happens in the management host. It validates the definition and stores it as a new
+  version. **Enabling** a version makes it the live one and writes the trigger registrations the
+  engine matches events against, in the same transaction.
 * **One active engine.** Engine instances run active/standby. Only the instance holding the leader
   lease (a row in SQL) consumes messages, runs workflows and runs background workers.
 * **Runs and branches.** An inbound event that matches a trigger starts a **run**. A run executes
@@ -50,7 +52,7 @@ users, HTTP callers ─► Management host ─┘                  (never public
 | Branch | One line of execution inside a run, with its current node and local state. |
 | Local state | The branch's JSON object. It starts as `{ "trigger": <payload> }` and nodes patch it. |
 | Bookmark | A row that says "this branch is waiting for X until Y". Claimed by delete when X or Y happens. |
-| Trigger registration | A row that says "events with this key start this workflow". Written at publish time. |
+| Trigger registration | A row that says "events with this key start this workflow". Written when a version is enabled. |
 | Channel | One source of inbound events (client message, schedule, webhook, signal...). Each channel owns how its keys are built. |
 | Cohort | The set of branches a fork or parallel loop started, which a join waits for. |
 | Credits | The budget a run spends; each node kind has a price. |
