@@ -320,35 +320,9 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
-        with:
-          global-json-file: global.json
-          cache: true
-          cache-dependency-path: Directory.Packages.props
-
-      # `dotnet tool install` fails when the tool is already there, so install only when it is missing.
-      - name: Install sqlpackage
-        run: |
-          dotnet tool list -g | grep -qi '^microsoft\.sqlpackage ' || dotnet tool install -g microsoft.sqlpackage
-          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
-
-      - name: Deploy databases
-        run: pwsh ./Deploy-Databases.ps1 -HostLoginPassword "$HOST_SQL_PASSWORD"
-
-      # The hosts serve HTTPS on their dev ports with the development certificate, and it has to be
-      # trusted system-wide: the client SDK the tests drive validates it, and so does Management when
-      # it calls the engine on https://localhost:7030. `dotnet dev-certs https --trust` only half
-      # does this on Linux (it exits non-zero), so the certificate goes into the OS store directly.
-      - name: Trust the development certificate
-        run: |
-          dotnet dev-certs https
-          dotnet dev-certs https --export-path "$RUNNER_TEMP/aspnet-dev.crt" --format PEM
-          sudo cp "$RUNNER_TEMP/aspnet-dev.crt" /usr/local/share/ca-certificates/aspnet-dev.crt
-          sudo update-ca-certificates
-
-      - name: Start hosts
+      - name: Start the stack
         id: hosts
-        run: Tests/Wbskt.E2E.FeatureTests/start-hosts.sh
+        uses: ./.github/actions/e2e-stack
 
       # Every pass below runs with --no-build, so the suite is built once here.
       - name: Build the E2E suite
