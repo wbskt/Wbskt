@@ -1,4 +1,3 @@
-using System.Globalization;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Csv;
 using Wbskt.Management.Host.Models;
@@ -81,14 +80,12 @@ public sealed class ClientReadingService : IClientReadingService
         {
             bucketSeconds = PickBucket(toUtc - fromUtc);
         }
-        else if (!TryParseBucket(bucket, out bucketSeconds))
+        else if (!ChartBuckets.TryParse(bucket, MaxRange, out bucketSeconds))
         {
             return Result<ClientReadingsResponse>.Failure(Error.Validation("READINGS_BUCKET_INVALID", "'bucket' must be a number of seconds, or a number followed by s, m, h or d, such as 5m."));
         }
 
-        // Buckets line up on whole multiples of their size, so the same reading lands in the same
-        // bucket whatever range was asked for, and an hourly bucket starts on the hour.
-        fromUtc = AlignDown(fromUtc, bucketSeconds);
+        fromUtc = ChartBuckets.AlignDown(fromUtc, bucketSeconds);
 
         if (Math.Ceiling((toUtc - fromUtc).TotalSeconds / bucketSeconds) > MaxBuckets)
         {
@@ -178,35 +175,6 @@ public sealed class ClientReadingService : IClientReadingService
         return Result<IReadOnlyCollection<ClientReading>>.Success(readings);
     }
 
-    internal static bool TryParseBucket(string text, out int seconds)
-    {
-        seconds = 0;
-        text = text.Trim();
-        if (text.Length == 0)
-        {
-            return false;
-        }
-
-        var unit = char.ToLowerInvariant(text[^1]);
-        var multiplier = unit switch { 's' => 1, 'm' => 60, 'h' => 3600, 'd' => 86400, _ => 0 };
-        var digits = multiplier == 0 ? text : text[..^1];
-        multiplier = multiplier == 0 ? 1 : multiplier;
-
-        if (!long.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out var count))
-        {
-            return false;
-        }
-
-        var total = count * multiplier;
-        if (total < 1 || total > MaxRange.TotalSeconds)
-        {
-            return false;
-        }
-
-        seconds = (int)total;
-        return true;
-    }
-
     internal static int PickBucket(TimeSpan range)
     {
         foreach (var size in BucketLadder)
@@ -218,13 +186,6 @@ public sealed class ClientReadingService : IClientReadingService
         }
 
         return BucketLadder[^1];
-    }
-
-    private static DateTime AlignDown(DateTime utc, int bucketSeconds)
-    {
-        var size = TimeSpan.FromSeconds(bucketSeconds).Ticks;
-        var sinceEpoch = utc.Ticks - DateTime.UnixEpoch.Ticks;
-        return new DateTime(DateTime.UnixEpoch.Ticks + sinceEpoch / size * size, DateTimeKind.Utc);
     }
 
     private Result<TimeRange> ResolveRange(DateTimeOffset? from, DateTimeOffset? to)
