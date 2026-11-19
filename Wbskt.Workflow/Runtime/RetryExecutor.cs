@@ -340,7 +340,7 @@ internal static class RetryExecutor
             }
             catch (Exception ex)
             {
-                var fail = new NodeExecutionResult.Fail("EXECUTOR_CRASH", ex.Message, false, ex) { Warnings = nodeContext.Warnings.ToArray() };
+                var fail = new NodeExecutionResult.Fail(NodeFailures.CrashCode, NodeFailures.CrashMessage, false, ex) { Warnings = nodeContext.Warnings.ToArray() };
                 string errorJson = JsonSerializer.Serialize(fail, EngineJson.Options);
 
                 await RecordOutcomeAsync(false, errorJson);

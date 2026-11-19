@@ -570,6 +570,30 @@ public sealed class RetryExecutorTests
         Assert.Equal("EXECUTOR_CRASH", Assert.IsType<NodeExecutionResult.Fail>(result).ErrorCode);
     }
 
+    [Fact]
+    public async Task An_unexpected_exception_reaches_history_as_a_fixed_message()
+    {
+        // History is readable by every workspace member; a SQL or bus exception's text can name hosts
+        // and procedures. The exception rides on Cause for the branch loop to log.
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] });
+        var thrown = new InvalidOperationException("Login failed for user 'wbskt_engine' on sql-prod-1");
+        var executor = new ThrowingExecutor(() => throw thrown);
+
+        NodeExecutionResult result = await RetryExecutor.RunWithRetryAsync(
+            node,
+            CreateContext(),
+            executor,
+            new TestNodeExecutionServices(),
+            new FixedClock(),
+            CancellationToken.None,
+            new UnlimitedRunCountersProvider(),
+            new DefaultCreditCostCalculator());
+
+        var fail = Assert.IsType<NodeExecutionResult.Fail>(result);
+        Assert.Equal(NodeFailures.CrashMessage, fail.Message);
+        Assert.Same(thrown, fail.Cause);
+    }
+
     private sealed class ThrowingExecutor(Func<NodeExecutionResult> behaviour) : INodeExecutor
     {
         public int AttemptCount { get; private set; }

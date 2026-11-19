@@ -255,7 +255,8 @@ Every executor runs inside `RetryExecutor.RunWithRetryAsync`:
   A delay shorter than `RetryParkThreshold` (5 s) waits in memory; a longer one parks the branch on a
   timer bookmark with `__retry_attempt`, so a long backoff survives failover and holds no worker.
 * **Exceptions.** `PermanentNodeException` keeps its error code. Any other exception becomes
-  `EXECUTOR_CRASH`. Cancellation is rethrown.
+  `EXECUTOR_CRASH` with a fixed message; the exception goes to the engine's log, not to run history,
+  which every workspace member can read. Cancellation is rethrown.
 
 ### 5.5 Ending branches and runs
 

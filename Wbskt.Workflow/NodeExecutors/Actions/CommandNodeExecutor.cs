@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Wbskt.Workflow.Abstraction.Models.Bookmarks;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
@@ -20,13 +21,14 @@ namespace Wbskt.Workflow.NodeExecutors.Actions;
 /// neither comes in time (the bookmark's TTL takes that port without running the step again). Without
 /// it, a command that could not be sent or queued fails the step with COMMAND_NOT_SENT.</para>
 /// </summary>
-internal sealed class CommandNodeExecutor(IClientCommandPublisher publisher, IBookmarkResumer bookmarkResumer, ActionTemplates templates, TimeProvider? clock = null)
+internal sealed class CommandNodeExecutor(IClientCommandPublisher publisher, IBookmarkResumer bookmarkResumer, ActionTemplates templates, TimeProvider? clock = null, ILogger<CommandNodeExecutor>? logger = null)
     : ParkingNodeExecutor(clock ?? TimeProvider.System)
 {
     public const string AckedPort = CommandChannel.Acked;
     public const string FailedPort = CommandChannel.Failed;
     public const string TimeoutPort = "timeout";
     public const string CommandNotSentCode = "COMMAND_NOT_SENT";
+    public const string PublishFailedMessage = "The command could not be sent right now; it will be tried again.";
 
     public override string Kind => NodeKind.ActionClientMessage;
 
@@ -60,7 +62,10 @@ internal sealed class CommandNodeExecutor(IClientCommandPublisher publisher, IBo
         }
         catch (Exception ex)
         {
-            return new NodeExecutionResult.Fail("COMMAND_PUBLISH_ERROR", ex.Message, true, ex);
+            // Run history is readable by every workspace member, and a bus exception can name brokers
+            // and hosts, so the history gets a fixed message and the log the exception.
+            logger?.LogWarning(ex, "Could not publish the command of node {NodeId} on run {RunRefId}.", ctx.Node.NodeId, ctx.Branch.RunRefId);
+            return new NodeExecutionResult.Fail("COMMAND_PUBLISH_ERROR", PublishFailedMessage, true, ex);
         }
 
         // Nothing waits for an answer here, so a command that never left must fail the step: carrying
