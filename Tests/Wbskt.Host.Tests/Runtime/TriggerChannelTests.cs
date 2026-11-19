@@ -196,8 +196,8 @@ public sealed class TriggerChannelTests
     public void A_command_outcome_wakes_the_step_waiting_on_that_command()
     {
         Guid command = Guid.NewGuid();
-        InboundEvent acked = CommandChannel.Event(command, CommandChannel.Acked, null);
-        InboundEvent failed = CommandChannel.Event(command, CommandChannel.Failed, "The client is not connected.");
+        InboundEvent acked = CommandChannel.Event(command, Guid.NewGuid(), CommandChannel.Acked, null);
+        InboundEvent failed = CommandChannel.Event(command, Guid.NewGuid(), CommandChannel.Failed, "The client is not connected.");
 
         Assert.Equal(CommandChannel.Key(command), new CommandChannel().CorrelationKey(acked));
         Assert.Contains(CommandChannel.Key(command), failed.MatchKeys);

@@ -84,12 +84,31 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
         BookmarkRow bookmark = Assert.Single(providers.Bookmarks);
         Assert.Equal(CommandChannel.Key(commandId), bookmark.MatchKey);
 
-        InboundEvent evt = CommandChannel.Event(commandId, outcome, outcome == CommandChannel.Failed ? "The client is not connected." : null);
+        InboundEvent evt = CommandChannel.Event(commandId, VentClient, outcome, outcome == CommandChannel.Failed ? "The client is not connected." : null);
         BookmarkMatchResult result = await resumer.MatchInboundAsync(evt, hasRegistrations: false, CancellationToken.None);
 
         Assert.True(result.Matched);
         Assert.Equal(outcome, ExitPort(providers));
         Assert.Equal(BranchStatus.Completed, providers.Branches[1001].Status);
+        Assert.Single(publisher.Sent);
+    }
+
+    [Fact]
+    public async Task An_ack_from_another_client_naming_the_command_is_ignored_and_the_real_one_still_wakes_the_step()
+    {
+        (BranchLoop loop, InMemoryProviders providers, RecordingCommandPublisher publisher, BookmarkResumer resumer) = CommandStepRun();
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+        Guid commandId = Assert.Single(publisher.Sent);
+
+        await resumer.MatchInboundAsync(CommandChannel.Event(commandId, Guid.NewGuid(), CommandChannel.Acked, null), hasRegistrations: false, CancellationToken.None);
+
+        Assert.NotEqual(BranchStatus.Completed, providers.Branches[1001].Status);
+        Assert.Equal(CommandChannel.Key(commandId), Assert.Single(providers.Bookmarks).MatchKey);
+
+        BookmarkMatchResult result = await resumer.MatchInboundAsync(CommandChannel.Event(commandId, VentClient, CommandChannel.Acked, null), hasRegistrations: false, CancellationToken.None);
+
+        Assert.True(result.Matched);
+        Assert.Equal(CommandChannel.Acked, ExitPort(providers));
         Assert.Single(publisher.Sent);
     }
 
@@ -220,6 +239,8 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
         Assert.Empty(providers.Bookmarks);
     }
 
+    private static readonly Guid VentClient = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+
     private (BranchLoop Loop, InMemoryProviders Providers, RecordingCommandPublisher Publisher, BookmarkResumer Resumer) CommandStepRun()
     {
         Guid nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
@@ -228,7 +249,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
             NodeId = nodeId,
             Name = "open vent",
             Ports = [],
-            Config = new SendClientMessageConfig { ClientRef = Guid.NewGuid().ToString(), Type = "vent.open", AwaitAck = true }
+            Config = new SendClientMessageConfig { ClientRef = VentClient.ToString(), Type = "vent.open", AwaitAck = true }
         };
         WorkflowDefinition definition = new(
             Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
