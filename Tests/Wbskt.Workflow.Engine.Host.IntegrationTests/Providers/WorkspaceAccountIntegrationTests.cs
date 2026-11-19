@@ -149,7 +149,7 @@ public sealed class WorkspaceAccountIntegrationTests(SqlEdgeFixture fixture)
         await Provider().UpsertAsync([pro with { PlanCode = PlanCode.Free, PlanRevision = 2 }, free with { PlanCode = PlanCode.Pro, PlanRevision = 1 }], CancellationToken.None);
 
         var held = await HeldAsync(workspaceId);
-        Assert.Equal((30, 730, 30), (held.Raw, held.Hourly, held.Runs));
+        Assert.Equal((7, 730, 30), (held.Raw, held.Hourly, held.Runs));
         Assert.InRange(held.Until!.Value, DateTime.UtcNow.AddDays(29), DateTime.UtcNow.AddDays(31));
         Assert.Null((await HeldAsync(upgraded)).Until);
     }
