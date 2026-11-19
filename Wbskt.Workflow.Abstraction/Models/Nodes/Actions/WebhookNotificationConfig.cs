@@ -24,6 +24,10 @@ public sealed record WebhookNotificationConfig
     /// </summary>
     public const int MaxResponseBytes = 256 * 1024;
 
+    // How much of an error reply a failed call keeps in its failure message, which lands in history
+    // once per attempt; the status code comes first.
+    public const int MaxErrorDetailChars = 1024;
+
     /// <summary>
     /// Optional: an HTTP-auth integration whose credential is added to the request. With one, the URL
     /// may be relative to the integration's base URL, and an absolute URL must share its origin, so

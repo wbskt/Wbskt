@@ -162,8 +162,10 @@ internal sealed class WebhookNodeExecutor(IHttpClientFactory httpClientFactory, 
                 return new NodeExecutionResult.Continue("default", output, RemoveKeys: ["json"]);
             }
 
+            // Scrubbed before it is cut, so a credential cut in half cannot slip past the scrub.
             string detail = integration is null ? body : IntegrationErrors.Scrub(body, integration.Secrets);
-            return new NodeExecutionResult.Fail("WEBHOOK_HTTP_ERROR", $"{status}: {detail}{(truncated ? "…" : "")}", status >= 500, null);
+            (detail, bool cut) = Prefix(detail, WebhookNotificationConfig.MaxErrorDetailChars);
+            return new NodeExecutionResult.Fail("WEBHOOK_HTTP_ERROR", $"{status}: {detail}{(truncated || cut ? "…" : "")}", status >= 500, null);
         }
         // A timeout that fires mid-body can surface as the stream's IOException rather than a
         // cancellation; it is still a timeout.
@@ -178,6 +180,18 @@ internal sealed class WebhookNodeExecutor(IHttpClientFactory httpClientFactory, 
             string message = integration is null ? ex.Message : IntegrationErrors.Scrub(ex.Message, integration.Secrets);
             return new NodeExecutionResult.Fail("WEBHOOK_NETWORK_ERROR", message, true, ex);
         }
+    }
+
+    private static (string Text, bool Cut) Prefix(string text, int maxChars)
+    {
+        if (text.Length <= maxChars)
+        {
+            return (text, false);
+        }
+
+        // Never end on the first half of a surrogate pair.
+        int length = char.IsHighSurrogate(text[maxChars - 1]) ? maxChars - 1 : maxChars;
+        return (text[..length], true);
     }
 
     /// <summary>
