@@ -26,4 +26,13 @@ internal sealed class WorkspaceFreezeProvider : BaseSqlProvider, IWorkspaceFreez
                 .ToList(),
             rows.Where(r => r.Kind == "run").Select(r => r.Id).ToList());
     }
+
+    public async Task<IReadOnlyCollection<int>> GetFrozenStillGoingAsync(CancellationToken cancellationToken = default)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.Workspace_GetFrozenStillGoing",
+            _ => { },
+            reader => reader.GetInt32(reader.GetOrdinal("WorkspaceId")),
+            cancellationToken);
+    }
 }

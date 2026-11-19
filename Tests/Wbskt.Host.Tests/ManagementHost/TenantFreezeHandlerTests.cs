@@ -62,6 +62,24 @@ public sealed class TenantFreezeHandlerTests
     }
 
     [Fact]
+    public async Task The_periodic_sync_stops_a_frozen_workspace_whose_event_was_lost()
+    {
+        // The freeze committed, but its event never arrived: the sync has copied the flag, and the
+        // workspace's runs and clients are still going until this stops them.
+        var client = new RetiredClient(5, Guid.NewGuid(), 9, Guid.NewGuid());
+        _provider.Setup(p => p.GetFrozenStillGoingAsync(It.IsAny<CancellationToken>())).ReturnsAsync([3]);
+        _provider.Setup(p => p.FreezeAsync(3, It.IsAny<CancellationToken>())).ReturnsAsync(new WorkspaceFreeze([client], [101L]));
+
+        await Freezer().StopFrozenStillGoingAsync(CancellationToken.None);
+
+        _cutoffs.Verify(c => c.RevokeAsync(client.ClientRefId), Times.Once);
+        _engine.Verify(e => e.CancelRunAsync(101L, WorkspaceFreezer.CancellationReason, It.IsAny<CancellationToken>()), Times.Once);
+
+        // Already copied by the sync that ran first, so nothing is fetched again.
+        _auth.VerifyNoOtherCalls();
+    }
+
+    [Fact]
     public async Task A_frozen_workspace_drops_its_clients_and_cancels_its_runs()
     {
         var client = new RetiredClient(5, Guid.NewGuid(), 9, Guid.NewGuid());

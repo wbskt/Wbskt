@@ -9,7 +9,8 @@ namespace Wbskt.Management.Host.Services.Billing;
 /// workspace account from the auth host at start and then every
 /// <see cref="BillingOptions.AccountSyncInterval"/>, so a copy an event never reached (a lost event, a
 /// tenant created before billing, a handler that gave up) is right by the next sync. Each management
-/// replica runs it; the copies are written by revision, so two at once only repeat work.
+/// replica runs it; the copies are written by revision, so two at once only repeat work. After each sync
+/// it stops any frozen workspace still going, so a lost <c>TenantFrozenEvent</c> is repaired too.
 /// </summary>
 public sealed class WorkspaceAccountSyncWorker(IServiceScopeFactory scopeFactory, IOptions<BillingOptions> options, TimeProvider clock, ILogger<WorkspaceAccountSyncWorker> logger)
     : PeriodicWorker(AlwaysOpenWorkGate.Instance, scopeFactory, logger, clock)
@@ -21,5 +22,6 @@ public sealed class WorkspaceAccountSyncWorker(IServiceScopeFactory scopeFactory
     protected override async Task RunOnceAsync(IServiceProvider services, CancellationToken ct)
     {
         await services.GetRequiredService<WorkspaceAccountSync>().SyncAllAsync(ct);
+        await services.GetRequiredService<WorkspaceFreezer>().StopFrozenStillGoingAsync(ct);
     }
 }

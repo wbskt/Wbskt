@@ -15,7 +15,8 @@ namespace Wbskt.Management.Host.Services;
 /// <para>
 /// The freeze itself is copied with the workspace's account (<c>dbo.WorkspaceAccounts.FrozenAt</c>), read
 /// fresh from the auth host like a plan change, so <c>dbo.Run_Start</c> and <c>dbo.Client_Create</c>
-/// refuse from then on and the periodic account sync repairs a copy this missed. A frozen workspace then
+/// refuse from then on, and the periodic account sync repairs a copy this missed and then stops any
+/// frozen workspace still going (<see cref="StopFrozenStillGoingAsync"/>). A frozen workspace then
 /// has its live clients revoked, and socket hosts told to drop them, and the engine is asked to cancel
 /// each run still going. The engine owns run state, so the cancels are commands to it.
 /// </para>
@@ -57,21 +58,20 @@ public sealed class WorkspaceFreezer
         foreach (var workspaceId in workspaceIds)
         {
             await _accounts.SyncWorkspaceAsync(workspaceId, cancellationToken);
-            var frozen = await _provider.FreezeAsync(workspaceId, cancellationToken);
+            await StopAsync(workspaceId, cancellationToken);
+        }
+    }
 
-            foreach (var client in frozen.RevokedClients)
-            {
-                await _access.RevokedAsync(workspaceId, client.ClientRefId, client.ClientId, client.PolicyRefId, client.PolicyId, cancellationToken);
-            }
-
-            foreach (var runId in frozen.ActiveRunIds)
-            {
-                await _engine.CancelRunAsync(runId, CancellationReason, cancellationToken);
-            }
-
-            _logger.LogInformation(
-                "Froze workspace {WorkspaceId}: revoked {ClientCount} client(s), asked the engine to cancel {RunCount} run(s).",
-                workspaceId, frozen.RevokedClients.Count, frozen.ActiveRunIds.Count);
+    /// <summary>
+    /// Stops the frozen workspaces that are still going, whose freeze event was lost or never handled.
+    /// Run after the periodic account sync, which has already copied the freeze, so it is the repair for
+    /// the stop as the sync is for the copy.
+    /// </summary>
+    public async Task StopFrozenStillGoingAsync(CancellationToken cancellationToken)
+    {
+        foreach (var workspaceId in await _provider.GetFrozenStillGoingAsync(cancellationToken))
+        {
+            await StopAsync(workspaceId, cancellationToken);
         }
     }
 
@@ -82,5 +82,24 @@ public sealed class WorkspaceFreezer
         {
             await _accounts.SyncWorkspaceAsync(workspaceId, cancellationToken);
         }
+    }
+
+    private async Task StopAsync(int workspaceId, CancellationToken cancellationToken)
+    {
+        var frozen = await _provider.FreezeAsync(workspaceId, cancellationToken);
+
+        foreach (var client in frozen.RevokedClients)
+        {
+            await _access.RevokedAsync(workspaceId, client.ClientRefId, client.ClientId, client.PolicyRefId, client.PolicyId, cancellationToken);
+        }
+
+        foreach (var runId in frozen.ActiveRunIds)
+        {
+            await _engine.CancelRunAsync(runId, CancellationReason, cancellationToken);
+        }
+
+        _logger.LogInformation(
+            "Froze workspace {WorkspaceId}: revoked {ClientCount} client(s), asked the engine to cancel {RunCount} run(s).",
+            workspaceId, frozen.RevokedClients.Count, frozen.ActiveRunIds.Count);
     }
 }
