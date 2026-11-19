@@ -84,195 +84,37 @@ BEGIN
 END
 GO
 
--- Permissions
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'users.read')
+-- Permissions: written from dbo.PermissionCatalogue, the one list of slugs. A slug added there is
+-- created here, and when it is a User default the User roles that already exist get it once, in this
+-- batch, so a tenant administrator who later takes it away is not overruled by the next deployment.
+-- A changed description is written back. A slug taken out of the catalogue is left in place, since
+-- removing one is a migration of its own. The new defaults are noted before the MERGE, because
+-- afterwards they look like the rest. The DACPAC build takes one statement per batch in this script
+-- and refuses a table variable, hence the BEGIN ... END and the JSON.
 BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('users.read', 'Read users, groups and tenant membership');
-END
-GO
+    DECLARE @NewUserDefaults NVARCHAR(MAX) = (
+        SELECT C.Slug
+        FROM dbo.PermissionCatalogue C
+        WHERE C.IsUserDefault = 1
+          AND NOT EXISTS (SELECT 1 FROM dbo.Permissions P WHERE P.Slug = C.Slug)
+        FOR JSON PATH);
 
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'users.manage')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('users.manage', 'Manage users');
-END
-GO
-
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'roles.read')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('roles.read', 'Read roles, permissions and assignments');
-END
-GO
-
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'roles.manage')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('roles.manage', 'Manage roles and permissions');
-END
-GO
-
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'policies.read')
-    BEGIN
-        INSERT INTO dbo.Permissions (Slug, Description) VALUES ('policies.read', 'Read registration policies');
-    END
-GO
-
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'policies.manage')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('policies.manage', 'Manage registration policies');
-END
-GO
-
--- Clients Permissions
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'clients.manage')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('clients.manage', 'Manage clients');
-END
-GO
-
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'clients.read')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('clients.read', 'Read clients');
-END
-GO
-
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'clients.update')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('clients.update', 'Update client status');
-END
-GO
-
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'clients.command')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('clients.command', 'Send commands to clients');
-END
-GO
-
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'clients.ping')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('clients.ping', 'Ping clients');
-END
-GO
-
--- Not a default User grant: a firmware image replaces the code a client runs. Admin roles get it
--- with every other permission below.
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'clients.firmware')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('clients.firmware', 'Update client firmware over the air');
-END
-GO
-
--- Message Template Permissions
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'templates.read')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('templates.read', 'Read message templates');
-END
-GO
-
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'templates.manage')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('templates.manage', 'Manage message templates');
-END
-GO
-
--- Workflow Permissions
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'workflows.read')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('workflows.read', 'Read workflows');
-END
-GO
-
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'workflows.create')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('workflows.create', 'Create workflows');
-END
-GO
-
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'workflows.update')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('workflows.update', 'Update workflows');
-END
-GO
-
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'workflows.delete')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('workflows.delete', 'Delete workflows');
-END
-GO
-
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'workflows.execute')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('workflows.execute', 'Start, signal and cancel workflow runs');
-END
-GO
-
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'workspace.join')
-    BEGIN
-        INSERT INTO dbo.Permissions (Slug, Description) VALUES ('workspace.join', 'Join workspaces');
-    END
-GO
-
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'logs.read')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('logs.read', 'Read event logs');
-END
-GO
-
--- Integration Permissions. integrations.read joins the User role's default reads (Tenant_Create);
--- the User roles that already exist get it once, as the slug is added, so a tenant administrator
--- who later takes it away is not overruled by the next deployment.
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'integrations.read')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('integrations.read', 'Read integrations');
+    MERGE dbo.Permissions AS target
+    USING dbo.PermissionCatalogue AS source
+        ON target.Slug = source.Slug
+    WHEN MATCHED AND ISNULL(target.Description, N'') <> source.Description THEN
+        UPDATE SET Description = source.Description
+    WHEN NOT MATCHED BY TARGET THEN
+        INSERT (Slug, Description)
+        VALUES (source.Slug, source.Description);
 
     INSERT INTO dbo.RolePermissions (RoleId, PermissionId, IsDeny)
-    SELECT r.Id, p.Id, 0
-    FROM dbo.Roles r
-    INNER JOIN dbo.Permissions p ON p.Slug = 'integrations.read'
-    WHERE r.Kind = 'User'
-      AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = r.Id AND rp.PermissionId = p.Id);
-END
-GO
-
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'integrations.manage')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('integrations.manage', 'Add, change, test and delete integrations');
-END
-GO
-
--- Billing. billing.read (what the plan allows and what has been used) joins the User role's default
--- reads (Tenant_Create), granted once to the User roles that already exist, as integrations.read was.
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'billing.read')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('billing.read', 'Read the plan, its limits and what has been used');
-
-    INSERT INTO dbo.RolePermissions (RoleId, PermissionId, IsDeny)
-    SELECT r.Id, p.Id, 0
-    FROM dbo.Roles r
-    INNER JOIN dbo.Permissions p ON p.Slug = 'billing.read'
-    WHERE r.Kind = 'User'
-      AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = r.Id AND rp.PermissionId = p.Id);
-END
-GO
-
--- billing.manage is not a default User grant: it decides what the account spends. Admin roles get it below.
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'billing.manage')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('billing.manage', 'Set a workspace''s monthly credit cap');
-END
-GO
-
--- workspaces.create is tenant-wide and not a default User grant: a workspace counts against the
--- tenant's plan. Admin roles get it below.
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'workspaces.create')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('workspaces.create', 'Create workspaces in the tenant');
-END
-GO
-
--- workspaces.delete is tenant-wide and not a default User grant: deleting a workspace retires everything
--- in it. A workspace's owner may delete it without this. Admin roles get it below.
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'workspaces.delete')
-BEGIN
-    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('workspaces.delete', 'Delete any workspace in the tenant');
+    SELECT R.Id, P.Id, 0
+    FROM dbo.Roles R
+    CROSS JOIN dbo.Permissions P
+    WHERE R.Kind = 'User'
+      AND P.Slug IN (SELECT Slug FROM OPENJSON(@NewUserDefaults) WITH (Slug NVARCHAR(100)))
+      AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions RP WHERE RP.RoleId = R.Id AND RP.PermissionId = P.Id);
 END
 GO
 
@@ -303,13 +145,13 @@ WHERE r.Kind = 'Admin'
 GO
 
 -- RolePermissions: the User roles the pre-deployment script recorded as empty get the default
--- reads Tenant_Create now seeds (keep the two lists the same). Runs once, then drops its list.
+-- reads (dbo.PermissionCatalogue), as Tenant_Create grants them. Runs once, then drops its list.
 IF OBJECT_ID('dbo.__UserRoleDefaultsBackfill', 'U') IS NOT NULL
 BEGIN
     EXEC('INSERT INTO dbo.RolePermissions (RoleId, PermissionId, IsDeny)
           SELECT b.Id, p.Id, 0
           FROM dbo.__UserRoleDefaultsBackfill b
-          INNER JOIN dbo.Permissions p ON p.Slug IN (''clients.read'', ''policies.read'', ''templates.read'', ''workflows.read'', ''logs.read'', ''integrations.read'', ''billing.read'', ''workspace.join'')
+          INNER JOIN dbo.Permissions p ON p.Slug IN (SELECT Slug FROM dbo.PermissionCatalogue WHERE IsUserDefault = 1)
           WHERE NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = b.Id AND rp.PermissionId = p.Id);');
     EXEC('DROP TABLE dbo.__UserRoleDefaultsBackfill;');
 END
