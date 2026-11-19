@@ -15,6 +15,8 @@ using Wbskt.Management.Models;
 using Wbskt.Management.Host.Services;
 using Wbskt.Host.Tests.Infrastructure;
 
+using Wbskt.Management.Host.Models;
+
 namespace Wbskt.Host.Tests.ManagementHost;
 
 /// <summary>
@@ -167,12 +169,25 @@ public sealed class ClientCommandServiceTests
     [Fact]
     public async Task A_ping_with_the_broker_down_is_unavailable()
     {
-        _clients.Setup(c => c.EnsureClientInWorkspaceAsync(WorkspaceId, ClientRef, It.IsAny<CancellationToken>())).ReturnsAsync(Result<int>.Success(42));
+        _clients.Setup(c => c.LoadInWorkspaceAsync(WorkspaceId, ClientRef, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<ClientDetail>.Success(new ClientDetail { Id = 42, RefId = ClientRef, WorkspaceId = WorkspaceId, Name = "c", IsConnected = true }));
         _bus.Setup(b => b.PublishAsync(It.IsAny<ClientPingEvent>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("broker down"));
 
         var result = await Service.PingAsync(WorkspaceId, ClientRef);
 
         result.Error.Should().Be(ClientCommandService.BrokerUnavailable);
+    }
+
+    [Fact]
+    public async Task A_ping_to_a_client_with_no_connection_is_a_conflict_and_sends_nothing()
+    {
+        _clients.Setup(c => c.LoadInWorkspaceAsync(WorkspaceId, ClientRef, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<ClientDetail>.Success(new ClientDetail { Id = 42, RefId = ClientRef, WorkspaceId = WorkspaceId, Name = "c", IsConnected = false }));
+
+        var result = await Service.PingAsync(WorkspaceId, ClientRef);
+
+        result.Error.Code.Should().Be("CLIENT_OFFLINE");
+        _bus.Verify(b => b.PublishAsync(It.IsAny<ClientPingEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

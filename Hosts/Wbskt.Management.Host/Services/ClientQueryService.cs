@@ -63,6 +63,9 @@ internal sealed class ClientQueryService : IClientQueryService
         return Result<ClientCountsResponse>.Success(await _clientProvider.GetCountsAsync(workspaceId, policyId, cancellationToken));
     }
 
+    public Task<Result<ClientDetail>> LoadInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default) =>
+        FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+
     private Task<Result<ClientDetail>> FindInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken)
     {
         return WorkspaceOwnership.LoadAsync(workspaceId, () => _clientProvider.FindDetailByRefIdAsync(clientRefId, cancellationToken), WorkspaceOwnership.ClientNotFound);

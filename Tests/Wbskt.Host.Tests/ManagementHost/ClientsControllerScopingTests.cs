@@ -62,6 +62,11 @@ public sealed class ClientsControllerScopingTests
         clientService
             .Setup(x => x.EnsureClientInWorkspaceAsync(WorkspaceId, ClientRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(outcome);
+        clientService
+            .Setup(x => x.LoadInWorkspaceAsync(WorkspaceId, ClientRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(outcome.IsSuccess
+                ? Result<Wbskt.Management.Host.Models.ClientDetail>.Success(new Wbskt.Management.Host.Models.ClientDetail { Id = outcome.Value, RefId = ClientRefId, WorkspaceId = WorkspaceId, Name = "c", IsConnected = true })
+                : Result<Wbskt.Management.Host.Models.ClientDetail>.Failure(outcome.Error));
     }
 
     [Fact]
