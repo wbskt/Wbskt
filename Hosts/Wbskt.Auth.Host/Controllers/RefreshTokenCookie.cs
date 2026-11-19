@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using Wbskt.Auth.Models;
 using Wbskt.Infrastructure.Configuration;
 using Wbskt.Infrastructure.Security;
 
@@ -71,6 +72,30 @@ public sealed class RefreshTokenCookie
 
     public void Clear(HttpResponse response) =>
         response.Cookies.Delete(_options.Name, CookieOptions(expires: null));
+
+    /// <summary>
+    /// The body to send with a new token pair: when the caller asked for the cookie, the refresh token
+    /// goes into it and out of the body, so it never reaches script on the page.
+    /// </summary>
+    public LoginResponse WriteSession(HttpContext context, LoginResponse session)
+    {
+        if (!IsRequested(context.Request) || session.RefreshToken is not { } refreshToken)
+        {
+            return session;
+        }
+
+        Write(context.Response, refreshToken);
+        return session with { RefreshToken = null };
+    }
+
+    /// <summary>Clears the refresh cookie of a caller that uses it; a body-only caller has none.</summary>
+    public void ClearIfRequested(HttpContext context)
+    {
+        if (IsRequested(context.Request))
+        {
+            Clear(context.Response);
+        }
+    }
 
     /// <summary>
     /// The sign-in device token from its cookie, under the same rules as the refresh token. It is not

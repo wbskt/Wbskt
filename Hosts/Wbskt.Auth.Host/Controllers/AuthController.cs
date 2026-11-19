@@ -140,7 +140,7 @@ public class AuthController : ApiControllerBase
         var result = await _signIn.RefreshTokenAsync(token, CallerIpAddress(), cancellationToken);
         if (result.IsFailure)
         {
-            ClearRefreshCookieIfRequested();
+            _refreshCookie.ClearIfRequested(HttpContext);
         }
 
         return MapSession(result);
@@ -165,7 +165,7 @@ public class AuthController : ApiControllerBase
             return MissingRefreshToken();
         }
 
-        ClearRefreshCookieIfRequested();
+        _refreshCookie.ClearIfRequested(HttpContext);
         if (token is null)
         {
             return NoContent();
@@ -192,7 +192,7 @@ public class AuthController : ApiControllerBase
         }
 
         var result = await _signIn.LogoutAllAsync(caller.Value.UserId, caller.Value.UserRef, CallerIpAddress(), cancellationToken);
-        ClearRefreshCookieIfRequested();
+        _refreshCookie.ClearIfRequested(HttpContext);
         return MapResult(result);
     }
 
@@ -256,8 +256,6 @@ public class AuthController : ApiControllerBase
         var result = await _signIn.RevokeSessionAsync(caller.Value.UserId, caller.Value.UserRef, sessionId, CallerIpAddress(), cancellationToken);
         return MapResult(result);
     }
-
-    private string CallerIpAddress() => HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 
     // Absent on tokens issued before sessions had ids.
     private Guid? CurrentSessionId() => WbsktClaims.SessionOf(User);
@@ -326,20 +324,9 @@ public class AuthController : ApiControllerBase
         return MapResult(result);
     }
 
-    /// <summary>
-    /// A new token pair, with the refresh token moved into the HttpOnly cookie when the caller asked
-    /// for that, so it never reaches script on the page.
-    /// </summary>
-    private ActionResult<LoginResponse> MapSession(Result<LoginResponse> result)
-    {
-        if (result.IsSuccess && RefreshTokenCookie.IsRequested(Request) && result.Value.RefreshToken is { } refreshToken)
-        {
-            _refreshCookie.Write(Response, refreshToken);
-            return Ok(result.Value with { RefreshToken = null });
-        }
-
-        return MapResult(result);
-    }
+    /// <summary>A new token pair, through <see cref="RefreshTokenCookie.WriteSession"/>.</summary>
+    private ActionResult<LoginResponse> MapSession(Result<LoginResponse> result) =>
+        result.IsSuccess ? Ok(_refreshCookie.WriteSession(HttpContext, result.Value)) : MapError(result.Error);
 
     private string? PresentedRefreshToken(RefreshTokenRequest? request) =>
         string.IsNullOrEmpty(request?.RefreshToken) ? _refreshCookie.Read(Request) : request.RefreshToken;
@@ -352,13 +339,5 @@ public class AuthController : ApiControllerBase
     {
         ModelState.AddModelError(nameof(RefreshTokenRequest.RefreshToken), "The RefreshToken field is required.");
         return ValidationProblem(ModelState);
-    }
-
-    private void ClearRefreshCookieIfRequested()
-    {
-        if (RefreshTokenCookie.IsRequested(Request))
-        {
-            _refreshCookie.Clear(Response);
-        }
     }
 }

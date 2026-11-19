@@ -393,8 +393,7 @@ public class ManagementController(ITenantService tenantService, IAccessControlSe
             return MapError(caller.Error);
         }
 
-        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        return MapResult(await tenantService.SetMemberSuspendedAsync(caller.Value, tenantId, userRef, isSuspended, ipAddress, cancellationToken));
+        return MapResult(await tenantService.SetMemberSuspendedAsync(caller.Value, tenantId, userRef, isSuspended, CallerIpAddress(), cancellationToken));
     }
 
     // ----- Shared plumbing ---------------------------------------------------------------------

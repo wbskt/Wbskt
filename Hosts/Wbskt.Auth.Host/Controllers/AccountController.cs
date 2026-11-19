@@ -105,17 +105,11 @@ public class AccountController : ApiControllerBase
 
         if (result.Value is not { } session)
         {
-            ClearRefreshCookieIfRequested();
+            _refreshCookie.ClearIfRequested(HttpContext);
             return NoContent();
         }
 
-        if (RefreshTokenCookie.IsRequested(Request) && session.RefreshToken is { } refreshToken)
-        {
-            _refreshCookie.Write(Response, refreshToken);
-            return Ok(session with { RefreshToken = null });
-        }
-
-        return Ok(session);
+        return Ok(_refreshCookie.WriteSession(HttpContext, session));
     }
 
     /// <summary>
@@ -135,7 +129,7 @@ public class AccountController : ApiControllerBase
         var result = await _profile.RevertEmailChangeAsync(request.Token, CallerIpAddress(), cancellationToken);
         if (result.IsSuccess)
         {
-            ClearRefreshCookieIfRequested();
+            _refreshCookie.ClearIfRequested(HttpContext);
         }
 
         return MapResult(result);
@@ -169,19 +163,9 @@ public class AccountController : ApiControllerBase
         var result = await _deletion.DeleteAccountAsync(userIdResult.Value, request.Password, CallerIpAddress(), cancellationToken);
         if (result.IsSuccess)
         {
-            ClearRefreshCookieIfRequested();
+            _refreshCookie.ClearIfRequested(HttpContext);
         }
 
         return MapResult(result);
     }
-
-    private void ClearRefreshCookieIfRequested()
-    {
-        if (RefreshTokenCookie.IsRequested(Request))
-        {
-            _refreshCookie.Clear(Response);
-        }
-    }
-
-    private string CallerIpAddress() => HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 }
