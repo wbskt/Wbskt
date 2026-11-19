@@ -24,8 +24,9 @@ CREATE TABLE dbo.Tenants (
     -- to Free. NULL while it has no end, and for every other source.
     PlanEndsAt DATETIME2(3) NULL,
     -- When the account was deleted (dbo.User_Delete) while this tenant was its alone. The row stays,
-    -- with its name cleared, so the payments recorded against it (subscriptions, credit purchases)
-    -- still match a refund or chargeback and remain for the accounts. Nothing acts for a closed tenant.
+    -- with its name cleared and back on Free, so the payments recorded against it (subscriptions, credit
+    -- purchases) still match a refund or chargeback and remain for the accounts. A tenant with nothing to
+    -- keep is deleted instead. Nothing acts for a closed tenant.
     ClosedAt DATETIME2(3) NULL,
     -- When Wbskt support froze the account (dbo.Tenant_StaffSetFrozen); NULL while it is not frozen.
     -- A frozen account's members can still sign in and read, but no workspace in it takes a change

@@ -3,11 +3,14 @@
 -- * A tenant where the user is the only member is closed: its workspaces go (through
 --   dbo.Workspace_Delete, so each is recorded in dbo.DeletedWorkspaces and its WorkspaceDeletedEvent,
 --   passed in @DeletedWorkspaces, goes into the outbox for the management host to retire), with its
---   roles, groups, invitations, membership, checkouts and billing mails. The tenant row stays as a
---   tombstone (ClosedAt set, name and description cleared) with its subscriptions, credit purchases
---   and billing notices, so a refund or chargeback still matches and the payment records remain for
---   the accounts (#951). Each provider customer it paid as, and no open tenant still does, is listed
---   in dbo.BillingCustomerErasures to be erased at the provider.
+--   roles, groups, invitations, membership, checkouts and billing mails. A tenant with a payment
+--   record, or whose plan or freeze was ever changed, stays as a tombstone (ClosedAt set, name and
+--   description cleared, back on the Free plan) with its subscriptions, credit purchases and billing
+--   notices, so a refund or chargeback still matches and the payment records remain for the accounts
+--   (#951), and it is counted as neither paying nor on a staff plan. Each provider customer it paid as,
+--   and no open tenant still does, is listed in dbo.BillingCustomerErasures to be erased at the
+--   provider. Any other tenant (an abandoned or never-confirmed sign-up) has nothing to keep, so its row
+--   is deleted.
 -- * A tenant with other members loses only this member, through dbo.TenantMember_Remove: workspaces
 --   they own pass to another administrator of that tenant. Refused (THROW 50018) while nobody else
 --   administers it: deleting them would leave the others in a tenant nobody can administer, so
@@ -173,10 +176,31 @@ BEGIN
     SET Name = N'Deleted workspace'
     WHERE TenantId IN (SELECT TenantId FROM @Sole);
 
+    -- Nothing to keep: no payment to match a refund to, and nobody ever set its plan or froze it.
+    DECLARE @Unkept TABLE (TenantId INT PRIMARY KEY);
+    INSERT INTO @Unkept (TenantId)
+    SELECT T.Id
+    FROM dbo.Tenants T
+    WHERE T.Id IN (SELECT TenantId FROM @Sole)
+      AND T.PlanRevision = 0
+      AND NOT EXISTS (SELECT 1 FROM dbo.TenantSubscriptions S WHERE S.TenantId = T.Id)
+      AND NOT EXISTS (SELECT 1 FROM dbo.TenantCreditPurchases P WHERE P.TenantId = T.Id);
+
+    DELETE FROM dbo.BillingNotices WHERE TenantId IN (SELECT TenantId FROM @Unkept);
+    DELETE FROM dbo.Tenants WHERE Id IN (SELECT TenantId FROM @Unkept);
+
+    -- The rest stay as tombstones, on Free: a cancelled subscription would otherwise keep a closed
+    -- tenant on its paid plan for good, since the plan review skips closed tenants.
     UPDATE dbo.Tenants
     SET Name = N'Closed account',
         Description = NULL,
-        ClosedAt = SYSUTCDATETIME()
+        ClosedAt = SYSUTCDATETIME(),
+        PlanCode = N'Free',
+        PlanSource = N'Default',
+        PlanEndsAt = NULL,
+        PlanLimitOverrides = NULL,
+        PlanRevision = PlanRevision + 1,
+        PlanChangedAt = SYSUTCDATETIME()
     WHERE Id IN (SELECT TenantId FROM @Sole);
 
     -- Anything left that names the user: assignments without a tenant row of theirs, sessions, tokens.
