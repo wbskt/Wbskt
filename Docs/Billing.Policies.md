@@ -34,7 +34,7 @@ customer-facing parts of it, so a change here goes there too.
 
 ## Messages over the plan
 
-- **Free** clients are slowed to one message a minute each once the workspace has sent its monthly
+- **Free** clients are slowed to one message a minute each once the account has sent its monthly
   allowance, until the 1st.
 - **Maker, Pro and Team** are never charged for messages past the allowance. Notices go out at 80% and 100% of
   it. At twice the allowance on Maker and Pro, and one and a half times it on Team
@@ -52,8 +52,8 @@ applies and the sweeps remove what is older.
 ## Credits over the plan
 
 - **Free, Maker, Pro and Team**: past the month's credits, runs draw on credit packs; with none left,
-  new runs are refused until the 1st, and runs already going stop at their next step that would need more
-  (`OutOfCredits`). The allowance is held exactly; it is never exceeded to finish a run. Notices at 80%
+  new runs are refused until the 1st, and runs already going stop once what is left is spent
+  (`OutOfCredits`; a credit pack bought then lets new runs start). The allowance is held exactly; it is never exceeded to finish a run. Notices at 80%
   and 100% say so.
 - **Business**: runs carry on past the contract's credits, to twice them. Credit packs are used first,
   then the rest is invoiced at $0.50 per 1,000 credits. At twice the credits, new runs are refused and
