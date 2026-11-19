@@ -144,7 +144,8 @@ public sealed class ClientPresenceTickerTests
         Assert.Equal(ClientRef, evt.Payload["clientRefId"].GetGuid());
         Assert.Equal("offline", evt.Payload["state"].GetString());
         Assert.Equal(60, evt.Payload["forSeconds"].GetInt32());
-        Assert.Equal(34, evt.Payload["workspaceId"].GetInt32());
+        Assert.False(evt.Payload.ContainsKey("workspaceId"));
+        Assert.False(evt.Payload.ContainsKey("clientId"));
         Assert.Equal([check.Id], provider.Deleted);
     }
 
@@ -183,7 +184,7 @@ public sealed class ClientPresenceTickerTests
         ClientPresenceCheckRow check = Offline(isConnected: false, connectedAt: null, lastActivityAt: ChangedAt);
 
         InboundEvent evt = ClientPresenceTicker.ToInboundEvent(check, Now);
-        InboundEvent expected = PresenceChannel.Event(check.Id, check.TriggerKey, check.ClientRefId, check.ClientId, check.ClientWorkspaceId, check.State, check.ChangedAt, 60, Now);
+        InboundEvent expected = PresenceChannel.Event(check.Id, check.TriggerKey, check.ClientRefId, check.State, check.ChangedAt, 60, Now);
 
         Assert.Equal(PresenceChannel.Name, evt.ChannelKind);
         Assert.Equal(expected.MatchKeys, evt.MatchKeys);

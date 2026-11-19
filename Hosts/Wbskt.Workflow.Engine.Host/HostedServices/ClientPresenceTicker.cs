@@ -140,8 +140,6 @@ public sealed class ClientPresenceTicker(
             check.Id,
             check.TriggerKey,
             check.ClientRefId,
-            check.ClientId,
-            check.ClientWorkspaceId,
             check.State,
             check.ChangedAt,
             forSeconds,

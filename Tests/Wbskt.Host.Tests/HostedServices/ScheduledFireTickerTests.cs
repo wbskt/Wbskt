@@ -48,7 +48,7 @@ public sealed class ScheduledFireTickerTests
         Assert.Equal("schedule", evt.ChannelKind);
         Assert.Contains(ScheduleChannel.Key(fire.WorkflowRefId, fire.TriggerNodeId), evt.MatchKeys);
         Assert.Equal(new DateTime(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc), evt.ReceivedAt);
-        Assert.Equal(41, evt.Payload["scheduledFireId"].GetInt32());
+        Assert.False(evt.Payload.ContainsKey("scheduledFireId"));
         Assert.Equal(fire.WorkflowRefId, evt.Payload["definitionRefId"].GetGuid());
         Assert.Equal(fire.TriggerNodeId, evt.Payload["triggerNodeId"].GetGuid());
         Assert.Equal(fire.NextFireAt, evt.Payload["fireAt"].GetDateTime());

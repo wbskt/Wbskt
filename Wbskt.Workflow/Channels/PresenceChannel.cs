@@ -17,8 +17,6 @@ public sealed class PresenceChannel : TriggerChannel
         int checkId,
         string triggerKey,
         Guid clientRefId,
-        int? clientId,
-        int? workspaceId,
         string state,
         DateTime changedAt,
         int forSeconds,
@@ -31,8 +29,6 @@ public sealed class PresenceChannel : TriggerChannel
         new Dictionary<string, JsonElement>
         {
             ["clientRefId"] = Json(clientRefId),
-            ["clientId"] = Json(clientId),
-            ["workspaceId"] = Json(workspaceId),
             ["state"] = Json(state),
             ["changedAt"] = Json(DateTime.SpecifyKind(changedAt, DateTimeKind.Utc)),
             ["forSeconds"] = Json(forSeconds)
