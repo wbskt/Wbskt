@@ -34,6 +34,8 @@ REPO_ROOT="$(cd "$(dirname "$SCRIPT_PATH")/../.." && pwd)"
 readonly REPO_ROOT
 readonly COMPOSE_DIR="$REPO_ROOT/deploy/compose"
 readonly ENV_FILE="$COMPOSE_DIR/.env"
+# shellcheck source=deploy/scripts/env-file.sh
+source "$(dirname "$SCRIPT_PATH")/env-file.sh"
 
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 readonly STAMP
@@ -59,8 +61,7 @@ alert() {
 load_env() {
     [[ -f "$ENV_FILE" ]] || die "no .env at $ENV_FILE"
 
-    # shellcheck disable=SC1090
-    set -a && source "$ENV_FILE" && set +a
+    env_load "$ENV_FILE" SQL_SA_PASSWORD BACKUP_DIR BACKUP_RETENTION_DAYS BACKUP_UPLOAD_CMD BACKUP_ALLOW_LOCAL_ONLY BACKUP_ALERT_CMD BACKUP_METRICS_URL
 
     : "${SQL_SA_PASSWORD:?SQL_SA_PASSWORD is required (deploy/compose/.env)}"
 
