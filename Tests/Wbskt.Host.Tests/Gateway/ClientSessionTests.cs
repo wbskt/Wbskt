@@ -34,14 +34,14 @@ public sealed class ClientSessionTests
 
     private readonly SupersedeMonitor _supersedes = new(TimeProvider.System);
 
-    private ClientSessions Sessions(MessageBudgetOptions? budget = null)
+    private ClientSessions Sessions(MessageBudgetOptions? budget = null, TimeProvider? time = null)
     {
         var metrics = new GatewayMetrics(GatewayTransport.WebSocket);
         var dispatcher = new InboundMessageDispatcher([], new ClientMessageHandler(_bus.Object, TimeProvider.System), metrics, NullLogger<InboundMessageDispatcher>.Instance);
         var lifetime = new Mock<IHostApplicationLifetime>();
         lifetime.SetupGet(x => x.ApplicationStopping).Returns(_stopping.Token);
         return new ClientSessions(_connections, _gate.Object, _bus.Object, new BusInstanceId(ThisHost), metrics, dispatcher,
-            Options.Create(budget ?? new MessageBudgetOptions()), lifetime.Object, NullLogger<ClientSessions>.Instance, NullLogger<ClientInbox>.Instance, TimeProvider.System, _supersedes);
+            Options.Create(budget ?? new MessageBudgetOptions()), lifetime.Object, NullLogger<ClientSessions>.Instance, NullLogger<ClientInbox>.Instance, time ?? TimeProvider.System, _supersedes);
     }
 
     private static FakeClientConnection Connection() => new() { ClientId = 42, WorkspaceId = 7, TokenIssuedAtUtc = DateTime.UtcNow };
@@ -109,20 +109,29 @@ public sealed class ClientSessionTests
     public async Task A_broker_outage_drops_the_clients_messages_but_not_its_session()
     {
         var connectAttempts = 0;
+        var retried = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _bus.Setup(x => x.PublishAsync(It.IsAny<ClientConnectedEvent>(), It.IsAny<CancellationToken>()))
-            .Callback(() => connectAttempts++)
-            .Returns(() => connectAttempts == 1 ? Task.FromException(new InvalidOperationException("broker down")) : Task.CompletedTask);
+            .Callback(() =>
+            {
+                if (Interlocked.Increment(ref connectAttempts) == 2)
+                {
+                    retried.TrySetResult();
+                }
+            })
+            .Returns(() => Volatile.Read(ref connectAttempts) == 1 ? Task.FromException(new InvalidOperationException("broker down")) : Task.CompletedTask);
         _bus.Setup(x => x.PublishAsync(It.IsAny<ClientMessageReceivedEvent>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("broker down"));
         var connection = Connection();
         DisconnectReason? result = DisconnectReason.Error;
 
-        await Sessions().RunAsync(Admitted, connection,
+        await Sessions(time: new ShortTimers()).RunAsync(Admitted, connection,
             async inbox =>
             {
                 result = await inbox.ReceiveAsync(Message, CancellationToken.None);
-                // The connect announcement is retried a second later, while the session lasts.
-                await Task.Delay(TimeSpan.FromSeconds(1.5));
+
+                // The connect announcement is retried after a delay on the session's clock, while the
+                // session lasts. The clock shortens it; the bound is only there so a broken retry fails.
+                await retried.Task.WaitAsync(TimeSpan.FromSeconds(10));
                 return DisconnectReason.ClientClosed;
             });
 
@@ -352,5 +361,12 @@ public sealed class ClientSessionTests
 
         Assert.Null(result);
         _bus.Verify(x => x.PublishAsync(It.IsAny<ClientMessageReceivedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // Every timer fires after a few milliseconds, so a retry delay passes at once without waiting on the wall clock.
+    private sealed class ShortTimers : TimeProvider
+    {
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period) =>
+            System.CreateTimer(callback, state, dueTime == Timeout.InfiniteTimeSpan ? dueTime : TimeSpan.FromMilliseconds(20), period);
     }
 }

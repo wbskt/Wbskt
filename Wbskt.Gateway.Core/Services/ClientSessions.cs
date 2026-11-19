@@ -199,7 +199,7 @@ public sealed class ClientSessions
 
             try
             {
-                await Task.Delay(delay, stop);
+                await Task.Delay(delay, _time, stop);
             }
             catch (OperationCanceledException)
             {
