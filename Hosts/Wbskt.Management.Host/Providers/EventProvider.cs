@@ -74,6 +74,15 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
         }, cancellationToken);
     }
 
+    public async Task<int> DeleteClientHourlyMessageCountsBeforeAsync(DateTime cutoffUtc, int batchSize, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteScalarAsync<int>("dbo.ClientMessageUsageHourly_DeleteBefore", p =>
+        {
+            p.Add("@CutoffUtc", SqlDbType.DateTime2).Value = cutoffUtc;
+            p.AddWithValue("@BatchSize", batchSize);
+        }, cancellationToken);
+    }
+
     public async Task<IReadOnlyCollection<EventLogRow>> GetLogsAsync(int workspaceId, EventLogFilter filter, long? cursorId, int take, CancellationToken cancellationToken = default)
     {
         return await ExecuteCollectionAsync(

@@ -28,6 +28,7 @@ BEGIN
     DELETE FROM dbo.ClientCapabilities WHERE ClientId = @Id;
     DELETE FROM dbo.ClientTags WHERE ClientId = @Id;
     DELETE FROM dbo.QueuedCommands WHERE ClientId = @Id;
+    DELETE FROM dbo.ClientMessageUsageHourly WHERE ClientId = @Id;
     -- Its hold states, keyed by its RefId (ClientHoldTriggerKey); a fired one keeps its last matching message.
     DELETE FROM dbo.ClientHoldStates WHERE TriggerKey LIKE N'hold:' + LOWER(CONVERT(NVARCHAR(36), @RefId)) + N':%';
     DELETE FROM dbo.Clients WHERE Id = @Id AND WorkspaceId = @WorkspaceId;

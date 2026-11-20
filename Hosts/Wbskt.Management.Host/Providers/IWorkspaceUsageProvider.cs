@@ -20,4 +20,10 @@ public interface IWorkspaceUsageProvider
 
     /// <summary>The workspace's client messages per UTC hour in [<paramref name="fromUtc"/>, <paramref name="toUtc"/>); hours with none are left out.</summary>
     Task<IReadOnlyCollection<MessageCountBucket>> GetHourlyMessagesAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, CancellationToken ct);
+
+    /// <summary>
+    /// One client's messages per UTC hour in [<paramref name="fromUtc"/>, <paramref name="toUtc"/>), or per UTC
+    /// day when <paramref name="daily"/>; buckets with none are left out.
+    /// </summary>
+    Task<IReadOnlyCollection<MessageCountBucket>> GetClientMessagesAsync(int clientId, DateTime fromUtc, DateTime toUtc, bool daily, CancellationToken ct);
 }

@@ -87,6 +87,21 @@ internal sealed class WorkspaceUsageProvider : BaseSqlProvider, IWorkspaceUsageP
             ct);
     }
 
+    public async Task<IReadOnlyCollection<MessageCountBucket>> GetClientMessagesAsync(int clientId, DateTime fromUtc, DateTime toUtc, bool daily, CancellationToken ct)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.ClientMessageUsageHourly_GetRange",
+            p =>
+            {
+                p.AddWithValue("@ClientId", clientId);
+                p.Add("@From", SqlDbType.DateTime2).Value = fromUtc;
+                p.Add("@To", SqlDbType.DateTime2).Value = toUtc;
+                p.AddWithValue("@Daily", daily);
+            },
+            r => ReadMessageCount(r, "Start"),
+            ct);
+    }
+
     private static MessageCountBucket ReadMessageCount(SqlDataReader r, string startColumn) =>
         new(r.GetDateTime(r.GetOrdinal(startColumn)).ToUtcOffset(), r.GetInt64(r.GetOrdinal("Inbound")), r.GetInt64(r.GetOrdinal("Outbound")));
 }

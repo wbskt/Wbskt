@@ -617,6 +617,12 @@ workspace, and `dbo.WorkspaceMessageUsageHourly`, kept `EventLogging:RetentionDa
 two-day traffic table, so they are exact and cheap at any range, and unlike the rate they are not split
 per instance. Hourly counts start from the release that added them.
 
+One client's counts, for the client page, are `GET /api/v1/workspaces/{workspaceRef}/clients/{clientRef}/stats/messages/history`
+(`clients.read`), with the same parameters and answer. They come from `dbo.ClientMessageUsageHourly`, written
+with the workspace's counts and kept `EventLogging:RetentionDays`; a day is the sum of its hours, so a range
+reaching back past them is 400 `MESSAGES_HOURLY_EXPIRED` whatever the bucket. **404** `CLIENT_NOT_FOUND` for a
+client that is not the workspace's. Per-client counts start from the release that added them.
+
 A client whose connections keep replacing each other (5 supersedes within 10 minutes on one gateway)
 raises `ClientCredentialsSharedEvent`, a Warning in the event log and `OnClientCredentialsSharedEvent
 { clientRefId, supersedes, windowMinutes, createdAtUtc }` to the client's watchers, at most once per
