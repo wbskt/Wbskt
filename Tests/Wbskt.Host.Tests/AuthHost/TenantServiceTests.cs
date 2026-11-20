@@ -262,12 +262,47 @@ public sealed class TenantServiceTests
             .ReturnsAsync(new InvitationLookup(invitationRef, acme, "Acme", "amal@example.test", DateTime.UtcNow.AddDays(1), IsLive: true));
         _tenants.Setup(p => p.AcceptInvitationAsync(It.Is<byte[]>(h => h.SequenceEqual(SecurityTokens.Hash("invitation-token"))), MemberId, It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(TenantId);
 
+        var greenhouse = new InvitationWorkspace(Guid.NewGuid(), "Greenhouse");
+        _tenants.Setup(p => p.GetInvitationWorkspacesAsync(invitationRef, It.IsAny<CancellationToken>())).ReturnsAsync([greenhouse]);
+
         var result = await _service.AcceptInvitationAsync(MemberId, MemberRef, "invitation-token");
 
-        Assert.Equal(new AcceptInvitationResponse(acme, "Acme"), result.Value);
+        Assert.Equal((acme, "Acme"), (result.Value.TenantRef, result.Value.TenantName));
+        Assert.Equal([greenhouse], result.Value.Workspaces);
         Assert.Equal(1, _accessChanges.Announced);
         var accepted = Assert.Single(_bus.Published.OfType<InvitationAcceptedEvent>());
         Assert.Equal((invitationRef, MemberId, MemberRef), (accepted.InvitationRefId, accepted.UserId, accepted.UserRefId));
+    }
+
+    [Theory]
+    [InlineData(null, null, 1, InvitationState.Pending)]
+    [InlineData(null, null, -1, InvitationState.Expired)]
+    [InlineData(-2, null, -1, InvitationState.Accepted)]
+    [InlineData(null, -2, 1, InvitationState.Revoked)]
+    public async Task A_preview_says_whether_the_invitation_can_still_be_accepted(int? acceptedDays, int? revokedDays, int expiresInDays, InvitationState state)
+    {
+        var invitationRef = Guid.NewGuid();
+        DateTime now = DateTime.UtcNow;
+        _tenants.Setup(p => p.FindInvitationPreviewByTokenHashAsync(It.Is<byte[]>(h => h.SequenceEqual(SecurityTokens.Hash("invitation-token"))), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new InvitationPreviewRow(invitationRef, "Acme", "pika", "amal@example.test", now.AddDays(expiresInDays), At(now, acceptedDays), At(now, revokedDays)));
+        var greenhouse = new InvitationWorkspace(Guid.NewGuid(), "Greenhouse");
+        _tenants.Setup(p => p.GetInvitationWorkspacesAsync(invitationRef, It.IsAny<CancellationToken>())).ReturnsAsync([greenhouse]);
+
+        var preview = (await _service.PreviewInvitationAsync("invitation-token")).Value;
+
+        Assert.Equal(state, preview.State);
+        Assert.Equal(("Acme", "pika", "a***@example.test"), (preview.AccountName, preview.InvitedBy, preview.Email));
+        Assert.Equal([greenhouse], preview.Workspaces);
+    }
+
+    private static DateTime? At(DateTime now, int? days) => days is null ? null : now.AddDays(days.Value);
+
+    [Fact]
+    public async Task A_preview_of_a_token_that_matches_nothing_is_the_invalid_invitation()
+    {
+        var result = await _service.PreviewInvitationAsync("no-such-token");
+
+        Assert.Equal("INVITATION_INVALID", result.Error.Code);
     }
 
     private void AssertNoInvitationCreated()

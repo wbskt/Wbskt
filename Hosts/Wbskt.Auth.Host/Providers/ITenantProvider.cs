@@ -53,6 +53,12 @@ internal interface ITenantProvider
     Task<CreatedInvitation> CreateInvitationAsync(int tenantId, string email, int? roleId, byte[] tokenHash, DateTime expiresAt, int invitedByUserId, IReadOnlyCollection<Guid> workspaceRefs, int? memberLimit, CancellationToken cancellationToken = default);
     /// <summary>The invitation carrying that hash, or null when none does.</summary>
     Task<InvitationLookup?> FindInvitationByTokenHashAsync(byte[] tokenHash, CancellationToken cancellationToken = default);
+
+    /// <summary>An invitation as the signed-out invite page shows it, live or not; null for a token that matches none.</summary>
+    Task<InvitationPreviewRow?> FindInvitationPreviewByTokenHashAsync(byte[] tokenHash, CancellationToken cancellationToken = default);
+
+    /// <summary>The workspaces an invitation joins its invitee to, by name.</summary>
+    Task<IReadOnlyCollection<InvitationWorkspace>> GetInvitationWorkspacesAsync(Guid invitationRef, CancellationToken cancellationToken = default);
     /// <summary>
     /// Joins the user to the invitation's tenant and returns its id. Throws 50011 for an invitation that
     /// cannot be redeemed, and 50031 when joining would take the tenant past <paramref name="memberLimit"/>

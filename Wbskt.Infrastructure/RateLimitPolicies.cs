@@ -29,6 +29,13 @@ public static class RateLimitPolicies
     public const string SignUpChallenge = "signup-challenge";
 
     /// <summary>
+    /// Reading an invitation by its token before signing in. Anonymous, so it is held to what a person
+    /// opening an invite link needs; the token is 32 random bytes, so this stops a flood, not a guess.
+    /// Partitioned per IP.
+    /// </summary>
+    public const string InvitationPreview = "invitation-preview";
+
+    /// <summary>
     /// A payment provider's webhooks. Anonymous, proven by a signature that is cheap to check; the budget
     /// is generous enough for the provider's retry bursts and only stops a flood. Partitioned per IP.
     /// </summary>
