@@ -114,6 +114,7 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
                 p.AddWithValue("@MaxWorkflows", (object?)maxWorkflows ?? DBNull.Value);
                 p.AddWithValue("@ExpectedCurrentVersion", (object?)guards.ExpectedCurrentVersion ?? DBNull.Value);
                 p.AddWithValue("@DraftRevision", (object?)guards.DraftRevision ?? DBNull.Value);
+                p.AddWithValue("@Note", (object?)row.Note ?? DBNull.Value);
             },
             Map,
             new InvalidOperationException("WorkflowDefinition_Publish did not return a row."),
@@ -192,6 +193,7 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
                 Description = reader.GetNullableString("Description"),
                 IsLive = reader.GetBoolean(reader.GetOrdinal("IsLive")),
                 PublishedBy = reader.GetInt32(reader.GetOrdinal("PublishedBy")),
+                Note = reader.GetNullableString("Note"),
                 CreatedAt = reader.GetUtcDateTime("CreatedAt"),
                 RunCount = reader.GetInt64(reader.GetOrdinal("RunCount"))
             },
@@ -254,6 +256,7 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
             DefinitionJson = reader.GetString(reader.GetOrdinal("DefinitionJson")),
             PublishedBy = reader.GetInt32(reader.GetOrdinal("PublishedBy")),
             CreatedAt = reader.GetUtcDateTime("CreatedAt"),
+            Note = HasColumn(reader, "Note") ? reader.GetNullableString("Note") : null,
             IsTestCopy = HasColumn(reader, "Kind") && reader.GetString(reader.GetOrdinal("Kind")) == TestCopyKind
         };
     }

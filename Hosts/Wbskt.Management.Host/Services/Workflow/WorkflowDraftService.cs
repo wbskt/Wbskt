@@ -175,15 +175,15 @@ public sealed class WorkflowDraftService : IWorkflowDraftService
         return await _lifecycleService.PublishAsync(
             workspaceId,
             workspaceRef,
-            ToPublish(refId, row, request.Enable),
+            ToPublish(refId, row, request.Enable, request.Note),
             guards,
             ct);
     }
 
-    private static WorkflowPublishRequest ToPublish(Guid refId, WorkflowDraftRow row, bool enable)
+    private static WorkflowPublishRequest ToPublish(Guid refId, WorkflowDraftRow row, bool enable, string? note)
     {
         WorkflowDefinition draft = Deserialize(row);
-        return new WorkflowPublishRequest(refId, row.Name, row.Description, draft.Nodes, draft.Edges, enable, draft.SharedVariableSchema, draft.CreditBudget, draft.FailFast);
+        return new WorkflowPublishRequest(refId, row.Name, row.Description, draft.Nodes, draft.Edges, enable, draft.SharedVariableSchema, draft.CreditBudget, draft.FailFast, note);
     }
 
     private static bool IsOutdated(WorkflowDraftRow row) => row.CurrentVersion != row.BaseVersion;

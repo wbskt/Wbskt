@@ -15,7 +15,9 @@ CREATE PROCEDURE dbo.WorkflowDefinition_Publish
     @ExpectedCurrentVersion INT = NULL,
     -- Publishing a draft: the draft is deleted with the publish, but only at this revision, so an edit
     -- saved while publishing is kept as the next draft. NULL leaves any draft alone.
-    @DraftRevision  INT = NULL
+    @DraftRevision  INT = NULL,
+    -- What the author wrote about this version. NULL for none.
+    @Note           NVARCHAR(500) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -114,8 +116,8 @@ BEGIN
     -- Property names are camelCase to match JsonSerializerDefaults.Web output.
     SET @DefinitionJson = JSON_MODIFY(@DefinitionJson, '$.version', @NextVersion);
 
-    INSERT INTO dbo.WorkflowDefinitions (RefId, Version, WorkspaceId, Name, Description, DefinitionJson, PublishedBy)
-    VALUES (@RefId, @NextVersion, @WorkspaceId, @Name, @Description, @DefinitionJson, @PublishedBy);
+    INSERT INTO dbo.WorkflowDefinitions (RefId, Version, WorkspaceId, Name, Description, DefinitionJson, PublishedBy, Note)
+    VALUES (@RefId, @NextVersion, @WorkspaceId, @Name, @Description, @DefinitionJson, @PublishedBy, @Note);
 
     DECLARE @DefinitionId INT = SCOPE_IDENTITY();
 
@@ -146,6 +148,7 @@ BEGIN
         Description,
         DefinitionJson,
         PublishedBy,
+        Note,
         CreatedAt
       FROM dbo.WorkflowDefinitions
      WHERE Id = @DefinitionId;

@@ -8,6 +8,7 @@ public sealed class WorkflowVersionRow
     public string? Description { get; init; }
     public required bool IsLive { get; init; }
     public required int PublishedBy { get; init; }
+    public string? Note { get; init; }
     public required DateTime CreatedAt { get; init; }
     public required long RunCount { get; init; }
 }

@@ -126,7 +126,8 @@ public sealed class WorkflowQueryService : IWorkflowQueryService
             r.Name,
             r.Description,
             r.RunCount,
-            r.CreatedAt.ToUtcOffset())).ToList();
+            r.CreatedAt.ToUtcOffset(),
+            r.Note)).ToList();
 
         return Result<IReadOnlyList<WorkflowVersionDto>>.Success(versions);
     }

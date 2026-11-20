@@ -155,6 +155,37 @@ public sealed class WorkflowLifecycleServiceTests
         }
     }
 
+    [Theory]
+    [InlineData("  Raised the vent threshold to 30 C  ", "Raised the vent threshold to 30 C")]
+    [InlineData("   ", null)]
+    [InlineData(null, null)]
+    public async Task Publish_stores_the_note_trimmed_and_a_blank_one_as_none(string? sent, string? stored)
+    {
+        var h = new Harness();
+        WorkflowPublishRequest request = PublishRequest(enable: false) with { Note = sent };
+        WorkflowDefinitionRow? submitted = null;
+        h.Definitions.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<IReadOnlyCollection<WorkflowIntegrationRef>>(), It.IsAny<int?>(), It.IsAny<WorkflowPublishGuards>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((WorkflowDefinitionRow row, IReadOnlyCollection<WorkflowIntegrationRef> _, int? _, WorkflowPublishGuards _, CancellationToken _) => { submitted = row; return row with { Id = 6, Version = 1 }; });
+
+        var response = await h.Service.PublishAsync(WorkspaceId, Guid.NewGuid(), request, CancellationToken.None);
+
+        Assert.True(response.IsSuccess);
+        Assert.Equal(stored, submitted!.Note);
+    }
+
+    [Fact]
+    public async Task Publish_with_a_note_over_the_limit_writes_nothing()
+    {
+        var h = new Harness();
+        WorkflowPublishRequest request = PublishRequest(enable: false) with { Note = new string('n', 501) };
+
+        var response = await h.Service.PublishAsync(WorkspaceId, Guid.NewGuid(), request, CancellationToken.None);
+
+        Assert.Equal("WORKFLOW_VALIDATION_FAILED", response.Error.Code);
+        Assert.Contains("NOTE_TOO_LONG", response.Error.Message);
+        h.VerifyNothingInserted();
+    }
+
     [Fact]
     public async Task Publish_does_not_treat_a_database_error_as_a_missing_workflow()
     {

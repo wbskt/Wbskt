@@ -14,6 +14,9 @@ public record WorkflowDefinitionRow
     public required int PublishedBy { get; init; }
     public required DateTime CreatedAt { get; init; }
 
+    /// <summary>What the author wrote about this version when publishing it. Read only where a procedure returns it.</summary>
+    public string? Note { get; init; }
+
     /// <summary>
     /// The frozen copy a test run was started from rather than a published version. Read by Id only
     /// (<c>WorkflowDefinition_GetBy_Id</c>); version lookups never return one.

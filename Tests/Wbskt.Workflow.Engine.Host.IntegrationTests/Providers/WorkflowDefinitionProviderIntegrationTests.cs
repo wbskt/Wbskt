@@ -88,6 +88,23 @@ public sealed class WorkflowDefinitionProviderIntegrationTests(SqlEdgeFixture fi
     }
 
     [SkippableFact]
+    public async Task A_versions_note_is_stored_with_it_and_listed_beside_it()
+    {
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
+
+        var provider = ProviderFactory.WorkflowDefinition(fixture.ConnectionString);
+        Guid refId = Guid.NewGuid();
+
+        WorkflowDefinitionRow v1 = await provider.InsertAsync(BuildRow(refId), CancellationToken.None);
+        WorkflowDefinitionRow v2 = await provider.InsertAsync(BuildRow(refId) with { Note = "Slower vent ramp" }, CancellationToken.None);
+
+        v1.Note.Should().BeNull();
+        v2.Note.Should().Be("Slower vent ramp");
+        var versions = await provider.GetVersionsAsync(refId, 1, CancellationToken.None);
+        versions.Select(v => (v.Version, v.Note)).Should().Equal((v2.Version, "Slower vent ramp"), (v1.Version, (string?)null));
+    }
+
+    [SkippableFact]
     public async Task A_first_publish_is_disabled_with_no_live_version()
     {
         Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
