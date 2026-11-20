@@ -7,7 +7,6 @@ namespace Wbskt.Events.Client;
 public enum ClientSignInRefusal
 {
     BadSecret,
-    Pending,
     Revoked,
     Rejected
 }
