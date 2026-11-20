@@ -85,6 +85,9 @@ public static class Program
         builder.Services.AddScoped<IClientQueryService, ClientQueryService>();
         builder.Services.AddScopedWithQueuedEvents<IClientLifecycleService, ClientLifecycleService>();
         builder.Services.AddScoped<IClientAuthService, ClientAuthService>();
+        // Refused sign-ins of known clients, raised once a minute per client by every instance (client-auth too).
+        builder.Services.AddSingleton<ClientSignInRefusals>();
+        builder.Services.AddHostedService<ClientSignInRefusalReporter>();
         // Numeric state history: written by the state.report ingestion, read for charts and CSV.
         builder.Services.Configure<ReadingsOptions>(builder.Configuration.GetSection(ReadingsOptions.SectionName));
         builder.Services.AddScoped<IClientReadingProvider, ClientReadingProvider>();
