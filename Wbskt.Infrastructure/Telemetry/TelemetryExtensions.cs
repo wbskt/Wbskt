@@ -26,7 +26,7 @@ public static class TelemetryExtensions
         !string.IsNullOrWhiteSpace(configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]);
 
     /// <summary>
-    /// Traces and metrics over OTLP to the collector: inbound HTTP, outbound HttpClient, the bus
+    /// Traces and metrics over OTLP to the collector: inbound HTTP, outbound HttpClient, SQL, the bus
     /// (MassTransit propagates the W3C trace context in message headers, so a trace runs from the
     /// console's request through the bus into the engine), the runtime, and <paramref name="meters"/>.
     /// </summary>
@@ -49,11 +49,16 @@ public static class TelemetryExtensions
             .WithTracing(tracing => tracing
                 .AddAspNetCoreInstrumentation(options => options.Filter = context => !IsProbe(context.Request.Path))
                 .AddHttpClientInstrumentation(TraceUrlRedaction.Configure)
+
+                // One span per command, named by its stored procedure, so a slow request shows which
+                // query it waited on. Parameter values are never recorded.
+                .AddSqlClientInstrumentation()
                 .AddProcessor(new TraceUrlRedaction.Processor())
                 .AddSource(MassTransitSource))
             .WithMetrics(metrics => metrics
                 .AddAspNetCoreInstrumentation()
                 .AddHttpClientInstrumentation()
+                .AddSqlClientInstrumentation()
                 .AddRuntimeInstrumentation()
                 .AddMeter(MassTransitSource)
                 .AddMeter(meters))
