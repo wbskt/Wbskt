@@ -20,11 +20,18 @@
           "tenantRef": {
             "format": "uuid",
             "type": "string"
+          },
+          "workspaces": {
+            "items": {
+              "$ref": "#/components/schemas/InvitationWorkspace"
+            },
+            "type": "array"
           }
         },
         "required": [
           "tenantRef",
-          "tenantName"
+          "tenantName",
+          "workspaces"
         ],
         "type": "object"
       },
@@ -430,6 +437,54 @@
         ],
         "type": "object"
       },
+      "InvitationPreviewRequest": {
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "type": "object"
+      },
+      "InvitationPreviewResponse": {
+        "properties": {
+          "accountName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "date-time"
+          },
+          "invitedBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/InvitationState"
+          },
+          "workspaces": {
+            "items": {
+              "$ref": "#/components/schemas/InvitationWorkspace"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "accountName",
+          "invitedBy",
+          "email",
+          "workspaces",
+          "state",
+          "expiresAt"
+        ],
+        "type": "object"
+      },
       "InvitationResponse": {
         "properties": {
           "createdAt": {
@@ -474,6 +529,30 @@
           "expiresAt",
           "createdAt",
           "workspaceRefs"
+        ],
+        "type": "object"
+      },
+      "InvitationState": {
+        "enum": [
+          "Pending",
+          "Expired",
+          "Accepted",
+          "Revoked"
+        ]
+      },
+      "InvitationWorkspace": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "refId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "refId",
+          "name"
         ],
         "type": "object"
       },
@@ -1379,12 +1458,23 @@
               "string"
             ]
           },
+          "memberCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
           "name": {
             "type": "string"
           },
           "refId": {
             "format": "uuid",
             "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/WorkspaceRole"
           },
           "tenantRefId": {
             "format": "uuid",
@@ -1396,9 +1486,18 @@
           "name",
           "description",
           "createdAt",
-          "tenantRefId"
+          "tenantRefId",
+          "role",
+          "memberCount"
         ],
         "type": "object"
+      },
+      "WorkspaceRole": {
+        "enum": [
+          "Owner",
+          "Admin",
+          "Member"
+        ]
       }
     },
     "securitySchemes": {
@@ -2129,6 +2228,55 @@
               "text/plain": {
                 "schema": {
                   "$ref": "#/components/schemas/AcceptInvitationResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "Invitations"
+        ]
+      }
+    },
+    "/api/v1/invitations/preview": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitationPreviewRequest"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitationPreviewRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitationPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationPreviewResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationPreviewResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationPreviewResponse"
                 }
               }
             },
