@@ -97,6 +97,10 @@ public interface IRunProvider
     Task<IReadOnlyCollection<RunDailyStatsRow>> GetWorkspaceDailyStatsAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, CancellationToken ct)
         => Task.FromResult<IReadOnlyCollection<RunDailyStatsRow>>(Array.Empty<RunDailyStatsRow>());
 
+    /// <summary>Outcomes per UTC hour across a workspace; hours without runs are left out.</summary>
+    Task<IReadOnlyCollection<RunHourlyStatsRow>> GetWorkspaceHourlyStatsAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, CancellationToken ct)
+        => Task.FromResult<IReadOnlyCollection<RunHourlyStatsRow>>(Array.Empty<RunHourlyStatsRow>());
+
     /// <summary>The error codes that actually occur, most frequent first.</summary>
     Task<IReadOnlyCollection<RunFailureBucketRow>> GetTopFailuresAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, int top, CancellationToken ct);
 

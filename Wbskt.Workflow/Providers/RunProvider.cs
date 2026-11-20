@@ -286,6 +286,33 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
         );
     }
 
+    public async Task<IReadOnlyCollection<RunHourlyStatsRow>> GetWorkspaceHourlyStatsAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, CancellationToken ct)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.Run_GetHourlyStatsBy_WorkspaceId",
+            p =>
+            {
+                p.AddWithValue("@WorkspaceId", workspaceId);
+                p.AddWithValue("@FromUtc", fromUtc);
+                p.AddWithValue("@ToUtc", toUtc);
+            },
+            MapHourlyStats,
+            ct
+        );
+    }
+
+    internal static RunHourlyStatsRow MapHourlyStats(DbDataReader reader)
+    {
+        return new RunHourlyStatsRow
+        {
+            Hour = reader.GetUtcDateTime("Hour"),
+            TotalRuns = reader.GetInt32(reader.GetOrdinal("TotalRuns")),
+            SucceededCount = reader.GetInt32(reader.GetOrdinal("SucceededCount")),
+            FailedCount = reader.GetInt32(reader.GetOrdinal("FailedCount")),
+            CancelledCount = reader.GetInt32(reader.GetOrdinal("CancelledCount"))
+        };
+    }
+
     internal static RunDailyStatsRow MapDailyStats(DbDataReader reader)
     {
         return new RunDailyStatsRow

@@ -141,6 +141,9 @@ public sealed class TestRunIntegrationTests(SqlEdgeFixture fixture)
         Assert.Equal(1, days.Sum(d => d.TotalRuns));
         var workspaceDays = await runs.GetWorkspaceDailyStatsAsync(workspaceId, from, to, CancellationToken.None);
         Assert.Equal(1, workspaceDays.Sum(d => d.TotalRuns));
+        var workspaceHours = await runs.GetWorkspaceHourlyStatsAsync(workspaceId, from, to, CancellationToken.None);
+        Assert.Equal(1, workspaceHours.Sum(h => h.TotalRuns));
+        Assert.Equal(DateTimeKind.Utc, Assert.Single(workspaceHours).Hour.Kind);
     }
 
     [SkippableFact]

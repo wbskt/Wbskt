@@ -28,6 +28,11 @@ public record RunDurationsDto(double P50Ms, double P95Ms, double MaxMs, double A
 /// <param name="P50Ms">Median duration of the day's completed runs. On a workflow's stats only; null when none completed.</param>
 public record RunDayDto(DateOnly Date, int Total, int Succeeded, int Failed, int Cancelled, double? P50Ms = null);
 
+/// <summary>The runs started in one UTC hour.</summary>
+/// <param name="Hour">The start of the hour, in UTC.</param>
+/// <param name="Failed">Every way of not succeeding: failed, partially failed, out of credits.</param>
+public record RunHourDto(DateTimeOffset Hour, int Total, int Succeeded, int Failed, int Cancelled);
+
 public record FailureBucketDto(string ErrorCode, Guid? NodeId, int Occurrences, DateTimeOffset LastSeenAt);
 
 public record NodeTimingDto(Guid NodeId, int Executions, int FailureCount, double AvgDurationMs, double MaxDurationMs);
@@ -84,6 +89,11 @@ public record WorkflowRunSummaryDto(
 /// </param>
 /// <param name="Workflows">Per-workflow breakdown, highest volume first.</param>
 /// <param name="Days">Every UTC day the window touches, oldest first, zeros included. A run counts on the day it started.</param>
+/// <param name="Hours">
+/// Every UTC hour the window touches, oldest first, zeros included, when the window is 48 hours or
+/// shorter; null for a longer one. A run counts in the hour it started. The first and last hours hold
+/// only the part of them inside the window, so a chart of whole hours passes a 'from' on the hour.
+/// </param>
 public record WorkspaceStatsResponse(
     DateTimeOffset FromUtc,
     DateTimeOffset ToUtc,
@@ -91,4 +101,5 @@ public record WorkspaceStatsResponse(
     RunDurationsDto Durations,
     double? SuccessRate,
     IReadOnlyCollection<WorkflowRunSummaryDto> Workflows,
-    IReadOnlyCollection<RunDayDto> Days);
+    IReadOnlyCollection<RunDayDto> Days,
+    IReadOnlyCollection<RunHourDto>? Hours = null);
