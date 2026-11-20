@@ -57,12 +57,12 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
         };
     }
 
-    public async Task<IReadOnlyCollection<Workspace>> GetWorkspacesForUserAsync(int userId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyCollection<MemberWorkspace>> GetWorkspacesForUserAsync(int userId, CancellationToken cancellationToken = default)
     {
         return await ExecuteCollectionAsync(
             "dbo.Workspace_GetBy_UserId",
             p => p.AddWithValue("@UserId", userId),
-            MapWorkspace,
+            r => new MemberWorkspace(MapWorkspace(r), r.GetBoolean(r.GetOrdinal("IsAdmin")), r.GetInt32(r.GetOrdinal("MemberCount"))),
             cancellationToken
         );
     }

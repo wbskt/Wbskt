@@ -127,6 +127,8 @@ public static class Program
         builder.Services.AddScoped<IWorkspaceUsageProvider, WorkspaceUsageProvider>();
         builder.Services.AddScoped<IWorkspaceUsageService, WorkspaceUsageService>();
         builder.Services.AddScoped<IWorkspaceMessageHistoryService, WorkspaceMessageHistoryService>();
+        builder.Services.AddScoped<IWorkspaceCountsProvider, WorkspaceCountsProvider>();
+        builder.Services.AddScoped<IWorkspaceCountsService, WorkspaceCountsService>();
         builder.Services.AddScoped<IBusinessUsageProvider, BusinessUsageProvider>();
         builder.Services.AddScoped<IBusinessOverageService, BusinessOverageService>();
         builder.Services.AddScoped<IMessageAllowanceProvider, MessageAllowanceProvider>();

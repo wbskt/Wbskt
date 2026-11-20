@@ -17,7 +17,7 @@ internal interface IWorkspaceProvider : IReferenceProvider
     /// <paramref name="workspaceLimit"/> workspaces (null is no limit).
     /// </summary>
     Task<Workspace> CreateWorkspaceAsync(string name, string description, int ownerId, int tenantId, int? workspaceLimit, OutboxMessage created, CancellationToken cancellationToken = default);
-    Task<IReadOnlyCollection<Workspace>> GetWorkspacesForUserAsync(int userId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<MemberWorkspace>> GetWorkspacesForUserAsync(int userId, CancellationToken cancellationToken = default);
     Task AddUserToWorkspaceAsync(int workspaceId, int userId, CancellationToken cancellationToken = default);
     /// <summary>False when the user was not a member of the workspace.</summary>
     Task<bool> RemoveUserFromWorkspaceAsync(int workspaceId, int userId, CancellationToken cancellationToken = default);
