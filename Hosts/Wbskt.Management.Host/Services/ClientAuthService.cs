@@ -1,3 +1,4 @@
+using Wbskt.Events.Client;
 using Wbskt.Protocol;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
@@ -14,13 +15,17 @@ internal sealed class ClientAuthService : IClientAuthService
     private readonly IJwtService _jwtService;
     private readonly ILogger<ClientAuthService> _logger;
     private readonly ManagementMetrics _metrics;
+    private readonly ClientSignInRefusals _refusals;
+    private readonly TimeProvider _clock;
 
-    public ClientAuthService(IClientProvider provider, IJwtService jwtService, ILogger<ClientAuthService> logger, ManagementMetrics metrics)
+    public ClientAuthService(IClientProvider provider, IJwtService jwtService, ILogger<ClientAuthService> logger, ManagementMetrics metrics, ClientSignInRefusals refusals, TimeProvider clock)
     {
         _provider = provider;
         _jwtService = jwtService;
         _logger = logger;
         _metrics = metrics;
+        _refusals = refusals;
+        _clock = clock;
     }
 
     public async Task<Result<ClientLoginResponse>> LoginAsync(ClientLoginRequest request, CancellationToken cancellationToken = default)
@@ -47,6 +52,7 @@ internal sealed class ClientAuthService : IClientAuthService
         if (!ClientSecrets.Matches(credential.SecretHash, request.Secret))
         {
             _logger.LogWarning("Client credentials verification failed for ClientRefId: {ClientRefId}. Secret did not match.", request.ClientRefId);
+            Refused(credential.Client, ClientSignInRefusal.BadSecret);
             return Result<ClientLoginResponse>.Failure(Error.Unauthorized("CLIENT_UNAUTHORIZED", "Invalid client credentials."));
         }
 
@@ -55,6 +61,12 @@ internal sealed class ClientAuthService : IClientAuthService
         if (client.Status != ClientStatus.Registered)
         {
             _logger.LogWarning("Client login rejected: Client status is '{ClientStatus}' instead of 'Registered'. ClientRefId: {ClientRefId}", client.Status, request.ClientRefId);
+            Refused(client, client.Status switch
+            {
+                ClientStatus.Pending => ClientSignInRefusal.Pending,
+                ClientStatus.Revoked => ClientSignInRefusal.Revoked,
+                _ => ClientSignInRefusal.Rejected
+            });
             return Result<ClientLoginResponse>.Failure(Error.Unauthorized("CLIENT_NOT_REGISTERED", $"Client registration is {client.Status}. Access denied."));
         }
 
@@ -65,4 +77,7 @@ internal sealed class ClientAuthService : IClientAuthService
 
         return Result<ClientLoginResponse>.Success(new ClientLoginResponse(token, (int)ClientTokenCutoffs.TokenLifetime.TotalSeconds));
     }
+
+    private void Refused(Client client, ClientSignInRefusal reason) =>
+        _refusals.Record(client.Id, client.RefId, client.WorkspaceId, reason, _clock.GetUtcNow());
 }

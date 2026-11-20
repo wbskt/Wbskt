@@ -43,6 +43,7 @@ public static class EventLogGroups
         nameof(WorkspaceOwnershipTransferredEvent),
         nameof(WorkspaceDeletedEvent),
         nameof(ClientSecretRotatedEvent),
+        nameof(ClientSignInRefusedEvent),
         nameof(ClientDeletedEvent),
         nameof(PolicyPinRotatedEvent),
         nameof(PolicyRegistrationAttemptedOnDisabledEvent),
