@@ -13,6 +13,8 @@ namespace Wbskt.Management.Models.Workflow;
 /// workflow) as it is. A first publish without it is Disabled.
 /// </summary>
 /// <param name="CreditBudget">The credits one run may use; null for the engine's default.</param>
+/// <param name="Note">What the author says about this version, shown beside it in the version list; at most
+/// 500 characters, and blank is none.</param>
 public record WorkflowPublishRequest(
     Guid RefId,
     string Name,
@@ -22,7 +24,8 @@ public record WorkflowPublishRequest(
     [property: JsonRequired] bool Enable,
     IReadOnlyCollection<SharedVariableDeclaration>? SharedVariableSchema = null,
     decimal? CreditBudget = null,
-    bool FailFast = false)
+    bool FailFast = false,
+    string? Note = null)
 {
     /// <summary>
     /// Deprecated: the earlier body, which nested the steps here beside the id, name and description

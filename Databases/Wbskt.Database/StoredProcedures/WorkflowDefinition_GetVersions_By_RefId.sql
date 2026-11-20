@@ -13,6 +13,7 @@ BEGIN
         WD.Description,
         CAST(CASE WHEN W.LiveDefinitionId = WD.Id THEN 1 ELSE 0 END AS BIT) AS IsLive,
         WD.PublishedBy,
+        WD.Note,
         WD.CreatedAt,
         (SELECT COUNT_BIG(*) FROM dbo.Runs RU WHERE RU.WorkflowDefinitionId = WD.Id) AS RunCount
     FROM dbo.WorkflowDefinitions WD

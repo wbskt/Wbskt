@@ -26,6 +26,12 @@ internal static class WorkflowLifecycleErrors
 
     public static readonly Error WorkflowNotDeprecated = Error.Conflict("WORKFLOW_NOT_DEPRECATED", "The workflow is not deprecated.");
 
+    public const int MaxNoteLength = 500;
+
+    public static readonly Error NoteTooLong = Error.Validation(
+        "WORKFLOW_VALIDATION_FAILED",
+        $"[NOTE_TOO_LONG] A version's note can be at most {MaxNoteLength} characters.");
+
     public static readonly Error WorkflowDeleted = Error.Conflict("WORKFLOW_DELETED", "The workflow was deleted and cannot be published again.");
 
     public static readonly Error IntegrationDeleted = Error.Validation(

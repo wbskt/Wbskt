@@ -12,6 +12,8 @@ CREATE TABLE dbo.WorkflowDefinitions
     IsEnabled       BIT              NOT NULL DEFAULT 1,
     DefinitionJson  NVARCHAR(MAX)    NOT NULL,
     PublishedBy     INT              NOT NULL,
+    -- What the author wrote about this version when publishing it, if anything.
+    Note            NVARCHAR(500)    NULL,
     CreatedAt       DATETIME2(3)     NOT NULL DEFAULT SYSUTCDATETIME(),
     -- 'Version' is a published version. 'Test' is the frozen copy a test run was started from (a draft,
     -- or the live version at the time): the engine loads it by Id like any version, but it registers no

@@ -46,6 +46,21 @@ public sealed class WorkflowDraftServiceTests
     }
 
     [Fact]
+    public async Task Publishing_a_draft_passes_its_note_on_with_the_version()
+    {
+        Draft(revision: 3, baseVersion: 4, currentVersion: 4);
+
+        await Service().PublishAsync(WorkspaceId, WorkspaceRef, RefId, new WorkflowDraftPublishRequest(3, Enable: false, Note: "Slower vent ramp"), CancellationToken.None);
+
+        _lifecycle.Verify(x => x.PublishAsync(
+            WorkspaceId,
+            WorkspaceRef,
+            It.Is<WorkflowPublishRequest>(r => r.Note == "Slower vent ramp"),
+            It.IsAny<WorkflowPublishGuards>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task A_new_workflows_draft_expects_no_version_yet()
     {
         Draft(revision: 1, baseVersion: null, currentVersion: null);

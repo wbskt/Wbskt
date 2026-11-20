@@ -95,6 +95,12 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
             return IdentityService.NoCaller;
         }
 
+        string? note = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim();
+        if (note?.Length > WorkflowLifecycleErrors.MaxNoteLength)
+        {
+            return Result<WorkflowPublishResponse>.Failure(WorkflowLifecycleErrors.NoteTooLong);
+        }
+
         DateTime now = _clock.GetUtcNow().UtcDateTime;
         WorkflowDefinition? definition = AuthoredDefinitions.From(request, now);
         Result<IntegrationReferences> check = await CheckAsync(workspaceId, request.RefId, definition, ct);
@@ -133,7 +139,8 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
                 Description = request.Description,
                 DefinitionJson = JsonSerializer.Serialize(definition with { WorkspaceId = workspaceId }, SerializerOptions),
                 PublishedBy = caller.UserId,
-                CreatedAt = now
+                CreatedAt = now,
+                Note = note
             }, check.Value.Refs, MaxPerWorkspace, guards, ct);
         }
         catch (SqlException ex) when (ex.Number == WorkflowLifecycleErrors.VersionMoved)
