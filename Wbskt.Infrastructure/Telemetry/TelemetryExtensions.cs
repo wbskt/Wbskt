@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,6 +14,9 @@ public static class TelemetryExtensions
 {
     /// <summary>MassTransit's ActivitySource and Meter. Its spans carry the trace across the bus.</summary>
     private const string MassTransitSource = "MassTransit";
+
+    /// <summary>The ActivitySource the SqlClient instrumentation starts its spans on.</summary>
+    private const string SqlClientSource = "OpenTelemetry.Instrumentation.SqlClient";
 
     /// <summary>
     /// The name this host reports as: <c>OTEL_SERVICE_NAME</c> (set per service in compose), else the
@@ -51,8 +55,10 @@ public static class TelemetryExtensions
                 .AddHttpClientInstrumentation(TraceUrlRedaction.Configure)
 
                 // One span per command, named by its stored procedure, so a slow request shows which
-                // query it waited on. Parameter values are never recorded.
-                .AddSqlClientInstrumentation()
+                // query it waited on. Parameter values are never recorded. Only calls made inside a
+                // request or a consumed message: the engine's pollers would otherwise add a root trace
+                // every second.
+                .AddSqlClientInstrumentation(options => options.Filter = _ => HasCaller())
                 .AddProcessor(new TraceUrlRedaction.Processor())
                 .AddSource(MassTransitSource))
             .WithMetrics(metrics => metrics
@@ -66,6 +72,11 @@ public static class TelemetryExtensions
 
         return builder;
     }
+
+    // The filter may run before or after the command's own span starts, so look past that span when
+    // it is current: a span with no parent means nothing traced was waiting on the query.
+    private static bool HasCaller() =>
+        Activity.Current is { } current && (current.Source.Name != SqlClientSource || current.Parent is not null);
 
     // Health probes run every few seconds per container; tracing them would bury everything else.
     private static bool IsProbe(PathString path) => path.StartsWithSegments("/healthz");
