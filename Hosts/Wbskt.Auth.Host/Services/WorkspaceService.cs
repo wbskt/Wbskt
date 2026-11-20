@@ -83,7 +83,7 @@ internal sealed class WorkspaceService : IWorkspaceService
         }
 
         _logger.LogInformation("Workspace '{WorkspaceName}' created successfully with RefId: {RefId}", request.Name, workspace.RefId);
-        return Result<WorkspaceResponse>.Success(new WorkspaceResponse(workspace.RefId, request.Name, request.Description, workspace.CreatedAt.ToUtcOffset(), tenant.RefId));
+        return Result<WorkspaceResponse>.Success(new WorkspaceResponse(workspace.RefId, request.Name, request.Description, workspace.CreatedAt.ToUtcOffset(), tenant.RefId, WorkspaceRole.Owner, MemberCount: 1));
     }
 
     public async Task<Result<IReadOnlyCollection<WorkspaceResponse>>> GetWorkspacesForUserAsync(int userId, CancellationToken cancellationToken = default)
@@ -93,9 +93,21 @@ internal sealed class WorkspaceService : IWorkspaceService
         var workspaces = await _workspaceProvider.GetWorkspacesForUserAsync(userId, cancellationToken);
         _logger.LogTrace("Retrieved {Count} workspaces for user ID: {UserId}", workspaces.Count, userId);
         
-        var items = workspaces.Select(w => new WorkspaceResponse(w.RefId, w.Name, w.Description, w.CreatedAt.ToUtcOffset(), w.TenantRefId)).ToList() as IReadOnlyCollection<WorkspaceResponse>;
+        var items = workspaces.Select(w => new WorkspaceResponse(
+            w.Workspace.RefId,
+            w.Workspace.Name,
+            w.Workspace.Description,
+            w.Workspace.CreatedAt.ToUtcOffset(),
+            w.Workspace.TenantRefId,
+            RoleOf(w, userId),
+            w.MemberCount)).ToList() as IReadOnlyCollection<WorkspaceResponse>;
         return Result<IReadOnlyCollection<WorkspaceResponse>>.Success(items);
     }
+
+    private static WorkspaceRole RoleOf(MemberWorkspace workspace, int userId) =>
+        workspace.Workspace.OwnerUserId == userId ? WorkspaceRole.Owner
+        : workspace.IsAdmin ? WorkspaceRole.Admin
+        : WorkspaceRole.Member;
 
     public async Task<Result> AddUserToWorkspaceAsync(int workspaceId, AddMemberRequest request, CancellationToken cancellationToken = default)
     {

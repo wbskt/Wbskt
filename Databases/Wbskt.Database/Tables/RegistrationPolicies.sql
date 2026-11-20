@@ -15,3 +15,8 @@ CREATE TABLE dbo.RegistrationPolicies (
     CONSTRAINT UQ_RegistrationPolicies_Pin   UNIQUE (Pin)
 );
 GO
+
+-- A workspace's policies: its policy list and Workspace_GetCounts.
+CREATE INDEX IX_RegistrationPolicies_WorkspaceId
+    ON dbo.RegistrationPolicies (WorkspaceId);
+GO

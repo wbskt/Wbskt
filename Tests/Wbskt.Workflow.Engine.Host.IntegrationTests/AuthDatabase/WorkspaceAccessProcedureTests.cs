@@ -244,6 +244,44 @@ public sealed class WorkspaceAccessProcedureTests(AuthSqlFixture fixture)
     }
 
     [SkippableFact]
+    public async Task The_workspace_list_says_who_holds_the_admin_role_and_counts_the_members()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var (tenantId, ownerId) = await CreateTenantAsync();
+        int workspaceId = await CreateWorkspaceAsync(tenantId, ownerId);
+        int memberId = await CreateUserAsync();
+        int groupAdminId = await CreateUserAsync();
+        int adminRoleId = await ScalarAsync<int>("SELECT Id FROM dbo.Roles WHERE TenantId = @p0 AND Kind = N'Admin'", tenantId);
+        int groupId = await ScalarAsync<int>("INSERT INTO dbo.Groups (TenantId, Name) OUTPUT INSERTED.Id VALUES (@p0, N'Operators')", tenantId);
+        await ExecAsync("""
+            INSERT INTO dbo.TenantMembers (TenantId, UserId) VALUES (@p0, @p2), (@p0, @p3);
+            INSERT INTO dbo.WorkspaceMembers (WorkspaceId, UserId) VALUES (@p1, @p4), (@p1, @p2), (@p1, @p3);
+            INSERT INTO dbo.UserGroups (UserId, GroupId) VALUES (@p3, @p5);
+            INSERT INTO dbo.GroupRoles (GroupId, RoleId, TenantId, WorkspaceId) VALUES (@p5, @p6, @p0, @p1);
+            """, tenantId, workspaceId, memberId, groupAdminId, ownerId, groupId, adminRoleId);
+
+        Assert.Equal((false, 3), await ListedAsync(memberId, workspaceId));
+        Assert.Equal((true, 3), await ListedAsync(groupAdminId, workspaceId));
+    }
+
+    private async Task<(bool IsAdmin, int MemberCount)> ListedAsync(int userId, int workspaceId)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = new SqlCommand("dbo.Workspace_GetBy_UserId", conn) { CommandType = CommandType.StoredProcedure };
+        cmd.Parameters.AddWithValue("@UserId", userId);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            if (reader.GetInt32(reader.GetOrdinal("Id")) == workspaceId)
+            {
+                return (reader.GetBoolean(reader.GetOrdinal("IsAdmin")), reader.GetInt32(reader.GetOrdinal("MemberCount")));
+            }
+        }
+
+        throw new InvalidOperationException($"Workspace {workspaceId} is not listed for user {userId}.");
+    }
+
+    [SkippableFact]
     public async Task A_tenant_cannot_have_two_roles_of_one_kind()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);

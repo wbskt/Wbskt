@@ -99,6 +99,7 @@ public sealed class ManagementEndpointPermissionTests
         ["WorkspaceMessageStatsController.Get"] = PermissionNames.ClientsRead,
         ["WorkspaceMessageStatsController.GetHistory"] = PermissionNames.ClientsRead,
         ["ClientMessageStatsController.GetHistory"] = PermissionNames.ClientsRead,
+        ["WorkspaceCountsController.Get"] = $"All({PermissionNames.ClientsRead}, {PermissionNames.PoliciesRead}, {PermissionNames.WorkflowsRead})",
     };
 
     private static Assembly ManagementHostAssembly => typeof(global::Wbskt.Management.Host.Program).Assembly;
