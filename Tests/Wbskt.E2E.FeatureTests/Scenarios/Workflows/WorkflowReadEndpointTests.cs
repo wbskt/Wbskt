@@ -80,6 +80,11 @@ public sealed class WorkflowReadEndpointTests(ServicesFixture fixture)
         workspaceStats.Counts.Total.Should().Be(1, "the workspace is this scenario's own");
         workspaceStats.Workflows.Should().ContainSingle(w => w.WorkflowRefId == workflowRef)
             .Which.Succeeded.Should().Be(1);
+        workspaceStats.Hours.Should().BeNull("the default window is 30 days, longer than hours are listed for");
+
+        var lastDay = await management.GetWorkspaceStatsAsync(workspace, DateTimeOffset.UtcNow.AddHours(-24), DateTimeOffset.UtcNow.AddMinutes(1));
+        lastDay.Hours.Should().NotBeNull().And.HaveCountGreaterThanOrEqualTo(24);
+        lastDay.Hours!.Sum(h => h.Total).Should().Be(lastDay.Counts.Total, "every run of the window is in one of its hours");
     }
 
     [SkippableFact]

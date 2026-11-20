@@ -4,6 +4,7 @@
 -- window would otherwise appear or vanish depending on when it happened to complete.
 --   WorkflowRefId  the workflow
 --   Day            the UTC day the run started
+--   Hour           the UTC hour the run started
 --   IsWaiting      still Running, with every live branch waiting on a delay, signal or call
 --                  (dbo.RunParked); probed only by a caller that reads it
 --   DurationMs     NULL until the run completes, so an average or percentile counts finished runs only
@@ -23,6 +24,7 @@ RETURN
     SELECT
         r.WorkflowRefId,
         CAST(r.CreatedAt AS DATE) AS Day,
+        CAST(DATEADD(HOUR, DATEDIFF(HOUR, 0, r.CreatedAt), 0) AS DATETIME2(0)) AS [Hour],
         r.Status,
         CASE WHEN r.Status = N'Running' AND EXISTS (SELECT 1 FROM dbo.RunParked(r.Id)) THEN 1 ELSE 0 END AS IsWaiting,
         CASE WHEN r.CompletedAt IS NULL THEN NULL ELSE DATEDIFF_BIG(MILLISECOND, r.StartedAt, r.CompletedAt) END AS DurationMs
@@ -38,6 +40,7 @@ RETURN
     SELECT
         r.WorkflowRefId,
         CAST(r.CreatedAt AS DATE),
+        CAST(DATEADD(HOUR, DATEDIFF(HOUR, 0, r.CreatedAt), 0) AS DATETIME2(0)),
         r.Status,
         CASE WHEN r.Status = N'Running' AND EXISTS (SELECT 1 FROM dbo.RunParked(r.Id)) THEN 1 ELSE 0 END,
         CASE WHEN r.CompletedAt IS NULL THEN NULL ELSE DATEDIFF_BIG(MILLISECOND, r.StartedAt, r.CompletedAt) END

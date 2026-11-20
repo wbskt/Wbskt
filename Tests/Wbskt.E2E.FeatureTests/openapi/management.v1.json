@@ -2314,6 +2314,53 @@
         ],
         "type": "object"
       },
+      "RunHourDto": {
+        "properties": {
+          "cancelled": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "failed": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "hour": {
+            "format": "date-time"
+          },
+          "succeeded": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "total": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "hour",
+          "total",
+          "succeeded",
+          "failed",
+          "cancelled"
+        ],
+        "type": "object"
+      },
       "RunListResponse": {
         "properties": {
           "items": {
@@ -4266,6 +4313,15 @@
           },
           "fromUtc": {
             "format": "date-time"
+          },
+          "hours": {
+            "items": {
+              "$ref": "#/components/schemas/RunHourDto"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
           },
           "successRate": {
             "format": "double",

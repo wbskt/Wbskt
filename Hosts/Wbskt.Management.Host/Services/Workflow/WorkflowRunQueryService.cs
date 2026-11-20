@@ -31,6 +31,9 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
     /// </summary>
     private static readonly TimeSpan MaxPerWorkflowDaysRange = TimeSpan.FromDays(92);
 
+    /// <summary>The longest window whose workspace rollup also lists its hours: a day's chart and the day before it.</summary>
+    private static readonly TimeSpan MaxHoursRange = TimeSpan.FromHours(48);
+
     /// <summary>
     /// The statuses the engine's cancellation acts on (<c>RunCancellationService</c>). A 'Failing' run
     /// is still going on its other branches; a 'Cancelling' one is accepted again, as the engine repeats
@@ -259,11 +262,21 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
 
         var (fromUtc, toUtc) = range.Value;
 
-        // No per-workflow ownership check to repeat: both procedures scope by workspace themselves,
-        // so a workflow from another workspace cannot appear in the result at all.
-        RunStatsRow stats = await _runProvider.GetWorkspaceStatsAsync(workspaceId, fromUtc, toUtc, ct);
-        IReadOnlyCollection<WorkflowRunSummaryRow> perWorkflow = await _runProvider.GetPerWorkflowStatsAsync(workspaceId, fromUtc, toUtc, TopWorkflows, ct);
-        IReadOnlyCollection<RunDailyStatsRow> daily = await _runProvider.GetWorkspaceDailyStatsAsync(workspaceId, fromUtc, toUtc, ct) ?? [];
+        // No per-workflow ownership check to repeat: every procedure scopes by workspace itself, so a
+        // workflow from another workspace cannot appear in the result at all. Each call opens its own
+        // connection, so they run side by side and the response waits for the slowest, not the sum.
+        bool withHours = toUtc - fromUtc <= MaxHoursRange;
+        Task<RunStatsRow> statsTask = _runProvider.GetWorkspaceStatsAsync(workspaceId, fromUtc, toUtc, ct);
+        Task<IReadOnlyCollection<WorkflowRunSummaryRow>> perWorkflowTask = _runProvider.GetPerWorkflowStatsAsync(workspaceId, fromUtc, toUtc, TopWorkflows, ct);
+        Task<IReadOnlyCollection<RunDailyStatsRow>> dailyTask = _runProvider.GetWorkspaceDailyStatsAsync(workspaceId, fromUtc, toUtc, ct);
+        Task<IReadOnlyCollection<RunHourlyStatsRow>> hourlyTask = withHours
+            ? _runProvider.GetWorkspaceHourlyStatsAsync(workspaceId, fromUtc, toUtc, ct)
+            : Task.FromResult<IReadOnlyCollection<RunHourlyStatsRow>>([]);
+        await Task.WhenAll(statsTask, perWorkflowTask, dailyTask, hourlyTask);
+
+        RunStatsRow stats = await statsTask;
+        IReadOnlyCollection<WorkflowRunSummaryRow> perWorkflow = await perWorkflowTask;
+        IReadOnlyCollection<RunDailyStatsRow> daily = await dailyTask ?? [];
         ILookup<Guid, RunDailyStatsRow> dailyByWorkflow = daily.ToLookup(d => d.WorkflowRefId);
         bool perWorkflowDays = toUtc - fromUtc <= MaxPerWorkflowDaysRange;
 
@@ -294,8 +307,31 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
                 Running: w.ActiveCount - w.WaitingCount,
                 Waiting: w.WaitingCount,
                 perWorkflowDays ? FillDays(fromUtc, toUtc, dailyByWorkflow[w.WorkflowRefId]) : null)).ToList(),
-            FillDays(fromUtc, toUtc, daily)));
+            FillDays(fromUtc, toUtc, daily),
+            withHours ? FillHours(fromUtc, toUtc, await hourlyTask ?? []) : null));
     }
+
+    /// <summary>Every UTC hour the window touches, oldest first, with zeros on hours without runs.</summary>
+    private static List<RunHourDto> FillHours(DateTime fromUtc, DateTime toUtc, IEnumerable<RunHourlyStatsRow> rows)
+    {
+        Dictionary<DateTime, RunHourlyStatsRow> byHour = rows.ToDictionary(r => r.Hour);
+
+        var hours = new List<RunHourDto>();
+        for (DateTime hour = HourStart(fromUtc); hour < toUtc; hour = hour.AddHours(1))
+        {
+            RunHourlyStatsRow? row = byHour.GetValueOrDefault(hour);
+            hours.Add(new RunHourDto(
+                hour.ToUtcOffset(),
+                row?.TotalRuns ?? 0,
+                row?.SucceededCount ?? 0,
+                row?.FailedCount ?? 0,
+                row?.CancelledCount ?? 0));
+        }
+
+        return hours;
+    }
+
+    private static DateTime HourStart(DateTime utc) => new(utc.Year, utc.Month, utc.Day, utc.Hour, 0, 0, DateTimeKind.Utc);
 
     /// <summary>
     /// Every UTC day the window touches, oldest first, with zeros on days without runs so a chart need

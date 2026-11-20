@@ -413,6 +413,39 @@ public sealed class WorkflowRunsControllerTests
         Assert.True(response.IsSuccess);
         Assert.Null(Assert.Single(response.Value.Workflows).Days);
         Assert.Equal(201, response.Value.Days.Count);
+        Assert.Null(response.Value.Hours);
+        runProvider.Verify(x => x.GetWorkspaceHourlyStatsAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetWorkspaceStatsAsync_lists_every_hour_of_a_short_window()
+    {
+        var from = new DateTime(2026, 11, 20, 9, 30, 0, DateTimeKind.Utc);
+        var to = new DateTime(2026, 11, 20, 12, 15, 0, DateTimeKind.Utc);
+        var runProvider = new Mock<IRunProvider>();
+        runProvider.Setup(x => x.GetWorkspaceStatsAsync(WorkspaceId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateStats(total: 4, succeeded: 2, failed: 1, active: 0));
+        runProvider.Setup(x => x.GetPerWorkflowStatsAsync(WorkspaceId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        runProvider.Setup(x => x.GetWorkspaceHourlyStatsAsync(WorkspaceId, from, to, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new RunHourlyStatsRow { Hour = new DateTime(2026, 11, 20, 9, 0, 0, DateTimeKind.Utc), TotalRuns = 1, SucceededCount = 1, FailedCount = 0, CancelledCount = 0 },
+                new RunHourlyStatsRow { Hour = new DateTime(2026, 11, 20, 12, 0, 0, DateTimeKind.Utc), TotalRuns = 3, SucceededCount = 1, FailedCount = 1, CancelledCount = 1 }
+            ]);
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), Mock.Of<IWorkflowDefinitionProvider>(), Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
+
+        var response = await service.GetWorkspaceStatsAsync(WorkspaceId, from, to, CancellationToken.None);
+
+        Assert.True(response.IsSuccess);
+        Assert.Equal(
+            [
+                new RunHourDto(new DateTimeOffset(2026, 11, 20, 9, 0, 0, TimeSpan.Zero), 1, 1, 0, 0),
+                new RunHourDto(new DateTimeOffset(2026, 11, 20, 10, 0, 0, TimeSpan.Zero), 0, 0, 0, 0),
+                new RunHourDto(new DateTimeOffset(2026, 11, 20, 11, 0, 0, TimeSpan.Zero), 0, 0, 0, 0),
+                new RunHourDto(new DateTimeOffset(2026, 11, 20, 12, 0, 0, TimeSpan.Zero), 3, 1, 1, 1)
+            ],
+            response.Value.Hours);
     }
 
     [Fact]
