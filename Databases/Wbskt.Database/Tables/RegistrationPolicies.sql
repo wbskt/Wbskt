@@ -8,6 +8,9 @@ CREATE TABLE dbo.RegistrationPolicies (
     AutoApproval BIT              NOT NULL           DEFAULT 1,
     IsEnabled    BIT              NOT NULL           DEFAULT 1,
     CreatedAt    DATETIME2(3)     NOT NULL           DEFAULT SYSUTCDATETIME(),
+    -- When the PIN was last drawn: on create and on each rotation. NULL on policies made before the
+    -- column, whose PIN is read as dating from CreatedAt.
+    PinRotatedAt DATETIME2(3)     NULL,
 
     -- Constraints
     CONSTRAINT PK_RegistrationPolicies       PRIMARY KEY (Id),
