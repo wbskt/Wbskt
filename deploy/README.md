@@ -548,7 +548,9 @@ On a 4 GB VM, add swap first (see Fresh install).
 
 Grafana starts with one provisioned dashboard, **Wbskt overview** (folder *Wbskt*): firing alerts,
 sign-ups and logins, open client sockets with connects and disconnects, workflow runs and their
-failure rate, and the engine's queue depth. It lives in
+failure rate, the engine's queue depth, and the console API: its slowest and busiest management
+routes, and the stored procedures that take longest or load SQL most (from the SqlClient spans and
+`db.client.operation.duration` every host sends). It lives in
 `observability/grafana/provisioning/dashboards/wbskt/overview.json` and is read-only in the UI; to
 change it, edit the JSON (or save a copy from the UI and export it over that file) and restart
 `grafana`. Anything else built in the UI is kept in the `grafana-data` volume.
