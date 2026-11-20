@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Wbskt.Auth.Models;
 using Wbskt.Auth.Host.Services;
 using Wbskt.Infrastructure;
@@ -42,5 +43,19 @@ public class InvitationsController : ApiControllerBase
         }
 
         return MapResult(await _tenantService.AcceptInvitationAsync(caller.Value.UserId, caller.Value.UserRef, request.Token, cancellationToken));
+    }
+
+    /// <summary>
+    /// What an invitation invites to, before signing in: the account, who sent it, the address it was sent to
+    /// (masked), the workspaces it joins, and whether it is pending, expired, accepted or revoked. The token
+    /// goes in the body, not the path, so it stays out of access logs. 400 <c>INVITATION_INVALID</c> for a token
+    /// that matches nothing.
+    /// </summary>
+    [HttpPost("preview")]
+    [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.InvitationPreview)]
+    public async Task<ActionResult<InvitationPreviewResponse>> Preview([FromBody] InvitationPreviewRequest request, CancellationToken cancellationToken)
+    {
+        return MapResult(await _tenantService.PreviewInvitationAsync(request.Token, cancellationToken));
     }
 }

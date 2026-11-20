@@ -8,7 +8,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.AuthDatabase;
 /// <summary>
 /// The plan's limits on a tenant's workspaces (dbo.Workspace_Create, 50030) and members
 /// (dbo.TenantInvitation_Create and dbo.TenantInvitation_Accept, 50031), counted under a lock on the
-/// tenant's row.
+/// tenant's row; and what an invitation's preview reads (dbo.TenantInvitation_GetPreview_By_TokenHash).
 /// </summary>
 [Collection("SqlEdge")]
 public sealed class TenantSeatLimitProcedureTests(AuthSqlFixture fixture)
@@ -88,6 +88,49 @@ public sealed class TenantSeatLimitProcedureTests(AuthSqlFixture fixture)
         Assert.Equal(2, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.TenantMembers WHERE TenantId = @p0", tenantId));
         Assert.Null(await ScalarAsync<DateTime?>("SELECT AcceptedAt FROM dbo.TenantInvitations WHERE TokenHash = @p0", second));
         await AcceptAsync(second, secondId, memberLimit: 3);
+    }
+
+    [SkippableFact]
+    public async Task A_preview_names_the_account_the_inviter_and_the_workspaces_and_not_an_unknown_token()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int tenantId = await CreateTenantAsync();
+        var (inviter, _) = await CreateUserWithEmailAsync();
+        await CreateWorkspaceAsync(tenantId, limit: null, inviter);
+        byte[] tokenHash = RandomNumberGenerator.GetBytes(32);
+        await InviteAsync(tenantId, "preview@example.test", tokenHash, inviter, memberLimit: null);
+        int workspaceId = await ScalarAsync<int>("SELECT TOP 1 Id FROM dbo.Workspaces WHERE TenantId = @p0", tenantId);
+        await ScalarAsync<int>(
+            "INSERT INTO dbo.TenantInvitationWorkspaces (InvitationId, WorkspaceId) SELECT Id, @p1 FROM dbo.TenantInvitations WHERE TokenHash = @p0; SELECT 1;",
+            tokenHash, workspaceId);
+
+        await using var conn = await OpenAsync();
+        Guid invitationRef;
+        await using (var cmd = new SqlCommand("dbo.TenantInvitation_GetPreview_By_TokenHash", conn) { CommandType = CommandType.StoredProcedure })
+        {
+            cmd.Parameters.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = tokenHash;
+            await using var reader = await cmd.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            invitationRef = reader.GetGuid(reader.GetOrdinal("RefId"));
+            Assert.Equal("preview@example.test", reader.GetString(reader.GetOrdinal("Email")));
+            Assert.False(reader.IsDBNull(reader.GetOrdinal("InvitedBy")));
+            Assert.True(reader.IsDBNull(reader.GetOrdinal("AcceptedAt")));
+        }
+
+        await using (var cmd = new SqlCommand("dbo.TenantInvitationWorkspace_GetBy_InvitationRefId", conn) { CommandType = CommandType.StoredProcedure })
+        {
+            cmd.Parameters.AddWithValue("@InvitationRefId", invitationRef);
+            await using var reader = await cmd.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.False(await reader.ReadAsync());
+        }
+
+        await using (var cmd = new SqlCommand("dbo.TenantInvitation_GetPreview_By_TokenHash", conn) { CommandType = CommandType.StoredProcedure })
+        {
+            cmd.Parameters.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = RandomNumberGenerator.GetBytes(32);
+            await using var reader = await cmd.ExecuteReaderAsync();
+            Assert.False(await reader.ReadAsync());
+        }
     }
 
     private async Task<int> CreateTenantAsync() =>

@@ -282,9 +282,43 @@ internal sealed class TenantService : ITenantService
 
             _announcer.AccessChanged(AccessChange.ForUsers(callerRef));
             await _announcer.ToTenantAsync(new InvitationAcceptedEvent(invitation.RefId, invitation.Email, callerId, callerRef), tenantId, cancellationToken);
-            return new AcceptInvitationResponse(invitation.TenantRef, invitation.TenantName);
+            var workspaces = await _tenants.GetInvitationWorkspacesAsync(invitation.RefId, cancellationToken);
+            return new AcceptInvitationResponse(invitation.TenantRef, invitation.TenantName, workspaces);
         });
         return accepted.IsSuccess ? accepted : Result<AcceptInvitationResponse>.Failure(await _limits.WithSeatsAsync(accepted.Error, invitation.TenantRef, cancellationToken));
+    }
+
+    public async Task<Result<InvitationPreviewResponse>> PreviewInvitationAsync(string token, CancellationToken cancellationToken = default)
+    {
+        var invitation = await _tenants.FindInvitationPreviewByTokenHashAsync(SecurityTokens.Hash(token), cancellationToken);
+        if (invitation is null)
+        {
+            _logger.LogInformation("Invitation preview refused: no invitation matches the presented token");
+            return Result<InvitationPreviewResponse>.Failure(InvalidInvitation);
+        }
+
+        var workspaces = await _tenants.GetInvitationWorkspacesAsync(invitation.RefId, cancellationToken);
+        return Result<InvitationPreviewResponse>.Success(new InvitationPreviewResponse(
+            invitation.TenantName,
+            invitation.InvitedBy,
+            MaskEmail(invitation.Email),
+            workspaces,
+            StateOf(invitation),
+            invitation.ExpiresAt.ToUtcOffset()));
+    }
+
+    // Accepted and revoked are final whatever the expiry says; a pending one lapses at ExpiresAt.
+    private InvitationState StateOf(InvitationPreviewRow invitation) =>
+        invitation.AcceptedAt is not null ? InvitationState.Accepted
+        : invitation.RevokedAt is not null ? InvitationState.Revoked
+        : invitation.ExpiresAt <= _time.GetUtcNow().UtcDateTime ? InvitationState.Expired
+        : InvitationState.Pending;
+
+    // Enough to recognise the address it went to, not enough to hand it on with a forwarded link: a***@example.com.
+    private static string MaskEmail(string email)
+    {
+        int at = email.IndexOf('@');
+        return at <= 0 ? "***" : $"{email[0]}***{email[at..]}";
     }
 
     // ----- Shared plumbing ---------------------------------------------------------------------

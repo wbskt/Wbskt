@@ -159,6 +159,33 @@ internal sealed class TenantProvider : BaseSqlProvider, ITenantProvider
         );
     }
 
+    public async Task<InvitationPreviewRow?> FindInvitationPreviewByTokenHashAsync(byte[] tokenHash, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteFindAsync(
+            "dbo.TenantInvitation_GetPreview_By_TokenHash",
+            p => p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = tokenHash,
+            r => new InvitationPreviewRow(
+                r.GetGuid(r.GetOrdinal("RefId")),
+                r.GetString(r.GetOrdinal("TenantName")),
+                r.GetNullableString("InvitedBy"),
+                r.GetString(r.GetOrdinal("Email")),
+                r.GetUtcDateTime("ExpiresAt"),
+                r.GetNullableUtcDateTime("AcceptedAt"),
+                r.GetNullableUtcDateTime("RevokedAt")),
+            cancellationToken
+        );
+    }
+
+    public async Task<IReadOnlyCollection<InvitationWorkspace>> GetInvitationWorkspacesAsync(Guid invitationRef, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.TenantInvitationWorkspace_GetBy_InvitationRefId",
+            p => p.AddWithValue("@InvitationRefId", invitationRef),
+            r => new InvitationWorkspace(r.GetGuid(r.GetOrdinal("RefId")), r.GetString(r.GetOrdinal("Name"))),
+            cancellationToken
+        );
+    }
+
     public async Task<int> AcceptInvitationAsync(byte[] tokenHash, int userId, int? memberLimit, CancellationToken cancellationToken = default)
     {
         var parameters = await ExecuteNonQueryAsync("dbo.TenantInvitation_Accept", p =>

@@ -51,4 +51,11 @@ public interface ITenantService
     /// which tenant the token belongs to, and learning that is the point of the call.
     /// </summary>
     Task<Result<AcceptInvitationResponse>> AcceptInvitationAsync(int callerId, Guid callerRef, string token, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// What an invitation invites to, for whoever holds its token, signed in or not: the account, who sent it,
+    /// the address it went to (masked), the workspaces it joins and whether it can still be accepted.
+    /// <c>INVITATION_INVALID</c> for a token that matches no invitation.
+    /// </summary>
+    Task<Result<InvitationPreviewResponse>> PreviewInvitationAsync(string token, CancellationToken cancellationToken = default);
 }

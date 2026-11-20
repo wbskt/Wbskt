@@ -143,8 +143,43 @@ public record AcceptInvitationRequest(
     [StringLength(255)]
     string Token);
 
-/// <summary>Identifies the tenant just joined, so a client can navigate straight into it.</summary>
-public record AcceptInvitationResponse(Guid TenantRef, string TenantName);
+/// <summary>
+/// Identifies the tenant just joined, and the workspaces the invitation added the caller to (none when it
+/// named none), so a client can open the right one straight away.
+/// </summary>
+public record AcceptInvitationResponse(Guid TenantRef, string TenantName, IReadOnlyCollection<InvitationWorkspace> Workspaces);
+
+/// <summary>An invitation's token, to read what it invites to before signing in.</summary>
+public record InvitationPreviewRequest(
+    [Required]
+    [StringLength(255)]
+    string Token);
+
+/// <summary>
+/// What an invitation invites to, for the invite page before sign-in: the account, who sent it, the address it
+/// was sent to (masked, since a forwarded link should not hand the address on), the workspaces it joins, and
+/// its state. <c>ExpiresAt</c> is when a pending one stops working.
+/// </summary>
+public record InvitationPreviewResponse(
+    string AccountName,
+    string? InvitedBy,
+    string Email,
+    IReadOnlyCollection<InvitationWorkspace> Workspaces,
+    InvitationState State,
+    DateTimeOffset ExpiresAt);
+
+/// <summary>A workspace an invitation joins its invitee to.</summary>
+public record InvitationWorkspace(Guid RefId, string Name);
+
+/// <summary>Whether an invitation can still be accepted (<c>Pending</c>), and if not, why.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<InvitationState>))]
+public enum InvitationState
+{
+    Pending,
+    Expired,
+    Accepted,
+    Revoked
+}
 
 /// <summary>
 /// A user as seen by tenant administration. <paramref name="IsActive"/> is the account, across every

@@ -260,6 +260,9 @@ public static class Program
             // caller asking for more than this is not signing up by hand.
             options.AddPerIpPolicy(builder.Configuration, RateLimitPolicies.SignUpChallenge, "SignUpChallenge", defaultPermitLimit: 30);
 
+            // Reading an invitation before sign-in: one per opened invite link, and a reload or two.
+            options.AddPerIpPolicy(builder.Configuration, RateLimitPolicies.InvitationPreview, "InvitationPreview", defaultPermitLimit: 30);
+
             // A payment provider's webhooks: anonymous and signed. Generous for its retry bursts after an
             // outage; only a flood reaches the limit, and the provider delivers a refused event again.
             options.AddPerIpPolicy(builder.Configuration, RateLimitPolicies.BillingWebhooks, "BillingWebhooks", defaultPermitLimit: 600);
