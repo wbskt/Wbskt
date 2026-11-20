@@ -14,6 +14,7 @@ BEGIN
         AutoApproval,
         IsEnabled,
         CreatedAt,
+        COALESCE(PinRotatedAt, CreatedAt) AS PinRotatedAt,
         (SELECT COUNT(*) FROM dbo.Clients c WHERE c.PolicyId = rp.Id AND c.Status = 1) AS RegisteredClientCount,
         (SELECT COUNT(*) FROM dbo.Clients c WHERE c.PolicyId = rp.Id AND c.IsConnected = 1) AS ConnectedClientCount
     FROM dbo.RegistrationPolicies rp

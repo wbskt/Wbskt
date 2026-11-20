@@ -19,7 +19,8 @@ public record RegistrationPolicyResponse(
     bool IsEnabled,
     DateTimeOffset CreatedAt,
     int RegisteredClientCount,
-    int ConnectedClientCount
+    int ConnectedClientCount,
+    DateTimeOffset PinRotatedAt
 );
 
 /// <summary>

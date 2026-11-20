@@ -16,6 +16,7 @@ BEGIN
         AutoApproval,
         IsEnabled,
         CreatedAt,
+        COALESCE(PinRotatedAt, CreatedAt) AS PinRotatedAt,
         (SELECT COUNT(*) FROM dbo.Clients c WHERE c.PolicyId = rp.Id AND c.Status = 1) AS RegisteredClientCount,
         -- Not counted. Kept for one release so a management host on the previous image, whose reader
         -- requires the column, keeps registering while the hosts restart after the migration; dropped

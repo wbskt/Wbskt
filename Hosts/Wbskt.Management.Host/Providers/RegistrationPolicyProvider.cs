@@ -160,6 +160,7 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
             AutoApproval = reader.GetBoolean(reader.GetOrdinal("AutoApproval")),
             IsEnabled = reader.GetBoolean(reader.GetOrdinal("IsEnabled")),
             CreatedAt = reader.GetUtcDateTime("CreatedAt"),
+            PinRotatedAt = reader.GetUtcDateTime("PinRotatedAt"),
             RegisteredClientCount = reader.GetInt32(reader.GetOrdinal("RegisteredClientCount")),
             ConnectedClientCount = ConnectedCountOf(reader)
         };

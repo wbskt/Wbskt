@@ -74,11 +74,16 @@ public sealed class ClientLifecycleIntegrationTests(SqlEdgeFixture fixture)
         int policyId = await CreatePolicyAsync(workspaceId);
         int clientId = await CreateClientAsync(workspaceId, policyId, status: 1);
         string before = await ScalarAsync<string>("SELECT Pin FROM dbo.RegistrationPolicies WHERE Id = @p0", policyId);
+        await ScalarAsync<int>("UPDATE dbo.RegistrationPolicies SET CreatedAt = DATEADD(DAY, -90, CreatedAt) WHERE Id = @p0; SELECT 1;", policyId);
+        var unrotated = await Policies().FindByIdAsync(policyId);
+        Assert.NotNull(unrotated);
+        Assert.Equal(unrotated.CreatedAt, unrotated.PinRotatedAt);
 
         await Assert.ThrowsAsync<SqlException>(() => Policies().RotatePinAsync(workspaceId + 1, policyId));
         var rotated = await Policies().RotatePinAsync(workspaceId, policyId);
 
         Assert.NotEqual(before, rotated.Pin);
+        Assert.True(rotated.PinRotatedAt > rotated.CreatedAt.AddDays(89), "the rotation dates the PIN anew");
         Assert.Equal(rotated.Pin, await ScalarAsync<string>("SELECT Pin FROM dbo.RegistrationPolicies WHERE Id = @p0", policyId));
         Assert.Equal(1, await ScalarAsync<byte>("SELECT Status FROM dbo.Clients WHERE Id = @p0", clientId));
     }

@@ -10,7 +10,8 @@ BEGIN
     SET NOCOUNT ON;
 
     UPDATE dbo.RegistrationPolicies
-    SET Pin = @Pin
+    SET Pin = @Pin,
+        PinRotatedAt = SYSUTCDATETIME()
     WHERE Id = @Id
       AND WorkspaceId = @WorkspaceId;
 

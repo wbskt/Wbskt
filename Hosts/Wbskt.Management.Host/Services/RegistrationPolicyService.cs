@@ -217,7 +217,8 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
             p.IsEnabled,
             p.CreatedAt.ToUtcOffset(),
             p.RegisteredClientCount,
-            p.ConnectedClientCount
+            p.ConnectedClientCount,
+            p.PinRotatedAt.ToUtcOffset()
         );
     }
 

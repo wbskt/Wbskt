@@ -21,7 +21,8 @@ BEGIN
         Name,
         MaxClients,
         AutoApproval,
-        Pin
+        Pin,
+        PinRotatedAt
     )
     VALUES (
         @WorkspaceId,
@@ -29,7 +30,8 @@ BEGIN
         @Name,
         @MaxClients,
         @AutoApproval,
-        @Pin
+        @Pin,
+        SYSUTCDATETIME()
     );
 
     SET @Id = SCOPE_IDENTITY();
