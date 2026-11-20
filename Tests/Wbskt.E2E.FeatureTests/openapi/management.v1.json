@@ -572,6 +572,67 @@
         ],
         "type": "object"
       },
+      "ClientStateCounts": {
+        "properties": {
+          "offline": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "online": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "pending": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "rejected": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "revoked": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "total": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "total",
+          "online",
+          "offline",
+          "pending",
+          "revoked",
+          "rejected"
+        ],
+        "type": "object"
+      },
       "ClientStateVariableResponse": {
         "properties": {
           "dataType": {
@@ -2108,6 +2169,9 @@
           "pin": {
             "type": "string"
           },
+          "pinRotatedAt": {
+            "format": "date-time"
+          },
           "refId": {
             "format": "uuid",
             "type": "string"
@@ -2130,7 +2194,8 @@
           "isEnabled",
           "createdAt",
           "registeredClientCount",
-          "connectedClientCount"
+          "connectedClientCount",
+          "pinRotatedAt"
         ],
         "type": "object"
       },
@@ -3446,6 +3511,12 @@
             "default": false,
             "type": "boolean"
           },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "revision": {
             "format": "int32",
             "pattern": "^-?(?:0|[1-9]\\d*)$",
@@ -3670,6 +3741,12 @@
               "array"
             ]
           },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "refId": {
             "format": "uuid",
             "type": "string"
@@ -3830,6 +3907,49 @@
           "Disabled",
           "Deprecated"
         ]
+      },
+      "WorkflowStateCounts": {
+        "properties": {
+          "deprecated": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "disabled": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "enabled": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "total": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "total",
+          "enabled",
+          "disabled",
+          "deprecated"
+        ],
+        "type": "object"
       },
       "WorkflowStateResponse": {
         "properties": {
@@ -4145,6 +4265,12 @@
           "name": {
             "type": "string"
           },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "runCount": {
             "format": "int64",
             "pattern": "^-?(?:0|[1-9]\\d*)$",
@@ -4168,7 +4294,32 @@
           "name",
           "description",
           "runCount",
-          "createdAt"
+          "createdAt",
+          "note"
+        ],
+        "type": "object"
+      },
+      "WorkspaceCountsResponse": {
+        "properties": {
+          "clients": {
+            "$ref": "#/components/schemas/ClientStateCounts"
+          },
+          "policies": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "workflows": {
+            "$ref": "#/components/schemas/WorkflowStateCounts"
+          }
+        },
+        "required": [
+          "clients",
+          "policies",
+          "workflows"
         ],
         "type": "object"
       },
@@ -5553,6 +5704,76 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspaceRef}/clients/{clientRef}/stats/messages/history": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clientRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "schema": {
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "schema": {
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bucket",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspaceRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceMessageHistory"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceMessageHistory"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceMessageHistory"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "ClientMessageStats"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspaceRef}/clients/{clientRef}/tags": {
       "put": {
         "parameters": [
@@ -5619,6 +5840,46 @@
         },
         "tags": [
           "Clients"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspaceRef}/counts": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspaceRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceCountsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceCountsResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceCountsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "WorkspaceCounts"
         ]
       }
     },
@@ -9012,6 +9273,9 @@
       "name": "Wbskt.Management.Host"
     },
     {
+      "name": "ClientMessageStats"
+    },
+    {
       "name": "ClientReadings"
     },
     {
@@ -9028,6 +9292,9 @@
     },
     {
       "name": "RegistrationPolicies"
+    },
+    {
+      "name": "WorkspaceCounts"
     },
     {
       "name": "WorkspaceCreditCap"
