@@ -77,6 +77,40 @@ public sealed class MessageMeterIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
+    public async Task Each_clients_hours_are_counted_apart_and_sum_into_the_workspaces()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int workspaceId = Random.Shared.Next(1_000_000, int.MaxValue);
+        int sensor = Random.Shared.Next(1_000_000, int.MaxValue);
+        int relay = sensor - 1;
+        int received = await EventIdAsync("ClientMessageReceivedEvent");
+        int delivered = await EventIdAsync("ClientCommandDeliveredEvent");
+        var day = new DateTime(2026, 3, 5, 0, 0, 0, DateTimeKind.Utc);
+        EventLogEntry Entry(int eventId, DateTime at, int clientId) => new(eventId, "{}", at, workspaceId, ClientId: clientId, MessageId: Guid.NewGuid());
+
+        await TrafficAsync(Entry(received, day.AddHours(9), sensor), Entry(received, day.AddHours(9).AddMinutes(30), sensor), Entry(delivered, day.AddHours(9), relay));
+        await TrafficAsync(Entry(received, day.AddDays(1).AddHours(2), sensor));
+
+        var usage = new WorkspaceUsageProvider(Configuration());
+        Assert.Equal(
+            [new MessageCountBucket(new DateTimeOffset(day.AddHours(9)), 2, 0), new MessageCountBucket(new DateTimeOffset(day.AddDays(1).AddHours(2)), 1, 0)],
+            await usage.GetClientMessagesAsync(sensor, day, day.AddDays(2), daily: false, CancellationToken.None));
+        Assert.Equal(
+            [new MessageCountBucket(new DateTimeOffset(day), 2, 0), new MessageCountBucket(new DateTimeOffset(day.AddDays(1)), 1, 0)],
+            await usage.GetClientMessagesAsync(sensor, day, day.AddDays(2), daily: true, CancellationToken.None));
+        Assert.Equal(
+            [new MessageCountBucket(new DateTimeOffset(day.AddHours(9)), 0, 1)],
+            await usage.GetClientMessagesAsync(relay, day, day.AddDays(2), daily: false, CancellationToken.None));
+        Assert.Equal(
+            [new MessageCountBucket(new DateTimeOffset(day.AddHours(9)), 2, 1)],
+            await usage.GetHourlyMessagesAsync(workspaceId, day, day.AddDays(1), CancellationToken.None));
+
+        var events = new EventProvider(Configuration());
+        Assert.True(await events.DeleteClientHourlyMessageCountsBeforeAsync(day.AddDays(1), 1_000_000, CancellationToken.None) >= 2);
+        Assert.Single(await usage.GetClientMessagesAsync(sensor, day, day.AddDays(2), daily: false, CancellationToken.None));
+    }
+
+    [SkippableFact]
     public async Task An_account_is_pooled_across_its_tenants_workspaces_and_each_is_announced_once()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);

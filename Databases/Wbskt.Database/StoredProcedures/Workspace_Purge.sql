@@ -47,6 +47,7 @@ BEGIN
     DELETE A FROM dbo.ClientCapabilities A INNER JOIN @Clients X ON X.Id = A.ClientId;
     DELETE T FROM dbo.ClientTags T INNER JOIN @Clients X ON X.Id = T.ClientId;
     DELETE Q FROM dbo.QueuedCommands Q INNER JOIN @Clients X ON X.Id = Q.ClientId;
+    DELETE U FROM dbo.ClientMessageUsageHourly U INNER JOIN @Clients X ON X.Id = U.ClientId;
     -- A fired hold keeps the client's last matching message; its key starts with the client's RefId
     -- (ClientHoldTriggerKey), so the prefix seeks UQ_ClientHoldStates_TriggerKey.
     DELETE H FROM dbo.ClientHoldStates H INNER JOIN @Clients X ON H.TriggerKey LIKE N'hold:' + LOWER(CONVERT(NVARCHAR(36), X.RefId)) + N':%';

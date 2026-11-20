@@ -2,7 +2,9 @@ using FluentAssertions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Wbskt.Management.Host.Models;
+using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Providers;
+using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Stats;
 using Wbskt.Management.Models;
 
@@ -15,8 +17,9 @@ public sealed class WorkspaceMessageHistoryServiceTests
     private static readonly DateTimeOffset Now = new(2026, 11, 19, 10, 25, 0, TimeSpan.Zero);
 
     private readonly Mock<IWorkspaceUsageProvider> _usage = new();
+    private readonly Mock<IClientQueryService> _clients = new();
 
-    private WorkspaceMessageHistoryService Service() => new(_usage.Object, new StoppedClock(), Options.Create(new EventLoggingOptions { RetentionDays = 90 }));
+    private WorkspaceMessageHistoryService Service() => new(_usage.Object, _clients.Object, new StoppedClock(), Options.Create(new EventLoggingOptions { RetentionDays = 90 }));
 
     [Fact]
     public async Task The_default_is_the_last_day_by_hour_with_empty_hours_as_zero()
@@ -96,6 +99,47 @@ public sealed class WorkspaceMessageHistoryServiceTests
         var result = await Service().GetAsync(WorkspaceId, Now.AddDays(-120), Now.AddDays(-119), WorkspaceMessageHistoryService.Hour, default);
 
         result.Error.Code.Should().Be("MESSAGES_HOURLY_EXPIRED");
+    }
+
+    [Fact]
+    public async Task A_clients_last_week_is_counted_by_day_from_its_hours()
+    {
+        Guid clientRef = Guid.NewGuid();
+        _clients.Setup(c => c.EnsureClientInWorkspaceAsync(WorkspaceId, clientRef, It.IsAny<CancellationToken>())).ReturnsAsync(Result<int>.Success(31));
+        var monday = new DateTimeOffset(2026, 11, 16, 0, 0, 0, TimeSpan.Zero);
+        _usage.Setup(u => u.GetClientMessagesAsync(31, It.IsAny<DateTime>(), It.IsAny<DateTime>(), true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new MessageCountBucket(monday, 40, 3)]);
+
+        var history = (await Service().GetForClientAsync(WorkspaceId, clientRef, Now.AddDays(-7), Now, null, default)).Value;
+
+        history.BucketSeconds.Should().Be(86400);
+        history.Buckets.Should().HaveCount(8);
+        history.Buckets.Should().ContainSingle(b => b.Inbound == 40).Which.Start.Should().Be(monday);
+        _usage.Verify(u => u.GetDailyMessagesAsync(It.IsAny<int>(), It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_clients_days_go_with_its_hours()
+    {
+        // A client's day is the sum of its hours, so past their retention there is nothing to sum.
+        Guid clientRef = Guid.NewGuid();
+        _clients.Setup(c => c.EnsureClientInWorkspaceAsync(WorkspaceId, clientRef, It.IsAny<CancellationToken>())).ReturnsAsync(Result<int>.Success(31));
+
+        var result = await Service().GetForClientAsync(WorkspaceId, clientRef, Now.AddDays(-120), Now, "1d", default);
+
+        result.Error.Code.Should().Be("MESSAGES_HOURLY_EXPIRED");
+        _usage.Verify(u => u.GetClientMessagesAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Another_workspaces_client_is_not_found()
+    {
+        Guid clientRef = Guid.NewGuid();
+        _clients.Setup(c => c.EnsureClientInWorkspaceAsync(WorkspaceId, clientRef, It.IsAny<CancellationToken>())).ReturnsAsync(Result<int>.Failure(Error.NotFound("CLIENT_NOT_FOUND", "Client not found.")));
+
+        var result = await Service().GetForClientAsync(WorkspaceId, clientRef, null, null, null, default);
+
+        result.Error.Code.Should().Be("CLIENT_NOT_FOUND");
     }
 
     private sealed class StoppedClock : TimeProvider
