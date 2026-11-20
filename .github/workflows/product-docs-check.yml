@@ -1,0 +1,60 @@
+name: Product docs check
+
+# The check behind "Product docs" here and in wbskt/Wbskt.Console, kept in one place. A PR that touches
+# the caller's behaviour paths says in its body, on a line of its own, where the change is documented:
+#
+#   Product docs: https://github.com/richardjoy530/fluffy-waddle/pull/123
+#   Product docs: none, <why users see no change>
+#
+# The docs live in richardjoy530/fluffy-waddle (app/src/app/pages/docs); see its CONTRIBUTING.md.
+
+on:
+  workflow_call:
+    inputs:
+      behaviour-paths:
+        description: An extended regex; a changed path matching it needs a Product docs line.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  product-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for a Product docs line
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          BEHAVIOUR_PATHS: ${{ inputs.behaviour-paths }}
+        run: |
+          changed=$(git diff --name-only "$BASE...$HEAD" | grep -E "$BEHAVIOUR_PATHS" || true)
+          if [ -z "$changed" ]; then
+            echo "No behaviour paths changed; no Product docs line needed."
+            exit 0
+          fi
+          link='https://github\.com/richardjoy530/fluffy-waddle/pull/[0-9]+|richardjoy530/fluffy-waddle#[0-9]+'
+          # Every "Product docs:" line counts, so the template's placeholder line can stay above the answer.
+          # Markdown around it is ignored: "- **Product docs:** [the docs PR](https://…/pull/44)".
+          while IFS= read -r line; do
+            value=$(printf '%s' "$line" | sed -E 's/^[[:space:]]*([-*][[:space:]]+)?(\*\*)?Product docs:(\*\*)?[[:space:]]*//I; s/\[[^]]*\]\(([^)]*)\)/\1/g')
+            if printf '%s' "$value" | grep -qiE "^($link)"; then
+              echo "Documented: $line"
+              exit 0
+            fi
+            if printf '%s' "$value" | grep -qiE '^none[[:space:],.:;-]+[[:alpha:]]{3}'; then
+              echo "No docs change, with a reason: $line"
+              exit 0
+            fi
+          done < <(printf '%s\n' "$BODY" | tr -d '\r' | grep -iE '^[[:space:]]*([-*][[:space:]]+)?(\*\*)?Product docs:' || true)
+          echo "::error::This PR changes how the product behaves:"
+          printf '%s\n' "$changed" | head -20 | sed 's/^/  /'
+          echo "::error::Add a line to the PR body: 'Product docs: <link to the richardjoy530/fluffy-waddle PR>', or 'Product docs: none, <why users see no change>'."
+          exit 1

@@ -65,9 +65,12 @@ dotnet test Tests/Wbskt.Workflow.Engine.Host.IntegrationTests   # when the engin
 - **Backend roadmap** ([Docs/Roadmap/wbskt-backend-roadmap.html](Docs/Roadmap/wbskt-backend-roadmap.html)):
   update its data block when issues are filed, closed or re-milestoned, or PRs open or merge.
 - **Architecture reviews** live in [Docs/Reviews](Docs/Reviews/README.md).
-- **Product docs** on wbskt.com ([richardjoy530/fluffy-waddle](https://github.com/richardjoy530/fluffy-waddle),
+- **Product docs** on wbskt.com
+  ([richardjoy530/fluffy-waddle](https://github.com/richardjoy530/fluffy-waddle),
   `app/src/app/pages/docs`) say how the product behaves for the people who use it. A PR that changes
-  `Hosts/`, `Wbskt.Workflow*`, `Wbskt.Gateway.Core`, `Wbskt.Infrastructure`, `Clients/Wbskt.Protocol`,
-  `Models/`, `Events/` or `Databases/` carries a line in its body, `Product docs: <link to the docs PR>`,
-  or `Product docs: none, <why users see no change>`. The `Product docs` check fails without it. New
-  error codes and node kinds are also flagged by the docs repo's weekly coverage run until they are documented.
+  `Hosts/`, `Wbskt.Workflow*`, `Wbskt.Gateway.Core`, `Wbskt.Infrastructure`, `Wbskt.Primitives`,
+  `Clients/Wbskt.Protocol`, `Clients/Wbskt.Api.Client`, `Models/`, `Events/`, `Databases/` or `Config/`
+  carries a line in its body, `Product docs: <link to the docs PR>`, or `Product docs: none, <why users
+  see no change>`. The `Product docs` check fails without it. New error codes and node kinds are also
+  flagged by the docs repo's weekly coverage run until they are documented. Merge the docs PR once this
+  one is deployed, so the site never describes behaviour that isn't live.

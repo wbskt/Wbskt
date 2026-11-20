@@ -1,12 +1,7 @@
 name: Product docs
 
-# A change to how the product behaves is documented on wbskt.com in the same breath. A PR that touches
-# the paths below says where in its body, on a line of its own:
-#
-#   Product docs: https://github.com/richardjoy530/fluffy-waddle/pull/123
-#   Product docs: none, <why the docs don't change>
-#
-# The docs live in richardjoy530/fluffy-waddle (app/src/app/pages/docs); see its CONTRIBUTING.md.
+# A change to how the product behaves is documented on wbskt.com in the same breath. The check itself is
+# product-docs-check.yml, which wbskt/Wbskt.Console calls too.
 
 on:
   pull_request:
@@ -17,36 +12,6 @@ permissions:
 
 jobs:
   product-docs:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Check for a Product docs line
-        env:
-          BODY: ${{ github.event.pull_request.body }}
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
-          BEHAVIOUR_PATHS: '^(Hosts/|Wbskt\.Workflow[^/]*/|Wbskt\.Gateway\.Core/|Wbskt\.Infrastructure/|Clients/Wbskt\.Protocol/|Models/|Events/|Databases/)'
-        run: |
-          changed=$(git diff --name-only "$BASE...$HEAD" | grep -E "$BEHAVIOUR_PATHS" || true)
-          if [ -z "$changed" ]; then
-            echo "No behaviour paths changed; no Product docs line needed."
-            exit 0
-          fi
-          line=$(printf '%s\n' "$BODY" | tr -d '\r' | grep -iE '^[[:space:]]*Product docs:' | head -1 || true)
-          link='https://github\.com/richardjoy530/fluffy-waddle/pull/[0-9]+|richardjoy530/fluffy-waddle#[0-9]+'
-          if printf '%s' "$line" | grep -qiE "^[[:space:]]*Product docs:[[:space:]]*($link)"; then
-            echo "Documented: $line"
-            exit 0
-          fi
-          if printf '%s' "$line" | grep -qiE '^[[:space:]]*Product docs:[[:space:]]*none[[:space:],.:;-]+[[:alpha:]].{9,}'; then
-            echo "No docs change, with a reason: $line"
-            exit 0
-          fi
-          echo "::error::This PR changes how the product behaves:"
-          printf '%s\n' "$changed" | head -20 | sed 's/^/  /'
-          echo "::error::Add a line to the PR body: 'Product docs: <link to the fluffy-waddle PR>', or 'Product docs: none, <why>' when users see no change."
-          exit 1
+    uses: ./.github/workflows/product-docs-check.yml
+    with:
+      behaviour-paths: '^(Hosts/|Wbskt\.Workflow[^/]*/|Wbskt\.Gateway\.Core/|Wbskt\.Infrastructure/|Wbskt\.Primitives/|Clients/Wbskt\.Protocol/|Clients/Wbskt\.Api\.Client/|Models/|Events/|Databases/|Config/)'
