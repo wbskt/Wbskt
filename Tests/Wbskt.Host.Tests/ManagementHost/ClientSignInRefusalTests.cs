@@ -21,7 +21,6 @@ public sealed class ClientSignInRefusalTests
 
     [Theory]
     [InlineData(ClientStatus.Revoked, ClientSignInRefusal.Revoked)]
-    [InlineData(ClientStatus.Pending, ClientSignInRefusal.Pending)]
     [InlineData(ClientStatus.Rejected, ClientSignInRefusal.Rejected)]
     public async Task A_client_that_may_not_connect_is_counted_with_its_status(ClientStatus status, ClientSignInRefusal reason)
     {
@@ -48,11 +47,12 @@ public sealed class ClientSignInRefusalTests
     }
 
     [Fact]
-    public async Task An_unknown_client_and_a_good_sign_in_are_not_counted()
+    public async Task An_unknown_client_a_pending_one_and_a_good_sign_in_are_not_counted()
     {
         var refusals = new ClientSignInRefusals();
 
         await LoginAsync(refusals, null, Secret);
+        await LoginAsync(refusals, Client(ClientStatus.Pending), Secret);
         var accepted = await LoginAsync(refusals, Client(ClientStatus.Registered), Secret);
 
         Assert.True(accepted.IsSuccess);
@@ -67,7 +67,7 @@ public sealed class ClientSignInRefusalTests
 
         refusals.Record(5, refId, 2, ClientSignInRefusal.BadSecret, Now);
         refusals.Record(5, refId, 2, ClientSignInRefusal.Revoked, Now.AddSeconds(40));
-        refusals.Record(6, Guid.NewGuid(), 2, ClientSignInRefusal.Pending, Now.AddSeconds(50));
+        refusals.Record(6, Guid.NewGuid(), 2, ClientSignInRefusal.Rejected, Now.AddSeconds(50));
 
         var taken = refusals.Take().ToDictionary(e => e.ClientId);
         var first = taken[5];

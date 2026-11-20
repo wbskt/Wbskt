@@ -61,12 +61,14 @@ internal sealed class ClientAuthService : IClientAuthService
         if (client.Status != ClientStatus.Registered)
         {
             _logger.LogWarning("Client login rejected: Client status is '{ClientStatus}' instead of 'Registered'. ClientRefId: {ClientRefId}", client.Status, request.ClientRefId);
-            Refused(client, client.Status switch
+
+            // A pending client retrying is the protocol working as written (it waits for approval on the
+            // reconnect schedule), and the console already lists it as pending, so it is not a refusal.
+            if (client.Status != ClientStatus.Pending)
             {
-                ClientStatus.Pending => ClientSignInRefusal.Pending,
-                ClientStatus.Revoked => ClientSignInRefusal.Revoked,
-                _ => ClientSignInRefusal.Rejected
-            });
+                Refused(client, client.Status == ClientStatus.Revoked ? ClientSignInRefusal.Revoked : ClientSignInRefusal.Rejected);
+            }
+
             return Result<ClientLoginResponse>.Failure(Error.Unauthorized("CLIENT_NOT_REGISTERED", $"Client registration is {client.Status}. Access denied."));
         }
 

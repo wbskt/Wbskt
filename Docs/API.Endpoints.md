@@ -635,12 +635,12 @@ raises `ClientCredentialsSharedEvent`, a Warning in the event log and `OnClientC
 { clientRefId, supersedes, windowMinutes, createdAtUtc }` to the client's watchers, at most once per
 10 minutes per client. It almost always means two boards are using one set of credentials.
 
-A known client refused at sign-in (`POST /api/v1/client-auth/login` with a wrong secret, or a client Pending,
+A known client refused at sign-in (`POST /api/v1/client-auth/login` with a wrong secret, or a client
 Revoked or Rejected) raises `ClientSignInRefusedEvent`, a Warning in the event log's Security view and
 `OnClientSignInRefusedEvent { clientRefId, reason, attempts, firstAttemptAt, lastAttemptAt, createdAtUtc }`
 to the workspace, at most once a minute per client from each management instance, with `attempts` counting
-the refusals since the last one. `reason` is `BadSecret`, `Pending`, `Revoked` or `Rejected` (the latest in
-the minute). A sign-in naming no client raises nothing: it belongs to no workspace. Refusals are counted in
+the refusals since the last one. `reason` is `BadSecret`, `Revoked` or `Rejected` (the latest in
+the minute). A Pending client is not counted: retrying until it is approved is what the protocol asks of it. A sign-in naming no client raises nothing: it belongs to no workspace. Refusals are counted in
 memory, so those of the last minute before an instance stops are not raised.
 
 > **Known gap.** The workspace feed is per workspace, not per permission. A member holding only
