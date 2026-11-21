@@ -155,6 +155,10 @@ public static class Program
         builder.Services.AddScoped<IWorkflowDraftService, WorkflowDraftService>();
         builder.Services.AddScopedWithQueuedEvents<IWorkflowTestRunService, WorkflowTestRunService>();
         builder.Services.AddMemoryCache();
+
+        // In memory only, as management runs one replica; registering an IDistributedCache later makes
+        // Redis its second level without touching a caller.
+        builder.Services.AddHybridCache(options => options.MaximumPayloadBytes = 1024 * 1024);
         builder.Services.AddScoped<IWorkflowRunQueryService, WorkflowRunQueryService>();
         builder.Services.AddScoped<ITriggerActivityService, TriggerActivityService>();
         builder.Services.AddScopedWithQueuedEvents<IWorkflowRunService, WorkflowRunService>();

@@ -20,6 +20,7 @@
     <ItemGroup>
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+        <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" />
         <PackageReference Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" />
         <!-- Only to lift SignalR.StackExchangeRedis's transitive MessagePack past GHSA-qhrr-8q5h-9q3h. -->
         <PackageReference Include="MessagePack" />

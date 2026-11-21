@@ -1,7 +1,9 @@
 using Wbskt.Models;
 using System.Text.Json;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Caching.Memory;
 using Wbskt.Infrastructure;
+using Wbskt.Management.Host.Services.Caching;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Models;
@@ -45,6 +47,15 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
 
     private static readonly MemoryCacheEntryOptions ListedVersionLifetime = new() { SlidingExpiration = TimeSpan.FromMinutes(30) };
 
+    /// <summary>
+    /// How long run stats are served from the cache, and the step a stats window is widened to. Runs
+    /// started in a window keep finishing, so stats are never final; a page opened twice in a row, or by
+    /// several people, reads them once.
+    /// </summary>
+    private static readonly TimeSpan StatsLifetime = TimeSpan.FromSeconds(30);
+
+    private static readonly HybridCacheEntryOptions StatsEntry = new() { Expiration = StatsLifetime, LocalCacheExpiration = StatsLifetime };
+
     private readonly IRunProvider _runProvider;
     private readonly IBranchProvider _branchProvider;
     private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
@@ -52,6 +63,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
     private readonly ILogger<WorkflowRunQueryService> _logger;
     private readonly IWorkflowDraftProvider? _draftProvider;
     private readonly IMemoryCache _listedVersions;
+    private readonly HybridCache? _stats;
 
     public WorkflowRunQueryService(
         IRunProvider runProvider,
@@ -60,9 +72,11 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
         IWorkflowStateProvider states,
         ILogger<WorkflowRunQueryService> logger,
         IWorkflowDraftProvider? draftProvider = null,
-        IMemoryCache? cache = null)
+        IMemoryCache? cache = null,
+        HybridCache? stats = null)
     {
         _draftProvider = draftProvider;
+        _stats = stats;
         _listedVersions = cache ?? new MemoryCache(new MemoryCacheOptions());
         _runProvider = runProvider;
         _branchProvider = branchProvider;
@@ -209,14 +223,24 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
             return Result<WorkflowStatsResponse>.Failure(range.Error);
         }
 
-        var (fromUtc, toUtc) = range.Value;
+        var (fromUtc, toUtc) = StatsWindow(range.Value);
 
+        // Ownership is checked on every call, before the cache, so a cached answer is only ever
+        // served for a workflow this workspace still owns.
         var ensureWorkflowResult = await WorkflowOwnershipCheck.EnsureCurrentAsync(_workflowDefinitionProvider, _logger, workspaceId, workflowRefId, ct);
         if (ensureWorkflowResult.IsFailure)
         {
             return Result<WorkflowStatsResponse>.Failure(ensureWorkflowResult.Error);
         }
 
+        return Result<WorkflowStatsResponse>.Success(await CachedAsync(
+            WorkspaceCacheKeys.WorkflowRunStats(workspaceId, workflowRefId, fromUtc, toUtc),
+            token => ReadWorkflowStatsAsync(workflowRefId, fromUtc, toUtc, token),
+            ct));
+    }
+
+    private async Task<WorkflowStatsResponse> ReadWorkflowStatsAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, CancellationToken ct)
+    {
         RunStatsRow stats = await _runProvider.GetStatsAsync(workflowRefId, fromUtc, toUtc, ct);
         IReadOnlyCollection<RunFailureBucketRow> failures = await _runProvider.GetTopFailuresAsync(workflowRefId, fromUtc, toUtc, TopFailures, ct);
         IReadOnlyCollection<NodeTimingRow> timings = await _runProvider.GetNodeTimingsAsync(workflowRefId, fromUtc, toUtc, TopSlowNodes, ct);
@@ -228,7 +252,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
         int finished = stats.TotalRuns - stats.ActiveCount;
         double? successRate = finished > 0 ? (double)stats.SucceededCount / finished : null;
 
-        return Result<WorkflowStatsResponse>.Success(new WorkflowStatsResponse(
+        return new WorkflowStatsResponse(
             workflowRefId,
             fromUtc.ToUtcOffset(),
             toUtc.ToUtcOffset(),
@@ -247,7 +271,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
             successRate,
             failures.Select(f => new FailureBucketDto(f.ErrorCode, f.NodeId, f.Occurrences, f.LastSeenAt.ToUtcOffset())).ToList(),
             timings.Select(t => new NodeTimingDto(t.NodeId, t.Executions, t.FailureCount, t.AvgDurationMs, t.MaxDurationMs)).ToList(),
-            FillDays(fromUtc, toUtc, daily)));
+            FillDays(fromUtc, toUtc, daily));
     }
 
     public async Task<Result<WorkspaceStatsResponse>> GetWorkspaceStatsAsync(int workspaceId, DateTimeOffset? from, DateTimeOffset? to, CancellationToken ct)
@@ -260,8 +284,16 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
             return Result<WorkspaceStatsResponse>.Failure(range.Error);
         }
 
-        var (fromUtc, toUtc) = range.Value;
+        var (fromUtc, toUtc) = StatsWindow(range.Value);
 
+        return Result<WorkspaceStatsResponse>.Success(await CachedAsync(
+            WorkspaceCacheKeys.RunStats(workspaceId, fromUtc, toUtc),
+            token => ReadWorkspaceStatsAsync(workspaceId, fromUtc, toUtc, token),
+            ct));
+    }
+
+    private async Task<WorkspaceStatsResponse> ReadWorkspaceStatsAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, CancellationToken ct)
+    {
         // No per-workflow ownership check to repeat: every procedure scopes by workspace itself, so a
         // workflow from another workspace cannot appear in the result at all. Each call opens its own
         // connection, so they run side by side and the response waits for the slowest, not the sum.
@@ -280,7 +312,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
         ILookup<Guid, RunDailyStatsRow> dailyByWorkflow = daily.ToLookup(d => d.WorkflowRefId);
         bool perWorkflowDays = toUtc - fromUtc <= MaxPerWorkflowDaysRange;
 
-        return Result<WorkspaceStatsResponse>.Success(new WorkspaceStatsResponse(
+        return new WorkspaceStatsResponse(
             fromUtc.ToUtcOffset(),
             toUtc.ToUtcOffset(),
             new RunOutcomeCountsDto(
@@ -308,7 +340,30 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
                 Waiting: w.WaitingCount,
                 perWorkflowDays ? FillDays(fromUtc, toUtc, dailyByWorkflow[w.WorkflowRefId]) : null)).ToList(),
             FillDays(fromUtc, toUtc, daily),
-            withHours ? FillHours(fromUtc, toUtc, await hourlyTask ?? []) : null));
+            withHours ? FillHours(fromUtc, toUtc, await hourlyTask ?? []) : null);
+    }
+
+    /// <summary>
+    /// Widens a stats window outwards to whole <see cref="StatsLifetime"/> steps. A page asks for a
+    /// window ending "now", which is a different window every millisecond; widened, the requests of the
+    /// same half minute share one entry, and the response says which window it counted.
+    /// </summary>
+    private static (DateTime FromUtc, DateTime ToUtc) StatsWindow(TimeRange range)
+    {
+        long step = StatsLifetime.Ticks;
+        long from = range.FromUtc.Ticks / step * step;
+        long to = (range.ToUtc.Ticks + step - 1) / step * step;
+        return (new DateTime(from, DateTimeKind.Utc), new DateTime(to, DateTimeKind.Utc));
+    }
+
+    private async Task<T> CachedAsync<T>(string key, Func<CancellationToken, Task<T>> read, CancellationToken ct)
+    {
+        if (_stats is null)
+        {
+            return await read(ct);
+        }
+
+        return await _stats.GetOrCreateAsync(key, read, static async (read, token) => await read(token), StatsEntry, cancellationToken: ct);
     }
 
     /// <summary>Every UTC hour the window touches, oldest first, with zeros on hours without runs.</summary>
