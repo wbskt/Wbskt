@@ -896,10 +896,11 @@ What hitting a cap looks like depends on the container:
 | migrator (one-shot, during a deploy) | 1g |
 
 The caps are ceilings, not reservations. With one replica of everything they add up to 7,232 MiB
-(about 7.1 GiB, 8.1 GiB while the migrator runs), and SQL Server takes about 2.3 GiB beside them, so
-an 8 GB VM is oversubscribed only if every container reaches its cap at once; `oom_score_adj` keeps
+(about 7.1 GiB, 8.1 GiB while the migrator runs), and SQL Server takes a little over
+`SQL_MAX_SERVER_MEMORY_MB` (1 GiB by default) beside them, so an 8 GB VM is oversubscribed only if every container reaches its cap at once; `oom_score_adj` keeps
 SQL Server out of the way if that happens. Idle, the stack uses far less. Each extra replica adds its
-limit. On a smaller VM, lower `HOST_MEM_LIMIT` and keep swap on. On a busier one, raise
+limit. On a smaller VM, lower `HOST_MEM_LIMIT` and keep swap on, but keep SQL Server's cache out of it:
+on 4 GB, `SQL_MAX_SERVER_MEMORY_MB` stays at 1024 or under. On a busier one, raise
 `GATEWAY_MEM_LIMIT` and `TRAEFIK_MEM_LIMIT` together (and `TRAEFIK_GOMEMLIMIT` to about 85% of the
 latter): Traefik terminates TLS for the same client connections the gateways hold. Check real use with
 `docker stats` after a change. A change takes effect when the container is recreated
