@@ -60,6 +60,8 @@ REPO_ROOT="$(cd "$(dirname "$SCRIPT_PATH")/../.." && pwd)"
 readonly REPO_ROOT
 readonly COMPOSE_DIR="$REPO_ROOT/deploy/compose"
 readonly ENV_FILE="$COMPOSE_DIR/.env"
+# shellcheck source=deploy/scripts/env-file.sh
+source "$(dirname "$SCRIPT_PATH")/env-file.sh"
 
 TAG=""
 CONSOLE_TAG=""
@@ -455,6 +457,19 @@ deploy_admin() {
     echo "==> deployed admin $ADMIN_TAG on 127.0.0.1:8090"
 }
 
+# SQL_MEMORY_LIMIT_MB cannot go under 2048, which on a 4 GB VM left most of SQL Server's cache in swap:
+# every page it believed cached was a disk read. max server memory has no such floor, applies at once
+# without a restart and is kept in master, so each deploy sets it from .env and an edit there takes
+# effect on the next one.
+apply_sql_memory() {
+    local mb
+    mb=$(env_get "$ENV_FILE" SQL_MAX_SERVER_MEMORY_MB)
+    mb=${mb:-1024}
+    [[ "$mb" =~ ^[0-9]+$ ]] || die "SQL_MAX_SERVER_MEMORY_MB must be a whole number of MB, not '$mb'"
+    echo "==> setting SQL Server max server memory to $mb MB"
+    docker compose exec -T sql bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"\$MSSQL_SA_PASSWORD\" -C -b -Q \"EXEC sp_configure 'show advanced options', 1; RECONFIGURE; EXEC sp_configure 'max server memory (MB)', $mb; RECONFIGURE;\"" >/dev/null
+}
+
 deploy_backend() {
     cd "$COMPOSE_DIR"
     export IMAGE_TAG="$TAG"
@@ -466,6 +481,10 @@ deploy_backend() {
 
     echo "==> pulling ${SERVICES[*]} at $TAG"
     pull_images pull "${SERVICES[@]}"
+
+    # The dependency wait --no-deps gives up below: sql must be up and healthy, as after a VM reboot.
+    wait_for_health sql
+    apply_sql_memory
 
     if [[ "$SKIP_MIGRATIONS" == true ]]; then
         echo "==> SKIPPING migrations (--skip-migrations)"
@@ -480,8 +499,6 @@ deploy_backend() {
         # (an edition or memory setting, a new image), restarting the database mid-deploy. Changing
         # sql is a deliberate step of its own (see "SQL Server edition" in deploy/README.md).
         echo "==> running incremental database migration"
-        # The dependency wait --no-deps gives up: sql must be up and healthy, as after a VM reboot.
-        wait_for_health sql
         pull_images --profile migrate pull migrator
         MIGRATE_FRESH=false MIGRATE_ALLOW_DATA_LOSS=false \
             docker compose --profile migrate run --rm --no-deps migrator

@@ -923,7 +923,11 @@ uses at most about 1.4 GB for its buffer pool, and the lesser of one socket or f
 in the schema needs more, and CI runs its SQL Server as Express too, so a feature it lacks fails
 there first. `SQL_MEMORY_LIMIT_MB` (default 2048) stops SQL Server from planning for 80% of the
 VM's RAM. 2048 is as low as it goes: SQL Server treats any lower value as about 2000 MB, so a
-smaller number only looks tighter. On Express the buffer pool cap is what binds in practice. `DatabaseNearExpressLimit` warns at 8 GiB and `DatabaseAtExpressLimit` pages at 9 GiB.
+smaller number only looks tighter. What SQL Server keeps is `SQL_MAX_SERVER_MEMORY_MB` (default
+1024), its `max server memory`, which `deploy.sh` sets on every backend deploy with no restart. Size it
+so it and the other containers fit in RAM: on the 4 GB VM a 2 GB cache was mostly in swap, so every
+page SQL Server believed cached was a disk read and simple console reads took seconds. On Express the
+buffer pool cap is what binds in practice. `DatabaseNearExpressLimit` warns at 8 GiB and `DatabaseAtExpressLimit` pages at 9 GiB.
 
 The edition is read when the container starts, and the data files carry over: an existing
 Developer volume comes up as Express with its databases online, and switching back is the same
