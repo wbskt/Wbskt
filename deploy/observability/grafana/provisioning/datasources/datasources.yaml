@@ -9,6 +9,10 @@ datasources:
     url: http://prometheus:9090
     isDefault: true
     jsonData:
+      # The hosts push metrics once a minute (the OTLP exporter's default), so a rate window needs
+      # at least two minutes to hold two samples. Grafana otherwise assumes 15 s and short ranges
+      # come up empty; at 60 s, $__rate_interval is at least 4 minutes.
+      timeInterval: 60s
       exemplarTraceIdDestinations:
         - name: trace_id
           datasourceUid: tempo
