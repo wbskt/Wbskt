@@ -19,7 +19,9 @@ public sealed class IdempotencyKeyGc(
     ILogger<IdempotencyKeyGc> logger,
     IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger, clock)
 {
-    private const int BatchSize = 5000;
+    // Under SQL Server's lock escalation threshold (5,000 locks on one table in one statement): a
+    // batch that reached it took a table lock and held up every claim on the busiest table.
+    private const int BatchSize = 2000;
     private readonly TimeSpan _retentionWindow = options.Value.IdempotencyRetentionWindow;
 
     protected override string Name => "Idempotency key GC";
