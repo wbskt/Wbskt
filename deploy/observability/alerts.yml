@@ -264,20 +264,32 @@ groups:
 
       - alert: DeadLetteredMessages
         # MassTransit moves a message that exhausted its retries to <queue>_error, and one with no
-        # consumer to <queue>_skipped. Either is an event some host never handled.
-        expr: sum by (queue) (rabbitmq_detailed_queue_messages_ready{queue=~".+_(error|skipped)"}) > 0
+        # consumer to <queue>_skipped. Either is an event some host never handled. It fires when such a
+        # queue has grown in the last hour (or appeared in it), not while old messages sit there: on the
+        # depth alone, 255 week-old messages mailed every 4 hours until someone emptied the queues.
+        expr: |
+          (
+            sum by (queue) (rabbitmq_detailed_queue_messages_ready{queue=~".+_(error|skipped)"})
+              > on (queue) sum by (queue) (rabbitmq_detailed_queue_messages_ready{queue=~".+_(error|skipped)"} offset 1h)
+          )
+          or
+          (
+            sum by (queue) (rabbitmq_detailed_queue_messages_ready{queue=~".+_(error|skipped)"}) > 0
+              unless on (queue) sum by (queue) (rabbitmq_detailed_queue_messages_ready{queue=~".+_(error|skipped)"} offset 1h)
+          )
         for: 5m
         labels:
           severity: page
         annotations:
-          summary: "{{ $value }} background messages failed and were set aside in {{ $labels.queue }}"
+          summary: "Background messages failed in the last hour and were set aside in {{ $labels.queue }}, {{ $value }} there now"
           impact: >-
             Work the platform does between its services was not done: depending on the queue, a device
             update, a billing change or a workflow event never happened.
           action: >-
             In the RabbitMQ management UI, read the messages in that queue, and read the logs of the service
             that consumes it for the exception. Fix the cause, then move the messages back to the original
-            queue (the same name without _error or _skipped) so they are processed.
+            queue (the same name without _error or _skipped) so they are processed, or purge them if they are
+            stale. The alert clears an hour after the last new message, whether or not the queue is emptied.
           command: "ssh -L 15672:127.0.0.1:15672 <your VM>, then open http://localhost:15672"
 
       - alert: CallbackQueueBacklog
