@@ -37,7 +37,9 @@ public sealed class RunStatsPercentileIntegrationTests(SqlEdgeFixture fixture)
         stats.TotalRuns.Should().Be(8);
         stats.P50DurationMs.Should().BeApproximately(35, 0.001);
         stats.P95DurationMs.Should().BeApproximately(760, 0.001);
-        (await ReferencePercentilesAsync(wd.RefId, null)).Should().Be((stats.P50DurationMs, stats.P95DurationMs));
+        (double p50, double p95) = await ReferencePercentilesAsync(wd.RefId, null);
+        p50.Should().BeApproximately(stats.P50DurationMs, 0.001);
+        p95.Should().BeApproximately(stats.P95DurationMs, 0.001);
     }
 
     [SkippableFact]
