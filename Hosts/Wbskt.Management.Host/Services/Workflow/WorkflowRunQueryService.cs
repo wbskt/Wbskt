@@ -213,7 +213,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
 
     private sealed record ListedVersion(string Name, IReadOnlyDictionary<Guid, BaseNode> Nodes);
 
-    public async Task<Result<WorkflowStatsResponse>> GetStatsAsync(int workspaceId, Guid workflowRefId, DateTimeOffset? from, DateTimeOffset? to, CancellationToken ct)
+    public async Task<Result<WorkflowStatsResponse>> GetStatsAsync(int workspaceId, Guid workflowRefId, DateTimeOffset? from, DateTimeOffset? to, bool includeSlowestNodes, CancellationToken ct)
     {
         _logger.LogDebug("Querying stats for workflow RefId: '{WorkflowRefId}'", workflowRefId);
 
@@ -234,17 +234,27 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
         }
 
         return Result<WorkflowStatsResponse>.Success(await CachedAsync(
-            WorkspaceCacheKeys.WorkflowRunStats(workspaceId, workflowRefId, fromUtc, toUtc),
-            token => ReadWorkflowStatsAsync(workflowRefId, fromUtc, toUtc, token),
+            WorkspaceCacheKeys.WorkflowRunStats(workspaceId, workflowRefId, fromUtc, toUtc, includeSlowestNodes),
+            token => ReadWorkflowStatsAsync(workflowRefId, fromUtc, toUtc, includeSlowestNodes, token),
             ct));
     }
 
-    private async Task<WorkflowStatsResponse> ReadWorkflowStatsAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, CancellationToken ct)
+    private async Task<WorkflowStatsResponse> ReadWorkflowStatsAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, bool withSlowestNodes, CancellationToken ct)
     {
-        RunStatsRow stats = await _runProvider.GetStatsAsync(workflowRefId, fromUtc, toUtc, ct);
-        IReadOnlyCollection<RunFailureBucketRow> failures = await _runProvider.GetTopFailuresAsync(workflowRefId, fromUtc, toUtc, TopFailures, ct);
-        IReadOnlyCollection<NodeTimingRow> timings = await _runProvider.GetNodeTimingsAsync(workflowRefId, fromUtc, toUtc, TopSlowNodes, ct);
-        IReadOnlyCollection<RunDailyStatsRow> daily = await _runProvider.GetDailyStatsAsync(workflowRefId, fromUtc, toUtc, ct) ?? [];
+        // Each call opens its own connection, so they run side by side. Node timings read every step
+        // the window ran (seconds of CPU on a busy workflow), so they are read only when asked for.
+        Task<RunStatsRow> statsTask = _runProvider.GetStatsAsync(workflowRefId, fromUtc, toUtc, ct);
+        Task<IReadOnlyCollection<RunFailureBucketRow>> failuresTask = _runProvider.GetTopFailuresAsync(workflowRefId, fromUtc, toUtc, TopFailures, ct);
+        Task<IReadOnlyCollection<NodeTimingRow>> timingsTask = withSlowestNodes
+            ? _runProvider.GetNodeTimingsAsync(workflowRefId, fromUtc, toUtc, TopSlowNodes, ct)
+            : Task.FromResult<IReadOnlyCollection<NodeTimingRow>>([]);
+        Task<IReadOnlyCollection<RunDailyStatsRow>> dailyTask = _runProvider.GetDailyStatsAsync(workflowRefId, fromUtc, toUtc, ct);
+        await Task.WhenAll(statsTask, failuresTask, timingsTask, dailyTask);
+
+        RunStatsRow stats = await statsTask;
+        IReadOnlyCollection<RunFailureBucketRow> failures = await failuresTask;
+        IReadOnlyCollection<NodeTimingRow> timings = await timingsTask;
+        IReadOnlyCollection<RunDailyStatsRow> daily = await dailyTask ?? [];
 
         // Success rate is over FINISHED runs. Counting in-flight ones as failures would make an
         // active workflow look broken, and dividing by zero when nothing has finished would report

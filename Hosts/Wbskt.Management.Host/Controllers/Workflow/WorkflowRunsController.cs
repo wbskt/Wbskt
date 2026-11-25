@@ -76,6 +76,8 @@ public sealed class WorkflowRunsController : ApiControllerBase
     /// How a workflow is doing: outcome counts, duration percentiles, success rate, the error codes
     /// that actually occur, and which nodes are slowest. Defaults to the last 30 days.
     /// </summary>
+    /// <param name="includeSlowestNodes">Fill <c>slowestNodes</c>, which reads every step the window ran and
+    /// costs far more than the rest of the answer; left empty unless asked for.</param>
     [HttpGet("workflows/{workflowRef:guid}/stats")]
     [RequiresPermission(PermissionNames.WorkflowsRead)]
     public async Task<ActionResult<WorkflowStatsResponse>> GetStats(
@@ -83,9 +85,10 @@ public sealed class WorkflowRunsController : ApiControllerBase
         Guid workflowRef,
         [FromQuery] DateTimeOffset? from = null,
         [FromQuery] DateTimeOffset? to = null,
+        [FromQuery] bool includeSlowestNodes = false,
         CancellationToken ct = default)
     {
-        var result = await _runQueryService.GetStatsAsync(workspaceId, workflowRef, from, to, ct);
+        var result = await _runQueryService.GetStatsAsync(workspaceId, workflowRef, from, to, includeSlowestNodes, ct);
         return MapResult(result);
     }
 

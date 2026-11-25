@@ -59,6 +59,47 @@ public sealed class WorkflowRunStatsCacheTests
             .ReturnsAsync([]);
         runs.Setup(x => x.GetNodeTimingsAsync(workflowRefId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
+        var definitions = OwnedWorkflow(workflowRefId);
+        var service = CreateService(runs.Object, definitions.Object, CreateCache());
+
+        var owner = await service.GetStatsAsync(WorkspaceId, workflowRefId, From, To, includeSlowestNodes: false, CancellationToken.None);
+        var again = await service.GetStatsAsync(WorkspaceId, workflowRefId, From, To, includeSlowestNodes: false, CancellationToken.None);
+        var other = await service.GetStatsAsync(WorkspaceId + 1, workflowRefId, From, To, includeSlowestNodes: false, CancellationToken.None);
+
+        Assert.True(owner.IsSuccess);
+        Assert.Equal(3, again.Value.Counts.Total);
+        Assert.True(other.IsFailure);
+        runs.Verify(x => x.GetStatsAsync(workflowRefId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+        definitions.Verify(x => x.FindCurrentByRefIdAsync(workflowRefId, It.IsAny<CancellationToken>()), Times.Exactly(3));
+    }
+
+    [Fact]
+    public async Task Slowest_nodes_are_read_only_when_asked_for_and_cached_apart()
+    {
+        var workflowRefId = Guid.NewGuid();
+        var nodeId = Guid.NewGuid();
+        var runs = new Mock<IRunProvider>();
+        runs.Setup(x => x.GetStatsAsync(workflowRefId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Stats(total: 3));
+        runs.Setup(x => x.GetTopFailuresAsync(workflowRefId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        runs.Setup(x => x.GetNodeTimingsAsync(workflowRefId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new NodeTimingRow { NodeId = nodeId, Executions = 2, FailureCount = 0, AvgDurationMs = 40, MaxDurationMs = 50 }]);
+        var service = CreateService(runs.Object, OwnedWorkflow(workflowRefId).Object, CreateCache());
+
+        var plain = await service.GetStatsAsync(WorkspaceId, workflowRefId, From, To, includeSlowestNodes: false, CancellationToken.None);
+        var withNodes = await service.GetStatsAsync(WorkspaceId, workflowRefId, From, To, includeSlowestNodes: true, CancellationToken.None);
+        var plainAgain = await service.GetStatsAsync(WorkspaceId, workflowRefId, From, To, includeSlowestNodes: false, CancellationToken.None);
+
+        Assert.Empty(plain.Value.SlowestNodes);
+        Assert.Equal(nodeId, Assert.Single(withNodes.Value.SlowestNodes).NodeId);
+        Assert.Empty(plainAgain.Value.SlowestNodes);
+        runs.Verify(x => x.GetNodeTimingsAsync(workflowRefId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Once);
+        runs.Verify(x => x.GetStatsAsync(workflowRefId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    private static Mock<IWorkflowDefinitionProvider> OwnedWorkflow(Guid workflowRefId)
+    {
         var definitions = new Mock<IWorkflowDefinitionProvider> { CallBase = true };
         definitions.Setup(x => x.FindCurrentByRefIdAsync(workflowRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new WorkflowDefinitionRow
@@ -73,17 +114,7 @@ public sealed class WorkflowRunStatsCacheTests
                 PublishedBy = 1,
                 CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
             });
-        var service = CreateService(runs.Object, definitions.Object, CreateCache());
-
-        var owner = await service.GetStatsAsync(WorkspaceId, workflowRefId, From, To, CancellationToken.None);
-        var again = await service.GetStatsAsync(WorkspaceId, workflowRefId, From, To, CancellationToken.None);
-        var other = await service.GetStatsAsync(WorkspaceId + 1, workflowRefId, From, To, CancellationToken.None);
-
-        Assert.True(owner.IsSuccess);
-        Assert.Equal(3, again.Value.Counts.Total);
-        Assert.True(other.IsFailure);
-        runs.Verify(x => x.GetStatsAsync(workflowRefId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
-        definitions.Verify(x => x.FindCurrentByRefIdAsync(workflowRefId, It.IsAny<CancellationToken>()), Times.Exactly(3));
+        return definitions;
     }
 
     private static Mock<IRunProvider> WorkspaceRuns()

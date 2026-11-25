@@ -8798,6 +8798,14 @@
             }
           },
           {
+            "in": "query",
+            "name": "includeSlowestNodes",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
             "in": "path",
             "name": "workspaceRef",
             "required": true,
