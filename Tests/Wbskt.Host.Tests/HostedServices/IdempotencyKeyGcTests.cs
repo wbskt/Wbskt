@@ -13,21 +13,21 @@ public sealed class IdempotencyKeyGcTests
     public async Task Tick_deletes_in_batches_until_caught_up()
     {
         var leadership = new FixedLeadershipGate(true);
-        var provider = new RecordingIdempotencyKeyProvider([5000, 42]);
+        var provider = new RecordingIdempotencyKeyProvider([2000, 42]);
         var gc = new IdempotencyKeyGc(new FixedClock(), leadership, WorkerTestServices.Scopes(provider), NullLogger<IdempotencyKeyGc>.Instance, WorkerTestServices.Options());
 
         await gc.TickAsync(CancellationToken.None);
 
         Assert.Equal(2, provider.DeleteCalls.Count);
         // Cutoff = now - 24h (the default retention window).
-        Assert.All(provider.DeleteCalls, call => Assert.Equal((new DateTime(2026, 5, 25, 12, 30, 0, DateTimeKind.Utc), 5000), call));
+        Assert.All(provider.DeleteCalls, call => Assert.Equal((new DateTime(2026, 5, 25, 12, 30, 0, DateTimeKind.Utc), 2000), call));
     }
 
     [Fact]
     public async Task Tick_skips_when_lease_not_held()
     {
         var leadership = new FixedLeadershipGate(false);
-        var provider = new RecordingIdempotencyKeyProvider([5000]);
+        var provider = new RecordingIdempotencyKeyProvider([2000]);
         var gc = new IdempotencyKeyGc(new FixedClock(), leadership, WorkerTestServices.Scopes(provider), NullLogger<IdempotencyKeyGc>.Instance, WorkerTestServices.Options());
 
         await gc.TickAsync(CancellationToken.None);
