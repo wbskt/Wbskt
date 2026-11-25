@@ -13,9 +13,10 @@ public interface IWorkflowRunQueryService
 
     /// <summary>
     /// How a workflow is doing over a window: outcome counts, duration percentiles, success rate, the
-    /// error codes that actually occur, and which nodes are slowest.
+    /// error codes that actually occur, and, when <paramref name="includeSlowestNodes"/> is set, which
+    /// nodes are slowest.
     /// </summary>
-    Task<Result<WorkflowStatsResponse>> GetStatsAsync(int workspaceId, Guid workflowRefId, DateTimeOffset? from, DateTimeOffset? to, CancellationToken ct);
+    Task<Result<WorkflowStatsResponse>> GetStatsAsync(int workspaceId, Guid workflowRefId, DateTimeOffset? from, DateTimeOffset? to, bool includeSlowestNodes, CancellationToken ct);
 
     /// <summary>The same question across a whole workspace, plus the per-workflow rows that keep the
     /// run-weighted rate honest.</summary>

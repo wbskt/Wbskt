@@ -319,7 +319,7 @@ public sealed class WorkflowRunsControllerTests
             .ReturnsAsync([]);
         var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
-        var response = await service.GetStatsAsync(WorkspaceId, workflowRefId, DateTime.UtcNow.AddDays(-7), DateTime.UtcNow, CancellationToken.None);
+        var response = await service.GetStatsAsync(WorkspaceId, workflowRefId, DateTime.UtcNow.AddDays(-7), DateTime.UtcNow, includeSlowestNodes: false, CancellationToken.None);
 
         Assert.True(response.IsSuccess);
         // 6 succeeded of 8 finished - the 2 active runs are excluded from the denominator.
@@ -522,7 +522,7 @@ public sealed class WorkflowRunsControllerTests
             .ReturnsAsync([]);
         var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
-        var response = await service.GetStatsAsync(WorkspaceId, workflowRefId, DateTime.UtcNow.AddDays(-7), DateTime.UtcNow, CancellationToken.None);
+        var response = await service.GetStatsAsync(WorkspaceId, workflowRefId, DateTime.UtcNow.AddDays(-7), DateTime.UtcNow, includeSlowestNodes: false, CancellationToken.None);
 
         Assert.True(response.IsSuccess);
         Assert.Null(response.Value.SuccessRate);
@@ -533,7 +533,7 @@ public sealed class WorkflowRunsControllerTests
     {
         var service = new WorkflowRunQueryService(Mock.Of<IRunProvider>(), Mock.Of<IBranchProvider>(), Mock.Of<IWorkflowDefinitionProvider>(), Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
-        var response = await service.GetStatsAsync(WorkspaceId, Guid.NewGuid(), DateTime.UtcNow, DateTime.UtcNow.AddDays(-1), CancellationToken.None);
+        var response = await service.GetStatsAsync(WorkspaceId, Guid.NewGuid(), DateTime.UtcNow, DateTime.UtcNow.AddDays(-1), includeSlowestNodes: false, CancellationToken.None);
 
         Assert.True(response.IsFailure);
         Assert.Equal("TIME_RANGE_INVALID", response.Error.Code);
@@ -548,7 +548,7 @@ public sealed class WorkflowRunsControllerTests
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId + 1));
         var service = new WorkflowRunQueryService(Mock.Of<IRunProvider>(), Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<IWorkflowStateProvider>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
 
-        var response = await service.GetStatsAsync(WorkspaceId, workflowRefId, DateTime.UtcNow.AddDays(-7), DateTime.UtcNow, CancellationToken.None);
+        var response = await service.GetStatsAsync(WorkspaceId, workflowRefId, DateTime.UtcNow.AddDays(-7), DateTime.UtcNow, includeSlowestNodes: false, CancellationToken.None);
 
         Assert.True(response.IsFailure);
     }
