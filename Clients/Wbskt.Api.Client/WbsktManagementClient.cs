@@ -477,12 +477,13 @@ public sealed class WbsktManagementClient : WbsktApiClient
         SendRawAsync(HttpMethod.Get, $"/api/v1/workspaces/{workspaceRef}/stats{Query(("from", from), ("to", to))}", null, cancellationToken);
 
     /// <summary>Run counts and durations of one workflow over a time range. <c>GET /api/workspaces/{workspaceRef}/workflows/{workflowRef}/stats</c>.</summary>
-    public Task<WorkflowStatsResponse> GetWorkflowStatsAsync(Guid workspaceRef, Guid workflowRef, DateTimeOffset? from = null, DateTimeOffset? to = null, CancellationToken cancellationToken = default) =>
-        ReceiveAsync<WorkflowStatsResponse>(GetWorkflowStatsRawAsync(workspaceRef, workflowRef, from, to, cancellationToken), cancellationToken);
+    /// <param name="includeSlowestNodes">Fill <c>SlowestNodes</c>, which costs the server far more than the rest; empty otherwise.</param>
+    public Task<WorkflowStatsResponse> GetWorkflowStatsAsync(Guid workspaceRef, Guid workflowRef, DateTimeOffset? from = null, DateTimeOffset? to = null, bool includeSlowestNodes = false, CancellationToken cancellationToken = default) =>
+        ReceiveAsync<WorkflowStatsResponse>(GetWorkflowStatsRawAsync(workspaceRef, workflowRef, from, to, includeSlowestNodes, cancellationToken), cancellationToken);
 
     /// <summary><see cref="GetWorkflowStatsAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
-    public Task<HttpResponseMessage> GetWorkflowStatsRawAsync(Guid workspaceRef, Guid workflowRef, DateTimeOffset? from = null, DateTimeOffset? to = null, CancellationToken cancellationToken = default) =>
-        SendRawAsync(HttpMethod.Get, $"/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/stats{Query(("from", from), ("to", to))}", null, cancellationToken);
+    public Task<HttpResponseMessage> GetWorkflowStatsRawAsync(Guid workspaceRef, Guid workflowRef, DateTimeOffset? from = null, DateTimeOffset? to = null, bool includeSlowestNodes = false, CancellationToken cancellationToken = default) =>
+        SendRawAsync(HttpMethod.Get, $"/api/v1/workspaces/{workspaceRef}/workflows/{workflowRef}/stats{Query(("from", from), ("to", to), ("includeSlowestNodes", includeSlowestNodes ? true : null))}", null, cancellationToken);
 
     /// <summary>A run with every branch and its state. <c>GET /api/workspaces/{workspaceRef}/runs/{runRef}</c>.</summary>
     public Task<RunDetailDto> GetRunAsync(Guid workspaceRef, Guid runRef, CancellationToken cancellationToken = default) =>

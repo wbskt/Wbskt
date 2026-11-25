@@ -67,6 +67,11 @@ public sealed class WorkflowReadEndpointTests(ServicesFixture fixture)
         workflowStats.FromUtc.Should().BeBefore(workflowStats.ToUtc);
         workflowStats.Counts.Total.Should().Be(1);
         workflowStats.SuccessRate.Should().Be(1.0);
+        workflowStats.SlowestNodes.Should().BeEmpty("node timings are read only when asked for");
+
+        var withNodes = await management.GetWorkflowStatsAsync(workspace, workflowRef, includeSlowestNodes: true);
+        withNodes.Counts.Total.Should().Be(1);
+        withNodes.SlowestNodes.Should().OnlyContain(n => n.Executions >= 1);
 
         var workspaceStats = await ServicesFixture.PollUntilAsync<WorkspaceStatsResponse>(
             $"the stats of workspace {workspace} to count the run",
