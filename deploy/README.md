@@ -578,7 +578,7 @@ dashboard otherwise). The template and the zone are read at start, so after chan
 | `WorkflowRunFailureRateHigh` | over 25% of at least 20 runs failed in 15 minutes |
 | `WorkflowWakeBacklog` | timers or timeouts are over a minute past due and unclaimed |
 | `WorkflowDispatchBacklog` | over 500 branches queued in the engine for 10 minutes |
-| `DeadLetteredMessages` | any MassTransit `_error` or `_skipped` queue holds messages |
+| `DeadLetteredMessages` | a MassTransit `_error` or `_skipped` queue gained messages in the last hour |
 | `SocketDisconnectRateHigh` | abnormal client disconnects exceed half the connected clients in 10 minutes |
 | `RevokeMissedByGateway` | a gateway missed a client revoke event and its access re-check closed the connection |
 | `BackupMissing` / `BackupNeverReported` | no successful backup for 26 hours |

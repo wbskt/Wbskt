@@ -202,3 +202,44 @@ tests:
               command: "docker compose logs --since 1h management | grep \"CreditPosting\""
               impact: "A scheduled job (credit posting, billing checks, data retention, the deleted-workspace cleanup, or device access re-checks) is not doing its work. What breaks depends on the job, and usually builds up slowly."
               summary: "The background job CreditPosting on management keeps failing"
+
+  # Messages land in an error queue: DeadLetteredMessages, for an hour after the last one arrives.
+  - interval: 1m
+    input_series:
+      - series: 'rabbitmq_detailed_queue_messages_ready{job="rabbitmq", queue="ClientPresenceHandler_error"}'
+        values: '4x60 6x120'
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: DeadLetteredMessages
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              queue: ClientPresenceHandler_error
+            exp_annotations:
+              summary: "Background messages failed in the last hour and were set aside in ClientPresenceHandler_error, 6 there now"
+              impact: "Work the platform does between its services was not done: depending on the queue, a device update, a billing change or a workflow event never happened."
+              action: "In the RabbitMQ management UI, read the messages in that queue, and read the logs of the service that consumes it for the exception. Fix the cause, then move the messages back to the original queue (the same name without _error or _skipped) so they are processed, or purge them if they are stale. The alert clears an hour after the last new message, whether or not the queue is emptied."
+              command: "ssh -L 15672:127.0.0.1:15672 <your VM>, then open http://localhost:15672"
+      - eval_time: 170m
+        alertname: DeadLetteredMessages
+        exp_alerts: []
+
+  # A queue that appears holding messages fires; old messages that stay where they are do not.
+  - interval: 1m
+    input_series:
+      - series: 'rabbitmq_detailed_queue_messages_ready{job="rabbitmq", queue="SocketHostHeartbeatHandler_error"}'
+        values: '_x90 3x30'
+      - series: 'rabbitmq_detailed_queue_messages_ready{job="rabbitmq", queue="ClientMetadataIngestionHandler_error"}'
+        values: '124x120'
+    alert_rule_test:
+      - eval_time: 100m
+        alertname: DeadLetteredMessages
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              queue: SocketHostHeartbeatHandler_error
+            exp_annotations:
+              summary: "Background messages failed in the last hour and were set aside in SocketHostHeartbeatHandler_error, 3 there now"
+              impact: "Work the platform does between its services was not done: depending on the queue, a device update, a billing change or a workflow event never happened."
+              action: "In the RabbitMQ management UI, read the messages in that queue, and read the logs of the service that consumes it for the exception. Fix the cause, then move the messages back to the original queue (the same name without _error or _skipped) so they are processed, or purge them if they are stale. The alert clears an hour after the last new message, whether or not the queue is emptied."
+              command: "ssh -L 15672:127.0.0.1:15672 <your VM>, then open http://localhost:15672"
