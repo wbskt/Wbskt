@@ -51,6 +51,23 @@ public sealed class WbsktHostPipelineTests
         Assert.Contains("X-Total-Count", response.Headers.GetValues("Access-Control-Expose-Headers").Single());
     }
 
+    [Fact]
+    public async Task A_preflight_may_be_reused_for_two_hours()
+    {
+        // Without it a browser re-sends a preflight within seconds, an extra round trip on every console call (#1118).
+        await using var app = await StartAsync();
+        using var client = new HttpClient { BaseAddress = BaseAddress(app) };
+        using var request = new HttpRequestMessage(HttpMethod.Options, "/ip");
+        request.Headers.Add("Origin", "https://console.example.test");
+        request.Headers.Add("Access-Control-Request-Method", "GET");
+        request.Headers.Add("Access-Control-Request-Headers", "authorization");
+        request.Headers.Add("X-Forwarded-For", "192.0.2.1");
+
+        using var response = await client.SendAsync(request);
+
+        Assert.Equal("7200", response.Headers.GetValues("Access-Control-Max-Age").Single());
+    }
+
     /// <summary>
     /// #775: the guard sees the forwarded header before the forwarded-headers step, which would
     /// consume it from this known proxy, and the route still answers a direct call.

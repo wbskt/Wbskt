@@ -24,6 +24,9 @@ namespace Wbskt.Infrastructure.Hosting;
 /// </summary>
 public static class WbsktHost
 {
+    /// <summary>How long a browser may reuse a CORS preflight: two hours, the most Chrome honours.</summary>
+    public static readonly TimeSpan PreflightMaxAge = TimeSpan.FromHours(2);
+
     /// <summary>
     /// The folder a host keeps its own files in (its log file): <c>Wbskt</c> under the user's
     /// config folder, which is created if it is missing. Without <c>Create</c>, .NET answers an empty
@@ -127,6 +130,10 @@ public static class WbsktHost
             {
                 policy.WithExposedHeaders(exposedHeaders);
             }
+
+            // Without a max age a browser keeps a preflight for 5 seconds, so nearly every console call
+            // paid an extra round trip first. Two hours is Chrome's ceiling; browsers cache per URL.
+            policy.SetPreflightMaxAge(PreflightMaxAge);
         }));
     }
 
