@@ -662,20 +662,25 @@ jobs:
       - name: Prometheus config, rules and rule tests
         run: |
           set -euo pipefail
-          image=$(grep -oE 'prom/prometheus:[^[:space:]]+' deploy/compose/docker-compose.yml)
+          image=$(grep -oE 'prom/prometheus:[^[:space:]]+' deploy/compose/monitoring.yml)
           promtool() {
             docker run --rm --entrypoint /bin/promtool -v "$PWD/deploy/observability:/etc/prometheus:ro" \
               -w /etc/prometheus "$image" "$@"
           }
           promtool check config prometheus.yml
           promtool test rules alerts.test.yml
+          # The config prometheus-entrypoint.sh writes when production is on another VM.
+          docker run --rm --entrypoint /bin/sh -e PROD_HOST_ADDRESS=10.0.0.4 \
+            -v "$PWD/deploy/observability:/etc/prometheus:ro" -w /etc/prometheus "$image" \
+            -c 'sed "/^exec \/bin\/prometheus/,\$d" prometheus-entrypoint.sh > /tmp/build.sh \
+              && . /tmp/build.sh && /bin/promtool check config "$config"'
 
       # Every receiver the entrypoint can write: email, webhook and dead man's switch, then none of
       # them. A password with a quote and a backslash checks its YAML quoting.
       - name: Alertmanager config from the entrypoint
         run: |
           set -euo pipefail
-          image=$(grep -oE 'prom/alertmanager:[^[:space:]]+' deploy/compose/docker-compose.yml)
+          image=$(grep -oE 'prom/alertmanager:[^[:space:]]+' deploy/compose/monitoring.yml)
           check() {
             docker run --rm --entrypoint /bin/sh "$@" \
               -v "$PWD/deploy/observability/alertmanager-entrypoint.sh:/etc/alertmanager/entrypoint.sh:ro" \
@@ -695,6 +700,7 @@ jobs:
           set -euo pipefail
           sed -E 's/^([A-Z0-9_]+)=$/\1=ci-placeholder/' deploy/compose/.env.example > "$RUNNER_TEMP/ci.env"
           docker compose -f deploy/compose/docker-compose.yml --env-file "$RUNNER_TEMP/ci.env" config -q
+          docker compose -f deploy/compose/monitoring.yml --env-file "$RUNNER_TEMP/ci.env" config -q
 
   meta:
     if: github.event_name != 'pull_request'
