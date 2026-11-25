@@ -26,20 +26,18 @@ internal sealed class AuthServiceClient : IAuthServiceClient
     {
         // The auth host answers for whoever the forwarded token names, which is this request's
         // identity, so that is the cache key. No identity means no caching rather than a shared entry.
-        int? userId = _identityService.TryGetUserIdentity(out var identity) ? identity.UserId : null;
-        if (userId is not null && _cache.TryGet(userId.Value, workspaceRef, out var cached))
+        if (!_identityService.TryGetUserIdentity(out var identity))
         {
-            return Result<WorkspaceAccess>.Success(cached!);
+            return await ResolveWithAuthServiceAsync(workspaceRef, accessToken: null, cancellationToken);
         }
 
-        var generation = _cache.Generation;
-        var result = await ResolveWithAuthServiceAsync(workspaceRef, accessToken: null, cancellationToken);
-        if (result.IsSuccess && userId is not null)
-        {
-            _cache.Set(userId.Value, workspaceRef, result.Value, generation);
-        }
-
-        return result;
+        // Shared with this user's other calls for the workspace that miss at the same moment, so it runs
+        // to its own timeout whatever this caller does.
+        return await _cache.GetOrResolveAsync(
+            identity.UserId,
+            workspaceRef,
+            () => ResolveWithAuthServiceAsync(workspaceRef, accessToken: null, CancellationToken.None),
+            cancellationToken);
     }
 
     public Task<Result<WorkspaceAccess>> ResolveWorkspaceForTokenAsync(string accessToken, Guid workspaceRef, CancellationToken cancellationToken = default) =>

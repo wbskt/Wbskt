@@ -41,6 +41,73 @@ public sealed class AuthServiceClientCacheTests
     }
 
     [Fact]
+    public async Task Calls_that_miss_together_share_one_resolve()
+    {
+        // A console page fires a dozen calls at once; on a cold cache they must not each ask the auth host.
+        var release = new TaskCompletionSource();
+        var auth = new FakeAuthHost(HttpStatusCode.OK) { Hold = release.Task };
+        var (client, identity, _) = CreateClient(auth);
+
+        Task<Result<int>>[] calls;
+        using (identity.BeginScope(new UserIdentity(7)))
+        {
+            calls = Enumerable.Range(0, 10).Select(_ => client.ResolveWorkspaceAsync(WorkspaceRef, Permissions.ClientsRead)).ToArray();
+        }
+
+        release.SetResult();
+        var results = await Task.WhenAll(calls);
+
+        results.Should().OnlyContain(r => r.IsSuccess && r.Value == 42);
+        auth.Calls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task A_caller_that_gives_up_does_not_cancel_the_others()
+    {
+        var release = new TaskCompletionSource();
+        var auth = new FakeAuthHost(HttpStatusCode.OK) { Hold = release.Task };
+        var (client, identity, _) = CreateClient(auth);
+        using var leaving = new CancellationTokenSource();
+
+        Task<Result<WorkspaceAccess>> first;
+        Task<Result<WorkspaceAccess>> second;
+        using (identity.BeginScope(new UserIdentity(7)))
+        {
+            first = client.ResolveWorkspaceAsync(WorkspaceRef, leaving.Token);
+            second = client.ResolveWorkspaceAsync(WorkspaceRef);
+        }
+
+        await leaving.CancelAsync();
+        await first.Invoking(t => t).Should().ThrowAsync<OperationCanceledException>();
+
+        release.SetResult();
+        (await second).IsSuccess.Should().BeTrue();
+        auth.Calls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task A_call_after_a_change_does_not_wait_on_an_older_resolve()
+    {
+        var release = new TaskCompletionSource();
+        var auth = new FakeAuthHost(HttpStatusCode.OK) { Hold = release.Task };
+        var (client, identity, cache) = CreateClient(auth);
+
+        Task<Result<WorkspaceAccess>> before;
+        Task<Result<WorkspaceAccess>> after;
+        using (identity.BeginScope(new UserIdentity(7)))
+        {
+            before = client.ResolveWorkspaceAsync(WorkspaceRef);
+            cache.Clear();
+            after = client.ResolveWorkspaceAsync(WorkspaceRef);
+        }
+
+        release.SetResult();
+        await Task.WhenAll(before, after);
+
+        auth.Calls.Should().Be(2);
+    }
+
+    [Fact]
     public async Task Users_do_not_share_entries()
     {
         var auth = new FakeAuthHost(HttpStatusCode.OK);
@@ -325,21 +392,31 @@ public sealed class AuthServiceClientCacheTests
 
     private sealed class FakeAuthHost(HttpStatusCode status) : HttpMessageHandler
     {
-        public int Calls { get; private set; }
+        private int _calls;
+
+        public int Calls => Volatile.Read(ref _calls);
 
         public Action? OnCall { get; set; }
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        /// <summary>When set, every answer waits for it, so calls can be made to overlap.</summary>
+        public Task? Hold { get; set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            Calls++;
+            Interlocked.Increment(ref _calls);
             OnCall?.Invoke();
+            if (Hold is not null)
+            {
+                await Hold.WaitAsync(cancellationToken);
+            }
+
             var response = new HttpResponseMessage(status);
             if (status == HttpStatusCode.OK)
             {
                 response.Content = JsonContent.Create(new ResolvedWorkspaceResponse(42, [Permissions.ClientsRead.ToString()]));
             }
 
-            return Task.FromResult(response);
+            return response;
         }
     }
 }

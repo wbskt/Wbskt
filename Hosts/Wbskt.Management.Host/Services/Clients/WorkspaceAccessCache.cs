@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Caching.Memory;
+using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
 
 namespace Wbskt.Management.Host.Services.Clients;
@@ -37,6 +39,7 @@ internal sealed class WorkspaceAccessCache : IHostedService, IDisposable
     private const int MaxEntries = 10_000;
 
     private readonly MemoryCache _cache = new(new MemoryCacheOptions { SizeLimit = MaxEntries });
+    private readonly ConcurrentDictionary<ResolveKey, Lazy<Task<Result<WorkspaceAccess>>>> _resolving = new();
     private readonly TimeSpan _lifetime;
     private readonly TimeSpan _confirmedLifetime;
     private readonly TimeSpan _checkInterval;
@@ -125,6 +128,48 @@ internal sealed class WorkspaceAccessCache : IHostedService, IDisposable
         return true;
     }
 
+    /// <summary>
+    /// The user's access to the workspace from the cache, or from <paramref name="resolve"/> on a miss.
+    /// A console page fires a dozen calls at once, so on a cold cache they would all miss together and
+    /// each ask the auth host; concurrent misses for the same user and workspace share one call instead.
+    /// The generation is part of what they share on, so a caller that arrives after a <see cref="Clear"/>
+    /// never waits on an answer started before it. <paramref name="resolve"/> must not depend on the
+    /// caller's cancellation, since callers who stay still need its answer when one gives up.
+    /// </summary>
+    public async Task<Result<WorkspaceAccess>> GetOrResolveAsync(
+        int userId,
+        Guid workspaceRef,
+        Func<Task<Result<WorkspaceAccess>>> resolve,
+        CancellationToken cancellationToken)
+    {
+        if (TryGet(userId, workspaceRef, out var cached))
+        {
+            return Result<WorkspaceAccess>.Success(cached!);
+        }
+
+        var key = new ResolveKey(userId, workspaceRef, Generation);
+        var shared = _resolving.GetOrAdd(key, k => new Lazy<Task<Result<WorkspaceAccess>>>(() => ResolveOnceAsync(k, resolve)));
+        return await shared.Value.WaitAsync(cancellationToken);
+    }
+
+    private async Task<Result<WorkspaceAccess>> ResolveOnceAsync(ResolveKey key, Func<Task<Result<WorkspaceAccess>>> resolve)
+    {
+        try
+        {
+            var result = await resolve();
+            if (result.IsSuccess)
+            {
+                Set(key.UserId, key.WorkspaceRef, result.Value, key.Generation);
+            }
+
+            return result;
+        }
+        finally
+        {
+            _resolving.TryRemove(key, out _);
+        }
+    }
+
     public void Set(int userId, Guid workspaceRef, WorkspaceAccess access, long generation)
     {
         if (!Enabled || generation != Generation)
@@ -205,4 +250,6 @@ internal sealed class WorkspaceAccessCache : IHostedService, IDisposable
     }
 
     private sealed record Entry(WorkspaceAccess Access, DateTimeOffset CachedAt);
+
+    private readonly record struct ResolveKey(int UserId, Guid WorkspaceRef, long Generation);
 }
